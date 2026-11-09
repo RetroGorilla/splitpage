@@ -53,7 +53,7 @@ Scene descriptions (#1171) were closed as not planned. They are not queued work.
 
 [#1177](https://github.com/RetroGorilla/splitpage/issues/1177) (Follow My Voice responsiveness) and the [review-mode-later issues](https://github.com/RetroGorilla/splitpage/issues?q=is%3Aissue%20state%3Aopen%20label%3Areview-mode-later) are parked. Review mode and collaboration remain removed.
 
-Collaboration has started with the Stage 0 audit ([#1364](https://github.com/RetroGorilla/splitpage/issues/1364)); its artifacts are collected in [collaboration/stage-0](collaboration/stage-0/README.md). Nothing is built. [COLLABORATION-PLAN.md](COLLABORATION-PLAN.md) is the plan of record, Yjs on a self-hosted server.
+Collaboration has finished its Stage 0 audit ([#1364](https://github.com/RetroGorilla/splitpage/issues/1364)); the artifacts and the Stage 1 experiment table are in [collaboration/stage-0](collaboration/stage-0/README.md). Stage 1, the feasibility prototypes, is next. Nothing is built. [COLLABORATION-PLAN.md](COLLABORATION-PLAN.md) is the plan of record, Yjs on a self-hosted server.
 
 Real-microphone verification remains a manual check: the automated relay/device tests do not prove recognition with a physical microphone. Keep the outstanding platform checks in [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md) explicit when preparing the release.
 

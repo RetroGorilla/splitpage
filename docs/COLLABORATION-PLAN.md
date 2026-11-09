@@ -69,7 +69,7 @@ Browser eviction, private browsing and storage clearing are distinct from a fail
 
 ### One writable tab
 
-V1 allows one writable tab per instance on a device. A second tab or window that opens the same instance is refused with an explanation or opens read-only. The desktop main process already decides which tab owns a document and enforces the rule there. Browsers use a Web Lock, a browser feature that lets one tab hold a named lock, held by the writable tab. This removes concurrent writers from the local replica and removes multi-tab propagation from every gate below.
+V1 allows one writable tab per instance on a device. A second tab or window that opens the same instance is refused with an explanation or opens read-only. The desktop main process already decides which tab owns a file-backed document, keyed by its path, and enforces the rule there. A shared tab needs its own source kind and key: untitled tabs have none today, and a duplicate `docId` is reassigned, not refused. Browsers use a Web Lock, a browser feature that lets one tab hold a named lock, held by the writable tab. This removes concurrent writers from the local replica and removes multi-tab propagation from every gate below.
 
 ### Outside v1
 
@@ -97,13 +97,13 @@ The build's `connect-src 'self' https: http:` blocks a `wss://` connection to an
 
 Do not require every method of today's `DocumentSession` to have a shared equivalent. Classify its callers first. Common operations should cover reads, command dispatch, change notifications, capabilities and disposal. Mutable `held()` access, whole-document adoption, disk merge, legacy replay and unknown-extent edits need explicit standalone ownership or a deliberately supported shared operation. No compatibility re-exports or silent shared-session no-ops.
 
-Remote updates enter through the session as well. A transaction kind for remote changes, beside `edit`, `disk`, `reload`, `recovery` and `adopt`, publishes the same change set that features already consume. The session stays the only writer of the projection and the only publisher of change, and one-row repaints keep working (INV-06, INV-07). A remote change records no undo entry, stamps no attribution and triggers no save.
+Remote updates enter through the session as well. A transaction kind for remote changes, beside `edit`, `disk`, `reload`, `recovery`, `adopt`, `replay` and `amend`, publishes the same change set that features already consume. The session stays the only writer of the projection and the only publisher of change, and one-row repaints keep working (INV-06, INV-07). A remote change records no undo entry, stamps no attribution and triggers no save.
 
 In shared mode, disable the local three-way merge, conflict-stash application and independent drafts of the live document. The replica is the live recovery source. Existing history snapshots can remain explicit recovery checkpoints; restoring one must not overwrite the authoritative replica. Keep these paths unchanged in standalone mode.
 
 Audit the save-time disk conflict check, autosave destinations, recent documents, app-data export, tab restoration, close/quit, and every whole-document replacement entry. There is no file watcher: a disk change is found at save time or by an explicit reload or merge. A shared instance must not remain attached to an automatic file writer. Saving a standalone copy does not switch the live instance's authority or make that file a synchronization target. Desktop tabs know only `file` and `blank` sources, so a shared instance needs its own tab source for restore, duplicate detection, close and quit.
 
-An instance carries its own `docId`, minted when the instance is created. The source file keeps its `docId` and its history. Each standalone export gets a new `docId`, as Standalone HTML export already drops it, so copies exported by several people never share history or trigger the duplicate-id reassignment between open scripts.
+An instance carries its own `docId`, minted when the instance is created. The source file keeps its `docId` and its history. Each standalone export gets a new `docId`, so copies exported by several people never share history or trigger the duplicate-id reassignment between open scripts. Dropping the id, as Standalone HTML export does today, is not enough: opening a file that has no id derives one from its content, so identical exports would share it.
 
 Reuse what exists before adding a parallel mechanism:
 
@@ -129,7 +129,7 @@ The adapter must preserve which characters a deletion selected. Two endpoints tr
 
 Within one keystroke the native DOM mutation and the input handler run in the same task, so a network message cannot interleave between them. The hazard for ordinary typing is a remote update that the replica has integrated but that is not yet painted into the focused beat: a whole-beat reconciliation then deletes the remote text.
 
-The standalone app already paints into a focused beat. `repaint()` in `src/features/writer/flow-surface.ts` rewrites it and restores the caret after undo, merge and reload, and the surface keeps each beat's last painted HTML, which is already an editor base. That code is the starting point for mechanism 2 below and is measured first. During composition the hazard is unavoidable, because the writer forbids repaint while composing. It exists today: the owed repaint waits, and composition end then syncs the whole beat over whatever arrived. Composition is the open case, and the experiment starts there.
+The standalone app already paints into a focused beat. `repaint()` in `src/features/writer/flow-surface.ts` rewrites it and restores the caret after undo, merge and reload, and the surface keeps each beat's last painted HTML. Today that is a paint cache, overwritten after every sync and never read back; turning it into an editor base is part of the experiment. That code is the starting point for mechanism 2 below and is measured first. During composition the hazard is unavoidable, because the writer forbids repaint while composing. It exists today: the owed repaint waits, and composition end then syncs the whole beat over whatever arrived. Composition is the open case, and the experiment starts there.
 
 The first Stage 1 experiment, run before the schema candidates: Alice's buffer records the deletion of the original `bc` from `abcd`; her replica integrates Bob's `X` between `b` and `c`; only then does the binding commit Alice's edit. Expected `aXd`. Compare three mechanisms:
 
@@ -165,7 +165,7 @@ List which behaviours of the standalone undo owner shared undo keeps: one-second
 
 Projection and derivations never write repairs back into Yjs. Resolve display defaults deterministically, or perform an explicit validated command when shared state must change. A remote update followed by a local no-op must emit no new document update. Preserve targeted rendering and measure invalidation cost.
 
-Today every commit runs three steps that write into the document: attribution stamps, tag and shot records minted from the text, and comment anchor repair. INV-54 also relies on a pass that gives a duplicate b-roll key a new id. In shared mode each of these becomes a pure derivation in the projection or an explicit validated command.
+Today every commit runs three steps that write into the document: attribution stamps, tag and shot records minted from the text, and comment anchor repair. The records step runs for edits only, not for undo replay or an amended edit. INV-54 also relies on a pass that gives a duplicate b-roll key a new id. In shared mode each of these becomes a pure derivation in the projection or an explicit validated command.
 
 ## 5 Shared document schema feasibility
 
@@ -192,8 +192,8 @@ Every field has one authoritative representation. Boundary atoms carry stable id
 | Structural order | Explicit deterministic semantics for concurrent insertion, movement, deletion and undo |
 | Scalars | Deterministic conflict policy appropriate to the field; atomic values for genuinely coupled fields |
 | Status and other monotonic values | Define the merge rule and any explicit reset operation; local maximum calculations alone are not a merge policy |
-| Comments | Independent comment records and recoverable anchors; prototype one text attribute per comment id before considering anchored-range alternatives |
-| Replies | Independent records with deterministic display order |
+| Comments | Independent comment records and recoverable anchors; a comment whose words are all deleted is listed in recovery; only its author edits the text of a comment or reply; prototype one text attribute per comment id before considering anchored-range alternatives |
+| Replies | Independent records shown oldest post time first, ties broken by reply id |
 | People, tags, shots and gallery entries | Stable record identities; ordered sequence, set or atomic value chosen by meaning |
 | Images | Existing sha256 references and metadata; binary data stays outside CRDT updates |
 | Video and file links | Descriptive fields synchronize; a link's local `location` does not (section 7) |
@@ -288,9 +288,9 @@ Stage 1 proves three things before selecting it:
 
 - The commit cost per update on the deployment disk under continuous typing, with any batching stated.
 - Undecodable or oversized input is refused before the journal write, so replay never meets a bad entry.
-- The provider's count stays truthful across a reconnect. It restarts at 1 each time a sync starts, and unsent buffered updates are dropped when the socket closes.
+- The provider's count stays truthful across a reconnect. It restarts at 1 each time a sync starts, whatever is still in flight, and it can reach 0 while a message is unacknowledged. Unsent buffered updates survive an ordinary close and are sent after reconnect; they are dropped when `disconnect()` is called while a socket exists, when the socket is replaced, and on the connection checker's early close.
 
-Without the journal commit in `beforeSync`, the built-in acknowledgement means only "applied in memory". It must never drive save status.
+Without the journal commit in `beforeSync`, the built-in acknowledgement means only "applied in memory", and not reliably that: it is also sent when applying the update threw and the error was swallowed, and for an update whose content waits on missing dependencies. It must never drive save status.
 
 If write-ahead journaling fails a proof, use barriers through flush requests on the same ordered path:
 
@@ -306,7 +306,7 @@ Pure deletes need coverage even when a state vector does not advance. Update cov
 
 Facts from the 4.8.0 source that shape the barrier: sync messages are awaited one at a time per connection, so updates sent before a barrier on the same connection are applied before it is handled. The stateless message callback is invoked without await, so a barrier's own asynchronous work is detached from that queue and two barriers can complete out of order. The store hook is debounced per document (defaults 2 s, at most 10 s under continuous updates), the debounced call resolves when the timer is scheduled rather than when the store finishes, and `flushPendingStores()` starts pending stores without returning their completion. Receipts therefore attach to a request id and generation within one deployment, instance and connection, tolerate duplicates and reordering, and never let an old connection's receipt mark newer unsent work saved. Bare sequence values are never compared across instance replacements. Whether a barrier triggers a store itself or waits for the debounce is a measured decision; save status stays pending until a covering receipt arrives.
 
-Two more facts from the same source apply to both designs. An error thrown by the store hook is caught and logged and the document stays in memory, so a failed store reaches save status only through Splitpage's own store code. A connection marked read-only is answered "not applied" for an update that carries new changes, and it stays connected.
+Two more facts from the same source apply to both designs. An error thrown by the store hook is caught and logged and the document stays in memory, so a failed store reaches save status only through Splitpage's own store code. On a connection marked read-only every update message is answered "not applied", whether or not it carries new changes; only the reply to the initial sync is compared with the document. The connection stays open.
 
 Handle normal container termination and configured stop signals, drain pending work within a documented grace period, and report failure. Graceful shutdown is not part of the guarantee for updates already acknowledged as durable.
 
@@ -528,7 +528,7 @@ The proposed defaults are owner-only administration, individually named invitati
 
 Image ordering and the receipt design are Stage 1 selections, not defaults. Confirm the public hostname, off-machine backup destination and actual storage budgets before deployment. Any change to required writing behavior returns to the product contract before implementation.
 
-The next implementation task is Stage 0. Its output must make the Stage 1 experiments executable and give each experiment an expected user-visible result.
+The Stage 0 artifacts are in [collaboration/stage-0](collaboration/stage-0/README.md); [9-stage-1-experiments.md](collaboration/stage-0/9-stage-1-experiments.md) indexes every Stage 1 trace to its inputs, expected result and entry paths, and lists the product decisions still assumed. The next implementation tasks are Stages 1a and 1b.
 
 ## 15 Primary technical references
 
