@@ -676,6 +676,9 @@ function mergeSet<T>(base: readonly T[] | null | undefined, mine: readonly T[] |
 }
 
 export interface GallerySide {
+  imageRef?: ImageRef | null | undefined;
+  imageName?: string | undefined;
+  imageAnnotation?: Annotation | null | undefined;
   imageLinks?: VideoLink[] | undefined;
   moreImages?: GalleryItem[] | undefined;
 }
@@ -693,17 +696,84 @@ function mergeLink(b: VideoLink | undefined, m: VideoLink, t: VideoLink): VideoL
   return out;
 }
 
+function gallerySideItems(side: GallerySide): GalleryItem[] {
+  const first: GalleryItem = {};
+  if (side.imageRef) first.imageRef = side.imageRef;
+  if (side.imageName) first.name = side.imageName;
+  if (side.imageAnnotation) first.annotation = side.imageAnnotation;
+  if (side.imageLinks) first.links = side.imageLinks;
+  return [first].concat(side.moreImages || []);
+}
+
+function galleryDetailsEqual(base: GalleryItem, candidate: GalleryItem): boolean {
+  return (base.name || "") === (candidate.name || "") &&
+    JSON.stringify(base.annotation || null) === JSON.stringify(candidate.annotation || null) &&
+    JSON.stringify(base.links || []) === JSON.stringify(candidate.links || []);
+}
+
+function galleryItemsUnchanged(base: GalleryItem, candidate: GalleryItem): boolean {
+  return galleryItemKey(base) === galleryItemKey(candidate) &&
+    base.imageRef?.width === candidate.imageRef?.width && base.imageRef?.height === candidate.imageRef?.height &&
+    base.imageRef?.mime === candidate.imageRef?.mime && galleryDetailsEqual(base, candidate);
+}
+
+function thumbnailMatches(base: GalleryItem, candidate: GalleryItem): boolean {
+  return !!candidate.imageRef && base.imageRef?.sha256 !== candidate.imageRef.sha256 && galleryDetailsEqual(base, candidate);
+}
+
+function thumbnailRemovals(base: GallerySide | null | undefined, side: GallerySide, other: GallerySide): Map<string, Set<string>> {
+  const removed = new Map<string, Set<string>>();
+  const originals = base ? gallerySideItems(base) : [];
+  const baseKeys = new Set(originals.map(galleryItemKey));
+  const candidates = gallerySideItems(side).filter(function (it) {
+    const at = originals.findIndex(function (bi) { return galleryItemsUnchanged(bi, it); });
+    if (at < 0) return true;
+    originals.splice(at, 1);
+    return false;
+  });
+  const successors = candidates.filter(function (it) { return !baseKeys.has(galleryItemKey(it)); });
+  const kept = new Set((other.imageLinks || []).map(videoLinkKey));
+  (other.moreImages || []).forEach(function (it) { (it.links || []).forEach(function (l) { kept.add(videoLinkKey(l)); }); });
+  successors.forEach(function (it) {
+    if (!(side.moreImages || []).includes(it) || !it.imageRef || !(it.links || []).some(function (l) { return l.poster; })) return;
+    const ancestors = originals.filter(function (bi) {
+      return thumbnailMatches(bi, it);
+    });
+    const ancestor = ancestors[0];
+    if (ancestors.length !== 1 || !ancestor) return;
+    const originalKey = galleryItemKey(ancestor);
+    if (candidates.some(function (item) { return galleryItemKey(item) === originalKey; })) return;
+    // why: an existing item's link edit can also explain a new copy, so it still makes the match ambiguous
+    if (candidates.filter(function (item) { return thumbnailMatches(ancestor, item); }).length !== 1) return;
+    const keys = new Set((it.links || []).map(videoLinkKey).filter(function (k) { return !kept.has(k); }));
+    if (keys.size) removed.set(galleryItemKey(it), keys);
+  });
+  return removed;
+}
+
+export function mergeGalleryThumbnailRemovals(b: GallerySide | null | undefined, m: GallerySide, t: GallerySide): boolean {
+  return thumbnailRemovals(b, m, t).size > 0 || thumbnailRemovals(b, t, m).size > 0;
+}
+
 export function mergeGalleryField(f: string, b: GallerySide | null | undefined, m: GallerySide, t: GallerySide): VideoLink[] | GalleryItem[] | undefined {
   let list: VideoLink[] | GalleryItem[];
   if (f === "imageLinks") {
     list = mergeSet(b && b.imageLinks, m.imageLinks, t.imageLinks, videoLinkKey, mergeLink);
   } else {
-    list = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, galleryItemKey, function (bi, mi, ti) {
+    const items = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, galleryItemKey, function (bi, mi, ti) {
       const out = copy(ti);
       const links = mergeSet(bi && bi.links, mi.links, ti.links, videoLinkKey, mergeLink);
       if (links.length) out.links = links; else delete out.links;
       return out;
     });
+    const mine = thumbnailRemovals(b, m, t), theirs = thumbnailRemovals(b, t, m);
+    items.forEach(function (it) {
+      const key = galleryItemKey(it), removedMine = mine.get(key), removedTheirs = theirs.get(key);
+      if (!removedMine && !removedTheirs) return;
+      const links = (it.links || []).filter(function (l) { return !removedMine?.has(videoLinkKey(l)) && !removedTheirs?.has(videoLinkKey(l)); });
+      if (links.length) it.links = links; else delete it.links;
+    });
+    list = items;
   }
   return list.length ? list : undefined;
 }
