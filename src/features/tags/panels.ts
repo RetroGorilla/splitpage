@@ -598,21 +598,22 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
         '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + (TAG_CATEGORIES[1] as TagCategoryLook).id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
-          '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> filmed · ' +
+          '<span class="tag-figure">' + shot + ' of ' + g.rows.length + '</span> filmed · ' +
           '<span class="tag-figure">' + formatDuration(secs) + '</span></span>' +
       '</h3>' +
       '<dl class="shoot-detail">' +
         '<dt>Beats</dt>' +
-        '<dd class="tag-scenes">' +
-          joinBeatLinks(g.rows.map(i => (doc.rows[i] as DocumentView["rows"][number]).id), function (rowId) {
-            const row = doc.rows.find(row => row.id === rowId) as DocumentView["rows"][number];
+        '<dd class="shoot-scenes">' +
+          groupItemsByScene(doc, g.rows.map(i => doc.rows[i] as DocumentView["rows"][number]), row => row.id).groups.map(function (group) {
+            return '<section class="shoot-scene"><h4>' + escapeHtml('Scene ' + group.scene.letter + (group.scene.name ? ' · ' + group.scene.name : '')) + '</h4><div class="shoot-beats">' + group.items.map(function (row) {
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
             const label = "Beat " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
-            return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
-              '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
+            return '<button type="button" class="shoot-beat' + (row.status === "shot" ? ' is-shot' : '') + (row.id === (ports as TagPanelPorts).focus.lastRow() ? ' is-current' : '') +
+              '"' + (row.id === (ports as TagPanelPorts).focus.lastRow() ? ' aria-current="true"' : '') + ' data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
               '" aria-label="' + escapeHtml(label) + '">' + escapeHtml((ports as TagPanelPorts).document.numbering().beats[row.id]?.short ?? "") +
               (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
-          }) +
+            }).join('') + '</div></section>';
+          }).join('') +
         '</dd>' +
         (g.needOrder.length
           ? '<dt>Needs on the day</dt>' +

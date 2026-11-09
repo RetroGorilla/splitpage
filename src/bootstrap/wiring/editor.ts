@@ -642,7 +642,14 @@ const editorFocusPorts: EditorFocusPorts = {
     return edge;
   },
   typed: function (cellEl, data) { onRootInput({ target: cellEl, inputType: "insertText", data: data } as RootInput); },
-  focusedRow: function (rowId) { focusMemory().focusedRow(rowId); },
+  focusedRow: function (rowId) {
+    focusMemory().focusedRow(rowId);
+    document.querySelectorAll<HTMLElement>(".shoot-beat").forEach((cell) => {
+      cell.classList.toggle("is-current", cell.dataset.row === rowId);
+      if (cell.dataset.row === rowId) cell.setAttribute("aria-current", "true");
+      else cell.removeAttribute("aria-current");
+    });
+  },
   selectionChanged: function (active) {
     forgetStalePendingMarks();
     if (active && active.classList && active.classList.contains("cell-editable")) {
