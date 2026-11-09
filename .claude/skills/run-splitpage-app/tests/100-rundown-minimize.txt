@@ -58,7 +58,6 @@ expect getComputedStyle(document.querySelector('#rundown .rd-seg.is-ready, #rund
 expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == false
 expect document.querySelector('#rundown .rundown-toggle').textContent == Show rundown
 expect getComputedStyle(document.querySelector('#rundown .rundown-toggle svg')).transform === 'none'
-# the labelled control sits at the strip's right edge and stays a fair size to tap
 expect (function(){ var r = document.getElementById('rundown').getBoundingClientRect(); var f = document.querySelector('#rundown .rundown-toggle-face').getBoundingClientRect(); return f.width >= 100 && f.height >= 18 && r.right - f.right <= 16; })()
 # a view setting, not an edit
 expect document.getElementById('save-status').hidden

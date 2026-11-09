@@ -157,7 +157,6 @@ click #present-menu-browser
 wait window.fakeP._prompterCalls === 4
 expect document.getElementById('present-menu').hidden === true
 expect document.getElementById('prompter').hidden === true
-# Escape closes the dropdown and gives focus back to its button
 click #btn-present-more
 wait !document.getElementById('present-menu').hidden
 key Escape
