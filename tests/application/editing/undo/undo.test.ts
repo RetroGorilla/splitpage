@@ -14,6 +14,7 @@ function setup() {
   let held: ValidatedDocument | null = doc;
   const ports: UndoPorts = {
     held: () => held,
+    epoch: () => 1,
     runs: cellRuns,
     now: () => 1000,
     cleared: () => {}

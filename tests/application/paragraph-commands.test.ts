@@ -67,7 +67,7 @@ function content(doc: DocumentShape): unknown {
 
 function undoFor(h: Harness) {
   let now = 0;
-  const undo = createUndo({ held: h.session.held, runs: html => ports.cells(String(html ?? "")),
+  const undo = createUndo({ held: h.session.held, epoch: h.session.epoch, runs: html => ports.cells(String(html ?? "")),
     now: () => now += 2000, cleared: () => {} });
   undo.track();
   undo.routeReplays(h.session.replay, { clock: ports.clock, editor: { name: () => "Bob" } });

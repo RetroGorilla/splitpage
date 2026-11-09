@@ -31,6 +31,7 @@ const HELD: UndoResult = Object.freeze({ ok: false, empty: true });
 
 export interface UndoPorts {
   readonly held: () => ValidatedDocument | null;
+  readonly epoch: () => number;
   readonly runs: HtmlRunDecoder;
   readonly now: () => number;
   readonly cleared: (count: number) => void;
@@ -82,7 +83,7 @@ export function createUndo(ports: UndoPorts): Undo {
   let flushQueued = false;
   let queuedSelection: FlowSelectionPair | undefined;
   let applying = false;
-  let holds = 0;
+  const holds = new Map<number, number>();
   const hooks: { afterApply: UndoHooks["afterApply"] | null; onRefused: UndoHooks["onRefused"] | null } = { afterApply: null, onRefused: null };
   const UNROUTED: Replays = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
   let replays: Replays = UNROUTED;
@@ -333,9 +334,20 @@ export function createUndo(ports: UndoPorts): Undo {
   }
 
   function hold(): () => void {
-    holds++;
+    const epoch = ports.epoch();
+    holds.set(epoch, (holds.get(epoch) || 0) + 1);
     let open = true;
-    return function () { if (open) { open = false; holds--; } };
+    return function () {
+      if (!open) return;
+      open = false;
+      const count = holds.get(epoch) || 0;
+      if (count > 1) holds.set(epoch, count - 1);
+      else holds.delete(epoch);
+    };
+  }
+
+  function isHeld(): boolean {
+    return holds.has(ports.epoch());
   }
 
   return {
@@ -348,8 +360,8 @@ export function createUndo(ports: UndoPorts): Undo {
     noteRemote: noteRemote,
     absorbRemote: absorbRemote,
     reset: function () { restart(held()); },
-    undo: function () { return holds ? HELD : run("undo"); },
-    redo: function () { return holds ? HELD : run("redo"); },
+    undo: function () { return isHeld() ? HELD : run("undo"); },
+    redo: function () { return isHeld() ? HELD : run("redo"); },
     settleAfterApply: settleAfterApply,
     foldIntoEdit: foldIntoEdit,
     amendRows: amendRows,
