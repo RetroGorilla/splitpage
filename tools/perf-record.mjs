@@ -453,7 +453,7 @@ function footprintSuite(fixture) {
   if (name === "long") lines.push(`eval ${oneLine(ENVIRONMENT)}`);
   lines.push(`eval window.__perfMem.take('${name} heap after load')`, `eval window.__perfScale.facts('${name} footprint')`);
   for (let i = 0; i < OPEN_RUNS; i++) lines.push(`eval window.__perfScale.open('${name} open file')`, "sleep 500");
-  lines.push(...typing(name, "footprint typing"), `eval window.__perfMem.take('${name} heap after typing')`);
+  lines.push(...typing(name, "footprint typing"), `eval window.__perfMem.take('${name} heap after typing')`, "expect document.querySelectorAll('#rows .row').length > 0");
   return lines.join("\n") + "\n";
 }
 
@@ -573,7 +573,7 @@ export function report(results, env, when) {
   const fixtureLines = [
     beats("short") !== undefined ? `short is the seed script (${beats("short")} scenes)` : null,
     beats("long") !== undefined ? `long is the long demo (${beats("long")} scenes)` : null,
-    footprints.length ? "short is the seed script and long is the long demo; their counts are in the footprint table" : null,
+    footprints.length && beats("short") === undefined ? "short is the seed script and long is the long demo; their counts are in the footprint table" : null,
     results.some((r) => r.label.startsWith("large ")) ? `large is the long demo repeated ${LARGE_COPIES} times with fresh ids, built in the page and opened with openFile` : null,
     images.length ? `images is the seed script with ${PICTURES} comments, each holding a fresh ${PICTURE_BYTES / 1024 / 1024} MiB PNG (a 1x1 image with a private chunk of random bytes)` : null
   ].filter(Boolean);

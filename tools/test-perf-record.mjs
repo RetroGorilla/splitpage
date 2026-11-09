@@ -184,6 +184,8 @@ eq("the long baseline starts on the long demo", longBase.slice(0, 5).map((l) => 
 eq("the large script is ten copies of the long demo", largeBase.includes("wait document.querySelectorAll('#rows .row').length == 300"), true);
 eq("no suite navigates after typing, which would meet the unsaved-work prompt", [shortBase, longBase, largeBase].map((l) => l.slice(l.findIndex((x) => x.startsWith("key end"))).some((x) => x.startsWith("goto ") || x.startsWith("open"))), [false, false, false]);
 eq("each suite takes the heap after load before typing and again after it", [shortBase, longBase, largeBase].map((l) => l.findIndex((x) => x.includes("heap after load")) < l.findIndex((x) => x.startsWith("key end")) && l.findIndex((x) => x.startsWith("key end")) < l.findIndex((x) => x.includes("heap after typing"))), [true, true, true]);
+eq("every baseline suite ends on an assertion the driver sees", [shortBase, longBase, largeBase].map((l) => l.some((x) => x.startsWith("expect ") || x.startsWith("wait "))), [true, true, true]);
+eq("the short baseline ends on one, not only its startup waits", shortBase[shortBase.length - 1].startsWith("expect "), true);
 eq("the existing suites do not touch the new probes", ["short", "long"].map((f) => perfLines(f).some((l) => l.includes("__perfMem") || l.includes("__perfScale"))), [false, false]);
 
 function pageWorld(extra) {
