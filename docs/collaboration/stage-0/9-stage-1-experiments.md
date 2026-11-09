@@ -75,7 +75,7 @@ The expected result is fixed; what delivers it is not. Each is settled inside th
 | Open | Trace | In 8 |
 | --- | --- | --- |
 | A status that stays as it was when two people change it to different values at the same time, and stays there when one of them undoes | T21, PROJ | A-H12 |
-| Undo that stops when its step changed nothing, including a join another person rewrote | T06, T12, T21 | U-H1 |
+| Undo that stops when its step changed nothing, including a join another person rewrote; and undo that takes back a change two people made identically at the same time | T06, T12, T21 | U-H1 |
 | An id for the later of two b-roll keys that share one | PROJ | A-H13 |
 | Where a comment with no marked words keeps its row and field | T11 | PROJ-detached |
 | Whether the cue flag is stored or derived | PROJ | PROJ-cue |
@@ -95,6 +95,7 @@ Decided on 2026-11-09:
 - Two people press Enter at the same point: both breaks show, leaving an empty beat.
 - An edit to a beat someone else removed goes to recovery, not into a neighbouring beat.
 - Each person undoes only their own changes. Someone else's work is removed by hand or brought back from recovery.
+- Identical changes made at the same time count as one change that either person can undo: two joins of the same beats, the same status, the same tag on the same words, two removals of the same beat. If both people joined two beats, either one's undo splits them; the other's later undo changes nothing.
 - Cutting beats and pasting them elsewhere stays two commands; other people see the beats gone in between.
 - The collaboration code ships in every build and export (115,589 bytes minified, 33,176 gzip, about 6.2% of `index.html`).
 
@@ -106,19 +107,18 @@ Assumed until decided. Every trace above is written to the assumption, so a diff
 | 2 | A beat is split by one person after another removed it | Both parts stay removed | 8 |
 | 3 | Two tags cross after merging | The tag that starts later is shown untagged and listed in recovery | 8 |
 | 4 | A reply to a comment whose creation was undone | Kept in recovery | 8 |
-| 5 | Undo when another person made the same change, so there is nothing of your own left to take back | Nothing visible changes, the step is used up, a short notice says so | 8 |
-| 6 | A status change that did not apply because someone changed it to something else at the same time | Both people get a short notice | 8 |
-| 7 | Edit stamps | A beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export | 8 |
-| 8 | A scene left with no beats; a script left with none | The scene is listed in recovery; the empty script waits for the first keystroke | 8 |
-| 9 | A scene name longer than 200 characters after merging | Shown in full with a notice; it cannot grow further | 8 |
-| 10 | Two b-roll keys with one id after merging | The later key is unanchored in the shot list until reassigned | 8 |
-| 11 | An owner assigned to a person someone else removed | The assignment is kept as text; the person is listed in recovery | 8 |
-| 12 | A comment is two undo steps today (the highlight, then the text on Post) | Kept as two | 1 |
-| 13 | The same author edits one comment on two devices while a draft box is open | The open box is kept and its Save replaces the text | 5 |
-| 14 | Is the local replica part of app-data export? | No; people export a Standalone copy | 6 |
-| 15 | Wording shown when the server refuses an update | Written with the rest of the status wording | 8 |
-| 16 | The limits a person feels: time to join a large script and time until "saved to server" | The provisional limits in 7, section 7 | 7 |
-| 17 | The server half of INV-52, if the pending-image design is chosen | No decision until Stage 1 picks an image design | 5 |
+| 5 | A status change that did not apply because someone changed it to something else at the same time | Both people get a short notice | 8 |
+| 6 | Edit stamps | A beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export | 8 |
+| 7 | A scene left with no beats; a script left with none | The scene is listed in recovery; the empty script waits for the first keystroke | 8 |
+| 8 | A scene name longer than 200 characters after merging | Shown in full with a notice; it cannot grow further | 8 |
+| 9 | Two b-roll keys with one id after merging | The later key is unanchored in the shot list until reassigned | 8 |
+| 10 | An owner assigned to a person someone else removed | The assignment is kept as text; the person is listed in recovery | 8 |
+| 11 | A comment is two undo steps today (the highlight, then the text on Post) | Kept as two | 1 |
+| 12 | The same author edits one comment on two devices while a draft box is open | The open box is kept and its Save replaces the text | 5 |
+| 13 | Is the local replica part of app-data export? | No; people export a Standalone copy | 6 |
+| 14 | Wording shown when the server refuses an update | Written with the rest of the status wording | 8 |
+| 15 | The limits a person feels: time to join a large script and time until "saved to server" | The provisional limits in 7, section 7 | 7 |
+| 16 | The server half of INV-52, if the pending-image design is chosen | No decision until Stage 1 picks an image design | 5 |
 
 The defaults the third review added to plan section 14 stay open on the same terms.
 
