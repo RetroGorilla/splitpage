@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
-  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run, loadGraph, stronglyConnected
+  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run, loadGraph, stronglyConnected, isAnalyzed
 } from "./dep-report.mjs";
 
 const TOOLS = dirname(fileURLToPath(import.meta.url));
@@ -753,6 +753,21 @@ function runIn(repo, mode) {
 }
 
 try {
+  const bridge = repoWith({
+    "src/bootstrap/main.ts": 'import "./eslint.config.mjs";\n',
+    "src/bootstrap/eslint.config.mjs": 'import { Doc } from "../../prototypes/collab/src/bridge.ts";\nexport { Doc };\n',
+    "prototypes/collab/src/bridge.ts": 'export { Doc } from "yjs";\n'
+  });
+  const bridged = runIn(bridge, "check");
+  eq("an app-reachable config-named bridge to Yjs fails the dependency gate", bridged.code, 1);
+  check("the gate names the bridge's prototype import", bridged.err.includes("layer: src/bootstrap/eslint.config.mjs:1 -> prototypes/collab/src/bridge.ts"), bridged.err);
+  for (const root of ["src/bootstrap", "desktop", "server", "shared", "prototypes/collab/src"]) {
+    for (const name of ["eslint.config.js", "eslint.config.mjs", "eslint.config.cjs", "vitest.config.js", "vitest.config.mjs", "vitest.config.cjs"]) {
+      eq(`${root}/${name} is analyzed as source`, isAnalyzed(`${root}/${name}`), true);
+    }
+  }
+  eq("the real root ESLint config remains tooling", isAnalyzed("eslint.config.mjs"), false);
+
   const repo = repoWith({
     "shared/p.js": '"use strict";\nmodule.exports = new URL("https://x.test");\n',
     "src/bootstrap/a.js": 'import "../../shared/p.js";\n'

@@ -532,7 +532,7 @@ export function analyzeScript(path, text) {
 }
 
 export function isAnalyzed(path) {
-  return isScript(path) && !EXCLUDED.some((re) => re.test(path)) && !/(^|\/)(eslint\.config|vitest\.config)\.[cm]?js$/.test(path);
+  return isScript(path) && !EXCLUDED.some((re) => re.test(path)) && !/^(eslint\.config|vitest\.config)\.[cm]?js$/.test(path);
 }
 
 export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
