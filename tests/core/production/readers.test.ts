@@ -31,6 +31,16 @@ test("tagsInField reads each tag span once, by trimmed name, with the text it co
   assert.deepEqual(readers.tagsInField(null), []);
 });
 
+test("nested tags retain each occurrence and its complete text", () => {
+  const html = cells.html([T("rain on ", { tag: "t:sound:Rain" }),
+    T("umbrella", { tag: "t:sound:Rain", innerTags: ["t:prop:Umbrella"] }),
+    T(" now", { tag: "t:sound:Rain" })]);
+  assert.deepEqual(readers.tagsInField(html), [
+    { catId: "sound", name: "Rain", text: "rain on umbrella now" },
+    { catId: "prop", name: "Umbrella", text: "umbrella" }
+  ]);
+});
+
 test("tagsInField adds each cue line as a sound, its name cut at 80 characters", () => {
   assert.deepEqual(readers.tagsInField(CUED), [
     { catId: "sound", name: "door slam", text: "SFX: door slam" },

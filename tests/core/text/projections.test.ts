@@ -98,6 +98,16 @@ test("Word runs carry formatting; annotated, they carry the tag, comments and b-
   assert.deepEqual(toDocxRuns([T(NBSP)]), [{ ...base, text: " " }]);
 });
 
+test("nested labels export words once with the innermost tag colour", () => {
+  const cell = [T("rain on ", { tag: "t:sound:Rain" }),
+    T("umbrella", { tag: "t:sound:Rain", innerTags: ["t:prop:Umbrella"] })];
+  const runs = toDocxRuns(cell, { annotate: true });
+  assert.equal(runs.map(run => run.text).join(""), "rain on umbrella");
+  assert.deepEqual(runs.map(run => run.tag), [{ cat: "sound", name: "Rain" }, { cat: "prop", name: "Umbrella" }]);
+  assert.equal(toPlainText(cell), "rain on umbrella");
+  assert.equal(toMarkdown(cell), "rain on umbrella");
+});
+
 test("every reader handles any canonical cell and changes nothing it is given", () => {
   for (const cell of RANDOM) {
     const before = JSON.stringify(cell);

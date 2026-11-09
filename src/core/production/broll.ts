@@ -18,7 +18,7 @@ import { cappedLongText, cappedName, plainText, unitCutName } from "../document/
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
-import { tagNameOf } from "../text/runs.ts";
+import { tagNameOf, tagStack } from "../text/runs.ts";
 import type { BrollRun, Marks, Run } from "../text/runs.ts";
 import type { BrollItem, FieldHtml, FieldText, ProductionReaders, ProductionRow } from "./ports.ts";
 import { TAG_FIELDS, registryEntry } from "./tags.ts";
@@ -211,13 +211,16 @@ export function brollPropsInCell(cell: readonly Run[]): string[][] {
     if (!open) return;
     const props: string[] = open;
     line.items.forEach(function (it) {
-      const t = !it.atom && it.marks && it.marks.tag ? tagNameOf(it.marks.tag) : null;
-      if (!t || t.cat !== "prop") return;
-      const name = cappedName(t.name, BROLL_PROP_NAME_MAX);
-      const key = normalizeTagName(name);
-      if (!name || seen[key]) return;
-      seen[key] = true;
-      props.push(name);
+      if (it.atom || !it.marks) return;
+      tagStack(it.marks).forEach(function (id) {
+        const t = tagNameOf(id);
+        if (!t || t.cat !== "prop") return;
+        const name = cappedName(t.name, BROLL_PROP_NAME_MAX);
+        const key = normalizeTagName(name);
+        if (!name || seen[key]) return;
+        seen[key] = true;
+        props.push(name);
+      });
     });
   });
   return out;

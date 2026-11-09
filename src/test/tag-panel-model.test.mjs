@@ -326,7 +326,7 @@ test("tagsInField: on the shapes where spans and the model disagree, it counts w
   const broll = '<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span>';
   const cases = [
     [tagSpan("prop", "Mug", "mug") + tagSpan("prop", "Mug", "mug"), 2, [["Mug", "mugmug"]]],
-    [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, [["Mug", "a"], ["Cup", "b"], ["Mug", "c"]], 2],
+    [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, [["Mug", "a b c"], ["Cup", "b"]], 2],
     ["x" + tagSpan("prop", "Mug", "") + "y", 1, []],
     [tagSpan("prop", "Mug", "a" + broll + "b"), 1, [["Mug", "a"], ["Mug", "b"]]]
   ];
