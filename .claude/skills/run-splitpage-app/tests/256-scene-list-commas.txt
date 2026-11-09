@@ -52,6 +52,7 @@ jsclick #rows .row[data-id="d15"] [data-action="cycle-status"]
 jsclick #rows .row[data-id="d15"] [data-action="cycle-status"]
 wait document.querySelector('#production-list .shoot-beat[data-row="d15"]').classList.contains('is-shot')
 expect document.querySelector('#production-list .shoot-group:first-child .shoot-progress').textContent.includes('2 of 47 filmed')
+expect document.activeElement === document.querySelector('#production-list .shoot-group:first-child .shoot-beat[data-row="d15"]')
 viewport 390 800
 expect Array.from(document.querySelectorAll('#production-list .shoot-beat')).every(e=>e.getBoundingClientRect().width >= 44 && e.getBoundingClientRect().height >= 44)
 shot 1159-shoot-dense-narrow

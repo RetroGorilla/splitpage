@@ -553,6 +553,7 @@ function renderProductionByPerson(all: readonly PresentedProductionEntry[]) {
 function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) {
   const doc = (ports as TagPanelPorts).document.current();
   if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
+  const numbering = (ports as TagPanelPorts).document.numbering();
   const live = entries || productionEntries();
   const byRow: Record<number, PresentedProductionEntry[]> = {};
   live.forEach(function (item) {
@@ -593,7 +594,7 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
     const shot = g.rows.filter(function (i) { return (doc.rows[i] as DocumentView["rows"][number]).status === "shot"; }).length;
     const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i] as DocumentView["rows"][number], doc, (ports as TagPanelPorts).text.productionReaders); }, 0);
     const done = shot === g.rows.length;
-    return '<section class="shoot-group" style="--dot:' + (key ? (TAG_CATEGORIES[1] as TagCategoryLook).color : "var(--border-strong)") + '">' +
+    return '<section class="shoot-group" data-shoot-key="' + escapeHtml(key) + '" style="--dot:' + (key ? (TAG_CATEGORIES[1] as TagCategoryLook).color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
         '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + (TAG_CATEGORIES[1] as TagCategoryLook).id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
@@ -604,13 +605,13 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
       '<dl class="shoot-detail">' +
         '<dt>Beats</dt>' +
         '<dd class="shoot-scenes">' +
-          groupItemsByScene(doc, g.rows.map(i => doc.rows[i] as DocumentView["rows"][number]), row => row.id).groups.map(function (group) {
+          groupItemsByScene(doc, g.rows.map(i => doc.rows[i] as DocumentView["rows"][number]), row => row.id, numbering).groups.map(function (group) {
             return '<section class="shoot-scene"><h4>' + escapeHtml('Scene ' + group.scene.letter + (group.scene.name ? ' · ' + group.scene.name : '')) + '</h4><div class="shoot-beats">' + group.items.map(function (row) {
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
-            const label = "Beat " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
+            const label = "Beat " + (numbering.beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
             return '<button type="button" class="shoot-beat' + (row.status === "shot" ? ' is-shot' : '') + (row.id === (ports as TagPanelPorts).focus.lastRow() ? ' is-current' : '') +
               '"' + (row.id === (ports as TagPanelPorts).focus.lastRow() ? ' aria-current="true"' : '') + ' data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
-              '" aria-label="' + escapeHtml(label) + '">' + escapeHtml((ports as TagPanelPorts).document.numbering().beats[row.id]?.short ?? "") +
+              '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(numbering.beats[row.id]?.short ?? "") +
               (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
             }).join('') + '</div></section>';
           }).join('') +
@@ -714,7 +715,19 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
   }
 
   if ((ports as TagPanelPorts).view.productionGroupBy() === "shoot") {
-    listEl.innerHTML = renderProductionByShoot(entries);
+    const active = document.activeElement;
+    const focused = active && listEl.contains(active) && active.matches(".shoot-beat") ? active as HTMLElement : null;
+    const row = focused?.getAttribute("data-row");
+    const key = focused?.closest(".shoot-group")?.getAttribute("data-shoot-key");
+    const scroll = listEl.scrollTop;
+    const html = renderProductionByShoot(entries);
+    if (listEl.innerHTML === html) return;
+    listEl.innerHTML = html;
+    if (row != null && key != null) {
+      const group = Array.from(listEl.querySelectorAll<HTMLElement>(".shoot-group")).find(el => el.getAttribute("data-shoot-key") === key);
+      Array.from(group?.querySelectorAll<HTMLElement>(".shoot-beat") ?? []).find(el => el.getAttribute("data-row") === row)?.focus({ preventScroll: true });
+    }
+    listEl.scrollTop = scroll;
     return;
   }
 

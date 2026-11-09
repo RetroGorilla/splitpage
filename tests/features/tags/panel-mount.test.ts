@@ -17,6 +17,7 @@ import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
 import { tagStatusLampHtml } from "../../../src/features/common/tag-status.ts";
 import * as commands from "../../../src/application/tag-panel-commands.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
+import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -111,6 +112,33 @@ function prepFixture(focus: string | null = null) {
   }
   return { ...h, doc, ports, calls, mounted, click };
 }
+
+test("shoot rendering derives document numbering once for many location groups", () => {
+  const migration = fakeMigration();
+  const h = fixture("location", migration);
+  const doc = migrateRows({ schema: 2, rows: Array.from({ length: 94 }, (_, i) => ({
+    id: "r" + i, visualText: migration.cell([{ text: "Place " + i, marks: { tag: "t:location:Place " + i } }]), audioText: ""
+  })), sections: [{ id: "s1", name: "Opening", firstSceneId: "r0" }],
+  productionTags: Array.from({ length: 94 }, (_, i) => ({ id: "t_" + i, cat: "location", name: "Place " + i })) }, migration.ports);
+  const entries = h.ports.production.entries(doc);
+  let derivations = 0;
+  const counted = new Proxy(doc, { get(target, key, receiver) {
+    if (key === "sections") derivations++;
+    return Reflect.get(target, key, receiver) as unknown;
+  } });
+  win.document.body.innerHTML = '<div id="production-panel"><div id="production-list"></div></div>';
+  const ports: TagPanelPorts = { ...h.ports,
+    document: { ...h.ports.document, current: () => counted, numbering: () => deriveDocumentNumbering(counted) },
+    production: { ...h.ports.production, entries: () => entries },
+    view: { ...h.ports.view, productionGroupBy: () => "shoot" }
+  };
+  const mounted = startTagPanels(ports);
+  try {
+    mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll('.shoot-group').length, 94);
+    assert.equal(derivations, 1);
+  } finally { mounted.dispose(); }
+});
 
 test("tag panels unsubscribe from preference changes on disposal", () => {
   const h = fixture();
