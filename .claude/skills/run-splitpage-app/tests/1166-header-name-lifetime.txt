@@ -1,0 +1,42 @@
+open
+viewport 1400 900
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.U=window.__undoTest;window.old=F.state();F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'Header editor lifetime',rows:['r1','r2','r3'].map(function(id){return {id:id,audioText:id+' narration.',visualText:''};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r3'}]})],'lifetime.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'Header editor lifetime'
+click #rows [data-section-id="s1"] .section-name
+press Renamed opening
+click #rows [data-section-id="s1"] .section-more summary
+wait F.state().sections[0].name === 'Renamed opening'
+expect document.querySelector('#rows [data-section-id="s1"] .section-more').open
+expect document.activeElement === document.querySelector('#rows [data-section-id="s1"] .section-more summary')
+key none Escape
+expect !document.querySelector('#rows [data-section-id="s1"] .section-more').open
+click #rows .row[data-id="r2"] .row-more
+click #rows .row[data-id="r2"] [data-action="add-section"]
+press Middle
+click #rows [data-section-id="s2"] .section-name
+wait F.state().sections.length === 3
+expect F.state().sections[1].name === 'Middle'
+expect (function(){var input=document.querySelector('#rows [data-section-id="s2"] .section-rename input');return !!input && input===document.activeElement && input.value==='Ending' && input.selectionStart===0 && input.selectionEnd===6;})()
+key none Escape
+wait !document.querySelector('.section-rename')
+expect document.activeElement === document.querySelector('#rows [data-section-id="s2"] .section-name')
+focus #rows .row[data-id="r2"] .audio-cell .cell-editable
+key ctrl KeyZ
+wait F.state().sections.length === 2
+eval U.flush();window.before=JSON.stringify(F.state());window.steps=U.sizes().undo;true
+click #rows .row[data-id="r2"] .row-more
+click #rows .row[data-id="r2"] [data-action="add-section"]
+press Invisible creation
+eval window.detached=document.querySelector('.section-rename');window.__renderTest.render();true
+expect !detached.isConnected && !document.querySelector('#rows .section-rename')
+click #doc-title
+eval detached.requestSubmit();U.flush();true
+expect JSON.stringify(F.state()) === before && U.sizes().undo === steps
+eval U.flush();window.before=JSON.stringify(F.state());window.steps=U.sizes().undo;true
+click #rows [data-section-id="s2"] .section-name
+press Invisible rename
+eval document.querySelector('#rows [data-section-id="s1"] [role="heading"]').append(document.querySelector('#rows [data-section-id="s2"] .section-rename'));true
+click #doc-title
+expect JSON.stringify(F.state()) === before && U.sizes().undo === steps
+quit

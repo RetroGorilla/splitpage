@@ -145,6 +145,36 @@ for (const existing of [false, true]) {
       } finally { f.controls.dispose(); }
     });
   }
+
+  test(`a connected ${existing ? "rename" : "creation"} line cannot save under another owner`, () => {
+    const f = fixture(existing);
+    try {
+      f.add.click();
+      const { input, form } = nameForm();
+      input.value = "Wrong owner";
+      document.getElementById("rows")?.append(form);
+      assert.equal(form.isConnected, true);
+      document.body.click();
+      assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+    } finally { f.controls.dispose(); }
+  });
+
+  test(`removing a ${existing ? "rename" : "creation"} line invalidates it even if later reattached`, async () => {
+    const f = fixture(existing);
+    try {
+      f.add.click();
+      const { input, form } = nameForm();
+      const parent = form.parentElement, next = form.nextSibling;
+      assert.ok(parent);
+      input.value = "Expired editor";
+      form.remove();
+      await Promise.resolve();
+      parent.insertBefore(form, next);
+      form.requestSubmit();
+      assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+      form.remove();
+    } finally { f.controls.dispose(); }
+  });
 }
 
 test("empty Enter leaves the name open without an edit until clicking away", () => {
@@ -209,3 +239,41 @@ test("a pointer click saves after the focus transfer so header controls can rece
     assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 1);
   } finally { f.controls.dispose(); }
 });
+
+test("an expired input cannot cancel a newer editor", async () => {
+  const f = fixture();
+  try {
+    f.add.click();
+    const expired = nameForm().input;
+    expired.closest("form")?.remove();
+    await Promise.resolve();
+    f.add.click();
+    const current = nameForm().input;
+    expired.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(current.isConnected, true);
+    assert.equal(document.activeElement, current);
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+  } finally { f.controls.dispose(); }
+});
+
+for (const existing of [false, true]) {
+  for (const commit of ["submit", "click", "blur", "window-blur", "pointercancel"]) {
+    test(`a detached ${existing ? "rename" : "creation"} editor cannot commit through ${commit}`, () => {
+      const f = fixture(existing);
+      try {
+        f.add.click();
+        const { input, form } = nameForm();
+        input.value = "Invisible draft";
+        form.remove();
+        if (commit === "submit") form.requestSubmit();
+        else if (commit === "click") document.body.click();
+        else if (commit === "blur") input.dispatchEvent(new window.FocusEvent("blur", { relatedTarget: f.more }));
+        else if (commit === "window-blur") window.dispatchEvent(new window.Event("blur"));
+        else document.dispatchEvent(new window.Event("pointercancel"));
+        assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+        assert.deepEqual(f.h.session.read(doc => doc?.sections), existing
+          ? [{ id: "s1", name: "Opening", firstSceneId: "r2" }] : undefined);
+      } finally { f.controls.dispose(); }
+    });
+  }
+}
