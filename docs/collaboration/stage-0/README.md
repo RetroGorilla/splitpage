@@ -13,7 +13,7 @@ Audited against `0ca1929177ffc84bced412ad2be3aa99690761d0`. Each file names the 
 | `3-session-callers.md` | `DocumentSession` methods and callers by class, and the paths that would bypass shared state | [#1358](https://github.com/RetroGorilla/splitpage/issues/1358) |
 | `4-writers-merge-drafts.md` | Automatic writers, merge, conflict stash and drafts by entry point, and how the prototype isolates from each | [#1359](https://github.com/RetroGorilla/splitpage/issues/1359) |
 | `5-invariants.md` | Invariants that are preserved, intentionally different or left to an experiment in shared mode, with Stage 1 pass criteria | [#1360](https://github.com/RetroGorilla/splitpage/issues/1360) |
-| `6-boundaries.md` | Stores and origins, hydration entry, inbound update sources, app-data export, CSP, service worker and join-route delivery | [#1361](https://github.com/RetroGorilla/splitpage/issues/1361) |
+| `6-boundaries.md` | Stores and origins, hydration entry, inbound update sources, the desktop tab source, app-data export, the connection policy, the bundle sizes, the service worker and how the browser app is served | [#1361](https://github.com/RetroGorilla/splitpage/issues/1361) |
 | `7-performance-baseline.md` | The standalone baseline, the tolerated regression, the noise treatment and provisional limits | [#1362](https://github.com/RetroGorilla/splitpage/issues/1362) |
 | `8-schema-hypotheses.md` | Schema candidates as layouts, expected outcome of every trace written by hand, expected failures and provider API questions | [#1363](https://github.com/RetroGorilla/splitpage/issues/1363) |
 
@@ -27,11 +27,11 @@ Code is cited as a path and a symbol name, not a line number.
 
 ## Stage 1 tags
 
-Traces, in the order of the plan's section 13 table:
+Traces from the plan's section 13 table. T20 to T24 name rows the plan's third review added, so the numbers are not in table order. Stage 1a (editing feasibility) owns T01 to T12, T20, T21, MOVE, SLICE and PROJ; Stage 1b (service feasibility) owns T13 to T19, T22 to T24 and STORE.
 
 | Tag | Trace |
 | --- | --- |
-| T01 | Buffered deletion of observed content with a concurrent remote insertion inside it (`abcd`, delete `bc`, remote `X`) under both buffer mechanisms |
+| T01 | Buffered deletion of observed content with a concurrent remote insertion inside it (`abcd`, delete `bc`, remote `X`) under every candidate buffer mechanism |
 | T02 | Ordinary keystroke while a remote update is integrated but the focused beat is unpainted |
 | T03 | Same-word edits and repeated text |
 | T04 | Held IME input with remote insertion and deletion, driven by synthetic composition events |
@@ -44,12 +44,17 @@ Traces, in the order of the plan's section 13 table:
 | T11 | Overlapping comments, replies and structural edits |
 | T12 | Structural undo after intervening remote edits |
 | T13 | Initial upload while the owner continues typing |
-| T14 | Older server write finishes after a newer flush request; pure deletes |
-| T15 | Two barriers completing out of order; a receipt from a closed connection |
-| T16 | Offline image insertion followed by automatic reconnect |
+| T14 | With barriers: older server write finishes after a newer flush request; pure deletes |
+| T15 | With barriers: two barriers completing out of order; a receipt from a closed connection |
+| T16 | Offline image insertion followed by automatic reconnect, under upload-before-sync and under the pending-image contract |
 | T17 | Server restart and join with all previous clients offline |
 | T18 | Invalid and oversized input at the chosen hooks |
 | T19 | Reconnect with a rejected update still in the local replica |
+| T20 | Concurrent tag edits on overlapping text, and a comment or link applied across part of a tag another client is adding |
+| T21 | Undo of a mark or comment change after intervening remote edits |
+| T22 | Update acknowledged, then the server is killed before any debounced store |
+| T23 | Reconnect with acknowledged, unacknowledged and never-sent updates on the device |
+| T24 | A second tab opens an instance that a writable tab holds, then the holder crashes |
 
 Other tags:
 
