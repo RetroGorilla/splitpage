@@ -17,6 +17,18 @@ assert.equal(smoke["runs-on"], "ubuntu-latest");
 assert.equal(smoke["timeout-minutes"], 90);
 assert.equal(smoke.if, "needs.changes.outputs.desktop == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(changes.outputs.desktop, "${{ steps.classify.outputs.desktop }}");
+assert.equal(changes.outputs.collab, "${{ steps.classify.outputs.collab }}");
+const prototypeTests = checks.steps.find((s) => s.name === "Collaboration prototype tests");
+assert.equal(prototypeTests.if, "needs.changes.outputs.collab == 'true'");
+assert.equal(prototypeTests.run, "npm test");
+assert.equal(prototypeTests["working-directory"], "prototypes/collab");
+const install = checks.steps.find((s) => s.name === "Install tooling");
+assert.ok(install.run.includes("npm ci --prefix prototypes/collab"));
+assert.ok(checks.steps.indexOf(install) < checks.steps.indexOf(prototypeTests));
+for (const job of [checks, workflow.jobs["npm-cache"]]) {
+  assert.ok(job.steps.find((s) => s.uses?.startsWith("actions/setup-node@")).with["cache-dependency-path"].split("\n").includes("prototypes/collab/package-lock.json"));
+}
+assert.ok(workflow.jobs["npm-cache"].steps.some((s) => s.run?.includes("npm ci --ignore-scripts --prefix prototypes/collab")));
 assert.deepEqual(tests.strategy.matrix.shard, [1, 2, 3, 4]);
 assert.equal(tests.strategy["fail-fast"], false);
 assert.equal(tests.needs, "changes");

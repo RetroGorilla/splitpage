@@ -41,8 +41,13 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `shared` | `shared/` | itself |
 | `tests` | `src/test/`, `tests/`, `*.test.*` | anything |
 | `tools` | `tools/` | anything |
+| `prototypes` | `prototypes/` (tests included) | itself, core, `shared`; nothing outside this layer may import it |
 | `server`, `desktop` | `server/`, `desktop/` | anything except tests |
 | `src-unknown` | any other `src/` folder, or a file directly under `src/` | anything, but each file is an `unknown-layer` violation |
+
+Prototype isolation overrides the unrestricted rows: no other layer may import
+`prototypes/`, including prototype test files. Prototypes may read core and
+shared code, but may not import application owners, features, adapters or tooling.
 
 A script under `src/` outside the folders above is an `unknown-layer`
 violation keyed by its top-level folder (`src/util/`, or `src/` for a file

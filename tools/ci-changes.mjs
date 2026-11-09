@@ -15,6 +15,7 @@ const PROSE_ONLY = [
 const BUILD_PROSE = new Set(["docs/help.md"]);
 
 const NON_APP = [
+  /^prototypes\//,
   /^(tests|src\/test|desktop\/test)\//,
   /^tools\/test-[^/]+\.mjs$/,
   /^tools\/ci-changes\.mjs$/,
@@ -25,7 +26,12 @@ const NON_APP = [
 
 export function needsChecks(files) {
   if (files === null || files.length === 0) return true;
-  return files.some((f) => BUILD_PROSE.has(f) || !(f.endsWith(".md") || PROSE_ONLY.some((re) => re.test(f))));
+  return files.some((f) => f.startsWith("prototypes/collab/") || BUILD_PROSE.has(f) || !(f.endsWith(".md") || PROSE_ONLY.some((re) => re.test(f))));
+}
+
+export function needsCollabChecks(files) {
+  if (files === null || files.length === 0) return true;
+  return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml");
 }
 
 export function needsAppChecks(files) {
@@ -54,10 +60,12 @@ if (isMain(import.meta.url)) {
   const code = needsChecks(files);
   const app = needsAppChecks(files);
   const desktop = needsDesktopChecks(files);
+  const collab = needsCollabChecks(files);
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);
   console.log(`ci-changes: app=${app}`);
   console.log(`ci-changes: desktop=${desktop}`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\n`);
+  console.log(`ci-changes: collab=${collab}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\ncollab=${collab}\n`);
 }

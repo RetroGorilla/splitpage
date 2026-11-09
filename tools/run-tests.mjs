@@ -90,7 +90,7 @@ export function discover(files, groups = GROUPS) {
     return { group: g, files: selected, required: g.requiredWhen(files) };
   });
   const overlaps = [...claimed].filter(([, names]) => names.length > 1).map(([p, names]) => `${p} (${names.join(", ")})`);
-  const orphans = files.filter((p) => TEST_FILE.test(p) && !claimed.has(p) && !/(^|\/)node_modules\//.test(p)).sort();
+  const orphans = files.filter((p) => TEST_FILE.test(p) && !claimed.has(p) && !p.startsWith("prototypes/collab/test/") && !/(^|\/)node_modules\//.test(p)).sort();
   return { groups: result, overlaps, orphans, untested: untestedAreas(files) };
 }
 

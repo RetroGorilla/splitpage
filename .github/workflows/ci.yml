@@ -29,6 +29,7 @@ jobs:
       tested: ${{ steps.tested.outputs.tested }}
       app: ${{ steps.classify.outputs.app }}
       desktop: ${{ steps.classify.outputs.desktop }}
+      collab: ${{ steps.classify.outputs.collab }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,9 +66,10 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             desktop/package-lock.json
+            prototypes/collab/package-lock.json
 
       - name: Download every locked package into the npm cache
-        run: npm ci --ignore-scripts && npm ci --ignore-scripts --prefix desktop
+        run: npm ci --ignore-scripts && npm ci --ignore-scripts --prefix desktop && npm ci --ignore-scripts --prefix prototypes/collab
 
   checks:
     needs: changes
@@ -86,9 +88,10 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             desktop/package-lock.json
+            prototypes/collab/package-lock.json
 
       - name: Install tooling
-        run: npm ci && npm ci --prefix desktop
+        run: npm ci && npm ci --prefix desktop && npm ci --prefix prototypes/collab
 
       - name: Desktop browser scripts are generated from their checked sources
         run: node tools/build-preload.mjs && node tools/check-preload.mjs
@@ -104,6 +107,11 @@ jobs:
 
       - name: No new comments
         run: npm run check:comments
+
+      - name: Collaboration prototype tests
+        if: needs.changes.outputs.collab == 'true'
+        run: npm test
+        working-directory: prototypes/collab
 
       - name: Build index.html and stamp sw.js
         if: needs.changes.outputs.app == 'true'

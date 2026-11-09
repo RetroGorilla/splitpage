@@ -66,6 +66,33 @@ check("bootstrap may import anything", layerAllows("bootstrap", "features/rows")
 check("production code may not import tests", !layerAllows("application", "tests") && !layerAllows("server", "tests"));
 check("tools may import tests", layerAllows("tools", "tests"));
 
+for (const path of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts", "prototypes/other/probe.ts"]) {
+  eq("prototype paths keep their layer even for tests", layerOf(path), "prototypes");
+}
+for (const source of ["core/document", "core/text", "core", "application", "adapters", "features/rows", "bootstrap", "starters", "src-unknown", "shared", "server", "desktop", "tests", "tools", "other"]) {
+  check(`${source} cannot import prototypes`, !layerAllows(source, "prototypes"));
+  check(`prototype imports of ${source} are limited to core and shared`, layerAllows("prototypes", source) === (source.startsWith("core") || source === "shared"));
+}
+check("prototypes can import their own code", layerAllows("prototypes", "prototypes"));
+
+for (const source of ["src/bootstrap/probe.ts", "desktop/probe.ts", "server/probe.ts", "shared/probe.ts", "src/test/probe.test.mjs", "desktop/test/probe.test.mjs"]) {
+  for (const target of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts"]) {
+    const prefix = "../".repeat(source.split("/").length - 1);
+    const violations = findViolations(graph({
+      [source]: `import "${prefix}${target}";\n`,
+      [target]: "export const value = 1;\n"
+    }));
+    eq(`${source} importing ${target} fails the real dependency graph`, violations.map(({ rule }) => rule), ["layer"]);
+  }
+}
+
+eq("prototype tests can read core and shared but not application owners", findViolations(graph({
+  "prototypes/collab/test/probe.test.ts": 'import "../../../src/core/document/probe.ts";\nimport "../../../shared/probe.ts";\nimport "../../../src/application/probe.ts";\n',
+  "src/core/document/probe.ts": "export const coreValue = 1;\n",
+  "shared/probe.ts": "export const sharedValue = 1;\n",
+  "src/application/probe.ts": "export const ownerValue = 1;\n"
+})).map(({ rule, target }) => ({ rule, target })), [{ rule: "layer", target: "src/application/probe.ts" }]);
+
 eq("reintroducing the retired folder fails the unknown-layer and import rules", findViolations(graph({
   "src/contracts/dto.ts": "export type Dto = { id: string };\n",
   "src/application/probe.ts": 'import type { Dto } from "../contracts/dto.ts";\nexport type Probe = Dto;\n'
