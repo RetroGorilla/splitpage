@@ -2,7 +2,7 @@
 
 The standalone performance baseline that shared-mode results are judged against, with the tolerated regression, the noise treatment and the provisional limits fixed before any prototype number exists (plan [section 12](../../COLLABORATION-PLAN.md), item 7).
 
-Audited against `main` at `0ca1929177ffc84bced412ad2be3aa99690761d0`. The recorder additions are in the same PR (`tools/perf-record.mjs`, measured at branch commit `0ed0c19d772a36d3e30d6fb718b3cb4885015248`; `src/` is identical to `main`).
+Audited against `main` at `0ca1929177ffc84bced412ad2be3aa99690761d0`. The recorder additions are in the same PR (`tools/perf-record.mjs`). The five full runs used branch commit `0ed0c19d772a36d3e30d6fb718b3cb4885015248`; the one re-measured row (section 4, heap) used the recorder as it stands in this PR, which differs from `0ed0c19d` only in reading free memory first and averaging an even sample count. `src/`, `build.mjs` and the driver are unchanged on `main` since the audited commit, so the build measured is the build on `main` today.
 
 Every row below is tagged `PERF` plus the Stage 1 tags it bounds ("Serves"). Numbers are the **median of 5 runs, with the min-max range across the runs in brackets**. No single run is reported.
 
@@ -19,7 +19,7 @@ Every row below is tagged `PERF` plus the Stage 1 tags it bounds ("Serves"). Num
 | Fonts | `"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, sans-serif`; Atkinson Hyperlegible Next is installed and drew the text (checked by the recorder) |
 | Build | `node build.mjs --test` (test hooks present), served by the driver's static server on ports 18990 and 19990 |
 | Locks | `perf` and `smoke` held through `tools/with-lock.ps1` for every run, so no other lane's browser or suite ran during them |
-| Free RAM at start of each run | 5.5, 5.0, 4.9, 5.1 and 5.3 GB. This is low for a 31 GB machine: Windows memory compression held about 3.7 GB, around 50 Firefox processes and 15 to 17 `node` processes of other lanes were alive, and Defender (`MsMpEng`) was resident. No `msedge` process existed before any run |
+| Free RAM before each run | 4.8, 5.5, 5.0, 5.0 and 5.1 GB for the five full runs, read by the run script just before each run (Windows free physical memory). The recorder's own "free memory" line in those five reports was read after the run, not before, so it is not quoted here; the recorder now reads it before any work. This is low for a 31 GB machine: Windows memory compression held about 3.7 GB, around 50 Firefox processes and 15 to 17 `node` processes of other lanes were alive, and Defender (`MsMpEng`) was resident. No `msedge` process existed before any run |
 | CPU busy, second before / after each run | 15/6, 9/6, 7/19, 14/14 and 12/12 % |
 | Other things running | Other agent sessions (15 to 17 Claude processes, node processes), a ChatGPT app, Firefox. Not a quiet machine, and not controlled beyond the locks |
 | Fixture counts | Section 3 |
@@ -29,12 +29,12 @@ Every row below is tagged `PERF` plus the Stage 1 tags it bounds ("Serves"). Num
 | Item | Status | Serves |
 | --- | --- | --- |
 | Typing, open-tag typing, new scene, delete, undo, stamp, hide, display preference, three exports on `short` and `long`; image open, load and merge on `images` | Existing, unchanged (default run) | PERF, T02, T04, T05, T08, T12 |
-| Initial load: navigation entry (dom interactive, DOMContentLoaded, load end), first and largest paint, whether a scene cell exists, five fresh navigations per run | New, fixture `footprint` | PERF, T06, T17 |
-| Open a script: `openFile` on a file built from the current script until the frame after it, three trials per script (`short`, `long`, `large`) | New, fixtures `footprint`, `footprint-long`, `large` | PERF, T06, T07, T13 |
+| Initial load: navigation entry (dom interactive, DOMContentLoaded, load end), first and largest paint, whether a scene cell exists, five fresh navigations per run | New, fixture `footprint` | PERF |
+| Open a script: `openFile` on a file built from the current script until the frame after it, three trials per script (`short`, `long`, `large`) | New, fixtures `footprint`, `footprint-long`, `large` | PERF, T13, T17 |
 | JS heap after two forced collections: after load and after the typing case, for `short`, `long` and `large` | New | PERF, STORE |
 | Script size and stored bytes: counts, text and HTML characters, `.splitpage`, `.md project`, state JSON bytes | New | PERF, STORE, T18 |
-| Scale script: the long demo repeated 10 times with fresh ids, built in the page from the live state and opened with `openFile`; runs typing, new scene, delete, undo and the exports on it | New, fixture `large` | PERF, T13, T06 |
-| Free memory at the start in the conditions list | New line in the report | PERF |
+| Scale script: the long demo repeated 10 times with fresh ids, built in the page from the live state and opened with `openFile`; runs typing, new scene, delete, undo and the exports on it | New, fixture `large` | PERF, T13 |
+| Free memory in the conditions list, read once before the build and every fixture | New line in the report | PERF |
 
 The three new fixtures run only when named (`--only footprint,footprint-long,large`), so the default run and `tools/perf-ab.mjs` are unchanged. Each starts its own browser: a navigation after the typing case timed out in the driver in a first attempt (the likely cause is the unsaved-work prompt, not confirmed). Nothing large is committed; the scale script is generated in the page.
 
@@ -111,14 +111,14 @@ Load is a fresh `goto /index.html` on the seed script, five per run, each probed
 
 | Case | Value | Serves |
 | --- | --- | --- |
-| Load, dom interactive | 49.7 [37.6-53.7] | PERF, T06, T17 |
+| Load, dom interactive | 49.7 [37.6-53.7] | PERF |
 | Load, DOMContentLoaded | 65.9 [52.1-72.4] | PERF |
-| Load, load end | 70.3 [54.1-74.4] | PERF, T06, T17 |
+| Load, load end | 70.3 [54.1-74.4] | PERF |
 | Load, first paint | 36 [32-40] | PERF |
-| Load, largest paint | 88 [68-96] | PERF, T06, T17 |
-| Open short (2 beats), first trial / median of 3 | 6.4 [5.3-18.8] / 11 [8-15.6] | PERF, T06 |
-| Open long (30 beats), first trial / median of 3 | 15.3 [12.3-17.4] / 10.6 [9-14.7] | PERF, T06, T07 |
-| Open large (300 beats), first trial / median of 3 | 204.2 [191.8-215.7] / 48.9 [47.5-52] | PERF, T06, T07, T13 |
+| Load, largest paint | 88 [68-96] | PERF |
+| Open short (2 beats), first trial / median of 3 | 6.4 [5.3-18.8] / 11 [8-15.6] | PERF |
+| Open long (30 beats), first trial / median of 3 | 15.3 [12.3-17.4] / 10.6 [9-14.7] | PERF |
+| Open large (300 beats), first trial / median of 3 | 204.2 [191.8-215.7] / 48.9 [47.5-52] | PERF, T17 |
 | Images: open 10 pictures, median trial | 315.8 [268.3-324.1] | PERF, T16 |
 | Images: load 10 pictures from IndexedDB | 109.2 [103-116.5] | PERF, T16, T17 |
 | Images: merge 10 + 10 pictures | 326.1 [281.1-370] | PERF, T16 |
@@ -129,14 +129,16 @@ The first trial of short is 5.3 to 18.8 ms across runs: at this size the number 
 
 | Case | MiB | Serves |
 | --- | --- | --- |
-| short after load (6 samples a run: 5 navigations and the footprint page) | 6.45 [6.45-7.51], two values only: 6.45 and about 7.5 | PERF, STORE |
+| short after load (6 samples a run: 5 navigations and the footprint page; mean of the middle pair) | 6.45 [6.45-6.45], re-measured, see below | PERF, STORE |
 | short after typing | 7.46 [7.46-7.47] | PERF, STORE |
 | long after load | 7.13 [7.13-7.13] | PERF, STORE |
 | long after typing | 8.58 [8.57-8.58] | PERF, STORE |
 | large after load | 14.96 [14.95-14.97] | PERF, STORE |
 | large after typing | 15.66 [15.66-15.67] | PERF, STORE |
 
-With a forced collection and precise sampling the heap is nearly deterministic: ranges under 0.05 MiB except the short page after load, which fell on one of two values (6.45 in three runs, about 7.5 in two); the cause was not found.
+With a forced collection and precise sampling the heap is nearly deterministic: every range is under 0.05 MiB.
+
+The short-after-load row was first recorded as 6.45 [6.45-7.51]. That was a recorder fault: six samples made an even count and the report took the upper middle one, so two runs showed a high sample (about 7.5 MiB) as the median. The recorder now averages the middle pair for an even count (new fixtures only; every existing case has an odd count). The raw samples of the first five runs were not kept, so the `footprint` fixture was run again five times (15:21 to 15:24, the corrected recorder, same build, same machine and locks). One of those runs began with 2.8 GB free, under the 3 GB void line of section 6, and was replaced by a sixth run (4.8 GB free). The five valid runs read 6.45 in each. Their other rows (load end 54.8 to 76.2 ms, typing p50 2.4 to 3.3 ms, `short open file` median trial 6.3 to 11.3 ms) are in line with the first five runs and were not substituted for them: only this row comes from the rerun. Free RAM before the five valid reruns, by the recorder: 4.2, 5.1, 5.0, 4.9 and 4.8 GB.
 
 ### Storage growth (bytes; counts in section 3)
 
@@ -201,7 +203,7 @@ The typing p95 per run: short 15.6, 16, 12.6, 13.1, 14.1; long 15.4, 14.7, 14.8,
 | What is compared | For each case, the **median of the five per-run p50s** (typing cases also the median of the five p95s). Never pooled keystrokes and never a mean. Bytes are compared exactly |
 | Outliers | Never dropped. The baseline's own min-max range is the noise estimate, so an outlier widens the tolerance instead |
 | Locks | `perf` and `smoke` held for each run through `tools/with-lock.ps1`; no other browser, suite or desktop smoke on the machine |
-| Voids a run | CPU busy over 35 % in the second before or after it (the recorder reads this); free RAM under 3 GB at the start; any `msedge` process alive before it starts; a different Node or browser version inside one set; a recorder exit other than 0 or a case count other than expected; a game or `pc-hold` active. A void run is replaced and the replacement is noted in the PR, never silently dropped |
+| Voids a run | CPU busy over 35 % in the second before or after it (the recorder reads this); free RAM under 3 GB at the start, as the recorder reads it before it does any work; any `msedge` process alive before it starts; a different Node or browser version inside one set; a recorder exit other than 0 or a case count other than expected; a game or `pc-hold` active. A void run is replaced and the replacement is noted in the PR, never silently dropped |
 | Where it holds | Only the same machine and browser build. A baseline from another PC, or from this one after a browser update, is re-recorded first |
 
 ### Tolerated regression for standalone A/B (shared code present but unused must not slow standalone)
@@ -255,15 +257,15 @@ T for p50, "limit" is baseline median + T. Cases whose T exceeds 50 % of the med
 | long writer open tag spaces | 7.3 | 4-10.6 | 6.6 | 13.9 | 90 % | yes | PERF, T04 |
 | long writer open tag name | 3.7 | 2.8-4.1 | 1.3 | 5.0 | 35 % | | PERF, T04 |
 | Export `.splitpage`, short / long / large | 0.5 / 5.3 / 27.5 | 0.4-0.7 / 4.5-6.1 / 21.8-35.5 | 0.5 / 1.6 / 13.7 | 1.0 / 6.9 / 41.2 | 100 / 30 / 50 % | short | PERF |
-| Load end | 70.3 | 54.1-74.4 | 20.3 | 90.6 | 29 % | | PERF, T06, T17 |
-| Open large, first trial | 204.2 | 191.8-215.7 | 30.6 | 234.8 | 15 % | | PERF, T06, T13 |
-| Open large, median of 3 | 48.9 | 47.5-52 | 7.3 | 56.2 | 15 % | | PERF, T06 |
-| Open long, first trial | 15.3 | 12.3-17.4 | 5.1 | 20.4 | 33 % | | PERF, T06 |
+| Load end | 70.3 | 54.1-74.4 | 20.3 | 90.6 | 29 % | | PERF |
+| Open large, first trial | 204.2 | 191.8-215.7 | 30.6 | 234.8 | 15 % | | PERF, T17 |
+| Open large, median of 3 | 48.9 | 47.5-52 | 7.3 | 56.2 | 15 % | | PERF, T17 |
+| Open long, first trial | 15.3 | 12.3-17.4 | 5.1 | 20.4 | 33 % | | PERF |
 | Heap after typing, short / long / large (MiB) | 7.46 / 8.58 / 15.66 | under 0.02 | 0.25 / 0.26 / 0.47 | 7.71 / 8.84 / 16.13 | 3 % | | PERF, STORE |
 | Heap after load, long / large (MiB) | 7.13 / 14.96 | under 0.02 | 0.25 / 0.45 | 7.38 / 15.41 | 3 to 4 % | | PERF, STORE |
 | Bytes, every script | table in section 4 | none | 0 | exact | 0 % | | PERF, STORE |
 
-Short open and short heap after load are not gated: the first is timer noise at 3 to 19 ms and the second takes one of two values.
+Heap after load, short: 6.45 MiB, range 0, so T is the 0.25 MiB floor and the limit is 6.70 MiB (PERF, STORE). Short open is not gated: it is timer noise at 3 to 19 ms.
 
 ## 7. Provisional limits where no standalone baseline can exist
 
@@ -273,7 +275,7 @@ Each is **provisional; changing it is an explicit decision**, never a retroactiv
 | --- | --- | --- | --- |
 | Shared-session input latency, a local writer typing with a second client connected and one remote edit per second landing in another beat | p50 at most standalone p50 + 3 ms and never above 8 ms; p95 at most 25 ms on short and long, 40 ms on large; no long task over 50 ms during typing | Standalone p50 is 2.5 to 2.8 ms and p95 sits at one frame (14 to 15 ms). 8 ms is the existing perf-ab limit. 25 ms is 1.5 frames, so a keystroke is still painted within two frames; large's standalone p95 of 22.6 ms gets the same proportional headroom | PERF, T02, T04, T09 |
 | Projection time after a remote update, message applied to the frame that paints it | One remote character in a visible beat: p50 at most 30 ms and p95 at most 50 ms on long and large. A remote structural change (split, new beat, delete): at most 1.5x the standalone new-scene p50, so 45 ms on long and 300 ms on large | A remote character should cost no more than two frames (33 ms), and a local one costs 2.5 ms. A structural change redraws everything today (27.9 ms long, 194.6 ms large), so 1.5x is the room for the shared projection itself. A smaller large budget would need an incremental render, a Stage 2 choice | PERF, T02, T05, T08, T12 |
-| Initial join load, 2 MiB encoded state, provider connect to editable and first frame drawn | p50 at most 3 s and worst of five at most 5 s; no single task over 1 s | Large (0.33 MB, 300 beats) opens in 0.2 s cold. 2 MiB is about 6x the bytes, so linear cost is about 1.2 s; 3 s leaves 2.5x headroom for decoding the CRDT state, which standalone does not do | PERF, T06, T07, T13, T17 |
+| Initial join load, 2 MiB encoded state, provider connect to editable and first frame drawn | p50 at most 3 s and worst of five at most 5 s; no single task over 1 s | Large (0.33 MB, 300 beats) opens in 0.2 s cold. 2 MiB is about 6x the bytes, so linear cost is about 1.2 s; 3 s leaves 2.5x headroom for decoding the CRDT state, which standalone does not do | PERF, T13, T17 |
 | Reconnect to synced, network restored to "connected, nothing pending", with up to 100 offline edits on a 2 MiB state | p95 at most 5 s; to the status "Your changes saved to server" at most 10 s | 5 s is the 2 s store debounce plus about 3 s to connect and exchange state. 10 s is the plan's upper bound for a store under continuous updates; backoff settings are a Stage 1b output and may move this | PERF, T16, T17, T19 |
 | Receipt delay, last local edit to a covering receipt, on the local network | Journaling inside `beforeSync` (no debounce): p95 at most 1 s. Barrier design with the debounced store: p50 at most 3 s, p95 at most 5 s when idle, and at most 10 s under continuous typing | The plan's facts: the store hook is debounced at 2 s with a 10 s maximum, and a journal commit per update has no debounce. 1 s is a disk commit plus a round trip; the barrier numbers are the debounce plus slack | PERF, T14, T15 |
 | Retained-state growth, encoded CRDT state against the plain document | A fresh import is at most 3x the plain `.splitpage` bytes (section 4). After a heavily edited run (the long demo with 10,000 character inserts and deletes and 200 structural edits and undos) at most 10x the plain size at that point, and never above the 2 MiB document bound | A CRDT keeps per-character identities (3x allows them on text-dense scripts) and deletion tombstones (10x bounds a long editing history). The plain size is `.splitpage` 38,432 bytes for the long demo. No standalone retained state exists to measure | PERF, STORE, T10, T18 |
@@ -286,7 +288,7 @@ The measurement for each uses the cases of section 4 on the same PC and the same
 | Question | Experiment |
 | --- | --- |
 | Is load end a fair stand-in for "navigation to editable"? The page has no early mark; editable was true at the probe in all 25 loads and largest paint (88 ms) is about 18 ms after load end | Add an app-side `performance.mark` when the first scene cell is editable (an app change, so Stage 2), or keep the pair as the definition |
-| Does a join resemble a first open (cold, 204 ms for large) or a warm one (49 ms)? The limits assume cold | T06 and T07 prototypes report both |
+| Does a join resemble a first open (cold, 204 ms for large) or a warm one (49 ms)? The limits assume cold | The T17 and T13 prototypes report both |
 | Real history-store bytes, including the index row, and draft bytes on desktop | A harness path that takes a snapshot, and a desktop run; both listed in section 2 |
 | The tolerance rule has no power check against a real regression | First Stage 2 A/B, or a deliberate delay of known size in an A/B built for the purpose |
 | A 2 MiB standalone script has not been measured | `LARGE_COPIES` set to about 55 and one `large` run; the projection budget does not need it |

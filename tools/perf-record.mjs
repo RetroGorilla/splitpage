@@ -504,6 +504,12 @@ function median(values) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
+function middle(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  return n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+}
+
 export function imageProblems(trials) {
   const problems = [];
   for (const spec of IMAGE_CASES) {
@@ -555,7 +561,7 @@ function sampleBusy(ms) {
 
 function machine() {
   const c = cpus();
-  return { platform: `${platform()} ${release()} ${arch()}`, cpu: `${c[0]?.model ?? "unknown"} x${c.length}`, memoryGb: +(totalmem() / 2 ** 30).toFixed(1), freeGb: +(freemem() / 2 ** 30).toFixed(1), node: process.version };
+  return { platform: `${platform()} ${release()} ${arch()}`, cpu: `${c[0]?.model ?? "unknown"} x${c.length}`, memoryGb: +(totalmem() / 2 ** 30).toFixed(1), node: process.version };
 }
 
 export function report(results, env, when) {
@@ -569,7 +575,7 @@ export function report(results, env, when) {
   const heaps = [...results.filter((r) => r.kind === "load").map((r) => ({ ...r, label: r.label.replace(" load", " heap after load") })), ...results.filter((r) => r.kind === "heap")];
   const footprints = results.filter((r) => r.kind === "footprint");
   const grouped = (list) => [...new Set(list.map((r) => r.label))].map((label) => list.filter((r) => r.label === label));
-  const mid = (list, key) => median(list.map((r) => r[key]).filter((v) => v !== null && v !== undefined));
+  const mid = (list, key) => +middle(list.map((r) => r[key]).filter((v) => v !== null && v !== undefined)).toFixed(2);
   const fixtureLines = [
     beats("short") !== undefined ? `short is the seed script (${beats("short")} scenes)` : null,
     beats("long") !== undefined ? `long is the long demo (${beats("long")} scenes)` : null,
@@ -683,6 +689,7 @@ export function parseArgs(argv) {
 }
 
 export function main(argv) {
+  const freeGb = +(freemem() / 2 ** 30).toFixed(1);
   const args = parseArgs(argv);
   if (args.error) {
     console.error(`perf-record: ${args.error}`);
@@ -733,7 +740,7 @@ export function main(argv) {
     results.push(...found, ...imageRows(trials));
   }
   const busyAfter = sampleBusy(1000);
-  const text = report(results, { ...machine(), busy: { before: busyBefore, after: busyAfter } }, new Date().toISOString().slice(0, 10));
+  const text = report(results, { ...machine(), freeGb, busy: { before: busyBefore, after: busyAfter } },new Date().toISOString().slice(0, 10));
   if (out) writeFileSync(out, text);
   console.log(text);
   rmSync(work, { recursive: true, force: true });

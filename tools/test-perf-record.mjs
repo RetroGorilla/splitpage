@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
@@ -247,9 +248,13 @@ const baseText = report([
   { label: "short heap after typing", kind: "heap", heapMb: 10, collected: true },
   { label: "short footprint", kind: "footprint", beats: 2, sceneHeaders: 0, comments: 1, people: 0, tags: 0, textChars: 5, htmlChars: 6, splitpageBytes: 7, markdownBytes: 8, stateJsonBytes: 9 }
 ], { platform: "p", cpu: "c", memoryGb: 1, freeGb: 0.5, node: "n" }, "2026-01-01");
-eq("the report has the load, open, heap and size tables", ["## Initial load (median of 2 navigations", "## Open a script", "| short heap after load | 2 | 8 |", "| short heap after typing | 1 | 10 |", "| short | 2 | 0 | 1 | 0 | 0 | 5 | 6 | 7 | 8 | 9 |"].map((s) => baseText.includes(s)), [true, true, true, true, true]);
-eq("the report names the free memory", baseText.includes("- Free memory at the start: 0.5 GB"), true);
-eq("a null paint time is left out of the median", baseText.includes("| short load | 2 | 3 | 4 | 5 | 4 | 7 | yes |"), true);
+eq("the report has the load, open, heap and size tables", ["## Initial load (median of 2 navigations", "## Open a script", "| short heap after load | 2 | 7 |","| short heap after typing | 1 | 10 |", "| short | 2 | 0 | 1 | 0 | 0 | 5 | 6 | 7 | 8 | 9 |"].map((s) => baseText.includes(s)), [true, true, true, true, true]);
+const evenText = report(["6.01", "6.02", "7", "9.5"].map((h) => ({ label: "x heap after typing", kind: "heap", heapMb: Number(h), collected: true })), { platform: "p", cpu: "c", memoryGb: 1, node: "n" }, "2026-01-01");
+eq("an even sample count reports the mean of the middle pair, to two decimals", evenText.includes("| x heap after typing | 4 | 6.51 |"), true);
+const recorderSource = readFileSync(new URL("./perf-record.mjs", import.meta.url), "utf8");
+eq("free memory is read once, before the build and every fixture", [recorderSource.match(/freemem\(\)/g).length, recorderSource.indexOf("freemem() /") < recorderSource.indexOf("buildArgs(readFileSync")], [1, true]);
+eq("the report names the free memory",baseText.includes("- Free memory at the start: 0.5 GB"), true);
+eq("a null paint time is left out of the median", baseText.includes("| short load | 2 | 2 | 3 | 4 | 4 | 6 | yes |"), true);
 eq("an older record has none of the new tables or the free-memory line", ["## Initial load", "## Open a script", "## JS heap", "## Script size", "Free memory"].some((s) => text.includes(s)), false);
 
 console.log("\nthe pictures:\n");
