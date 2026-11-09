@@ -28,13 +28,27 @@ const ASSET_HOST = "https://release-assets.githubusercontent.com/github-producti
 const signed = (id) => ASSET_HOST + id
   + "?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-11-06T19%3A23%3A10Z&rscd=attachment%3B+filename%3DSHA256SUMS.txt&sig=a%2Fb%3D";
 
-function updateFlow(body, platform = "win32", redirects = {}) {
+const PAYLOAD = Buffer.from("test installer");
+const DIGEST = crypto.createHash("sha256").update(PAYLOAD).digest("hex");
+
+function updateFlow(body, platform = "win32", redirects = {}, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-update-test-"));
   const main = fs.readFileSync(path.join(here, "..", "main.ts"), "utf8");
   const source = stripTypeScriptTypes(main.slice(main.indexOf("function readAppVersion()"), main.indexOf("async function pickChromiumBrowser()")));
   const requests = [], launches = [], served = [];
-  const payload = Buffer.from("test installer");
-  const digest = crypto.createHash("sha256").update(payload).digest("hex");
+  const writes = [];
+  let reads = 0, cancelled = false;
+  const installerResponse = () => {
+    const chunks = options.chunks || [PAYLOAD];
+    return {
+      ok: true,
+      headers: new Headers(options.contentLength === undefined ? {} : { "content-length": options.contentLength }),
+      body: { getReader: () => ({
+        read: async () => reads < chunks.length ? { done: false, value: chunks[reads++] } : { done: true },
+        cancel: async () => { cancelled = true; }
+      }), cancel: async () => { cancelled = true; } }
+    };
+  };
   let finishQuit, guard = null;
   const follow = async (start, check) => {
     requests.push(start);
@@ -45,15 +59,18 @@ function updateFlow(body, platform = "win32", redirects = {}) {
       served.push(url);
       if (redirects[url]) { url = redirects[url]; continue; }
       if (url === API) return Response.json(body);
-      if (url.endsWith("setup-x64.exe") || url.startsWith(ASSET_HOST + "installer")) return new Response(payload);
-      if (url.endsWith("SHA256SUMS.txt") || url.startsWith(ASSET_HOST + "sums")) return new Response(digest + "  setup-x64.exe\n");
+      if (url.endsWith("setup-x64.exe") || url.startsWith(ASSET_HOST + "installer")) return installerResponse();
+      if (url.endsWith("SHA256SUMS.txt") || url.startsWith(ASSET_HOST + "sums")) return new Response((options.checksum ?? DIGEST) + "  setup-x64.exe\n");
       throw new Error("unexpected fetch " + JSON.stringify(url));
     }
     throw new Error("too many redirects");
   };
   const context = {
     ...require(path.join(here, "..", "update-release.ts")),
-    fs, fsp: fs.promises, path, crypto, Buffer, URL, Date,
+    fs, fsp: { ...fs.promises, open: async (...args) => {
+      const handle = await fs.promises.open(...args);
+      return { close: () => handle.close(), write: (buf) => { writes.push(Buffer.from(buf)); return handle.write(buf); } };
+    } }, path, crypto, Buffer, URL, Date,
     APP_ROOT: dir, TEST_MODE: false, SKIP_UPDATE_CHECK: false,
     process: { platform, arch: "x64", env: { SPLITPAGE_UPDATE_API: LOCAL_API } },
     app: { getVersion: () => "0", getPath: () => dir }, tabs: new Map(),
@@ -68,15 +85,16 @@ function updateFlow(body, platform = "win32", redirects = {}) {
   };
   vm.createContext(context);
   vm.runInContext(source + "\nfunction status() { return updateStatus; }", context);
-  return { context, requests, launches, served, finishQuit: () => finishQuit(),
+  return { context, requests, launches, served, writes, dir,
+    stream: () => ({ reads, cancelled }), finishQuit: () => finishQuit(),
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
 const releaseBody = () => ({
   url: "https://api.github.com/repos/RetroGorilla/splitpage/releases/123",
-  html_url: "https://github.com/RetroGorilla/splitpage/releases/tag/test-release",
-  tag_name: "v99.0.0", draft: false, prerelease: false,
-  assets: [asset("setup-x64.exe"), asset("SHA256SUMS.txt")]
+  html_url: "https://github.com/RetroGorilla/splitpage/releases/tag/v9.9.9",
+  tag_name: "v9.9.9", draft: false, prerelease: false,
+  assets: [{ ...asset("setup-x64.exe", undefined, PAYLOAD.length), digest: "sha256:" + DIGEST }, asset("SHA256SUMS.txt")]
 });
 
 test("the default update API is the releases repository's latest release", () => {
@@ -224,7 +242,7 @@ test("release links must name this repository's release page before being expose
 
 test("the installer for this platform is picked, and its name, url and size are described", () => {
   const picked = pickUpdateAsset([asset("Splitpage-Setup-9.9.9.exe", undefined, 123), asset("Splitpage-9.9.9.dmg")], { platform: "win32", arch: "x64", apiUrl: API });
-  assert.deepEqual(picked, { name: "Splitpage-Setup-9.9.9.exe", url: gh("Splitpage-Setup-9.9.9.exe"), size: 123 });
+  assert.deepEqual(picked, { name: "Splitpage-Setup-9.9.9.exe", url: gh("Splitpage-Setup-9.9.9.exe"), size: 123, digest: null });
   assert.deepEqual(pickUpdateAsset([asset("Splitpage-9.9.9.dmg")], { platform: "darwin", arch: "arm64", apiUrl: API }).name, "Splitpage-9.9.9.dmg");
   assert.equal(pickUpdateAsset([asset("Splitpage-9.9.9.AppImage")], { platform: "linux", arch: "x64", apiUrl: API }).name, "Splitpage-9.9.9.AppImage");
   assert.equal(pickUpdateAsset([asset("Splitpage-Setup-9.9.9.exe", undefined, Number.NaN)], { platform: "win32", arch: "x64", apiUrl: API }).size, 0);
@@ -414,6 +432,126 @@ test("an installer and checksum served through GitHub's asset host for this repo
     assert.equal((await installing).ok, true);
     assert.equal(flow.launches.length, 1);
   } finally { flow.cleanup(); }
+});
+
+test("CDN URLs must already be canonical, including signed URLs", () => {
+  for (const url of [
+    signed("installer-1").replace("https:", "HTTPS:"),
+    signed("installer-1").replace("release-assets", "RELEASE-assets"),
+    signed("installer-1").replace(".com/", ".com:443/"),
+    signed("installer-1").replace("https://", "https://@"),
+    ASSET_HOST + "x/../installer-1", ASSET_HOST + "./installer-1",
+    ASSET_HOST + "installer\n-1", ASSET_HOST + "installer%2D1",
+    signed("installer-1") + "#", " " + signed("installer-1")
+  ]) assert.equal(isAllowedDownloadHop(url, API), false, url);
+});
+
+test("an allowed CDN hop cannot redirect the installer or checksum to a disallowed hop", async () => {
+  for (const name of ["setup-x64.exe", "SHA256SUMS.txt"]) {
+    const cdn = signed(name === "setup-x64.exe" ? "installer-1" : "sums-1");
+    const disallowed = "https://evil.test/" + name;
+    const flow = updateFlow(releaseBody(), "win32", { [gh(name)]: cdn, [cdn]: disallowed });
+    try {
+      await flow.context.checkForUpdate();
+      assert.equal((await flow.context.downloadUpdate()).error, "download-failed");
+      assert.ok(flow.served.includes(cdn));
+      assert.ok(!flow.served.includes(disallowed));
+      assert.equal((await flow.context.runUpdateInstaller()).error, "not-downloaded");
+      assert.deepEqual(flow.launches, []);
+      assert.equal(fs.existsSync(path.join(flow.dir, "updates", "setup-x64.exe")), false);
+    } finally { flow.cleanup(); }
+  }
+});
+
+for (const [label, change] of [
+  ["installer file name", (body) => { body.assets[0].browser_download_url = gh("another-x64.exe"); }],
+  ["checksum file name", (body) => { body.assets[1].browser_download_url = gh("another.txt"); }],
+  ["installer tag", (body) => { body.assets[0].browser_download_url = gh("setup-x64.exe").replace("v9.9.9/", "v9.9.8/"); }],
+  ["checksum tag", (body) => { body.assets[1].browser_download_url = gh("SHA256SUMS.txt").replace("v9.9.9/", "v9.9.8/"); }],
+  ["missing release tag", (body) => { body.name = "9.9.9"; delete body.tag_name; }]
+]) test("release metadata refuses a mismatched " + label + " before downloading", async () => {
+  const body = releaseBody();
+  change(body);
+  const flow = updateFlow(body);
+  try {
+    await flow.context.checkForUpdate();
+    assert.equal(flow.context.status().canInstall, false);
+    assert.ok(flow.context.status().error);
+    assert.equal((await flow.context.downloadUpdate()).ok, false);
+    assert.deepEqual(flow.requests, [API]);
+  } finally { flow.cleanup(); }
+});
+
+async function refusedDownload(body, options, message, inspect = () => {}) {
+  const flow = updateFlow(body, "win32", {}, options);
+  try {
+    await flow.context.checkForUpdate();
+    assert.equal(flow.context.status().canInstall, true);
+    const result = await flow.context.downloadUpdate();
+    assert.equal(result.error, "download-failed");
+    assert.match(result.message, message);
+    assert.equal(flow.context.status().download.state, "failed");
+    assert.equal(fs.existsSync(path.join(flow.dir, "updates", "setup-x64.exe")), false);
+    assert.equal((await flow.context.runUpdateInstaller()).error, "not-downloaded");
+    assert.deepEqual(flow.launches, []);
+    inspect(flow);
+  } finally { flow.cleanup(); }
+}
+
+test("an API digest mismatch refuses and removes an installer even when its published checksum matches", async () => {
+  const body = releaseBody();
+  body.assets[0].digest = "sha256:" + HASH;
+  await refusedDownload(body, {}, /does not match.*digest/, (flow) => {
+    assert.deepEqual(Buffer.concat(flow.writes), PAYLOAD);
+  });
+});
+
+for (const digest of [undefined, null, "", "sha256:abc", "sha512:" + DIGEST, "sha256:" + "g".repeat(64), ["sha256:" + DIGEST]]) {
+  test("a missing or malformed API digest is refused: " + JSON.stringify(digest), async () => {
+    const body = releaseBody();
+    body.assets[0].digest = digest;
+    await refusedDownload(body, {}, /no valid.*digest/);
+  });
+}
+
+test("a published checksum mismatch removes the complete installer even when its API digest matches", async () => {
+  await refusedDownload(releaseBody(), { checksum: HASH }, /does not match the checksum/, (flow) => {
+    assert.deepEqual(Buffer.concat(flow.writes), PAYLOAD);
+  });
+});
+
+test("a missing published checksum removes the complete installer even when its API digest matches", async () => {
+  const body = releaseBody();
+  body.assets.pop();
+  await refusedDownload(body, {}, /no published checksum/);
+});
+
+for (const size of [PAYLOAD.length - 1, PAYLOAD.length + 1]) {
+  test("Content-Length cannot override a metadata size of " + size, async () => {
+    const body = releaseBody();
+    body.assets[0].size = size;
+    await refusedDownload(body, { contentLength: String(PAYLOAD.length) }, /does not match.*release size/, (flow) => {
+      assert.equal(flow.writes.length, 0);
+      assert.equal(flow.stream().reads, 0);
+      assert.equal(flow.context.status().download.total, size);
+    });
+  });
+}
+
+test("a body longer than metadata is cancelled before writing the excess or reading another chunk", async () => {
+  const body = releaseBody();
+  body.assets[0].size = 6;
+  await refusedDownload(body, { chunks: [Buffer.from("test "), Buffer.from("installer"), Buffer.from("extra")] }, /exceeds.*release size/, (flow) => {
+    assert.deepEqual(flow.stream(), { reads: 2, cancelled: true });
+    assert.deepEqual(Buffer.concat(flow.writes), Buffer.from("test "));
+    assert.equal(flow.context.status().download.total, 6);
+  });
+});
+
+test("a body shorter than metadata without Content-Length is refused and removed", async () => {
+  const body = releaseBody();
+  body.assets[0].size = PAYLOAD.length + 1;
+  await refusedDownload(body, {}, /cut short/);
 });
 
 let failed = 0;

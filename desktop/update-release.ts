@@ -4,7 +4,7 @@ import type * as NodePath from "node:path";
 
 const path: typeof NodePath = require("node:path");
 
-type DesktopReleaseAsset = { name: string; browser_download_url: string; size?: unknown };
+type DesktopReleaseAsset = { name: string; browser_download_url: string; size?: unknown; digest?: unknown };
 
 const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
 
@@ -29,8 +29,8 @@ const RELEASE_ASSET_HOST = "https://release-assets.githubusercontent.com";
 // why: GitHub redirects this repository's release downloads to its asset host under the repository's numeric id
 const RELEASE_ASSET_HOST_PATH = /^\/github-production-release-asset\/1349872068\/[A-Za-z0-9-]+$/;
 
-function hasReleaseAssets(assets: unknown, apiUrl: string = DEFAULT_UPDATE_API, testMode = false) {
-  return Array.isArray(assets) && assets.length > 0 && assets.every((a) => isReleaseAsset(a, apiUrl, testMode));
+function hasReleaseAssets(assets: unknown, apiUrl: string = DEFAULT_UPDATE_API, testMode = false, tagName?: string) {
+  return Array.isArray(assets) && assets.length > 0 && assets.every((a) => isReleaseAsset(a, apiUrl, testMode, tagName));
 }
 
 function splitVersion(v: unknown) {
@@ -92,18 +92,24 @@ function isAllowedReleaseUrl(urlString: unknown, apiUrl: unknown, testMode = fal
   return isAllowedReleasePath(urlString, apiUrl, testMode, "tag");
 }
 
-function isReleaseAsset(asset: unknown, apiUrl: string, testMode: boolean): asset is DesktopReleaseAsset {
+function isReleaseAsset(asset: unknown, apiUrl: string, testMode: boolean, tagName?: string): asset is DesktopReleaseAsset {
   if (!asset || typeof asset !== "object" || Array.isArray(asset)) return false;
   const entry = asset as Record<string, unknown>;
-  return typeof entry.name === "string" && SAFE_ASSET_NAME.test(entry.name)
-    && isAllowedDownloadHost(entry.browser_download_url, apiUrl, testMode);
+  if (typeof entry.name !== "string" || !SAFE_ASSET_NAME.test(entry.name)
+    || !isAllowedDownloadHost(entry.browser_download_url, apiUrl, testMode)) return false;
+  const url = new URL(entry.browser_download_url as string);
+  if (testMode && apiUrl !== DEFAULT_UPDATE_API && url.origin === new URL(apiUrl).origin) return true;
+  const parts = url.pathname.split("/");
+  return parts.at(-1) === entry.name && (tagName === undefined || parts.at(-2) === tagName);
 }
 
 function describeAsset(asset: DesktopReleaseAsset) {
   return {
     name: path.basename(asset.name),
     url: asset.browser_download_url,
-    size: Number.isFinite(asset.size) ? asset.size as number : 0
+    size: Number.isSafeInteger(asset.size) && (asset.size as number) >= 0 ? asset.size as number : 0,
+    digest: typeof asset.digest === "string" && /^sha256:[0-9a-f]{64}$/i.test(asset.digest)
+      ? asset.digest.slice(7).toLowerCase() : null
   };
 }
 
