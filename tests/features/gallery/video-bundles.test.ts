@@ -912,4 +912,7 @@ test("the Export dialog's line about the files gives their count and size, and t
   assert.equal(exportFilesText({ files: 0, bytes: 0, left: 1 }), "no linked files to include · 1 file can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach. To include files outside the folder, use File > Create bundle… first.");
   assert.equal(exportFilesText({ files: 1, bytes: BUNDLE_WARN_BYTES + 1, left: 0 }), "1 file (250 MB) in a folder beside the script. " +
     "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.");
+  assert.equal(exportFilesText({ files: 1, bytes: BUNDLE_WARN_BYTES + 1, left: 1 }), "1 file (250 MB) in a folder beside the script · 1 file can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach. " +
+    "To include files outside the folder, use File > Create bundle… first. " +
+    "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.");
 });

@@ -114,8 +114,9 @@ export function exportFilesText(plan: DesktopBundleExportPlan): string {
   const parts = [plan.files ? videos(plan.files, "file") + " (" + sizeText(plan.bytes) + ") in a folder beside the script" : "no linked files to include"];
   if (plan.left) parts.push(videos(plan.left, "file") + " can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach");
   let text = parts.join(" · ");
-  if (plan.left) text += ". To include files outside the folder, use File > Create bundle… first.";
+  if (plan.left) text += ". To include files outside the folder, use File > Create bundle… first";
   if (plan.bytes > BUNDLE_WARN_BYTES) text += ". " + BIG_COPY;
+  else if (plan.left) text += ".";
   return text;
 }
 
