@@ -80,4 +80,5 @@ Typing, editing and undo changes also need a performance comparison (`tools/perf
 - [docs/architecture/](docs/architecture/): current design. Start with [feature-ports.md](docs/architecture/feature-ports.md) (ports and wiring for features), [dependencies.md](docs/architecture/dependencies.md) (gates and layers), [saving.md](docs/architecture/saving.md), [session.md](docs/architecture/session.md) and [testing.md](docs/architecture/testing.md).
 - [review.md](docs/architecture/review.md): what review checks before a merge.
 - [ROADMAP.md](docs/ROADMAP.md): the current release, completed work and links to open work. Check GitHub before starting.
+- [COLLABORATION-PLAN.md](docs/COLLABORATION-PLAN.md): the plan of record for collaboration. Nothing in it is built; do not start it without being asked.
 - Finished milestone plans and gate records were removed from the tree. Read them in git history if you need the record, and do not treat them as current rules.
