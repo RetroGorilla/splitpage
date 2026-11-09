@@ -553,6 +553,7 @@ function renderProductionByPerson(all: readonly PresentedProductionEntry[]) {
 function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) {
   const doc = (ports as TagPanelPorts).document.current();
   if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
+  const numbering = (ports as TagPanelPorts).document.numbering();
   const live = entries || productionEntries();
   const byRow: Record<number, PresentedProductionEntry[]> = {};
   live.forEach(function (item) {
@@ -593,26 +594,27 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
     const shot = g.rows.filter(function (i) { return (doc.rows[i] as DocumentView["rows"][number]).status === "shot"; }).length;
     const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i] as DocumentView["rows"][number], doc, (ports as TagPanelPorts).text.productionReaders); }, 0);
     const done = shot === g.rows.length;
-    return '<section class="shoot-group" style="--dot:' + (key ? (TAG_CATEGORIES[1] as TagCategoryLook).color : "var(--border-strong)") + '">' +
+    return '<section class="shoot-group" data-shoot-key="' + escapeHtml(key) + '" style="--dot:' + (key ? (TAG_CATEGORIES[1] as TagCategoryLook).color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
         '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + (TAG_CATEGORIES[1] as TagCategoryLook).id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
-          '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> filmed · ' +
+          '<span class="tag-figure">' + shot + ' of ' + g.rows.length + '</span> filmed · ' +
           '<span class="tag-figure">' + formatDuration(secs) + '</span></span>' +
       '</h3>' +
       '<dl class="shoot-detail">' +
         '<dt>Beats</dt>' +
-        '<dd class="tag-scenes">' +
-          joinBeatLinks(g.rows.map(i => (doc.rows[i] as DocumentView["rows"][number]).id), function (rowId) {
-            const row = doc.rows.find(row => row.id === rowId) as DocumentView["rows"][number];
+        '<dd class="shoot-scenes">' +
+          groupItemsByScene(doc, g.rows.map(i => doc.rows[i] as DocumentView["rows"][number]), row => row.id, numbering).groups.map(function (group) {
+            return '<section class="shoot-scene"><h4>' + escapeHtml('Scene ' + group.scene.letter + (group.scene.name ? ' · ' + group.scene.name : '')) + '</h4><div class="shoot-beats">' + group.items.map(function (row) {
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
-            const label = "Beat " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
-            return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
-              '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
-              '" aria-label="' + escapeHtml(label) + '">' + escapeHtml((ports as TagPanelPorts).document.numbering().beats[row.id]?.short ?? "") +
+            const label = "Beat " + (numbering.beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
+            return '<button type="button" class="shoot-beat' + (row.status === "shot" ? ' is-shot' : '') + (row.id === (ports as TagPanelPorts).focus.lastRow() ? ' is-current' : '') +
+              '"' + (row.id === (ports as TagPanelPorts).focus.lastRow() ? ' aria-current="true"' : '') + ' data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
+              '" aria-label="' + escapeHtml(label) + '">' + escapeHtml(numbering.beats[row.id]?.short ?? "") +
               (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
-          }) +
+            }).join('') + '</div></section>';
+          }).join('') +
         '</dd>' +
         (g.needOrder.length
           ? '<dt>Needs on the day</dt>' +
@@ -713,7 +715,19 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
   }
 
   if ((ports as TagPanelPorts).view.productionGroupBy() === "shoot") {
-    listEl.innerHTML = renderProductionByShoot(entries);
+    const active = document.activeElement;
+    const focused = active && listEl.contains(active) && active.matches(".shoot-beat") ? active as HTMLElement : null;
+    const row = focused?.getAttribute("data-row");
+    const key = focused?.closest(".shoot-group")?.getAttribute("data-shoot-key");
+    const scroll = listEl.scrollTop;
+    const html = renderProductionByShoot(entries);
+    if (listEl.innerHTML === html) return;
+    listEl.innerHTML = html;
+    if (row != null && key != null) {
+      const group = Array.from(listEl.querySelectorAll<HTMLElement>(".shoot-group")).find(el => el.getAttribute("data-shoot-key") === key);
+      Array.from(group?.querySelectorAll<HTMLElement>(".shoot-beat") ?? []).find(el => el.getAttribute("data-row") === row)?.focus({ preventScroll: true });
+    }
+    listEl.scrollTop = scroll;
     return;
   }
 
