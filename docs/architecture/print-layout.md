@@ -168,7 +168,7 @@ old list PDFs are:
   flags use colored text rather than PDF drawing operations.
 - Chromium repeats column heads and splits oversized rows, with no continued
   group labels or `cont.` markers. Signatures stay together. Notes space uses
-  two 12-point blocks with 0.5-point bottom borders in a 24-point notes space.
+  two 8 mm blocks with 0.5-point bottom borders, so the rules sit 8 mm apart.
   Borders and the clipped solid sourcing half-fill replace print gradients so
   Chromium emits vector rules and solid fills without gradient smearing.
 
