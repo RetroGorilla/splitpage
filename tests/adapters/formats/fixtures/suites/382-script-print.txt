@@ -25,6 +25,6 @@ expect document.documentElement.scrollWidth === document.documentElement.clientW
 expect Array.from(document.querySelectorAll('td')).every(e => e.scrollWidth <= e.clientWidth + 1)
 expect Array.from(document.querySelectorAll('img')).every(e => e.getBoundingClientRect().width <= e.parentElement.getBoundingClientRect().width)
 goto /tests/adapters/formats/fixtures/_script-print-empty.html
-expect document.querySelector('main').textContent.includes('No scenes yet.')
+expect document.querySelector('main').textContent.includes('No beats yet.')
 expect document.querySelectorAll('table,#comments,.rundown').length === 0
 quit
