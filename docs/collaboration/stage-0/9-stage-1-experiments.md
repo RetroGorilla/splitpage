@@ -18,7 +18,7 @@ Stage 1a and 1b have separate exits and may run side by side (plan section 11).
 1a, in this order:
 
 1. The identity model, the deterministic delivery queue and the late-joining third replica, with the checker failing on each deliberate defect of artifact 8 section 5 before it endorses anything.
-2. T01 under M1, M2 and M3, then T04 (composition), T02 and T03. This selects the buffer mechanism and needs none of the open product decisions.
+2. The stale-base experiment under M1, M2 and M3, starting with composition: T04, then T01, T02 and T03. This selects the buffer mechanism and needs none of the open product decisions.
 3. T05 to T12, T20, T21 and the MOVE rows under both schema candidates, with the PROJ round trip of the canonical fixtures.
 4. The throwaway real-editor slice bound to two replicas through the same queue, entered through the commands listed below.
 
@@ -129,7 +129,7 @@ Corrected in `docs/COLLABORATION-PLAN.md` with this file:
 | 2 | The desktop main process decides which tab owns a document | Only for file-backed tabs keyed by path; a shared tab needs its own kind and key (6) |
 | 3 | Five transaction kinds | Seven: also `replay` and `amend` (3, 5) |
 | 3 | Dropping the `docId` on export is enough | A file with no id gets one derived from its content, so identical exports share it (4) |
-| 4 | The surface's last painted HTML is already an editor base | It is a paint cache, overwritten after every sync and never read (1, 8) |
+| 4 | The surface's last painted HTML is already an editor base | It is a paint cache, overwritten after every sync and read only to skip repainting unchanged HTML (1, 8) |
 | 4 | Every commit mints tag and shot records | Only edits do; undo replay and an amended edit do not (3) |
 | 5 | Reply order and comment editing unstated | The three comment decisions above (5) |
 | 8 | Unsent buffered updates are dropped when the socket closes | Kept on an ordinary close; dropped on three other paths (8, H4) |
