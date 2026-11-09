@@ -1438,9 +1438,9 @@ async function startTinyReleaseServer(opts) {
       tag_name: "v99.0.0",
       html_url: base + "/r",
       assets: noSums
-        ? [{ name: assetName, size: payload.length, browser_download_url: base + "/asset" }]
+        ? [{ name: assetName, size: payload.length, digest: "sha256:" + digest, browser_download_url: base + "/asset" }]
         : [
-          { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
+          { name: assetName, size: payload.length, digest: "sha256:" + digest, browser_download_url: base + "/asset" },
           { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
         ]
     };
