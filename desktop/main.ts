@@ -736,57 +736,68 @@ function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">
     if (!asset.digest) throw new Error("this release has no valid SHA-256 asset digest, so it is not being installed");
 
     const res = await fetchUpdateFile(asset.url);
-    if (!res.ok) throw new Error(`download failed: ${res.status} ${res.statusText}`);
-    const declared = asset.size;
-    const contentLength = res.headers.get("content-length");
-    if (contentLength !== null && Number(contentLength) !== declared) {
-      await res.body?.cancel();
-      throw new Error("the download Content-Length does not match the release size");
-    }
-
-    const hash = crypto.createHash("sha256");
-    const handle = await fsp.open(target, "w");
-    let received = 0;
-    let lastReport = 0;
+    let reader: ReturnType<NonNullable<typeof res.body>["getReader"]> | null = null;
+    let finished = false;
     try {
-      const reader = (res.body as NonNullable<typeof res.body>).getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const buf = Buffer.from(value);
-        if (buf.length > declared - received) {
-          await reader.cancel();
-          throw new Error("the download exceeds the release size");
-        }
-        hash.update(buf);
-        await handle.write(buf);
-        received += buf.length;
-        const now = Date.now();
-        if (now - lastReport > 200) { lastReport = now; setDownloadState({ received }); }
+      if (!res.ok) throw new Error(`download failed: ${res.status} ${res.statusText}`);
+      const declared = asset.size;
+      const contentLength = res.headers.get("content-length");
+      if (contentLength !== null && Number(contentLength) !== declared) {
+        throw new Error("the download Content-Length does not match the release size");
       }
+
+      const hash = crypto.createHash("sha256");
+      const handle = await fsp.open(target, "w");
+      let received = 0;
+      let lastReport = 0;
+      try {
+        reader = (res.body as NonNullable<typeof res.body>).getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) { finished = true; break; }
+          const buf = Buffer.from(value);
+          if (buf.length > declared - received) {
+            throw new Error("the download exceeds the release size");
+          }
+          for (let offset = 0; offset < buf.length;) {
+            const { bytesWritten } = await handle.write(buf.subarray(offset));
+            if (bytesWritten === 0) throw new Error("the download could not be written completely");
+            offset += bytesWritten;
+          }
+          hash.update(buf);
+          received += buf.length;
+          const now = Date.now();
+          if (now - lastReport > 200) { lastReport = now; setDownloadState({ received }); }
+        }
+      } finally {
+        await handle.close();
+      }
+      setDownloadState({ received });
+
+      if (received !== declared) {
+        throw new Error(`download is ${received} bytes, expected ${declared} — it was cut short`);
+      }
+      const digest = hash.digest("hex");
+      if (asset.digest !== digest) {
+        throw new Error("the download does not match the SHA-256 asset digest published for it");
+      }
+      const published = await fetchPublishedChecksum(assets, asset.name);
+      if (!published) {
+        throw new Error("this release has no published checksum, so it is not being installed");
+      }
+      if (published !== digest) {
+        throw new Error("the download does not match the checksum published for it");
+      }
+
+      updateFile = target;
+      setDownloadState({ state: "ready", error: null, verified: true });
+      return { ok: true, state: "ready" };
     } finally {
-      await handle.close();
+      try {
+        if (!finished) await (reader ? reader.cancel() : res.body?.cancel());
+      } catch { }
+      reader?.releaseLock();
     }
-    setDownloadState({ received });
-
-    if (received !== declared) {
-      throw new Error(`download is ${received} bytes, expected ${declared} — it was cut short`);
-    }
-    const digest = hash.digest("hex");
-    if (asset.digest !== digest) {
-      throw new Error("the download does not match the SHA-256 asset digest published for it");
-    }
-    const published = await fetchPublishedChecksum(assets, asset.name);
-    if (!published) {
-      throw new Error("this release has no published checksum, so it is not being installed");
-    }
-    if (published !== digest) {
-      throw new Error("the download does not match the checksum published for it");
-    }
-
-    updateFile = target;
-    setDownloadState({ state: "ready", error: null, verified: true });
-    return { ok: true, state: "ready" };
   })().catch(async (err): Promise<DesktopIpcResult<"splitpage:update-download">> => {
     updateFile = null;
     await fsp.rm(updateDir(), { recursive: true, force: true }).catch(() => {});

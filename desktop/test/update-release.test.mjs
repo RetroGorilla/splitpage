@@ -37,16 +37,32 @@ function updateFlow(body, platform = "win32", redirects = {}, options = {}) {
   const source = stripTypeScriptTypes(main.slice(main.indexOf("function readAppVersion()"), main.indexOf("async function pickChromiumBrowser()")));
   const requests = [], launches = [], served = [];
   const writes = [];
-  let reads = 0, cancelled = false;
+  let reads = 0, cancelled = false, locked = false, writeCalls = 0;
+  const cancel = async () => {
+    cancelled = true;
+    if (options.cancelError) throw new Error("injected cancel failure");
+  };
   const installerResponse = () => {
     const chunks = options.chunks || [PAYLOAD];
     return {
       ok: true,
       headers: new Headers(options.contentLength === undefined ? {} : { "content-length": options.contentLength }),
-      body: { getReader: () => ({
-        read: async () => reads < chunks.length ? { done: false, value: chunks[reads++] } : { done: true },
-        cancel: async () => { cancelled = true; }
-      }), cancel: async () => { cancelled = true; } }
+      body: {
+        getReader: () => {
+          assert.equal(locked, false);
+          locked = true;
+          return {
+            read: async () => {
+              assert.equal(locked, true);
+              if (options.readError) throw new Error("injected read failure");
+              return reads < chunks.length ? { done: false, value: chunks[reads++] } : { done: true };
+            },
+            cancel,
+            releaseLock: () => { locked = false; }
+          };
+        },
+        cancel: async () => { assert.equal(locked, false); await cancel(); }
+      }
     };
   };
   let finishQuit, guard = null;
@@ -68,8 +84,15 @@ function updateFlow(body, platform = "win32", redirects = {}, options = {}) {
   const context = {
     ...require(path.join(here, "..", "update-release.ts")),
     fs, fsp: { ...fs.promises, open: async (...args) => {
+      if (options.openError) throw new Error("injected open failure");
       const handle = await fs.promises.open(...args);
-      return { close: () => handle.close(), write: (buf) => { writes.push(Buffer.from(buf)); return handle.write(buf); } };
+      return { close: () => handle.close(), write: async (buf) => {
+        if (++writeCalls === options.writeErrorOnCall) throw new Error("injected write failure");
+        const part = buf.subarray(0, options.writeLimit ?? buf.length);
+        const result = await handle.write(part);
+        writes.push(Buffer.from(part.subarray(0, result.bytesWritten)));
+        return result;
+      } };
     } }, path, crypto, Buffer, URL, Date,
     APP_ROOT: dir, TEST_MODE: false, SKIP_UPDATE_CHECK: false,
     process: { platform, arch: "x64", env: { SPLITPAGE_UPDATE_API: LOCAL_API } },
@@ -87,6 +110,7 @@ function updateFlow(body, platform = "win32", redirects = {}, options = {}) {
   vm.runInContext(source + "\nfunction status() { return updateStatus; }", context);
   return { context, requests, launches, served, writes, dir,
     stream: () => ({ reads, cancelled }), finishQuit: () => finishQuit(),
+    readerLocked: () => locked,
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -552,6 +576,42 @@ test("a body shorter than metadata without Content-Length is refused and removed
   const body = releaseBody();
   body.assets[0].size = PAYLOAD.length + 1;
   await refusedDownload(body, {}, /cut short/);
+});
+
+test("short writes are retried until the verified installer is complete on disk", async () => {
+  const flow = updateFlow(releaseBody(), "win32", {}, { writeLimit: 1 });
+  try {
+    await flow.context.checkForUpdate();
+    assert.equal((await flow.context.downloadUpdate()).ok, true);
+    assert.deepEqual(fs.readFileSync(path.join(flow.dir, "updates", "setup-x64.exe")), PAYLOAD);
+    assert.equal(flow.writes.length, PAYLOAD.length);
+    assert.equal(flow.context.status().download.verified, true);
+    assert.equal(flow.context.status().download.received, PAYLOAD.length);
+    assert.equal(flow.readerLocked(), false);
+    assert.equal(flow.stream().cancelled, false);
+  } finally { flow.cleanup(); }
+});
+
+test("a write making no progress refuses and removes the installer instead of marking it verified", async () => {
+  await refusedDownload(releaseBody(), { writeLimit: 0, writeErrorOnCall: 2 }, /could not be written completely/, (flow) => {
+    assert.equal(flow.readerLocked(), false);
+    assert.equal(flow.stream().cancelled, true);
+    assert.notEqual(flow.context.status().download.verified, true);
+  });
+});
+
+for (const [label, options] of [
+  ["open", { openError: true }],
+  ["write", { writeErrorOnCall: 2, chunks: [PAYLOAD.subarray(0, 5), PAYLOAD.subarray(5)] }],
+  ["read", { readError: true }],
+  ["write when cancellation also fails", { writeErrorOnCall: 1, cancelError: true }]
+]) test("a failed " + label + " cancels the unfinished body and leaves no reader lock or installer", async () => {
+  await refusedDownload(releaseBody(), options, /injected (open|write|read) failure/, (flow) => {
+    assert.equal(flow.stream().cancelled, true);
+    assert.equal(flow.readerLocked(), false);
+    assert.notEqual(flow.context.status().download.verified, true);
+    if (options.writeErrorOnCall === 2) assert.deepEqual(Buffer.concat(flow.writes), PAYLOAD.subarray(0, 5));
+  });
 });
 
 let failed = 0;
