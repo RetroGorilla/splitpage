@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { cpus, totalmem, platform, release, arch, tmpdir } from "node:os";
+import { cpus, freemem, totalmem, platform, release, arch, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
@@ -14,7 +14,12 @@ const PICTURES = 10;
 const PICTURE_BYTES = 1024 * 1024;
 const IMAGE_TRIALS = 3;
 const FIXTURES = ["short", "long", "images"];
-const EXPECTED_PERF = { short: 10, long: 13, images: 1 };
+const OPT_IN_FIXTURES = ["footprint", "footprint-long", "large"];
+const LOAD_RUNS = 5;
+const OPEN_RUNS = 3;
+const LARGE_COPIES = 10;
+const MEMORY_FLAGS = "--enable-precise-memory-info --js-flags=--expose-gc";
+const EXPECTED_PERF = { short: 10, long: 13, images: 1, footprint: 13, "footprint-long": 8, large: 12 };
 const SETTLE_MS = 500;
 const STAMP_ROWS = [3, 4, 5, 6, 7, 8];
 const STAMP_PASSES = 2;
@@ -138,6 +143,74 @@ const EXPORTS = `(function () {
   };
   return 'PERF ' + JSON.stringify({ label: 'export', splitpage: time(function () { F.buildSplitpage(s); }),
     markdown: time(function () { F.buildMarkdown(s); }), standaloneHtml: time(function () { F.buildStandaloneHtml(); }) });
+})()`;
+
+export const loadProbe = (label) => `(async function () {
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var nav = performance.getEntriesByType('navigation')[0];
+  var paint = performance.getEntriesByType('paint').filter(function (e) { return e.name === 'first-contentful-paint'; })[0];
+  var largest = 0;
+  try { new PerformanceObserver(function (l) { var e = l.getEntries(); largest = e[e.length - 1].startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch (e) {}
+  await wait(100);
+  if (typeof gc === 'function') { gc(); await wait(200); gc(); }
+  var m = performance.memory, r1 = function (x) { return +x.toFixed(1); };
+  return 'PERF ' + JSON.stringify({ label: '${label}', kind: 'load', domInteractive: r1(nav.domInteractive), domContentLoaded: r1(nav.domContentLoadedEventEnd),
+    loadEnd: r1(nav.loadEventEnd), firstPaint: paint ? r1(paint.startTime) : null, largestPaint: r1(largest),
+    editable: document.querySelector('#rows .cell-editable') !== null, heapMb: m ? +(m.usedJSHeapSize / 1048576).toFixed(2) : null, collected: typeof gc === 'function' });
+})()`;
+
+export const MEMORY = `(function () {
+  if (window.__perfMem) return 'ready';
+  window.__perfMem = { take: async function (label) {
+    var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    if (typeof gc === 'function') { gc(); await wait(200); gc(); }
+    var m = performance.memory;
+    return 'PERF ' + JSON.stringify({ label: label, kind: 'heap', heapMb: m ? +(m.usedJSHeapSize / 1048576).toFixed(2) : null, collected: typeof gc === 'function' });
+  } };
+  return 'ready';
+})()`;
+
+export const SCALE = `(function () {
+  if (window.__perfScale) return 'ready';
+  var F = window.__splitpageFormats;
+  var frame = function () { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); };
+  var bytes = function (t) { return new Blob([t]).size; };
+  var plain = function (html) { var d = document.createElement('div'); d.innerHTML = html; return d.textContent.length; };
+  var fileOf = function (s) { return new File([F.buildSplitpage(s)], 'perf-scale.splitpage', { type: 'application/json' }); };
+  var big = null;
+  var grow = function (base, copies) {
+    var s = F.clone(base), rows = [], comments = [], shots = [];
+    for (var k = 0; k < copies; k++) {
+      var sfx = k ? '-' + k : '';
+      var retag = function (t) { return typeof t === 'string' ? t.replace(/(data-cmt|data-broll-id)="([^"]*)"/g, function (m, a, id) { return a + '="' + id + sfx + '"'; }) : t; };
+      base.rows.forEach(function (r) { var c = F.clone(r); c.id = r.id + sfx; ['visualText', 'audioText'].forEach(function (f) { c[f] = retag(c[f]); }); rows.push(c); });
+      base.comments.forEach(function (x) { var c = F.clone(x); c.id = x.id + sfx; c.rowId = x.rowId + sfx; if (c.anchorId) c.anchorId = x.anchorId + sfx; comments.push(c); });
+      (base.brollShots || []).forEach(function (x) { var c = F.clone(x); c.id = x.id + sfx; shots.push(c); });
+    }
+    s.rows = rows; s.comments = comments; s.brollShots = shots;
+    return s;
+  };
+  window.__perfScale = {
+    facts: function (label) {
+      var s = F.state(), html = 0, text = 0;
+      s.rows.forEach(function (r) { var t = (r.visualText || '') + (r.audioText || ''); html += t.length; text += plain(r.visualText || '') + plain(r.audioText || ''); });
+      var heads = s.rows.filter(function (r) { return r.header; }).length;
+      return 'PERF ' + JSON.stringify({ label: label, kind: 'footprint', beats: s.rows.length, sceneHeaders: heads, comments: s.comments.length, people: s.people.length,
+        tags: s.productionTags.length, htmlChars: html, textChars: text, splitpageBytes: bytes(F.buildSplitpage(s)), markdownBytes: bytes(F.buildMarkdown(s)), stateJsonBytes: bytes(JSON.stringify(s)) });
+    },
+    open: async function (label, copies) {
+      if (copies && !big) big = grow(F.state(), copies);
+      var s = copies ? big : F.state();
+      var file = fileOf(s);
+      await frame();
+      var t = performance.now();
+      var ok = await F.openFile(file);
+      await frame();
+      var ms = performance.now() - t;
+      return 'PERF ' + JSON.stringify({ label: label, kind: 'open', ms: +ms.toFixed(1), opened: ok === true, beats: document.querySelectorAll('#rows .row').length });
+    }
+  };
+  return 'ready';
 })()`;
 
 export const IMAGES = `(function () {
@@ -293,10 +366,10 @@ export const IMAGES = `(function () {
 
 const oneLine = (code) => code.replace(/\n\s*/g, " ");
 
-function typing(fixture) {
+function typing(fixture, name = "typing") {
   const lines = ["eval window.__perf.reset()", "caret #rows .row:nth-of-type(2) .audio-cell .cell-editable", "key end"];
   for (const token of TYPED.match(/ ?[^ ]/g)) lines.push(`press ${token}`, `sleep ${KEY_GAP_MS}`);
-  lines.push("sleep 1200", `eval window.__perf.take('${fixture} typing')`);
+  lines.push("sleep 1200", `eval window.__perf.take('${fixture} ${name}')`);
   return lines;
 }
 
@@ -360,8 +433,43 @@ function imageSuite() {
   return lines.join("\n") + "\n";
 }
 
+const LONG_DEMO_START = [
+  "open /index.html?newtab=1",
+  "viewport 1400 900",
+  "wait document.getElementById('newtab-page').hidden == false",
+  "click [data-newtab-action=\"long-demo\"]",
+  "wait document.querySelectorAll('#rows .row').length == 30"
+];
+
+function footprintSuite(fixture) {
+  const probes = [`eval ${oneLine(PROBE)}`, `eval ${oneLine(MEMORY)}`, `eval ${oneLine(SCALE)}`];
+  const lines = fixture === "footprint-long" ? [...LONG_DEMO_START] : ["open", "viewport 1400 900", "sleep 2000", `eval ${oneLine(ENVIRONMENT)}`];
+  const name = fixture === "footprint-long" ? "long" : "short";
+  if (name === "short") {
+    for (let i = 0; i < LOAD_RUNS; i++) lines.push("goto /index.html", "sleep 1500", `eval ${oneLine(loadProbe("short load"))}`);
+    lines.push("goto /index.html", "sleep 1500");
+  }
+  lines.push(...probes, "sleep 2000");
+  if (name === "long") lines.push(`eval ${oneLine(ENVIRONMENT)}`);
+  lines.push(`eval window.__perfMem.take('${name} heap after load')`, `eval window.__perfScale.facts('${name} footprint')`);
+  for (let i = 0; i < OPEN_RUNS; i++) lines.push(`eval window.__perfScale.open('${name} open file')`, "sleep 500");
+  lines.push(...typing(name, "footprint typing"), `eval window.__perfMem.take('${name} heap after typing')`);
+  return lines.join("\n") + "\n";
+}
+
+function largeSuite() {
+  const probes = [`eval ${oneLine(PROBE)}`, `eval ${oneLine(MEMORY)}`, `eval ${oneLine(SCALE)}`];
+  const lines = [...LONG_DEMO_START, ...probes, `eval ${oneLine(ENVIRONMENT)}`];
+  for (let i = 0; i < OPEN_RUNS; i++) lines.push(`eval window.__perfScale.open('large open file', ${LARGE_COPIES})`, "sleep 500");
+  lines.push(`wait document.querySelectorAll('#rows .row').length == ${30 * LARGE_COPIES}`, "sleep 2000", "eval window.__perfMem.take('large heap after load')", "eval window.__perfScale.facts('large footprint')");
+  lines.push(...typing("large"), "eval window.__perfMem.take('large heap after typing')", ...rowEdits("large"), ...bulk("large"), `eval ${oneLine(EXPORTS).replace("'export'", "'large export'")}`);
+  return lines.join("\n") + "\n";
+}
+
 export function suiteText(fixture) {
   if (fixture === "images") return imageSuite();
+  if (fixture.startsWith("footprint")) return footprintSuite(fixture);
+  if (fixture === "large") return largeSuite();
   const lines = fixture === "long"
     ? [
       "open /index.html?newtab=1",
@@ -447,7 +555,7 @@ function sampleBusy(ms) {
 
 function machine() {
   const c = cpus();
-  return { platform: `${platform()} ${release()} ${arch()}`, cpu: `${c[0]?.model ?? "unknown"} x${c.length}`, memoryGb: +(totalmem() / 2 ** 30).toFixed(1), node: process.version };
+  return { platform: `${platform()} ${release()} ${arch()}`, cpu: `${c[0]?.model ?? "unknown"} x${c.length}`, memoryGb: +(totalmem() / 2 ** 30).toFixed(1), freeGb: +(freemem() / 2 ** 30).toFixed(1), node: process.version };
 }
 
 export function report(results, env, when) {
@@ -456,9 +564,17 @@ export function report(results, env, when) {
   const browsers = results.filter((r) => r.label === "environment");
   const images = results.filter((r) => r.trials !== undefined);
   const beats = (fixture) => browsers.find((b) => b.fixture === fixture)?.scenes;
+  const loads = results.filter((r) => r.kind === "load");
+  const opens = results.filter((r) => r.kind === "open");
+  const heaps = [...results.filter((r) => r.kind === "load").map((r) => ({ ...r, label: r.label.replace(" load", " heap after load") })), ...results.filter((r) => r.kind === "heap")];
+  const footprints = results.filter((r) => r.kind === "footprint");
+  const grouped = (list) => [...new Set(list.map((r) => r.label))].map((label) => list.filter((r) => r.label === label));
+  const mid = (list, key) => median(list.map((r) => r[key]).filter((v) => v !== null && v !== undefined));
   const fixtureLines = [
     beats("short") !== undefined ? `short is the seed script (${beats("short")} scenes)` : null,
     beats("long") !== undefined ? `long is the long demo (${beats("long")} scenes)` : null,
+    footprints.length ? "short is the seed script and long is the long demo; their counts are in the footprint table" : null,
+    results.some((r) => r.label.startsWith("large ")) ? `large is the long demo repeated ${LARGE_COPIES} times with fresh ids, built in the page and opened with openFile` : null,
     images.length ? `images is the seed script with ${PICTURES} comments, each holding a fresh ${PICTURE_BYTES / 1024 / 1024} MiB PNG (a 1x1 image with a private chunk of random bytes)` : null
   ].filter(Boolean);
   const lines = [
@@ -472,6 +588,7 @@ export function report(results, env, when) {
     `- Browser: ${browsers[0]?.userAgent ?? "unknown"}, headless, viewport ${browsers[0]?.viewport ?? "?"} at ${browsers[0]?.devicePixelRatio ?? "?"}x`,
     `- Script font: \`${browsers[0]?.cellFont ?? "?"}\`; ${browsers[0]?.firstFont} ${browsers[0]?.firstFontRendered ? "is installed and used" : "is not installed, so a fallback family drew the text"}`,
     ...(env.busy ? [`- Machine load: ${env.busy.before}% of the CPU busy in the second before the run and ${env.busy.after}% in the second after it`] : []),
+    ...(env.freeGb !== undefined ? [`- Free memory at the start: ${env.freeGb} GB`] : []),
     `- Fixtures: ${fixtureLines.join("; ")}`,
     ...(rows.length ? [`- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms, into scene 2's audio cell; latency is key-down to the frame after it`] : []),
     ...(rows.some((r) => r.label.endsWith("display preference")) ? [`- Redraw scenes (long script): one click per sample, measured from the click to the frame after it, ${SETTLE_MS} ms apart; stamp cycles the status of scenes ${STAMP_ROWS.join(", ")} twice, hide toggles Hide shot scenes ${HIDE_TOGGLES} times, display preference switches the clock between 24 and 12 hours ${PREFERENCE_CHANGES} times`] : []),
@@ -492,6 +609,46 @@ export function report(results, env, when) {
       ...exports.map((r) => `| ${r.label.replace(" export", "")} | ${r.splitpage} | ${r.markdown} | ${r.standaloneHtml} |`),
       "",
       ".docx, PDF, CSV and .xlsx have no page hook to time them by and are not measured.",
+      ""
+    ] : []),
+    ...(loads.length ? [
+      `## Initial load (median of ${loads.length} navigations, ms from navigation start)`,
+      "",
+      "Each navigation is a fresh `goto /index.html`. Dom interactive, DOMContentLoaded and load end come from the navigation entry; first paint and largest paint from the paint timeline. Editable says whether a scene cell was present in the page when the probe ran, 1.6 s after the load.",
+      "",
+      "| Case | Navigations | Dom interactive | DOMContentLoaded | Load end | First paint | Largest paint | Editable |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      ...grouped(loads).map((g) => `| ${g[0].label} | ${g.length} | ${mid(g, "domInteractive")} | ${mid(g, "domContentLoaded")} | ${mid(g, "loadEnd")} | ${mid(g, "firstPaint")} | ${mid(g, "largestPaint")} | ${g.every((r) => r.editable) ? "yes" : "no"} |`),
+      ""
+    ] : []),
+    ...(opens.length ? [
+      `## Open a script (ms)`,
+      "",
+      "`openFile` on a .splitpage built from the current script, until the frame after it: reading, parsing, migrating and drawing every scene.",
+      "",
+      "| Case | Scenes drawn | Trials | Median |",
+      "| --- | --- | --- | --- |",
+      ...grouped(opens).map((g) => `| ${g[0].label} | ${g[0].beats} | ${g.map((r) => r.ms).join(", ")} | ${mid(g, "ms")} |`),
+      ""
+    ] : []),
+    ...(heaps.length ? [
+      "## JS heap after a forced collection (MiB)",
+      "",
+      "`performance.memory.usedJSHeapSize` of the page after two `gc()` calls, with the browser started with `--enable-precise-memory-info --js-flags=--expose-gc`.",
+      "",
+      "| Case | Samples | MiB |",
+      "| --- | --- | --- |",
+      ...grouped(heaps).map((g) => `| ${g[0].label} | ${g.length} | ${mid(g, "heapMb")}${g.every((r) => r.collected) ? "" : " (not collected)"} |`),
+      ""
+    ] : []),
+    ...(footprints.length ? [
+      "## Script size and stored bytes",
+      "",
+      "Counts are of the script open in the page. Stored bytes are UTF-8: .splitpage and .md project from the export builders, and the state JSON, which is the body of a version history snapshot and the `stateJson` of a draft.",
+      "",
+      "| Script | Beats | Scene headers | Comments | People | Tags | Text characters | HTML characters | .splitpage | .md project | State JSON |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+      ...footprints.map((r) => `| ${r.label.replace(" footprint", "")} | ${r.beats} | ${r.sceneHeaders} | ${r.comments} | ${r.people} | ${r.tags} | ${r.textChars} | ${r.htmlChars} | ${r.splitpageBytes} | ${r.markdownBytes} | ${r.stateJsonBytes} |`),
       ""
     ] : []),
     ...(images.length ? [
@@ -521,8 +678,8 @@ export function parseArgs(argv) {
     else if (argv[i] === "--only") only = (argv[++i] ?? "").split(",").filter(Boolean);
     else rest.push(argv[i]);
   }
-  const unknown = only.filter((f) => !FIXTURES.includes(f));
-  return { out: rest[0] ? resolve(rest[0]) : null, only, built, error: unknown.length || !only.length ? `unknown fixture ${unknown.join(", ") || "(none given)"}; use ${FIXTURES.join(", ")}` : null };
+  const unknown = only.filter((f) => !FIXTURES.includes(f) && !OPT_IN_FIXTURES.includes(f));
+  return { out: rest[0] ? resolve(rest[0]) : null, only, built, error: unknown.length || !only.length ? `unknown fixture ${unknown.join(", ") || "(none given)"}; use ${FIXTURES.join(", ")}, or ${OPT_IN_FIXTURES.join(", ")} when named` : null };
 }
 
 export function main(argv) {
@@ -556,8 +713,10 @@ export function main(argv) {
   for (const fixture of args.only) {
     const suite = join(work, `${fixture}.txt`);
     writeFileSync(suite, suiteText(fixture));
+    const chromeArgs = OPT_IN_FIXTURES.includes(fixture) ? [process.env.SPLITPAGE_CHROME_ARGS, MEMORY_FLAGS].filter(Boolean).join(" ") : process.env.SPLITPAGE_CHROME_ARGS;
+    const env = { ...process.env, ...(chromeArgs ? { SPLITPAGE_CHROME_ARGS: chromeArgs } : {}) };
     const r = spawnSync(process.execPath, [DRIVER, "--script", suite, "--port", String(ports.base), "--cdp-port", String(ports.base + CDP_PORT_OFFSET), "--shot-dir", work], {
-      cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 5 * 60 * 1000
+      cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 5 * 60 * 1000, env
     });
     const stdout = r.stdout ?? "";
     const found = parsePerf(stdout).map((p) => ({ ...p, fixture }));
