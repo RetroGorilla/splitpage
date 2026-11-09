@@ -120,6 +120,7 @@ export function mountWriterRuntimeFeature() {
               hideTagGhost();
             },
             visualKeydown: (event, cell) => {
+              if (event.isComposing || event.keyCode === 229) return true;
               if (currentWhoList()?.keydown(event, cell)) return true;
               const plain = currentPlainTags();
               if (event.key === "Escape" && tagGhost?.cellEl === cell) {

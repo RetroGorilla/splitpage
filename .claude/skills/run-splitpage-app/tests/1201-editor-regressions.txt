@@ -33,7 +33,11 @@ eval W.openVisual('r3');pasteTag(v(),true)
 expect stackKept(v(),'new shelter')
 expect v().querySelector('[data-tag-cat="location"] strong').textContent === 'new shelter'
 key Escape
-eval W.openVisual('r5');openTag(v(),'sound');document.getElementById('tag-edit-action').focus();true
+eval W.openVisual('r5');openTag(v(),'sound');window.writerComposingEscape=function(options){var cell=v();cell.addEventListener('keydown',function(event){event.stopPropagation();},{once:true});return cell.dispatchEvent(new KeyboardEvent('keydown',Object.assign({key:'Escape',bubbles:true,cancelable:true},options)));};writerComposingEscape({isComposing:true});true
+expect v().querySelector('[data-tag-editing]')?.getAttribute('contenteditable') === 'true' && !document.querySelector('.wr-flow-visual-box').hidden
+eval writerComposingEscape({keyCode:229});true
+expect v().querySelector('[data-tag-editing]')?.getAttribute('contenteditable') === 'true' && !document.querySelector('.wr-flow-visual-box').hidden
+eval document.getElementById('tag-edit-action').focus();true
 expect document.activeElement === document.getElementById('tag-edit-action') && v().querySelector('[data-tag-editing]') !== null
 key Enter
 expect document.activeElement === v()
