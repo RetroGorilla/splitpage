@@ -287,7 +287,7 @@ No decision is made here; see "Decisions for Adam".
 
 | Decision | Numbers | Assumed meanwhile |
 | --- | --- | --- |
-| Bundle: ship Yjs and the provider in every build and export (A), or load a second script only for shared sessions (B) | A: +115,589 bytes minified (+33,176 gzip, +29,296 brotli), about +6.2% on `index.html`, every export. B: no cost to ordinary exports; changes the one-output build, the script hash rule and eight packaging and test files (section 8) | Stage 1 measures with the libraries inside a scratch bundle and decides nothing about shipping. Neither option is built |
+| Bundle: ship Yjs and the provider in every build and export (A), or load a second script only for shared sessions (B) | A: +115,589 bytes minified (+33,176 gzip, +29,296 brotli), about +6.2% on `index.html`, every export. B: no cost to ordinary exports; changes the one-output build, the script hash rule and eight packaging and test files (section 8) | Decided 2026-11-09: A, ship in every build and export. Before that: Stage 1 measures with the libraries inside a scratch bundle and decides nothing about shipping. Neither option is built |
 | Is the local replica part of app-data export? | Export is an allow-list; nothing new is included unless added | Excluded; users export a Standalone copy instead |
 
 ## Doc mismatches

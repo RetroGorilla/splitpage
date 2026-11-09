@@ -91,7 +91,7 @@ The existing editor does not already expose a complete CRDT operation stream. `F
 | Construction and composition | Bootstrap wiring; no application-module initialization side effects |
 | Collaboration service | Its own top-level folder with its own package manifest and lockfile, an entry in the dependency gate's layer table, message types shared through `shared/`, and its own CI job. `server/` stays the static file server |
 
-Yjs and the provider would be the app's first runtime dependencies. The build emits one inline script, the connection policy is compiled into it, and Standalone HTML export embeds the whole app. Stage 0 measures the added size and records one decision: ship the collaboration code in every build and export, or load it as a second script for shared sessions only, which changes the one-output build and the script hash rule.
+Yjs and the provider would be the app's first runtime dependencies. The build emits one inline script, the connection policy is compiled into it, and Standalone HTML export embeds the whole app. Stage 0 measured the added size: 115,589 bytes minified (33,176 gzip), about 6.2% of `index.html`. Decided 2026-11-09: the collaboration code ships in every build and export. Loading it as a second script for shared sessions only would change the one-output build and the script hash rule.
 
 The build's `connect-src 'self' https: http:` blocks a `wss://` connection to another host; this was tested in Chromium. The desktop app runs at `splitpage://app` and reuses that policy, so it cannot reach any collaboration server until the rule changes. The proposed change adds `wss:`, which is no wider than the `https:` the rule already allows. A fixed host cannot be compiled in, because the invitation decides the host.
 
@@ -191,7 +191,7 @@ Every field has one authoritative representation. Boundary atoms carry stable id
 | Beat and scene identity | Stable across supported edits; no duplicate visible identities after concurrent structure changes |
 | Structural order | Explicit deterministic semantics for concurrent insertion, movement, deletion and undo |
 | Scalars | Deterministic conflict policy appropriate to the field; atomic values for genuinely coupled fields |
-| Status and other monotonic values | Define the merge rule and any explicit reset operation; local maximum calculations alone are not a merge policy |
+| Status and other monotonic values | Status of a beat, tag or shot: two changes made at the same time to different values leave the status as it was before both, and the person who wants the change makes it again; two changes to the same value apply. For any other monotonic value, define the merge rule and any explicit reset operation; local maximum calculations alone are not a merge policy |
 | Comments | Independent comment records and recoverable anchors; a comment whose words are all deleted is listed in recovery; only its author edits the text of a comment or reply; prototype one text attribute per comment id before considering anchored-range alternatives |
 | Replies | Independent records shown oldest post time first, ties broken by reply id |
 | People, tags, shots and gallery entries | Stable record identities; ordered sequence, set or atomic value chosen by meaning |

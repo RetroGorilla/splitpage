@@ -397,7 +397,7 @@ What `repaint()` does today, against the plan's section 4:
 ## Decisions for Adam
 
 1. A comment is two undo entries today (the anchor, then the record on Post). Should one undo remove both? Assumed meanwhile: keep two.
-2. Cutting beats removes them at once and pasting re-inserts them later, so collaborators see the beats disappear between the two steps. Is that acceptable, or should a cut-then-paste become one move? Assumed meanwhile: keep two commands; T10 covers it.
+2. Cutting beats removes them at once and pasting re-inserts them later, so collaborators see the beats disappear between the two steps. Is that acceptable, or should a cut-then-paste become one move? Decided 2026-11-09: keep two commands; T10 covers it.
 
 ## Doc mismatches
 
