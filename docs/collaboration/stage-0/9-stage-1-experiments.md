@@ -137,4 +137,4 @@ Corrected in `docs/COLLABORATION-PLAN.md` with this file:
 | 8 | The built-in acknowledgement means "applied in memory" | It is also sent when the apply threw or the update waits on dependencies (8, Y15, H2) |
 | 8 | A read-only connection answers "not applied" to updates with new changes | To every update message (8, H2) |
 
-Stale statements in other documents (`invariants.md`, `session.md`, `DOCUMENT-MODEL.md`, `HANDOFF.md`, `WRITER-FLOW-PLAN.md`) are listed under "Doc mismatches" in artifacts 1 to 5.
+Stale statements in other documents (`invariants.md`, `session.md`, `DOCUMENT-MODEL.md`, `HANDOFF.md`, `WRITER-FLOW-PLAN.md`), listed under "Doc mismatches" in artifacts 1 to 5, were corrected separately ([#1379](https://github.com/RetroGorilla/splitpage/issues/1379)).
