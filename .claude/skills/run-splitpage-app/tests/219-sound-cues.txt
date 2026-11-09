@@ -110,6 +110,9 @@ wait document.getElementById('prompter').hidden
 click #btn-production
 wait !document.getElementById('production-panel').hidden
 sleep 400
+jsclick #production-panel .prep-requirements-toggle
+wait document.querySelector('#production-panel .prep-requirements-toggle').getAttribute('aria-expanded') === 'true'
+sleep 200
 expect document.getElementById('production-panel').textContent.indexOf('upbeat intro') !== -1
 expect document.getElementById('production-panel').textContent.indexOf('a long rolling rumble of thunder over the distant hills') !== -1
 expect F.state().productionTags.some(function (t) { return t.cat === 'sound' && t.name === 'upbeat intro'; })
