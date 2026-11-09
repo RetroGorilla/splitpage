@@ -1,5 +1,16 @@
 # Performance record
 
+## Media-heavy bundle
+
+Install ffmpeg on PATH, then run `node tools/make-media-bundle.mjs` from the repository root.
+It creates `D:\vibecoding\Splitpage\scratch\media-bundle` with a `.splitpage` script and its
+adjacent files folder. The output folder must not already exist and must be outside the repository.
+Pass another output folder as the first argument, `--small` for a quick sample, or `--photos N`
+and `--videos N` to set counts. The default has 30 scenes, 150 beats, 300 pictures and 60 videos.
+Open the script in Splitpage desktop with the files folder beside it. Pictures are embedded in the
+script; bundled video links resolve through the desktop app. Browser Splitpage displays the gallery
+but cannot open local video files from a saved bundle. This fixture is separate from `perf-ab`.
+
 Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe this machine and browser; compare a later run only under the same conditions.
 
 ## Conditions (Linux)
