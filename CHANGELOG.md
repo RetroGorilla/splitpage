@@ -46,9 +46,39 @@ appear in the app under **Help**. The format follows
   "<script name> files" folder, with every link pointing into that folder.
   Files that are missing, linked from elsewhere on the computer, or of a type
   Splitpage doesn't attach are left out, and the export says how many.
+- While you type a keyword tag such as `prop:`, Splitpage suggests a matching
+  name already in that category. Tab or a click on the hint uses the existing
+  entry. Esc dismisses the suggestion so Tab makes a new tag.
+- Attaching a file to a saved script in the desktop app now offers **Move it**
+  as well as **Copy it** and **Leave it where it is**. Move puts the file in the
+  script's folder: a rename on the same drive, otherwise a checked copy and then
+  the original is deleted. It keeps both copies when the original is in use or
+  changed. A path link whose file has moved into the script's folder still
+  opens.
+- Create a bundle of a script's linked files after its first save, from the
+  outside-files bar, or from **File ▸ Create bundle…**. Old document paths are
+  copied, and files added in this session can be moved.
+- B-roll and Comments can be grouped by scene, with each panel remembering its
+  choice.
+- Scene headings can be created and renamed in place: Enter saves, Esc cancels,
+  clicking away saves, and a brief animation respects reduced motion.
 
 ### Changed
 - After a Save As, the new script starts with no undo history.
+- The Production Panel labels an unnamed scene "Scene A" (its scene letter)
+  instead of "Untitled scene".
+- Production and Gear items are grouped by scene, with separate remembered
+  choices for each panel.
+- The Export dialog says to use **File ▸ Create bundle…** first when files
+  outside the script's folder would be left out.
+- Export with the script's files: a confirmed Replace now overwrites the
+  existing .zip. The zip is still written to a temporary file first, so a
+  cancelled or failed export leaves the old one as it was.
+- The merge review shows both folders when a video sits in different folders
+  and says which one is kept. A copy beside the script is now always kept over
+  a path on one computer.
+- Scene headers in the editor look like headings, with quieter controls that
+  appear when needed.
 - Clicking a beat in the Rundown scrolls the script there with a short, smooth
   scroll (or jumps, if you prefer reduced motion). The Rundown's magnifier
   keeps the beat under the pointer steady and every beat reachable, also with
@@ -119,6 +149,16 @@ appear in the app under **Help**. The format follows
   makes it, and text you formatted stays formatted. A paste with several lines
   cancels the open tag and keeps all the text.
 - Cancelling a tag with nothing typed no longer adds an extra undo step.
+- Naming yourself in a comment or reply box now sets your name everywhere at
+  once: the name chip and your colour update straight away, and the name stays
+  for every script.
+- The open-tag highlight covers the first word of the tag again.
+- A stalled Save As in one script no longer blocks Undo and Redo in a script
+  opened afterward.
+- A video link you removed stays removed when another editor only changed its
+  thumbnail.
+- Old scripts with an embedded picture show that picture in the beat again,
+  instead of an empty Attach button.
 
 ## 0.4.1 — 2026-11-02
 
