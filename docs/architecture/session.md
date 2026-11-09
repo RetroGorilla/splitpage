@@ -13,19 +13,19 @@ The code lives in `src/application/session/` (`document-session.ts`, `change-set
 | The document | One `ValidatedDocument` or none. It arrives only through the `DocumentEntry` port, which brands it |
 | The epoch | A counter that opens a new epoch when a document is adopted or recovered, even for the same document id |
 | The generation | A counter of accepted user edits. It never resets, and a new epoch does not clear it |
-| Transaction kinds | `TransactionKind`: `edit`, `disk`, `reload`, `recovery`, `adopt` |
+| Transaction kinds | `TransactionKind`: `edit`, `replay`, `amend`, `disk`, `reload`, `recovery`, `adopt`; `replay` and `amend` advance generation and run effects without recording undo |
 | Capability | Whether an edit is allowed, asked of the `CapabilityPort` before a command plans |
 | Change sets | `ChangeSet`: what a transaction touched, published as a `SessionChange` |
 | Selectors | `read(select)` hands a function the live document typed as a deep-readonly `DocumentView`, or `null`; the type is compile-time only. The selector functions themselves (`sceneAt`, `sceneStatus`, `cellHtml`, `bothScenesHaveVisual`) live in the command modules, not in `document-session.ts` as the milestone's layout says |
 
 It does not own these yet:
 
-- **Legacy writers that bypass it.** Eight edits are commands: beat length, beat status, typing, split, join, cut, paste and the import modal's append or replace (M5 5.3). Since then the other writers became commands too: cell edits through the cell-editing owner (`application/editing/cell-editing.ts`, #452), the beat paste and drop as a document edit (`features/clipboard/beat-clip.ts`, which still records pasted b-roll through `recordPastedBroll`), scenes, the panels, and find and replace. One writer still edits outside a command: importing into a new document (`features/imports/imports.ts`) calls `noteSessionEdit()` (`bootstrap/wiring/session-owner.ts`), an edit of unknown extent, published as a whole-document change set with no reconciliation.
+- **Legacy writers that bypass it.** Eight edits are commands: beat length, beat status, typing, split, join, cut, paste and the import modal's append or replace (M5 5.3). Since then the other writers became commands too: cell edits through the cell-editing owner (`application/editing/cell-editing.ts`, #452), the beat paste and drop as a document edit (`features/clipboard/beat-clip.ts`, which still records pasted b-roll through `recordPastedBroll`), scenes, the panels, and find and replace. One writer still edits outside a command: importing into a new document (`features/imports/imports.ts`) calls `noteSessionEdit()` (`bootstrap/wiring/session-owner.ts`), an edit of unknown extent, published as a whole-document change set with record reconciliation, but no anchor reconciliation or rollback of the original edit.
 - **Adoption at `trackDocument`.** `render()` in `features/rows/render.ts` still calls the undo owner's `track()` (`application/editing/undo/undo.ts`) directly, through `ports.undo.track`.
 - **Undo and redo replay.** Ctrl+Z and Ctrl+Y call the undo owner's `undo()` and `redo()` from `src/bootstrap/wiring/editor.ts`. The replay runs through the session (`replay`, routed by `routeUndoReplays` in `src/bootstrap/wiring/undo.ts`), as one transaction. Afterwards `afterUndoApplied` in `editor.ts` redraws the production panels, calls the undo owner's `settleAfterApply` and puts the caret back.
 - **The save coordinator's change count.** It increments in the dirty effect on every effect pass, including passes with no generation, and `saveChanges()` reads it. The generation and the change count therefore diverge after a merge, reload or recovery.
 
-No app module (outside `src/test`) subscribes to the session (`subscribe` is used by tests), and `liveSession()` in `session-owner.ts` exists for tests. A subscription is bound to the session it was made on and a replacement drops it (L1d, with the new session starting empty), so an app-lifetime listener would have to re-subscribe after each replacement. `session-owner.ts` offers `onDocumentReplaced(listener)` for that need; its one listener is `releaseSessionVideoUrls` in `features/gallery/video-files.ts` (matrix case L1c). `src/test/m4-lifecycle.test.mjs` names the listeners and observers that live as long as the app (E9).
+App listeners use `onSessionChange` in `session-owner.ts`, which retains them and re-attaches them when the session is replaced. Direct `subscribe` listeners remain bound to one session and are dropped on disposal. `liveSession()` is used in production by `writer.ts`, `ports/document.ts`, `transition-owners.ts`, `editor-owners.ts` and `undo.ts` under `src/bootstrap/wiring/`. `onDocumentReplaced(listener)` publishes replacement notifications.
 
 ## 2. Lifecycle
 
@@ -148,7 +148,7 @@ None of the five sets `saveNow`: they save through the ordinary debounce. All fi
 
 ### Legacy edits
 
-`noteEdit(changes?)` is the entry for a legacy edit. It runs steps 3 to 5 with `WHOLE_DOCUMENT` (or the given set), with no plan, no apply and no reconciliation. `noteSessionEdit()` calls it.
+`noteEdit(changes?)` is the entry for a legacy edit. It runs steps 3 to 5 with `WHOLE_DOCUMENT` (or the given set), with record reconciliation but no plan, no apply, no anchor reconciliation and no rollback of the original edit. `noteSessionEdit()` calls it.
 
 ## 4. The effect scheduler
 
@@ -268,7 +268,7 @@ This table keeps the milestone findings and their recorded dispositions. Numbere
 
 | Gap or exception | Where it stands |
 | --- | --- |
-| Importing into a new document still calls `noteSessionEdit` (a whole-document change set, no reconciliation); every other writer is a command | Cell edits: #452. The rest moved in milestones 4 to 6 and 4.1 |
+| Importing into a new document still calls `noteSessionEdit` (a whole-document change set with record reconciliation, but no anchor reconciliation or rollback of the original edit); every other writer is a command | Cell edits: #452. The rest moved in milestones 4 to 6 and 4.1 |
 | The legacy writers that bypass the session. Nothing assigns the document outside the session (`S` is deleted, L3j), and every open, new, restore and recover goes through the transition API | Closed for documents arriving whole by 4.8, 4.12, 4.15 and 4.18; the writers that edit in place are milestone 6's |
 | Ctrl+Z and Ctrl+Y replays were outside the session in M3 | Fixed: replays run through the session's `replay` (`routeUndoReplays`, #426) |
 | Recovery by whole replacement (draft restores, history restore, file import) is published as `adopt`, not `recovery`, so it opens an epoch with no generation or undo entry (INV-53, E4). It now arrives through a transition and a new session | Accepted by the coordinator; INV-53's row says so |

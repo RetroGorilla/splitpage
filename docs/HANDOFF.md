@@ -281,9 +281,8 @@ features were removed; the app now saves to files only.
 
 Everything from outside the page goes through `migrateRows(s)` — the single
 choke point where untrusted input becomes trusted state. A new top-level
-field must be added in **two** places: `migrateRows()` and `mergeStates()`'s
-merge literal — missing from the latter, it's silently destroyed on every
-merge (happened to `people` and `productionTags`).
+field must be added to `STATE_FIELDS` in `src/core/document/fields.ts`,
+which drives migration and merge policy.
 
 ### 3.3 Finished tags are protected
 
@@ -310,10 +309,10 @@ entry's five fields, compared rather than tracked (the `contentMemo()`
 reasoning: a key that is the input cannot go stale). The badges, both
 panels, the untagged scan and Tab completion all share it, so a render or an
 idle refresh derives it once. A live tag missing a registry entry still
-*shows*; giving it the entry is `healTagRegistry()`, an explicit step with
-no dirtying, run by `render()` and the idle refresh — and by `migrateRows()`
-(`missingRegistryTags()`) for every document that comes in, so a document
-looks after load exactly as it did when the read did the healing. Bulk
+*shows*; accepted edits reconcile records through `withRecords` in
+`src/application/session/document-session.ts`. Explicit healing uses
+`healTagRegistry()` through a session stamp, without dirtying. `migrateRows()`
+also fills missing registry entries for incoming documents. Bulk
 delete must still also call `removeTag()`, or the heal puts the item back.
 Selection state is UI-only, never serialised. Read the panel through
 `productionEntries()`, never `collectTags()`.
@@ -386,7 +385,7 @@ Narration exports mirror this outward: one paragraph per row, read back by
 ### 3.10 Field splits and writer structure use the same text primitives
 
 Alt+Enter in `#rows` splits the focused field at the caret, leaving the
-other column untouched on the original row. `splitRowFieldCore(cellEl)`
+other column untouched on the original row. `splitField(cellEl)` in `src/features/rows/beats.ts`
 reads `field` off `data-field` and runs `splitBeatCommand`. The writer's
 flow commands implement its beat and paragraph decisions using the same
 text primitives. A split operates on the cell's model (#85): the caret as a
