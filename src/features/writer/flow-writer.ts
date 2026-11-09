@@ -4,6 +4,7 @@ import type { Undo, UndoDirection } from "../../application/editing/undo/undo.ts
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
 import { setVisualForRange } from "../../core/flow/visual.ts";
 import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
@@ -32,7 +33,7 @@ export interface FlowWriterPorts {
   readonly closeFind?: () => void;
   readonly pictures?: Pick<PictureStore, "imgHtml">;
   readonly visualInput?: (event: InputEvent, cell: HTMLElement) => void;
-  readonly visualBeforeWrite?: (cell: Element) => (() => void) | null;
+  readonly visualBeforeWrite?: (cell: Element) => ((selection?: CellRange | null) => void) | null;
   readonly visualLeave?: (cell: HTMLElement) => void;
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
@@ -210,6 +211,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       return after;
     },
     input: (event, cell) => { if (isCurrent()) ports.visualInput?.(event, cell); },
+    beforeWrite: cell => ports.visualBeforeWrite?.(cell) ?? null,
     leave: cell => { if (isCurrent()) { ports.visualLeave?.(cell); if (cell.dataset.id) surface.refreshBeat(cell.dataset.id); } },
     keydown: (event, cell) => isCurrent() && !!ports.visualKeydown?.(event, cell),
     notice: message => { ports.notice(message, "warn"); },
@@ -231,7 +233,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       ensureTrailingCaretSpot(cell);
       const at = line?.pos ?? selection.from + cellLength(pasted.cell);
       setCellSelection(cell, at, at);
-      restore?.();
+      restore?.({ from: at, to: at });
     }
   });
 

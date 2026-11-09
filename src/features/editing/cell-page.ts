@@ -1,16 +1,17 @@
 import type { CellPage } from "../../application/editing/cell-editing.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 
 export interface CellPagePorts {
   readonly storedHtml: (html: string) => string;
   readonly caretSpot: (cellEl: Element) => void;
-  readonly beforeWrite?: (cellEl: Element) => (() => void) | null;
+  readonly beforeWrite?: (cellEl: Element) => ((selection?: CellRange | null) => void) | null;
 }
 
 const ZWSP = /\u200B/g;
 
 export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown> {
-  let restore: (() => void) | null = null;
+  let restore: ((selection?: CellRange | null) => void) | null = null;
   return {
     address: function (cellEl) {
       return { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
@@ -31,7 +32,7 @@ export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown>
       if (sel) setCellSelection(cellEl, sel.from, sel.to);
       const after = restore;
       restore = null;
-      after?.();
+      after?.(sel);
     }
   };
 }

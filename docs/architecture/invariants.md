@@ -38,13 +38,13 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **As built (M3, part):** typing, split, join, paste and cut write the cell only through `cellTextCommand`, `splitSceneCommand`, `joinScenesCommand`, `pasteCommand` and `cutCommand` ([session.md](session.md#the-text-commands)). `editCell()` (formatting, shortcuts, tags, b-roll keys, Enter) still writes `row[field]`, stamps and calls `markDirty` itself (#452), and the scene paste and drop in `src/features/clipboard/beat-clip.ts` is out of M3 (D10). The row stays open until M6.
 - **Acceptance:** the five suites pass on the migrated editor. A new architecture check finds no `document.execCommand` call and no `innerHTML` assignment to a `.cell-editable` under `src/features/`.
 
-### INV-03 — Text inside a tag is never touched
+### INV-03 — Finished tags are protected outside their explicit editor
 
-- **Behaviour:** A tag is one atom. An edit applies a comment or link to all of a tag or to none of it, the caret cannot enter a tag, and editor find/replace never matches inside or across one. Present's read-only Find searches the text on screen, including displayed tag words.
-- **Tests:** `src/test/doc-model.test.mjs` ("a comment or link covers all of a tag or none of it", "positions: an atom is one character"); `src/test/find-replace.test.mjs` ("find: never inside a tag, never across one or across a b-roll key", "replace never touches a tag…"); browser `04-prompter-find.txt`.
+- **Behaviour:** Finished tag occurrences protect their words. Edit tag temporarily opens just the selected occurrence; Done protects it again. Bracket shortcuts and selected labels may nest by full containment; crossing an existing boundary is refused by the text model. Inner completion preserves the outer draft, and outer completion keeps completed inner tags and visible words. Escape dismisses a suggestion, then cancels an unfinished tag, then acts like Done. Completed edits are undoable. Comments, links and editor find/replace retain their existing restrictions. Present's read-only Find searches displayed tag words.
+- **Tests:** `src/test/doc-model.test.mjs` ("a comment or link covers all of a tag or none of it", "positions: an atom is one character"); `src/test/find-replace.test.mjs` ("find: never inside a tag, never across one or across a b-roll key", "replace never touches a tag…"); `tests/features/tags/occurrence-editor.test.ts`; `tests/features/editing/cell-dom.test.ts`; browser `04-prompter-find.txt` and the `1201-*` suites.
 - **Owner:** `src/core/text` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
-- **Acceptance:** the named unit tests pass unchanged against `src/core/text`.
+- **Acceptance:** the named unit tests and browser suites `1201-nested-typing.txt` and `1201-tag-editor.txt` pass.
 
 ### INV-04 — Every top-level field survives migration and merge
 
