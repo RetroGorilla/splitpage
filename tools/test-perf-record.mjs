@@ -158,7 +158,7 @@ function hideWorld(controls) {
     querySelectorAll: () => ({ length: hiding ? 1 : 0 })
   };
   const window = { __perf: { lat: [], reset() {}, take: (label) => label } };
-  vm.runInNewContext(BEATS, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
+  vm.runInNewContext(BEATS.replace(/\n\s*/g, " "), { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
   return { clicked, run: () => window.__perfScene.hide() };
 }
 const headerRun = hideWorld([NEW_HIDE]);
