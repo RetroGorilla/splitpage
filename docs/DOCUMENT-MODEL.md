@@ -165,7 +165,7 @@ atomic inline object, the b-roll key:
 | Mark | Value | Notes |
 | --- | --- | --- |
 | `b` `i` `u` `s` `hl` | `true` | bold, italic, underline, strike, highlight |
-| `dir` | `true` | a stage direction for the performer (#167, Audio column): stored as `<span class="stage-dir">`, nested just inside the comments; never on the b-roll key; its brackets are added by every reader, never stored; left out of `spokenText()` (the read time) and of the teleprompter's word spans |
+| `dir` | `true` | a stage direction for the performer (#167, accepted in either cell): stored as `<span class="stage-dir">`, nested just inside the comments; never on the b-roll key; its brackets are added by every reader, never stored; left out of `spokenText()` (the read time) and of the teleprompter's word spans |
 | `href` | string | http, https or mailto only (`safeHref`) |
 | `tag` | registry id | the outermost label; ordinary old runs keep this shape |
 | `innerTags` | ordered array of registry ids | labels inside `tag`, from outer to inner; absent for ordinary tags |
@@ -298,7 +298,7 @@ ledger's INV-18.
 
 - Splitting a row moves the runs, and their marks move with them. Joining
   rows does the same. **Built:** `splitSceneCommand`
-  (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
+  (`src/application/commands/split-join.ts`, run by `splitField` in
   `src/bootstrap/wiring/rows.ts`) is `splitCell` at the caret;
   `joinBeatsCommand` (the same file) and the writer flow engine use
   `joinCells`, whose glue space carries a comment (or link) the text on
@@ -529,8 +529,8 @@ selection kept:
 stored format for this release.**
 
 - `rows[].visualText` / `audioText` keep holding HTML, but it is always
-  exactly `toHtml(runs)`. That is the sanitiser's current output, plus
-  `data-tag-id` on tag spans. The app converts once on load (`fromHtml`,
+  exactly `toHtml(runs)`. Tag spans carry `data-tag-cat` and
+  `data-tag-name`; ids live only in the registry. The app converts once on load (`fromHtml`,
   memoised by string) and once on save.
 - **What that keeps working, unchanged:**
   - older clients (2.x, 3.0) reading and writing the same file
@@ -540,9 +540,7 @@ stored format for this release.**
   - every existing document, with no migration step to go wrong
 - **What it costs:**
   - a parse per changed cell on load and after each merge (memoised; cheap)
-  - an old client drops `data-tag-id`, because its sanitiser doesn't know
-    it. The next load by a new client re-resolves the tag by category and
-    name, which is the fallback anyway.
+  - tags are resolved by category and name, with ids kept in the registry.
 - **The alternative** is runs as JSON in the stored state (`schema: 3`).
   - It is cleaner, and diffs of `.splitpage` files become readable.
   - Every older client must be locked out:

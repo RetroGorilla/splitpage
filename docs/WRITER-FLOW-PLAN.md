@@ -174,7 +174,7 @@ Recommended: **one editing host, with native text entry inside a beat, behind a 
 - **The gap is a painted margin plus a zero-width space:** the space is the first character of a run-on beat's span, and only when a gap shows. CSS alone isn't enough (section 9). The cell reader already strips `​`, and repair and the save path assert that no synthetic whitespace reaches storage.
 - **Crossing beats or changing structure:** `beforeinput` and `keydown` are cancelled, one flow command runs, and the DOM is patched with the selection restored from model positions.
 - **Repair:** after native input, any text outside a `.wr-beat`, or a merged or split span, is folded back into the right beat before anything is saved, and never during composition.
-- **Patches, not paragraph repaints.** A script with little punctuation can still open as one huge paragraph, so repainting "the paragraph" could mean nearly the whole document. Ordinary edits patch the affected beat. This has to cover the app's own paint path: full renders on structural edits and replay reach `wiring/panels.ts`, which calls `paintWriterDraw`, and that replaces all of `#writer-doc`. Left alone, it overwrites patches, kills tag references and disturbs the selection.
+- **Patches, not paragraph repaints.** A script with little punctuation can still open as one huge paragraph, so repainting "the paragraph" could mean nearly the whole document. Ordinary edits patch the affected beat. This has to cover the app's own paint path: full renders on structural edits and replay reach `wiring/panels.ts`, which calls `paintWriterDraw`, which calls `flowWriter.repaint()` to patch changed beats while retaining unchanged nodes.
 - **IME:** Adam doesn't use one and IME-only bugs go on the never-do list (#1144), so there is no tuning. The one rule is that text is never discarded: no repaint or repair during composition, and all touched beats sync when it ends. Suite `289-script-cell-ime` has to keep passing or be updated on purpose.
 
 Integrations this must adapt, beyond `currentBeat()`, because the host is now the event target and active element:
@@ -365,7 +365,7 @@ The full Electron smoke and `tools/perf-ab.mjs` were outstanding here too. Both 
 **Left for the branch:**
 
 - `UndoEntry`'s selection pair (section 4.2). The slice keeps its own map of selections for now.
-- `joinBeatsCommand`'s refusal of two visuals. It stays until the new writer ships, because the old writer depends on it. The flow engine's own join already combines them.
+- `joinBeatsCommand`'s refusal of two visuals. It has no app caller today; only tests call it. The flow engine's own join already combines them.
 - Deleting `tools/writer-lab/` before the phase 8 merge, and taking `lab.ts` back out of `tsconfig.web.json`. Until then the page's files pass the same gates as everything else, because CI runs them on every phase PR. `gap-probe.mjs` has done its job and is gone; it's in history at `01ef194b`.
 - Taking `feat/writer-flow` back out of `ci.yml`'s `pull_request` branches at phase 8. It's there so phase PRs get CI.
 
