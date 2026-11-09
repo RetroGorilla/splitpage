@@ -232,6 +232,20 @@ test("overlay: Writer Escape dismisses the ghost before closing and preserves in
   } finally { owner.dispose(); h.win.close(); }
 });
 
+test("Writer permits keyboard focus on the occurrence control", () => {
+  const h = harness();
+  const owner = h.mount();
+  const button = h.doc.createElement("button");
+  button.id = "tag-edit-action";
+  h.doc.body.append(button);
+  h.state.writer = true;
+  try {
+    button.focus();
+    assert.equal(h.doc.activeElement, button);
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});
+
 test("overlay: every row acts once after remount and retained handlers stop at disposal", () => {
   const h = harness();
   const prior = h.mount();

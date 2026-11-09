@@ -786,6 +786,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   const target = e.target as Element | null;
   const cellEl = target?.closest(".cell-editable");
   if (!cellEl) return;
+  if (e.isComposing || e.keyCode === 229) return;
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;

@@ -27,11 +27,12 @@ function editableCell(target: EventTarget | null): Element | null {
 
 export function editorBlur(ports: EditorFocusPorts): Listener {
   return (e: Event) => {
+    const related = (e as FocusEvent).relatedTarget;
+    if (isElement(related) && related.closest("#tag-edit-action")) return;
     ports.leftEditable();
     const cellEl = editableCell(e.target);
     if (!cellEl || ports.blurSuppressed()) return;
     const wrap = cellEl.closest(".field-wrap");
-    const related = (e as FocusEvent).relatedTarget;
     if (wrap && related && wrap.contains(related as Node)) return;
     ports.blurredCell(cellEl);
   };

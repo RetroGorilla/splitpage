@@ -92,3 +92,49 @@ test("ordinary caret changes do not mutate the hidden occurrence control", async
     assert.equal(changes.length, 0);
   } finally { observer.disconnect(); h.editor.dispose(); }
 });
+
+test("the visible occurrence control reads geometry before writes and leaves unchanged positions alone", () => {
+  const h = fixture();
+  const outer = h.tags[0] as HTMLElement;
+  const button = document.getElementById("tag-edit-action") as HTMLElement;
+  const rect = outer.getBoundingClientRect();
+  outer.getClientRects = () => [rect] as unknown as DOMRectList;
+  h.select(outer);
+  h.activate();
+  button.textContent = "stale";
+  const observer = new win.MutationObserver(() => {});
+  observer.observe(button, { attributes: true, childList: true });
+  const beforeRead: number[] = [];
+  outer.getBoundingClientRect = () => { beforeRead.push(observer.takeRecords().length); return rect; };
+  Object.defineProperty(button, "offsetWidth", { get: () => { beforeRead.push(observer.takeRecords().length); return 80; } });
+  Object.defineProperty(button, "offsetHeight", { get: () => { beforeRead.push(observer.takeRecords().length); return 28; } });
+  try {
+    h.editor.refresh();
+    assert.deepEqual(beforeRead, [0, 0, 0]);
+    assert.ok(observer.takeRecords().length > 0);
+    assert.equal(button.textContent, "Done");
+    for (let i = 0; i < 20; i++) h.editor.refresh();
+    assert.equal(observer.takeRecords().length, 0);
+    assert.ok(beforeRead.every(count => count === 0));
+  } finally { observer.disconnect(); h.editor.dispose(); }
+});
+
+test("activating Done from the keyboard returns focus and a caret beyond the protected occurrence", () => {
+  const h = fixture();
+  try {
+    const outer = h.tags[0] as HTMLElement;
+    outer.getClientRects = () => [outer.getBoundingClientRect()] as unknown as DOMRectList;
+    h.select(outer);
+    h.activate();
+    const button = document.getElementById("tag-edit-action") as HTMLElement;
+    button.focus();
+    assert.equal(document.activeElement, button);
+    h.activate();
+    const range = win.getSelection()?.getRangeAt(0);
+    assert.equal(document.activeElement, h.cell);
+    assert.equal(range?.collapsed, true);
+    assert.equal(range?.startContainer, h.cell);
+    assert.equal(range?.startOffset, 1);
+    assert.equal(h.cell.querySelector("[data-tag-editing]"), null);
+  } finally { h.editor.dispose(); }
+});

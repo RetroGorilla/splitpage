@@ -11,8 +11,8 @@
   .tag-anchor:has(.tag-anchor) { outline: 1px solid var(--tag-color); outline-offset: 2px; }
   .tag-anchor .tag-anchor { background: var(--tag-tint); }
   .tag-anchor[data-tag-editing] { cursor: text; outline: 1px dashed var(--tag-color); outline-offset: 2px; }
-  .tag-suggest.tag-edit-action { z-index: 149; }
-  .tag-edit-action[hidden] { display: none; }
+  .tag-suggest.tag-edit-action { z-index: 149; min-width: 80px; justify-content: center; }
+  .tag-edit-action[hidden] { display: flex; visibility: hidden; pointer-events: none; }
   .wr-flow-visual-heading .mini-toolbar { display: flex; position: relative; opacity: 1; pointer-events: auto; transform: none; }
   .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 22%, var(--tag-tint, transparent)); }
   .tag-sample[data-tag-cat="prop"],     .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }

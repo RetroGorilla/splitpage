@@ -8,6 +8,7 @@ export function createTagOccurrenceEditor(choose: (cell: HTMLElement) => void, s
   button.type = "button";
   button.id = "tag-edit-action";
   button.className = "tag-suggest tag-edit-action";
+  button.textContent = "Edit tag";
   button.hidden = true;
   document.body.append(button);
   let selected: HTMLElement | null = null;
@@ -25,23 +26,33 @@ export function createTagOccurrenceEditor(choose: (cell: HTMLElement) => void, s
       if (!button.hidden) button.hidden = true;
       return;
     }
-    button.textContent = editing ? "Done" : "Edit tag";
-    button.hidden = false;
-    button.classList.add("is-visible");
     const rect = tag.getBoundingClientRect();
-    button.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - button.offsetWidth - 8)) + "px";
-    button.style.top = Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - button.offsetHeight - 8)) + "px";
+    const width = button.offsetWidth, height = button.offsetHeight;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + "px";
+    const top = Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - height - 8)) + "px";
+    const label = editing ? "Done" : "Edit tag";
+    if (button.textContent !== label) button.textContent = label;
+    if (button.hidden) button.hidden = false;
+    if (!button.classList.contains("is-visible")) button.classList.add("is-visible");
+    if (button.style.left !== left) button.style.left = left;
+    if (button.style.top !== top) button.style.top = top;
   }
 
   function finish(): boolean {
     if (!editing) return false;
     const current = editing;
+    const returnFocus = document.activeElement === button;
     settle();
     editing = null;
     current.tag.removeAttribute("data-tag-editing");
     current.tag.setAttribute("contenteditable", "false");
     selected = null;
     button.hidden = true;
+    if (returnFocus && current.cell.isConnected && current.tag.isConnected) {
+      const after = domToPos(current.cell, current.tag, current.tag.childNodes.length);
+      current.cell.focus({ preventScroll: true });
+      if (after !== null) setCellSelection(current.cell, after);
+    }
     return true;
   }
 
