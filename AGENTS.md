@@ -4,7 +4,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 
 ## Setup
 
-- Node 24.22.1 (`.nvmrc`). The test runner refuses older versions on purpose: on 22.22.0 two PDF tests break for the runtime, not the code. Install it before anything else.
+- Node 24.22.1 (`.nvmrc`). The test runner warns on other versions and refuses versions outside `package.json`'s `engines`: on 22.22.0 two PDF tests break for the runtime, not the code. Install the pinned version before anything else.
 - `npm ci`, then the commands below.
 - Branch from `main`, and open pull requests against `main`. It is the only long-lived branch; a release is a tag on it.
 
@@ -68,7 +68,7 @@ npm run lint                              # about 45 s
 node tools/code-map.mjs                   # prints the feature map; fails on duplicate type names
 ```
 
-Before you push, run the full gate once: `npm run verify` (lint, types, both gates, build, every unit test). The unit tests alone take about 10 minutes, so do not run the full suite after every edit.
+Before you push, run the full gate once: `npm run verify` (lint, types, both gates, app and preload builds, generated-file checks, every unit, desktop and tool test). The tests take about 10 minutes, so do not run the full suite after every edit.
 
 Anything a person can see also needs its browser suites, which PR CI mostly does not run (the nightly run does): `node tools/run-suites.mjs <out-dir> '<regex over suite filenames>'`. Which suites go with which change: [testing.md, What to run for which change](docs/architecture/testing.md#what-to-run-for-which-change). The browser harness is described in [the run-splitpage-app skill](.claude/skills/run-splitpage-app/SKILL.md).
 

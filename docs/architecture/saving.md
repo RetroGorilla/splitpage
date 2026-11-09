@@ -1,5 +1,40 @@
 # Saving
 
+## Current file and bundle workflows
+
+For user steps, see [Saving your script](../help.md#saving-your-script) and
+[Desktop app](../help.md#desktop-app). This section records the media workflows
+merged since 0.4.1; the milestone account below records their earlier foundation.
+
+- `src/features/gallery/video-bundles.ts` owns the desktop Attach Copy / Move /
+  Leave offer, progress, Save As file choices and export-with-files UI.
+  `create-bundle.ts` in the same folder inspects outside paths when opening a
+  saved script, offers to gather them after first save, and implements the
+  File menu's Create bundle action. Missing paths stay linked where they were.
+- `desktop/bundle-jobs.ts` carries the bundled files named by captured project
+  bytes during a save to another file. The renderer's save choice is Copy files,
+  Don't copy the files (absolute links back to the old folder), or Cancel.
+  Network-share paths cannot use the link choice. File grants and checks remain
+  in main; the renderer does not choose arbitrary source or destination paths.
+- `src/application/save/file-saving.ts` captures the document before asking
+  about files. Cancel or failure restores a temporary retarget. On successful,
+  still-owned Save As completion, `save-completion.ts` resets Undo/Redo after
+  applying naming and relinking. Ordinary saves keep history. Download-only
+  browsers have no picked destination to retarget.
+- Move renames on the same drive where possible; copy-based moves check bytes
+  before removing the original. A changed or undeletable original is kept with
+  a warning. Undo removes the attachment from
+  the document, not files already copied or moved. Export with files is a
+  separate ZIP operation, with confirmed replacement and cancellable progress;
+  it does not change the script's save destination.
+
+Coverage includes `desktop/test/bundle-copy.test.mjs`, `bundle-move.test.mjs`,
+`bundle-export.test.mjs` and `bundle-ipc.test.mjs` in that folder, plus
+`tests/features/gallery/` and the save completion tests. Browser sessions cannot
+reopen stored local paths; project pictures remain embedded.
+
+## Milestone foundation and subsequent updates
+
 The as-built description of the operation context, the document transitions, the save coordinator, the writers behind it and the restore policy, on `4.0-development` at `511dce0` (the merge of PR #569, the last code step of milestone 4). It covers milestone 4's PRs 4.6 (capture contract, #557), 4.8 (operation context and transition API, #555), 4.9 (save coordinator, #562), 4.11 (file writer, #568), 4.12 (import writeback and file-open adoption, #567), 4.13 (desktop handle, #570), 4.14 (hosted writer and transport, #564), 4.15 (server open, resume, pull and publish, #565), 4.16 (collaboration and authority, #566) and 4.18 (restore and adoption policy, #569), and says where 4.17 (draft stores), 4.19 (blob store) and 4.20 (continuations) touch saving. [Milestone 4](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-4.md) is the plan; this file says what the code does today. Where the two differ, a sentence says so, and "Known gaps and exceptions" collects what is left. Step 4.22 revised this file for the later lanes; the sections below that changed most are 3 (who calls the transitions), 5 (the writers), 7 (restore) and 8 (gaps). During the 4.1 work the server and collaboration features were removed: the hosted writer, the transport, server open, resume, pull and publish, the authority model and the restore policy are gone, and saving has two destinations, a file and an import. Import save-back was switched off on 2026-10-30: the import destination is still registered, but nothing in the app asks for it ([Deprecated: import save-back](#deprecated-import-save-back)).
 
 The code lives in `src/application/session/operation.ts`, `src/application/transitions/` (`transitions.ts`, `ports.ts`), `src/application/save/` (`coordinator.ts`, `status.ts`, `autosave.ts`, `capture.ts`, `session-effects.ts`, the session's dirty, draft and save effects, and `file-saving.ts`, the file writer and the save ports, with its ports in `file-saving-ports.ts`), `src/application/recovery/` (`pristine.ts`, `capture-schedule.ts`, `drafts.ts`, which holds the draft restores, and `draft-restore.ts`, which decides where a taken draft goes and words its notices, and `draft-origin.ts`, which records where a captured draft came from and builds what a draft write sends), `src/adapters/files/file-target.ts`, `src/adapters/files/save-dialogs.ts`, `src/bootstrap/wiring/transition-owners.ts`, `src/bootstrap/wiring/save-owners.ts` and `src/bootstrap/wiring/recovery-owners.ts`. The file-saving owner is wired by `src/bootstrap/wiring/file-saving.ts`, which fills its ports from the owner modules beside it (`location-owner.ts`, `save-owners.ts`, `session-owner.ts`, `preferences-owner.ts`) and the adapters; `copyDocHistorySafe` and `syncDocIdentity` come from the identity owner, and `setBaseState` (the session merge owner, `application/session/session-merge.ts`, through `src/bootstrap/wiring/session-merge.ts`) arrives as `setBaseline` from `wireLegacyApp` in `src/bootstrap/wiring.ts`. File open is `application/transitions/local-files.ts`, import writeback is `application/save/import-saving.ts`, and the destination port and `setBaseState` are the session merge owner's. The status line and the shared save control are `src/features/title/save-status.ts`, wired by `src/bootstrap/wiring/save-status.ts`. It names functions and types, not lines.
@@ -26,7 +61,7 @@ Each start function returns a stop function that clears the module's state; test
 | --- | --- | --- |
 | `epoch` | The session's epoch: a new one opens when a document is adopted or recovered, even with the same document id | `liveSession().epoch()` |
 | `docId` | The live document's id, or `null` | `currentDocument().docId` |
-| `destination` | The destination's identity | The current `home` record (`_home.js`) |
+| `destination` | The destination's identity | The current `home` record (`src/application/location/document-location.ts`) |
 | `destinationGeneration` | The generation the current destination has confirmed | `confirmedGeneration()` in `save-owners.ts` |
 | `generation` | The session's count of accepted edits | `liveSession().generation()` |
 
@@ -65,7 +100,7 @@ The ports, all supplied by the legacy modules:
 
 Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTINATION` is `{ kind: "none" }`.
 
-When `adoptReplacement` has started the new session it calls the listeners registered with `onDocumentReplaced` (`bootstrap/wiring/session-owner.ts`), and so does the undo adapter's adoption hook. A listener made with `liveSession().subscribe` would die with the session it was made on; `onDocumentReplaced` is the app-lifetime way to react to a replacement. Its one listener today is `releaseSessionVideoUrls` in `features/gallery/video-files.ts` (4.22, L1c), which revokes the cached object URLs of session videos and keeps the file and token grants.
+When `adoptReplacement` has started the new session it calls the listeners registered with `onDocumentReplaced` (`bootstrap/wiring/session-owner.ts`), and so does the undo adapter's adoption hook. A listener made with `liveSession().subscribe` would die with the session it was made on; `onDocumentReplaced` is the app-lifetime way to react to a replacement. Gallery video URL release is one consumer; Create bundle and feature lifetimes also subscribe. These are replacement notifications, not an edit stream.
 
 `keepSnapshot(label, doc?)` (`src/bootstrap/wiring/transition-owners.ts`, the `history` port) takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`features/comments/comments.ts`), replacing rows on import (`features/imports/imports.ts`), reloading an import from disk (`application/transitions/local-files.ts`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`features/file-menu/file-menu.ts`).
 

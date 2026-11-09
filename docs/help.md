@@ -9,9 +9,43 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
+## What's new since 0.4.1
+
+These changes are on development `main`, planned for 0.4.3. The published
+release is still 0.4.1. The instructions below describe the current app.
+
+- **Scenes, beats and filmed.** Scene headers group beats; beats restart at 1
+  in each lettered scene. The status is now **Filmed**, and Present uses
+  **Beat mode** and **Skip filmed**.
+- **Flowing writer.** Write narration across beats as one document. Enter
+  starts a beat, Enter again starts a paragraph, and Shift+Enter adds a line
+  break. Whole-beat copying preserves visuals, pictures and comments.
+- **Scene prep** in Production shows each scene's beats and requirements.
+  **By scene** groups Production, Gear, B-roll and Comments under scene headers.
+- **Attach** adds pictures, videos and other supported files. In the desktop
+  app, Copy / Move / Leave controls where local files live; **Create bundle…**
+  gathers outside files beside the script. Export a Splitpage script with its
+  files as a zip. See [Pictures and video](#pictures-and-video) and
+  [Exporting](#exporting).
+- **Save a copy** can copy bundled files or keep links to their old locations.
+  A successful Save a copy to a picked file resets Undo; cancellation does not.
+- **Complete tag names**: type `Prop: ca` and press Tab to accept an existing
+  matching name. Esc dismisses the suggestion so you can keep your own words.
+- **Assign as you write**: an `@Name` chip assigns tags in its sentence to that
+  person. See [Assigning with @Name](#assigning-with-name).
+- **Choose a microphone** in Present, including when the desktop app does the
+  listening for a browser teleprompter.
+- Naming yourself in a comment or reply updates your name and colour everywhere
+  and remembers the name for every script. Scene headers can be named in place,
+  including the automatic Scene A.
+- Formatting and pasting preserve an open tag; late cuts and saves stay with
+  their original script, and removed video links stay removed after another
+  editor changes only the thumbnail.
+
 ## What's new in 0.4.1
 
-- **Scenes, beats and filmed.** Scene headers group beats; the production status is now **Filmed**.
+Historical names below: this release called beats “scenes” and scene headers
+“sections”. Current instructions use the newer names.
 
 - **New version numbers.** 0.4.1 follows 3.1 and the 4.0 beta. Those copies
   won't offer it as an update, so download it from the
@@ -20,30 +54,31 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
-- **Scene headers** group beats without changing their running order.
-  Open a beat's **⋯** menu and choose **Add Scene Header** to name a
-  scene. Its header shows the beat count and total time, including filmed beats. Click the name to rename it; the ⋯ menu moves or removes the header.
-  Drag the grip to move the whole scene, or drag a beat across a header
-  to change its scene. The fold chevron hides beats for this session only;
+- **Section headers** group scenes without changing their running order.
+  Open a scene's **⋯** menu and choose **Add Section Header** to name a
+  section. Its header shows the scene count and total time, including shot
+  scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
+  Drag the grip to move the whole section, or drag a scene across a header
+  to change its section. The fold chevron hides scenes for this session only;
   folding changes neither the saved file nor the running order.
-  Scene names appear above rundown blocks and in Present's top bar as
+  Section names appear above rundown blocks and in Present's top bar as
   visual cues. They are never spoken or used by Follow My Voice. Print/PDF,
   full-script Word and Markdown exports retain headings and totals and include
-  every beat, including folded ones. Narration Word keeps heading cues;
-  plain narration text omits scene headings. CSV and XLSX use beat labels.
-  At the start of a beat after a header, press Backspace once to show
-  “Press Backspace again to remove the scene header”. Press it again
+  every scene, including folded ones. Narration Word keeps heading cues;
+  plain narration text omits section headings. CSV/XLSX keep their existing columns.
+  At the start of a scene after a header, press Backspace once to show
+  “Press Backspace again to remove the section header”. Press it again
   within two seconds, without another key, click or caret move, to remove
-  only the header. The beats join the scene above, or join automatic Scene A
-  at the top. A further Backspace joins beats normally. Delete at the end
-  of the preceding beat works the same way. Other input, a caret move or
+  only the header. The scenes join the section above, or become unsectioned
+  at the top. A further Backspace joins scenes normally. Delete at the end
+  of the preceding scene works the same way. Other input, a caret move or
   waiting two seconds cancels the hint. Undo restores the header and its
   name in one step.
   - If <kbd>Alt</kbd>+<kbd>↑</kbd> or <kbd>Alt</kbd>+<kbd>↓</kbd> would move a
-    scene's only beat across its header, the first press changes nothing
-    and shows “Press again to remove the scene header”. Repeat the same
+    section's only scene across its header, the first press changes nothing
+    and shows “Press again to remove the section header”. Repeat the same
     shortcut within two seconds, without another non-modifier key, click or caret move,
-    to move the beat and remove the emptied header. Undo restores both.
+    to move the scene and remove the emptied header. Undo restores both.
     Releasing and pressing Alt again does not cancel the hint; the same
     confirmation also applies when Shift is held with the shortcut.
 
@@ -327,6 +362,15 @@ The launcher needs Node. Without it, open `index.html` directly.
 
 Scenes contain beats. Scene letters continue after Z as AA, AB and so on. Beats restart at 1 within each scene: **B.8** is beat 8 in Scene B, shown as **B8** beside the beat in the editor. B-roll shots follow tag order within a beat: **B.8.2** is its second shot. Beats before the first header belong to an automatic, unnamed Scene A. Moving scenes, beats or tags updates their numbers; plain-text references in notes and comments must be updated by hand. **Remove scene header** keeps its beats in the previous scene (or automatic Scene A at the top), and supports Undo.
 
+**Scene headers**: choose **Add Scene Header** in a beat's **⋯** menu. Click a
+header's name to edit it, or **Add a name** on automatic Scene A. The letter,
+beat count and time stay visible while naming. Drag its grip to move the scene;
+its chevron folds beats for this session. Folding changes neither the file nor
+exports, and selecting across a folded scene leaves its hidden beats alone.
+At a header boundary, Backspace or Delete first asks you to press again within
+two seconds to remove only the header. The same confirmation protects a
+one-beat scene when moving its beat across the header. Undo restores the header.
+
 
 Each beat is a row: **Visual** on the left, **Audio** on the right.
 
@@ -353,9 +397,6 @@ Each beat is a row: **Visual** on the left, **Audio** on the right.
   **Comments** open their panels; **Write** and **Present** are the two other
   ways to see it. In a narrower window the panel buttons shrink to their icons
   and counts, and Write to its icon. Point at one,
-  **Comments** open their panels; **Write** and **Present** are the
-  two other ways to see it. In a narrower window the panel buttons shrink to
-  their icons and counts, and Write to its icon. Point at one,
   or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
 - **Beat status**: click the lamp in the beat's gutter to cycle **To do →
   Ready → Filmed**.
@@ -495,12 +536,17 @@ status.
   its words. **Write a reply…** replies, **Resolve** closes the thread,
   **Assign** hands it to someone, and **⋯ ▸ Delete** deletes it.
 - **Filter** with the **Open / Resolved / All** tabs and the person menu, and
-  sort by **Script order** or **Most recent**.
+  sort by **Script order**, **Most recent** or **By scene**. Unplaced threads
+  follow the scene groups under **No scene**.
+- Your name in a comment or reply is remembered for every script; changing it
+  updates the identity chip and your colour immediately.
 
 ### Pictures and video
 
-- **Add a picture**: **Add picture** under a beat's Visual text, or drop an
-  image file on the Visual column.
+- **Attach** under a beat's Visual text picks pictures, videos and other
+  supported files, including PDFs, audio and documents. You can also drop or
+  paste them there. Unsupported files, including macro-enabled Office files,
+  are refused.
 - **Paste or drop** a picture, a video file or a video link (YouTube, Vimeo
   and the like) into a beat and it goes into that beat's Image section,
   with **Undo** on the notice. The words you pasted with it stay in the text.
@@ -520,8 +566,14 @@ status.
 - **Watch a video**: press **▶** in the gallery. YouTube and Vimeo links
   play there, and so does a video file dropped since you opened the script.
   Anything else opens with **Open link** / **Open file**.
+- **Local files after reopening**: the desktop app remembers their location
+  and opens them with **Open file**. Keep the script's bundled files folder
+  beside it when moving or sending it. Browsers cannot reopen a saved local
+  path; add the file again for this session. Pictures are saved inside the
+  project and do not need the original file.
 - **Video thumbnails**: pasting a YouTube or Vimeo link fetches its
-  thumbnail once. Turn this off in **Settings ▸ Fetch video thumbnails**.
+  thumbnail. If it failed, clicking the beat tries again. Turn fetching off in
+  **Settings ▸ Fetch video thumbnails**.
 - **Comments** can carry a picture too: the image button in the comment
   box.
 
@@ -564,9 +616,13 @@ picture back as it was. Saving is one step of the script's undo, so
 - <kbd>Space</kbd> plays and pauses, <kbd>↑</kbd> / <kbd>↓</kbd> change the
   speed, and <kbd>Esc</kbd> closes it.
 - **Follow My Voice** scrolls as you read aloud.
+- **Microphone** chooses the input on supported browsers and in the Windows
+  desktop app. The choice is remembered on this device. When browser recognition
+  cannot select an input, use the browser or system default. A disconnected
+  choice is reported; pick it again or select another input.
 - **Mirror** (<kbd>M</kbd>) and **Flip** (<kbd>F</kbd>) are for a
   beam-splitter or an upside-down monitor.
-- **Skip shot** leaves out beats marked Filmed.
+- **Skip filmed** leaves out beats marked Filmed.
 - **Beat mode** plays one beat at a time and pauses at its end. The arrows
   (or <kbd>←</kbd> / <kbd>→</kbd>) step between beats.
 
@@ -619,13 +675,18 @@ as before.
 
 - <kbd>Tab</kbd> (on a phone, tap the note under the box) makes them one
   tag.
+- When a matching name already exists in that category, a completion appears
+  beside the caret. <kbd>Tab</kbd> fills and tags it in one step. <kbd>Esc</kbd>
+  first dismisses the completion; keep typing a new name, or press
+  <kbd>Esc</kbd> again to cancel the open tag.
 - <kbd>Esc</kbd> cancels and leaves the plain text.
 - <kbd>Enter</kbd> or leaving the cell ends the open tag as plain text;
   <kbd>Enter</kbd> also inserts a line break.
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> takes the tag off and
   leaves your words as you typed them.
 
-**The Production panel**, grouped by category or person, is a table:
+**The Production panel** offers **Scene prep**, **Category**, **Person**,
+**Beat**, **Shoot** and **By scene**. Category and Person show a table:
 **Item · Status · Beats · Owner**. Click a beat number to jump to it.
 
 - **Open an item**: click its name, or the tag in the script. Set its
@@ -638,7 +699,7 @@ as before.
   for a run) to assign, set status or delete them together. Deleting removes
   their tags from the script too; the words stay. <kbd>Esc</kbd> clears the
   selection.
-- **Group** by category, person or beat, or **Shoot** to see beats grouped
+- **Group** by category, person, beat or scene, or **Shoot** to see beats grouped
   by location, with what each needs.
 - **Untagged mentions**: write the name of something already tracked in
   the Visual column without tagging it, and it gets a dotted underline and a
@@ -649,11 +710,34 @@ as before.
 - **Export** it with the panel's **CSV** button, or File ▸ Export… ▸
   Breakdown. PDF, Word and Markdown exports include the breakdown too.
 
+### Scene prep and scene grouping
+
+**Scene prep** opens a scene-and-beat outline in Production. Expand a scene and
+beat to see its tagged requirements, change status or owner, or open an item's
+notes. The ready button marks an item **Have it**; already-ready requirements
+can be expanded separately. Filmed beats can be shown again from the outline.
+
+**By scene** is also available in Production, Gear, B-roll and Comments. Each
+scene appears in script order, including automatic Scene A when present.
+Production and Gear list an item once in every scene that mentions it. These
+are the same items: changing one updates its other appearances. Entries without
+a current beat follow under **No scene**. Grouping is remembered separately for
+each panel on this device and changes no script data or export order.
+
+### Assigning with @Name
+
+In Visual text, including the writer's Visual box, type `@` and choose a person.
+Type to filter, use the arrow keys to choose, and press <kbd>Tab</kbd> or
+<kbd>Enter</kbd>; <kbd>Esc</kbd> leaves the typed text alone. The list can add a
+new person too. The chip assigns production tags in that sentence to the person;
+it is an assignment, not a notification. A B-roll line can use the same chip
+for its owner. The chip stays out of narration and read-time estimates.
+
 ### Gear
 
 **Gear** in the header lists equipment: cameras, mics, lights. Gear that's
 never written in the script goes in the **Add gear** box at the foot of the
-panel, one item per line; press **Update list**. **List** or **Beat**
+panel, one item per line; press **Update list**. **List**, **Beat** or **By scene**
 changes the view. **Packing list** prints a checklist with a box for going
 out and one for coming back, and lines to sign.
 
@@ -664,8 +748,8 @@ on the **B-roll** list. Lines under it, up to the next marker, are its
 description.
 
 - **Mark a shot done**: tick its box.
-- **Filter** with **All / To film / Flagged / Filmed**, and group by beat or
-  location.
+- **Filter** with **All / To film / Flagged / Filmed**, and group by beat,
+  scene or location, or choose **Not grouped**.
 - **Open a shot** to set its location, who's getting it, its props, a note,
   or **Flag for reshoot**. **⋯** has **Rename in script** and **Delete from
   list**.
@@ -708,7 +792,20 @@ change and keeps the chosen file as the save destination.
 There is no extra filename prompt.
 
 **Save a copy…** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) writes a new
-file and leaves the one on screen where it is.
+file. With a desktop dialog or browser file picker, that new file becomes the
+destination for later saves; the original stays on disk. A successful Save a
+copy clears Undo and Redo. Cancelling or failing keeps the original destination
+and history. Download-only browsers download a copy and cannot choose a new
+in-place destination.
+
+In the desktop app, if the script has bundled files, **Copy files** puts them
+beside the new script. **Don't copy the files** links the new script to their old
+locations instead, so sending the new script alone will not send those files.
+That choice is unavailable when the old files are on a network share. **Cancel**
+stops the save. Missing files or different files with the same names in the new
+folder can block copying; Splitpage reports the problem instead of overwriting
+them. After the first save of a script with outside files, **Create bundle?**
+offers to gather them beside it.
 
 ### Autosave
 
@@ -805,7 +902,9 @@ folder go in: files that are missing, linked from elsewhere on your computer,
 or of a type Splitpage doesn't attach are left out, and Splitpage tells you how
 many. To include files outside the folder, use **File ▸ Create bundle…** first.
 You can keep working while it exports, hide the progress, or press
-**Cancel**, which leaves no zip behind. In the browser, the card exports the
+**Cancel**, which leaves no new zip and preserves an existing zip selected for
+replacement. A confirmed **Replace** overwrites that chosen zip on success.
+In the browser, the card exports the
 script on its own.
 
 **PDF** and **Word** lay the script out the way the app does: the running
@@ -937,7 +1036,9 @@ with tabs, native Open and Save dialogs, and version history on disk.
 Double-clicking a `.splitpage` file opens it here.
 
 - **Follow My Voice** uses Windows' speech recognition, offline. Only one
-  tab listens at a time. The status line names the microphone it's using. If
+  tab listens at a time. Present's microphone selector chooses a Windows input
+  or **System default**. The choice is remembered on this device; changing it
+  while listening restarts recognition. The status line names the microphone. If
   it hears nothing, check, in Windows Settings:
   - **System ▸ Sound**: the default input is the right microphone.
   - **Privacy & security ▸ Microphone**: desktop apps may use it.
@@ -947,7 +1048,8 @@ Double-clicking a `.splitpage` file opens it here.
   opens a read-only teleprompter in your default browser, any browser, with
   the desktop app doing the listening. Save the script first. **Use Chromium
   Speech Recognition** opens it in Edge or Chrome to use that browser's
-  recognition instead.
+  recognition instead. The desktop relay's microphone selector lists the
+  desktop app's Windows inputs, not the browser's microphones.
 - **Crash recovery**: unsaved changes are kept as you type and offered back,
   tab by tab, at the next launch.
 - **Closing with unsaved work** asks first. With several unsaved tabs, one
@@ -964,6 +1066,11 @@ Double-clicking a `.splitpage` file opens it here.
   bundle…** copies them into that folder, or moves the ones you added this
   session, so they open wherever the script goes. The × hides the bar until you
   open the script again. **File ▸ Create bundle…** does the same at any time.
+- **Copy or Move failures** keep links to the original location. Move renames
+  on the same drive where possible; otherwise it checks the copy before removing
+  the original. If the original changed or cannot be removed, both files are
+  kept and a notice explains why. Undoing an attach
+  removes its script link, not files already copied or moved on disk.
 
 ### Tabs
 

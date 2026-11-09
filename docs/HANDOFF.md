@@ -122,15 +122,15 @@ Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Since
 asserted nothing at all, which is what lets CI gate on it; `driver.ps1` still
 only exits non-zero for a command that throws, so read its `RESULT:` line.
 
-**CI** (`.github/workflows/ci.yml`, #58) runs the fast gates on every pull
-request: lint, types, the dependency and comment gates, the build and its
-`sw.js` stamp, every discovered unit, desktop and tool test
-(`npm run test:all`), and the smoke and CSP browser suites
-(`01-core.txt`, `52-csp.txt`).
+**CI** (`.github/workflows/ci.yml`) classifies paths before running code checks.
+Markdown prose skips them except `docs/help.md`, an app build input. Code changes
+run lint, types, the dependency and comment gates, generated-file checks and
+every discovered unit, desktop and tool test in four shards. App changes also
+run core/CSP and the selected save, typing, undo, export and Writer suites.
 [docs/architecture/testing.md](architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
 --only-target dev` against an Xvfb display (#89) on pull requests and pushes that touch app or desktop code — that
-is where `main.ts` and `preload.js` are actually executed, ~600 checks of it.
+is where `main.ts` and the generated preloads are actually executed.
 It is its own job because it launches ~60 real Electron processes — 6.3
 minutes on a Windows 11 x64 machine, far longer on a slow shared runner —
 which is more than everything else together. None of this is the full
@@ -179,9 +179,9 @@ The release packages in `dist/` run only the hook-free groups; the full
 smoke runs on the test package in `dist-test/` (`npm run dist:win:test`,
 never published). See [WINDOWS-CHECKS.md, Before you start](WINDOWS-CHECKS.md#before-you-start).
 
-On Linux (#89) the same dev target runs, and CI runs it on every pull
-request. It needs a display of its own and, on a first checkout, an explicit
-fetch of the Electron binary — Electron 44 has no postinstall. The fetch
+On Linux (#89) the same dev target runs for app/desktop-affecting pull requests
+and pushes. It needs a display of its own and, on a first checkout, an explicit
+fetch of the Electron binary — Electron 45 has no postinstall. The fetch
 script selects the machine architecture, including Windows ARM64 with x64
 Node running under emulation:
 
@@ -435,7 +435,7 @@ correct rename. Fix: blur before `jsclick`.
 
 ### 3.13 The desktop shell
 
-`desktop/main.ts` + `desktop/preload.js` (Electron 44 + electron-builder 26)
+`desktop/main.ts` + generated `desktop/preload.js` (Electron 45 + electron-builder 26)
 turn the web app into a native Windows app; optional shell. Since the
 2026-09-14 tabs build it manages **multiple windows, each with multiple
 tabs**.

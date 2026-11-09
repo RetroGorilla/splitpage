@@ -27,7 +27,7 @@ the folders that own one job each (`core/`, `application/`, `adapters/`,
 `features/` and `bootstrap/`), with `src/bootstrap/main.ts`, the entry point
 esbuild bundles from — plus `shared/` (code shared with the desktop
 app), `VERSION` and `docs/help.md`, which is rendered into the in-app
-Help page. Nothing else feeds the build. Which folder may import which is
+Help page. The CSS input list is `tools/css-inputs.mjs`. Which folder may import which is
 [docs/architecture/dependencies.md](architecture/dependencies.md).
 
 The build inlines everything into one self-contained page, and that is a
@@ -45,10 +45,10 @@ stamps its cache name from `VERSION`. Commit it like any other source file,
 and rebuild after a version bump so the stamp is current — CI fails if it
 isn't.
 
-Before pushing, run CI's fast gate:
+Before pushing, run the full local gate:
 
 ```
-npm run verify        # lint, types, dependency and comment gates, build and sw.js stamp, every unit test
+npm run verify        # lint, types, both gates, builds, generated-file checks, unit/desktop/tool tests
 ```
 
 While you work, run the focused checks for what you changed, browser suites
@@ -58,10 +58,37 @@ says which, and the same page lists what each script runs.
 [`.claude/skills/run-splitpage-app/SKILL.md`](../.claude/skills/run-splitpage-app/SKILL.md)
 drives the browser suites.
 
-CI (`.github/workflows/ci.yml`) runs the same fast gate on every pull
-request, plus the smoke and CSP browser suites, builds the app,
-and, on pushes, uploads the built files as a `splitpage-app` artifact
-([RELEASING.md](RELEASING.md) §1).
+The desktop dependency install is separate: `npm ci --prefix desktop` supplies
+Electron's types for lint and typecheck. If changing a preload or the tab-strip
+page script, edit its `.ts` source and run `node tools/build-preload.mjs`.
+Commit the generated JavaScript too; `check-preload` requires those outputs to be
+committed and current. See [desktop-build.md](architecture/desktop-build.md).
+
+CI (`.github/workflows/ci.yml`) classifies the changed paths first. Markdown-only
+prose skips code checks, except `docs/help.md`: it changes the built app and
+therefore runs app checks. Code checks include lint, types, the gates and four
+test shards; app changes also run browser flow suites, and desktop-affecting
+changes run the desktop smoke. A passed exact tree can be reused on a push to
+main. See [Local verification](architecture/testing.md) for commands and
+classification details. App-affecting pushes upload `splitpage-app`.
+
+## Media-heavy test bundles
+
+For local media and Save As testing, `tools/make-media-bundle.mjs` (#1330)
+creates a 150-beat, 30-scene script with generated JPG/PNG pictures and MP4
+videos. It requires `ffmpeg` on PATH and a new output folder outside this
+repository; the parent folder must already exist.
+
+```
+node tools/make-media-bundle.mjs D:\scratch\media-small --small
+node tools/make-media-bundle.mjs D:\scratch\media-large --photos 300 --videos 60
+```
+
+The default is 300 pictures and 60 videos; `--small` uses six pictures and two
+videos. The output includes `Media speed test.splitpage` and its files folder;
+the command prints counts and total size. Pictures are embedded in the script; videos are
+bundled beside it and reopen in desktop. The browser cannot reopen those local
+video files. This is a local fixture, not a shipped starter or benchmark result.
 
 ## Building a release
 
@@ -180,6 +207,5 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 - `docs/HANDOFF.md` — developer notes: architecture, the invariants that keep the
   document from corrupting, how to test, and what is still unverified. Read it
   before changing anything in `src/`.
-- `.github/workflows/ci.yml` — lint, unit tests, server and updater tests and
-  two browser suites on every pull request, plus the build whose output a push
-  run uploads as the `splitpage-app` artifact.
+- `.github/workflows/ci.yml` — path classification, code checks, four test
+  shards, app browser suites and desktop smoke as described above.
