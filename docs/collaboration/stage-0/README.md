@@ -16,8 +16,9 @@ Audited against `0ca1929177ffc84bced412ad2be3aa99690761d0`. Each file names the 
 | `6-boundaries.md` | Stores and origins, hydration entry, inbound update sources, the desktop tab source, app-data export, the connection policy, the bundle sizes, the service worker and how the browser app is served | [#1361](https://github.com/RetroGorilla/splitpage/issues/1361) |
 | `7-performance-baseline.md` | The standalone baseline, the tolerated regression, the noise treatment and provisional limits | [#1362](https://github.com/RetroGorilla/splitpage/issues/1362) |
 | `8-schema-hypotheses.md` | Schema candidates as layouts, expected outcome of every trace written by hand, expected failures and provider API questions | [#1363](https://github.com/RetroGorilla/splitpage/issues/1363) |
+| `9-stage-1-experiments.md` | The closing index: each Stage 1 trace with its inputs and expected result, entry paths, hypotheses and related audit rows; the open mechanisms; the product decisions, decided and assumed; what the audit corrected in the plan | [#1364](https://github.com/RetroGorilla/splitpage/issues/1364) |
 
-A file appears here when its pull request merges.
+Start with `9-stage-1-experiments.md`.
 
 ## Reading an entry
 
@@ -69,4 +70,4 @@ Other tags:
 
 ## Closing step
 
-Stage 0 ends with the Stage 1 experiment table: for each trace, its inputs, its expected user-visible outcome and the entry paths it touches, drawn from `8-schema-hypotheses.md` and `1-commands.md`. It is added to this folder once the eight artifacts are merged.
+Stage 0 ends with the Stage 1 experiment table, `9-stage-1-experiments.md`: for each trace, where its inputs and expected user-visible outcome are written and the entry paths it touches, drawn from `8-schema-hypotheses.md` and `1-commands.md`.
