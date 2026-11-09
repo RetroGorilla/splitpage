@@ -9,10 +9,9 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
-## What's new since 0.4.1
+## What's new in 0.4.3
 
-These changes are on development `main`, with 0.4.3 being prepared. The published
-release is still 0.4.1. The instructions below describe the current app.
+The instructions below describe this release.
 
 - **Scenes, beats and filmed.** Scene headers group beats; beats restart at 1
   in each lettered scene. The status is now **Filmed**, and Present uses

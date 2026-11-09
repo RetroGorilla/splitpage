@@ -14,7 +14,7 @@
 
 | Decision | Outcome |
 | --- | --- |
-| Release | 0.4.1, released 2026-11-02 as `v0.4.1`. `main` is the only long-lived branch. |
+| Release | 0.4.3, released 2026-11-09 as `v0.4.3`. `main` is the only long-lived branch. |
 | Plugins, SDK, extension runtime | Out of scope |
 | Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
 | Comments | None in authored code, tests, CSS, HTML, scripts or workflow/configuration files, except short reason comments (section 2) |

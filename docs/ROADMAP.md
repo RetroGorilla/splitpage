@@ -4,9 +4,9 @@ Final pre-0.4.3 documentation pass checked against GitHub, source and merge hist
 
 ## Current release
 
-Splitpage **0.4.1** was released on **2026-11-02**, tagged [v0.4.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1). `VERSION` and `desktop/package.json` still say `0.4.1`. Changes merged after that tag are development work; they are not in the published release.
+Splitpage **0.4.3** was released on **2026-11-09**, tagged [v0.4.3](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3). There is no 0.4.2; 0.4.1 was released on 2026-11-02. Changes merged after the v0.4.3 tag are development work; they are not in the published release.
 
-The next release, **0.4.3**, is being prepared; it is not released. It has no release date here. The old plans used “3.x”, “4.0” and “4.1” as milestone names. The remote tags now use `v0.3.*` and `v0.4.*`. Use the remote tags and [releases](https://github.com/RetroGorilla/splitpage/releases), rather than old plan headings, for shipped versions.
+The old plans used “3.x”, “4.0” and “4.1” as milestone names. The remote tags now use `v0.3.*` and `v0.4.*`. Use the remote tags and [releases](https://github.com/RetroGorilla/splitpage/releases), rather than old plan headings, for shipped versions.
 
 ## Completed foundation
 
@@ -19,7 +19,7 @@ The next release, **0.4.3**, is being prepared; it is not released. It has no re
 | Scene headers, first-save title/version naming, and open tags. | #1028, #1029, #1031, #1027, #1026 |
 | The default performance run reaches its images fixture again. | #1039, fixed by #1121 |
 
-## Merged since 0.4.1, not yet released
+## Released in 0.4.3
 
 | Work | Evidence |
 | --- | --- |
@@ -45,15 +45,9 @@ The next release, **0.4.3**, is being prepared; it is not released. It has no re
 | Desktop updates verify installer release name, tag, API digest and size. | #1288 via #1335 |
 | Production and Gear By-scene views reuse cached document numbering. | #1344 via #1347 |
 | Printed-output wording and beat multi-selection browser suites brought up to date. | #1339 via #1340; #1341 via #1342 |
-| First roadmap, Help and contributor documentation refresh. | #1327 pass 1 via #1333 |
+| Roadmap, Help and contributor documentation refreshes. | #1327 via #1333, #1349 |
 
 Scene descriptions (#1171) were closed as not planned. They are not queued work.
-
-## Preparing 0.4.3
-
-All planned product changes for 0.4.3 are merged. [#1327](https://github.com/RetroGorilla/splitpage/issues/1327)
-is this final documentation pass. Release validation and publishing remain separate
-steps under [RELEASING.md](RELEASING.md); merged work does not establish release readiness.
 
 ## Parked and manual checks
 
