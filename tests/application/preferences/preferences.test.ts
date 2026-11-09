@@ -21,6 +21,18 @@ function setup() {
   return { storage, announced, prefs };
 }
 
+test("panel grouping preferences persist independently across preference owners", () => {
+  const { storage, prefs } = setup();
+  prefs.setPanelGrouping("broll", "by-scene");
+  prefs.setPanelGrouping("comments", "recent");
+  prefs.setPanelGrouping("production", "by-scene");
+  const restored = createPreferences({ storage: () => storage, announce: () => {} });
+  assert.equal(restored.panelGrouping("broll"), "by-scene");
+  assert.equal(restored.panelGrouping("comments"), "recent");
+  assert.equal(restored.panelGrouping("production"), "by-scene");
+  assert.equal(restored.panelGrouping("gear"), null);
+});
+
 test("the stored keys keep the 3.x names, and each key maps back to its preference", () => {
   const { prefs } = setup();
   assert.equal(prefs.nameOf("splitpage-autosave"), "autosave");
@@ -478,11 +490,11 @@ test("comments writes still announce when storage is unavailable", () => {
 
 test("app data owns comments sort validation, imports silently and preserves the export bytes", () => {
   const { prefs, storage, announced } = setup();
-  assert.equal(JSON.stringify(prefs.appDataExport(settingsAppData())), '{"onboarding":null,"tourDone":null,"commentAuthor":null,"writerSize":null,"taggingHelpDismissed":null,"autosave":null,"commentsSort":null,"theme":null,"clock":null,"personColor":null,"defaultWpm":null,"hideShot":null,"prompterMirror":null,"prompterFlip":null,"prompterSceneMode":null,"rundownMin":null,"videoThumbs":null,"tagIcons":null,"scriptScale":null}');
+  assert.equal(JSON.stringify(prefs.appDataExport(settingsAppData())), '{"onboarding":null,"tourDone":null,"commentAuthor":null,"writerSize":null,"taggingHelpDismissed":null,"autosave":null,"commentsSort":null,"panelGrouping":null,"theme":null,"clock":null,"personColor":null,"defaultWpm":null,"hideShot":null,"prompterMirror":null,"prompterFlip":null,"prompterSceneMode":null,"rundownMin":null,"videoThumbs":null,"tagIcons":null,"scriptScale":null}');
   for (const commentsSort of ["unknown", "Recent", "", 1, null]) {
     assert.deepEqual(prefs.appDataImport({ commentsSort }, []), []);
   }
-  for (const commentsSort of ["recent", "position"]) {
+  for (const commentsSort of ["recent", "position", "by-scene"]) {
     storage.items.delete("splitpage-comments-sort");
     assert.deepEqual(prefs.appDataImport({ commentsSort }, []), ["commentsSort"]);
     assert.equal(prefs.commentsSort(), commentsSort);
@@ -511,6 +523,7 @@ test("exporting the app data lists every owned preference by name, with the onbo
     taggingHelpDismissed: null,
     autosave: null,
     commentsSort: null,
+    panelGrouping: null,
     theme: "dark"
   });
 });

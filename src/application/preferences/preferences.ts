@@ -22,6 +22,7 @@ const KEYS = Object.freeze({
   hideShot: "splitpage-hide-shot",
   microphone: "splitpage-microphone",
   onboarding: "splitpage-onboarding",
+  panelGrouping: "splitpage-panel-grouping",
   personColor: "splitpage-person-color",
   prompterFlip: "splitpage-prompter-flip",
   prompterMirror: "splitpage-prompter-mirror",
@@ -42,6 +43,9 @@ export interface CommentFilter {
   mode: string;
   assignee: string;
 }
+
+export type GroupingPanel = "broll" | "comments" | "production" | "gear";
+export type PanelGroupingPreferences = Partial<Record<GroupingPanel, string>>;
 
 export type PreferenceName = keyof typeof KEYS;
 
@@ -81,12 +85,14 @@ export type OnboardingRecord = Record<string, unknown>;
 
 export interface Preferences {
   readonly nameOf: (key: string) => PreferenceName | null;
+  readonly panelGrouping: (panel: GroupingPanel) => string | null;
+  readonly setPanelGrouping: (panel: GroupingPanel, mode: string) => void;
   readonly autosave: () => boolean;
   readonly setAutosave: (on: boolean) => void;
   readonly commentAuthor: () => string;
   readonly setCommentAuthor: (name: string) => void;
   readonly rememberCommentAuthor: (name: string) => void;
-  readonly commentsSort: () => "recent" | "position";
+  readonly commentsSort: () => "recent" | "position" | "by-scene";
   readonly setCommentsSort: (mode: string) => void;
   readonly commentFilter: () => CommentFilter;
   readonly setCommentFilter: (filter: CommentFilter) => void;
@@ -181,7 +187,14 @@ function ownAppData(): readonly AppDataPref[] {
     },
     { name: "taggingHelpDismissed", key: KEYS.taggingHelp, valid: isFlag },
     { name: "autosave", key: KEYS.autosave, valid: isFlag },
-    { name: "commentsSort", key: KEYS.commentsSort, valid: function (v: string) { return v === "recent" || v === "position"; } }
+    { name: "commentsSort", key: KEYS.commentsSort, valid: function (v: string) { return v === "recent" || v === "position" || v === "by-scene"; } },
+    { name: "panelGrouping", key: KEYS.panelGrouping, valid: function (v: string) {
+      try {
+        const value: unknown = JSON.parse(v);
+        return isPlainObject(value) && Object.entries(value).every(([key, mode]) =>
+          ["broll", "comments", "production", "gear"].includes(key) && typeof mode === "string" && mode.length <= 40);
+      } catch { return false; }
+    } }
   ];
 }
 
@@ -254,6 +267,19 @@ export function createPreferences(ports: PreferencePorts): Preferences {
 
   return Object.freeze({
     nameOf: function (key: string): PreferenceName | null { return names.get(key) ?? null; },
+    panelGrouping: function (panel: GroupingPanel): string | null {
+      const value = readJson(KEYS.panelGrouping);
+      return isPlainObject(value) && typeof value[panel] === "string" ? value[panel] : null;
+    },
+    setPanelGrouping: function (panel: GroupingPanel, mode: string): void {
+      const value = readJson(KEYS.panelGrouping);
+      const saved: PanelGroupingPreferences = {};
+      for (const key of ["broll", "comments", "production", "gear"] as const) {
+        if (isPlainObject(value) && typeof value[key] === "string") saved[key] = value[key];
+      }
+      saved[panel] = mode;
+      announce(KEYS.panelGrouping, JSON.stringify(saved));
+    },
     autosave: function (): boolean { return read(KEYS.autosave) !== "0"; },
     setAutosave: function (on: boolean): void { announce(KEYS.autosave, on ? "1" : "0"); },
     commentAuthor: function (): string { return read(KEYS.commentAuthor) ?? ""; },
@@ -261,8 +287,11 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     rememberCommentAuthor: function (name: string): void {
       if (read(KEYS.commentAuthor) !== name) announce(KEYS.commentAuthor, name);
     },
-    commentsSort: function (): "recent" | "position" { return read(KEYS.commentsSort) === "recent" ? "recent" : "position"; },
-    setCommentsSort: function (mode: string): void { announce(KEYS.commentsSort, mode === "recent" ? "recent" : "position"); },
+    commentsSort: function (): "recent" | "position" | "by-scene" {
+      const value = read(KEYS.commentsSort);
+      return value === "recent" || value === "by-scene" ? value : "position";
+    },
+    setCommentsSort: function (mode: string): void { announce(KEYS.commentsSort, mode === "recent" || mode === "by-scene" ? mode : "position"); },
     commentFilter: function (): CommentFilter {
       try {
         const raw = read(KEYS.commentFilter);

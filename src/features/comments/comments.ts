@@ -1,4 +1,5 @@
 import { numberHtml } from "../common/number-html.ts";
+import { groupItemsByScene } from "../../core/document/scene-items.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { CommentStatePorts } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
@@ -279,6 +280,7 @@ export function limitAuthorNameField(field: HTMLElement) {
 export function setCommentSortMode(mode: string) {
   const chosen = (ports as CommentsRuntimePorts).sort.choose(mode);
   (ports as CommentsRuntimePorts).preferences.setCommentsSort(chosen);
+  (ports as CommentsRuntimePorts).preferences.setPanelGrouping("comments", chosen);
   captureReplyDrafts();
   renderComments();
 }
@@ -999,9 +1001,18 @@ export function renderComments() {
   const a = document.activeElement;
   const focusInMenu = !!(a && a.closest && a.closest("#comments-list .comment-menu"));
   const nums = commentThreadNumbers();
-  listEl.innerHTML = items.map(function (c) {
+  const card = function (c: CommentRenderRecord) {
     return commentCardHtml(c, c.resolved ? 0 : nums[c.id] || 0);
-  }).join("") + COMMENTS_HINT_HTML;
+  };
+  if ((ports as CommentsRuntimePorts).sort.current() === "by-scene") {
+    const current = (ports as CommentsRuntimePorts).document.current();
+    const result = groupItemsByScene(current ?? { rows: [] }, items, c => c.field === "title" ? null : c.rowId);
+    listEl.innerHTML = result.groups.map(({ scene, items: grouped }) =>
+      '<section><h3 class="comments-scene-heading">' + escapeHtml("Scene " + scene.letter + (scene.name ? " · " + scene.name : "")) + '</h3>' + grouped.map(card).join("") + '</section>'
+    ).join("") + (result.unassigned.length ? '<section><h3 class="comments-scene-heading">No scene</h3>' + result.unassigned.map(card).join("") + '</section>' : '') + COMMENTS_HINT_HTML;
+  } else {
+    listEl.innerHTML = items.map(card).join("") + COMMENTS_HINT_HTML;
+  }
   if (commentMenuFor) {
     placeCommentMenu();
     if (focusInMenu) focusCommentMenuItem();
@@ -1010,7 +1021,7 @@ export function renderComments() {
 
 export function startComments(nextPorts: CommentStatePorts) {
   ports = nextPorts;
-  (ports as CommentsRuntimePorts).sort.choose((ports as CommentsRuntimePorts).preferences.commentsSort());
+  (ports as CommentsRuntimePorts).sort.choose((ports as CommentsRuntimePorts).preferences.panelGrouping("comments") ?? (ports as CommentsRuntimePorts).preferences.commentsSort());
 
   commentFilter = (ports as CommentsRuntimePorts).preferences.commentFilter();
 

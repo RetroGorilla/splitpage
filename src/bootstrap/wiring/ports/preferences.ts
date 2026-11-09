@@ -1,5 +1,5 @@
 import type { BrollView } from "../../../application/preferences/broll-view.ts";
-import type { CommentFilter, PreferenceChange, PreferenceChanges, Preferences } from "../../../application/preferences/preferences.ts";
+import type { CommentFilter, GroupingPanel, PreferenceChange, PreferenceChanges, Preferences } from "../../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../../application/preferences/view-flags.ts";
 import type { BrollAnchorDeclines } from "../../../application/broll-anchoring.ts";
 import type { CommentSorting } from "../../../application/comment-sort.ts";
@@ -54,6 +54,8 @@ export const flags: Pick<ViewFlags, "findOpen" | "setFindOpen" | "brollPageOpen"
 export const screenFlags: () => Pick<ViewFlags, "tourOpen" | "writerOpen" | "brollPageOpen"> = viewFlags;
 
 export const preferenceValues = {
+  panelGrouping: (panel: GroupingPanel) => preferences().panelGrouping(panel),
+  setPanelGrouping: (panel: GroupingPanel, mode: string) => preferences().setPanelGrouping(panel, mode),
   defaultWpm: () => preferences().defaultWpm(),
   clock: () => preferences().clock(),
   commentAuthor: () => preferences().commentAuthor(),
@@ -75,10 +77,11 @@ export const brollView: BrollView = {
   printView: (overrides) => brollViewOwner().printView(overrides)
 };
 
-export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort"> = {
+export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort" | "panelGrouping"> = {
   appDataExport: (extra) => preferences().appDataExport(extra),
   appDataImport: (incoming, extra) => preferences().appDataImport(incoming, extra),
-  commentsSort: () => preferences().commentsSort()
+  commentsSort: () => preferences().commentsSort(),
+  panelGrouping: (panel) => preferences().panelGrouping(panel)
 };
 
 export const attributionPreferences: Pick<Preferences, "commentAuthor" | "myColor"> = {

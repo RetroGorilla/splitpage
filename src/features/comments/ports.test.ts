@@ -36,6 +36,8 @@ function fixture() {
     edits: { edit: () => { calls.push("edit"); return true; }, stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => { calls.push("notice"); return { isConnected: false, dismiss: () => {}, removeEventListener: () => {} }; } },
     preferences: {
+      panelGrouping: () => null,
+      setPanelGrouping: () => {},
       clock: () => "24", commentAuthor: () => "Ada", rememberCommentAuthor: () => {},
       commentsSort: () => "position", setCommentsSort: () => {},
       commentFilter: () => ({ mode: "open", assignee: "" }), setCommentFilter: () => {},

@@ -73,12 +73,14 @@ test("comments app: panel sort and filter changes announce to another preference
     assert.equal(localStorage.getItem("splitpage-comments-filter"), '{"mode":"all","assignee":""}');
     assert.deepEqual(announced, [
       { key: "splitpage-comments-sort", value: "recent" },
+      { key: "splitpage-panel-grouping", value: '{"comments":"recent"}' },
       { key: "splitpage-comments-filter", value: '{"mode":"all","assignee":""}' }
     ]);
   } finally {
     document.removeEventListener("splitpage:pref", listen);
     globalThis.CustomEvent = nodeCustomEvent;
     localStorage.removeItem("splitpage-comments-sort");
+    localStorage.removeItem("splitpage-panel-grouping");
     localStorage.removeItem("splitpage-comments-filter");
     owner.dispose();
   }

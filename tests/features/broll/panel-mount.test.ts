@@ -28,6 +28,7 @@ function fixture() {
   const ports: BrollPanelPorts = {
     screen: fakeScreen().screen,
     view,
+    preferences: { panelGrouping: () => null, setPanelGrouping: () => {} },
     document: fakeDocument().document,
     edits: fakeEdits().edits,
     text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) } },

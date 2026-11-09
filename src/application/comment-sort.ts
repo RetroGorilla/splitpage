@@ -1,4 +1,4 @@
-export type CommentSort = "recent" | "position";
+export type CommentSort = "recent" | "position" | "by-scene";
 
 export interface CommentSorting {
   readonly current: () => CommentSort;
@@ -10,7 +10,7 @@ export function createCommentSorting(): CommentSorting {
   return Object.freeze({
     current: (): CommentSort => mode,
     choose: (value: string): CommentSort => {
-      mode = value === "recent" ? "recent" : "position";
+      mode = value === "recent" || value === "by-scene" ? value : "position";
       return mode;
     }
   });

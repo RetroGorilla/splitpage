@@ -20,7 +20,7 @@ export interface CommentStatePorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed">;
+  readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed" | "panelGrouping" | "setPanelGrouping">;
   readonly sidePanels: Pick<SidePanels, "open" | "close">;
   readonly text: Pick<TextServices<HTMLElement>, "inertBody" | "sanitizeHtml">;
   readonly ids: Pick<IdSource, "id">;

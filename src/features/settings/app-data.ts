@@ -229,6 +229,7 @@ function appDataNormalizePrefs(p: unknown) {
     tourDone: str(p.tourDone),
     commentAuthor: str(p.commentAuthor),
     commentsSort: str(p.commentsSort),
+    panelGrouping: str(p.panelGrouping),
     writerSize: str(p.writerSize),
     taggingHelpDismissed: str(p.taggingHelpDismissed),
     autosave: str(p.autosave)
@@ -284,7 +285,9 @@ function appDataExtraPrefs() {
 function appDataMergePrefs(prefs: Parameters<AppDataPorts["preferences"]["appDataImport"]>[0]) {
   const written = ports.preferences.appDataImport(prefs, appDataExtraPrefs());
   try {
-    if (written.indexOf("commentsSort") !== -1) ports.commentSorting.choose(ports.preferences.commentsSort());
+    if (written.indexOf("commentsSort") !== -1 || written.indexOf("panelGrouping") !== -1) {
+      ports.commentSorting.choose(ports.preferences.panelGrouping("comments") ?? ports.preferences.commentsSort());
+    }
     if (written.indexOf("writerSize") !== -1) ports.writer.setSize(ports.writer.size(), false);
   } catch (e) {}
   return written;
