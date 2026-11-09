@@ -152,6 +152,8 @@ const APP_LIFETIME_LISTENERS = [
   "document:mousemove",
   "document:mouseup",
   "document:paste",
+  "document:pointercancel",
+  "document:pointerdown",
   "document:securitypolicyviolation",
   "document:selectionchange",
   "document:splitpage:pref",

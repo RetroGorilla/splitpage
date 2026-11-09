@@ -1,0 +1,147 @@
+open
+viewport 1400 900
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.U=window.__undoTest;window.old=F.state();F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'A day on location',rows:[{id:'r1',audioText:'The harbour wakes slowly.',visualText:'Wide shot of the harbour.'},{id:'r2',audioText:'Every day begins with the tide.',visualText:'Hands tying a mooring line.'}],sections:[{id:'s1',name:'The harbour wakes',firstSceneId:'r1'}]})],'heading.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'A day on location'
+eval window.H='#rows [data-section-id="s1"]';window.cell='#rows .row[data-id="r2"] .audio-cell .cell-editable';window.original=JSON.stringify(F.state());U.flush();window.steps=U.sizes().undo;true
+click #rows .section-name
+wait !!document.querySelector('.section-rename input')
+expect document.querySelector('.section-rename').parentElement.matches('[role="heading"]')
+expect !document.querySelector('.section-rename button')
+expect document.activeElement.selectionStart === 0 && document.activeElement.selectionEnd === 'The harbour wakes'.length
+expect getComputedStyle(document.activeElement).fontSize === getComputedStyle(document.querySelector(H+' [role="heading"]')).fontSize
+expect getComputedStyle(document.activeElement).fontWeight === '600'
+wait document.querySelector('.section-rename').getAnimations().length === 0
+shot 1166-after-rename
+press First light
+key none Enter
+wait F.state().sections[0].name === 'First light'
+expect document.activeElement === document.querySelector(H+' .section-name')
+eval U.flush();true
+expect U.sizes().undo === steps+1
+focus #rows .row[data-id="r2"] .audio-cell .cell-editable
+key ctrl KeyZ
+wait F.state().sections[0].name === 'The harbour wakes'
+expect JSON.stringify(F.state()) === original
+key ctrl+shift KeyZ
+wait F.state().sections[0].name === 'First light'
+click #rows .section-name
+press Discard this
+key none Escape
+wait !document.querySelector('.section-rename')
+expect document.activeElement === document.querySelector(H+' .section-name')
+expect F.state().sections[0].name === 'First light'
+eval U.flush();window.steps=U.sizes().undo;true
+click #rows .section-name
+press Dawn
+click #rows .row[data-id="r2"] .audio-cell .cell-editable
+wait F.state().sections[0].name === 'Dawn'
+expect document.activeElement === document.querySelector(cell)
+expect document.querySelector(cell).contains(getSelection().anchorNode) && getSelection().isCollapsed
+eval window.at=getSelection().anchorOffset;window.textBefore=document.querySelector(cell).textContent;true
+press !
+expect document.querySelector(cell).textContent === textBefore.slice(0,at)+'!'+textBefore.slice(at)
+eval U.flush();true
+expect U.sizes().undo === steps+2
+key ctrl KeyZ
+wait document.querySelector(cell).textContent === textBefore
+key ctrl KeyZ
+wait F.state().sections[0].name === 'First light'
+click #rows .section-name
+key ctrl KeyA
+key none Backspace
+click #rows .row[data-id="r2"] .audio-cell .cell-editable
+wait !document.querySelector('.section-rename')
+expect F.state().sections[0].name === 'First light'
+expect document.activeElement === document.querySelector(cell) && document.querySelector(cell).contains(getSelection().anchorNode)
+eval U.flush();window.steps=U.sizes().undo;window.beforeCreate=JSON.stringify(F.state());true
+click #rows .row[data-id="r2"] .row-more
+click #rows .row[data-id="r2"] [data-action="add-section"]
+wait !!document.querySelector('.section-rename input')
+expect document.activeElement.selectionStart === 0 && document.activeElement.selectionEnd === 0
+wait document.querySelector('.section-rename').getAnimations().length === 0
+expect getComputedStyle(document.activeElement).fontSize === getComputedStyle(document.querySelector(H+' [role="heading"]')).fontSize
+shot 1166-after-create
+key none Escape
+wait !document.querySelector('.section-rename')
+expect document.activeElement === document.querySelector('#rows .row[data-id="r2"] .row-more')
+expect JSON.stringify(F.state()) === beforeCreate && U.sizes().undo === steps
+click #rows .row[data-id="r2"] .row-more
+click #rows .row[data-id="r2"] [data-action="add-section"]
+click #doc-title
+wait !document.querySelector('.section-rename')
+expect JSON.stringify(F.state()) === beforeCreate && U.sizes().undo === steps
+expect document.activeElement === document.querySelector('#doc-title')
+click #rows .row[data-id="r2"] .row-more
+click #rows .row[data-id="r2"] [data-action="add-section"]
+press By the quay
+click #rows .row[data-id="r2"] .audio-cell .cell-editable
+wait F.state().sections.length === 2
+expect F.state().sections[1].name === 'By the quay'
+expect document.activeElement === document.querySelector(cell) && document.querySelector(cell).contains(getSelection().anchorNode)
+eval U.flush();true
+expect U.sizes().undo === steps+1
+key ctrl KeyZ
+wait F.state().sections.length === 1
+expect JSON.stringify(F.state()) === beforeCreate
+key ctrl+shift KeyZ
+wait F.state().sections.length === 2
+expect F.state().sections[1].name === 'By the quay'
+click #rows [data-section-id="s1"] .section-name
+press Before folding
+click #rows [data-section-id="s1"] .section-fold
+wait F.state().sections[0].name === 'Before folding'
+expect document.querySelector('#rows [data-section-id="s1"] .section-fold').getAttribute('aria-expanded') === 'false'
+click #rows [data-section-id="s1"] .section-fold
+wait document.querySelectorAll('#rows .row').length === 2
+eval (function(){var b=document.querySelector(H+' .section-name');b.focus();b.click();var line=document.querySelector('.section-rename');var a=line.getAnimations()[0];a.pause();a.currentTime=0;window.grow=a;window.line=line;window.keyframes=a.effect.getKeyframes();return true;})()
+expect grow.effect.getTiming().duration === 150 && keyframes[0].height === '0px' && keyframes[0].opacity === '0'
+expect parseFloat(keyframes[1].height) > 0 && keyframes[1].opacity === '1'
+eval grow.finish();true
+wait line.getAnimations().length === 0
+eval line.querySelector('input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));window.shrink=line.getAnimations()[0];shrink.pause();shrink.currentTime=0;window.keyframes=shrink.effect.getKeyframes();true
+expect shrink.effect.getTiming().duration === 150 && parseFloat(keyframes[0].height) > 0 && keyframes[1].height === '0px' && keyframes[1].opacity === '0'
+eval shrink.finish();true
+wait !line.isConnected
+expect document.activeElement === document.querySelector(H+' .section-name')
+eval window.media=window.matchMedia;window.matchMedia=function(q){return q==='(prefers-reduced-motion: reduce)'?{matches:true}:media.call(window,q);};document.querySelector(H+' .section-name').focus();document.querySelector(H+' .section-name').click();window.line=document.querySelector('.section-rename');true
+expect line.getAnimations().length === 0
+key none Escape
+expect !line.isConnected && document.activeElement === document.querySelector(H+' .section-name')
+eval window.matchMedia=media;true
+wait !document.querySelector('#toast-host .toast')
+viewport 390 844 mobile
+click #rows .section-name
+wait !!document.querySelector('.section-rename input')
+expect document.documentElement.scrollWidth <= innerWidth
+expect (function(){var r=document.querySelector('.section-rename input').getBoundingClientRect();return r.width>50 && r.left>=0 && r.right<=innerWidth;})()
+press Morning on the water
+click #rows .row[data-id="r2"] .audio-cell .cell-editable
+wait F.state().sections[0].name === 'Morning on the water'
+expect document.activeElement === document.querySelector(cell)
+click #rows .section-name
+key none Escape
+wait !document.querySelector('.section-rename')
+expect F.state().sections[0].name === 'Morning on the water'
+eval window.old=F.state();F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'Unnamed scene',rows:[{id:'a',audioText:'A new beginning.',visualText:''}]})],'unnamed.splitpage'));true
+wait F.state() !== old && F.state().title === 'Unnamed scene'
+eval U.flush();window.beforeAutomatic=JSON.stringify(F.state());window.steps=U.sizes().undo;true
+click #rows .section-name-empty
+wait !!document.querySelector('.section-rename input')
+expect document.querySelector('.section-rename').parentElement.matches('[role="heading"]')
+key none Escape
+wait !document.querySelector('.section-rename')
+expect document.activeElement === document.querySelector('#rows .section-name-empty')
+expect JSON.stringify(F.state()) === beforeAutomatic && U.sizes().undo === steps
+click #rows .section-name-empty
+press A fresh scene
+key none Enter
+wait F.state().sections && F.state().sections[0].name === 'A fresh scene'
+expect document.activeElement === document.querySelector('#rows .section-name')
+eval U.flush();true
+expect U.sizes().undo === steps+1
+focus #rows .audio-cell .cell-editable
+key ctrl KeyZ
+wait !F.state().sections
+expect JSON.stringify(F.state()) === beforeAutomatic
+quit

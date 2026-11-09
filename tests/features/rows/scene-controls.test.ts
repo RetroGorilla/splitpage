@@ -49,6 +49,7 @@ test("section controls add before the menu's scene without consulting scene sele
     assert.equal(document.querySelector<HTMLDivElement>(".row-menu")?.hidden, true);
     assert.equal(f.more.getAttribute("aria-expanded"), "false");
     assert.equal(document.activeElement, input);
+    assert.equal(form.querySelectorAll("button").length, 0);
     assert.equal(form.closest(".row"), null);
     assert.equal(form.nextElementSibling?.getAttribute("data-id"), "r2");
     input.value = " Middle ";
@@ -87,6 +88,9 @@ test("section controls rename an existing header directly above the menu's scene
     const { form, input } = nameForm();
     assert.equal(input.value, "Opening");
     assert.equal(form.closest(".section-header")?.getAttribute("data-section-id"), "s1");
+    assert.equal(form.parentElement?.getAttribute("role"), "heading");
+    assert.equal(input.selectionStart, 0);
+    assert.equal(input.selectionEnd, "Opening".length);
     input.value = "Renamed";
     form.requestSubmit();
     assert.deepEqual(f.h.session.read(doc => doc?.sections), [{ id: "s1", name: "Renamed", firstSceneId: "r2" }]);
@@ -120,5 +124,86 @@ test("cancelling section naming returns focus to the scene menu button without a
     assert.equal(document.querySelector(".section-rename"), null);
     assert.equal(document.activeElement, f.more);
     assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+  } finally { f.controls.dispose(); }
+});
+
+for (const existing of [false, true]) {
+  for (const value of ["", "  ", "New name"]) {
+    test(`blurring ${existing ? "an existing" : "a new"} heading with ${JSON.stringify(value)} settles once and keeps outside focus`, () => {
+      const f = fixture(existing);
+      try {
+        f.add.click();
+        const { input } = nameForm();
+        input.value = value;
+        f.more.focus();
+        assert.equal(document.querySelector(".section-rename"), null);
+        assert.equal(document.activeElement, f.more);
+        assert.equal(f.h.log.filter(entry => entry === "undo.record").length, value.trim() ? 1 : 0);
+        assert.deepEqual(f.h.session.read(doc => doc?.sections), value.trim()
+          ? [{ id: existing ? "s1" : "created", name: "New name", firstSceneId: "r2" }]
+          : existing ? [{ id: "s1", name: "Opening", firstSceneId: "r2" }] : undefined);
+      } finally { f.controls.dispose(); }
+    });
+  }
+}
+
+test("empty Enter cancels a new name without an edit", () => {
+  const f = fixture();
+  try {
+    f.add.click();
+    nameForm().form.requestSubmit();
+    assert.equal(document.querySelector(".section-rename"), null);
+    assert.equal(document.activeElement, f.more);
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+  } finally { f.controls.dispose(); }
+});
+
+test("reset and disposal discard a pending name without committing it on blur", () => {
+  const f = fixture();
+  try {
+    f.add.click();
+    const { input } = nameForm();
+    input.value = "Discard on replacement";
+    f.controls.reset();
+    input.dispatchEvent(new window.Event("blur"));
+    assert.equal(document.querySelector(".section-rename"), null);
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+    f.add.click();
+    const pending = nameForm().input;
+    pending.value = "Discard on disposal";
+    f.controls.dispose();
+    pending.dispatchEvent(new window.Event("blur"));
+    assert.equal(document.querySelector(".section-rename"), null);
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+  } finally { f.controls.dispose(); }
+});
+
+test("clicking a nonfocusable surface settles a pending name once", () => {
+  const f = fixture();
+  try {
+    f.add.click();
+    const { input, form } = nameForm();
+    input.value = "Click away";
+    document.body.click();
+    form.requestSubmit();
+    assert.equal(document.querySelector(".section-rename"), null);
+    assert.equal(f.h.session.read(doc => doc ? scenesInOrder(doc)?.[0]?.name : undefined), "Click away");
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 1);
+  } finally { f.controls.dispose(); }
+});
+
+test("a pointer click saves after the focus transfer so header controls can receive their click", () => {
+  const f = fixture(true);
+  try {
+    f.add.click();
+    const { input } = nameForm();
+    input.value = "Before the click";
+    f.more.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+    f.more.focus();
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+    f.more.click();
+    assert.equal(document.activeElement, f.more);
+    assert.equal(f.h.session.read(doc => doc ? scenesInOrder(doc)?.[0]?.name : undefined), "Before the click");
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 1);
   } finally { f.controls.dispose(); }
 });
