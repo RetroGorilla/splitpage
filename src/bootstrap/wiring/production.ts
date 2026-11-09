@@ -65,6 +65,7 @@ import { bulkTagRows } from "./production-index.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
+import { changes, preferenceValues } from "./ports/preferences.ts";
 
 const tags = owned<ReturnType<typeof mountTags>>();
 
@@ -75,7 +76,7 @@ export function mountTagPanelsFeature(): TagPanelMount {
     const ports: TagPanelPorts = {
       focus: portFocus, footage: productionFootage,
       beats: { setFilmed: setBeatFilmed, reveal: (id) => { portActions.invoke("reveal-row", "button", id); } },
-      view: portView, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
+      view: portView, preferences: preferenceValues, changes, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
       panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
       notices: portNotices, undo: portUndo, ids: portIds, bulkTag: bulkTagRows
@@ -164,8 +165,8 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       setAddingPerson: function (value) { portView.setTagAddingPerson(value); },
       setRenaming: function (value) { portView.setTagRenaming(value); },
       setExpanded: function (value) { portView.setTagExpanded(value); },
-      setProductionGroup: function (value) { portView.setProductionGroupBy(value as string); },
-      setGearGroup: function (value) { portView.setGearGroupBy(value as string); },
+      setProductionGroup: function (value) { portView.setProductionGroupBy(value as string); preferenceValues.setPanelGrouping("production", value as string); },
+      setGearGroup: function (value) { portView.setGearGroupBy(value as string); preferenceValues.setPanelGrouping("gear", value as string); },
       capture: function () { const context = captureOperation(); return function () { return stillOwns(context); }; },
       installEntity: function (id) { return createTagEntityContainer(id, onRootClick); }
     };

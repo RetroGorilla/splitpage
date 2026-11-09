@@ -44,12 +44,15 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const selection = createProductionSelection(timers);
   const prep = createProductionPrepState();
   const ports: TagPanelPorts = {
+    preferences: { panelGrouping: () => null, setPanelGrouping: () => {} },
+    changes: { onChange: () => () => {} },
     focus: { lastRow: () => null },
     beats: { setFilmed: () => {}, reveal: () => {} },
     footage: { entries: () => [], open: () => {} },
     view: {
       prep: () => prep,
       gearGroupBy: () => "flat", productionGroupBy: () => "cat",
+      setGearGroupBy: () => {}, setProductionGroupBy: () => {},
       setTagAddingPerson: (key) => { addingPerson = key; },
       setTagRenaming: (key) => { renaming = key; },
       tagAddingPersonKey: () => addingPerson, tagRenamingKey: () => renaming,
@@ -107,6 +110,16 @@ function prepFixture(focus: string | null = null) {
   }
   return { ...h, doc, ports, calls, mounted, click };
 }
+
+test("tag panels unsubscribe from preference changes on disposal", () => {
+  const h = fixture();
+  let listeners = 0;
+  const mounted = startTagPanels({ ...h.ports, changes: { onChange: () => { listeners++; return () => { listeners--; }; } } });
+  assert.equal(listeners, 1);
+  mounted.dispose();
+  mounted.dispose();
+  assert.equal(listeners, 0);
+});
 
 test("Scene prep handles 200 beats as six scene groups, reveals the focused beat, and keeps browsing stable across refresh", () => {
   const h = prepFixture("r119");

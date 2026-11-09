@@ -19,6 +19,7 @@ import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
 import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
 import type { Marks } from "../../core/text/runs.ts";
 import type { BrollEntry } from "../../core/production/broll.ts";
+import type { PreferenceChanges, Preferences } from "../../application/preferences/preferences.ts";
 
 export interface TagPanelMount extends TagPanelCommands {
   readonly openProductionPanel: () => void;
@@ -76,7 +77,9 @@ export interface WhoListMount extends WhoListControl {
 }
 
 export interface TagPanelPorts {
-  readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
+  readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setGearGroupBy" | "setProductionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
+  readonly preferences: Pick<Preferences, "panelGrouping" | "setPanelGrouping">;
+  readonly changes: PreferenceChanges;
   readonly focus: Pick<FocusMemory<HTMLElement>, "lastRow">;
   readonly beats: { readonly setFilmed: (rowId: string, filmed: boolean) => void; readonly reveal: (rowId: string) => void };
   readonly footage: { readonly entries: () => readonly BrollEntry[]; readonly open: (id: string) => void };
