@@ -150,7 +150,7 @@ release `index.html` on the dev target or a release exe through `--exe`. In a
 hook-free run, any page evaluation that names a hook fails at once, so a group
 marked `hookFree` that starts driving a hook shows up on the dev target too.
 
-Electron 44 has no postinstall. Run `npm run fetch-electron` after `npm ci`
+Electron 45 has no postinstall. Run `npm run fetch-electron` after `npm ci`
 on both x64 and ARM64 Windows. The script detects native ARM64 even when
 Node runs as x64 under emulation. Explicit `npm_config_arch`,
 `ELECTRON_ARCH` or `ELECTRON_INSTALL_ARCH` overrides detection, in that
@@ -172,7 +172,7 @@ xvfb-run -a node test/smoke.mjs --only-target dev
 
 Three things to know:
 
-- **Run `npm run fetch-electron` after `npm ci`.** Electron 44 has no
+- **Run `npm run fetch-electron` after `npm ci`.** Electron 45 has no
   postinstall. The script selects `process.arch` on Linux unless an explicit
   architecture override is set.
 - **A display is required.** Electron has no headless mode for a real

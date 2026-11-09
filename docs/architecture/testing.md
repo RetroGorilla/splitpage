@@ -15,7 +15,7 @@ runs the fast gates in the order CI does.
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
 | `npm run test:all` | All three sets |
-| `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
+| `npm run verify` | lint, typecheck, check:deps, check:comments, app and preload builds, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), `check-preload`, test:all |
 
 The full browser regression and the desktop smoke run by hand at milestone
 and release gates, after `node build.mjs --test`: `node tools/run-suites.mjs <out-dir> [regex]` on
@@ -56,12 +56,22 @@ fell through to PATH's browser and failed with `e: missing glyph on page 1`.
 Whether the browser or its system libraries caused that wasn't established.
 
 While a pull request is being written, run the focused checks for what it
-touches. CI then runs every fast gate on every pull request: lint, types, the
+touches. CI classifies paths with `tools/ci-changes.mjs` first: Markdown prose
+skips the code jobs, except `docs/help.md`, which feeds the app build. A prose-only
+PR still runs `changes` and `gate`. No label is needed for that path. For code
+changes CI runs lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
 tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool. CI
 distributes the full discovered test set across four required shards, while
 lint, types and the other checks run in a separate job.
+
+App-affecting changes also require the dev desktop smoke. Test-only changes
+outside desktop do not build the app in the checks job; desktop test changes
+still run the smoke. On a push to main, `ci-tested-tree.mjs` can reuse a passed
+run of the exact tree. The authoritative suite lists and conditions live in
+`.github/workflows/ci.yml`; the browser jobs cover core/CSP plus save, typing,
+undo, export and Writer flows, not the full nightly suite set.
 
 The shard allocator sorts discovered files by the measured milliseconds in
 `tools/test-weights.json`, heaviest first, and puts each on the currently
@@ -127,7 +137,7 @@ the absence of that object and capture/copy/export without instrumentation.
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.
 It also times an image-heavy case (ten fresh 1 MiB pictures in comment bodies:
-open, load from IndexedDB, and a hosted merge of two sides that each add ten);
+open, load from IndexedDB, and a local conflict merge of two sides that each add ten);
 `--only short,long,images` picks fixtures, and `PERF_PORT_BASE` moves its two
 ports. `--built` skips the build and requires an existing test build; `perf-ab`
 uses it after building each side (or the plain build on older commits without
