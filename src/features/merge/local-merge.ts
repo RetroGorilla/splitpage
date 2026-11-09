@@ -10,6 +10,8 @@ import { idMap } from "../../core/document/id-map.ts";
 import { safeImageSrc } from "../../core/document/text-policy.ts";
 import { deriveDocumentNumbering } from "../../core/document/numbering.ts";
 import { cloneState } from "../../core/document/clone.ts";
+import { mergeGalleryThumbnailRemovals } from "../../core/document/gallery.ts";
+import type { GallerySide } from "../../core/document/gallery.ts";
 import type { MergeReviewControl, MergeReviewPorts } from "./ports.ts";
 import type { Home } from "../../application/location/document-location.ts";
 import type { DocumentShape, DocumentRow, DocumentShot, ValidatedDocument } from "../../core/document/validated.ts";
@@ -153,9 +155,10 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
         const gm = mergeGallerySummary(m, f, moves?.keys), gt = mergeGallerySummary(t, f, moves?.keys);
         const gPair = mergeDiffPairHtml(gm, gt);
         const moved = moves && moves.only && moves.kept ? moves : null;
+        const combined = f === "moreImages" && m && t && mergeGalleryThumbnailRemovals(bb as GallerySide | null, m as GallerySide, t as GallerySide);
         entries.push({
           label: f === "imageLinks" ? "Video links" : "More pictures",
-          outcome: rowOutcome ?? (moved && moved.kept !== "mixed" ? moved.kept : "both"),
+          outcome: rowOutcome ?? (combined ? "merged" : moved && moved.kept !== "mixed" ? moved.kept : "both"),
           text: moved ? MERGE_MOVE_TEXT[moved.bundled ? "bundled" : moved.kept as keyof typeof MERGE_MOVE_TEXT] : undefined,
           mineHtml: gPair.mine,
           theirsHtml: gPair.theirs

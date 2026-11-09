@@ -693,17 +693,49 @@ function mergeLink(b: VideoLink | undefined, m: VideoLink, t: VideoLink): VideoL
   return out;
 }
 
+function thumbnailRemovals(base: GallerySide | null | undefined, side: GallerySide, other: GallerySide): Map<string, Set<string>> {
+  const removed = new Map<string, Set<string>>();
+  const kept = new Set((other.imageLinks || []).map(videoLinkKey));
+  (other.moreImages || []).forEach(function (it) { (it.links || []).forEach(function (l) { kept.add(videoLinkKey(l)); }); });
+  (side.moreImages || []).forEach(function (it) {
+    if (!it.imageRef || !(it.links || []).some(function (l) { return l.poster; })) return;
+    const ancestors = (base && base.moreImages || []).filter(function (bi) {
+      return bi.imageRef?.sha256 !== it.imageRef?.sha256 && (bi.name || "") === (it.name || "") &&
+        JSON.stringify(bi.annotation || null) === JSON.stringify(it.annotation || null) &&
+        JSON.stringify(bi.links || []) === JSON.stringify(it.links || []);
+    });
+    if (ancestors.length !== 1) return;
+    const originalKey = galleryItemKey(ancestors[0]);
+    if ((side.moreImages || []).some(function (item) { return galleryItemKey(item) === originalKey; })) return;
+    const keys = new Set((it.links || []).map(videoLinkKey).filter(function (k) { return !kept.has(k); }));
+    if (keys.size) removed.set(galleryItemKey(it), keys);
+  });
+  return removed;
+}
+
+export function mergeGalleryThumbnailRemovals(b: GallerySide | null | undefined, m: GallerySide, t: GallerySide): boolean {
+  return thumbnailRemovals(b, m, t).size > 0 || thumbnailRemovals(b, t, m).size > 0;
+}
+
 export function mergeGalleryField(f: string, b: GallerySide | null | undefined, m: GallerySide, t: GallerySide): VideoLink[] | GalleryItem[] | undefined {
   let list: VideoLink[] | GalleryItem[];
   if (f === "imageLinks") {
     list = mergeSet(b && b.imageLinks, m.imageLinks, t.imageLinks, videoLinkKey, mergeLink);
   } else {
-    list = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, galleryItemKey, function (bi, mi, ti) {
+    const items = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, galleryItemKey, function (bi, mi, ti) {
       const out = copy(ti);
       const links = mergeSet(bi && bi.links, mi.links, ti.links, videoLinkKey, mergeLink);
       if (links.length) out.links = links; else delete out.links;
       return out;
     });
+    const mine = thumbnailRemovals(b, m, t), theirs = thumbnailRemovals(b, t, m);
+    items.forEach(function (it) {
+      const key = galleryItemKey(it), removedMine = mine.get(key), removedTheirs = theirs.get(key);
+      if (!removedMine && !removedTheirs) return;
+      const links = (it.links || []).filter(function (l) { return !removedMine?.has(videoLinkKey(l)) && !removedTheirs?.has(videoLinkKey(l)); });
+      if (links.length) it.links = links; else delete it.links;
+    });
+    list = items;
   }
   return list.length ? list : undefined;
 }

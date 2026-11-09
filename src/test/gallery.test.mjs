@@ -36,6 +36,21 @@ function doc(rows) {
   return migrateRows({ schema: 2, title: "Gallery", comments: [], rows: rows.map((r, i) => Object.assign({ id: "r" + i, visualText: "", audioText: "", status: "todo" }, r)) });
 }
 
+test("mergeStates keeps a video link removed after the other editor sets its thumbnail (#1278)", () => {
+  for (const ref of [null, P2]) {
+    const base = doc([{ imageRef: P1, moreImages: [{ ...(ref ? { imageRef: ref } : {}), links: [{ name: "take.mp4", size: 3, poster: true }] }] }]);
+    const removed = structuredClone(base), changed = structuredClone(base);
+    removeGalleryLink(removed.rows[0], 1, videoLinkKey(base.rows[0].moreImages[0].links[0]));
+    changed.rows[0].moreImages[0].imageRef = P3;
+    for (const [mine, theirs] of [[removed, changed], [changed, removed]]) {
+      const result = mergeStates(base, mine, theirs);
+      assert.deepEqual(result.conflicts, []);
+      assert.deepEqual(result.merged.rows[0].moreImages, [{ imageRef: P3 }]);
+      assert.equal(rowSlots(migrateRows(structuredClone(result.merged)).rows[0]).some((slot) => slot.links.length), false);
+    }
+  }
+});
+
 test("migrateRows keeps a gallery, and makes it safe", () => {
   const s = doc([
     { imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }, { href: "javascript:alert(1)" }, { href: "https://youtu.be/abc" }, { name: "<b>take</b>.mp4", size: 12, extra: 1 }, "junk"],
