@@ -95,6 +95,7 @@ committing it; timings vary with runner load.
 | --- | --- |
 | A pure rule in one feature or core policy | Its unit tests (`npm test -- --only <folder>`), `npm run typecheck`, `npm run lint`, `npm run check:deps`, `npm run check:comments` |
 | A feature's controller, view or bindings | The feature's tests, and the browser suites for its real input, focus and selection |
+| The in-app guide (`docs/help.md`) | Build with `node build.mjs --test`, inspect the rendered guide and contents links, then run `14-help.txt` and `273-help-actions-every-surface.txt` |
 | A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
 | Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`) |
 | Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |

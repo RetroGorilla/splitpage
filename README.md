@@ -11,7 +11,7 @@ and read the narration from a teleprompter.
 ## Get Splitpage
 
 The latest published release is [0.4.1, released 2026-11-02](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1).
-The source on `main` includes unreleased changes for **0.4.3**. See the [roadmap](docs/ROADMAP.md) for merged work and plans still in flight.
+The source on `main` includes the merged changes for **0.4.3**, which is being prepared and is not released. See the [roadmap](docs/ROADMAP.md) for completed work and remaining release checks.
 
 Download the Windows installer or the portable zip from the
 [latest release](https://github.com/RetroGorilla/splitpage/releases/latest).
@@ -62,10 +62,12 @@ the text for a teleprompter display.
 
 ## Turn script notes into a production breakdown
 
-Tag props, locations, cast, effects, sound and gear as you write. The
-breakdown gathers each item with the beats that need it, its status and
+Tag props, locations, cast, effects, sound and gear as you write, including
+tags inside other tags. Use **Edit tag** and **Done** to label words inside a
+finished tag. The breakdown gathers each item with the beats that need it, its status and
 the person responsible. Scene prep walks through requirements by scene and
-beat; By scene also groups Production, Gear, B-roll and Comments.
+beat; By scene also groups Production, Gear, B-roll and Comments. Shoot shows
+each location's beats under scene headings, with filmed and current indicators.
 
 <img src="docs/images/readme/production.png" width="490" alt="The older production breakdown, showing props, locations, sourcing status, beat references labelled Scenes, and assigned demo characters.">
 

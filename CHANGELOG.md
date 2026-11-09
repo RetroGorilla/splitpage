@@ -7,6 +7,11 @@ appear in the app under **Help**. The format follows
 ## Unreleased
 
 ### Added
+- Nest tags while typing, or use **Edit tag** and **Done** to label words inside
+  a finished tag, with category colours, enclosing outlines and undo. Nested
+  production tags appear in breakdowns, Gear, shot props and exports with their
+  own details. Nested tag labels are preserved through project saves, clipboard,
+  undo and merge.
 - Select beats like in other apps: Shift+click selects a run of beats,
   Ctrl+click (Cmd+click on a Mac) adds or removes one, and Ctrl+A outside a
   text field selects all beats.
@@ -64,6 +69,22 @@ appear in the app under **Help**. The format follows
   clicking away saves, and a brief animation respects reduced motion.
 
 ### Changed
+- Show a subtle category-coloured underline when a visual tag is awaiting its
+  name.
+- Group Shoot view beats by scene in a responsive grid with filmed and current
+  indicators.
+- Printed shot list: the Notes handwriting lines are now 8 mm apart (they were
+  about 4 mm), so there is room to write on them.
+- Desktop updates now verify the installer's release name, tag, API digest and
+  size before allowing installation.
+- **Hide filmed beats** is now a switch beside the filmed count, the rundown has
+  a labelled **Minimise rundown** / **Show rundown** control, and **Present in
+  browser…** sits in a dropdown beside Present. All three left the File menu,
+  and Use Chromium Speech Recognition is gone.
+- The File menu is tidier: **Create bundle…** sits under **Save a copy…**, the
+  bottom has full-width **Settings** and **Help** rows, and Help opens User guide,
+  Take the tour, Getting started…, Tagging reference and About Splitpage.
+  **Export app data…** and **Import app data…** now live only in **Settings ▸ Data**.
 - After a Save As, the new script starts with no undo history.
 - The Production Panel labels an unnamed scene "Scene A" (its scene letter)
   instead of "Untitled scene".
@@ -123,6 +144,10 @@ appear in the app under **Help**. The format follows
   its blocks and ruler instead of rebuilding them on every resize step.
 
 ### Fixed
+- Production, Scene prep: renaming an item whose detail is open keeps the detail
+  open and focus on the item.
+- Production and Gear By-scene views no longer rescan the document's scene
+  numbering on every render.
 - A cut that finished late can no longer delete beats from a different script
   opened, merged or saved under a new name in the meantime.
 - Copying whole beats from the writer into Split keeps their visuals, pictures,

@@ -11,7 +11,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since 0.4.1
 
-These changes are on development `main`, planned for 0.4.3. The published
+These changes are on development `main`, with 0.4.3 being prepared. The published
 release is still 0.4.1. The instructions below describe the current app.
 
 - **Scenes, beats and filmed.** Scene headers group beats; beats restart at 1
@@ -32,6 +32,17 @@ release is still 0.4.1. The instructions below describe the current app.
 - **Complete tag names**: type `Prop: ca` and press Tab to accept an existing
   matching name. Esc dismisses the suggestion so you can keep your own words.
 - An underline at the caret shows when a tag is waiting for its name.
+- **Nested tags**: type a bracket tag inside an open keyword tag, or use
+  **Edit tag** and **Done** to label words inside a finished tag. Each label
+  keeps its category colour and production details. See [Nested tags](#nested-tags).
+- **Controls where you need them**: Hide filmed beats sits beside the filmed
+  count; the rundown has Minimise rundown / Show rundown; the dropdown beside
+  Present opens Present in browser… in the desktop app. File has full-width
+  Settings and Help rows, with a Help submenu.
+- **Shoot** groups each location's beats under scene headings, with filmed and
+  current indicators. Scene prep keeps an item's detail open after renaming it.
+- Printed shot-list Notes lines are now 8 mm apart for handwriting, and desktop
+  updates verify the installer's release name, tag, API digest and size.
 - **Assign as you write**: an `@Name` chip assigns tags in its sentence to that
   person. See [Assigning with @Name](#assigning-with-name).
 - **Choose a microphone** in Present, including when the desktop app does the
@@ -614,7 +625,10 @@ picture back as it was. Saving is one step of the script's undo, so
 
 ### Presenting
 
-**Present** in the header opens the teleprompter.
+**Present** in the header opens the teleprompter. In the desktop app, the
+dropdown beside it offers **Present ▸ Present in browser…** to open a read-only
+teleprompter in your default browser, with the desktop app doing the listening.
+Save the script first. This replaces the old Chromium speech-recognition option.
 
 - <kbd>Space</kbd> plays and pauses, <kbd>↑</kbd> / <kbd>↓</kbd> change the
   speed, and <kbd>Esc</kbd> closes it.
@@ -668,13 +682,11 @@ exports and read times stay the same, and the teleprompter leaves them out.
 category's colour.
 
 You can also put the caret in the Visual column with nothing selected and
-press **Tag**. The label dialog shows only its categories, with the first
-one focused. Click a category, or focus it and press <kbd>Enter</kbd>, to
-start the same open tag at your saved caret. <kbd>Esc</kbd> or a click
-outside the dialog returns to that caret without changing the script.
-This works wherever typing a category keyword would open a tag, outside
-links and existing tags. With selected words, the full label dialog works
-as before.
+press **Tag**. A compact category menu above the toolbar shows the typing
+shortcut beside each category. Click a category to start the same open tag at
+your saved caret. <kbd>Esc</kbd> or a click outside closes the menu without
+changing the script. With selected words, choosing a category labels those words.
+To type inside a finished tag, open it with **Edit tag** first.
 
 - <kbd>Tab</kbd> (on a phone, tap the note under the box) makes them one
   tag.
@@ -688,11 +700,44 @@ as before.
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> takes the tag off and
   leaves your words as you typed them.
 
+### Nested tags
+
+One tag can contain another. In Visual text or the writer's Visual box, type
+`SFX: rain on [umbrella]` and press <kbd>Tab</kbd>. The brackets finish the
+inner Prop tag **umbrella**; Tab finishes the outer Music/SFX tag **rain on
+umbrella**. The outer tag stays open while you finish the inner one. You can
+also use location `{park}`, VFX `~glow~` and gear `<camera>` brackets inside
+an open keyword tag. A second keyword such as `VFX:` inside that draft stays
+ordinary text; use brackets there, or finish the outer tag and use Edit tag
+to add another label.
+
+If an inner name completion appears, <kbd>Tab</kbd> accepts it first; press
+<kbd>Tab</kbd> again to finish the outer tag. On a phone, tap the completion
+and the note for the open tag instead.
+
+To label words inside a finished tag, click or tap it and choose **Edit tag**.
+Only that occurrence opens for editing. Select its inner words and use **Tag**
+and a category, or place the caret inside and type a bracket or keyword tag.
+**Done** protects the occurrence again. <kbd>Esc</kbd> first dismisses any
+suggestion, then cancels an unfinished tag, then acts like Done. Clicking
+outside the cell also finishes editing. Edits are undoable; opening an occurrence
+does not rename its production item or open its other occurrences.
+
+Each label keeps its own category colour; an enclosing tag has an outline
+around its children. Each also has its own status, owner and notes in the
+breakdown, Gear, shot props and exports where that category applies. Saves,
+clipboard, Undo and merge retain the nesting. Tags must fit completely inside
+one another; a selection that crosses a tag boundary is refused. Editor Find
+and replace still skips tagged words.
+
+### The Production panel
+
 **The Production panel** offers **Scene prep**, **Category**, **Person**,
 **Beat**, **Shoot** and **By scene**. Category and Person show a table:
 **Item · Status · Beats · Owner**. Click a beat number to jump to it.
 
-- **Open an item**: click its name, or the tag in the script. Set its
+- **Open an item**: click its name in the panel. Clicking a tag in the script
+  offers **Edit tag** for that occurrence. Set the item's
   **Status**, **Assigned to** (**Add person** adds a name), and **Notes &
   links**. **⋯** has **Rename** and **Remove label** / **Delete from list**.
 - **Status**: **Needed → Sourcing → Have it → Returned**. Click the status to
@@ -703,7 +748,9 @@ as before.
   their tags from the script too; the words stay. <kbd>Esc</kbd> clears the
   selection.
 - **Group** by category, person, beat or scene, or **Shoot** to see beats grouped
-  by location, with what each needs.
+  by location, then scene, with what each needs. Shoot's beat cells wrap to fit
+  the panel; filmed beats have a fill and tick, and the current beat has its own
+  outline. Its count reads, for example, **7 of 18 filmed**, beside the duration.
 - **Untagged mentions**: write the name of something already tracked in
   the Visual column without tagging it, and it gets a dotted underline and a
   **Tag** offer. <kbd>Tab</kbd> takes it, <kbd>Esc</kbd> waves it off.
@@ -717,7 +764,8 @@ as before.
 
 **Scene prep** opens a scene-and-beat outline in Production. Expand a scene and
 beat to see its tagged requirements, change status or owner, or open an item's
-notes. The ready button marks an item **Have it**; already-ready requirements
+notes. Renaming an item with its detail open keeps the detail open and focus on
+the item. The ready button marks an item **Have it**; already-ready requirements
 can be expanded separately. Filmed beats can be shown again from the outline.
 
 **By scene** is also available in Production, Gear, B-roll and Comments. Each
@@ -825,7 +873,6 @@ The **Save** button shows where things stand:
   after every change.
 - **Saving…** or **Unsaved changes**.
 - **Not saving** when something is in the way: the file changed on disk or a
-- **Not saving** when something is in the way: the file changed on disk, a
   write failed.
 
 Hover it for where and when ("Last saved to script.md at 2:52 PM") or what
@@ -849,10 +896,6 @@ yours is kept as an **Unmerged edit** comment.
   file with the script and the whole app in it. It opens in any browser, on
   any device, with nothing to install, and they can read, edit and present
   it. It's a copy: their edits stay in their file.
-**File ▸ Export… ▸ SplitShare** writes one `.html` file with the script and
-the whole app in it. It opens in any browser, on any device, with nothing to
-install, and they can read, edit and present it. It's a copy: their edits
-stay in their file.
 
 ## Reopening a saved project
 
@@ -895,7 +938,8 @@ format, with a preview and the file name.
 - **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, a
   **Packing list** of gear or props, or the **B-roll shot list**: a
   landscape table of every shot with its beat, props, flags and their
-  reasons, and lines for notes (or the same as a spreadsheet).
+  reasons, and handwriting lines 8 mm apart for notes (or the same as a
+  spreadsheet).
 
 **Sending a script with its files.** In the desktop app, pick **Splitpage
 script** and turn on **Include the script's files, as one .zip**. Splitpage
@@ -967,9 +1011,11 @@ commands…**, and below it:
 - **Export**: Export…, Export again, and Export narration.
 - **This document**: Version history… and Find & replace.
 
-Two rows along the bottom: **Settings**, and **Help**, which opens User
+Two full-width rows along the bottom: **Settings**, and **Help**, which opens User
 guide, Take the tour, Getting started…, Tagging reference and About
-Splitpage. An item that can't work right now says why.
+Splitpage. Export and Import app data live in **Settings ▸ Data**. Hide filmed
+beats, Minimise rundown and Present in browser are beside their header controls.
+An item that can't work right now says why.
 
 ### Keyboard shortcuts
 
@@ -1010,8 +1056,6 @@ change the script.
 - **Editor**: Hide filmed beats, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
 - **Present**: the teleprompter's Mirror, Flip and One beat at a time.
-- **You**: your name and colour. Clicking your name in the header opens these
-  too.
 - **You**: your name and colour, which sign your edits and comments.
   Clicking your name in the header opens these too.
 - **Help & tips**: bring back the tagging reference, the tour and the
