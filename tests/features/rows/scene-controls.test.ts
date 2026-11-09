@@ -147,13 +147,15 @@ for (const existing of [false, true]) {
   }
 }
 
-test("empty Enter cancels a new name without an edit", () => {
+test("empty Enter leaves the name open without an edit until clicking away", () => {
   const f = fixture();
   try {
     f.add.click();
     nameForm().form.requestSubmit();
+    assert.equal(document.activeElement, nameForm().input);
+    assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
+    document.body.click();
     assert.equal(document.querySelector(".section-rename"), null);
-    assert.equal(document.activeElement, f.more);
     assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
   } finally { f.controls.dispose(); }
 });

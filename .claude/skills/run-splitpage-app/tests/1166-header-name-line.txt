@@ -62,6 +62,9 @@ expect document.activeElement.selectionStart === 0 && document.activeElement.sel
 wait document.querySelector('.section-rename').getAnimations().length === 0
 expect getComputedStyle(document.activeElement).fontSize === getComputedStyle(document.querySelector(H+' [role="heading"]')).fontSize
 shot 1166-after-create
+key none Enter
+expect !!document.querySelector('.section-rename input') && document.activeElement === document.querySelector('.section-rename input')
+expect JSON.stringify(F.state()) === beforeCreate && U.sizes().undo === steps
 key none Escape
 wait !document.querySelector('.section-rename')
 expect document.activeElement === document.querySelector('#rows .row[data-id="r2"] .row-more')

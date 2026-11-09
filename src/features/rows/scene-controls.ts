@@ -91,7 +91,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     made.append(input);
     function settle(focus: boolean): void {
       if (form !== made) return;
-      if (!input.value.trim()) { cancelName(true, focus); return; }
+      if (!input.value.trim()) { if (!focus) cancelName(true, false); return; }
       if (!ports.edits.allowed()) return;
       const name = input.value;
       cancelName(false, false);
