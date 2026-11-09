@@ -113,6 +113,12 @@ test("a video link or two in a gallery, and no picture bytes", () => {
   assert.equal(JSON.stringify(doc).includes("data:image"), false);
 });
 
+test("pictures from video links on several scenes, from more than one host", () => {
+  const links = doc.rows.flatMap((r) => (Array.isArray(r.imageLinks) ? r.imageLinks : []));
+  assert.ok(links.filter((l) => l.poster).length >= 4, "poster links");
+  assert.ok(links.some((l) => /youtu/.test(l.href)) && links.some((l) => /vimeo\.com\//.test(l.href)));
+});
+
 test("survives a .splitpage round trip", () => {
   const opened = migrateRows(copy(doc));
   const round = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(opened))));

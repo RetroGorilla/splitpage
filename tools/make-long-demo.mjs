@@ -157,6 +157,9 @@ const COMMENTS = [
 
 const LINKS = {
   2: [{ href: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", poster: true }],
+  6: [{ href: "https://youtu.be/jNQXAC9IVRw", poster: true }],
+  12: [{ href: "https://www.youtube.com/watch?v=M7lc1UVf-VE", poster: true }],
+  17: [{ href: "https://vimeo.com/76979871", poster: true }],
   28: [{ href: "https://www.youtube.com/watch?v=eRsGyueVLvQ", poster: true }]
 };
 
