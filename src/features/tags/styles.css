@@ -272,6 +272,14 @@
     color: var(--text-dim);
   }
   .plain-tag-keyword { display: none; }
+  #tag-open-starter { position: fixed; display: none; pointer-events: none; width: 1ch; border-bottom: 1.5px dashed; z-index: 146; }
+  #tag-open-starter.is-visible { display: block; }
+  #tag-open-starter[data-cat="prop"] { color: var(--tag-prop); }
+  #tag-open-starter[data-cat="location"] { color: var(--tag-location); }
+  #tag-open-starter[data-cat="cast"] { color: var(--tag-cast); }
+  #tag-open-starter[data-cat="vfx"] { color: var(--tag-vfx); }
+  #tag-open-starter[data-cat="sound"] { color: var(--tag-sound); }
+  #tag-open-starter[data-cat="gear"] { color: var(--tag-gear); }
   ::highlight(splitpage-open-tag-prop)     { background-color: color-mix(in srgb, var(--tag-prop-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-prop) 1.5px;     text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-location) { background-color: color-mix(in srgb, var(--tag-location-tint) 70%, transparent); text-decoration: underline dashed var(--tag-location) 1.5px; text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-cast)     { background-color: color-mix(in srgb, var(--tag-cast-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-cast) 1.5px;     text-underline-offset: 3px; }

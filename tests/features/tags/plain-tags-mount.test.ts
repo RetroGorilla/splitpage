@@ -56,6 +56,45 @@ function typedColon(): Pick<InputEvent, "inputType" | "data"> {
   return { inputType: "insertText", data: ":" };
 }
 
+test("starter follows whitespace, hands over to the name and clears on cancellation", () => {
+  const h = fixture("loc:", "loc:  x");
+  const starter = win.document.createElement("div");
+  starter.id = "tag-open-starter";
+  win.document.body.append(starter);
+  const rangePrototype = win.Range.prototype;
+  const previous = rangePrototype.getClientRects;
+  let reads = 0;
+  rangePrototype.getClientRects = () => { reads++; return [{ left: reads * 10, bottom: 20 }] as unknown as DOMRectList; };
+  const control = startPlainTags(h.ports);
+  try {
+    h.cell.focus();
+    caretAt(h.cell.firstChild as Node, 4);
+    control.maybeOpen(typedColon(), h.cell);
+    assert.equal(starter.classList.contains("is-visible"), true);
+    assert.equal(starter.dataset.cat, "location");
+    const tail = h.cell.querySelector(".plain-tag-keyword")?.nextSibling as Text;
+    tail.appendData("  ");
+    caretAt(tail, 3);
+    control.refresh();
+    assert.equal(starter.style.left, "20px");
+    tail.appendData("x");
+    caretAt(tail, 4);
+    control.refresh();
+    assert.equal(starter.classList.contains("is-visible"), false);
+    assert.equal(reads, 2);
+    tail.deleteData(3, 1);
+    caretAt(tail, 3);
+    control.refresh();
+    assert.equal(starter.classList.contains("is-visible"), true);
+    control.cancel();
+    assert.equal(starter.classList.contains("is-visible"), false);
+    assert.equal(h.cell.textContent, "loc:  ");
+  } finally {
+    control.dispose();
+    rangePrototype.getClientRects = previous;
+  }
+});
+
 test("open tag highlight starts at the first word across formatting nodes", () => {
   const h = fixture("VFX:", "VFX:  flare");
   const css = { highlights: new Map<string, Set<Range>>() };

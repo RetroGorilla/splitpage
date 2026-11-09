@@ -14,7 +14,7 @@ const PICTURES = 10;
 const PICTURE_BYTES = 1024 * 1024;
 const IMAGE_TRIALS = 3;
 const FIXTURES = ["short", "long", "images"];
-const EXPECTED_PERF = { short: 6, long: 9, images: 1 };
+const EXPECTED_PERF = { short: 10, long: 13, images: 1 };
 const SETTLE_MS = 500;
 const STAMP_ROWS = [3, 4, 5, 6, 7, 8];
 const STAMP_PASSES = 2;
@@ -35,13 +35,15 @@ export function parsePortBase(raw) {
 
 const PROBE = `(function () {
   if (window.__perf) return 'ready';
-  var perf = { lat: [], long: [] };
-  perf.reset = function () { perf.lat = []; perf.long = []; return true; };
+  var perf = { lat: [], long: [], rects: 0 };
+  var rangeRects = Range.prototype.getClientRects;
+  Range.prototype.getClientRects = function () { perf.rects++; return rangeRects.call(this); };
+  perf.reset = function () { perf.lat = []; perf.long = []; perf.rects = 0; return true; };
   perf.take = function (label) {
     var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
     var q = function (p) { return lat.length ? +lat[Math.min(lat.length - 1, Math.floor(p * lat.length))].toFixed(1) : null; };
     var out = { label: label, keys: lat.length, p50: q(0.5), p95: q(0.95), max: lat.length ? +lat[lat.length - 1].toFixed(1) : null,
-      longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1) };
+      longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1), rangeRects: perf.rects };
     perf.reset();
     return 'PERF ' + JSON.stringify(out);
   };
@@ -297,6 +299,20 @@ function typing(fixture) {
   return lines;
 }
 
+function openTagTyping(fixture, writer) {
+  const surface = writer ? "writer" : "split";
+  const lines = writer
+    ? ["click #btn-write", "wait window.__writerFlowTest.on()", "eval window.__writerFlowTest.openVisual(window.__splitpageFormats.state().rows[1].id)"]
+    : ["caret #rows .row:nth-of-type(2) .visual-cell .cell-editable", "key end"];
+  lines.push("key Space", "press prop:", "expect document.querySelector('.plain-tag-keyword') !== null", "eval window.__perf.reset()");
+  for (let i = 0; i < 20; i++) lines.push("key Space", `sleep ${KEY_GAP_MS}`);
+  lines.push("sleep 200", `eval window.__perf.take('${fixture} ${surface} open tag spaces')`, "eval window.__perf.reset()");
+  for (const token of "abcdefghijabcdefghij") lines.push(`press ${token}`, `sleep ${KEY_GAP_MS}`);
+  lines.push("sleep 200", `eval window.__perf.take('${fixture} ${surface} open tag name')`, "key Escape");
+  if (writer) lines.push("eval document.querySelector('.wr-flow-visual-close').click()", "key Escape");
+  return lines;
+}
+
 function rowEdits(fixture) {
   const lines = ["eval window.__perf.reset()"];
   for (let i = 0; i < SPLITS; i++) lines.push("caret #rows .row:nth-of-type(2) .audio-cell .cell-editable", "key ctrl Enter", "sleep 400");
@@ -355,7 +371,7 @@ export function suiteText(fixture) {
     ]
     : ["open", "viewport 1400 900"];
   lines.push(`eval ${oneLine(PROBE)}`, "sleep 2000", `eval ${oneLine(ENVIRONMENT)}`);
-  lines.push(...typing(fixture), ...rowEdits(fixture), ...bulk(fixture), `eval ${oneLine(EXPORTS).replace("'export'", `'${fixture} export'`)}`);
+  lines.push(...typing(fixture), ...openTagTyping(fixture, false), ...openTagTyping(fixture, true), ...rowEdits(fixture), ...bulk(fixture), `eval ${oneLine(EXPORTS).replace("'export'", `'${fixture} export'`)}`);
   if (fixture === "long") lines.push(...redraws());
   return lines.join("\n") + "\n";
 }
@@ -462,9 +478,9 @@ export function report(results, env, when) {
     ...(rows.length ? [
       "## Input latency (ms)",
       "",
-      "| Case | Keys | p50 | p95 | Max | Long tasks | Long-task ms |",
-      "| --- | --- | --- | --- | --- | --- | --- |",
-      ...rows.map((r) => `| ${r.label} | ${r.keys} | ${r.p50 ?? "—"} | ${r.p95 ?? "—"} | ${r.max ?? "—"} | ${r.longTasks} | ${r.longTaskMs} |`),
+      "| Case | Keys | p50 | p95 | Max | Long tasks | Long-task ms | Range rect reads |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      ...rows.map((r) => `| ${r.label} | ${r.keys} | ${r.p50 ?? "—"} | ${r.p95 ?? "—"} | ${r.max ?? "—"} | ${r.longTasks} | ${r.longTaskMs} | ${r.rangeRects ?? "—"} |`),
       ""
     ] : []),
     ...(exports.length ? [
