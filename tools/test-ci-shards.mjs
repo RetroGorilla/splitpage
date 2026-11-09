@@ -17,10 +17,27 @@ assert.equal(smoke["runs-on"], "ubuntu-latest");
 assert.equal(smoke["timeout-minutes"], 90);
 assert.equal(smoke.if, "needs.changes.outputs.desktop == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(changes.outputs.desktop, "${{ steps.classify.outputs.desktop }}");
+assert.equal(changes.outputs.collab, "${{ steps.classify.outputs.collab }}");
+assert.equal(changes.outputs.root_tests, "${{ steps.classify.outputs.root_tests }}");
+const prototypeTests = checks.steps.find((s) => s.name === "Collaboration prototype tests");
+assert.equal(prototypeTests.if, "needs.changes.outputs.collab == 'true'");
+assert.equal(prototypeTests.run, "npm test");
+assert.equal(prototypeTests["working-directory"], "prototypes/collab");
+const install = checks.steps.find((s) => s.name === "Install tooling");
+assert.ok(install.run.includes("npm ci --prefix prototypes/collab"));
+assert.ok(checks.steps.indexOf(install) < checks.steps.indexOf(prototypeTests));
+assert.equal(checks.steps.find((s) => s.run === "node tools/build-preload.mjs && node tools/check-preload.mjs").if, "needs.changes.outputs.root_tests == 'true'");
+for (const s of checks.steps.filter((s) => /^node build\.mjs|playwright@/.test(s.run ?? "") || s.run?.includes("playwright@"))) {
+  assert.equal(s.if, "needs.changes.outputs.app == 'true'");
+}
+for (const job of [checks, workflow.jobs["npm-cache"]]) {
+  assert.ok(job.steps.find((s) => s.uses?.startsWith("actions/setup-node@")).with["cache-dependency-path"].split("\n").includes("prototypes/collab/package-lock.json"));
+}
+assert.ok(workflow.jobs["npm-cache"].steps.some((s) => s.run?.includes("npm ci --ignore-scripts --prefix prototypes/collab")));
 assert.deepEqual(tests.strategy.matrix.shard, [1, 2, 3, 4]);
 assert.equal(tests.strategy["fail-fast"], false);
 assert.equal(tests.needs, "changes");
-assert.equal(tests.if, checks.if);
+assert.equal(tests.if, "needs.changes.outputs.root_tests == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(tests["runs-on"], checks["runs-on"]);
 assert.equal(tests["runs-on"], changes["runs-on"]);
 assert.equal(checks.steps.some((s) => s.run?.includes("npm run test:all")), false);
@@ -37,6 +54,7 @@ assert.equal(step.env.TESTS, "${{ needs.tests.result }}");
 assert.equal(step.env.CHECKS, "${{ needs.checks.result }}");
 assert.equal(step.env.CHANGES, "${{ needs.changes.result }}");
 assert.equal(step.env.CODE, "${{ needs.changes.outputs.code }}");
+assert.equal(step.env.ROOT_TESTS, "${{ needs.changes.outputs.root_tests }}");
 assert.equal(step.env.TESTED, "${{ needs.changes.outputs.tested }}");
 assert.equal(checks.if, "needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(changes.outputs.tested, "${{ steps.tested.outputs.tested }}");
@@ -66,7 +84,7 @@ for (const change of bash ? results : []) {
           for (const test of others) {
             for (const smokeResult of others) {
               const result = spawnSync(bash, ["-e", "-c", step.run], {
-                env: { ...process.env, CHANGES: change, CODE: code, TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, SMOKE: smokeResult },
+                env: { ...process.env, CHANGES: change, CODE: code, ROOT_TESTS: code, TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, SMOKE: smokeResult },
                 encoding: "utf8",
                 timeout: 5000
               });
@@ -79,6 +97,19 @@ for (const change of bash ? results : []) {
           }
         }
       }
+    }
+  }
+}
+for (const check of bash ? results : []) {
+  for (const test of results) {
+    for (const smokeResult of results) {
+      const result = spawnSync(bash, ["-e", "-c", step.run], {
+        env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_TESTS: "false", TESTED: "false", DESKTOP: "false", CHECKS: check, TESTS: test, SMOKE: smokeResult },
+        encoding: "utf8",
+        timeout: 5000
+      });
+      assert.equal(result.status === 0, check === "success" && test === "skipped" && smokeResult === "skipped", JSON.stringify({ prototypeOnly: true, check, test, smoke: smokeResult, error: result.error?.message }));
+      cases++;
     }
   }
 }

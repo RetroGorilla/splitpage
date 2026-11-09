@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, needsDesktopChecks, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsRootTests, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -59,6 +59,25 @@ for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src
   eq(`the desktop smoke skips ${JSON.stringify(files)}`, needsDesktopChecks(files), false);
 }
 eq("a smoke change that is not prose runs the smoke although app checks skip it", [needsAppChecks(["desktop/test/smoke.mjs"]), needsDesktopChecks(["desktop/test/smoke.mjs"])], [false, true]);
+
+for (const path of ["package.json", "package-lock.json", "tsconfig.json", "src/probe.ts", "test/convergence.test.ts", "histories/trace.json", "README.md"]) {
+  const files = [`prototypes/collab/${path}`];
+  eq(`prototype-only ${path} runs required checks and prototype tests`, [needsChecks(files), needsCollabChecks(files)], [true, true]);
+  eq(`prototype-only ${path} does not need app or desktop browser checks`, [needsAppChecks(files), needsDesktopChecks(files)], [false, false]);
+  eq(`prototype-only ${path} skips all root test shards`, needsRootTests(files), false);
+}
+eq("prototype changes plus unrelated prose still skip root tests", needsRootTests(["prototypes/collab/README.md", "docs/ROADMAP.md"]), false);
+for (const files of [null, [], ["src/bootstrap/main.ts"], ["tests/application/session.test.ts"], ["desktop/test/smoke.mjs"], ["tools/ci-changes.mjs"], [".github/workflows/ci.yml"], ["package.json"], ["unknown/new.file"]]) {
+  eq(`existing root test requirements remain for ${JSON.stringify(files)}`, needsRootTests(files), true);
+}
+eq("prose-only changes still skip root tests", needsRootTests(["README.md", "docs/ROADMAP.md"]), false);
+for (const path of ["src/bootstrap/main.ts", "tools/dep-report.mjs", ".github/workflows/ci.yml"]) {
+  const files = ["prototypes/collab/README.md", path];
+  eq(`mixed prototype and ${path} changes run every check`, [needsChecks(files), needsRootTests(files), needsCollabChecks(files), needsAppChecks(files), needsDesktopChecks(files)], [true, true, true, true, true]);
+}
+for (const files of [null, [], [".github/workflows/ci.yml"]]) eq("unknown diffs and workflow changes run prototype tests", needsCollabChecks(files), true);
+eq("app-only changes do not run prototype tests", needsCollabChecks(["src/bootstrap/main.ts"]), false);
+eq("a mixed change still runs every affected check", [needsChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsCollabChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsDesktopChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"])], [true, true, true]);
 
 const repo = mkdtempSync(join(tmpdir(), "splitpage-ci-changes-"));
 const git = (...args) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, encoding: "utf8" }).stdout.trim();

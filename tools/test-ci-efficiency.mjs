@@ -12,7 +12,8 @@ const steps = ci.jobs.checks.steps;
 const appSteps = ["Build index.html and stamp sw.js", "sw.js is committed with the current VERSION stamp", "Select persistent Chromium cache", "Install Chromium", "Pick this runner's port block", "Browser suites 01 (core) and 52 (content security policy)", "Browser suites for save, typing, undo and export"];
 assert.equal(ci.jobs.changes.outputs.app, "${{ steps.classify.outputs.app }}");
 assert.equal(ci.jobs.checks.if, "needs.changes.outputs.code == 'true'" + (ci.jobs.changes.outputs.tested ? " && needs.changes.outputs.tested != 'true'" : ""));
-assert.equal(ci.jobs.tests.if, ci.jobs.checks.if);
+assert.equal(ci.jobs.changes.outputs.root_tests, "${{ steps.classify.outputs.root_tests }}");
+assert.equal(ci.jobs.tests.if, "needs.changes.outputs.root_tests == 'true' && needs.changes.outputs.tested != 'true'");
 for (const name of appSteps) assert.equal(steps.find((s) => s.name === name)?.if, "needs.changes.outputs.app == 'true'", name);
 assert.equal(steps.find((s) => s.name === "Upload the built app")?.if, "needs.changes.outputs.app == 'true' && github.event_name == 'push'");
 for (const name of ["Lint", "Types", "Layers and dependencies", "No new comments"]) {

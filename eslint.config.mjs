@@ -11,7 +11,8 @@ const commentFree = [
   "src/features/**",
   "src/bootstrap/**",
   "src/legacy/**",
-  "tests/**"
+  "tests/**",
+  "prototypes/**"
 ];
 
 const issueRules = {
@@ -153,7 +154,7 @@ export default [
     files: typescriptFiles,
     languageOptions: {
       parserOptions: {
-        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json", "./tsconfig.desktop.json"],
+        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json", "./tsconfig.desktop.json", "./prototypes/collab/tsconfig.json"],
         tsconfigRootDir: import.meta.dirname
       }
     },

@@ -12,7 +12,7 @@ const RESOLVE_SUFFIXES = ["", ".ts", ".js", ".mjs", ".cjs", ".mts", ".cts", ".js
 const BUILTINS = new Set(builtinModules.flatMap((m) => [m, m.replace(/^node:/, "")]));
 
 export const MIGRATED_LAYERS = ["core", "application", "adapters", "features", "bootstrap"];
-const NON_PRODUCTION = ["tests", "tools", "other"];
+const NON_PRODUCTION = ["tests", "tools", "other", "prototypes"];
 
 const CORE_DEPENDENCIES = {
   "core/document": ["core/document"],
@@ -60,6 +60,7 @@ const BINDING_KINDS = new Set([
 ].map((name) => ts.SyntaxKind[name]));
 
 export function layerOf(path) {
+  if (path.startsWith("prototypes/")) return "prototypes";
   if (path.startsWith("src/test/") || path.startsWith("tests/") || /\.test\.[cm]?[jt]s$/.test(path)) return "tests";
   const core = /^src\/core\/([^/]+)\//.exec(path);
   if (core) return CORE_DEPENDENCIES[`core/${core[1]}`] ? `core/${core[1]}` : "core";
@@ -90,6 +91,8 @@ function isCore(layer) {
 
 export function layerAllows(source, target) {
   if (source === target) return true;
+  if (target === "prototypes") return false;
+  if (source === "prototypes") return isCore(target) || target === "shared";
   if (target === "tests") return ["tools", "other"].includes(source);
   if (isCore(source)) {
     if (target === "shared") return true;
@@ -529,7 +532,7 @@ export function analyzeScript(path, text) {
 }
 
 export function isAnalyzed(path) {
-  return isScript(path) && !EXCLUDED.some((re) => re.test(path)) && !/(^|\/)(eslint\.config|vitest\.config)\.[cm]?js$/.test(path);
+  return isScript(path) && !EXCLUDED.some((re) => re.test(path)) && !/^(eslint\.config|vitest\.config)\.[cm]?js$/.test(path);
 }
 
 export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {

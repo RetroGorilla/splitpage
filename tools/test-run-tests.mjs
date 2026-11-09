@@ -51,6 +51,12 @@ console.log("\ndiscover():\n");
 }
 
 {
+  const found = discover(["prototypes/collab/test/convergence.test.ts", "prototypes/collab/src/misplaced.test.ts"]);
+  eq("the collaboration package owns its test directory only", found.orphans, ["prototypes/collab/src/misplaced.test.ts"]);
+  eq("prototype tests stay out of the root test groups", found.groups.flatMap((g) => g.files), []);
+}
+
+{
   const found = discover(["src/test/a.test.mjs", "src/core/text/runs.ts", "tests/core/text/runs.test.ts"]);
   eq("tests under tests/ satisfy migrated source", groupRequired(found, "source"), false);
   eq("migrated source with no test anywhere requires the source group", groupRequired(discover(["src/test/a.test.mjs", "src/core/text/runs.ts"]), "source"), true);
@@ -340,7 +346,10 @@ function linkNodeModules(repo) {
 
 function typedRepo(files) {
   const repo = repoWith({ "package.json": '{ "type": "module" }\n', ...files });
-  for (const name of ["tsconfig.base.json", ...CONFIGS]) copyFileSync(join(REPO, name), join(repo, name));
+  for (const name of ["tsconfig.base.json", ...CONFIGS]) {
+    mkdirSync(dirname(join(repo, name)), { recursive: true });
+    copyFileSync(join(REPO, name), join(repo, name));
+  }
   const problem = linkNodeModules(repo);
   return problem ? { problem } : { repo };
 }
@@ -367,6 +376,14 @@ if (typed.problem && process.platform === "win32" && !process.env.CI) {
   const clean = checkTypes(repo);
   eq("clean core and test files pass", clean.code, 0);
   check("each config reports its own files", clean.out.includes("tsconfig.core.json: 1 files") && clean.out.includes("tsconfig.test.json: 1 files"), clean.out);
+
+  const prototype = join(repo, "prototypes/collab/test/probe.test.ts");
+  mkdirSync(dirname(prototype), { recursive: true });
+  writeFileSync(prototype, "const value: string = 1;\nexport { value };\n");
+  const invalidPrototype = checkTypes(repo);
+  eq("the root typecheck rejects a prototype type error", invalidPrototype.code, 1);
+  check("and names the prototype project", invalidPrototype.err.includes("prototypes/collab/tsconfig.json: 1 errors in 1 files"), invalidPrototype.err);
+  rmSync(prototype);
 
   writeFileSync(join(repo, "src/core/text/dom.ts"), "export const w = document.title;\n");
   const dom = checkTypes(repo);
