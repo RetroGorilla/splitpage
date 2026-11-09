@@ -266,12 +266,12 @@ sleep 200
 expect ov('.rd-target-label').classList.contains('is-right') === false
 
 # --- with shot scenes hidden, the target still measures the whole script -----
-jsclick #file-menu [data-file-action="toggle-hide-shot"]
+jsclick #hide-shot-toggle
 sleep 300
 expect document.getElementById('runtime-total').textContent == 1:35
 expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
 expect document.getElementById('runtime-chip').title.indexOf('still to film') !== -1
-jsclick #file-menu [data-file-action="toggle-hide-shot"]
+jsclick #hide-shot-toggle
 sleep 300
 
 # --- it goes out in the file --------------------------------------------------

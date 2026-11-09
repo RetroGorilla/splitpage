@@ -86,14 +86,14 @@ wait !__shown('findbar')
 key ctrl+alt KeyH
 wait __hideShot() === '0'
 
-# --- the command menu open: the native menu and the File menu item ---------
+# --- the command menu open: the native menu and the header switch ----------
 key ctrl KeyK
 wait __shown('cmdk')
 eval __toasts()
 eval D.runMenuCommand('toggle-hide-shot'); true
 wait __hideShot() === '1'
 expect __shown('cmdk')
-jsclick #file-menu [data-file-action="toggle-hide-shot"]
+jsclick #hide-shot-toggle
 wait __hideShot() === '0'
 expect __shown('cmdk')
 eval __toasts()
