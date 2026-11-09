@@ -90,7 +90,7 @@ test("seeded reference: 1800 replacements compare headings, text, beat identitie
       return live;
     }, reconcile: live => syncCommentAnchors(live, cells), record: () => { undo.noteEdit(); undo.flush(); } });
     h.session.adopt({});
-    const undo = createUndo({ held: h.session.held, runs: html => cells(String(html ?? "")), now: () => 1000, cleared: () => {} });
+    const undo = createUndo({ held: h.session.held, epoch: h.session.epoch, runs: html => cells(String(html ?? "")), now: () => 1000, cleared: () => {} });
     undo.adopt(h.session.held());
     const unroute = undo.routeReplays(h.session.replay, null);
     const before = observedFlowContent(h.session.held() as FlowDoc, doc, p);

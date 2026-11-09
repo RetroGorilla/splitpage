@@ -143,7 +143,7 @@ test("seeded flow: 240 documents × 16 operations preserve structure, outside te
         const h = harness(undefined, { entry: () => migratedThenSet(doc), reconcile: live => syncCommentAnchors(live, cells),
           record: () => { undo.noteEdit(); undo.flush(); } });
         h.session.adopt({});
-        const undo = createUndo({ held: h.session.held, runs: html => cells(String(html ?? "")), now: () => 1000, cleared: () => {} });
+        const undo = createUndo({ held: h.session.held, epoch: h.session.epoch, runs: html => cells(String(html ?? "")), now: () => 1000, cleared: () => {} });
         undo.adopt(h.session.held());
         const unroute = undo.routeReplays(h.session.replay, null);
         const before = content(h.session.held());
