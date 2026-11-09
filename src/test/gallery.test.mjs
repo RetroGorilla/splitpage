@@ -51,6 +51,22 @@ test("mergeStates keeps a video link removed after the other editor sets its thu
   }
 });
 
+test("mergeStates pairs unchanged pictures sharing a video before matching a changed thumbnail (#1278)", () => {
+  const link = { name: "shared.mp4", size: 3, poster: true };
+  const base = doc([{ imageRef: P1, imageLinks: [link], moreImages: [{ imageRef: P2, links: [link] }] }]);
+  const removed = structuredClone(base), changed = structuredClone(base);
+  removeGalleryLink(removed.rows[0], 1, videoLinkKey(link));
+  removeGalleryLink(removed.rows[0], 0, videoLinkKey(link));
+  changed.rows[0].moreImages[0].imageRef = P3;
+  for (const [mine, theirs] of [[removed, changed], [changed, removed]]) {
+    const result = mergeStates(base, mine, theirs);
+    assert.deepEqual(result.conflicts, []);
+    assert.equal(result.merged.rows[0].imageRef.sha256, P1.sha256);
+    assert.equal(result.merged.rows[0].imageLinks, undefined);
+    assert.deepEqual(result.merged.rows[0].moreImages, [{ imageRef: P3 }]);
+  }
+});
+
 test("migrateRows keeps a gallery, and makes it safe", () => {
   const s = doc([
     { imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }, { href: "javascript:alert(1)" }, { href: "https://youtu.be/abc" }, { name: "<b>take</b>.mp4", size: 12, extra: 1 }, "junk"],

@@ -120,6 +120,67 @@ for (const [shape, label] of ["original moved to primary", "second successor in 
   }
 });
 
+test("video removals (#1278, seeded differential): unchanged items sharing links are paired before thumbnail successors", () => {
+  const seen = { primary: 0, moved: 0, multiple: 0, ambiguous: 0, editedNeighbor: 0, exact: 0 };
+  const ambiguousShapes = { ancestors: 0, successors: 0 };
+  for (let seed = 1; seed <= 3000; seed++) {
+    const r = seeded(seed);
+    const video: VideoLink = r() < 0.5 ? { href: "https://example.test/shared/" + seed, poster: true } :
+      { name: "shared-" + seed + ".mp4", size: seed, poster: true };
+    const item = (n: number): GalleryItem => ({ imageRef: image(n), links: [copy(video)] });
+    const unchanged = Array.from({ length: Math.floor(r() * 4) }, (_, i) => item(10 + i));
+    const base: GallerySide = { imageRef: image(1), imageLinks: [copy(video)], moreImages: [item(2), ...unchanged] };
+    const changed = copy(base), removed = copy(base);
+    const successor = changed.moreImages?.[0] as GalleryItem;
+    successor.imageRef = image(3);
+    const moved = unchanged.length > 0 && r() < 0.5, ambiguous = r() < 0.25;
+    if (moved) {
+      changed.imageRef = image(10);
+      changed.moreImages = [successor, item(1), ...unchanged.slice(1)];
+    }
+    if (ambiguous) {
+      if (r() < 0.5) {
+        base.moreImages?.push(item(4));
+        removed.moreImages?.push(item(4));
+        ambiguousShapes.ancestors++;
+      } else {
+        changed.moreImages?.push(item(4));
+        ambiguousShapes.successors++;
+      }
+    }
+    const editedNeighbor = r() < 0.2;
+    if (editedNeighbor) changed.imageLinks = [{ ...video, duration: 17 }];
+    delete removed.imageLinks;
+    (removed.moreImages || []).forEach((it) => { delete it.links; });
+    if (r() < 0.5) changed.moreImages?.reverse();
+    if (r() < 0.5) removed.moreImages?.reverse();
+    for (const [mine, theirs] of [[changed, removed], [removed, changed]] as const) {
+      const before = JSON.stringify([base, mine, theirs]);
+      for (const field of ["imageLinks", "moreImages"]) {
+        const expected = baseMergeGalleryField(field, base, mine, theirs);
+        if (field === "moreImages" && !ambiguous && !editedNeighbor) {
+          for (const it of expected as GalleryItem[] || []) {
+            if (it.imageRef?.sha256 === image(3).sha256) delete it.links;
+          }
+        }
+        assert.deepEqual(currentMergeGalleryField(field, base, mine, theirs), expected,
+          "seed " + seed + ", moved " + moved + ", ambiguous " + ambiguous + ", edited neighbor " + editedNeighbor + ", field " + field + ", changed " + (mine === changed ? "mine" : "theirs"));
+      }
+      assert.equal(mergeGalleryThumbnailRemovals(base, mine, theirs), !ambiguous && !editedNeighbor,
+        "seed " + seed + ": the review follows the unambiguous leftover match");
+      assert.equal(JSON.stringify([base, mine, theirs]), before, "seed " + seed + ": inputs unchanged");
+    }
+    seen.primary += moved ? 0 : 1;
+    seen.moved += moved ? 1 : 0;
+    seen.multiple += unchanged.length > 1 ? 1 : 0;
+    seen.ambiguous += ambiguous ? 1 : 0;
+    seen.editedNeighbor += editedNeighbor ? 1 : 0;
+    seen.exact += unchanged.length === 0 && !ambiguous && !editedNeighbor ? 1 : 0;
+  }
+  for (const [what, n] of Object.entries(seen)) assert.ok(n > (what === "exact" ? 300 : what === "editedNeighbor" ? 400 : 500), what + " covered only " + n + " times");
+  for (const [what, n] of Object.entries(ambiguousShapes)) assert.ok(n > 200, what + " covered only " + n + " times");
+});
+
 test("video removals (#1278, seeded differential): main differs only for a removal against a thumbnail-only edit", () => {
   const seen = { approved: 0, reverse: 0, url: 0, file: 0, replace: 0, secondary: 0, wholeItem: 0, noBase: 0, head: 0, control: 0 };
   const changes = Array.from({ length: 14 }, () => 0);

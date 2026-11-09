@@ -705,21 +705,36 @@ function gallerySideItems(side: GallerySide): GalleryItem[] {
   return [first].concat(side.moreImages || []);
 }
 
-function thumbnailMatches(base: GalleryItem, candidate: GalleryItem): boolean {
-  return !!candidate.imageRef && base.imageRef?.sha256 !== candidate.imageRef.sha256 &&
-    (base.name || "") === (candidate.name || "") &&
+function galleryDetailsEqual(base: GalleryItem, candidate: GalleryItem): boolean {
+  return (base.name || "") === (candidate.name || "") &&
     JSON.stringify(base.annotation || null) === JSON.stringify(candidate.annotation || null) &&
     JSON.stringify(base.links || []) === JSON.stringify(candidate.links || []);
 }
 
+function galleryItemsUnchanged(base: GalleryItem, candidate: GalleryItem): boolean {
+  return galleryItemKey(base) === galleryItemKey(candidate) &&
+    base.imageRef?.width === candidate.imageRef?.width && base.imageRef?.height === candidate.imageRef?.height &&
+    base.imageRef?.mime === candidate.imageRef?.mime && galleryDetailsEqual(base, candidate);
+}
+
+function thumbnailMatches(base: GalleryItem, candidate: GalleryItem): boolean {
+  return !!candidate.imageRef && base.imageRef?.sha256 !== candidate.imageRef.sha256 && galleryDetailsEqual(base, candidate);
+}
+
 function thumbnailRemovals(base: GallerySide | null | undefined, side: GallerySide, other: GallerySide): Map<string, Set<string>> {
   const removed = new Map<string, Set<string>>();
-  const candidates = gallerySideItems(side);
+  const originals = base ? gallerySideItems(base) : [];
+  const candidates = gallerySideItems(side).filter(function (it) {
+    const at = originals.findIndex(function (bi) { return galleryItemsUnchanged(bi, it); });
+    if (at < 0) return true;
+    originals.splice(at, 1);
+    return false;
+  });
   const kept = new Set((other.imageLinks || []).map(videoLinkKey));
   (other.moreImages || []).forEach(function (it) { (it.links || []).forEach(function (l) { kept.add(videoLinkKey(l)); }); });
-  (side.moreImages || []).forEach(function (it) {
-    if (!it.imageRef || !(it.links || []).some(function (l) { return l.poster; })) return;
-    const ancestors = (base && base.moreImages || []).filter(function (bi) {
+  candidates.forEach(function (it) {
+    if (!(side.moreImages || []).includes(it) || !it.imageRef || !(it.links || []).some(function (l) { return l.poster; })) return;
+    const ancestors = originals.filter(function (bi) {
       return thumbnailMatches(bi, it);
     });
     const ancestor = ancestors[0];
