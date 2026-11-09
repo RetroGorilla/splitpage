@@ -1,4 +1,6 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { createBundle } from "./gallery.ts";
+import { currentHome } from "./location-owner.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { autosaveActions as autosaveDefinitions, fileMenuActions as definitions } from "../../features/file-menu/actions.ts";
@@ -54,6 +56,8 @@ export const stopFileMenuDropdownFeature = fileMenu.stop;
 
 export function fileMenuActions(): ActionDefinition[] {
   return definitions(fileMenu.owner, {
+    createBundle,
+    canCreateBundle: () => presence.running() && currentHome().kind === "file" && !!currentHome().handle,
     screen,
     desktop: presence.running,
     saves,

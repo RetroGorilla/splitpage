@@ -18,6 +18,7 @@
   box-shadow: var(--shadow);
   font-size: 13.5px;
 }
+.bundle-create-paths { max-height: 30vh; overflow: auto; overflow-wrap: anywhere; padding-inline-start: 24px; }
 .bundle-progress[hidden] { display: none; }
 .bundle-progress-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .bundle-progress-bar { flex: 0 0 96px; accent-color: var(--accent); }

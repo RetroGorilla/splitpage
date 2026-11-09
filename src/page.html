@@ -137,6 +137,7 @@
               <div class="menu-group-head" id="fm-g-export">Export</div>
               <button type="button" role="menuitem" class="mi" data-file-action="export" id="menu-export" data-keys="mod+e" title="PDF, Word, Markdown, a spreadsheet, a SplitShare, or part of the script"><svg class="mi-icon" aria-hidden="true"><use href="#i-export"/></svg><span class="mi-text"><span class="mi-label">Export…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="export-again" id="menu-export-again" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-repeat"/></svg><span class="mi-text"><span class="mi-label">Export again</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="create-bundle"><svg class="mi-icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="mi-text"><span class="mi-label">Create bundle…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="export-narration-docx" id="menu-export-narration"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Export narration</span></span></button>
               <div class="menu-hidden-actions" hidden></div>
             </div>
@@ -238,6 +239,11 @@
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
+  <div class="update-bar" id="bundle-outside-bar" hidden>
+    <span id="bundle-outside-text"></span>
+    <button type="button" class="update-bar-action" id="bundle-outside-create">Create bundle…</button>
+    <button type="button" class="update-bar-dismiss" id="bundle-outside-dismiss" title="Dismiss" aria-label="Dismiss">×</button>
+  </div>
   <div class="update-bar" id="desktop-app-bar" hidden>
     <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
     <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
@@ -703,6 +709,10 @@
       <h2 id="bundle-title">Add this file to the script's folder?</h2>
     </div>
     <p class="modal-hint" id="bundle-detail"></p>
+    <ul class="bundle-create-paths" id="bundle-create-paths" hidden></ul>
+    <p class="modal-hint" id="bundle-create-missing" hidden></p>
+    <p class="modal-hint" id="bundle-create-move" hidden></p>
+    <p class="modal-hint" id="bundle-create-warning" hidden></p>
     <div class="modal-footer">
       <span></span>
       <div class="modal-footer-actions">

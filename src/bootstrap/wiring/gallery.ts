@@ -20,7 +20,8 @@ import { cellEditing, pickPictureFor } from "./editor-owners.ts";
 import { preferences } from "./preferences-owner.ts";
 import { desktopVideo } from "./desktop-video.ts";
 import { presence } from "./ports/desktop-presence.ts";
-import { currentHome } from "./location-owner.ts";
+import { currentHome, locationStarted } from "./location-owner.ts";
+import { place } from "./ports/location.ts";
 
 const gallery = owned<GalleryMount>();
 
@@ -89,10 +90,12 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       bundles: {
         window: window,
         script: scriptOnDisk,
-        files: { bundle: videoFiles.bundle, move: videoFiles.move, cancelBundle: videoFiles.cancelBundle },
+        files: { bundle: videoFiles.bundle, move: videoFiles.move, cancelBundle: videoFiles.cancelBundle, movedPath: videoFiles.movedPath },
         carries: desktopVideo.onCarry,
         saves: { plan: desktopVideo.planSave, choose: desktopVideo.chooseSave },
         exports: { plan: desktopVideo.planExport, pick: desktopVideo.pickExport, run: desktopVideo.exportBundle },
+        create: desktopVideo,
+        place,
         notices: portNotices,
         ownership: portOwnership,
         undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
@@ -106,7 +109,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
 }
 
 function scriptOnDisk(): string | null {
-  if (!presence.running()) return null;
+  if (!presence.running() || !locationStarted()) return null;
   const home = currentHome();
   const handle = home.handle as { readonly _desktopId?: unknown; readonly name?: unknown } | null | undefined;
   return home.kind === "file" && handle && handle._desktopId && typeof handle.name === "string" && handle.name ? handle.name : null;
@@ -119,6 +122,10 @@ export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offe
 export function beginBundleSave(): ReturnType<GalleryVideoMount["beginSave"]> {
   const owner = video.owner();
   return owner ? owner.beginSave() : { drained: null, ask: () => Promise.resolve([]), end: () => {} };
+}
+
+export function createBundle(): Promise<void> {
+  return video.owner()?.createBundle() ?? Promise.resolve();
 }
 
 export function exportFilesPlan(body: string, script: unknown): ReturnType<GalleryVideoMount["exportPlan"]> {

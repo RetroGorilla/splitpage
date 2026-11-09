@@ -50,6 +50,17 @@ export const desktopVideo: DesktopVideo = {
     if (!presence.running() || !port || typeof port.moveVideoFile !== "function") return Promise.resolve(null);
     return Promise.resolve(port.moveVideoFile(token, job, onProgress));
   },
+  planCreate: async (paths) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.planCreateBundle !== "function") return null;
+    const answer = await port.planCreateBundle([...paths]);
+    return answer && answer.ok ? answer.plan : null;
+  },
+  bundlePath: (path, job, choice, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.bundlePath !== "function") return Promise.resolve(null);
+    return port.bundlePath(path, job, choice, onProgress);
+  },
   onCarry: (listener) => {
     const port = desktopPort();
     if (port && typeof port.onBundleCarry === "function") port.onBundleCarry(listener);

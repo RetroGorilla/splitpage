@@ -1660,6 +1660,7 @@ function buildMenu() {
     submenu: [
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuCommand("save") },
       { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
+      { label: "Create bundle…", click: () => sendMenuCommand("create-bundle") },
       { type: "separator" },
       { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
       { label: "Paste a script…", click: () => sendMenuCommand("paste") },

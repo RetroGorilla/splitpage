@@ -173,6 +173,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     thumbnailsAfterPaste: thumbnailsAfterPaste,
     thumbnailsOnBeatClick: thumbnailsOnBeatClick,
     offerAfterDrop: bundles.offerAfterDrop,
+    createBundle: bundles.createBundle,
     beginSave: bundles.beginSave,
     exportPlan: bundles.exportPlan,
     exportWithFiles: bundles.exportWithFiles,

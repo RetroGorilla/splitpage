@@ -7,6 +7,7 @@ export type DesktopVideoResult = DesktopIpcResult<"splitpage:video-file-open">;
 export type DesktopVideoThumbnail = DesktopIpcResult<"splitpage:video-thumbnail">;
 export type DesktopBundleCopy = DesktopIpcResult<"splitpage:bundle-file">;
 export type DesktopBundleMove = DesktopIpcResult<"splitpage:bundle-move">;
+export type CreateBundlePlan = Extract<DesktopIpcResult<"splitpage:bundle-create-plan">, { ok: true }>["plan"];
 export type DesktopBundleCarry = DesktopWireBundleCarryNote;
 export type DesktopBundleSavePlan = DesktopWireBundleSavePlan;
 export type BundleSaveChoice = "copy" | "link";
@@ -24,6 +25,8 @@ export interface DesktopVideo {
   readonly openBundled: (name: string) => Promise<DesktopVideoResult | null>;
   readonly bundle: (token: string, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy | null>;
   readonly move: (token: string, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleMove | null>;
+  readonly planCreate: (paths: readonly string[]) => Promise<CreateBundlePlan | null>;
+  readonly bundlePath: (path: string, job: string, choice: "copy" | "move", onProgress: BundleProgressListener) => Promise<DesktopBundleCopy | DesktopBundleMove | null>;
   readonly onCarry: (listener: (note: DesktopBundleCarry) => void) => void;
   readonly cancelBundle: (job: string) => void;
   readonly planSave: (handle: unknown, names: readonly string[]) => Promise<DesktopBundleSavePlan | null>;

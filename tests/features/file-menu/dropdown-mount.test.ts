@@ -272,6 +272,8 @@ test("the file menu's actions refuse while it is unmounted and reach the mounted
   const screen = fakeScreen();
   const registry = createActionRegistry();
   const stop = registerAll(registry, fileMenuActions(() => owner as FileMenuControls | null, {
+    createBundle: async () => { ran.push("create-bundle"); },
+    canCreateBundle: () => false,
     screen: screen.screen,
     desktop: () => false,
     saves: { busy: () => false },
@@ -280,7 +282,7 @@ test("the file menu's actions refuse while it is unmounted and reach the mounted
     openImport: () => { ran.push("paste"); }
   }));
   try {
-    assert.deepEqual(registry.list().map((definition) => definition.id), ["save", "save-as", "open", "close-file-menu", "new", "paste", "long-demo"]);
+    assert.deepEqual(registry.list().map((definition) => definition.id), ["save", "save-as", "open", "close-file-menu", "new", "paste", "long-demo", "create-bundle"]);
     for (const id of ["save", "save-as", "open", "new", "paste", "long-demo"]) assert.equal(registry.view(id, "menu")?.enabled, false, id);
     owner = startFileMenu(h.ports);
     owner.toggleFileMenu(true);

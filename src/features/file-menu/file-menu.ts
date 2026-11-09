@@ -114,6 +114,8 @@ function recentsSupported() {
 }
 
 function refreshFileMenu() {
+  const createBundle = document.querySelector<HTMLElement>('#file-menu [data-file-action="create-bundle"]');
+  if (createBundle) createBundle.hidden = !(ports as FileMenuDropdownPorts).desktop();
   const presentBrowser = el("menu-present-browser");
   if (presentBrowser) presentBrowser.hidden = !(ports as FileMenuDropdownPorts).canOpenPrompter.browser();
   const presentChromium = el("menu-present-chromium");

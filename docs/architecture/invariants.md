@@ -316,6 +316,8 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Replacement:** — (plan §8 keeps opaque file ids).
 - **Acceptance:** the checks pass after the desktop file service is extracted, and `ipc-table.test.mjs` refuses a path-shaped argument on every file channel.
 
+- **Create bundle exception (#260):** `splitpage:bundle-create-plan` inspects the document's path links with the same `openableVideoPath`, `ATTACHABLE_FILE` and regular-file checks as opening a path. It answers only those supplied paths, their sizes, existing bundled names and whether this tab already holds a matching session grant. Inspection and Copy never create grants. `splitpage:bundle-path` takes a source path, job id and Copy or Move; main derives the destination from the tab, validates Copy inside the existing bundle queue, and refuses Move without this tab's existing grant for that exact file stamp and folder realpath. Move reuses `moveIn` and its `guarded` checkpoints. Cancel and Quit anyway during validation stop before any copy or move is attempted. Tests: `desktop/test/bundle-move.test.mjs` records forbidden attempts, and `src/test/video-bundle-app.test.mjs` covers the first-save and reopen entry points.
+
 ### INV-35 — Every document has a valid id, and the seed has none
 
 - **Behaviour:** Every loaded document carries a `state.docId` matching `/^d[0-9a-f]{32}$/`. The seed, `#state-data` and the Standalone HTML export carry none. `SCHEMA_VERSION` was not bumped for it. A missing or invalid id is treated as unique, never as shared.

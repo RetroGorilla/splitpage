@@ -208,6 +208,51 @@ test("undoing a re-drop that moved a link's path opens the old path, not the fil
   h.owner.dispose();
 });
 
+test("a Create bundle move forgets the original's grant and preview, so an undone path link reaches main's missing-file fallback", async (t) => {
+  const tokens: string[] = [];
+  const paths: [string, number | undefined][] = [];
+  const revoked: string[] = [];
+  t.mock.method(URL, "createObjectURL", () => "blob:moved-original");
+  t.mock.method(URL, "revokeObjectURL", (url: string) => { revoked.push(url); });
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok", opens: () => true,
+    open: async (token) => { tokens.push(token); return { ok: false, code: "UNKNOWN" }; },
+    openPath: async (path, size) => { paths.push([path, size]); return { ok: true }; } } });
+  const link = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, link);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.owner.url(link), "blob:moved-original");
+  h.owner.movedPath("C:\\Elsewhere\\take.mp4");
+  assert.equal(h.owner.has(link), true, "moving another path keeps this file's grant and preview");
+  h.owner.movedPath("C:\\Drops\\take.mp4");
+  assert.equal(h.owner.has(link), false);
+  assert.deepEqual(revoked, ["blob:moved-original"]);
+  h.owner.openFile(link);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(tokens, [], "the revoked token is never tried");
+  assert.deepEqual(paths, [["C:\\Drops\\take.mp4", 5]]);
+  h.owner.dispose();
+});
+
+test("a grant that answers after a Create bundle move cannot restore the forgotten token", async () => {
+  let release: (token: string) => void = () => {};
+  const tokens: string[] = [];
+  const paths: string[] = [];
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: () => new Promise((resolve) => { release = resolve; }), opens: () => true,
+    open: async (token) => { tokens.push(token); return { ok: true }; },
+    openPath: async (path) => { paths.push(path); return { ok: true }; } } });
+  const link = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, link);
+  h.owner.movedPath("C:\\Drops\\take.mp4");
+  release("late-token");
+  await new Promise((resolve) => setImmediate(resolve));
+  h.owner.openFile(link);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(tokens, []);
+  assert.deepEqual(paths, ["C:\\Drops\\take.mp4"]);
+  assert.equal(h.owner.has(link), false);
+  h.owner.dispose();
+});
+
 test("a bundled link opens by its name in the script's folder, which main resolves, and never by a path", async () => {
   const names: string[] = [];
   const paths: string[] = [];

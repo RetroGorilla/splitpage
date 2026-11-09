@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type {
-  DesktopBundleCarry, DesktopBundleCopy, DesktopBundleExport, DesktopBundleExportPlan, DesktopBundleMove, DesktopBundleSavePlan
+  CreateBundlePlan, DesktopBundleCarry, DesktopBundleCopy, DesktopBundleExport, DesktopBundleExportPlan, DesktopBundleMove, DesktopBundleSavePlan
 } from "../../../src/application/media/desktop-video.ts";
 import type { UndoEntry, UndoState } from "../../../src/application/editing/undo/history.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -20,6 +20,9 @@ const DROP = { name: "take one.mp4", size: 9, path: "C:\\Drops\\take one.mp4" };
 const ENTRY = { steps: [] } as unknown as UndoEntry;
 
 interface Setup {
+  written?: boolean;
+  createPlan?: (paths: readonly string[]) => Promise<CreateBundlePlan | null>;
+  pathRun?: VideoBundlePorts["create"]["bundlePath"];
   script?: string | null;
   fold?: boolean;
   answer?: (link: VideoLink, job: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleCopy>;
@@ -32,12 +35,16 @@ interface Setup {
 }
 
 function setup(opts: Setup = {}) {
-  const at = { script: opts.script === undefined ? "Episode 12.splitpage" : opts.script };
+  const at = { script: opts.script === undefined ? "Episode 12.splitpage" : opts.script, written: opts.written !== false };
   let heard: ((note: DesktopBundleCarry) => void) | null = null;
-  document.body.innerHTML = '<div id="toast-host"></div>' + MARKUP;
+  document.body.innerHTML = '<div id="toast-host"></div>' + MARKUP + (/<div class="update-bar" id="bundle-outside-bar"[\s\S]*?<\/div>/.exec(PAGE)?.[0] ?? "");
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ name: DROP.name, size: DROP.size, location: { kind: "path", path: DROP.path }, poster: true }] }] }, fakeMigration().ports);
   const notices = fakeNotices();
   const ownership = fakeOwnership();
+  const reader = fakeDocument(doc);
+  const placeListeners = new Set<(change: "home" | "writtenOut") => void>();
+  const pathCalls: { path: string; job: string; choice: string }[] = [];
+  const forgotten: string[] = [];
   const calls: { link: VideoLink; job: string }[] = [];
   const moves: { link: VideoLink; job: string }[] = [];
   const cancels: string[] = [];
@@ -47,9 +54,18 @@ function setup(opts: Setup = {}) {
   const choices: { handle: unknown; choice: string }[] = [];
   const exportCalls: unknown[][] = [];
   const ports: VideoBundlePorts = {
+    create: {
+      planCreate: opts.createPlan ?? (async () => null),
+      bundlePath: (path, job, choice, progress) => {
+        pathCalls.push({ path, job, choice });
+        return opts.pathRun ? opts.pathRun(path, job, choice, progress) : Promise.resolve({ ok: true, name: "take one.mp4" });
+      }
+    },
+    place: { writtenOut: () => at.written, onChange: (listener) => { placeListeners.add(listener); return () => { placeListeners.delete(listener); }; } },
     window: window,
     script: () => at.script,
     files: {
+      movedPath: (path) => { forgotten.push(path); },
       bundle: (link, job, onProgress) => {
         calls.push({ link, job });
         return opts.answer ? opts.answer(link, job, onProgress) : Promise.resolve({ ok: true, name: "take one (2).mp4" });
@@ -83,7 +99,7 @@ function setup(opts: Setup = {}) {
     notices: notices.notices,
     ownership: ownership.ownership,
     undo: { fold: (entry, _touches, change) => { folds.push(entry); return opts.fold === false ? false : change(doc as unknown as UndoState); } },
-    document: fakeDocument(doc).document,
+    document: reader.document,
     cells: { editGallery: (rowId, message, edit) => { edits.push(message); const row = doc.rows.find((r) => r.id === rowId); return !!row && !!edit(row); } },
     viewer: { refresh: () => {} }
   };
@@ -93,10 +109,150 @@ function setup(opts: Setup = {}) {
     assert.ok(heard, "the feature listens for carries from main");
     heard(note);
   };
-  return { at, doc, notices, ownership, calls, moves, cancels, carry, folds, edits, plans, choices, exportCalls, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
+  return { at, doc, notices, ownership, calls, moves, cancels, carry, folds, edits, plans, choices, exportCalls, owner, el, pathCalls, forgotten,
+    firstSave: () => { at.script = "Episode 12.splitpage"; at.written = true; placeListeners.forEach((listener) => listener("writtenOut")); },
+    reopen: () => { ownership.replace(); reader.replace(doc); },
+    location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+const CREATE_PLAN: CreateBundlePlan = { files: [{ path: DROP.path, size: 1288490189, move: false }], missing: 2, bundled: [] };
+
+test("Create bundle on open shows a dismissible bar; the dialog lists full paths, size and missing count, with Copy only for document paths", async () => {
+  const h = setup({ createPlan: async () => CREATE_PLAN });
+  await settle();
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.equal(h.el("bundle-outside-bar").hidden, false);
+  assert.equal(h.el("bundle-outside-text").textContent, "1 file is outside this script's folder.");
+  h.el("bundle-outside-dismiss").click();
+  assert.equal(h.el("bundle-outside-bar").hidden, true);
+  await h.owner.createBundle();
+  assert.equal(h.el("bundle-title").textContent, "Create bundle?");
+  assert.equal(h.el("bundle-detail").textContent, "This script links 1 file outside “Episode 12 files” (1.2 GB). Copy or move them into that folder, next to the script, so they open wherever the script goes.");
+  assert.deepEqual([...h.el("bundle-create-paths").children].map((n) => n.textContent), [DROP.path]);
+  assert.equal(h.el("bundle-create-missing").textContent, "2 more can't be found, so they stay as they are.");
+  assert.equal(h.el("bundle-create-move").textContent, "Move is only offered for files you added since Splitpage started. To move these, copy them, then delete the originals yourself.");
+  assert.equal(h.el("bundle-create-warning").hidden, false);
+  assert.equal(h.el("bundle-move").hidden, true);
+  assert.equal(h.el("bundle-accept").textContent, "Copy (1.2 GB)");
+  assert.equal(document.activeElement, h.el("bundle-accept"));
+  h.el("bundle-move").click();
+  await settle();
+  assert.deepEqual(h.pathCalls, [], "even a forced hidden Move click never submits a document path");
+  assert.deepEqual(h.moves, []);
+  h.reopen();
+  await settle();
+  assert.equal(h.el("bundle-outside-bar").hidden, false, "dismissal lasts only until reopen");
+  h.owner.dispose();
+  assert.equal(h.el("bundle-outside-bar").hidden, true);
+});
+
+test("Create bundle after the first save waits for the landed save, offers granted Move, and relinks every use of one path with one job", async () => {
+  const h = setup({ script: null, written: false, createPlan: async () => ({ ...CREATE_PLAN, files: [{ path: DROP.path, size: 9, move: true }] }),
+    pathRun: async (_path, _job, _choice, progress) => { progress({ done: 9, total: 9 }); return { ok: true, name: "take one.mp4", outcome: "moved" }; } });
+  const row = h.doc.rows[0];
+  assert.ok(row);
+  h.doc.rows.push({ ...row, id: "r2", imageLinks: [{ name: DROP.name, size: DROP.size, location: { kind: "path", path: DROP.path } }] });
+  await settle();
+  const saving = h.owner.beginSave();
+  h.firstSave();
+  await settle();
+  assert.equal(h.el("bundle-modal").hidden, true, "nothing opens while save completion still owns its window");
+  saving.end();
+  await settle();
+  assert.equal(h.el("bundle-modal").hidden, false);
+  assert.equal(h.el("bundle-move").hidden, false);
+  assert.equal(h.el("bundle-move").textContent, "Move");
+  h.el("bundle-move").click();
+  await settle();
+  assert.deepEqual(h.pathCalls.map((c) => [c.path, c.choice]), [[DROP.path, "move"]]);
+  assert.deepEqual(h.forgotten, [DROP.path]);
+  for (const r of h.doc.rows) assert.deepEqual(rowSlots(r)[0]?.links[0]?.location, { kind: "bundled", name: "take one.mp4" });
+  assert.ok(h.notices.shown.some((n) => n.message === "Moved 1 file to “Episode 12 files”."));
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.moves, [], "Create bundle uses main's path channel, never a renderer-generated grant");
+  h.owner.dispose();
+});
+
+test("Create bundle copies through the progress panel, Hide and Cancel, and failed copies keep their path links", async () => {
+  let finish: ((result: DesktopBundleCopy) => void) | undefined;
+  let progress: ((p: { done: number; total: number }) => void) | undefined;
+  const h = setup({ createPlan: async () => CREATE_PLAN,
+    pathRun: (_path, _job, _choice, report) => { progress = report; return new Promise((resolve) => { finish = resolve; }); } });
+  await settle();
+  await h.owner.createBundle();
+  h.el("bundle-accept").click();
+  assert.ok(progress && finish);
+  progress({ done: 3, total: 9 });
+  assert.match(h.el("bundle-progress-text").textContent || "", /Copying.*33%/);
+  h.el("bundle-hide").click();
+  assert.equal(h.el("bundle-indicator").hidden, false);
+  h.el("bundle-indicator").click();
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, [h.pathCalls[0]?.job]);
+  finish({ ok: false, code: "CANCELLED" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  assert.equal(h.el("bundle-progress").hidden, true);
+  await h.owner.createBundle();
+  h.el("bundle-accept").click();
+  finish({ ok: false, code: "FAILED" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  assert.ok(h.notices.shown.some((n) => n.message === "1 file couldn't be copied, so it links to where it is."));
+  h.owner.dispose();
+});
+
+test("an old Create bundle plan never opens over a replaced document or survives disposal", async () => {
+  const finishes: ((plan: CreateBundlePlan) => void)[] = [];
+  const h = setup({ createPlan: () => new Promise((resolve) => { finishes.push(resolve); }) });
+  await settle();
+  const open = h.owner.createBundle();
+  h.reopen();
+  finishes.splice(0).forEach((finish) => finish(CREATE_PLAN));
+  await open;
+  assert.equal(h.el("bundle-modal").hidden, true);
+  await settle();
+  h.owner.dispose();
+  finishes.splice(0).forEach((finish) => finish(CREATE_PLAN));
+  await settle();
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.equal(h.el("bundle-outside-bar").hidden, true);
+  assert.deepEqual(h.pathCalls, []);
+});
+
+test("Create bundle leaves mixed grants as Copy or Leave, counts each path once, and never turns inspection into a transfer", async () => {
+  let inspected: readonly string[] = [];
+  const h = setup({ createPlan: async (paths) => {
+    inspected = paths;
+    return { files: [{ path: DROP.path, size: 9, move: true }, { path: "C:\\Drops\\other.pdf", size: 12, move: false }], bundled: [], missing: 0 };
+  } });
+  const row = h.doc.rows[0];
+  assert.ok(row);
+  h.doc.rows.push({ ...row, id: "r2" });
+  await settle();
+  await h.owner.createBundle();
+  assert.deepEqual(inspected, [DROP.path], "duplicate references do not inflate main's plan");
+  assert.equal(h.el("bundle-move").hidden, true, "one ungranted file rules out a Move answer for the whole list");
+  assert.equal(h.el("bundle-create-missing").hidden, true);
+  assert.equal(h.el("bundle-create-warning").hidden, true);
+  h.el("bundle-decline").click();
+  assert.deepEqual(h.pathCalls, []);
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  h.owner.dispose();
+});
+
+test("a path already inside the folder becomes a bundled name on inspection, without any copy or move", async () => {
+  const h = setup({ createPlan: async () => ({ files: [], bundled: [{ path: DROP.path, name: "take one.mp4" }], missing: 0 }) });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "bundled", name: "take one.mp4" });
+  assert.equal(h.el("bundle-outside-bar").hidden, true);
+  assert.deepEqual(h.pathCalls, []);
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.moves, []);
+  h.owner.dispose();
+});
 
 test("the page carries the prompt and the progress panel", () => {
   assert.ok(MARKUP.includes('id="bundle-accept"') && MARKUP.includes('id="bundle-move"') && MARKUP.includes('id="bundle-decline"') &&

@@ -44,6 +44,11 @@ export interface DesktopWireBundleProgress {
 }
 export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
 export type DesktopWireBundleMove = { ok: true; name: string; outcome: "moved" | "kept" | "changed" } | DesktopWireFailure;
+export interface DesktopWireCreateBundlePlan {
+  readonly files: readonly { readonly path: string; readonly size: number; readonly move: boolean }[];
+  readonly bundled: readonly { readonly path: string; readonly name: string }[];
+  readonly missing: number;
+}
 export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; missing: number } | (DesktopWireFailure & { name?: string; copied?: number; left?: number });
 export interface DesktopWireBundleRefusal {
   reason: "clash" | "failed" | "cancelled" | "unlinkable" | "missing";
@@ -295,6 +300,8 @@ export interface DesktopIpcContract {
   "splitpage:video-path-open": DesktopChannelCall<[string, number?], { ok: true } | DesktopWireFailure>;
   "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
   "splitpage:bundle-move": DesktopChannelCall<[string, string], DesktopWireBundleMove>;
+  "splitpage:bundle-create-plan": DesktopChannelCall<[string[]], { ok: true; plan: DesktopWireCreateBundlePlan } | DesktopWireFailure>;
+  "splitpage:bundle-path": DesktopChannelCall<[string, string, string], DesktopWireBundleCopy | DesktopWireBundleMove>;
   "splitpage:bundle-carry": DesktopChannelCall<[DesktopWireBundleCarryNote], void>;
   "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;  "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
   "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
