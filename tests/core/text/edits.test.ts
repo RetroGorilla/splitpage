@@ -327,7 +327,12 @@ test("a range with an end inside a surrogate pair grows to take the whole charac
         const tag = replaceWithTag(cell, p, q, "w" + GRIN, "t:prop:W");
         wholeCodePoints(tag.cell, "replaceWithTag " + where);
         assert.deepEqual(tag, replaceWithTag(cell, lo, hi, "w" + GRIN, "t:prop:W"), "replaceWithTag " + where);
-        assert.equal(tag.end, lo + 3, "replaceWithTag " + where);
+        if (sliceCell(cell, lo, hi).some(function (r) { return !!r.marks.tag; })) {
+          assert.deepEqual(tag.cell, normalizeCell(cell), "protected tag replacement " + where);
+          assert.equal(tag.end, hi, "refused replaceWithTag " + where);
+        } else {
+          assert.equal(tag.end, lo + 3, "replaceWithTag " + where);
+        }
         const key = replaceWithBrollKey(cell, q, p, "bs9", "B-roll:");
         wholeCodePoints(key.cell, "replaceWithBrollKey " + where);
         assert.deepEqual(key, replaceWithBrollKey(cell, lo, hi, "bs9", "B-roll:"), "replaceWithBrollKey " + where);

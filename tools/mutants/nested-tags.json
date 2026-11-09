@@ -6,6 +6,24 @@
   ],
   "mutants": [
     {
+      "label": "undo-ignores-tag-path-conflicts",
+      "file": "src/application/editing/undo/history.ts",
+      "find": "if (r.conflict || r.markConflicts) return null;",
+      "replace": "if (r.conflict) return null;"
+    },
+    {
+      "label": "tag-placement-allows-crossings",
+      "file": "src/core/text/edits.ts",
+      "find": "if (!containsTag && !insideTag) return null;",
+      "replace": ""
+    },
+    {
+      "label": "tag-wrapping-erases-enclosed-labels",
+      "file": "src/core/text/edits.ts",
+      "find": "[...path.slice(0, depth), value as string, ...path.slice(depth)]",
+      "replace": "[value as string]"
+    },
+    {
       "label": "decode-keeps-only-inner",
       "file": "src/adapters/richtext/decode.ts",
       "find": "if (marks.tag) next.innerTags = (marks.innerTags || []).concat(id);",

@@ -104,6 +104,36 @@ test("nested label removal is an undo step; undo and redo survive an independent
   assert.equal(doc.rows[1].audioText, "Remote end");
 });
 
+test("undo refuses restoring an inner label over a later outer-label removal, changing nothing", () => {
+  const before = fixture(), doc = structuredClone(before), history = createUndoHistory(fromHtml);
+  doc.rows[0].visualText = toHtml(retag(fromHtml(nested), "t:prop:Umbrella", null));
+  doc.title = "Recorded title";
+  history.record(diffStates(before, doc), 1000);
+  doc.rows[0].visualText = toHtml(retag(fromHtml(doc.rows[0].visualText), "t:sound:Rain on umbrella", null));
+  doc.rows[1].audioText = "Later edit";
+  const live = structuredClone(doc);
+  const replay = history.undo(doc);
+  assert.equal(replay.ok, false);
+  assert.equal(replay.reason, "that beat's text has changed since");
+  assert.deepEqual(doc, live);
+  assert.deepEqual(history.sizes(), { undo: 0, redo: 0 });
+});
+
+test("redo refuses removing an inner label over a later outer-label removal, changing nothing", () => {
+  const before = fixture(), doc = structuredClone(before), history = createUndoHistory(fromHtml);
+  doc.rows[0].visualText = toHtml(retag(fromHtml(nested), "t:prop:Umbrella", null));
+  doc.title = "Recorded title";
+  history.record(diffStates(before, doc), 1000);
+  assert.equal(history.undo(doc).ok, true);
+  doc.rows[0].visualText = toHtml(retag(fromHtml(nested), "t:sound:Rain on umbrella", null));
+  const live = structuredClone(doc);
+  const replay = history.redo(doc);
+  assert.equal(replay.ok, false);
+  assert.equal(replay.reason, "that beat's text has changed since");
+  assert.deepEqual(doc, live);
+  assert.deepEqual(history.sizes(), { undo: 0, redo: 0 });
+});
+
 test("merge preserves nested records when one is renamed and other words change independently", async () => {
   const base = fixture(), mine = structuredClone(base), theirs = structuredClone(base);
   mine.productionTags[1].name = "Blue umbrella";
