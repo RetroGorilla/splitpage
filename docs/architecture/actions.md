@@ -35,7 +35,7 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 
 | Action | Difference kept from 3.1 |
 | --- | --- |
-| `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
+| `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the native menu does |
 | `find` | With the bar already open, Ctrl+F only puts the focus back in it and selects its query; the File menu, the command menu and the native Edit menu open the bar again, taking the selected words as the query (`run` looks at its source; `286-find-from-every-surface.txt`) |
 | `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source). The header's Search button is refused without a reason, so nothing is shown, as `openCommandMenu()` returned quietly in 3.1 |
 
@@ -87,7 +87,7 @@ and both the menu's painting and the action's availability call it:
 | State | Function |
 | --- | --- |
 | Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.ts` |
-| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `appDataImportShown()`, `src/features/desktop/desktop.ts` |
+| Present in browser, Import app data | `canOpenPrompterInBrowser()`, `src/adapters/desktop/desktop-port.ts`, controls the Present dropdown and command-menu entry; `importShown`, `src/bootstrap/wiring/settings.ts`, controls Import in Settings ▸ Data |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
@@ -100,15 +100,15 @@ menu follow it.
 
 `visible: false` only keeps an action out of the command menu. It still runs
 from a surface that has it: the desktop app's native menu reaches items the
-File menu hides (Present in browser), and their handlers explain
+browser app hides (Present in browser), and their handlers explain
 the refusal themselves. Export again is never listed (its availability always
 says `visible: false`), because the 3.1 command menu did not offer it.
 
 ## The command menu
 
 `src/features/command-menu/command-menu.ts` lists `appActions.list()` each time it renders, with
-nothing cached between openings, plus the export formats, which are not
-actions until milestone 5's format registry. `LIST_BEFORE_EXPORTS` and
+nothing cached between openings, plus the export formats from the separate
+export registry (`src/application/export/registry.ts`). `LIST_BEFORE_EXPORTS` and
 `LIST_AFTER_EXPORTS` there keep the 3.1 order. An action it does not name is listed after the named ones, in the
 order it was registered, under its own `group`; a group the command menu does
 not know is listed after the known groups. So an action registered anywhere
@@ -191,7 +191,7 @@ started over one of them.
 | Action | Refused under |
 | --- | --- |
 | `save`, `save-as` | still loading, a dialog, the command menu |
-| `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
+| `prompter-open-in-browser` | still loading, a dialog, the command menu (then its own state) |
 | `open`, `export` | still loading, every overlay |
 | `command-menu` | still loading, every overlay but itself |
 | `find` | still loading, every overlay but the command menu |
@@ -204,7 +204,7 @@ started over one of them.
 | `paste`, `gdoc-import` | still loading, a dialog, the tour |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
 | `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400) |
-| The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
+| Export formats (export registry, not action registry) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide filmed beats still act in the writer, Present, the
 shot list and the tour, and Find, Hide filmed beats and Search commands behind
@@ -343,8 +343,8 @@ native menu cannot grey an item out, and in 3.1 it did nothing there, so
 the action (`src/features/file-menu/actions.ts`) gives such a refusal no reason for that source, and the native path does
 nothing at all for a refusal without one; a dialog or other overlay in front
 of a greyed-out item is still named, as it is checked first. The export
-formats are not actions yet (milestone 5) and keep the File menu item's own
-dispatch, but the runner refuses one under a dialog or the command menu
+formats use the export registry and the local-file controller's dispatch,
+but the runner refuses one under a dialog or the command menu
 first, through the presenter the bootstrap gives it, so a refused format is
 neither run nor remembered for Export again. Before that check it runs the
 `onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `src/features/file-menu/local-files.ts`),
@@ -368,8 +368,8 @@ open when a command runs from the keyboard or a menu.
 
 | Action id | Surfaces | Old owner |
 | --- | --- | --- |
-| `toggle-hide-shot` | File menu, command menu, `mod+alt+h` (Shift held too, as before) | `18-local-files.js` dispatch, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
-| `toggle-rundown-min` | File menu, command menu, the rundown's own button | `18-local-files.js`, `18d-command-menu.js`, `05f-rundown.js` click listener |
+| `toggle-hide-shot` | The header's Hide filmed beats switch, command menu, `mod+alt+h` (Shift held too, as before) | `mountHideShotSwitch` in `src/features/rows/hide-shot.ts`, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
+| `toggle-rundown-min` | The rundown's own Minimise rundown / Show rundown button, command menu, desktop menu | `05f-rundown.js` click listener, `18d-command-menu.js` |
 | `history` | File menu, command menu | `18-local-files.js`, `18d-command-menu.js` |
 | `find` | File menu, command menu, `mod+f` (Shift or Alt held too, as before) | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
 | `export` | File menu, command menu, `mod+e` | `18-local-files.js`, `18d-command-menu.js`, an `18c-export-dialog.js` keydown listener |
@@ -380,16 +380,18 @@ open when a command runs from the keyboard or a menu.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
-| `settings`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Help and Tour also from the Settings dialog's and the setup wizard's buttons; Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
-| `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
+| `settings`, `help`, `tour`, `setup` | File menu (Settings, and Help ▸ User guide, Take the tour, Getting started…), command menu, desktop menu (F1 for the user guide); Help and Tour also from the Settings dialog's and the setup wizard's buttons; Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
+| `about`, `tagging-help` | File menu (Help ▸), command menu, desktop menu; Tagging reference also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
+| `export-app-data`, `import-app-data` | Settings ▸ Data, command menu (since #1163 no longer the File menu) | `20s-settings.js` direct calls, `18d-command-menu.js` |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
 | `new`, `paste`, `gdoc-import`, `autosave`, `export-again` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
 | `set-target` | Command menu | `18d-command-menu.js` |
-| `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |
+| `prompter-open-in-browser` | The dropdown beside Present, command menu, desktop menu (Ctrl+Shift+P) | `mountPrompterOpen` in `src/features/prompter/mount.ts`, `18d-command-menu.js` |
 | `script-zoom-in`, `script-zoom-out`, `script-zoom-reset` | Desktop View menu, Ctrl + "+" / "-" / "0" (not listed in the command menu) | `20f-desktop.js` via `runScriptZoomCommand`, the `05s-script-zoom.js` keydown listener |
 
-The File menu's export formats (`export-pdf` and the rest) still dispatch in
-`18-local-files.js`; milestone 5's format registry takes them over. The New
+The export formats (`export-pdf` and the rest) dispatch through
+`src/features/file-menu/local-files.ts` to the export registry wired in
+`src/bootstrap/wiring/export-registry.ts`. The New
 Tab page's Tour runs the `tour` action (source `button`; it cannot be
 refused, so nothing changed for it). Its other buttons are different actions (a blank new script, a
 starter, paste as a new script, open into this tab) and stay its own.

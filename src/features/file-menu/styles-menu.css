@@ -29,11 +29,14 @@
     opacity: 1;
     transform: translateY(0);
     transform-origin: top left;
-    transition: opacity var(--dur-enter) var(--ease-enter),
-                transform var(--dur-enter) var(--ease-enter);
+    transition: opacity var(--dur-fast) var(--ease-standard),
+                transform var(--dur-fast) var(--ease-enter);
   }
   @starting-style {
-    .menu:not([hidden]) { opacity: 0; transform: translateY(-4px); }
+    .menu:not([hidden]) { opacity: 0; transform: translateY(-3px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .menu { transition: none; }
   }
   .menu:focus { outline: none; }
   .menu-head { display: none; }
@@ -228,23 +231,13 @@
   .menu-foot {
     flex: none;
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+    flex-direction: column;
+    max-height: 50vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: var(--space-4);
     border-top: 1px solid var(--border);
   }
-  .mi.mi-foot {
-    width: auto;
-    min-height: 28px;
-    gap: var(--space-6);
-    padding: var(--space-4) var(--space-8);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--text-dim);
-  }
-  .mi-foot .mi-icon { width: 16px; height: 16px; }
-  .mi-foot:hover:not(:disabled) { color: var(--text); }
-  .mi-foot .mi-keys { margin-left: var(--space-2); }
   @media (max-width: 760px) and (hover: none) {
     .mi-keys { display: none; }
   }

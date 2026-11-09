@@ -24,6 +24,72 @@ const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts")
 
 after(closeApp);
 
+test("Create bundle follows a first landed save, the File menu and reopen, with links saved by the normal save path", async () => {
+  setAutoSaveEnabled(false);
+  const fake = window.__desktopTest.makeFakeBackend();
+  const calls = [];
+  let granted = true;
+  fake.planCreateBundle = async (paths) => ({ ok: true, plan: {
+    files: paths.includes(DROP.path) ? [{ path: DROP.path, size: DROP.size, move: granted }] : [], bundled: [], missing: 0
+  } });
+  fake.bundlePath = async (path, job, choice, progress) => {
+    calls.push({ path, job, choice });
+    progress({ done: DROP.size, total: DROP.size });
+    return { ok: true, name: "take one.mp4", outcome: "moved" };
+  };
+  window.__desktopTest.setBackend(fake);
+  const modal = () => document.getElementById("bundle-modal");
+  try {
+    homeModule.setHome("none");
+    homeModule.documentLocation().markWrittenOut(false);
+    loadTestDocument(script("Episode 12", ID("c")));
+    videoFiles.grant(new File([new Uint8Array(DROP.size)], DROP.name, { type: "video/mp4" }), LINK);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(videoFiles.has(LINK), true);
+    assert.equal(modal().hidden, true, "an unsaved script never asks");
+    const write = fake.writeFile;
+    let wrote = false;
+    fake.writeFile = async function (...args) {
+      assert.equal(modal().hidden, true, "the dialog never precedes the landed write");
+      const answer = await write.apply(this, args);
+      wrote = true;
+      return answer;
+    };
+    await saveDoc({});
+    assert.ok(wrote);
+    assert.ok(await until(() => !modal().hidden), "the real completion path opens Create bundle after the first save");
+    assert.equal(document.getElementById("bundle-title").textContent, "Create bundle?");
+    assert.equal(document.getElementById("bundle-move").hidden, false);
+    document.getElementById("bundle-decline").click();
+    await saveDoc({});
+    assert.equal(modal().hidden, true, "later ordinary saves do not ask again");
+    window.__desktopTest.runMenuCommand("create-bundle");
+    assert.ok(await until(() => !modal().hidden), "File > Create bundle reaches the same dialog");
+    document.getElementById("bundle-move").click();
+    assert.ok(await until(() => linkIn(currentDocument())?.kind === "bundled"));
+    assert.deepEqual(calls.map((c) => [c.path, c.choice]), [[DROP.path, "move"]]);
+    assert.equal(videoFiles.has(LINK), false, "the old session file is forgotten along with main's grant");
+    videoFiles.openFile(LINK);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(fake._videoPathOpens, [DROP.path], "restoring the old path can reach main's same-name-and-size fallback");
+    assert.equal(unsavedChanges(), true, "relinking is a document edit awaiting the normal save");
+    await saveDoc({});
+    assert.equal(unsavedChanges(), false);
+    const saved = await homeModule.currentHome().handle.getFile();
+    assert.ok(bundledNamesInProject(await saved.text()).includes("take one.mp4"));
+    granted = false;
+    await openFromDesktop(fake, script("Old script", ID("e")), "Old script.splitpage");
+    assert.ok(await until(() => !document.getElementById("bundle-outside-bar").hidden));
+    document.getElementById("bundle-outside-create").click();
+    assert.ok(await until(() => !modal().hidden));
+    assert.equal(document.getElementById("bundle-move").hidden, true, "a reopened document gets no Move from its path");
+    document.getElementById("bundle-decline").click();
+  } finally {
+    window.__desktopTest.restoreBackend();
+    document.getElementById("toast-host").replaceChildren();
+  }
+});
+
 const ID = (letter) => "d" + letter.repeat(32);
 const DROP = { name: "take one.mp4", size: 9, path: "C:\\Drops\\take one.mp4" };
 const LINK = { name: DROP.name, size: DROP.size, location: { kind: "path", path: DROP.path }, poster: true };

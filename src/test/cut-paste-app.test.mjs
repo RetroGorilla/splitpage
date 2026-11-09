@@ -1,6 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -139,6 +140,64 @@ test("a copy writes the words and their formatting, prevents the default and cha
   assert.equal(got.out.store["text/html"], "bravo charlie", "a copy carries no comment mark and no cut marker");
   assert.deepEqual({ seq: got.seq, generation: got.generation, heard: got.heard, undo: got.undo }, { seq: 0, generation: 0, heard: [], undo: 0 });
   assert.equal(JSON.stringify(currentDocument()), before);
+});
+
+test("nested labels survive real cell copy, paste, undo, redo and cut without exposing editable tag text", async () => {
+  const prop = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Umbrella" contenteditable="false">umbrella</span>';
+  const nested = '<span class="tag-anchor" data-tag-cat="sound" data-tag-name="Rain on umbrella" contenteditable="false">rain on ' + prop + '</span>';
+  const doc = fixture();
+  doc.rows[0].audioText = nested;
+  await open(doc);
+  const source = cellOf("r1", "audioText");
+  source.focus();
+  selectAll(source);
+  const copied = clip("copy", source);
+  assert.equal(copied.store["text/html"], nested);
+  assert.equal(copied.store["text/plain"], "rain on umbrella");
+  assert.equal(source.querySelectorAll('[contenteditable="false"]').length, 2);
+  const target = cellOf("r3", "audioText");
+  target.focus();
+  selectAll(target);
+  const pasted = record(() => clip("paste", target, copied.store));
+  assert.equal(pasted.undo, 1);
+  assert.equal(row("r3").audioText, nested);
+  assert.equal(undo().ok, true);
+  assert.equal(row("r3").audioText, "Three.");
+  assert.equal(redo().ok, true);
+  assert.equal(row("r3").audioText, nested);
+  const again = cellOf("r3", "audioText");
+  again.focus();
+  selectAll(again);
+  const cut = record(() => clip("cut", again));
+  assert.ok(cut.out.store["text/html"].includes(nested));
+  assert.equal(row("r3").audioText, "");
+  assert.equal(undo().ok, true);
+  assert.equal(row("r3").audioText, nested);
+});
+
+test("a real v0.3.0 tagged script opens directly and keeps protected tags and record metadata through paste and undo", async () => {
+  const bytes = readFileSync(new URL("./fixtures/splitpage-0.3.0-spot.splitpage", import.meta.url), "utf8");
+  const raw = JSON.parse(bytes);
+  await openDocument({ kind: "file", file: new File([bytes], "old-spot.splitpage"), handle: null, options: { skipSnapshot: true } });
+  flushEdits();
+  assert.equal(currentDocument().rows.length, raw.rows.length);
+  assert.deepEqual(currentDocument().productionTags, raw.productionTags);
+  const source = cellOf("r2", "visualText");
+  assert.equal(source.querySelector('.tag-anchor').getAttribute("contenteditable"), "false");
+  source.focus();
+  selectAll(source);
+  const copied = clip("copy", source);
+  assert.equal(copied.store["text/html"], raw.rows[1].visualText);
+  const target = cellOf("r6", "audioText");
+  target.focus();
+  selectAll(target);
+  assert.equal(record(() => clip("paste", target, copied.store)).undo, 1);
+  assert.equal(row("r6").audioText, raw.rows[1].visualText);
+  assert.equal(undo().ok, true);
+  assert.equal(row("r6").audioText, raw.rows[5].audioText);
+  assert.equal(redo().ok, true);
+  assert.equal(row("r6").audioText, raw.rows[1].visualText);
+  assert.deepEqual(currentDocument().productionTags, raw.productionTags);
 });
 
 test("a cut dirties once, stamps only the cut scene, and records one entry for the one cell", async () => {

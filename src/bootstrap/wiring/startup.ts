@@ -6,7 +6,7 @@ import type { MergedStates } from "../../core/merge-states.ts";
 import { connectStartup } from "../../application/startup-signal.ts";
 import { documentTransitions } from "./transition-owners.ts";
 import { suppressUnloadWarning } from "../startup/page-entry.ts";
-import { updateHideShotMenu } from "./hide-shot.ts";
+import { updateHideShotSwitch } from "./hide-shot.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { loadInitialState } from "../startup/document-entry.ts";
 import { heldDocument } from "./session-owner.ts";
@@ -54,7 +54,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
         if (!render) throw new Error("Rows rendering is not started yet");
         return render.renderFirstDraw();
       },
-      refreshChrome: [updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
+      refreshChrome: [updateAutoSaveMenu, updateHideShotSwitch, updateSaveStatus],
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
       resumeLastProject: (...args: Parameters<ReturnType<typeof localFilesOwner>["tryResumeLastProject"]>) => localFilesOwner().tryResumeLastProject(...args),

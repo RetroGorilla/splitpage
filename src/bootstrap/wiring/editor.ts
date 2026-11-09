@@ -530,7 +530,7 @@ function afterUndoApplied(steps: readonly unknown[]): void {
 
 export function onRootInput(e: RootInput): void {
   const target = e.target as Element | null;
-  const cellEl = target && target.classList && target.classList.contains("cell-editable") ? target : null;
+  const cellEl = target?.closest(".cell-editable");
   if (!cellEl) return;
   if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
   currentPlainTags()?.noteInput(cellEl);
@@ -642,7 +642,14 @@ const editorFocusPorts: EditorFocusPorts = {
     return edge;
   },
   typed: function (cellEl, data) { onRootInput({ target: cellEl, inputType: "insertText", data: data } as RootInput); },
-  focusedRow: function (rowId) { focusMemory().focusedRow(rowId); },
+  focusedRow: function (rowId) {
+    focusMemory().focusedRow(rowId);
+    document.querySelectorAll<HTMLElement>(".shoot-beat").forEach((cell) => {
+      cell.classList.toggle("is-current", cell.dataset.row === rowId);
+      if (cell.dataset.row === rowId) cell.setAttribute("aria-current", "true");
+      else cell.removeAttribute("aria-current");
+    });
+  },
   selectionChanged: function (active) {
     forgetStalePendingMarks();
     if (active && active.classList && active.classList.contains("cell-editable")) {
@@ -777,26 +784,32 @@ export function onRootKeydown(e: KeyboardEvent): void {
   const video = videoPopover.owner();
   if (video && video.keydown(e)) return;
   const target = e.target as Element | null;
-  const cellEl = target && target.classList && target.classList.contains("cell-editable") ? target : null;
+  const cellEl = target?.closest(".cell-editable");
   if (!cellEl) return;
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;
   if (currentWhoList()?.keydown(e, cellEl)) { hideTagGhost(); return; }
-  const plainTag = currentPlainTags();
-  if (plainTag && plainTag.isOpen(cellEl) && plainTagKeydown(e, plainTag, hideTagGhost)) return;
-  const ghost = shownTagGhost();
-  if (acceptGhostOnTab(e, !!ghost && ghost.cellEl === cellEl, acceptTagGhost)) return;
-  const suggestion = shownUntaggedSuggestion();
-  if (e.key === "Tab" && !shownTagGhost() && suggestion && suggestion.cellEl === cellEl) {
-    if (acceptUntaggedMention()) { e.preventDefault(); return; }
-  }
-  if (dismissesTagGhost(e.key)) {
-    hideTagGhost();
-  }
-  if (e.key === "Escape" && shownUntaggedSuggestion()) {
-    focusMemory().mutePrompt(cellEl);
-    hideUntaggedPrompt();
+  if (!e.isComposing && e.keyCode !== 229) {
+    const plainTag = currentPlainTags();
+    const ghost = shownTagGhost();
+    if (e.key === "Escape" && ghost?.cellEl === cellEl) {
+      e.preventDefault(); e.stopPropagation(); hideTagGhost(); return;
+    }
+    if (acceptGhostOnTab(e, ghost?.cellEl === cellEl, acceptTagGhost)) return;
+    if (plainTag && plainTag.isOpen(cellEl) && plainTagKeydown(e, plainTag, hideTagGhost)) return;
+    if (e.key === "Escape" && plainTag?.finishEditing()) { e.preventDefault(); e.stopPropagation(); return; }
+    const suggestion = shownUntaggedSuggestion();
+    if (e.key === "Tab" && !shownTagGhost() && suggestion && suggestion.cellEl === cellEl) {
+      if (acceptUntaggedMention()) { e.preventDefault(); return; }
+    }
+    if (dismissesTagGhost(e.key)) {
+      hideTagGhost();
+    }
+    if (e.key === "Escape" && shownUntaggedSuggestion()) {
+      focusMemory().mutePrompt(cellEl);
+      hideUntaggedPrompt();
+    }
   }
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {

@@ -20,6 +20,8 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _bundleCalls?: { token: string; job: string }[];
   _bundleAnswer?: Awaited<ReturnType<DesktopPort["bundleVideoFile"]>>;  _bundleCarry?: Parameters<DesktopPort["onBundleCarry"]>[0];
   _bundleCancels?: string[];
+  _moveCalls?: { token: string; job: string }[];
+  _moveAnswer?: Awaited<ReturnType<DesktopPort["moveVideoFile"]>>;
   _bundledOpens?: string[];
   _printed?: string[];
   _printAnswer?: Awaited<ReturnType<DesktopPort["printToPdf"]>>;
@@ -206,6 +208,15 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       if (onProgress) onProgress({ done: 1, total: 1 });
       return Promise.resolve(this._bundleAnswer || { ok: true, name: name });
     },
+    moveVideoFile: function (token: string, job: string, onProgress?: Parameters<DesktopPort["moveVideoFile"]>[2]) {
+      (this._moveCalls = this._moveCalls || []).push({ token, job });
+      const name = this._videoGrants && this._videoGrants[token];
+      if (typeof name !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+      if (onProgress) onProgress({ done: 1, total: 1 });
+      return Promise.resolve(this._moveAnswer || { ok: true, name: name, outcome: "moved" as const });
+    },
+    planCreateBundle: function () { return Promise.resolve({ ok: true as const, plan: { files: [], bundled: [], missing: 0 } }); },
+    bundlePath: function () { return Promise.resolve({ ok: false as const, code: "UNAVAILABLE" }); },
     onBundleCarry: function (cb: Parameters<DesktopPort["onBundleCarry"]>[0]) { this._bundleCarry = cb; },
     cancelBundle: function (job: string) { (this._bundleCancels = this._bundleCancels || []).push(job); },
     openBundledFile: function (name: string) {

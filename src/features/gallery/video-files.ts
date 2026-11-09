@@ -1,7 +1,7 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { isOtherFileLink, locatedVideoKey, normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
-import type { BundleProgressListener, DesktopBundleCopy, DesktopVideoResult } from "../../application/media/desktop-video.ts";
+import type { BundleProgressListener, DesktopBundleCopy, DesktopBundleMove, DesktopVideoResult } from "../../application/media/desktop-video.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
 import type { VideoFileMount, VideoFilePorts } from "./video-files-ports.ts";
@@ -11,6 +11,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
   let videoFileTokens: Record<string, string> = {};
   let sessionVideoFiles: Record<string, unknown> = {};
   let pendingGrants: Record<string, Promise<string | null>> = {};
+  let sessionVideoPaths: Record<string, string> = {};
   const sessionVideoUrls: Record<string, string> = {};
 
   function grantVideoFile(file: unknown, link: VideoLink): void {
@@ -18,6 +19,10 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     const l = normalizeVideoLink(link) || link;
     // why: a link that names where its file is may use only a grant from that place; one without keeps name-and-size
     const keys = l.location ? [videoLinkKey(l), locatedVideoKey(l)] : [videoLinkKey(l)];
+    keys.forEach((key) => {
+      if (l.location?.kind === "path") sessionVideoPaths[key] = l.location.path;
+      else Reflect.deleteProperty(sessionVideoPaths, key);
+    });
     if (file && typeof (file as { size?: unknown }).size === "number") {
       keys.forEach(function (key) {
         if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
@@ -31,7 +36,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     if (granting === null) return;
     const settled = Promise.resolve(granting).then(function (token: string | null) {
       if (disposed) return null;
-      if (typeof token === "string" && token) keys.forEach(function (key) { videoFileTokens[key] = token; });
+      if (typeof token === "string" && token) keys.forEach(function (key) { if (pendingGrants[key] === settled) videoFileTokens[key] = token; });
       return typeof token === "string" && token ? token : null;
     }, function () { return null; });
     keys.forEach(function (key) { pendingGrants[key] = settled; });
@@ -51,6 +56,50 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
         return res;
       });
     }).then(null, function (): DesktopBundleCopy { return { ok: false, code: "FAILED" }; });
+  }
+
+  function forgetToken(token: string): void {
+    Object.keys(videoFileTokens).forEach(function (key) {
+      if (videoFileTokens[key] !== token) return;
+      Reflect.deleteProperty(videoFileTokens, key);
+      Reflect.deleteProperty(pendingGrants, key);
+    });
+  }
+
+  function movedPath(path: string): void {
+    if (disposed) return;
+    const keys = Object.keys(sessionVideoPaths).filter((key) => sessionVideoPaths[key] === path);
+    keys.forEach((key) => {
+      if (sessionVideoUrls[key]) { try { URL.revokeObjectURL(sessionVideoUrls[key] as string); } catch { } }
+      Reflect.deleteProperty(sessionVideoUrls, key);
+      Reflect.deleteProperty(sessionVideoFiles, key);
+      Reflect.deleteProperty(sessionVideoPaths, key);
+      Reflect.deleteProperty(videoFileTokens, key);
+      Reflect.deleteProperty(pendingGrants, key);
+    });
+  }
+
+  function moveVideoFile(link: VideoLink, job: string, onProgress: BundleProgressListener): Promise<DesktopBundleMove> {
+    if (disposed) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
+    const key = locatedVideoKey(link);
+    const waiting = videoFileTokens[key] ? Promise.resolve(videoFileTokens[key] as string) : (pendingGrants[key] || Promise.resolve(null));
+    return waiting.then(function (token): Promise<DesktopBundleMove> | DesktopBundleMove {
+      if (disposed || !token) return { ok: false, code: "UNKNOWN" };
+      return Promise.resolve(ports.desktop.move(token, job, onProgress)).then(function (res): DesktopBundleMove {
+        if (!res) return { ok: false, code: "UNAVAILABLE" };
+        if (!res.ok || disposed) return res;
+        if (res.outcome !== "moved") {
+          if (sessionVideoFiles[key]) sessionVideoFiles[locatedVideoKey(Object.assign({}, link, { location: { kind: "bundled", name: res.name } }))] = sessionVideoFiles[key];
+          return res;
+        }
+        // why: main dropped the grant with the original, and the dropped file no longer reads from where it was
+        forgetToken(token);
+        if (sessionVideoUrls[key]) { try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { } }
+        Reflect.deleteProperty(sessionVideoUrls, key);
+        Reflect.deleteProperty(sessionVideoFiles, key);
+        return res;
+      });
+    }).then(null, function (): DesktopBundleMove { return { ok: false, code: "FAILED" }; });
   }
 
   function hasSessionVideo(link: VideoLink | null | undefined): boolean {
@@ -90,7 +139,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
         "drop “" + name + "” onto this beat again to open it from here.", "warn", true);
       return;
     }
-    const opening = token ? ports.desktop.open(token) : bundled ? ports.desktop.openBundled(bundled) : ports.desktop.openPath(stored);
+    const opening = token ? ports.desktop.open(token) : bundled ? ports.desktop.openBundled(bundled) : ports.desktop.openPath(stored, link.size);
     Promise.resolve(opening).then(function (res: DesktopVideoResult | null) {
       if (disposed) return;
       if (res && res.ok) return;
@@ -118,9 +167,11 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
 
   const off = ports.document.onReplaced(releaseSessionVideoUrls);
   return {
+    movedPath,
     grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl,
     releaseUrls: releaseSessionVideoUrls, openFile: openVideoFile, openGallery: openGalleryLink,
     bundle: bundleVideoFile,
+    move: moveVideoFile,
     cancelBundle: function (job: string): void { if (!disposed) ports.desktop.cancelBundle(job); },
     dispose: function (): void {
       if (disposed) return;
@@ -130,6 +181,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
       sessionVideoFiles = {};
       videoFileTokens = {};
       pendingGrants = {};
+      sessionVideoPaths = {};
     }
   };
 }

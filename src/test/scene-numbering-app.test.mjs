@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 after(closeApp);
 
-const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
+const { currentDocument, liveSession, onRefresh } = await import("../bootstrap/wiring/session-owner.ts");
 const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
@@ -19,12 +19,19 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { renderRundown } = await import("../features/rundown/rundown.ts");
 const { openBrollPanel } = await import("../features/broll/panel.ts");
 const { openProductionPanel } = await import("../features/tags/panels.ts");
+const { setBeatFilmed } = await import("../bootstrap/wiring/beat-status.ts");
 const writer = await import("../features/writer/writer.ts");
 const present = await import("../features/prompter/prompter.ts");
 
 async function open(text, name) {
   await openDocument({ kind: "file", file: new File([text], name), handle: null, options: { skipSnapshot: true } });
   undoOwner().flush();
+}
+
+function nextProductionRefresh() {
+  return new Promise(resolve => {
+    const off = onRefresh(jobs => { if (jobs.has("production")) { off(); resolve(); } });
+  });
 }
 
 test("#1186: an old document reorders, saves and reopens with identity, statuses, anchors and surface numbers intact", async () => {
@@ -130,11 +137,49 @@ test("grouped production beats keep full accessible numbers and filmed links", a
   assert.equal(groups()[0].querySelectorAll('button')[13].textContent, "14");
   assert.match(groups()[0].querySelectorAll('button')[13].getAttribute('aria-label'), /^Beat A\.14 /);
   document.querySelector('#production-modes [data-group="shoot"]').click();
-  assert.deepEqual(groups().map(g => g.querySelectorAll('button').length), [60, 34]);
-  const filmed = document.querySelector('#production-list .tag-scene[data-row="g13"]');
+  const scenes = Array.from(document.querySelectorAll('#production-list .shoot-scene'));
+  assert.deepEqual(scenes.map(g => g.querySelector('h4').textContent), ['Scene A', 'Scene B · Second']);
+  assert.deepEqual(scenes.map(g => g.querySelectorAll('button').length), [60, 34]);
+  assert.match(document.querySelector('.shoot-progress').textContent, /1 of 94 filmed/);
+  const filmed = document.querySelector('#production-list .shoot-beat[data-row="g13"]');
   assert.equal(filmed.textContent, "14");
   assert.ok(filmed.querySelector('.tag-scene-tick'));
   assert.equal(filmed.title, filmed.getAttribute('aria-label'));
   assert.match(filmed.title, /^Beat A\.14 /);
   assert.equal(filmed.dataset.action, "jump-row");
+  document.querySelector('#rows .cell-editable[data-id="g13"]').focus();
+  assert.ok(filmed.classList.contains('is-current'));
+  assert.equal(filmed.getAttribute('aria-current'), 'true');
+  filmed.focus();
+  assert.ok(filmed.classList.contains('is-current'));
+  const refreshed = nextProductionRefresh();
+  setBeatFilmed('g13', false);
+  await refreshed;
+  assert.match(document.querySelector('.shoot-progress').textContent, /0 of 94 filmed/);
+  assert.ok(!document.querySelector('.shoot-beat[data-row="g13"]').classList.contains('is-shot'));
+  assert.equal(document.activeElement, document.querySelector('.shoot-beat[data-row="g13"]'));
+});
+
+test("shoot groups keep numbered gaps and do not mark an unrelated current beat", async () => {
+  const location = '<span class="tag-anchor" data-tag-cat="location" data-tag-name="Harbour">Harbour</span>';
+  const other = '<span class="tag-anchor" data-tag-cat="location" data-tag-name="Market">Market</span>';
+  await open(JSON.stringify({ schema: 2, title: "Shoot gaps", rows: [
+    { id: "a", visualText: location, audioText: "" },
+    { id: "b", visualText: "", audioText: "" },
+    { id: "c", visualText: location + location + other, audioText: "" }
+  ], productionTags: [{ id: "t_harbour", cat: "location", name: "Harbour" }, { id: "t_market", cat: "location", name: "Market" }] }), "gaps.splitpage");
+  document.querySelector('#rows .cell-editable[data-id="b"]').focus();
+  openProductionPanel();
+  document.querySelector('#production-modes [data-group="shoot"]').click();
+  const groups = Array.from(document.querySelectorAll('#production-list .shoot-group'));
+  assert.deepEqual(Array.from(groups[0].querySelectorAll('.shoot-beat'), e => e.textContent), ['1', '3']);
+  assert.equal(groups[0].querySelector('.is-current'), null);
+  assert.equal(groups[2].querySelector('.shoot-beat.is-current').dataset.row, 'b');
+  groups[1].querySelector('.shoot-beat[data-row="c"]').focus();
+  const refreshed = nextProductionRefresh();
+  setBeatFilmed('c', true);
+  await refreshed;
+  const updated = document.querySelectorAll('#production-list .shoot-group');
+  assert.equal(document.activeElement, updated[1].querySelector('.shoot-beat[data-row="c"]'));
+  assert.notEqual(document.activeElement, updated[0].querySelector('.shoot-beat[data-row="c"]'));
 });

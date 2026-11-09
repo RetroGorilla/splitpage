@@ -1,8 +1,13 @@
 "use strict";
 
+import type * as NodeCrypto from "node:crypto";
+import type * as NodePath from "node:path";
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
-import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
+import type { BundleCarryResult, BundleCopyResult, BundleMoveGrant, BundleMoveResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
+
+const crypto: typeof NodeCrypto = require("node:crypto");
+const path: typeof NodePath = require("node:path");
 
 type BundleSender = {
   readonly id: number;
@@ -11,6 +16,8 @@ type BundleSender = {
 };
 
 type BundleJobResult = BundleCopyResult | { ok: false; code: "DROPPED" | "UNKNOWN" | "NO_FOLDER" };
+type BundleMoveJobResult = { ok: true; name: string; outcome: Extract<BundleMoveResult, { ok: true }>["outcome"] } |
+  Extract<BundleMoveResult, { ok: false }> | { ok: false; code: "DROPPED" | "UNKNOWN" | "NO_FOLDER" };
 type BundleSaveRefusal = { reason: "clash" | "failed" | "cancelled" | "unlinkable" | "missing"; folder: string; name: string; copied: number; count?: number };
 type BundleSaveChoice = "copy" | "link";
 interface BundleSavePlan {
@@ -61,6 +68,7 @@ interface ExportPlan {
   readonly text: string;
   readonly scriptName: string;
   readonly script: string | null;
+  readonly token: string;
 }
 
 type BundleExportPlanAnswer = { ok: true; plan: { files: number; bytes: number; left: number } } | { ok: false; code: "REFUSED" };
@@ -88,7 +96,7 @@ function createBundleJobs(options: {
   const exporter = options.exporter || null;
   const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
   const exportPlans = new Map<string, ExportPlan>();
-  const exportTargets = new Map<string, string>();
+  const exportTargets = new Map<string, { readonly tabId: string; readonly key: string; readonly token: string; readonly replace: boolean }>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -146,7 +154,7 @@ function createBundleJobs(options: {
     }
   }
 
-  function copy(sender: BundleSender, tabId: string, job: string, source: string, script: string): Promise<BundleJobResult> {
+  function copy(sender: BundleSender, tabId: string, job: string, source: string, script: string, stored = false): Promise<BundleJobResult> {
     return new Promise((finish) => {
       let settled = false;
       const done = (result: BundleJobResult) => { if (!settled) { settled = true; finish(result); } };
@@ -156,7 +164,36 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const now = scriptOfTab(tabId);
           if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
-          done(await copier.copyIn(source, script, allow, progress, signal));
+          const checked = stored ? await copier.openStored(source, allow) : { ok: true as const, path: source };
+          if (!checked.ok) { done({ ok: false, code: "REFUSED" }); return; }
+          if (signal.aborted) { done({ ok: false, code: "CANCELLED" }); return; }
+          done(await copier.copyIn(checked.path, script, allow, progress, signal));
+        }
+      });
+    });
+  }
+
+  function moveGrantOf(source: string): Promise<BundleMoveGrant | null> {
+    return copier.moveGrantOf(source);
+  }
+
+  function move(sender: BundleSender, tabId: string, job: string, source: string, grant: BundleMoveGrant, script: string,
+    onMoved: () => void = () => {}, validate?: () => Promise<boolean>): Promise<BundleMoveJobResult> {
+    return new Promise((finish) => {
+      let settled = false;
+      const done = (result: BundleMoveJobResult) => { if (!settled) { settled = true; finish(result); } };
+      enqueue({
+        key: keyOf(sender, job), sender, job, ctl: new AbortController(),
+        stop: (code) => done({ ok: false, code }),
+        run: async (progress, signal) => {
+          const now = scriptOfTab(tabId);
+          if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
+          if (validate && !(await validate())) { done({ ok: false, code: "REFUSED" }); return; }
+          if (signal.aborted) { done({ ok: false, code: "CANCELLED" }); return; }
+          const moved = await copier.moveIn(source, script, allow, progress, signal, grant);
+          if (!moved.ok) { done(moved); return; }
+          if (moved.outcome === "moved") onMoved();
+          done({ ok: true, name: moved.name, outcome: moved.outcome });
         }
       });
     });
@@ -165,6 +202,12 @@ function createBundleJobs(options: {
   function cancel(sender: BundleSender, job: string): void {
     const found = byKey.get(keyOf(sender, job));
     if (found) abortJob(found);
+    dropExport(keyOf(sender, job));
+  }
+
+  function dropExport(key: string): void {
+    exportPlans.delete(key);
+    for (const [fileId, noted] of [...exportTargets]) if (noted.key === key) exportTargets.delete(fileId);
   }
 
   function noteSaveTarget(fileId: string, tab: { id: string; source: { kind: string; absPath?: unknown } } | null): void {
@@ -349,24 +392,33 @@ function createBundleJobs(options: {
     const laid = await exporter.layout(text, scriptName, script, allow);
     if (!laid) return { ok: false, code: "REFUSED" };
     const key = keyOf(sender, job);
-    exportPlans.delete(key);
+    dropExport(key);
     const mine = [...exportPlans].filter(([, p]) => p.sender === sender);
-    while (mine.length >= EXPORT_PLANS_PER_SENDER) exportPlans.delete((mine.shift() as [string, ExportPlan])[0]);
-    exportPlans.set(key, { sender, tabId, text, scriptName, script });
+    while (mine.length >= EXPORT_PLANS_PER_SENDER) dropExport((mine.shift() as [string, ExportPlan])[0]);
+    exportPlans.set(key, { sender, tabId, text, scriptName, script, token: crypto.randomBytes(16).toString("hex") });
     return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
   }
 
-  function noteExportTarget(fileId: string, tab: { id: string } | null): void {
-    if (!tab) return;
+  function exportPlanToken(sender: BundleSender, tab: { id: string } | null, job: unknown): string | null {
+    const planned = tab && typeof job === "string" ? exportPlans.get(keyOf(sender, job)) : undefined;
+    return planned && tab && planned.tabId === tab.id ? planned.token : null;
+  }
+
+  function noteExportTarget(fileId: string, token: string | null, replace: boolean): void {
+    const current = token ? [...exportPlans].find(([, p]) => p.token === token) : undefined;
+    if (!current) return;
+    const [key, planned] = current;
     if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
-    exportTargets.set(fileId, tab.id);
+    exportTargets.set(fileId, { tabId: planned.tabId, key, token: planned.token, replace });
   }
 
   function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
     const key = keyOf(sender, job);
     const planned = exportPlans.get(key);
     if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
-    if (typeof fileId !== "string" || exportTargets.get(fileId) !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (typeof fileId !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    const noted = exportTargets.get(fileId);
+    if (!noted || noted.tabId !== tabId || noted.key !== key || noted.token !== planned.token) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const target = pathOf(fileId);
     if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
     exportPlans.delete(key);
@@ -381,7 +433,7 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);
           if (!laid) { done({ ok: false, code: "FAILED" }); return; }
-          done(await writer.write(laid, target, signal, progress));
+          done(await writer.write(laid, target, noted.replace, signal, progress));
         }
       });
     });
@@ -404,6 +456,21 @@ function createBundleJobs(options: {
     return found;
   }
 
+  function openBeside(script: string, stored: string, size: unknown): Promise<VideoPathVerdict> {
+    return copier.besideScript(script, stored, size, allow);
+  }
+
+  async function inspectPath(source: string, script: string): Promise<{ size: number; name: string | null } | "missing" | null> {
+    const found = await copier.openStored(source, allow);
+    if (!found.ok) return found.code === "GONE" ? "missing" : null;
+    const size = await copier.sizeOfFile(found.path);
+    if (size === null) return "missing";
+    if (size < 0) return null;
+    const name = path.basename(found.path);
+    const beside = await copier.resolveIn(script, name, allow);
+    return { size, name: beside.ok && same(beside.path, found.path) ? name : null };
+  }
+
   function noteScript(tabId: string, script: string | null): void {
     for (const open of [...opens]) {
       const kept = !!script && (same(script, open.to) || (!open.landed && same(script, open.from)));
@@ -414,7 +481,7 @@ function createBundleJobs(options: {
   function forgetTab(tabId: string): void {
     for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
     for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
-    for (const [fileId, owner] of [...exportTargets]) if (owner === tabId) exportTargets.delete(fileId);
+    for (const [fileId, owner] of [...exportTargets]) if (owner.tabId === tabId) exportTargets.delete(fileId);
     for (const [key, planned] of [...exportPlans]) if (planned.tabId === tabId) exportPlans.delete(key);
   }
 
@@ -434,11 +501,13 @@ function createBundleJobs(options: {
   }
 
   return {
-    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
+    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, inspectPath, move, moveGrantOf, noteExportTarget, noteSaveTarget, noteScript, openBeside,
+    openBundled,
+    planExport, planSave,
     prepareWrite, startExport
   };
 }
 
-export type { BundleExportAnswer, BundleExportPlanAnswer, BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
+export type { BundleExportAnswer, BundleExportPlanAnswer, BundleJobResult, BundleMoveJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
 
 module.exports = { createBundleJobs };

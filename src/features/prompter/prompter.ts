@@ -1189,7 +1189,7 @@ async function launchPrompterFromScript(token: string): Promise<boolean> {
   if (!body || typeof body.name !== "string" || typeof body.text !== "string") {
     try { sessionStorage.removeItem(PROMPTER_LAUNCH_KEY); } catch (e) {}
     ports.notices.show("This teleprompter link has expired — open it again from the Splitpage desktop app " +
-              "(File ▸ Present in browser).", "warn", true);
+              "(Present ▸ Present in browser…).", "warn", true);
     return false;
   }
   const file = new File([body.text], body.name, { type: "text/plain" });

@@ -1,4 +1,5 @@
 import { numberHtml } from "../common/number-html.ts";
+import { groupItemsByScene } from "../../core/document/scene-items.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { CommentStatePorts } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
@@ -586,6 +587,10 @@ function findCommentIndex(id: string | null) {
 
 export function openCommentsPanel() {
   if (!(ports as CommentsRuntimePorts).document.current()) return;
+  const current = (ports as CommentsRuntimePorts).preferences.commentsSort();
+  const mode = (ports as CommentsRuntimePorts).sort.choose(current);
+  const select = document.getElementById("comments-sort") as HTMLSelectElement | null;
+  if (select) select.value = mode;
   (ports as CommentsRuntimePorts).sidePanels.open("comments-panel");
   captureReplyDrafts();
   renderComments();
@@ -999,9 +1004,18 @@ export function renderComments() {
   const a = document.activeElement;
   const focusInMenu = !!(a && a.closest && a.closest("#comments-list .comment-menu"));
   const nums = commentThreadNumbers();
-  listEl.innerHTML = items.map(function (c) {
+  const card = function (c: CommentRenderRecord) {
     return commentCardHtml(c, c.resolved ? 0 : nums[c.id] || 0);
-  }).join("") + COMMENTS_HINT_HTML;
+  };
+  if ((ports as CommentsRuntimePorts).sort.current() === "by-scene") {
+    const current = (ports as CommentsRuntimePorts).document.current();
+    const result = groupItemsByScene(current ?? { rows: [] }, items, c => c.field === "title" ? null : c.rowId);
+    listEl.innerHTML = result.groups.map(({ scene, items: grouped }) =>
+      '<section><h3 class="comments-scene-heading">' + escapeHtml("Scene " + scene.letter + (scene.name ? " · " + scene.name : "")) + '</h3>' + grouped.map(card).join("") + '</section>'
+    ).join("") + (result.unassigned.length ? '<section><h3 class="comments-scene-heading">No scene</h3>' + result.unassigned.map(card).join("") + '</section>' : '') + COMMENTS_HINT_HTML;
+  } else {
+    listEl.innerHTML = items.map(card).join("") + COMMENTS_HINT_HTML;
+  }
   if (commentMenuFor) {
     placeCommentMenu();
     if (focusInMenu) focusCommentMenuItem();
@@ -1011,6 +1025,17 @@ export function renderComments() {
 export function startComments(nextPorts: CommentStatePorts) {
   ports = nextPorts;
   (ports as CommentsRuntimePorts).sort.choose((ports as CommentsRuntimePorts).preferences.commentsSort());
+
+  const stopPreferenceChanges = nextPorts.changes.onChange(function (change) {
+    if (change.name !== "commentsSort") return;
+    const mode = nextPorts.preferences.commentsSort();
+    if (nextPorts.sort.current() === mode) return;
+    nextPorts.sort.choose(mode);
+    const select = document.getElementById("comments-sort") as HTMLSelectElement | null;
+    if (select) select.value = mode;
+    const panel = document.getElementById("comments-panel");
+    if (panel && !panel.hidden) { captureReplyDrafts(); renderComments(); }
+  });
 
   commentFilter = (ports as CommentsRuntimePorts).preferences.commentFilter();
 
@@ -1022,6 +1047,7 @@ export function startComments(nextPorts: CommentStatePorts) {
   return { dispose: function () {
     if (!active) return;
     active = false;
+    stopPreferenceChanges();
     commentDisposers.splice(0).reverse().forEach(function (off) { off(); });
     if (taggingHelpCoverFrame) cancelAnimationFrame(taggingHelpCoverFrame);
     taggingHelpCoverFrame = 0;

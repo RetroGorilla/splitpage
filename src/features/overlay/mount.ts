@@ -73,7 +73,7 @@ export function mountOverlay(mount: { window: Window; ports: OverlayPorts }): Ov
         const el = e.target;
         if (!el?.closest) return;
         if (el.closest("#writer")) return;
-        if (el.closest(".topbar, #comments-panel, #wpm-editor, #identity-editor")) return;
+        if (el.closest(".topbar, #comments-panel, #wpm-editor, #identity-editor, #tag-edit-action")) return;
         if (el.closest(".toast")) return;
         const back = writerFocusTarget(doc);
         if (back) ports.focus(back);

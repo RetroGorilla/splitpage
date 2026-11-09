@@ -17,6 +17,14 @@ or joins them to automatic, unnamed Scene A at the top.
 
 Scene letters and beat numbers come from the derived numbering projection: beats before a stored header belong to automatic Scene A. No automatic header record is saved.
 
+Production's Shoot view groups each location's beats under scene headings in
+script order. Shoot and the Production/Gear By-scene views pass the document
+reader's cached `numbering()` projection to `groupItemsByScene`; they do not
+derive numbering separately for each group or render. Filmed and current beat
+indicators are separate, and Shoot restores focus by location key and beat ID
+after refreshing its cells. The panel coverage is in
+`tests/features/tags/panel-mount.test.ts` and `src/test/scene-numbering-app.test.mjs`.
+
 ## Merge invariant
 
 A scene keeps its stable identity across beat replacement and movement;

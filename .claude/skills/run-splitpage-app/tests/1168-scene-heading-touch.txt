@@ -1,0 +1,22 @@
+open
+viewport 390 844 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.old=F.state();F.openFile(new File([JSON.stringify({title:'Touch headings',rows:[{id:'r1',audioText:'The first beat.',visualText:''},{id:'r2',audioText:'The next beat.',visualText:''}],sections:[{id:'s1',name:'A long scene heading that wraps on a phone',firstSceneId:'r1'}]})],'touch-heading.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'Touch headings'
+expect matchMedia('(hover: none)').matches
+expect document.documentElement.scrollWidth <= innerWidth
+expect (function(){var h=document.querySelector('#rows .section-header');return ['.section-grip','.section-fold','.section-stats','.section-more summary'].every(function(s){var c=getComputedStyle(h.querySelector(s));return c.opacity==='1'&&c.display!=='none'&&c.visibility==='visible';});})()
+expect getComputedStyle(document.querySelector('#rows .section-header')).backgroundColor === 'rgba(0, 0, 0, 0)'
+click #rows .section-more summary
+expect document.querySelector('#rows .section-more').open
+click #rows .section-menu [data-section-action="rename"]
+wait !!document.querySelector('.section-rename input')
+press Dawn
+key none Enter
+wait F.state().sections[0].name === 'Dawn'
+click #rows .section-fold
+wait document.querySelectorAll('#rows .row').length === 0
+click #rows .section-fold
+wait document.querySelectorAll('#rows .row').length === 2
+quit

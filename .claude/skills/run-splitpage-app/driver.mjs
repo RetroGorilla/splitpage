@@ -297,6 +297,7 @@ async function connectCdp() {
   log("cdp connected");
   await send("Page.enable");
   await send("Runtime.enable");
+  await send("Page.bringToFront");
   await send("Emulation.setFocusEmulationEnabled", { enabled: true });
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
   await send("Page.addScriptToEvaluateOnNewDocument", {
@@ -508,6 +509,7 @@ async function imeInput(rest) {
 const KEY_MAP = {
   enter:     { key: "Enter",     code: "Enter",     vk: 13, text: "\r" },
   tab:       { key: "Tab",       code: "Tab",       vk: 9,  text: "\t" },
+  space:     { key: " ",         code: "Space",     vk: 32, text: " " },
   escape:    { key: "Escape",    code: "Escape",    vk: 27 },
   backspace: { key: "Backspace", code: "Backspace", vk: 8 },
   arrowdown: { key: "ArrowDown", code: "ArrowDown", vk: 40 },
@@ -536,7 +538,7 @@ const KEY_MAP = {
   keyp:      { key: "p",         code: "KeyP",      vk: 80 },
   keyt:      { key: "t",         code: "KeyT",      vk: 84 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV, KeyP, KeyT";
+const KEY_NAMES = "Enter, Tab, Space, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV, KeyP, KeyT";
 
 async function mouseEvent(rest) {
   const m = /^\s*(?:(ctrl|shift|meta)\s+)?(down|move|up|right|hover|click)\s+(.+)$/.exec(rest);

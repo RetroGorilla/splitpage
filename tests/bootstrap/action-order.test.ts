@@ -17,11 +17,11 @@ test("bootstrap preserves the complete action registration order when export def
       "toggle-hide-shot", "toggle-rundown-min", "history", "find",
       "save", "save-as", "open", "export", "command-menu", "close-file-menu",
       "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
-      "settings", "help", "tour", "long-demo", "setup", "about",
+      "settings", "help", "tour", "long-demo", "create-bundle", "setup", "about",
       "tagging-help", "export-app-data", "import-app-data",
       "autosave", "new", "paste", "gdoc-import", "show-gdoc-import",
       "export-again", "set-target",
-      "prompter-open-in-browser", "prompter-open-in-chromium",
+      "prompter-open-in-browser",
       "script-zoom-in", "script-zoom-out", "script-zoom-reset",
       "go-to-scene", "annotate-picture", "open-picture-link", "comment-on-selection", "tag-selection", "reveal-row"
     ]);

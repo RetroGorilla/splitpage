@@ -243,8 +243,11 @@ export function fakeTourFlags() {
 
 export function fakeSidePanels() {
   let closed = 0;
-  const sidePanels: Pick<SidePanels, "closeAll"> = { closeAll: () => { closed++; } };
-  return { sidePanels, closed: () => closed };
+  const closedPanels: string[] = [];
+  const sidePanels: Pick<SidePanels, "close" | "closeAll"> = {
+    close: id => { closedPanels.push(id); }, closeAll: () => { closed++; }
+  };
+  return { sidePanels, closed: () => closed, closedPanels };
 }
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {

@@ -26,7 +26,7 @@ sleep 600
 wait document.querySelectorAll('#rows .row').length > 0
 # where they act
 expect document.documentElement.getAttribute('data-theme') === 'dark'
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') === 'true'
 jsclick #btn-present
 wait !document.getElementById('prompter').hidden
 expect document.getElementById('pp-flip').classList.contains('is-active')

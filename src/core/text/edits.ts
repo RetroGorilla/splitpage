@@ -1,4 +1,4 @@
-import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell, projection } from "./runs.ts";
+import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell, projection, tagStack, withTagStack } from "./runs.ts";
 import type { AtomRun, BrollRun, CellInput, MarkName, Marks, NormalizeOptions, Run } from "./runs.ts";
 
 export type AtomChar = { atom: AtomRun; ch?: undefined; marks?: undefined };
@@ -70,6 +70,7 @@ export function marksAt(cell: CellInput, pos: number): Marks {
 export function typingMarks(cell: CellInput, pos: number): Marks {
   const m = marksAt(cell, pos);
   delete m.tag;
+  delete m.innerTags;
   delete m.cmt;
   delete m.href;
   if (m.dir && !insideDirection(cell, pos)) delete m.dir;
@@ -128,6 +129,11 @@ export function replaceText(cell: CellInput, from: number, to: number, text: str
 
 export function replaceWithTag(cell: CellInput, from: number, to: number, text: string, id: string): EditedCell {
   const r = clampRange(cell, from, to);
+  const selected = sliceCell(cell, r.from, r.to);
+  if (selected.some(function (run) { return !!run.marks.tag; })) {
+    if (projection(selected) !== cleanText(text)) return { cell: normalizeCell(cell), end: r.to };
+    return { cell: setMark(cell, r.from, r.to, "tag", id), end: r.to };
+  }
   const next = replaceText(cell, r.from, r.to, text);
   const end = r.from + cleanText(text).length;
   return { cell: setMark(next, r.from, end, "tag", id), end: end };
@@ -138,18 +144,58 @@ export function replaceWithBrollKey(cell: CellInput, from: number, to: number, i
   return { cell: insertBrollKey(deleteRange(cell, r.from, r.to), r.from, id, keyText, {}), end: r.from + 1 };
 }
 
+function tagPlacement(chars: readonly Char[], range: TextSpan, removing: boolean): number | null {
+  if (range.from === range.to) return 0;
+  const open: { id: string; from: number }[] = [];
+  const paths = new Map<Marks, readonly string[]>();
+  let depth = 0;
+  for (let pos = 0; pos <= chars.length; pos++) {
+    const c = chars[pos];
+    let path: readonly string[] = [];
+    if (c && !c.atom && c.marks.tag) {
+      let cached = paths.get(c.marks);
+      if (!cached) { cached = tagStack(c.marks); paths.set(c.marks, cached); }
+      path = cached;
+    }
+    let common = 0;
+    while (common < open.length && common < path.length && (open[common] as { id: string }).id === path[common]) common++;
+    for (let i = open.length - 1; i >= common; i--) {
+      const start = (open[i] as { from: number }).from;
+      if (range.from >= pos || range.to <= start) continue;
+      const containsTag = range.from <= start && range.to >= pos;
+      const insideTag = start <= range.from && pos >= range.to;
+      if (!containsTag && !insideTag) return null;
+      if (removing && i === 0 && !containsTag) return null;
+      if (insideTag && !containsTag) depth = Math.max(depth, i + 1);
+    }
+    open.length = common;
+    for (let i = common; i < path.length; i++) open.push({ id: path[i] as string, from: pos });
+  }
+  return depth;
+}
+
 export function setMark(cell: CellInput, from: number, to: number, name: MarkName, value: unknown): Run[] {
   const chars = explode(cell);
   const r = clampRange(cell, from, to);
+  const addingTag = name === "tag" && typeof value === "string" && !!value;
+  const removingTag = name === "tag" && (value === false || value === null || value === undefined);
+  if (name === "tag" && !addingTag && !removingTag) return normalizeCell(cell);
+  const depth = addingTag || removingTag ? tagPlacement(chars, r, removingTag) : 0;
+  if (depth === null) return normalizeCell(cell);
   const cache = new Map<Marks, Marks>();
   for (let i = r.from; i < r.to; i++) {
     const c = chars[i] as Char;
     const base = c.atom ? c.atom.marks : c.marks;
-    if (c.atom && (name === "tag" || name === "dir" || name === "cue")) continue;
+    if (c.atom && (name === "tag" || name === "innerTags" || name === "dir" || name === "cue")) continue;
     let next = cache.get(base);
     if (!next) {
       next = Object.assign({}, base);
-      if (value === false || value === null || value === undefined) Reflect.deleteProperty(next, name);
+      if (addingTag) {
+        const path = tagStack(base);
+        next = withTagStack(base, [...path.slice(0, depth), value as string, ...path.slice(depth)]);
+      } else if (name === "tag" && (value === false || value === null || value === undefined)) {
+        next = withTagStack(next, next.innerTags || []);
+      } else if (value === false || value === null || value === undefined) Reflect.deleteProperty(next, name);
       else (next as Record<string, unknown>)[name] = value;
       cache.set(base, next);
     }
@@ -231,9 +277,9 @@ export function commentRange(cell: CellInput, id: string): TextSpan | null {
 
 export function retag(cell: CellInput, fromId: string, toId: string | null | undefined): Run[] {
   return normalizeCell(normalizeCell(cell).map(function (r) {
-    if (r.atom || r.marks.tag !== fromId) return r;
-    const m = Object.assign({}, r.marks);
-    if (toId) m.tag = toId; else delete m.tag;
+    if (r.atom || tagStack(r.marks).indexOf(fromId) === -1) return r;
+    const ids = tagStack(r.marks).flatMap(function (id) { return id !== fromId ? [id] : toId ? [toId] : []; });
+    const m = withTagStack(r.marks, ids);
     return { text: r.text, marks: m };
   }));
 }

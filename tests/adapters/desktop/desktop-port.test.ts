@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import {
-  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort,
+  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, desktopPort, onDesktopChange,
   restoreDesktop, runningOnDesktop, useDesktopForTest
 } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopMember, DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
@@ -140,8 +140,11 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   setTheme: { args: ["dark"], direction: "send", channel: "splitpage:set-theme" },
   grantVideoFile: { args: [{ path: "/videos/a.mp4" }], direction: "invoke", channel: "splitpage:video-file-grant", wire: ["/videos/a.mp4"] },
   openVideoFile: { args: ["tok"], direction: "invoke", channel: "splitpage:video-file-open" },
-  openVideoPath: { args: ["C:\\Videos\\a.mp4"], direction: "invoke", channel: "splitpage:video-path-open" },
+  openVideoPath: { args: ["C:\\Videos\\a.mp4", 4096], direction: "invoke", channel: "splitpage:video-path-open" },
   bundleVideoFile: { args: ["tok", "bundle1"], direction: "invoke", channel: "splitpage:bundle-file" },
+  moveVideoFile: { args: ["tok", "bundle1"], direction: "invoke", channel: "splitpage:bundle-move" },
+  planCreateBundle: { args: [["C:\\Drops\\a.pdf"]], direction: "invoke", channel: "splitpage:bundle-create-plan" },
+  bundlePath: { args: ["C:\\Drops\\a.pdf", "create1", "copy"], direction: "invoke", channel: "splitpage:bundle-path" },
   cancelBundle: { args: ["bundle1"], direction: "send", channel: "splitpage:bundle-cancel" },
   openBundledFile: { args: ["a (2).mp4"], direction: "invoke", channel: "splitpage:bundled-file-open" },
   planBundleSave: { args: ["fid1", ["a.mp4"]], direction: "invoke", channel: "splitpage:bundle-save-plan" },
@@ -288,12 +291,25 @@ test("the attached bridge is the port, and the test seam swaps it and restores i
   attachDesktop(null);
 });
 
-test("the prompter can open in a browser or Chromium only when the attached desktop app offers it", () => {
+test("the prompter can open in a browser only when the attached desktop app offers it", () => {
   useDesktopForTest(null);
-  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, false]);
+  assert.equal(canOpenPrompterInBrowser(), false);
   useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
-  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [true, false]);
+  assert.equal(canOpenPrompterInBrowser(), true);
   useDesktopForTest({ openPrompterInChromium: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
-  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, true]);
+  assert.equal(canOpenPrompterInBrowser(), false);
   restoreDesktop();
+});
+
+test("every change of desktop bridge is announced until the listener stops", () => {
+  let heard = 0;
+  const stop = onDesktopChange(() => { heard++; });
+  useDesktopForTest(null);
+  useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
+  restoreDesktop();
+  assert.equal(heard, 3);
+  stop();
+  useDesktopForTest(null);
+  restoreDesktop();
+  assert.equal(heard, 3);
 });

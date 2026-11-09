@@ -1,7 +1,8 @@
 import { updateControls } from "./update.ts";
 import type { Disposable, Owned } from "../../features/routing/owned.ts";
 import type { NoticesPorts } from "../../features/notices/mount.ts";
-import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../features/prompter/mount.ts";
+import type { PrompterVisibilityPorts } from "../../features/prompter/mount.ts";
+import type { PrompterOpenPorts, PrompterPorts } from "../../features/prompter/ports.ts";
 import type { IdentityPorts } from "../../features/settings/mount.ts";
 import type { AppearancePorts } from "../../features/settings/appearance.ts";
 import type { HistoryPorts } from "../../features/history/mount.ts";
@@ -11,6 +12,8 @@ import type { WriterOpenPorts, WriterNavigationPorts } from "../../features/writ
 import type { HistoryGalleryPorts } from "../../features/gallery/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton, saveFromButton } from "./ports/actions.ts";
+import { prompterDesktop } from "./ports/desktop.ts";
+import { onDesktopChange } from "../../adapters/desktop/desktop-port.ts";
 import { mountNotices } from "../../features/notices/mount.ts";
 import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../../features/prompter/mount.ts";
 import { mountIdentity } from "../../features/settings/mount.ts";
@@ -222,7 +225,8 @@ export function mountSaveFeature(): ReturnType<typeof mountSave> {
 export function mountPrompterOpenFeature(): ReturnType<typeof mountPrompterOpen> {
   return replaceViewMount("mountPrompterOpen", function () {
     const ports: PrompterOpenPorts = {
-      runFromButton: runFromButton
+      runFromButton: runFromButton,
+      presentInBrowser: { offered: prompterDesktop.canOpen, onChange: onDesktopChange }
     };
     return mountPrompterOpen({ window: window, ports: ports });
   });

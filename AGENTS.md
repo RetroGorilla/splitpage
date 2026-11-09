@@ -4,7 +4,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 
 ## Setup
 
-- Node 24.22.1 (`.nvmrc`). The test runner refuses older versions on purpose: on 22.22.0 two PDF tests break for the runtime, not the code. Install it before anything else.
+- Node 24.22.1 (`.nvmrc`). The test runner warns on other versions and refuses versions outside `package.json`'s `engines`: on 22.22.0 two PDF tests break for the runtime, not the code. Install the pinned version before anything else.
 - `npm ci`, then the commands below.
 - Branch from `main`, and open pull requests against `main`. It is the only long-lived branch; a release is a tag on it.
 
@@ -19,7 +19,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 | `src/features/common/` | Stateless DOM helpers shared by features | as features |
 | `src/bootstrap/wiring/<name>.ts` | Builds one feature's ports from the real owners and mounts it | anything |
 | `src/bootstrap/wiring/ports/` | Shared ports, one module per responsibility (document, editing, text, preferences, screen, effects...) | anything |
-| `src/bootstrap/actions.ts` | The one ordered list of actions. Order is what the command menu shows; `tests/bootstrap/action-order.test.ts` pins it | anything |
+| `src/bootstrap/actions.ts` | The one ordered list of action registrations, pinned by `tests/bootstrap/action-order.test.ts`. The command menu applies its own display order; see [feature-ports.md, Rule 6](docs/architecture/feature-ports.md#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order) | anything |
 | `src/bootstrap/main.ts` | The composition root and build entry: wires the app, then mounts owners and features in a fixed order. `tests/bootstrap/composition-root.test.ts` pins the order | anything in `src/bootstrap/`; outside it, only its frozen set |
 | `server/`, `desktop/`, `shared/` | Static file server for `start.mjs`, Electron shell, code shared by all three | see the layer table |
 
@@ -68,7 +68,7 @@ npm run lint                              # about 45 s
 node tools/code-map.mjs                   # prints the feature map; fails on duplicate type names
 ```
 
-Before you push, run the full gate once: `npm run verify` (lint, types, both gates, build, every unit test). The unit tests alone take about 10 minutes, so do not run the full suite after every edit.
+Before you push, run the full gate once: `npm run verify` (lint, types, both gates, app and preload builds, generated-file checks, every unit, desktop and tool test). The tests take about 10 minutes, so do not run the full suite after every edit.
 
 Anything a person can see also needs its browser suites, which PR CI mostly does not run (the nightly run does): `node tools/run-suites.mjs <out-dir> '<regex over suite filenames>'`. Which suites go with which change: [testing.md, What to run for which change](docs/architecture/testing.md#what-to-run-for-which-change). The browser harness is described in [the run-splitpage-app skill](.claude/skills/run-splitpage-app/SKILL.md).
 
@@ -76,9 +76,9 @@ Typing, editing and undo changes also need a performance comparison (`tools/perf
 
 ## Documents
 
-- [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md): the plan and its standing rules.
+- [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md): the completed implementation record and its standing rules.
 - [docs/architecture/](docs/architecture/): current design. Start with [feature-ports.md](docs/architecture/feature-ports.md) (ports and wiring for features), [dependencies.md](docs/architecture/dependencies.md) (gates and layers), [saving.md](docs/architecture/saving.md), [session.md](docs/architecture/session.md) and [testing.md](docs/architecture/testing.md).
 - [review.md](docs/architecture/review.md): what review checks before a merge.
-- [ROADMAP.md](docs/ROADMAP.md): what is left for 4.1, and the order it runs in.
+- [ROADMAP.md](docs/ROADMAP.md): the current release, completed work and links to open work. Check GitHub before starting.
 - [COLLABORATION-PLAN.md](docs/COLLABORATION-PLAN.md): the plan of record for collaboration. Nothing in it is built; do not start it without being asked.
 - Finished milestone plans and gate records were removed from the tree. Read them in git history if you need the record, and do not treat them as current rules.

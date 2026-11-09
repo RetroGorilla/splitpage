@@ -9,6 +9,7 @@ export const SCRIPT_SCALE_MAX = 2;
 export const CLOCK_MODES: readonly string[] = Object.freeze(["system", "12", "24"]);
 export const THEME_MODES: readonly string[] = Object.freeze(["system", "light", "dark"]);
 const MICROPHONE_ID_MAX = 512;
+export const BROLL_VIEW_KEY = "splitpage-broll-view";
 
 const KEYS = Object.freeze({
   autosave: "splitpage-autosave",
@@ -22,6 +23,7 @@ const KEYS = Object.freeze({
   hideShot: "splitpage-hide-shot",
   microphone: "splitpage-microphone",
   onboarding: "splitpage-onboarding",
+  panelGrouping: "splitpage-panel-grouping",
   personColor: "splitpage-person-color",
   prompterFlip: "splitpage-prompter-flip",
   prompterMirror: "splitpage-prompter-mirror",
@@ -42,6 +44,9 @@ export interface CommentFilter {
   mode: string;
   assignee: string;
 }
+
+export type GroupingPanel = "broll" | "production" | "gear";
+export type PanelGroupingPreferences = Partial<Record<GroupingPanel, string>>;
 
 export type PreferenceName = keyof typeof KEYS;
 
@@ -81,12 +86,14 @@ export type OnboardingRecord = Record<string, unknown>;
 
 export interface Preferences {
   readonly nameOf: (key: string) => PreferenceName | null;
+  readonly panelGrouping: (panel: GroupingPanel) => string | null;
+  readonly setPanelGrouping: (panel: GroupingPanel, mode: string) => void;
   readonly autosave: () => boolean;
   readonly setAutosave: (on: boolean) => void;
   readonly commentAuthor: () => string;
   readonly setCommentAuthor: (name: string) => void;
   readonly rememberCommentAuthor: (name: string) => void;
-  readonly commentsSort: () => "recent" | "position";
+  readonly commentsSort: () => "recent" | "position" | "by-scene";
   readonly setCommentsSort: (mode: string) => void;
   readonly commentFilter: () => CommentFilter;
   readonly setCommentFilter: (filter: CommentFilter) => void;
@@ -181,7 +188,14 @@ function ownAppData(): readonly AppDataPref[] {
     },
     { name: "taggingHelpDismissed", key: KEYS.taggingHelp, valid: isFlag },
     { name: "autosave", key: KEYS.autosave, valid: isFlag },
-    { name: "commentsSort", key: KEYS.commentsSort, valid: function (v: string) { return v === "recent" || v === "position"; } }
+    { name: "commentsSort", key: KEYS.commentsSort, valid: function (v: string) { return v === "recent" || v === "position" || v === "by-scene"; } },
+    { name: "panelGrouping", key: KEYS.panelGrouping, valid: function (v: string) {
+      try {
+        const value: unknown = JSON.parse(v);
+        return isPlainObject(value) && Object.entries(value).every(([key, mode]) =>
+          ["broll", "comments", "production", "gear"].includes(key) && typeof mode === "string" && mode.length <= 40);
+      } catch { return false; }
+    } }
   ];
 }
 
@@ -225,6 +239,10 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     try { ports.announce({ key: key, value: value }); } catch (e) { }
   }
 
+  function notify(key: string, value: string | null): void {
+    try { ports.announce({ key, value }); } catch (e) { }
+  }
+
   function readJson(key: string): unknown {
     const raw = read(key);
     if (raw === null) return undefined;
@@ -252,8 +270,70 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     return changed && put(KEYS.onboarding, JSON.stringify(merged));
   }
 
+  function migrateCommentsGrouping(): void {
+    const local = readJson(KEYS.panelGrouping);
+    if (!isPlainObject(local) || !Object.hasOwn(local, "comments")) return;
+    const mode = local["comments"];
+    if (read(KEYS.commentsSort) === null && (mode === "position" || mode === "recent" || mode === "by-scene")) {
+      if (!put(KEYS.commentsSort, mode)) return;
+    }
+    const rest = { ...local };
+    delete rest["comments"];
+    put(KEYS.panelGrouping, Object.keys(rest).length ? JSON.stringify(rest) : null);
+  }
+
+  function migrateBrollGrouping(): void {
+    const view = readJson(BROLL_VIEW_KEY);
+    if (!isPlainObject(view) || !Object.hasOwn(view, "group")) return;
+    const mode = view["group"];
+    if (mode !== "scene" && mode !== "location" && mode !== "flat" && mode !== "by-scene") return;
+    const raw = read(KEYS.panelGrouping);
+    const local = raw === null ? {} : readJson(KEYS.panelGrouping);
+    if (!isPlainObject(local)) return;
+    if (!Object.hasOwn(local, "broll") && !put(KEYS.panelGrouping, JSON.stringify({ ...local, broll: mode }))) return;
+    const rest = { ...view };
+    delete rest["group"];
+    put(BROLL_VIEW_KEY, JSON.stringify(rest));
+  }
+
+  function mergePanelGrouping(incoming: unknown): boolean {
+    if (typeof incoming !== "string") return false;
+    const spec = ownAppData().find(item => item.name === "panelGrouping");
+    if (!spec?.valid(incoming)) return false;
+    const added: unknown = JSON.parse(incoming);
+    if (!isPlainObject(added)) return false;
+    const raw = read(KEYS.panelGrouping);
+    const local = raw === null ? {} : readJson(KEYS.panelGrouping);
+    if (!isPlainObject(local)) return false;
+    const merged: Record<string, unknown> = { ...local };
+    let changed = false;
+    for (const key of ["broll", "production", "gear"] as const) {
+      if (typeof added[key] !== "string" || Object.hasOwn(local, key)) continue;
+      merged[key] = added[key];
+      changed = true;
+    }
+    return changed && put(KEYS.panelGrouping, JSON.stringify(merged));
+  }
+
   return Object.freeze({
     nameOf: function (key: string): PreferenceName | null { return names.get(key) ?? null; },
+    panelGrouping: function (panel: GroupingPanel): string | null {
+      migrateCommentsGrouping();
+      migrateBrollGrouping();
+      const value = readJson(KEYS.panelGrouping);
+      return isPlainObject(value) && typeof value[panel] === "string" ? value[panel] : null;
+    },
+    setPanelGrouping: function (panel: GroupingPanel, mode: string): void {
+      migrateCommentsGrouping();
+      migrateBrollGrouping();
+      const value = readJson(KEYS.panelGrouping);
+      const saved: PanelGroupingPreferences = {};
+      for (const key of ["broll", "production", "gear"] as const) {
+        if (isPlainObject(value) && typeof value[key] === "string") saved[key] = value[key];
+      }
+      saved[panel] = mode;
+      announce(KEYS.panelGrouping, JSON.stringify(saved));
+    },
     autosave: function (): boolean { return read(KEYS.autosave) !== "0"; },
     setAutosave: function (on: boolean): void { announce(KEYS.autosave, on ? "1" : "0"); },
     commentAuthor: function (): string { return read(KEYS.commentAuthor) ?? ""; },
@@ -261,8 +341,12 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     rememberCommentAuthor: function (name: string): void {
       if (read(KEYS.commentAuthor) !== name) announce(KEYS.commentAuthor, name);
     },
-    commentsSort: function (): "recent" | "position" { return read(KEYS.commentsSort) === "recent" ? "recent" : "position"; },
-    setCommentsSort: function (mode: string): void { announce(KEYS.commentsSort, mode === "recent" ? "recent" : "position"); },
+    commentsSort: function (): "recent" | "position" | "by-scene" {
+      migrateCommentsGrouping();
+      const value = read(KEYS.commentsSort);
+      return value === "recent" || value === "by-scene" ? value : "position";
+    },
+    setCommentsSort: function (mode: string): void { migrateCommentsGrouping(); announce(KEYS.commentsSort, mode === "recent" || mode === "by-scene" ? mode : "position"); },
     commentFilter: function (): CommentFilter {
       try {
         const raw = read(KEYS.commentFilter);
@@ -357,12 +441,34 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     appDataImport: function (incoming: unknown, extra: readonly AppDataPref[]): string[] {
       const prefs = isPlainObject(incoming) ? incoming : {};
       const written: string[] = [];
+      migrateCommentsGrouping();
+      migrateBrollGrouping();
       ownAppData().concat(extra).forEach(function (spec) {
+        if (spec.name === "panelGrouping") return;
         const value = prefs[spec.name];
         if (typeof value !== "string" || !spec.valid(value)) return;
         if (read(spec.key) !== null) return;
-        if (put(spec.key, value)) written.push(spec.name);
+        if (put(spec.key, value)) {
+          written.push(spec.name);
+          if (spec.name === "commentsSort") notify(spec.key, value);
+        }
       });
+      const grouping = prefs["panelGrouping"];
+      if (typeof grouping === "string") {
+        const spec = ownAppData().find(item => item.name === "panelGrouping");
+        if (spec?.valid(grouping)) {
+          const parsed: unknown = JSON.parse(grouping);
+          const mode = isPlainObject(parsed) ? parsed["comments"] : null;
+          if (read(KEYS.commentsSort) === null && (mode === "position" || mode === "recent" || mode === "by-scene") && put(KEYS.commentsSort, mode)) {
+            written.push("commentsSort");
+            notify(KEYS.commentsSort, mode);
+          }
+        }
+      }
+      if (mergePanelGrouping(grouping)) {
+        written.push("panelGrouping");
+        notify(KEYS.panelGrouping, read(KEYS.panelGrouping));
+      }
       if (mergeOnboarding(prefs["onboarding"])) written.push("onboarding");
       return written;
     }

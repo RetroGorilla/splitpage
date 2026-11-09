@@ -117,6 +117,7 @@
               </div>
               <button type="button" role="menuitemcheckbox" aria-checked="true" class="mi mi-switch" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing"><svg class="mi-icon" aria-hidden="true"><use href="#i-autosave"/></svg><span class="mi-text"><span class="mi-label">Autosave</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="save-as" data-keys="mod+shift+s" title="Writes this script to a new file of your choosing — the one on screen keeps its own"><svg class="mi-icon" aria-hidden="true"><use href="#i-copy"/></svg><span class="mi-text"><span class="mi-label">Save a copy…</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="create-bundle"><svg class="mi-icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="mi-text"><span class="mi-label">Create bundle…</span><span class="mi-why" hidden></span></span></button>
             </div>
             <button type="button" role="menuitem" class="mi mi-command" data-file-action="command-menu" id="menu-command" data-keys="mod+k"><svg class="mi-icon" aria-hidden="true"><use href="#i-search"/></svg><span class="mi-text"><span class="mi-label">Search commands…</span><span class="mi-why" hidden></span></span></button>
 
@@ -145,21 +146,18 @@
               <div class="menu-group-head" id="fm-g-doc">This document</div>
               <button type="button" role="menuitem" class="mi" data-file-action="history"><svg class="mi-icon" aria-hidden="true"><use href="#i-history"/></svg><span class="mi-text"><span class="mi-label">Version history…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="find" data-keys="mod+f"><svg class="mi-icon" aria-hidden="true"><use href="#i-find"/></svg><span class="mi-text"><span class="mi-label">Find &amp; replace</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse beats marked Filmed into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide filmed beats</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimise the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-browser" id="menu-present-browser" data-keys="mod+shift+p" data-keys-only="desktop" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser (Follow My Voice)</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Use Chromium Speech Recognition</span><span class="mi-why" hidden></span></span></button>
             </div>
           </div>
           <div class="menu-foot" role="group" aria-label="Help and settings">
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="settings" id="menu-settings"><svg class="mi-icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="mi-label">Settings</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="help" data-keys="F1" data-keys-only="desktop"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-label">Help</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tour"><svg class="mi-icon" aria-hidden="true"><use href="#i-compass"/></svg><span class="mi-label">Tour</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="setup" title="Set up Splitpage…"><svg class="mi-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="mi-label">Set up</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="about" title="About Splitpage"><svg class="mi-icon" aria-hidden="true"><use href="#i-info"/></svg><span class="mi-label">About</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tagging-help"><svg class="mi-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="mi-label">Tagging reference</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="export-app-data" id="menu-export-app-data"><svg class="mi-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="mi-label">Export app data…</span></button>
-            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="import-app-data" id="menu-import-app-data" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="mi-label">Import app data…</span></button>
+            <button type="button" role="menuitem" class="mi" data-file-action="settings" id="menu-settings"><svg class="mi-icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="mi-text"><span class="mi-label">Settings</span></span></button>
+            <button type="button" role="menuitem" class="mi mi-parent" data-submenu="help" id="menu-help" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-help"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-text"><span class="mi-label">Help</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+            <div class="menu-sub" id="menu-sub-help" role="menu" aria-label="Help" hidden>
+              <button type="button" role="menuitem" class="mi" data-file-action="help" data-keys="F1" data-keys-only="desktop"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-text"><span class="mi-label">User guide</span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="tour"><svg class="mi-icon" aria-hidden="true"><use href="#i-compass"/></svg><span class="mi-text"><span class="mi-label">Take the tour</span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="setup"><svg class="mi-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="mi-text"><span class="mi-label">Getting started…</span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="tagging-help"><svg class="mi-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="mi-text"><span class="mi-label">Tagging reference</span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="about"><svg class="mi-icon" aria-hidden="true"><use href="#i-info"/></svg><span class="mi-text"><span class="mi-label">About Splitpage</span></span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -179,6 +177,7 @@
           <span class="stat-chip" id="progress-chip" hidden>
             <span class="stat-dot"></span><span id="progress-text"></span>
           </span>
+          <button type="button" class="hide-shot-switch" id="hide-shot-toggle" role="switch" aria-checked="false" title="Hide filmed beats: collapse beats marked Filmed into a thin strip" hidden><span class="hide-shot-track" aria-hidden="true"><span class="hide-shot-thumb"></span></span><span class="hide-shot-label">Hide filmed beats</span></button>
           <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
             <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
           </button>
@@ -195,7 +194,13 @@
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
-        <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
+        <div class="present-split" id="present-split">
+          <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
+          <button class="btn btn-accent present-more" id="btn-present-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="present-menu" aria-label="More ways to present" title="More ways to present" hidden><svg class="btn-icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+          <div class="menu present-menu" id="present-menu" role="menu" aria-label="More ways to present" hidden>
+            <button type="button" role="menuitem" class="mi" id="present-menu-browser" title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser…</span></span></button>
+          </div>
+        </div>
       </div>
     </div>
     <section class="rundown" id="rundown" aria-label="Rundown" hidden>
@@ -238,9 +243,14 @@
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
+  <div class="update-bar" id="bundle-outside-bar" hidden>
+    <span id="bundle-outside-text"></span>
+    <button type="button" class="update-bar-action" id="bundle-outside-create">Create bundle…</button>
+    <button type="button" class="update-bar-dismiss" id="bundle-outside-dismiss" title="Dismiss" aria-label="Dismiss">×</button>
+  </div>
   <div class="update-bar" id="desktop-app-bar" hidden>
     <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
-    <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
+    <span id="desktop-app-bar-text" title="Moving over: Settings ▸ Data ▸ Export app data… here, install the desktop app, then Settings ▸ Data ▸ Import app data… there."></span>
     <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
     <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
@@ -353,10 +363,12 @@
     <p class="tagging-help-note">Click a tag in the script, or its card in <strong>Production</strong>, to say who's responsible and keep notes, links or file paths against it.</p>
   </div>
   <div class="tagging-help-foot">
-    <span class="tagging-help-sub">File ▸ Tagging reference brings this back</span>
+    <span class="tagging-help-sub">File ▸ Help ▸ Tagging reference brings this back</span>
   </div>
 </section>
 <button class="tag-suggest tag-open-hint" id="tag-open-hint" type="button" tabindex="-1"></button>
+<div class="tag-ghost-hint" id="tag-open-ghost" aria-hidden="true"></div>
+<div id="tag-open-starter" aria-hidden="true"></div>
 <ul class="who-list" id="who-list" role="listbox" aria-label="People" hidden></ul>
 
 <div class="modal-backdrop" id="import-modal" hidden>
@@ -699,13 +711,18 @@
 <div class="modal-backdrop" id="bundle-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="bundle-title" aria-describedby="bundle-detail">
     <div class="modal-header">
-      <h2 id="bundle-title">Copy this video into the script's folder?</h2>
+      <h2 id="bundle-title">Add this file to the script's folder?</h2>
     </div>
     <p class="modal-hint" id="bundle-detail"></p>
+    <ul class="bundle-create-paths" id="bundle-create-paths" hidden></ul>
+    <p class="modal-hint" id="bundle-create-missing" hidden></p>
+    <p class="modal-hint" id="bundle-create-move" hidden></p>
+    <p class="modal-hint" id="bundle-create-warning" hidden></p>
     <div class="modal-footer">
       <span></span>
       <div class="modal-footer-actions">
-        <button type="button" class="btn" id="bundle-decline">Link to where it is</button>
+        <button type="button" class="btn" id="bundle-decline">Leave it where it is</button>
+        <button type="button" class="btn" id="bundle-move">Move it</button>
         <button type="button" class="btn btn-accent" id="bundle-accept">Copy it</button>
       </div>
     </div>
@@ -772,6 +789,7 @@
       <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="false">Category</button>
       <button type="button" class="panel-tab" data-group="person" role="radio" aria-checked="false">Person</button>
       <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Beat</button>
+      <button type="button" class="panel-tab" data-group="by-scene" role="radio" aria-checked="false">By scene</button>
       <button type="button" class="panel-tab" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
     </div>
     </details>
@@ -797,6 +815,7 @@
     <div class="panel-tabs" id="gear-modes" role="radiogroup" aria-label="Group gear by">
       <button type="button" class="panel-tab" data-group="flat" role="radio" aria-checked="true">List</button>
       <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Beat</button>
+      <button type="button" class="panel-tab" data-group="by-scene" role="radio" aria-checked="false">By scene</button>
     </div>
     <button type="button" class="gear-packing-btn" data-action="export-packing-gear" title="Export a printable packing list" aria-label="Packing list: export a printable PDF"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>Packing list</button>
   </div>
@@ -926,6 +945,7 @@
       <span class="ev-field comments-filter-menu">
         <select id="comments-sort" aria-label="Sort comments">
           <option value="position">Script order</option>
+          <option value="by-scene">By scene</option>
           <option value="recent">Most recent</option>
         </select>
         <svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
@@ -1099,13 +1119,13 @@
       <section class="onboard-step" data-onboard-step="3">
         <p class="modal-hint">That's it — Splitpage saves your scripts as Markdown files
           you keep wherever you like, and everything above is always reachable again from
-          File ▸ Set up Splitpage….</p>
+          File ▸ Help ▸ Getting started….</p>
         <div class="modal-row">
           <span class="modal-hint">Want a quick tour of the editor?</span>
           <button type="button" class="btn btn-accent" data-onboard-action="finish-tour">Take the 5-step tour</button>
         </div>
         <p class="modal-hint"><a href="#" data-onboard-action="open-help">Open the user guide</a>
-          any time from the File menu.</p>
+          any time from File ▸ Help.</p>
       </section>
     </div>
 

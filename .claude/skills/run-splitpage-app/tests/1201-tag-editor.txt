@@ -1,0 +1,108 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.tag=function(){return '<span class="tag-anchor" data-tag-cat="sound" data-tag-name="Weather" contenteditable="false">rain on umbrella roof</span>';}; F.openFile(new File([JSON.stringify({schema:5,title:'Occurrence editor',paragraphsDecided:true,productionTags:[{id:'t_weather',cat:'sound',name:'Weather',notes:'Keep this name',status:'have',owner:''},{id:'t_cable',cat:'prop',name:'cable tray',notes:'Blue',status:'have',owner:''}],rows:[{id:'r0',visualText:tag(),audioText:'First'},{id:'r1',visualText:tag(),audioText:'Second'},{id:'r2',visualText:'before '+tag()+' after',audioText:'Third'},{id:'r3',visualText:tag(),audioText:'Fourth'}],comments:[]})],'editor.splitpage'))
+wait F.state().title === 'Occurrence editor'
+eval window.c=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.outer=function(i){return c(i).querySelector('[data-tag-cat="sound"]');}; window.selectWords=function(el,a,b){var node=el.firstChild;var r=document.createRange();r.setStart(node,a);r.setEnd(node,b);getSelection().removeAllRanges();getSelection().addRange(r);}; true
+eval window.lastScroll=performance.now();addEventListener('scroll',function(){window.lastScroll=performance.now();},true);true
+expect outer(0).getAttribute('contenteditable') === 'false'
+click #rows .row:nth-of-type(1) [data-tag-cat="sound"]
+wait !document.getElementById('tag-edit-action').hidden
+expect document.getElementById('tag-edit-action').textContent === 'Edit tag'
+click #tag-edit-action
+expect outer(0).getAttribute('contenteditable') === 'true'
+expect outer(1).getAttribute('contenteditable') === 'false'
+expect document.getElementById('tag-edit-action').textContent === 'Done'
+eval selectWords(outer(0),8,16)
+click #rows .row:nth-of-type(1) .tb-tag
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
+expect outer(0).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+expect outer(0).getAttribute('contenteditable') === 'true'
+expect outer(0).dataset.tagName === 'Weather'
+expect F.state().productionTags.find(function(t){return t.id==='t_weather';}).notes === 'Keep this name'
+expect F.state().productionTags.find(function(t){return t.id==='t_weather';}).status === 'have'
+expect outer(1).querySelector('.tag-anchor') === null
+click #tag-edit-action
+expect outer(0).getAttribute('contenteditable') === 'false'
+expect document.getElementById('tag-edit-action').hidden
+key ctrl KeyZ
+expect outer(0).querySelector('.tag-anchor') === null && outer(0).dataset.tagName === 'Weather'
+key ctrl KeyY
+expect outer(0).querySelector('[data-tag-cat="prop"]') !== null
+click #rows .row:nth-of-type(2) [data-tag-cat="sound"]
+click #tag-edit-action
+eval c(1).focus(); var r=document.createRange();r.setStart(outer(1).firstChild,8);r.collapse(true);getSelection().removeAllRanges();getSelection().addRange(r); true
+wait performance.now() - window.lastScroll > 400
+press [cable t
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+key Escape
+expect outer(1).getAttribute('contenteditable') === 'true' && !document.getElementById('tag-ghost').classList.contains('is-visible')
+key Escape
+expect outer(1).getAttribute('contenteditable') === 'false'
+click #rows .row:nth-of-type(2) [data-tag-cat="sound"]
+click #tag-edit-action
+eval c(1).focus(); var r=document.createRange();r.setStart(outer(1).firstChild,8);r.collapse(true);getSelection().removeAllRanges();getSelection().addRange(r); true
+press prop: cab
+wait document.getElementById('tag-open-ghost').classList.contains('is-visible')
+expect c(1).querySelector('.plain-tag-keyword') !== null
+key Escape
+expect !document.getElementById('tag-open-ghost').classList.contains('is-visible') && c(1).querySelector('.plain-tag-keyword') !== null && outer(1).getAttribute('contenteditable') === 'true'
+key Escape
+expect c(1).querySelector('.plain-tag-keyword') === null && outer(1).getAttribute('contenteditable') === 'true'
+key Escape
+expect outer(1).getAttribute('contenteditable') === 'false'
+click #rows .row:nth-of-type(2) [data-tag-cat="sound"]
+click #tag-edit-action
+eval c(1).focus();var r=document.createRange();r.selectNodeContents(outer(1));getSelection().removeAllRanges();getSelection().addRange(r);true
+press [umbrella]
+expect outer(1).textContent === 'umbrella' && outer(1).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+eval c(1).focus();var r=document.createRange();r.selectNodeContents(outer(1));getSelection().removeAllRanges();getSelection().addRange(r);true
+click #rows .row:nth-of-type(2) .tb-tag
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="cast"]
+expect c(1).querySelector('[data-tag-cat="sound"] [data-tag-cat="cast"] [data-tag-cat="prop"]').textContent === 'umbrella'
+click #tag-edit-action
+eval (function(){var el=c(2);el.focus();var r=document.createRange();r.setStart(el.firstChild,0);r.setEnd(outer(2).firstChild,4);getSelection().removeAllRanges();getSelection().addRange(r);window.before=F.state().rows[2].visualText;return true;})()
+click #rows .row:nth-of-type(3) .tb-tag
+expect document.querySelector('#rows [data-tags-open="true"]') === null
+expect F.state().rows[2].visualText === window.before
+eval (function(){var el=c(2);el.focus();var r=document.createRange();r.selectNodeContents(el);getSelection().removeAllRanges();getSelection().addRange(r);return true;})()
+click #rows .row:nth-of-type(3) .tb-tag
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="location"]
+expect c(2).querySelector('[data-tag-cat="location"] [data-tag-cat="sound"]') !== null
+click #btn-write
+wait W.on()
+eval W.openVisual('r3'); window.v=function(){return document.querySelector('.wr-flow-visual-text');}; true
+click .wr-flow-visual-text [data-tag-cat="sound"]
+click #tag-edit-action
+eval selectWords(v().querySelector('[data-tag-cat="sound"]'),8,16)
+click .wr-flow-visual-tag
+wait document.querySelector('.wr-flow-visual-box [data-tags-open="true"]') !== null
+shot 1201-writer-picker
+click .wr-flow-visual-box .tag-toolbar-choice[data-tag-cat="prop"]
+expect v().querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
+expect v().querySelector('[data-tag-cat="sound"]').dataset.tagName === 'Weather'
+key Escape
+expect v().querySelector('[data-tag-cat="sound"]').getAttribute('contenteditable') === 'false'
+expect !document.querySelector('.wr-flow-visual-box').hidden
+key ctrl KeyZ
+expect !F.state().rows[3].visualText.includes('data-tag-cat="prop"')
+click #wr-close
+wait !W.on()
+click #btn-production
+wait !document.getElementById('production-panel').hidden
+jsclick #production-modes [data-group="cat"]
+eval (function(){var card=document.querySelector('#production-list .tag-entity[data-key="prop umbrella"]');if(!card.classList.contains('is-expanded'))card.querySelector('[data-action="tag-expand"]').click();return true;})()
+jsclick #production-list [data-key="prop umbrella"] [data-action="tag-remove"]
+jsclick #production-list [data-key="prop umbrella"] [data-action="tag-remove"]
+expect !F.state().rows[0].visualText.includes('data-tag-cat="prop"') && F.state().rows[0].visualText.includes('data-tag-name="Weather"')
+expect outer(0).textContent === 'rain on umbrella roof'
+key ctrl KeyZ
+expect F.state().rows[0].visualText.includes('data-tag-cat="prop"') && F.state().rows[0].visualText.includes('data-tag-name="Weather"')
+eval (function(){var card=document.querySelector('#production-list .tag-entity[data-key="sound weather"]');if(!card.classList.contains('is-expanded'))card.querySelector('[data-action="tag-expand"]').click();return true;})()
+jsclick #production-list [data-key="sound weather"] [data-action="tag-remove"]
+jsclick #production-list [data-key="sound weather"] [data-action="tag-remove"]
+expect !F.state().rows[0].visualText.includes('data-tag-cat="sound"') && F.state().rows[0].visualText.includes('data-tag-cat="prop"')
+expect c(0).textContent.replace(/\u200b/g,'') === 'rain on umbrella roof'
+key ctrl KeyZ
+expect c(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]') !== null
+quit

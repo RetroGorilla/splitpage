@@ -27,7 +27,7 @@ server reads three settings, all optional:
 
 ## 2. Desktop installers (Windows)
 
-Splitpage is available as a standalone desktop application built with Electron 44
+Splitpage is available as a standalone desktop application built with Electron 45
 and packaged with electron-builder 26. Starting with 2.0.0, these installers are
 part of the release recipe (§3) alongside the portable zip.
 

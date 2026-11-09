@@ -958,17 +958,15 @@ function lensOff(src?: LensSource): void {
 }
 
 function updateRundownMinControls(): void {
-  const item = document.getElementById("menu-rundown-min");
-  if (item) item.setAttribute("aria-checked", state.minimized ? "true" : "false");
   const strip = stripEl();
   if (!strip) return;
   strip.classList.toggle("is-min", state.minimized);
   const toggle = strip.querySelector<HTMLElement>(".rundown-toggle");
   if (toggle) {
     toggle.setAttribute("aria-expanded", state.minimized ? "false" : "true");
-    const words = state.minimized ? "Show the rundown" : "Minimise the rundown";
-    toggle.setAttribute("aria-label", words);
-    toggle.title = words;
+    const label = toggle.querySelector(".rundown-toggle-label");
+    const words = state.minimized ? "Show rundown" : "Minimise rundown";
+    if (label && label.textContent !== words) label.textContent = words;
   }
 }
 
@@ -1146,7 +1144,8 @@ function ensureToggle(strip: HTMLElement): HTMLButtonElement {
   toggle.type = "button";
   toggle.className = "rundown-toggle";
   toggle.setAttribute("aria-controls", "rundown");
-  toggle.innerHTML = '<svg aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg>';
+  toggle.innerHTML = '<span class="rundown-toggle-face"><span class="rundown-toggle-label"></span>' +
+    '<svg aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg></span>';
   strip.appendChild(toggle);
   return toggle;
 }

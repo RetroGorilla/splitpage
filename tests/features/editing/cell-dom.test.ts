@@ -26,6 +26,24 @@ test("every position goes to the page and back to itself", () => {
   }
 });
 
+test("nested finished tags protect the outer extent, while an opened occurrence exposes only its own words", () => {
+  const el = cell('<span class="tag-anchor" contenteditable="false"><span class="tag-anchor" contenteditable="false">rain</span> outside</span>');
+  const outer = el.firstElementChild as HTMLElement;
+  const child = outer.firstElementChild as HTMLElement;
+  const start = posToDom(el, 0), end = posToDom(el, 4);
+  assert.deepEqual(start, { node: el, offset: 0 });
+  assert.deepEqual(end, { node: el, offset: 1 });
+  outer.setAttribute("data-tag-editing", "");
+  outer.setAttribute("contenteditable", "true");
+  assert.deepEqual(posToDom(el, 2), { node: outer, offset: 1 });
+  assert.deepEqual(posToDom(el, 6), { node: outer.lastChild, offset: 2 });
+  outer.removeAttribute("data-tag-editing");
+  outer.setAttribute("contenteditable", "false");
+  child.setAttribute("data-tag-editing", "");
+  child.setAttribute("contenteditable", "true");
+  assert.deepEqual(posToDom(el, 2), { node: child.firstChild, offset: 2 });
+});
+
 test("a selection is read with its direction, and placed back with it", () => {
   const el = cell("Hello there");
   const text = el.firstChild as Text;

@@ -45,14 +45,14 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean } = 
     onMenuCommand: (cb: (command: string) => void) => { handlers.menu = cb; },
     onDraftFlush: (cb: (request: { readonly keep: boolean }) => unknown) => { handlers.flush = cb; },
     openPrompterInBrowser: () => { log.push("browser"); return Promise.resolve({ ok: true, voice: "relay" } as unknown as MalformedDesktopReply<DesktopAnswer>); },
-    openPrompterInChromium: () => Promise.resolve({ ok: true, browser: "Edge" } as unknown as MalformedDesktopReply<DesktopAnswer>)
+    openPrompterInChromium: () => { log.push("chromium"); return Promise.resolve({ ok: true, browser: "Edge" } as unknown as MalformedDesktopReply<DesktopAnswer>); }
   };
   const notices = fakeNotices();
   const flushDraft = (request: { readonly keep: boolean }) => { log.push("flush:" + request.keep); return "flushed"; };
   const ports: DesktopPorts = {
     running: () => state.running,
     shell: () => (state.running ? shell : null),
-    canOpenPrompter: { browser: () => state.running, chromium: () => state.running },
+    canOpenPrompterInBrowser: () => state.running,
     makeHandle: (entry) => ({ getFile: () => Promise.resolve(new File([], "file:" + entry.name, { lastModified: 0 })) }),
     wireBlobs: () => { log.push("blobs"); },
     document: { current: () => (state.doc ? pilot : null) },
@@ -76,8 +76,7 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean } = 
 }
 
 function page() {
-  win.document.body.innerHTML = '<div id="file-menu"><button data-file-action="save-as">Save as</button></div>' +
-    '<button id="menu-export-app-data" hidden></button><button id="menu-import-app-data" hidden></button>';
+  win.document.body.innerHTML = '<div id="file-menu"><button data-file-action="save-as">Save as</button></div>';
 }
 
 test("starting the desktop wires pictures, menus and every shell event in the old order, then reports the document", async () => {
@@ -87,8 +86,6 @@ test("starting the desktop wires pictures, menus and every shell event in the ol
   try {
     mounted.initDesktop();
     assert.deepEqual(h.log, ["blobs", "await:open-file", "notify"]);
-    assert.equal(win.document.getElementById("menu-export-app-data")?.hidden, false);
-    assert.equal(win.document.getElementById("menu-import-app-data")?.hidden, false);
     assert.equal(h.handlers.flush, h.flushDraft);
     await settled();
     assert.deepEqual(h.log, ["blobs", "await:open-file", "notify"], "nothing more runs once the shell answers");
@@ -204,23 +201,27 @@ test("off the desktop, starting does nothing", () => {
   }
 });
 
-test("the prompter actions are refused until mounted, then follow the screen and what the shell offers", async () => {
+test("the one prompter action is refused until mounted, then follows the screen and what the shell offers", async () => {
   const screen = fakeScreen();
   let current: DesktopMount | null = null;
   let running = true;
+  let offered = true;
   const definitions = desktopActions(() => current, {
     screen: screen.screen,
     running: () => running,
-    canOpenPrompter: { browser: () => running, chromium: () => false }
+    canOpenPrompterInBrowser: () => offered
   });
-  assert.deepEqual(definitions.map((d) => d.id), ["prompter-open-in-browser", "prompter-open-in-chromium"]);
-  const [browser, chromium] = definitions;
+  assert.deepEqual(definitions.map((d) => d.id), ["prompter-open-in-browser"]);
+  const [browser] = definitions;
+  assert.equal(browser?.label, "Present in browser…");
   assert.deepEqual(browser?.availability?.("menu"), { enabled: false });
   const h = harness();
   current = mount(h.ports);
   try {
     assert.deepEqual(browser?.availability?.("menu"), { enabled: true });
-    assert.deepEqual(chromium?.availability?.("menu"), { enabled: true, visible: false });
+    offered = false;
+    assert.deepEqual(browser?.availability?.("menu"), { enabled: true, visible: false });
+    offered = true;
     const keys = browser?.keys;
     assert.deepEqual(typeof keys === "function" ? keys() : keys, ["mod+shift+p"]);
     running = false;

@@ -2,7 +2,7 @@ import { createUndo } from "../../application/editing/undo/undo.ts";
 import type { ReplayRunner, Undo, UndoHooks, UndoPorts } from "../../application/editing/undo/undo.ts";
 import type { StampPorts, UndoPort } from "../../application/session/ports.ts";
 import { fromHtml } from "../richtext.ts";
-import { heldDocument } from "./session-owner.ts";
+import { heldDocument, liveSession } from "./session-owner.ts";
 
 const WITH_MEDIA = Object.freeze({ media: true });
 
@@ -17,6 +17,7 @@ function announceCleared(count: number): void {
 export function undoPorts(): UndoPorts {
   return Object.freeze({
     held: heldDocument,
+    epoch: () => liveSession().epoch(),
     runs: function (html: unknown) { return fromHtml(html == null ? "" : html, WITH_MEDIA); },
     now: function () { return Date.now(); },
     cleared: announceCleared

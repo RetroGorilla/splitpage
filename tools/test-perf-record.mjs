@@ -11,7 +11,7 @@ const failures = [];
 
 function boot(code) {
   const formats = { clone: (x) => JSON.parse(JSON.stringify(x)), state: () => ({ rows: [{ id: "r1" }], comments: [] }) };
-  const window = { __splitpageFormats: formats, __blobsTest: {}, __hostedTest: {} };
+  const window = { __splitpageFormats: formats, __blobsTest: {} };
   vm.runInNewContext(code, { window, btoa, File, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
   return window.__perfImg;
 }
@@ -147,6 +147,27 @@ function stampWorld(clicksWork) {
 const stampRun = async (clicksWork) => stampWorld(clicksWork).then(() => "passed", (e) => e.message);
 eq("a stamp run in which the clicks change the scenes passes", await stampRun(true), "passed");
 eq("a stamp run in which every click does nothing is rejected, though 6 scenes are already shot", (await stampRun(false)).startsWith("perf scenes: "), true);
+
+const OLD_HIDE = '#file-menu [data-file-action="toggle-hide-shot"]';
+const NEW_HIDE = "#hide-shot-toggle";
+function hideWorld(controls) {
+  const clicked = [];
+  let hiding = false;
+  const document = {
+    querySelector: (selector) => (controls.includes(selector) ? { click() { clicked.push(selector); hiding = !hiding; } } : null),
+    querySelectorAll: () => ({ length: hiding ? 1 : 0 })
+  };
+  const window = { __perf: { lat: [], reset() {}, take: (label) => label } };
+  vm.runInNewContext(BEATS.replace(/\n\s*/g, " "), { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
+  return { clicked, run: () => window.__perfScene.hide() };
+}
+const headerRun = hideWorld([NEW_HIDE]);
+eq("a build with the header switch measures the hide run through it", await headerRun.run(), "long hide shot scenes");
+eq("every hide click in that build is the header switch", headerRun.clicked.length > 0 && headerRun.clicked.every((s) => s === NEW_HIDE), true);
+const menuRun = hideWorld([OLD_HIDE]);
+eq("an older build with only the File menu item measures the same run through it", await menuRun.run(), "long hide shot scenes");
+eq("every hide click in that build is the File menu item", menuRun.clicked.length > 0 && menuRun.clicked.every((s) => s === OLD_HIDE), true);
+eq("both builds get the same number of hide clicks", menuRun.clicked.length, headerRun.clicked.length);
 
 console.log("\nthe pictures:\n");
 

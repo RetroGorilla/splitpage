@@ -1,0 +1,240 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; var t=function(cat,name,words){return '<span class="tag-anchor" data-tag-cat="'+cat+'" data-tag-name="'+name+'" contenteditable="false">'+words+'</span>';};var nested=t('sound','Weather','rain '+t('location','Park','at '+t('prop','Carry','carry here')+' today')+' outside');F.openFile(new File([JSON.stringify({schema:5,title:'Nested depth',paragraphsDecided:true,rows:[{id:'r0',audioText:'First',visualText:nested},{id:'r1',audioText:'Second',visualText:nested}],comments:[]})],'depth.splitpage'));
+wait F.state().title === 'Nested depth'
+eval window.nestedPerf={lat:[],long:[],depth4:0,measuring:false};addEventListener('keydown',function(e){if(!nestedPerf.measuring)return;var t=e.timeStamp,n=getSelection().anchorNode,d=0;for(var el=n.nodeType===1?n:n.parentElement;el;el=el.parentElement)if(el.matches('.tag-anchor'))d++;if(d===4)nestedPerf.depth4++;requestAnimationFrame(function(){setTimeout(function(){nestedPerf.lat.push(performance.now()-t);},0);});},true);try{new PerformanceObserver(function(l){if(nestedPerf.measuring)nestedPerf.long.push(...l.getEntries().map(function(e){return e.duration;}));}).observe({type:'longtask'});}catch(e){};window.takeNested=function(label){nestedPerf.measuring=false;var a=nestedPerf.lat.slice().sort(function(a,b){return a-b;});return 'NESTED_PERF '+JSON.stringify({label:label,keys:a.length,depth4:nestedPerf.depth4,p50:+a[Math.floor(a.length*.5)].toFixed(1),p95:+a[Math.floor(a.length*.95)].toFixed(1),longTasks:nestedPerf.long.length});};window.startDepth=function(cell){var t=cell.querySelector('[data-tag-cat="gear"]');cell.focus();var r=document.createRange();r.selectNodeContents(t);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);nestedPerf={lat:[],long:[],depth4:0,measuring:true};return true;};true
+eval window.inside=function(el){var tag=el.querySelector('[data-tag-name="Carry"]');el.focus();var r=document.createRange();r.setStart(tag.firstChild,6);r.collapse(true);getSelection().removeAllRanges();getSelection().addRange(r);nestedPerf.lat=[];nestedPerf.long=[];return true;}; true
+click #rows .row:nth-of-type(1) [data-tag-name="Carry"]
+click #tag-edit-action
+eval inside(document.querySelector('#rows .visual-cell .cell-editable'))
+press <
+sleep 60
+press c
+sleep 60
+press a
+sleep 60
+press m
+sleep 60
+press e
+sleep 60
+press r
+sleep 60
+press a
+sleep 60
+press >
+sleep 60
+sleep 200
+expect document.querySelector('#rows [data-tag-cat="sound"] [data-tag-cat="location"] [data-tag-cat="prop"] [data-tag-cat="gear"]').textContent === 'camera'
+expect document.querySelector('#rows [data-tag-name="Carry"]').getAttribute('contenteditable') === 'true'
+key Escape
+expect document.querySelector('#rows [data-tag-name="Carry"]').getAttribute('contenteditable') === 'false'
+key ctrl KeyZ
+expect !F.state().rows[0].visualText.includes('data-tag-cat="gear"')
+key ctrl KeyY
+expect F.state().rows[0].visualText.includes('data-tag-cat="gear"')
+click #rows .row:nth-of-type(1) [data-tag-cat="gear"]
+click #tag-edit-action
+eval startDepth(document.querySelector('#rows .visual-cell .cell-editable'))
+key Space
+sleep 60
+press f
+sleep 60
+press i
+sleep 60
+press l
+sleep 60
+press m
+sleep 60
+press s
+sleep 60
+key Space
+sleep 60
+press t
+sleep 60
+press h
+sleep 60
+press e
+sleep 60
+key Space
+sleep 60
+press q
+sleep 60
+press u
+sleep 60
+press i
+sleep 60
+press e
+sleep 60
+press t
+sleep 60
+key Space
+sleep 60
+press s
+sleep 60
+press h
+sleep 60
+press e
+sleep 60
+press l
+sleep 60
+press t
+sleep 60
+press e
+sleep 60
+press r
+sleep 60
+key Space
+sleep 60
+press i
+sleep 60
+press n
+sleep 60
+key Space
+sleep 60
+press s
+sleep 60
+press t
+sleep 60
+press e
+sleep 60
+press a
+sleep 60
+press d
+sleep 60
+press y
+sleep 60
+key Space
+sleep 60
+press r
+sleep 60
+press a
+sleep 60
+press i
+sleep 60
+press n
+sleep 60
+press .
+sleep 60
+sleep 200
+eval takeNested('sustained depth 4 rows')
+expect nestedPerf.lat.length >= 30 && nestedPerf.depth4 === nestedPerf.lat.length
+expect document.querySelector('#rows [data-tag-cat="gear"]').textContent === 'camera films the quiet shelter in steady rain.'
+key Escape
+expect document.querySelector('#rows [data-tag-cat="gear"]').getAttribute('contenteditable') === 'false'
+click #btn-write
+wait W.on()
+eval W.openVisual('r1'); true
+click .wr-flow-visual-text [data-tag-name="Carry"]
+click #tag-edit-action
+eval inside(document.querySelector('.wr-flow-visual-text'))
+press <
+sleep 60
+press c
+sleep 60
+press a
+sleep 60
+press m
+sleep 60
+press e
+sleep 60
+press r
+sleep 60
+press a
+sleep 60
+press >
+sleep 60
+sleep 200
+expect document.querySelector('.wr-flow-visual-text [data-tag-cat="sound"] [data-tag-cat="location"] [data-tag-cat="prop"] [data-tag-cat="gear"]').textContent === 'camera'
+key Escape
+expect document.querySelector('.wr-flow-visual-text [data-tag-name="Carry"]').getAttribute('contenteditable') === 'false'
+click .wr-flow-visual-text [data-tag-cat="gear"]
+click #tag-edit-action
+eval startDepth(document.querySelector('.wr-flow-visual-text'))
+key Space
+sleep 60
+press f
+sleep 60
+press i
+sleep 60
+press l
+sleep 60
+press m
+sleep 60
+press s
+sleep 60
+key Space
+sleep 60
+press t
+sleep 60
+press h
+sleep 60
+press e
+sleep 60
+key Space
+sleep 60
+press q
+sleep 60
+press u
+sleep 60
+press i
+sleep 60
+press e
+sleep 60
+press t
+sleep 60
+key Space
+sleep 60
+press s
+sleep 60
+press h
+sleep 60
+press e
+sleep 60
+press l
+sleep 60
+press t
+sleep 60
+press e
+sleep 60
+press r
+sleep 60
+key Space
+sleep 60
+press i
+sleep 60
+press n
+sleep 60
+key Space
+sleep 60
+press s
+sleep 60
+press t
+sleep 60
+press e
+sleep 60
+press a
+sleep 60
+press d
+sleep 60
+press y
+sleep 60
+key Space
+sleep 60
+press r
+sleep 60
+press a
+sleep 60
+press i
+sleep 60
+press n
+sleep 60
+press .
+sleep 60
+sleep 200
+eval takeNested('sustained depth 4 Writer')
+expect nestedPerf.lat.length >= 30 && nestedPerf.depth4 === nestedPerf.lat.length
+expect document.querySelector('.wr-flow-visual-text [data-tag-cat="gear"]').textContent === 'camera films the quiet shelter in steady rain.'
+key Escape
+expect document.querySelector('.wr-flow-visual-text [data-tag-cat="gear"]').getAttribute('contenteditable') === 'false'
+expect !document.querySelector('.wr-flow-visual-box').hidden
+quit

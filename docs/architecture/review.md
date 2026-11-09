@@ -1,6 +1,6 @@
 # Splitpage review policy
 
-This applies to every PR into `main`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on `main` under §2.
+This applies to every PR into `main`, the only long-lived branch. Bug fixes go to `main` under §2. Splitpage 0.4.1 has shipped; [ROADMAP.md](../ROADMAP.md) links to current work.
 
 **Tiers.** The area a PR touches sets how much review it gets, not its size. Anything not listed is Normal. A PR that fits more than one tier takes the highest, and when in doubt go up a tier.
 
@@ -10,7 +10,7 @@ This applies to every PR into `main`. No 3.1.x release is planned before 4.0, so
 | Normal | New features; IPC and the desktop main process; the updater; the release pipeline; major dependency updates, which also need a run of the real app | One independent review (§4) and a re-check of its fixes. Only blockers hold the merge; other concerns are filed as issues (§6) |
 | Full | Save, drafts, history, recovery, merge | The whole process below, with every concern closed before merge |
 
-The Autonomous run rules in [AGENT-QUEUE.md](../AGENT-QUEUE.md) still apply to queue tasks.
+The [old agent queue](../AGENT-QUEUE.md) is finished. Its former run rules do not authorize new work or merges.
 
 ## 1. The PR
 

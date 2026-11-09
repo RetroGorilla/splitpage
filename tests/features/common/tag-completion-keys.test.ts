@@ -2,16 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { acceptGhostOnTab, dismissesTagGhost, plainTagKeydown } from "../../../src/features/common/tag-completion-keys.ts";
 
-function setup(key: string, empty = true, cancelled = true) {
+function setup(key: string, empty = true, cancelled = true, suggested = false) {
   const calls: string[] = [];
   const event = { key, preventDefault: () => { calls.push("prevent"); }, stopPropagation: () => { calls.push("stop"); } } as KeyboardEvent;
   const tag = {
     close: () => calls.push("close"), cancel: () => calls.push("cancel"),
     emptyAtCaret: () => { calls.push("empty"); return empty; },
-    cancelOnBackspace: () => { calls.push("backspace"); return cancelled; }
+    cancelOnBackspace: () => { calls.push("backspace"); return cancelled; },
+    dismissSuggestion: () => { if (suggested) calls.push("dismiss"); return suggested; }
   };
   return { calls, event, tag };
 }
+
+test("Escape on an open tag with a suggestion hides only the suggestion; the next Escape cancels", () => {
+  const first = setup("Escape", true, true, true);
+  assert.equal(plainTagKeydown(first.event, first.tag, () => first.calls.push("hide")), true);
+  assert.deepEqual(first.calls, ["prevent", "stop", "dismiss"]);
+  const second = setup("Escape", true, true, false);
+  assert.equal(plainTagKeydown(second.event, second.tag, () => second.calls.push("hide")), true);
+  assert.deepEqual(second.calls, ["prevent", "stop", "hide", "cancel"]);
+});
 
 test("open tags consume Tab before completion and preserve Escape effect ordering", () => {
   for (const visual of [false, true]) {

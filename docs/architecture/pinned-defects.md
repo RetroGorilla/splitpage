@@ -1,5 +1,7 @@
 # Pinned and deferred defects
 
+This is a historical disposition ledger for the completed refactor. Milestone assignments and old “triage” entries below are not current status. Check the linked issue before starting work; [ROADMAP.md](../ROADMAP.md) links to the current backlog.
+
 Every known defect that a test pins as it is, or that work up to and including
 milestone 2 found and deferred, with its disposition. This is the fourth
 commitment of the milestone 2 external review
@@ -14,8 +16,7 @@ commitment of the milestone 2 external review
 Adam approved these dispositions and the milestone assignments on 2026-10-01.
 He may change any of them later.
 
-**How a fix lands.** Bug fixes go to `main` only. No 3.1.x release
-is planned, and `3.1.x-development` takes no more fixes
+**How a fix lands.** Bug fixes go to `main` only, the sole long-lived branch
 ([review.md §2](review.md#2-where-bugs-get-fixed)). Each fix is its own PR,
 in the module that now owns the code, with a regression test written to fail
 first. A test that pins the old behaviour changes in that PR, on purpose. A
@@ -220,5 +221,5 @@ Added by PR 4.3 (groups B, K, H and M), measured on `758128d`. Each row is a cas
 
 ## Not in this table
 
-- #302 is a test gap, not a defect: two b-roll id draws that no test pins. It stays in the post-M2 queue as a tests-only PR.
-- The open product bugs #238, #239, #246, #258, #259 and #262 were not pinned or deferred by the refactor. They follow [review.md §2](review.md#2-where-bugs-get-fixed) like any other bug.
+- #302 was a test gap, not a defect. The issue is closed; it is not queued work.
+- Product issues #238, #239, #246, #258, #259 and #262 were outside this ledger and are now closed. Check GitHub for any new work.

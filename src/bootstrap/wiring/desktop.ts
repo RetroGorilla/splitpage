@@ -2,7 +2,7 @@ import { historyOwner } from "./history.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { runMenuCommand } from "../../application/desktop/menu-commands.ts";
 import { presence } from "./ports/desktop-presence.ts";
-import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../../adapters/desktop/desktop-port.ts";
+import { canOpenPrompterInBrowser, desktopPort, restoreDesktop, useDesktopForTest } from "../../adapters/desktop/desktop-port.ts";
 import type { DesktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { makeDesktopBlobBackend, wireDesktopBlobs } from "../../adapters/desktop/desktop-blobs.ts";
@@ -29,15 +29,13 @@ import { startup as portStartup } from "./ports/startup.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
-const canOpenPrompter = { browser: canOpenPrompterInBrowser, chromium: canOpenPrompterInChromium };
-
 const desktop = owned<DesktopMount>();
 
 function desktopPorts(): DesktopPorts {
   return {
     running: presence.running,
     shell: desktopPort,
-    canOpenPrompter: canOpenPrompter,
+    canOpenPrompterInBrowser: canOpenPrompterInBrowser,
     makeHandle: (entry) => makeDesktopHandle(entry),
     wireBlobs: () => { wireDesktopBlobs(desktopPort()); },
     document: portDocument,
@@ -113,5 +111,5 @@ export function startDesktopShell(): void {
 }
 
 export function desktopActions(): ActionDefinition[] {
-  return definitions(desktop.owner, { screen: portScreen, running: presence.running, canOpenPrompter: canOpenPrompter });
+  return definitions(desktop.owner, { screen: portScreen, running: presence.running, canOpenPrompterInBrowser: canOpenPrompterInBrowser });
 }

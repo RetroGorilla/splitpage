@@ -1,0 +1,23 @@
+open
+viewport 390 844 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;F.openFile(new File([JSON.stringify({schema:5,title:'Nested phone',paragraphsDecided:true,productionTags:[{id:'t_umbrella',cat:'prop',name:'umbrella',notes:'Red',status:'have',owner:''}],rows:[{id:'r0',visualText:'',audioText:'First'}],comments:[]})],'phone.splitpage'))
+wait F.state().title === 'Nested phone'
+caret #rows .visual-cell .cell-editable
+press sfx: rain on [umb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+mouse click (function(){var r=document.getElementById('tag-ghost').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
+expect document.querySelector('#rows .plain-tag-keyword') !== null
+expect document.querySelector('#rows [data-tag-cat="prop"]').textContent === 'umbrella'
+mouse click (function(){var r=document.getElementById('tag-open-hint').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
+expect document.querySelector('#rows [data-tag-cat="sound"] [data-tag-cat="prop"]') !== null
+expect document.querySelector('#rows .cell-editable').textContent.replace(/\u200b/g,'') === 'rain on umbrella'
+mouse click (function(){var r=document.querySelector('#rows [data-tag-cat="sound"]').getBoundingClientRect();return {x:r.left+3,y:r.top+r.height/2};})()
+click #tag-edit-action
+expect document.getElementById('production-panel').hidden
+expect document.querySelector('#rows [data-tag-cat="sound"]').getAttribute('contenteditable') === 'true'
+expect document.querySelector('#rows [data-tag-cat="prop"]').getAttribute('contenteditable') === 'false'
+click #tag-edit-action
+expect document.querySelector('#rows [data-tag-cat="sound"]').getAttribute('contenteditable') === 'false'
+quit

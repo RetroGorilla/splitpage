@@ -59,15 +59,15 @@ click #settings-modal input[name="settings-theme"][value="system"]
 expect document.documentElement.hasAttribute('data-theme') === false
 expect localStorage.getItem('splitpage-theme') === null
 
-# --- Hide shot scenes: the File menu's switch, the same key ----------------
+# --- Hide shot scenes: the header's switch, the same key -------------------
 click #settings-modal label[for="settings-hide-shot"]
 expect localStorage.getItem('splitpage-hide-shot') === '1'
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
-# the File menu's switch is refused while Settings (a dialog) is open, and says why
-jsclick #menu-hide-shot
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') === 'true'
+# the header's switch is refused while Settings (a dialog) is open, and says why
+jsclick #hide-shot-toggle
 sleep 200
 expect localStorage.getItem('splitpage-hide-shot') === '1'
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') === 'true'
 expect window.__on('settings-hide-shot') === true
 expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first.'; })
 # another tab storing a change while Settings is open: the Settings switch

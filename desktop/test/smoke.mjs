@@ -1438,9 +1438,9 @@ async function startTinyReleaseServer(opts) {
       tag_name: "v99.0.0",
       html_url: base + "/r",
       assets: noSums
-        ? [{ name: assetName, size: payload.length, browser_download_url: base + "/asset" }]
+        ? [{ name: assetName, size: payload.length, digest: "sha256:" + digest, browser_download_url: base + "/asset" }]
         : [
-          { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
+          { name: assetName, size: payload.length, digest: "sha256:" + digest, browser_download_url: base + "/asset" },
           { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
         ]
     };
@@ -4059,7 +4059,7 @@ async function caseGalleryVideoBundle(target) {
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
     const title = await evalPage(cdp, "document.getElementById('bundle-title').textContent");
     const focused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
-    record(tag + ": the drop asks whether to copy the video, with Copy it as the default", !!asked && title === "Copy this video into the script's folder?" && focused === "bundle-accept",
+    record(tag + ": the drop asks whether to add the video to the folder, with Copy it as the default", !!asked && title === "Add this video to the script's folder?" && focused === "bundle-accept",
       JSON.stringify({ asked, title, focused }));
     await evalPage(cdp, "document.getElementById('bundle-accept').click()");
     const bundled = await poll(cdp, "(function(){ var l = " + locationOf("take one.mp4") + "; return l && l.kind === 'bundled' ? l : null; })()", 20000).catch(() => null);
@@ -4130,6 +4130,55 @@ async function caseGalleryVideoBundle(target) {
   }
 }
 
+async function caseCreateBundle(target) {
+  const tag = target.name + " Create bundle: old document paths copy without granting Move (#260)";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-create-bundle-"));
+  const outside = path.join(dir, "outside");
+  fs.mkdirSync(outside);
+  const source = path.join(outside, "brief.pdf");
+  const bytes = Buffer.from("production brief");
+  fs.writeFileSync(source, bytes);
+  const script = writeFixture(dir, "Episode 12.splitpage", "Create Bundle Smoke", [["Wide", "One."]]);
+  const state = JSON.parse(fs.readFileSync(script, "utf8"));
+  state.rows[0].imageLinks = [{ name: "brief.pdf", size: bytes.length, location: { kind: "path", path: source }, poster: true }];
+  fs.writeFileSync(script, JSON.stringify(state));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "create-bundle", userDataDir, fixtures: [script] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const bar = await poll(cdp, "!document.getElementById('bundle-outside-bar').hidden", 10000).catch(() => false);
+    record(tag + ": opening the old script shows the outside-files bar without a dialog", bar === true &&
+      await evalPage(cdp, "document.getElementById('bundle-modal').hidden"));
+    await evalPage(cdp, "document.getElementById('bundle-outside-create').click()");
+    const asked = await poll(cdp, "!document.getElementById('bundle-modal').hidden", 10000).catch(() => false);
+    const text = await evalPage(cdp, "({title:document.getElementById('bundle-title').textContent,path:document.getElementById('bundle-create-paths').textContent," +
+      "moveHidden:document.getElementById('bundle-move').hidden,focused:document.activeElement.id})");
+    record(tag + ": the dialog lists the full path, defaults to Copy and hides Move", asked && text.title === "Create bundle?" &&
+      text.path === source && text.moveHidden && text.focused === "bundle-accept", JSON.stringify(text));
+    const refused = await evalPage(cdp, "window.splitpageDesktop.bundlePath(" + JSON.stringify(source) + ", 'forgedmove', 'move')");
+    record(tag + ": main refuses a forged Move for the document path", refused && refused.ok === false && refused.code === "REFUSED", JSON.stringify(refused));
+    await evalPage(cdp, "document.getElementById('bundle-accept').click()");
+    const copied = path.join(dir, "Episode 12 files", "brief.pdf");
+    const linked = await poll(cdp, "(window.__splitpageFormats.state().rows[0].imageLinks||[]).some(function(l){return l.location && l.location.kind === 'bundled' && l.location.name === 'brief.pdf';})", 10000).catch(() => false);
+    record(tag + ": Copy links the published file and keeps the original byte for byte", linked && fs.existsSync(copied) &&
+      fs.readFileSync(copied).equals(bytes) && fs.readFileSync(source).equals(bytes));
+    await evalPage(cdp, "window.__splitpageFormats.save()");
+    const saved = await pollNode(async () => JSON.parse(fs.readFileSync(script, "utf8")).rows[0].imageLinks[0].location.kind === "bundled", 10000).catch(() => false);
+    record(tag + ": the normal save writes the bundled name", saved === true);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('create-bundle')", { awaitPromise: false });
+    const menu = await poll(cdp, "!document.getElementById('bundle-modal').hidden", 10000).catch(() => false);
+    record(tag + ": the native File command opens the same dialog, with nothing left to copy", menu &&
+      await evalPage(cdp, "document.getElementById('bundle-accept').disabled && document.getElementById('bundle-move').hidden"));
+    await evalPage(cdp, "document.getElementById('bundle-decline').click()");
+  } finally {
+    if (app) await teardown(app, tag);
+    rmrf(userDataDir);
+    rmrf(dir);
+  }
+}
+
 async function caseGalleryAttachFile(target) {
   const tag = target.name + " gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)";
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-attach-"));
@@ -4170,8 +4219,9 @@ async function caseGalleryAttachFile(target) {
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
     const title = await evalPage(cdp, "document.getElementById('bundle-title').textContent");
     const focused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
-    record(tag + ": the drop asks whether to copy the file, with Copy it as the default", !!asked && title === "Copy this file into the script's folder?" && focused === "bundle-accept",
-      JSON.stringify({ asked, title, focused }));
+    const buttons = await evalPage(cdp, "Array.prototype.map.call(document.querySelectorAll('#bundle-modal .modal-footer-actions button'), function (b) { return b.textContent; })");
+    record(tag + ": the drop asks Copy, Move or Leave for the file, with Copy it as the default", !!asked && title === "Add this file to the script's folder?" && focused === "bundle-accept" &&
+      JSON.stringify(buttons) === JSON.stringify(["Leave it where it is", "Move it", "Copy it"]), JSON.stringify({ asked, title, focused, buttons }));
     await evalPage(cdp, "document.getElementById('bundle-accept').click()");
     const bundled = await poll(cdp, "(function(){ var l = " + linksNamed("brief.pdf") + "[0]; return l && l.location && l.location.kind === 'bundled' ? l.location : null; })()", 20000).catch(() => null);
     record(tag + ": the PDF's link names the copy, not a path", !!bundled && bundled.name === "brief.pdf" && !("path" in bundled), JSON.stringify(bundled));
@@ -4182,6 +4232,22 @@ async function caseGalleryAttachFile(target) {
       "return x.querySelector('.scene-gallery-link') && x.querySelector('.scene-gallery-link').textContent === 'brief.pdf'; })[0]; " +
       "return l ? { host: l.querySelector('.scene-gallery-host').textContent, icon: !!l.querySelector('.scene-gallery-file-icon'), tiles: document.querySelectorAll('#rows .row')[0].querySelectorAll('.scene-gallery-tile').length } : null; })()");
     record(tag + ": the beat shows the file as a line with its type and an icon, not as a picture", !!chip && chip.host === "PDF" && chip.icon && chip.tiles === 0, JSON.stringify(chip));
+
+    const notes = path.join(drops, "notes.pdf");
+    fs.writeFileSync(notes, Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(8192, 2)]));
+    const notesBytes = fs.readFileSync(notes);
+    await drop(cdp, "__a3", notes);
+    await poll(cdp, modalOpen, 10000).catch(() => false);
+    await evalPage(cdp, "document.getElementById('bundle-move').click()");
+    const movedTo = await poll(cdp, "(function(){ var l = " + linksNamed("notes.pdf") + "[0]; return l && l.location && l.location.kind === 'bundled' ? l.location.name : null; })()", 20000).catch(() => null);
+    const movedFile = path.join(folder, "notes.pdf");
+    record(tag + ": Move it moves the file into “Episode 12 files”: the link names it there, the original is gone, and the bytes are the same",
+      movedTo === "notes.pdf" && !fs.existsSync(notes) && fs.existsSync(movedFile) && fs.readFileSync(movedFile).equals(notesBytes),
+      JSON.stringify({ movedTo, original: fs.existsSync(notes), folder: fs.existsSync(folder) ? fs.readdirSync(folder) : null }));
+    const movedToast = await toastContaining(cdp, "Moved “notes.pdf” to “Episode 12 files”.", 5000).catch(() => false);
+    record(tag + ": the move says so", !!movedToast, "");
+    const forgedMove = await evalPage(cdp, "window.splitpageDesktop.moveVideoFile(" + JSON.stringify("0".repeat(32)) + ", 'bundle9')");
+    record(tag + ": main refuses to move a file it never granted", !!forgedMove && forgedMove.ok === false && forgedMove.code === "UNKNOWN", JSON.stringify(forgedMove));
 
     await drop(cdp, "__a2", tool);
     const toast = await toastContaining(cdp, "“setup.exe” wasn't attached.", 5000).catch(() => false);
@@ -4273,8 +4339,8 @@ async function caseGalleryExportWithFiles(target) {
   ] }, null, 2), "utf8");
   const scriptBefore = fs.readFileSync(scriptPath);
   const zipPath = path.join(out, "Shared.zip");
-  const takenPath = path.join(out, "Taken.zip");
-  fs.writeFileSync(takenPath, "the user's own file");
+  const replacedPath = path.join(out, "Replaced.zip");
+  fs.writeFileSync(replacedPath, "the old zip");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   async function exportFromDialog(cdp) {
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('export')", { awaitPromise: false });
@@ -4288,7 +4354,7 @@ async function caseGalleryExportWithFiles(target) {
   }
   let app = null;
   try {
-    app = await launchApp(target, { label: "gallery-export-files", userDataDir, fixtures: [scriptPath], dialogs: [zipPath, takenPath] });
+    app = await launchApp(target, { label: "gallery-export-files", userDataDir, fixtures: [scriptPath], dialogs: [zipPath, replacedPath] });
     await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Export Smoke'", 20000).catch(() => false);
@@ -4317,10 +4383,12 @@ async function caseGalleryExportWithFiles(target) {
       (await evalPage(cdp, "window.__splitpageFormats.state().rows[0].imageLinks[1].location.kind")) === "path", "");
     await evalPage(cdp, "document.querySelectorAll('.toast').forEach(function (t) { t.remove(); }); true");
     await exportFromDialog(cdp);
-    const taken = await toastContaining(cdp, "Could not export — “Taken.zip” already exists. Export again and choose a new name.", 20000).catch(() => false);
-    record(tag + ": a name that is taken is never replaced, and nothing is left beside it",
-      !!taken && fs.readFileSync(takenPath, "utf8") === "the user's own file" && fs.readdirSync(out).sort().join() === "Shared.zip,Taken.zip",
-      JSON.stringify({ taken: !!taken, out: fs.readdirSync(out) }));
+    const replaced = await toastContaining(cdp, "“Replaced.zip” with 1 file.", 20000).catch(() => false);
+    const again = fs.existsSync(replacedPath) && !fs.readFileSync(replacedPath).equals(Buffer.from("the old zip")) ? zipEntries(replacedPath) : new Map();
+    record(tag + ": a name the save dialog returned after its Replace prompt is overwritten with the whole zip, and nothing is left beside it",
+      !!replaced && [...again.keys()].length === 3 && !!again.get(files + "take.mp4") && again.get(files + "take.mp4").equals(take) &&
+      fs.readdirSync(out).sort().join() === "Replaced.zip,Shared.zip",
+      JSON.stringify({ replaced: !!replaced, names: [...again.keys()], out: fs.readdirSync(out) }));
     const forged = await evalPage(cdp, "window.splitpageDesktop.exportBundle('export9', " + JSON.stringify("0".repeat(32)) + ")");
     record(tag + ": a file id no export dialog chose writes nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
   } finally {
@@ -5962,8 +6030,8 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     record(tag + ": main holds no share afterwards", !!status2 && status2.listening === false && status2.shares.length === 0, JSON.stringify(status2));
 
     const pristineBefore = await dialogsSeen(witness);
-    const inPage = await evalPage(witness, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-browser'); var shown = !!b && !b.hidden && !document.getElementById('file-menu').hidden; if (shown) b.click(); return shown; })()");
-    record(tag + ": File ▸ This document ▸ Present in browser is offered in the desktop app", inPage === true, String(inPage));
+    const inPage = await evalPage(witness, "(function(){ var more = document.getElementById('btn-present-more'); if (!more || more.hidden) return false; more.click(); var b = document.getElementById('present-menu-browser'); var shown = !document.getElementById('present-menu').hidden && b.textContent.indexOf('Present in browser…') === 0; if (shown) b.click(); return shown; })()");
+    record(tag + ": Present ▸ Present in browser… is offered in the desktop app", inPage === true, String(inPage));
     const saveFirst = await toastContaining(witness, "Save this script first", 10000);
     record(tag + ": an unsaved new document is told to save first", !!saveFirst, String(saveFirst));
     await sleep(500);
@@ -6236,8 +6304,10 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     const arity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInChromium === 'function' && window.splitpageDesktop.openPrompterInChromium.length");
     record(tag + ": the bridge has openPrompterInChromium() and it takes no argument", arity === 0, "length=" + arity);
 
-    const inPage = await evalPage(cdp, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-chromium'); var shown = !!b && !b.hidden && b.textContent === 'Use Chromium Speech Recognition'; if (shown) b.click(); return shown; })()");
-    record(tag + ": File ▸ This document ▸ Use Chromium Speech Recognition is offered", inPage === true, String(inPage));
+    const offered = await evalPage(cdp, "!document.getElementById('menu-present-chromium') && !document.querySelector('[data-cmd=\"prompter-open-in-chromium\"]')");
+    record(tag + ": the page offers no separate Chromium entry", offered === true, String(offered));
+    const answer = await evalPage(cdp, "window.splitpageDesktop.openPrompterInChromium()");
+    record(tag + ": the bridge answers ok and names the browser", !!answer && answer.ok === true && answer.browser === "Microsoft Edge", JSON.stringify(answer));
     const launched = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length ? l : null; }, 15000).catch(() => null);
     record(tag + ": main starts the Chromium browser it found, once", !!launched && launched.length === 1 && launched[0].browser === "edge", JSON.stringify(launched));
     const m = launched && PROMPTER_URL_RE.exec(launched[0].url);
@@ -6249,12 +6319,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     }
     const opens = await externalOpens(cdp);
     record(tag + ": the default browser is not asked", opens.length === 0, JSON.stringify(opens));
-    const toast = await toastContaining(cdp, "Opened in Microsoft Edge", 10000);
-    record(tag + ": the page names the browser and its own speech recognition", !!toast && toast.indexOf("own speech recognition") !== -1, String(toast));
-
-    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
-    const twice = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length >= 2 ? l : null; }, 15000).catch(() => null);
-    record(tag + ": View ▸ Use Chromium Speech Recognition does the same", !!twice && twice.length === 2 && PROMPTER_URL_RE.test(twice[1].url), JSON.stringify(twice));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
@@ -6265,9 +6329,8 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — chromium"), 20000);
-    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
-    const none = await toastContaining(cdp, "No Chromium browser", 10000);
-    record(tag + ": with none installed the page says so and points at Present in browser", !!none && none.indexOf("Present in browser") !== -1, String(none));
+    const none = await evalPage(cdp, "window.splitpageDesktop.openPrompterInChromium()");
+    record(tag + ": with none installed the bridge refuses with NO_CHROMIUM", !!none && none.ok === false && none.code === "NO_CHROMIUM", JSON.stringify(none));
     record(tag + ": ... nothing is started", (await chromiumLaunches(cdp)).length === 0);
     record(tag + ": ... nor handed to the default browser", (await externalOpens(cdp)).length === 0);
     const status = await shell(cdp, "prompterShareStatus", {});
@@ -6372,6 +6435,7 @@ async function runTargetSuite(target, groupFilter) {
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
     ["gallery: a dropped video is copied beside the script and opens from there after a restart (#259)", () => caseGalleryVideoBundle(target)],
     ["gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)", () => caseGalleryAttachFile(target)],
+    ["gallery: Create bundle copies old document paths without granting Move (#260)", () => caseCreateBundle(target)],
     ["gallery: Export with the script's files writes one zip whose script links its files by bundled name (#260)", () => caseGalleryExportWithFiles(target)],
     ["gallery: a pasted video link's thumbnail comes through main, by host and id (#141)", () => caseGalleryVideoThumbnail(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],

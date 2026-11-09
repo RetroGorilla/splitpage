@@ -29,6 +29,8 @@ expect T.ids().join() === 'r3,r4,r5'
 key Escape
 
 eval out()
+eval row('r6').scrollIntoView({ block: 'center' })
+sleep 300
 mouse click audio('r6', 0.05)
 mouse shift click audio('r6', 0.6)
 expect T.ids().length === 0
@@ -39,13 +41,19 @@ mouse shift click pt(cell('r6', 'visualText'))
 expect T.ids().length === 0
 
 eval out()
+eval window.scrollTo(0, 0)
+sleep 300
 mouse ctrl click audio('r1')
 mouse ctrl click audio('r3')
+eval row('r6').scrollIntoView({ block: 'center' })
+sleep 300
 mouse ctrl click pt(cell('r6', 'visualText'))
 expect T.ids().join() === 'r1,r3,r6'
 expect !inText() && noText()
 expect lit('r1') && !lit('r2') && lit('r3') && !lit('r4') && lit('r6')
 shot 1179-beat-gap-selection
+eval window.scrollTo(0, 0)
+sleep 300
 mouse ctrl click audio('r3')
 expect T.ids().join() === 'r1,r6'
 expect !lit('r3')
@@ -156,12 +164,12 @@ jsclick #export-close
 wait document.getElementById('export-modal').hidden
 eval out()
 
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 wait !row('r3') && document.querySelector('#rows .hidden-shot-strip')
 key ctrl KeyA
 expect T.ids().join() === 'r1,r2,r4,r5,r6,r7'
 key Escape
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 wait row('r3') && !document.querySelector('#rows .hidden-shot-strip')
 jsclick .section-header[data-section-id="s2"] [data-section-action="fold"]
 wait !row('r5')

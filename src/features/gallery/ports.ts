@@ -14,6 +14,7 @@ import type { BundleSaveWindow } from "../../application/save/file-saving-ports.
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
+import type { DocumentPlace } from "../../application/location/document-place.ts";
 
 export interface GalleryPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
@@ -82,19 +83,22 @@ export interface DroppedVideo {
 export interface VideoBundlePorts {
   readonly window: Window;
   readonly script: () => string | null;
-  readonly files: Pick<VideoFiles, "bundle" | "cancelBundle">;
+  readonly files: Pick<VideoFiles, "bundle" | "move" | "cancelBundle" | "movedPath">;
   readonly carries: DesktopVideo["onCarry"];
   readonly saves: { readonly plan: DesktopVideo["planSave"]; readonly choose: DesktopVideo["chooseSave"] };
   readonly exports: { readonly plan: DesktopVideo["planExport"]; readonly pick: DesktopVideo["pickExport"]; readonly run: DesktopVideo["exportBundle"] };
+  readonly create: Pick<DesktopVideo, "planCreate" | "bundlePath">;
+  readonly place: Pick<DocumentPlace, "writtenOut" | "onChange">;
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;
   readonly undo: UndoFold;
-  readonly document: Pick<DocumentReader, "read">;
+  readonly document: Pick<DocumentReader, "read" | "onReplaced">;
   readonly cells: Pick<CellEditing<Element>, "editGallery">;
   readonly viewer: { readonly refresh: () => void };
 }
 
 export interface VideoBundleMount {
+  readonly createBundle: () => Promise<void>;
   readonly offerAfterDrop: (rowId: string, videos: readonly DroppedVideo[], entry: UndoEntry | null) => void;
   readonly beginSave: () => BundleSaveWindow;
   readonly exportPlan: (body: string, script: unknown) => ReturnType<DesktopVideo["planExport"]>;

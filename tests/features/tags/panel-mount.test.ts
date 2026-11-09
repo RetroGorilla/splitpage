@@ -3,7 +3,7 @@ import { clickProductionOutline, changeProductionOutline, revealProductionItem }
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startTagPanels, IS_TOUCH, openProductionPanel, setTagNotes } from "../../../src/features/tags/panels.ts";
+import { startTagPanels, IS_TOUCH, openProductionPanel, saveTagRename, setTagNotes } from "../../../src/features/tags/panels.ts";
 import type { TagPanelPorts } from "../../../src/features/tags/ports.ts";
 import { createProductionSelection } from "../../../src/application/editing/production-selection.ts";
 import { createDeleteConfirm } from "../../../src/application/editing/delete-confirm.ts";
@@ -14,9 +14,13 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
 import { tagPanelActions } from "../../../src/features/tags/actions.ts";
 import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
+import { tagKey } from "../../../src/core/document/tags.ts";
+import { changeSet } from "../../../src/application/session/change-set.ts";
+import { prepContext } from "../../../src/features/tags/outline.ts";
 import { tagStatusLampHtml } from "../../../src/features/common/tag-status.ts";
 import * as commands from "../../../src/application/tag-panel-commands.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
+import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -34,6 +38,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const calls: string[] = [];
   let renaming: string | null = null;
   let addingPerson: string | null = null;
+  let expanded: string | null = null;
   const pending = new Map<unknown, () => void>();
   let timerId = 0;
   const timers = {
@@ -44,16 +49,19 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const selection = createProductionSelection(timers);
   const prep = createProductionPrepState();
   const ports: TagPanelPorts = {
+    preferences: { panelGrouping: () => null },
+    changes: { onChange: () => () => {} },
     focus: { lastRow: () => null },
     beats: { setFilmed: () => {}, reveal: () => {} },
     footage: { entries: () => [], open: () => {} },
     view: {
       prep: () => prep,
       gearGroupBy: () => "flat", productionGroupBy: () => "cat",
+      setGearGroupBy: () => {}, setProductionGroupBy: () => {},
       setTagAddingPerson: (key) => { addingPerson = key; },
       setTagRenaming: (key) => { renaming = key; },
       tagAddingPersonKey: () => addingPerson, tagRenamingKey: () => renaming,
-      tagExpandedKey: () => null
+      tagExpandedKey: () => expanded, setTagExpanded: (key) => { expanded = key; }
     },
     document: document.document,
     lifetime: document.lifetime,
@@ -107,6 +115,71 @@ function prepFixture(focus: string | null = null) {
   }
   return { ...h, doc, ports, calls, mounted, click };
 }
+
+test("shoot rendering derives document numbering once for many location groups", () => {
+  const migration = fakeMigration();
+  const h = fixture("location", migration);
+  const doc = migrateRows({ schema: 2, rows: Array.from({ length: 94 }, (_, i) => ({
+    id: "r" + i, visualText: migration.cell([{ text: "Place " + i, marks: { tag: "t:location:Place " + i } }]), audioText: ""
+  })), sections: [{ id: "s1", name: "Opening", firstSceneId: "r0" }],
+  productionTags: Array.from({ length: 94 }, (_, i) => ({ id: "t_" + i, cat: "location", name: "Place " + i })) }, migration.ports);
+  const entries = h.ports.production.entries(doc);
+  let derivations = 0;
+  const counted = new Proxy(doc, { get(target, key, receiver) {
+    if (key === "sections") derivations++;
+    return Reflect.get(target, key, receiver) as unknown;
+  } });
+  win.document.body.innerHTML = '<div id="production-panel"><div id="production-list"></div></div>';
+  const ports: TagPanelPorts = { ...h.ports,
+    document: { ...h.ports.document, current: () => counted, numbering: () => deriveDocumentNumbering(counted) },
+    production: { ...h.ports.production, entries: () => entries },
+    view: { ...h.ports.view, productionGroupBy: () => "shoot" }
+  };
+  const mounted = startTagPanels(ports);
+  try {
+    mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll('.shoot-group').length, 94);
+    assert.equal(derivations, 1);
+  } finally { mounted.dispose(); }
+});
+
+test("By-scene rendering derives document numbering once per render, not once per group", () => {
+  const migration = fakeMigration();
+  const h = fixture("prop", migration);
+  const doc = migrateRows({ schema: 2, rows: Array.from({ length: 94 }, (_, i) => ({
+    id: "r" + i, visualText: migration.cell([{ text: "Hat " + i, marks: { tag: "t:prop:Hat " + i } }]), audioText: ""
+  })), sections: [{ id: "s1", name: "Opening", firstSceneId: "r0" }, { id: "s2", name: "Second", firstSceneId: "r60" }],
+  productionTags: Array.from({ length: 94 }, (_, i) => ({ id: "t_" + i, cat: "prop", name: "Hat " + i })) }, migration.ports);
+  const entries = h.ports.production.entries(doc);
+  let derivations = 0;
+  const counted = new Proxy(doc, { get(target, key, receiver) {
+    if (key === "sections") derivations++;
+    return Reflect.get(target, key, receiver) as unknown;
+  } });
+  let held: ReturnType<typeof deriveDocumentNumbering> | null = null;
+  win.document.body.innerHTML = '<div id="production-panel"><div id="production-list"></div></div>';
+  const ports: TagPanelPorts = { ...h.ports,
+    document: { ...h.ports.document, current: () => counted, numbering: () => { if (!held) held = deriveDocumentNumbering(counted); return held; } },
+    production: { ...h.ports.production, entries: () => entries },
+    view: { ...h.ports.view, productionGroupBy: () => "by-scene" }
+  };
+  const mounted = startTagPanels(ports);
+  try {
+    mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll('#production-list .tag-scene-group').length, 2);
+    assert.equal(derivations, 1);
+  } finally { mounted.dispose(); }
+});
+
+test("tag panels unsubscribe from preference changes on disposal", () => {
+  const h = fixture();
+  let listeners = 0;
+  const mounted = startTagPanels({ ...h.ports, changes: { onChange: () => { listeners++; return () => { listeners--; }; } } });
+  assert.equal(listeners, 1);
+  mounted.dispose();
+  mounted.dispose();
+  assert.equal(listeners, 0);
+});
 
 test("Scene prep handles 200 beats as six scene groups, reveals the focused beat, and keeps browsing stable across refresh", () => {
   const h = prepFixture("r119");
@@ -204,6 +277,23 @@ for (const focused of [true, false]) {
     } finally { h.mounted.dispose(); }
   });
 }
+
+test("Scene prep rename moves the open detail to the item's new key", () => {
+  const h = prepFixture("r2");
+  try {
+    h.click('.prep-resource-name [data-prep="notes"]');
+    const item = h.ports.production.entries(h.doc)[0];
+    assert.ok(item);
+    h.ports.view.setTagRenaming(item.key);
+    h.mounted.renderProduction();
+    const open = h.ports.view.prep().current().notes;
+    assert.ok(open);
+    h.edits.answer({ kind: "applied", generation: 1, changes: changeSet({}) });
+    assert.equal(saveTagRename(item.key, "Cap"), tagKey("prop", "Cap"));
+    const [container] = JSON.parse(open) as [string];
+    assert.equal(h.ports.view.prep().current().notes, prepContext(container, tagKey("prop", "Cap")));
+  } finally { h.mounted.dispose(); }
+});
 
 test("a requirement that becomes ready stays in place; initially ready items use an explicit fold", () => {
   const h = prepFixture("r2");
@@ -378,8 +468,8 @@ test("replaced and disposed panel controls cannot act on the next mount", () => 
   first.openProductionPanel();
   first.openGearPanel();
   first.renderProduction();
-  first.saveTagRename(entry.key);
-  first.addPersonForTag(entry.key);
+  first.saveTagRename(entry.key, "name");
+  first.addPersonForTag(entry.key, "name");
   first.setTagOwner(entry.key, "ada");
   first.setTagNotes(entry.key, "Stale");
   first.dispose();
@@ -429,8 +519,8 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const calls: unknown[][] = [];
   const handlers = (label: string): commands.TagPanelCommands => ({
     renderProduction: () => { calls.push([label, "render"]); },
-    saveTagRename: (key) => { calls.push([label, "rename", key]); },
-    addPersonForTag: (key) => { calls.push([label, "person", key]); },
+    saveTagRename: (key, value) => { calls.push([label, "rename", key, value]); return key; },
+    addPersonForTag: (key, value) => { calls.push([label, "person", key, value]); },
     setTagOwner: (key, person) => { calls.push([label, "owner", key, person]); },
     setTagNotes: (key, text) => { calls.push([label, "notes", key, text]); }
   });
@@ -438,11 +528,11 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const second = commands.installTagPanelCommands(handlers("second"));
   first();
   commands.renderProduction();
-  commands.saveTagRename("hat");
-  commands.addPersonForTag("hat");
+  commands.saveTagRename("hat", "cap");
+  commands.addPersonForTag("hat", "Alice");
   commands.setTagOwner("hat", "ada");
   commands.setTagNotes("hat", "Packed");
-  assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat"], ["second", "person", "hat"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
+  assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat", "cap"], ["second", "person", "hat", "Alice"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
   second();
   assert.throws(commands.renderProduction, /not installed yet/);
 });

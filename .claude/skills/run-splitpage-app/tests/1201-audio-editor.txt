@@ -1,0 +1,23 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;var tag='<span class="tag-anchor" data-tag-cat="sound" data-tag-name="Weather" contenteditable="false">rain on umbrella roof</span>';F.openFile(new File([JSON.stringify({schema:5,title:'Audio tag editor',paragraphsDecided:true,productionTags:[{id:'t_weather',cat:'sound',name:'Weather',notes:'Keep',status:'have',owner:''}],rows:[{id:'r0',visualText:'',audioText:tag},{id:'r1',visualText:'',audioText:'before '+tag+' after'}],comments:[]})],'audio.splitpage'))
+wait F.state().title === 'Audio tag editor'
+eval window.a=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.audio-cell .cell-editable');};true
+click #rows .row:nth-of-type(1) .audio-cell [data-tag-cat="sound"]
+click #tag-edit-action
+eval a(0).focus();var r=document.createRange();var t=a(0).querySelector('[data-tag-cat="sound"]').firstChild;r.setStart(t,8);r.setEnd(t,16);getSelection().removeAllRanges();getSelection().addRange(r);true
+click #rows .row:nth-of-type(1) .audio-cell .tb-tag
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="gear"]
+expect a(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="gear"]').textContent === 'umbrella'
+expect F.state().productionTags.find(function(t){return t.id==='t_weather';}).notes === 'Keep' && F.state().productionTags.find(function(t){return t.id==='t_weather';}).status === 'have'
+click #tag-edit-action
+eval a(0).focus();var r=document.createRange();r.selectNodeContents(a(0));getSelection().removeAllRanges();getSelection().addRange(r);true
+click #rows .row:nth-of-type(1) .audio-cell .tb-tag
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="cast"]
+expect a(0).querySelector('[data-tag-cat="cast"] [data-tag-cat="sound"] [data-tag-cat="gear"]') !== null
+key ctrl KeyZ
+expect a(0).querySelector('[data-tag-cat="cast"]') === null && a(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="gear"]') !== null
+eval a(1).focus();var r=document.createRange();r.setStart(a(1).firstChild,0);r.setEnd(a(1).querySelector('[data-tag-cat="sound"]').firstChild,4);getSelection().removeAllRanges();getSelection().addRange(r);window.before=F.state().rows[1].audioText;true
+click #rows .row:nth-of-type(2) .audio-cell .tb-tag
+expect document.querySelector('#rows [data-tags-open="true"]') === null && F.state().rows[1].audioText === window.before
+quit

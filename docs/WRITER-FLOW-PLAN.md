@@ -1,6 +1,8 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). All phases are done (sections 9 to 15) and on `main` through #1238: the flow writer is the only writer and the switch is gone. Adam has picked every setting. He chose to merge before trying a real script, so that trial is still open, and a revert of #1238 is the way back. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: complete. All phases merged to `main` through #1238 on 2026-11-05; #264 is closed. The flow writer is the only writer and the switch is gone. This landed after the published 0.4.1 release. Scene header work #1166 and #1168 also merged (#1318, #1313). The shared top bar (#1167) is complete: [Adam counts the save status as met](https://github.com/RetroGorilla/splitpage/issues/1167#issuecomment-6730027512), and the issue is closed. Current priorities are in [ROADMAP.md](ROADMAP.md).
+
+Sections 1–8 record the design decisions; sections 9–15 record results at their named commits. Earlier phase limits do not override later results or the merge to `main`. A real-script trial was unconfirmed when #1238 merged; this record has no later owner confirmation.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -92,7 +94,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 
 ### Left for later
 
-Narration export following the writer's paragraphs, bullets and the Outline view (scenes as bullets, beats as sub-bullets), dragging selected text, pasted Markdown converting, a Visual box shortcut. Split-view restyling of headers (#1166, #1168) and scene descriptions (#1171) stay separate.
+Narration export following the writer's paragraphs remains deferred by Adam's decision in section 7.1. Other ideas in the original design are not a work queue. Header restyling (#1166, #1168) is done in #1318 and #1313. Scene descriptions (#1171) were closed as not planned.
 
 ### To judge on the test page
 
@@ -257,8 +259,8 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 8. **Deleting all of a heading's text: decided (Adam, 2026-11-05), built in phase 4.** The line stays empty while the caret is on it, and the saved name doesn't change, because a saved scene needs a name. Leaving the line empty, including by closing the writer, removes the header. Its beats join the scene above, and one Ctrl+Z brings the header and its name back. If the app dies first, the old name is still saved. Backspace at a heading's start still removes the header, as section 2 says. Until phase 4, nothing is written and the old name stays.
 9. **Backspace on a blank beat: decided (Adam, 2026-11-05).** It removes the beat and passes any paragraph break to the next beat. This is the one exception to "Backspace at a paragraph's start removes only the paragraph break".
 10. **A selection ending at the start of an empty beat: coordinator's call (2026-11-05, #1227).** That beat stays, with its visual, status and comments, because the selection stops before it. The exception is the script's last beat, which counts as selected because a selection can't reach past it. Adam can overrule this.
-11. **Tag and Link buttons: phase 7.** The new writer has no such buttons yet, so their cross-beat limit arrives with the toolbar. Comment already has it.
-12. **Alt+Enter: still works, removed by phase 8.** Section 2 drops it unless Adam wants it kept.
+11. **Tag and Link buttons: done in phase 7.** Their cross-beat limit arrived with the toolbar.
+12. **Alt+Enter: removed in phase 8.** See section 15.
 
 ## 8. Outside review
 
@@ -306,7 +308,7 @@ The page is `tools/writer-lab/`. `node tools/writer-lab/build.mjs` builds it and
 The four regression failures:
 
 - `1197-ctrl-click-link` (3): the suite measured a link about 20 ms after closing the comments panel, while the rows were still widening for about 100 ms, so the link had moved by mouseup. It passed on clean `main` and failed on this branch, and why this code tips the timing isn't established: each half of the flow code passes alone, and only both together fail. The suite now waits for the rows to settle, keeps every assertion, and passed 40 of 40 three times in a row. The full browser run wasn't repeated, and no app code changed after it.
-- `219-sound-cues` (1): it fails the same way on a clean build of `main` on this PC, while `main`'s CI is green. The Production panel collapses beat A.2, so "upbeat intro" isn't in the panel's text, though the tag is in the document. It isn't from this work and is still open.
+- `219-sound-cues` (1): failed on the phase baseline because the Production panel collapsed beat A.2. Later fixed in #1316 by opening the requirements before the check.
 
 **What 0b checked:** undo replay and selection, real full renders and outside edits, toolbar clicks, focus to the title and back, comment Post and Cancel, close and Esc, Edit menu Undo and Redo through the real application menu, and Save As and plain Save to disk. The words, the flags and the paragraphs round-trip, and no zero-width space reaches the file.
 
@@ -433,9 +435,9 @@ Four parallel lanes merged into `feat/writer-flow`: #1230 (phase 5), #1229 (phas
 - On an emptied heading, Backspace and Enter both count as leaving it empty, so the header goes, no blank beat is added, and one Ctrl+Z brings it back.
 - Clicking Visual on a pending heading finalises it first. If the beat went away, the box stays closed and the caret stays on the heading.
 
-**Wording awaiting Adam:** "Visuals must stay within one beat.", "Put the caret in a beat to edit its visual.", "Add pictures in the split view.", "A scene header can't hold tags or comments.", "Split view", "Not saved yet", "Autosave off", "Tags must stay within one beat.", "Links must stay within one beat." and "Save to choose where this script is kept."
+**Wording recorded at this phase:** "Visuals must stay within one beat.", "Put the caret in a beat to edit its visual.", "Add pictures in the split view.", "A scene header can't hold tags or comments.", "Split view", "Not saved yet", "Autosave off", "Tags must stay within one beat.", "Links must stay within one beat." and "Save to choose where this script is kept." The implementation later merged in #1238; this list is not an approval queue.
 
-**Left for phase 8:** #1232 (the Visual box repaints every beat per keystroke, to measure), #1234 (Find starting from a stale position after a pending heading), removing Alt+Enter, and rechecking long undo and long HTML export.
+**Then left for phase 8, now done:** #1232 (Visual box measurement), #1234 (Find after a pending heading), removing Alt+Enter, and rechecking long undo and long HTML export. Section 15 records the results merged in #1238.
 
 **Still unproven:** a real IME, the real clipboard, right-click spellcheck, physical window and menu interactions, and a real script in Adam's hands.
 
@@ -474,4 +476,4 @@ Fail-first guard `596-writer-flow-typing-work.txt` now counts zero redundant not
 
 **Carried over:** Alt+Up/Down uses the existing beat-move command as one undo step, with that command's scene/paragraph rules; refused edits retain typing coalescing; Ctrl+Shift+Enter splits; Escape dismisses completion without closing. Adam has not tried beat movement in flowing text.
 
-**Limits:** the fixed synthetic file is not an owner script. Timing omits physical keyboard/display latency, IME, Electron and work deferred past the callback; the PC remained in use. Real clipboard/spellcheck/window/menu interactions, wording and owner acceptance remain unproven. Code PR #1235 targets `feat/writer-flow`; #1236 is CI-only and must never merge. Nothing reaches `main` before real-script acceptance.
+**Limits of that measurement:** the fixed synthetic file is not an owner script. Timing omits physical keyboard/display latency, IME, Electron and work deferred past the callback; the PC remained in use. Real clipboard/spellcheck/window/menu interactions and owner acceptance were not proved by it. #1235 was the feature-branch code PR and #1236 was a CI-only PR. #1238 subsequently merged the writer to `main` before a confirmed real-script trial, on Adam's decision.

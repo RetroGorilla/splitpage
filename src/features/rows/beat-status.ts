@@ -72,12 +72,14 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
 
     const chip = ports.element("progress-chip");
     const text = ports.element("progress-text");
+    const toggle = ports.element("hide-shot-toggle");
     if (!chip || !text) return;
     const rows = doc.rows;
     const shot = rows.filter(function (r) { return r.status === "shot"; }).length;
-    if (!shot) { chip.hidden = true; return; }
-    chip.hidden = false;
-    text.textContent = shot + "/" + rows.length + " filmed";
+    const shown = shot > 0 || ports.hideShot();
+    chip.hidden = !shown;
+    if (toggle) toggle.hidden = !shown && toggle.ownerDocument.activeElement !== toggle;
+    if (shown) text.textContent = shot + "/" + rows.length + " filmed";
   }
 
   return {

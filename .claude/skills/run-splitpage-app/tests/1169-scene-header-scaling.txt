@@ -17,7 +17,7 @@ expect num(H + ' .section-grip') === 17
 expect num('#rows .audio-cell .cell-editable') === 18
 eval window.h100 = hh(H); true
 shot 1169-editor-100
-eval (function(){ window.eq=function(a,b){return a.length===b.length&&a.every(function(v,i){return Math.abs(v-b[i])<0.02;});}; window.fv=function(){var f=document.querySelector('.section-rename');var i=f.querySelector('input');var b=f.querySelector('button');var c=getComputedStyle(f),ci=getComputedStyle(i),cb=getComputedStyle(b);return [c.columnGap,ci.fontSize,ci.paddingTop,ci.paddingLeft,cb.fontSize,cb.paddingTop,cb.paddingLeft].map(parseFloat);}; window.mv=function(h){var m=document.querySelector(h+' .section-menu');var b=m.querySelector('button');var cm=getComputedStyle(m),cb=getComputedStyle(b),cs=getComputedStyle(document.querySelector(h+' .section-more summary'));return [cm.minWidth,cm.paddingTop,cb.fontSize,cb.paddingTop,cb.paddingLeft,cs.fontSize].map(parseFloat);}; window.times=function(a,k){return a.map(function(v){return v*k;});}; window.FORM=[6,13,4,6,12,4,8]; window.MENU=[158,4,13,6,10,18]; return true;})()
+eval (function(){ window.eq=function(a,b){return a.length===b.length&&a.every(function(v,i){return Math.abs(v-b[i])<0.02;});}; window.fv=function(){var f=document.querySelector('.section-rename');var ci=getComputedStyle(f.querySelector('input'));return [ci.fontSize,ci.paddingTop,ci.paddingLeft].map(parseFloat);}; window.mv=function(h){var m=document.querySelector(h+' .section-menu');var b=m.querySelector('button');var cm=getComputedStyle(m),cb=getComputedStyle(b),cs=getComputedStyle(document.querySelector(h+' .section-more summary'));return [cm.minWidth,cm.paddingTop,cb.fontSize,cb.paddingTop,cb.paddingLeft,cs.fontSize].map(parseFloat);}; window.times=function(a,k){return a.map(function(v){return v*k;});}; window.FORM=[22.5,0,0]; window.MENU=[158,4,13,6,10,18]; return true;})()
 eval document.querySelector('#rows .row[data-id="r2"] .row-more').click(); document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').click(); true
 wait !!document.querySelector('.section-rename input')
 expect document.querySelector('.section-rename').nextElementSibling === document.querySelector('#rows .row[data-id="r2"]')
@@ -29,7 +29,7 @@ key none Escape
 wait !document.querySelector('.section-rename')
 eval document.querySelector(H + ' .section-name').click(); true
 wait !!document.querySelector('.section-rename input')
-expect document.querySelector('.section-rename').parentNode.matches('.section-header')
+expect document.querySelector('.section-rename').parentNode.matches('[role="heading"]')
 expect eq(fv(), FORM)
 key none Escape
 wait !document.querySelector('.section-rename')
@@ -48,7 +48,7 @@ expect Math.abs(num('#rows .audio-cell .cell-editable') - 27) < 0.05
 expect Math.abs(num(H) - 19.5) < 0.05
 expect Math.abs(num(H + ' .section-stats') - 16.5) < 0.05
 expect Math.abs(num(H + ' .section-grip') - 25.5) < 0.05
-expect Math.abs(num(H + ' .section-name') - 19.5) < 0.05
+expect Math.abs(num(H + ' .section-name') - 33.75) < 0.05
 expect Math.abs(hh(H) / h100 - 1.5) < 0.04
 expect Math.abs(num('#rows [data-section-id="s2"]') - 19.5) < 0.05
 shot 1169-editor-150
@@ -195,7 +195,7 @@ expect num(H) === 13
 expect num(H + ' .section-stats') === 11
 expect hh(H) >= 32
 shot 1169-phone-70
-eval (function(){ window.eq=function(a,b){return a.length===b.length&&a.every(function(v,i){return Math.abs(v-b[i])<0.02;});}; window.fv=function(){var f=document.querySelector('.section-rename');var i=f.querySelector('input');var b=f.querySelector('button');var c=getComputedStyle(f),ci=getComputedStyle(i),cb=getComputedStyle(b);return [c.columnGap,ci.fontSize,ci.paddingTop,ci.paddingLeft,cb.fontSize,cb.paddingTop,cb.paddingLeft].map(parseFloat);}; window.mv=function(h){var m=document.querySelector(h+' .section-menu');var b=m.querySelector('button');var cm=getComputedStyle(m),cb=getComputedStyle(b),cs=getComputedStyle(document.querySelector(h+' .section-more summary'));return [cm.minWidth,cm.paddingTop,cb.fontSize,cb.paddingTop,cb.paddingLeft,cs.fontSize].map(parseFloat);}; window.FORM=[6,13,4,6,12,4,8]; window.MENU=[158,4,13,6,10,18]; window.wfont=function(){return parseFloat(getComputedStyle(document.getElementById('writer')).getPropertyValue('--wr-font'));}; window.setSize=function(n){var s=document.getElementById('wr-size');s.value=n;s.dispatchEvent(new Event('input',{bubbles:true}));return wfont();}; return true;})()
+eval (function(){ window.eq=function(a,b){return a.length===b.length&&a.every(function(v,i){return Math.abs(v-b[i])<0.02;});}; window.fv=function(){var f=document.querySelector('.section-rename');var ci=getComputedStyle(f.querySelector('input'));return [ci.fontSize,ci.paddingTop,ci.paddingLeft].map(parseFloat);}; window.mv=function(h){var m=document.querySelector(h+' .section-menu');var b=m.querySelector('button');var cm=getComputedStyle(m),cb=getComputedStyle(b),cs=getComputedStyle(document.querySelector(h+' .section-more summary'));return [cm.minWidth,cm.paddingTop,cb.fontSize,cb.paddingTop,cb.paddingLeft,cs.fontSize].map(parseFloat);}; window.FORM=[20,0,0]; window.MENU=[158,4,13,6,10,18]; window.wfont=function(){return parseFloat(getComputedStyle(document.getElementById('writer')).getPropertyValue('--wr-font'));}; window.setSize=function(n){var s=document.getElementById('wr-size');s.value=n;s.dispatchEvent(new Event('input',{bubbles:true}));return wfont();}; return true;})()
 eval document.querySelector('#rows .row[data-id="r2"] .row-more').click(); document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').click(); true
 wait !!document.querySelector('.section-rename input')
 expect eq(fv(), FORM)

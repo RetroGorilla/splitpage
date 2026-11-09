@@ -3,7 +3,7 @@
 import type { DesktopNativePath, DesktopNativeFsPromises, DesktopNativeFs } from "./native-inputs.d.ts";
 
 import type { DesktopMainTab, DesktopMainWindow } from "./main-types.d.ts";
-import type { DesktopIpcEvent, DesktopFileIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopIpcEvent, DesktopFileIpcDependencies, VideoFileGrant } from "./ipc-boundaries.d.ts";
 
 import type { DesktopWireHistoryMeta, DesktopWireUpdateStatus, DesktopIpcArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
 
@@ -149,7 +149,7 @@ const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
 const testExternalOpens: string[] = [];
 const testChromiumLaunches: { browser: string; url: string }[] = [];
 const testVideoOpens: string[] = [];
-const videoFileGrants = new Map<string, string>();
+const videoFileGrants = new Map<string, VideoFileGrant>();
 if (TEST_MODE) {
 
   const cancelIndex = (opts: Electron.MessageBoxSyncOptions | Electron.MessageBoxOptions | undefined) => (opts && typeof opts.cancelId === "number")
@@ -681,7 +681,8 @@ async function checkForUpdate() {
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const body = await res.json() as Record<string, unknown>;
-    if (!hasReleaseAssets(body.assets, apiUrl, TEST_MODE)) throw new Error("the release has no valid assets");
+    if (typeof body.tag_name !== "string" || !body.tag_name
+      || !hasReleaseAssets(body.assets, apiUrl, TEST_MODE, body.tag_name)) throw new Error("the release has no valid assets");
     if (!isAllowedReleaseUrl(body.html_url, apiUrl, TEST_MODE)) throw new Error("the release has an untrusted page URL");
     const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
     const newer = !!latest && compareVersions(latest, current) > 0;
@@ -719,6 +720,7 @@ function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">
     return Promise.resolve({ ok: true, state: "ready" });
   }
   const asset = updateAsset;
+  const assets = updateAssets;
   if (!asset) return Promise.resolve({ ok: false, error: "no-installer" });
   if (!isAllowedDownloadHost(asset.url, updateApiUrl(), TEST_MODE)) return Promise.resolve({ ok: false, error: "bad-url" });
 
@@ -731,48 +733,71 @@ function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">
 
     updateFile = null;
     setDownloadState({ state: "downloading", received: 0, total: asset.size || 0, error: null });
+    if (!asset.digest) throw new Error("this release has no valid SHA-256 asset digest, so it is not being installed");
 
     const res = await fetchUpdateFile(asset.url);
-    if (!res.ok) throw new Error(`download failed: ${res.status} ${res.statusText}`);
-    const declared = Number(res.headers.get("content-length")) || asset.size || 0;
-    setDownloadState({ total: declared });
-
-    const hash = crypto.createHash("sha256");
-    const handle = await fsp.open(target, "w");
-    let received = 0;
-    let lastReport = 0;
+    let reader: ReturnType<NonNullable<typeof res.body>["getReader"]> | null = null;
+    let finished = false;
     try {
-      const reader = (res.body as NonNullable<typeof res.body>).getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const buf = Buffer.from(value);
-        hash.update(buf);
-        await handle.write(buf);
-        received += buf.length;
-        const now = Date.now();
-        if (now - lastReport > 200) { lastReport = now; setDownloadState({ received }); }
+      if (!res.ok) throw new Error(`download failed: ${res.status} ${res.statusText}`);
+      const declared = asset.size;
+      const contentLength = res.headers.get("content-length");
+      if (contentLength !== null && Number(contentLength) !== declared) {
+        throw new Error("the download Content-Length does not match the release size");
       }
+
+      const hash = crypto.createHash("sha256");
+      const handle = await fsp.open(target, "w");
+      let received = 0;
+      let lastReport = 0;
+      try {
+        reader = (res.body as NonNullable<typeof res.body>).getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) { finished = true; break; }
+          const buf = Buffer.from(value);
+          if (buf.length > declared - received) {
+            throw new Error("the download exceeds the release size");
+          }
+          for (let offset = 0; offset < buf.length;) {
+            const { bytesWritten } = await handle.write(buf.subarray(offset));
+            if (bytesWritten === 0) throw new Error("the download could not be written completely");
+            offset += bytesWritten;
+          }
+          hash.update(buf);
+          received += buf.length;
+          const now = Date.now();
+          if (now - lastReport > 200) { lastReport = now; setDownloadState({ received }); }
+        }
+      } finally {
+        await handle.close();
+      }
+      setDownloadState({ received });
+
+      if (received !== declared) {
+        throw new Error(`download is ${received} bytes, expected ${declared} — it was cut short`);
+      }
+      const digest = hash.digest("hex");
+      if (asset.digest !== digest) {
+        throw new Error("the download does not match the SHA-256 asset digest published for it");
+      }
+      const published = await fetchPublishedChecksum(assets, asset.name);
+      if (!published) {
+        throw new Error("this release has no published checksum, so it is not being installed");
+      }
+      if (published !== digest) {
+        throw new Error("the download does not match the checksum published for it");
+      }
+
+      updateFile = target;
+      setDownloadState({ state: "ready", error: null, verified: true });
+      return { ok: true, state: "ready" };
     } finally {
-      await handle.close();
+      try {
+        if (!finished) await (reader ? reader.cancel() : res.body?.cancel());
+      } catch { }
+      reader?.releaseLock();
     }
-    setDownloadState({ received });
-
-    if (declared && received !== declared) {
-      throw new Error(`download is ${received} bytes, expected ${declared} — it was cut short`);
-    }
-    const digest = hash.digest("hex");
-    const published = await fetchPublishedChecksum(updateAssets, asset.name);
-    if (!published) {
-      throw new Error("this release has no published checksum, so it is not being installed");
-    }
-    if (published !== digest) {
-      throw new Error("the download does not match the checksum published for it");
-    }
-
-    updateFile = target;
-    setDownloadState({ state: "ready", error: null, verified: true });
-    return { ok: true, state: "ready" };
   })().catch(async (err): Promise<DesktopIpcResult<"splitpage:update-download">> => {
     updateFile = null;
     await fsp.rm(updateDir(), { recursive: true, force: true }).catch(() => {});
@@ -1659,7 +1684,8 @@ function buildMenu() {
     label: "File",
     submenu: [
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuCommand("save") },
-      { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
+      { label: "Save a copy…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
+      { label: "Create bundle…", click: () => sendMenuCommand("create-bundle") },
       { type: "separator" },
       { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
       { label: "Paste a script…", click: () => sendMenuCommand("paste") },
@@ -1727,14 +1753,13 @@ function buildMenu() {
       { label: "Write", click: () => sendMenuCommand("write") },
       { label: "Present", click: () => sendMenuCommand("present") },
       {
-        label: "Present in Browser (Follow My Voice)",
+        label: "Present in browser…",
         accelerator: "CmdOrCtrl+Shift+P",
         click: () => sendMenuCommand("prompter-open-in-browser")
       },
-      { label: "Use Chromium Speech Recognition", click: () => sendMenuCommand("prompter-open-in-chromium") },
       { type: "separator" },
       { label: "Hide filmed beats", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
-      { label: "Minimise the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
+      { label: "Minimise rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" as const },
@@ -1777,11 +1802,10 @@ function buildMenu() {
   const helpMenu: Electron.MenuItemConstructorOptions = {
     label: "Help",
     submenu: [
-      { label: "User guide…", accelerator: "F1", click: () => sendMenuCommand("help") },
-      { label: "Tagging reference", click: () => sendMenuCommand("tagging-help") },
+      { label: "User guide", accelerator: "F1", click: () => sendMenuCommand("help") },
       { label: "Take the tour", click: () => sendMenuCommand("tour") },
-      { label: "Set up Splitpage…", click: () => sendMenuCommand("setup") },
-      { type: "separator" },
+      { label: "Getting started…", click: () => sendMenuCommand("setup") },
+      { label: "Tagging reference", click: () => sendMenuCommand("tagging-help") },
       { label: "About Splitpage", click: () => sendMenuCommand("about") }
     ]
   };

@@ -23,7 +23,7 @@ export interface BrollViewStorage {
 export function createBrollView(storage: BrollViewStorage): BrollView {
   let state: BrollViewState = { filter: "all", group: "scene", pageGroup: "location" };
   function save(): void {
-    try { storage.write(JSON.stringify(state)); } catch { }
+    try { storage.write(JSON.stringify({ filter: state.filter, pageGroup: state.pageGroup })); } catch { }
   }
   return {
     load: () => {

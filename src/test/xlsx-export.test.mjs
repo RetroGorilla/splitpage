@@ -12,7 +12,7 @@ import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS } from "../adapters/formats/export-kit.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
-import { scriptTable } from "../adapters/formats/csv.ts";
+import { scriptTable, buildBreakdownCsv } from "../adapters/formats/csv.ts";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../adapters/formats/xlsx.ts";
 import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
@@ -172,6 +172,18 @@ test("the breakdown's and the shot list's own workbooks, and empty ones", async 
   assert.deepEqual(bare.sheets.map((s) => s.name), ["Script"], "no comments, tags or b-roll: just the script");
   assert.deepEqual((await open(buildBreakdownXlsx(liveDoc()))).sheets[0].rows[1][0], "(nothing labelled yet)");
   assert.deepEqual((await open(buildBrollXlsx(liveDoc()))).sheets[0].rows[1][0], "(no b-roll yet)");
+});
+
+test("breakdown exports keep space-separated full beat references", async () => {
+  const tag = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug">Mug</span>';
+  loadTestDocument(migrateRows({ schema: 2, title: "References", rows: [
+    { id: "r1", visualText: tag, audioText: "" },
+    { id: "r2", visualText: tag, audioText: "" }
+  ], sections: [{ id: "s2", name: "Harbour", firstSceneId: "r2" }],
+  productionTags: [{ id: "t_mug", cat: "prop", name: "Mug", status: "needed" }] }));
+  assert.match(buildBreakdownCsv(liveDoc()), /A\.1 B\.1/);
+  const book = await open(buildBreakdownXlsx(liveDoc()));
+  assert.ok(book.sheets[0].rows.some(row => row.includes("A.1 B.1")));
 });
 
 test("a cell cut at Excel's limit and a shortened Cuts against never end in half an emoji (#434)", async () => {

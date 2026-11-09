@@ -5,6 +5,7 @@ import { formatDuration } from "../../core/production/timing.ts";
 import { posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 
 export interface FlowVisualBoxPorts {
   readonly root: HTMLElement;
@@ -18,6 +19,7 @@ export interface FlowVisualBoxPorts {
   readonly thumbnails: (row: FlowRow) => string;
   readonly save: (range: FlowRange, html: string, first: boolean) => FlowRange | null;
   readonly input: (event: InputEvent, cell: HTMLElement) => void;
+  readonly beforeWrite?: (cell: Element) => ((selection?: CellRange | null) => void) | null;
   readonly leave: (cell: HTMLElement) => void;
   readonly keydown: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly notice: (text: string) => void;
@@ -41,7 +43,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   box.hidden = true;
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", "Visual");
-  box.innerHTML = '<div class="wr-flow-visual-heading"><strong>Visual</strong><button type="button" class="wr-flow-visual-close" aria-label="Close visual">Close</button></div>' +
+  box.innerHTML = '<div class="wr-flow-visual-heading"><strong>Visual</strong><div class="mini-toolbar"><button type="button" class="tb-tag wr-flow-visual-tag">Tag</button></div><button type="button" class="wr-flow-visual-close" aria-label="Close visual">Close</button></div>' +
     '<div class="wr-flow-visual-text cell-editable" contenteditable="true" role="textbox" aria-label="Visual text" aria-multiline="true" spellcheck="true" data-field="visualText" data-undo-owner="document"></div>' +
     '<div class="wr-flow-visual-pictures"></div><div class="wr-flow-visual-hint">Add pictures in the split view.</div>';
   const cell = box.querySelector<HTMLElement>(".wr-flow-visual-text") as HTMLElement;
@@ -162,11 +164,13 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       if (row && (row.visualText ?? "") !== shownHtml) {
         shownHtml = row.visualText ?? "";
         const kept = doc.activeElement === cell ? cellSelection(cell) : null;
+        const restore = ports.beforeWrite?.(cell);
         cell.innerHTML = shownHtml;
         if (kept) {
           ensureTrailingCaretSpot(cell);
           setCellSelection(cell, kept.from, kept.to);
         }
+        restore?.(kept);
         pictures.innerHTML = ports.thumbnails(row);
       }
     }
@@ -265,6 +269,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   function onClose(): void { close(); }
   function outside(event: Event): void {
     const element = event.target as Node;
+    if ((element as Element).closest?.("#tag-edit-action, #tag-open-hint, #tag-ghost")) return;
     if (!box.hidden && !box.contains(element) && !button.contains(element) && !note.contains(element)) close(false);
   }
   const listeners: [EventTarget, string, EventListener][] = [

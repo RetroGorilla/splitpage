@@ -3,16 +3,19 @@ import type { TagCategoryLook } from "../../core/production/looks.ts";
 import { isBlankTagName } from "../../core/production/tags.ts";
 import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
-import { isInsideTagOrLink } from "../common/dom.ts";
+import { isInsideProtectedTagOrLink as isInsideTagOrLink } from "../common/dom.ts";
 import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
-import { deleteRange, insertText, marksAt, replaceText, setMark, typingMarks } from "../../core/text/edits.ts";
+import { deleteRange, insertText, marksAt, replaceText, setMark, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { FORMAT_MARKS, namedTagId, projection } from "../../core/text/runs.ts";
-import { registryEntryOf } from "../../core/production/records.ts";
+import { FORMAT_MARKS, namedTagId, projection, tagStack, withTagStack } from "../../core/text/runs.ts";
+import { registryCompletion, registryCompletionOf, registryEntryOf } from "../../core/production/records.ts";
+import type { RegistryCompletion } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
 import type { PlainTagMount, PlainTagPorts, TagCaretRefusal } from "./ports.ts";
 import { showToolbarTagPicker } from "./toolbar-picker.ts";
+import { createTagOccurrenceEditor } from "./occurrence-editor.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 
 export const PLAIN_TAG_KEYWORDS: Record<string, TagCategoryId> = {
   prop: "prop",
@@ -81,6 +84,8 @@ interface OpenPlainTag {
   cat: TagCategoryId;
   keyword: string;
   silent: SilentTag | null;
+  suggestion: RegistryCompletion | null;
+  dismissed: string | null;
 }
 
 interface SilentTag {
@@ -92,6 +97,7 @@ interface SilentTag {
 
 let ports: PlainTagPorts | null = null;
 let open: OpenPlainTag | null = null;
+let occurrence: ReturnType<typeof createTagOccurrenceEditor> | null = null;
 const HL_PREFIX = "splitpage-open-tag-";
 
 function tagPorts(): PlainTagPorts {
@@ -111,8 +117,9 @@ let categoryCaret: TagCaretSnapshot | null = null;
 let closeCategoryPicker: (() => void) | null = null;
 
 function tagCaret(cellEl: Element): Range | TagCaretRefusal {
-  if (cellEl.getAttribute("data-field") === "audioText") return "audio";
-  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return "elsewhere";
+  const field = cellEl.getAttribute("data-field");
+  if (field === "audioText" && window.getSelection()?.isCollapsed !== false) return "audio";
+  if ((field !== "visualText" && field !== "audioText") || !cellEl.closest("#rows, .wr-flow-visual-box")) return "elsewhere";
   if (plainTagOpen()) return "open";
   const sel = window.getSelection();
   if (!sel?.rangeCount) return "elsewhere";
@@ -120,10 +127,17 @@ function tagCaret(cellEl: Element): Range | TagCaretRefusal {
   const node = range.startContainer;
   if (!cellEl.contains(node) || !cellEl.contains(range.endContainer)) return "elsewhere";
   const element = node.nodeType === 1 ? node as Element : node.parentElement;
-  if (element?.closest(".tag-anchor")) return "tag";
+  if (isInsideTagOrLink(element) && !element?.closest("a")) return "tag";
   if (element?.closest("a")) return "link";
   if (!range.collapsed) {
-    if (Array.from(cellEl.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag))) return "tag-selection";
+    const selection = cellSelection(cellEl);
+    if (selection) {
+      const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
+      const existing = new Set(cell.flatMap(run => tagStack(run.marks)));
+      let probe = namedTagId("prop", "selection probe");
+      while (existing.has(probe)) probe += "x";
+      if (toHtml(setMark(cell, selection.from, selection.to, "tag", probe)) === toHtml(cell)) return "tag-selection";
+    }
     if (Array.from(cellEl.querySelectorAll("a")).some(link => range.intersectsNode(link))) return "link";
   }
   return domToPos(cellEl, node, range.startOffset) === null ? "elsewhere" : range;
@@ -212,8 +226,23 @@ function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: str
   sel.removeAllRanges();
   sel.addRange(caret);
   open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword,
-    silent: { marks: saved.marks, wrappers: wrappers, pending: true, initialHtml: toHtml(current) } };
+    silent: { marks: saved.marks, wrappers: wrappers, pending: true, initialHtml: toHtml(current) },
+    suggestion: null, dismissed: null };
   paint(open);
+}
+
+function labelSelection(cellEl: Element, cell: readonly Run[], from: number, to: number, id: string): Run[] {
+  const opened = cellEl.querySelector("[data-tag-editing]");
+  if (!opened || domToPos(cellEl, opened, 0) !== from || domToPos(cellEl, opened, opened.childNodes.length) !== to) {
+    return setMark(cell, from, to, "tag", id);
+  }
+  const path: string[] = [];
+  for (let tag: Element | null = opened; tag; tag = tag.parentElement?.closest(".tag-anchor") ?? null) {
+    path.unshift(namedTagId(tag.getAttribute("data-tag-cat") as string, tag.getAttribute("data-tag-name") as string));
+  }
+  // why: the temporary boundary keeps an equal-extent label inside the opened occurrence using model containment
+  const bounded = insertText(cell, from, " ", withTagStack(marksAt(cell, from + 1), path));
+  return deleteRange(setMark(bounded, from + 1, to + 1, "tag", id), from, from + 1);
 }
 
 function chooseCategory(cat: string | null): boolean {
@@ -231,7 +260,7 @@ function chooseCategory(cat: string | null): boolean {
       if (!phrase) return null;
       const name = registryEntryOf(tagPorts().document.current(), look.id, phrase.name)?.name || phrase.name;
       return {
-        cell: setMark(cell, selection.from + phrase.lead, selection.to - phrase.trail, "tag", namedTagId(look.id, name)),
+        cell: labelSelection(saved.cellEl, cell, selection.from + phrase.lead, selection.to - phrase.trail, namedTagId(look.id, name)),
         sel: { from: selection.to, to: selection.to }, records: { tags: [{ cat: look.id, name }] }
       };
     });
@@ -258,6 +287,39 @@ function highlightApiOk() {
 
 function hintEl() { return document.getElementById("tag-open-hint"); }
 
+function ghostEl() { return document.getElementById("tag-open-ghost"); }
+
+function starterEl() { return document.getElementById("tag-open-starter"); }
+
+function caretRange(): Range | null {
+  const sel = window.getSelection();
+  return sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+}
+
+function typedInOpen(o: OpenPlainTag, caret: Range): string {
+  const range = document.createRange();
+  range.setStartAfter(o.span);
+  range.setEnd(caret.startContainer, caret.startOffset);
+  return range.toString().replace(ZWSP_RE, "");
+}
+
+function suggestionFor(o: OpenPlainTag, typed: string): RegistryCompletion | null {
+  if (o.dismissed !== null) {
+    if (o.dismissed === typed) return null;
+    o.dismissed = null;
+  }
+  return ports ? registryCompletion(ports.document.current(), o.cat, typed) : null;
+}
+
+function dismissSuggestion(): boolean {
+  const o = open;
+  const caret = caretRange();
+  if (!o || !o.suggestion || !caret || !stillThere(o)) return false;
+  o.dismissed = typedInOpen(o, caret);
+  paint(o);
+  return true;
+}
+
 export function plainTagOpen(cellEl?: Element | null) {
   if (!open || !stillThere(open)) return false;
   return !cellEl || open.cellEl === cellEl;
@@ -268,7 +330,7 @@ function stillThere(o: OpenPlainTag) {
 }
 
 function caretInOpen(o: OpenPlainTag) {
-  if (document.activeElement !== o.cellEl) return null;
+  if (document.activeElement !== o.cellEl && !o.cellEl.contains(document.activeElement)) return null;
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount || !sel.isCollapsed) return null;
   const r = sel.getRangeAt(0);
@@ -287,7 +349,7 @@ function notePlainTagInput(cellEl: Element): void {
   tagPorts().undo.breakCoalescing();
 }
 
-function beforePlainTagWrite(cellEl: Element): (() => void) | null {
+function restorePlainTag(cellEl: Element): (() => void) | null {
   const o = open;
   if (!o || o.cellEl !== cellEl || !stillThere(o) || caretInOpen(o) === null) return null;
   const from = domToPos(cellEl, o.span, 0);
@@ -298,7 +360,7 @@ function beforePlainTagWrite(cellEl: Element): (() => void) | null {
     const sel = cellSelection(cellEl);
     const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
     const start = from + width;
-    if (!sel || sel.from !== sel.to || sel.from < start || existingPlainTagEnd(cell, start) < sel.to ||
+    if (!sel || sel.from !== sel.to || sel.from < start || existingPlainTagEnd(cell, start, true) < sel.to ||
       (!o.silent && projection(cell).slice(from, start) !== o.keyword)) {
       cancelPlainTag();
       return;
@@ -317,6 +379,17 @@ function beforePlainTagWrite(cellEl: Element): (() => void) | null {
   };
 }
 
+function beforePlainTagWrite(cellEl: Element): ((selection?: CellRange | null) => void) | null {
+  const restoreOccurrence = occurrence?.beforeWrite(cellEl);
+  const restoreDraft = restorePlainTag(cellEl);
+  if (!restoreOccurrence && !restoreDraft) return null;
+  return selection => {
+    restoreOccurrence?.();
+    if (selection) setCellSelection(cellEl, selection.from, selection.to);
+    restoreDraft?.();
+  };
+}
+
 function clearPaint() {
   if (highlightApiOk()) {
     try {
@@ -325,9 +398,14 @@ function clearPaint() {
   }
   const el = hintEl();
   if (el) el.classList.remove("is-visible");
+  const ghost = ghostEl();
+  if (ghost) ghost.classList.remove("is-visible");
+  starterEl()?.classList.remove("is-visible");
 }
 
 function paint(o: OpenPlainTag) {
+  const caret = caretRange();
+  const typed = caret ? typedInOpen(o, caret) : "";
   if (highlightApiOk()) {
     try {
       const range = document.createRange();
@@ -335,19 +413,60 @@ function paint(o: OpenPlainTag) {
       const end = window.getSelection()?.getRangeAt(0);
       if (!end) return;
       range.setEnd(end.startContainer, end.startOffset);
+      const leading = (typed.match(/^\s*/) || [""])[0].length;
+      const start = domToPos(o.cellEl, o.span, o.span.childNodes.length);
+      if (leading && start !== null) {
+        const point = posToDom(o.cellEl, start + leading);
+        range.setStart(point.node, point.offset);
+      }
       CSS.highlights.set(HL_PREFIX + o.cat, new Highlight(range));
     } catch (e) { }
   }
+  const starter = starterEl();
+  const starterRect = starter && caret && !typed.trim() ? caret.getClientRects()[0] : undefined;
+  const starterFont = starterRect ? window.getComputedStyle(o.cellEl).font : "";
+  const suggestion = caret && !completedInnerTag(o, caret) ? suggestionFor(o, typed) : null;
+  o.suggestion = suggestion;
   const el = hintEl();
-  if (!el) return;
-  const cat = tagCategory(o.cat) as TagCategoryLook;
-  if (el.getAttribute("data-cat") !== o.cat) {
-    el.setAttribute("data-cat", o.cat);
+  const ghost = ghostEl();
+  if (el) writeHint(el, o.cat, suggestion ? suggestion.name : "");
+  const caretRect = ghost && suggestion && caret ? caret.getClientRects()[0] : undefined;
+  const cs = caretRect ? getComputedStyle(o.cellEl) : null;
+  const hintAt = el ? hintPlace(o, el) : null;
+  if (starter && starterRect) {
+    starter.style.font = starterFont;
+    starter.style.left = starterRect.left + "px";
+    starter.style.top = (starterRect.bottom + 2) + "px";
+    starter.setAttribute("data-cat", o.cat);
+    if (!starter.classList.contains("is-visible")) starter.classList.add("is-visible");
+  } else if (starter?.classList.contains("is-visible")) starter.classList.remove("is-visible");
+  if (el && hintAt) {
+    el.style.left = hintAt.left + "px";
+    el.style.top = hintAt.top + "px";
+  }
+  if (!ghost) return;
+  if (!suggestion || !caretRect || !cs) { ghost.classList.remove("is-visible"); return; }
+  ghost.style.font = cs.font;
+  ghost.style.lineHeight = cs.lineHeight;
+  ghost.style.left = caretRect.right + "px";
+  ghost.style.top = caretRect.top + "px";
+  ghost.textContent = suggestion.rest;
+  ghost.classList.add("is-visible");
+}
+
+function writeHint(el: HTMLElement, catId: TagCategoryId, name: string) {
+  const cat = tagCategory(catId) as TagCategoryLook;
+  if (el.getAttribute("data-cat") !== catId || el.getAttribute("data-name") !== name) {
+    el.setAttribute("data-cat", catId);
+    el.setAttribute("data-name", name);
     el.innerHTML = '<span class="tag-cat-dot" data-tag-cat="' + cat.id + '" style="--dot: ' + cat.color + '"></span>' +
-      '<b>' + escapeHtml(cat.label) + '</b>' +
-      '<span class="tag-suggest-cat">tag</span><kbd>Tab</kbd>';
+      (name ? '<b>' + escapeHtml(cat.label) + ':</b><span>' + escapeHtml(name) + '</span>'
+        : '<b>' + escapeHtml(cat.label) + '</b><span class="tag-suggest-cat">tag</span>') + '<kbd>Tab</kbd>';
   }
   el.classList.add("is-visible");
+}
+
+function hintPlace(o: OpenPlainTag, el: HTMLElement) {
   const w = el.offsetWidth, h = el.offsetHeight;
   const at = document.createRange();
   at.setStartAfter(o.span);
@@ -356,8 +475,7 @@ function paint(o: OpenPlainTag) {
   const cellRect = o.cellEl.getBoundingClientRect();
   let top = cellRect.bottom + 6;
   if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
-  el.style.left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)) + "px";
-  el.style.top = top + "px";
+  return { left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)), top: top };
 }
 
 function dropSilent(o: OpenPlainTag, silent: SilentTag) {
@@ -391,6 +509,7 @@ export function cancelPlainTag() {
 }
 
 export function refreshPlainTag() {
+  occurrence?.refresh();
   const o = open;
   if (!o) return;
   if (!stillThere(o)) { open = null; clearPaint(); return; }
@@ -447,7 +566,7 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
   r.collapse(true);
   sel.removeAllRanges();
   sel.addRange(r);
-  open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null };
+  open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null, suggestion: null, dismissed: null };
   paint(open);
 }
 
@@ -468,25 +587,32 @@ function onPlainTagged(listener: () => void) {
   };
 }
 
-function plainTagBoundaryMarks(marks: Marks) {
+function plainTagBoundaryMarks(marks: Marks, nested = false) {
   const visual: readonly string[] = FORMAT_MARKS;
-  return JSON.stringify(Object.keys(marks).filter(name => !visual.includes(name)).sort()
+  return JSON.stringify(Object.keys(marks).filter(name => !visual.includes(name) && (!nested || (name !== "tag" && name !== "innerTags"))).sort()
     .map(name => [name, marks[name as keyof Marks]]));
 }
 
-function existingPlainTagEnd(cell: readonly Run[], from: number) {
-  const boundary = plainTagBoundaryMarks(marksAt(cell, from));
+function existingPlainTagEnd(cell: readonly Run[], from: number, nested = false) {
+  const boundary = plainTagBoundaryMarks(marksAt(cell, from), nested);
   let pos = 0;
   for (const run of cell) {
     const end = pos + (run.atom ? 1 : run.text.length);
     if (end <= from) { pos = end; continue; }
-    if (run.atom || run.marks.tag || run.marks.href) return Math.max(from, pos);
-    if (plainTagBoundaryMarks(run.marks) !== boundary) return Math.max(from, pos);
+    if (run.atom || (!nested && run.marks.tag) || run.marks.href) return Math.max(from, pos);
+    if (plainTagBoundaryMarks(run.marks, nested) !== boundary) return Math.max(from, pos);
     const lineEnd = run.text.indexOf("\n", Math.max(0, from - pos));
     if (lineEnd !== -1) return pos + lineEnd;
     pos = end;
   }
   return pos;
+}
+
+function completedInnerTag(o: OpenPlainTag, caret: Range): boolean {
+  const range = document.createRange();
+  range.setStartAfter(o.span);
+  range.setEnd(caret.startContainer, caret.startOffset);
+  return Array.from(o.cellEl.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag) && !tag.contains(o.span));
 }
 
 export function closePlainTag() {
@@ -497,7 +623,7 @@ export function closePlainTag() {
   let to = at === null || start === null ? null : start + at - 1;
   const html = tagPorts().text.storedHtmlFromDom(o.cellEl.innerHTML.replace(ZWSP_RE, ""));
   const current = tagPorts().text.fromHtml(html, { media: true });
-  if (start !== null && to !== null && existingPlainTagEnd(current, start) < to) {
+  if (start !== null && to !== null && existingPlainTagEnd(current, start, true) < to) {
     cancelPlainTag();
     return true;
   }
@@ -509,10 +635,16 @@ export function closePlainTag() {
   }
   const phrase = at === null ? null : plainTagPhrase(typed);
   if (!phrase) { cancelPlainTag(); return true; }
+  const baseDepth = start === null ? 0 : tagStack(marksAt(current, start)).length;
+  const nested = start !== null && to !== null && sliceCell(current, start, to).some(run => tagStack(run.marks).length > baseDepth);
+  const shown = nested ? null : o.suggestion;
+  const accepted = shown ? registryCompletionOf(tagPorts().document.current(), o.cat, typed, shown.name) : null;
+  // why: the shown record is gone or no longer matches; show what is there now
+  if (shown && !accepted) { paint(o); return true; }
   open = null;
   clearPaint();
-  const entry = registryEntryOf(tagPorts().document.current(), o.cat, phrase.name);
-  const name = entry ? entry.name : phrase.name;
+  const entry = accepted ? null : registryEntryOf(tagPorts().document.current(), o.cat, phrase.name);
+  const name = accepted || (entry ? entry.name : phrase.name);
   const done = tagPorts().cells.edit(o.cellEl, function (cell) {
     const from = domToPos(o.cellEl, o.silent ? o.span : o.span.firstChild as Node, 0);
     if (from === null || to === null) return null;
@@ -521,7 +653,10 @@ export function closePlainTag() {
     const base = o.silent
       ? insertText(cell, from, o.keyword, written ? typingMarks(cell, from + 1) : o.silent.marks)
       : cell;
-    const res = applyPlainTag(base, from, o.silent ? to + o.keyword.length : to, o.cat, name);
+    const end = o.silent ? to + o.keyword.length : to;
+    const typedFrom = from + o.keyword.length + phrase.lead;
+    const filled = accepted ? replaceText(base, typedFrom, end, accepted) : base;
+    const res = applyPlainTag(filled, from, accepted ? typedFrom + accepted.length : end, o.cat, name);
     if (!res) return null;
     return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
@@ -534,24 +669,46 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
   ports = given;
   let disposed = false;
   return {
+    mountEditing: () => {
+      occurrence?.dispose();
+      const editor = createTagOccurrenceEditor(cell => {
+        const selection = cellSelection(cell);
+        const model = given.text.fromHtml(given.text.storedHtmlFromDom(cell.innerHTML));
+        openCategoryAtCaret(cell, selection ? marksAt(model, selection.from) : {});
+      }, () => { if (plainTagOpen()) closePlainTag(); given.undo.breakCoalescing(); }, () => {
+        given.undo.breakCoalescing();
+        given.panels.close("production-panel");
+      });
+      occurrence = editor;
+      return () => {
+        cancelCategory(false);
+        cancelPlainTag();
+        editor.dispose();
+        if (occurrence === editor) occurrence = null;
+      };
+    },
     openCategoryAtCaret,
     chooseCategory,
     cancelCategory,
     maybeOpen: maybeOpenPlainTag,
     refresh: refreshPlainTag,
     beforeWrite: beforePlainTagWrite,
+    finishEditing: () => occurrence?.finish() ?? false,
     noteInput: notePlainTagInput,
     cancel: cancelPlainTag,
     close: closePlainTag,
     isOpen: plainTagOpen,
     emptyAtCaret: plainTagEmptyAtCaret,
     cancelOnBackspace,
+    dismissSuggestion,
     onTagged: onPlainTagged,
     dispose: function () {
       if (disposed) return;
       disposed = true;
       cancelCategory();
       cancelPlainTag();
+      occurrence?.dispose();
+      occurrence = null;
       ports = null;
     }
   };

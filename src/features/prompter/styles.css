@@ -12,3 +12,24 @@
     font-weight: 700;
   }
   #btn-present .tally-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--white); }
+  .present-split { position: relative; display: inline-flex; align-items: stretch; flex: none; }
+  .present-split.has-more #btn-present { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .present-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid color-mix(in srgb, var(--white) 40%, transparent);
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    background: var(--tally-fill);
+    color: var(--white);
+  }
+  .present-more[hidden] { display: none; }
+  .present-more .btn-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .present-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .menu.present-menu { top: calc(100% + 6px); right: 0; left: auto; width: max-content; min-width: 240px; padding: var(--space-4); }
+  .present-menu .mi-label { overflow: visible; }

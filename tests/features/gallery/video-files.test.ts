@@ -9,7 +9,7 @@ import type { VideoFilePorts } from "../../../src/features/gallery/video-files-p
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices } from "../fakes.ts";
 
-const NO_BUNDLES = { openBundled: async () => null, bundle: async () => null, cancelBundle: () => {} };
+const NO_BUNDLES = { openBundled: async () => null, bundle: async () => null, move: async () => null, cancelBundle: () => {} };
 
 function setup(overrides: Partial<VideoFilePorts> = {}) {
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ href: "https://example.com/clip" }, { name: "local.mp4", size: 5 }] }] }, fakeMigration().ports);
@@ -208,6 +208,51 @@ test("undoing a re-drop that moved a link's path opens the old path, not the fil
   h.owner.dispose();
 });
 
+test("a Create bundle move forgets the original's grant and preview, so an undone path link reaches main's missing-file fallback", async (t) => {
+  const tokens: string[] = [];
+  const paths: [string, number | undefined][] = [];
+  const revoked: string[] = [];
+  t.mock.method(URL, "createObjectURL", () => "blob:moved-original");
+  t.mock.method(URL, "revokeObjectURL", (url: string) => { revoked.push(url); });
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok", opens: () => true,
+    open: async (token) => { tokens.push(token); return { ok: false, code: "UNKNOWN" }; },
+    openPath: async (path, size) => { paths.push([path, size]); return { ok: true }; } } });
+  const link = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, link);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.owner.url(link), "blob:moved-original");
+  h.owner.movedPath("C:\\Elsewhere\\take.mp4");
+  assert.equal(h.owner.has(link), true, "moving another path keeps this file's grant and preview");
+  h.owner.movedPath("C:\\Drops\\take.mp4");
+  assert.equal(h.owner.has(link), false);
+  assert.deepEqual(revoked, ["blob:moved-original"]);
+  h.owner.openFile(link);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(tokens, [], "the revoked token is never tried");
+  assert.deepEqual(paths, [["C:\\Drops\\take.mp4", 5]]);
+  h.owner.dispose();
+});
+
+test("a grant that answers after a Create bundle move cannot restore the forgotten token", async () => {
+  let release: (token: string) => void = () => {};
+  const tokens: string[] = [];
+  const paths: string[] = [];
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: () => new Promise((resolve) => { release = resolve; }), opens: () => true,
+    open: async (token) => { tokens.push(token); return { ok: true }; },
+    openPath: async (path) => { paths.push(path); return { ok: true }; } } });
+  const link = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, link);
+  h.owner.movedPath("C:\\Drops\\take.mp4");
+  release("late-token");
+  await new Promise((resolve) => setImmediate(resolve));
+  h.owner.openFile(link);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(tokens, []);
+  assert.deepEqual(paths, ["C:\\Drops\\take.mp4"]);
+  assert.equal(h.owner.has(link), false);
+  h.owner.dispose();
+});
+
 test("a bundled link opens by its name in the script's folder, which main resolves, and never by a path", async () => {
   const names: string[] = [];
   const paths: string[] = [];
@@ -252,4 +297,43 @@ test("bundling sends main this session's grant for the dropped file, waiting for
   assert.equal(calls.length, 1);
   h.owner.dispose();
   assert.deepEqual(await h.owner.bundle(dropped, "bundle3", () => {}), { ok: false, code: "UNAVAILABLE" });
+});
+
+test("a move sends main only this session's grant; once moved, the token and the dropped file are forgotten and the old path opens through main with its size", async () => {
+  const moves: [string, string][] = [];
+  const opens: string[] = [];
+  const paths: [string, number | undefined][] = [];
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok", opens: () => true,
+    open: async (token) => { opens.push(token); return { ok: true }; },
+    openPath: async (p, size) => { paths.push([p, size]); return { ok: true }; },
+    move: async (token, job) => { moves.push([token, job]); return { ok: true, name: "take.mp4", outcome: "moved" }; } } });
+  const dropped = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, dropped);
+  assert.deepEqual(await h.owner.move(at("C:\\Elsewhere\\take.mp4"), "bundle1", () => {}), { ok: false, code: "UNKNOWN" }, "a path never dropped is never sent");
+  assert.deepEqual(moves, []);
+  assert.deepEqual(await h.owner.move(dropped, "bundle2", () => {}), { ok: true, name: "take.mp4", outcome: "moved" });
+  assert.deepEqual(moves, [["tok", "bundle2"]]);
+  assert.equal(h.owner.has(dropped), false, "the dropped file is gone from where it was");
+  assert.equal(h.owner.has({ name: "take.mp4", size: 5, location: { kind: "bundled", name: "take.mp4" } }), false);
+  h.owner.openFile(dropped);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(opens, [], "the moved file's token is not used again");
+  assert.deepEqual(paths, [["C:\\Drops\\take.mp4", 5]], "main gets the stored path and the link's size for its fallback");
+  h.owner.dispose();
+});
+
+test("a move that kept the original keeps its token and the preview for the copy", async (t) => {
+  t.mock.method(URL, "createObjectURL", () => "blob:copy");
+  const opens: string[] = [];
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok", opens: () => true,
+    open: async (token) => { opens.push(token); return { ok: true }; }, openPath: async () => null,
+    move: async () => ({ ok: true, name: "take (2).mp4", outcome: "kept" }) } });
+  const dropped = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, dropped);
+  assert.deepEqual(await h.owner.move(dropped, "bundle1", () => {}), { ok: true, name: "take (2).mp4", outcome: "kept" });
+  assert.equal(h.owner.has({ name: "take.mp4", size: 5, location: { kind: "bundled", name: "take (2).mp4" } }), true);
+  h.owner.openFile(dropped);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(opens, ["tok"]);
+  h.owner.dispose();
 });

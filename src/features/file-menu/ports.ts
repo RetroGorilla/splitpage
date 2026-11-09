@@ -119,7 +119,6 @@ export interface FileMenuDropdownPorts {
   readonly desktop: () => boolean;
   readonly recents: Pick<RecentFiles, "available" | "list" | "routeOpen" | "read">;
   readonly recentHandle: (entry: RecentFileData | undefined) => { readonly getFile: () => Promise<File> };
-  readonly canOpenPrompter: { readonly browser: () => boolean; readonly chromium: () => boolean };
   readonly opening: DocumentOpening;
   readonly transitions: Pick<Transitions<DocumentDestination>, "startNew">;
   readonly history: HistoryPort;
@@ -136,6 +135,8 @@ export interface FileMenuDropdownPorts {
 }
 
 export interface FileMenuActionPorts {
+  readonly createBundle: () => Promise<void>;
+  readonly canCreateBundle: () => boolean;
   readonly screen: () => ScreenState;
   readonly desktop: () => boolean;
   readonly saves: Pick<SaveState, "busy">;

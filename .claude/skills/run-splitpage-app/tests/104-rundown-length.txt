@@ -85,12 +85,12 @@ expect !document.getElementById('rundown').classList.contains('has-length-delta'
 
 # --- shot scenes hidden: what is left / the whole ---------------------------------
 eval (function(){ F.state().rows[0].status = 'shot'; return true; })()
-jsclick #file-menu [data-file-action="toggle-hide-shot"]
+jsclick #hide-shot-toggle
 sleep 400
 expect document.getElementById('runtime-total').textContent == 0:12 / 0:24
 expect document.querySelector('#runtime-total .rd-length-of').textContent === ' / 0:24'
 expect len().title.indexOf('still to film') !== -1
-jsclick #file-menu [data-file-action="toggle-hide-shot"]
+jsclick #hide-shot-toggle
 sleep 400
 expect document.getElementById('runtime-total').textContent == 0:24
 
@@ -136,7 +136,7 @@ eval document.querySelector('#rundown .rundown-track').dispatchEvent(new Pointer
 eval RT.setMinimized(true)
 sleep 400
 expect document.getElementById('rundown').classList.contains('is-min')
-expect R(document.getElementById('rundown')).height <= 12
+expect R(document.getElementById('rundown')).height <= 26
 expect R(len()).height > 0
 expect R(len()).top >= R(document.querySelector('#rundown .rundown-track')).top - 0.5
 expect R(len()).bottom <= R(document.querySelector('#rundown .rundown-track')).bottom + 0.5

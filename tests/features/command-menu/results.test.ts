@@ -9,6 +9,8 @@ import { wireRegistries } from "../../../src/test/_registries.mjs";
 import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../../src/bootstrap/wiring/file-menu-export.ts";
 
 import { mountCommandMenuFeature, stopCommandMenuFeature } from "../../../src/bootstrap/wiring/command-menu.ts";
+import { helpActions } from "../../../src/features/help/actions.ts";
+import { fakeScreen } from "../fakes.ts";
 
 const wired = wireRegistries();
 mountFileMenuExportFeature(captureExportDocument);
@@ -62,6 +64,25 @@ test("a group the command menu does not know yet is listed after the ones it doe
   ];
   try {
     assert.deepEqual(results("").map((g) => g.group), ["Export", "Help", "Zebras"]);
+  } finally {
+    for (const off of offs) off();
+  }
+});
+
+test("an alias counts as the label, so the user guide comes first for help", () => {
+  const offs = [
+    ...helpActions(() => ({ openHelp: () => {}, startTour: () => {} }), { screen: fakeScreen().screen, desktop: () => false })
+      .map((definition) => appActions.register(definition)),
+    appActions.register({ id: "test-tagging", label: "Tagging reference", group: "Tags", words: "tags reference help", run: () => {} }),
+    appActions.register({ id: "test-settings", label: "Settings", group: "Help", run: () => {} })
+  ];
+  try {
+    const help = results("help");
+    assert.equal(help[0]?.group, "Help");
+    assert.equal(help[0]?.items[0]?.cmd.id, "help");
+    assert.equal(help[0]?.items[0]?.view.label, "User guide");
+    assert.deepEqual(help.map((g) => g.group), ["Help", "Tags"]);
+    assert.equal(results("user guide")[0]?.items[0]?.cmd.id, "help");
   } finally {
     for (const off of offs) off();
   }

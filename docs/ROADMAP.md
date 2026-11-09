@@ -1,55 +1,62 @@
 # Roadmap
 
-What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-11-02 at `fd29b083`. "4.1" is the internal name for this work, not the version it ships as; the number is set when the release is cut. Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
+Final pre-0.4.3 documentation pass checked against GitHub, source and merge history at `8d607637` on 2026-11-09. GitHub issues hold the current backlog. Recheck them before starting work. This page describes only merged behaviour as done.
 
-## Where it stands
+## Current release
 
-The 4.1 restructure is finished: `src/js/` and `src/legacy/` are gone, there are no import loops, and the build starts from `src/bootstrap/main.ts`. The server and collaboration features were removed, not moved.
+Splitpage **0.4.3** was released on **2026-11-09**, tagged [v0.4.3](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3). There is no 0.4.2; 0.4.1 was released on 2026-11-02. Changes merged after the v0.4.3 tag are development work; they are not in the published release.
 
-Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged or closed; AQ-29 was replaced by AQ-32. The run is recorded in summary PR #1037, which was closed without merging once it had been read. Adam also brought three new features into 4.1 (I-31, I-32, I-33), and they are merged. All shipped JavaScript is now strict TypeScript: `src/`, `shared/`, `server/` and `desktop/`. The only `.js` files left in the shipped code are `sw.js`, which stays JavaScript on purpose, and three generated from TypeScript: `desktop/preload.js`, `desktop/tabstrip-preload.js` and `desktop/tabstrip/tabstrip.js`. Nothing is tagged yet.
+The old plans used “3.x”, “4.0” and “4.1” as milestone names. The remote tags now use `v0.3.*` and `v0.4.*`. Use the remote tags and [releases](https://github.com/RetroGorilla/splitpage/releases), rather than old plan headings, for shipped versions.
 
-## Done for 4.1
+## Completed foundation
 
-| Id | What | PRs |
-| --- | --- | --- |
-| A1 | Release builds expose no test hook (AQ-23, PRs 1 to 5), and history's fault-injection code is out of release builds too (AQ-46: two TypeScript conversions, then the move) | #974, #985, #990, #999, #1011, #1014, #1033, #1034, #1036 |
-| A2 | I-20 (Save label after a late save) does not reproduce; its test stays as a regression test (AQ-28). I-6 is moot: import save-back is switched off and the code is marked deprecated (AQ-32, which replaced AQ-29) | #976, #982 |
-| A3 | Flaky suite 266 (AQ-30) and desktop smoke #496 (AQ-31) fixed in the tests' timing; no assertion loosened | #975, #980 |
-| B1 | Desktop split: IPC setup in seven parts (AQ-35), process lifecycle (AQ-36) and voice (AQ-37) moved out of `desktop/main.ts`, now 1,810 lines | #1002, #1005 to #1010, #1013, #1016 |
-| B2 | One owner decides when a save is complete (AQ-38) | #1019 |
-| B3 | Storage re-exports gone (AQ-19); the `"server"` merge kind is now `"disk"` (AQ-33); startup slots decided (#954) | #993, #989 |
-| C1 | Prompter and rundown in strict TypeScript, each with its state in one object (AQ-24 to AQ-27) | #959, #973, #988, #997 |
-| C2 | Re-renders on stamp, hide and display settings measured: all under 65 ms, no fix needed (AQ-18) | #987 |
-| C3 | Stylesheets renamed and adjacent same-feature files merged by purpose, cascade unchanged (AQ-34) | #986 |
-| C4 | All remaining shipped JavaScript converted to strict TypeScript at Adam's request: the app files under `src/`, then `shared/`, `server/` and `desktop/`. Types only, apart from documented exceptions; performance and startup are in [performance-record.md](architecture/performance-record.md#typescript-conversion-e44e1d03-to-fd29b083) | The runs #1042 to #1079 and #1082 to #1118 |
-| C5 | Stale tracker rows closed and the old `main` PRs listed for Adam (AQ-39); Adam closed the old `main` PRs #547, #488, #489 and #382 | #996 |
-| C6 | PDF export as a print layout: script and list print pages (AQ-40, AQ-41), desktop `printToPDF` (AQ-42), browser print dialog (AQ-43), automatic layout checks in CI (AQ-45), the old PDF generator, font subsetter and Noto fonts deleted (AQ-44), plus Adam's print fixes (rows kept together, shot scenes as grey rows, desktop footer accepted as INV-61) | #994, #998, #1015, #1000, #1004, #1024, #1012, #1022, #1021 |
-| I-1 | Rows animating when a document opens (#595): closed by Adam, who will open an issue if he sees it again | none |
-| I-31 | Section Headers: divider rows between scenes, with a name and a running total; double Backspace removes a header. Model, editor, then print, PDF, Word, Markdown, rundown and Present output | #1028, #1029, #1031 |
-| I-32 | The first save takes the script title, and a version tag such as "v3", from the file name | #1027 |
-| I-33 | The tag button with nothing selected starts an open tag at the cursor | #1026 |
-| Fixes | Desktop smoke no longer flakes on the moved-file "asks again" group: the test waits for the file to open before moving it (#1035). Row merge keeps a scene reorder made on one side when the other side did not reorder (#1030). Loading a document makes duplicate row ids unique, so a malformed file can no longer lose or repeat a row in a merge (#1041) | #1038, #1040, #1048 |
-| | Also merged: Unicode PDF font (AQ-16), PDF text and JPEG fixes (AQ-15), release needs green CI (AQ-20), real-app tests on PRs (AQ-21), startup failure screen (AQ-22), CI uploads the built app on pushes only (#1032). Reports AQ-6 and AQ-14 read and closed by Adam | #969, #961, #963, #964, #965, #1032, #1001, #950 |
+| Work | Evidence |
+| --- | --- |
+| Architecture milestones 0–7 and the later legacy reduction. The build starts at `src/bootstrap/main.ts`; `src/js/` and `src/legacy/` are gone. Server and collaboration features were removed. | #906, #905; [implementation record](IMPLEMENTATION-PLAN.md) |
+| Queue AQ-1–AQ-46 completed or closed. AQ-29 was replaced by AQ-32. Desktop voice extraction AQ-37 is merged, not waiting. | #1037 (closed summary); #982, #1016 |
+| Shipped source converted to strict TypeScript. Generated JavaScript and `sw.js` remain. | #1042–#1079, #1082–#1118; [performance record](architecture/performance-record.md#typescript-conversion-e44e1d03-to-fd29b083) |
+| Print-based PDF output and automatic layout checks replaced the old PDF generator. | #994, #998, #1015, #1000, #1004, #1024 |
+| Scene headers, first-save title/version naming, and open tags. | #1028, #1029, #1031, #1027, #1026 |
+| The default performance run reaches its images fixture again. | #1039, fixed by #1121 |
 
-## Still to do for 4.1
+## Released in 0.4.3
 
-| Item | What | State | Adam's input |
-| --- | --- | --- | --- |
-| C4 | Files over 1,000 lines, only when a change touches them (rule 11) | As touched | none |
-| AQ-37 check | Real-microphone check of desktop voice (#1016), `WINDOWS-CHECKS.md` §3 | Waiting | Run it on his PC |
-| #1039 | `perf-ab`'s images fixture calls a removed test hook, so the default run stops; `--only short,long` works | Filed | none |
-| #1023 | Notes handwriting lines in printed PDFs are too close together | Parked by Adam for the later PDF layout work | none |
+| Work | Evidence |
+| --- | --- |
+| Scene/beat terminology and numbering; Scene prep production outline. | #1186, #1190, #1191, #1215 |
+| Flow Writer replaced the old Writer. | #264, #1238; [design and measured results](WRITER-FLOW-PLAN.md) |
+| The shared top bar meets all six requests, including the save status. #1167 is closed as completed. | [Adam's decision](https://github.com/RetroGorilla/splitpage/issues/1167#issuecomment-6730027512) |
+| Attach files, copy local files beside the script, and carry bundled files on Save As. | #1277, #1267, #1281 |
+| Export with files and confirmed Replace. Attach offers Copy / Move / Leave. Create bundle gathers outside files. | #260 items 1–3; #1294, #1310, #1311, #1319 |
+| Scene header styling and in-place naming. | #1168 via #1313; #1166 via #1318 |
+| By scene grouping in B-roll, Comments, Production and Gear. Items repeat in every scene that uses them; unplaced entries follow under No scene. | #1170; #1317, #1322 |
+| Open-tag highlight, keyword suggestions, video-merge review, save/undo ownership, and thumbnail-merge fixes. | #1303, #1308, #1309, #1312, #1314 |
+| An underline marks an open tag awaiting its name at the caret. | #1264 via #1331 |
+| Browser target activation and stale browser-suite selectors fixed. | #1304, #1315, #1316 |
+| Comment identity preferences update everywhere; unnamed-scene labels use their letter. | #1299, #1298 |
+| Microphone selection, desktop-to-browser relay choice, and `@Name` assignment while tagging. | #1256, #1258, #1259, #1292 |
+| Export dialog and Help explain Create bundle before exporting outside files. | #260 item 4; #1329 |
+| Local media-heavy test bundle generator (developer tooling, not a starter or release asset). | #1325 via #1330; [usage](DEVELOPING.md#media-heavy-test-bundles) |
+| Shoot view beats grouped under scenes in responsive cells, with filmed and current indicators. | #1159 via #1332 |
+| Nested tags preserved through saves, clipboard, undo and merge; shown in production and exports; created while typing or through Edit tag / Done. | #1201 via #1336, #1343, #1346 |
+| Hide filmed beats beside the filmed count, Minimise / Show rundown, and Present ▸ Present in browser…; regrouped File menu and Help submenu. | #1163 via #1338, #1345 |
+| Scene prep keeps an item's detail open and focus on the item after renaming. | #1326 via #1337 |
+| Printed shot-list Notes lines spaced 8 mm apart for handwriting. | #1023 via #1334 |
+| Desktop updates verify installer release name, tag, API digest and size. | #1288 via #1335 |
+| Production and Gear By-scene views reuse cached document numbering. | #1344 via #1347 |
+| Printed-output wording and beat multi-selection browser suites brought up to date. | #1339 via #1340; #1341 via #1342 |
+| Roadmap, Help and contributor documentation refreshes. | #1327 via #1333, #1349 |
 
-"Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules), so it gets an independent review and the PC checks, then stops for Adam's merge.
+Scene descriptions (#1171) were closed as not planned. They are not queued work.
 
-## New features (not in 4.1 unless Adam says so)
+## Parked and manual checks
 
-- Collaboration rebuilt with Yjs on a self-hosted server: [COLLABORATION-PLAN.md](COLLABORATION-PLAN.md) is the plan of record. Nothing is built; the next task is its Stage 0 audit. Held by Adam.
+[#1177](https://github.com/RetroGorilla/splitpage/issues/1177) (Follow My Voice responsiveness) and the [review-mode-later issues](https://github.com/RetroGorilla/splitpage/issues?q=is%3Aissue%20state%3Aopen%20label%3Areview-mode-later) are parked. Review mode and collaboration remain removed.
 
-I-31, I-32 and I-33 were here; Adam brought them into 4.1 and they are listed under Done.
+Collaboration is planned, not started: [COLLABORATION-PLAN.md](COLLABORATION-PLAN.md) is the plan of record, Yjs on a self-hosted server. Its next task is the Stage 0 audit. Held by Adam.
 
-## Releasing (last step, when Adam calls it)
+Real-microphone verification remains a manual check: the automated relay/device tests do not prove recognition with a physical microphone. Keep the outstanding platform checks in [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md) explicit when preparing the release.
 
-1. Freeze agent-queue merges, so the checked commit is the tagged one.
-2. Version bump PR: `VERSION`, `desktop/package.json` and its lockfile go to the release's number, plus `sw.js`, the CHANGELOG heading, the Help heading and README. How to release: [RELEASING.md](RELEASING.md).
-3. Full browser suites, PC desktop smoke and perf-ab on the bump commit, then tag.
+## Before starting
+
+Read `AGENTS.md`, the issue and its latest owner decisions. The [old queue](AGENT-QUEUE.md) is finished. Historical plans and test records do not authorize new work. Use [RELEASING.md](RELEASING.md) when Adam calls a release.

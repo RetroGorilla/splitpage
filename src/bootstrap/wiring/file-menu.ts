@@ -1,4 +1,6 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { createBundle } from "./gallery.ts";
+import { currentHome } from "./location-owner.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { autosaveActions as autosaveDefinitions, fileMenuActions as definitions } from "../../features/file-menu/actions.ts";
@@ -6,7 +8,7 @@ import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu
 import type { FileMenuDropdownMount, FileMenuDropdownPorts } from "../../features/file-menu/ports.ts";
 import { autoSavePolicy, saveDoc, savesStarted, toggleAutoSave } from "./save-owners.ts";
 import { documentReader } from "./ports/document.ts";
-import { prompterWindows, recents } from "./ports/desktop.ts";
+import { recents } from "./ports/desktop.ts";
 import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 import { place } from "./ports/location.ts";
@@ -31,7 +33,6 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
       desktop: presence.running,
       recents,
       recentHandle: (entry) => makeDesktopHandle(entry),
-      canOpenPrompter: prompterWindows,
       opening,
       transitions,
       history,
@@ -54,6 +55,8 @@ export const stopFileMenuDropdownFeature = fileMenu.stop;
 
 export function fileMenuActions(): ActionDefinition[] {
   return definitions(fileMenu.owner, {
+    createBundle,
+    canCreateBundle: () => presence.running() && currentHome().kind === "file" && !!currentHome().handle,
     screen,
     desktop: presence.running,
     saves,

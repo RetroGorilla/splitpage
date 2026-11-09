@@ -97,6 +97,21 @@ test("typed text at pending marks or a direction edge is taken over once, and co
   dispose();
 });
 
+test("moving focus to Done preserves the occurrence and its unfinished draft until activation", () => {
+  const s = surfaces();
+  const h = harness();
+  const button = doc.createElement("button");
+  button.id = "tag-edit-action";
+  doc.body.append(button);
+  const dispose = mountEditorFocus({ rows: s.rows, doc, ports: h.ports });
+  try {
+    focusout(s.gridCell, button);
+    assert.deepEqual(h.calls, []);
+    focusout(s.gridCell);
+    assert.deepEqual(h.calls, ["left", "blurred:r1"]);
+  } finally { dispose(); }
+});
+
 test("focus and selection are remembered: the focused scene and each selection change", () => {
   const s = surfaces();
   const h = harness();

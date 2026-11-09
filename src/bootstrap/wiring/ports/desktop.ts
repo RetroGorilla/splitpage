@@ -5,7 +5,7 @@ import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../../../a
 import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.ts";
 import { createMicrophoneDevices } from "../../../adapters/page/microphones.ts";
 import type { MicrophoneDevices } from "../../../application/microphones.ts";
-import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
+import { canOpenPrompterInBrowser, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
 import type { RecentFiles } from "../../../application/files/recent-files.ts";
@@ -13,11 +13,6 @@ import type { RecentFiles } from "../../../application/files/recent-files.ts";
 export const externalLinks: ExternalLinks = {
   available: () => typeof desktopPort()?.openExternal === "function",
   open: (url) => { desktopPort()?.openExternal?.(url); }
-};
-
-export const prompterWindows = {
-  browser: () => canOpenPrompterInBrowser(),
-  chromium: () => canOpenPrompterInChromium()
 };
 
 export const recents: RecentFiles = {

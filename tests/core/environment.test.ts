@@ -26,6 +26,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/person-colors.ts": await import("../../src/core/document/person-colors.ts"),
   "document/ports.ts": await import("../../src/core/document/ports.ts"),
   "document/rows.ts": await import("../../src/core/document/rows.ts"),
+  "document/scene-items.ts": await import("../../src/core/document/scene-items.ts"),
   "document/scenes.ts": await import("../../src/core/document/scenes.ts"),
   "document/tags.ts": await import("../../src/core/document/tags.ts"),
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),

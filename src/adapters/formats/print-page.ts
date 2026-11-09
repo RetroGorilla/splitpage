@@ -103,7 +103,7 @@ a { color: #${c.visual}; text-decoration: underline; }
 .shot-done .comment-marker { color: #985500; }
 .shot-done .shot-flag { color: #BE2F29; }
 .writing-lines { min-height: 24pt; }
-.writing-lines > span { display: block; height: 12pt; border-bottom: 0.5pt solid #${c.borderStrong}; }
+.writing-lines > span { display: block; height: 8mm; border-bottom: 0.5pt solid #${c.borderStrong}; }
 @page shot-list { size: letter landscape; }
 @media print { section:has(.shot-list) { page: shot-list; } }
 @media screen { body { padding: 24px; } }

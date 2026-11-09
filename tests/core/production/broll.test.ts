@@ -112,6 +112,13 @@ test("brollPropsInCell lists the props tagged on each item's own lines, once eac
   assert.deepEqual(brollPropsInCell(normalizeCell([T("no markers "), tag("prop", "Kettle")])), []);
 });
 
+test("nested props belong only to the shot containing their lines", () => {
+  const cell = normalizeCell([B("b1"), T(" rain on "),
+    T("umbrella", { tag: "t:sound:Rain", innerTags: ["t:prop:Umbrella"] }),
+    T("\n"), B("b2"), T(" empty")]);
+  assert.deepEqual(brollPropsInCell(cell), [["Umbrella"], []]);
+});
+
 test("collectBrollFromRows numbers each row's items and keeps an id only the first time it appears", () => {
   const rows = [
     { id: "r1", visualText: cells.html([B("bsA"), T(" one\n"), B("bsA"), T(" two")]), audioText: EMPTY },

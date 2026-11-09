@@ -2,6 +2,8 @@
 
 Written 2026-08-28, condensed 2026-09-15. For whoever (or whatever) picks this up next.
 
+**Current status:** Splitpage 0.4.3 was released on 2026-11-09 as [v0.4.3](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3). `main` includes later work. Start with [ROADMAP.md](ROADMAP.md) and the issue's latest owner decisions. Historical checks below describe their named commits, not today's backlog or release readiness.
+
 `docs/help.md` is the **user-facing** doc — what the features are and how to
 use them, and the file `build.mjs` renders into the in-app Help page. Read it
 first; this file deliberately does not repeat it.
@@ -120,15 +122,15 @@ Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Since
 asserted nothing at all, which is what lets CI gate on it; `driver.ps1` still
 only exits non-zero for a command that throws, so read its `RESULT:` line.
 
-**CI** (`.github/workflows/ci.yml`, #58) runs the fast gates on every pull
-request: lint, types, the dependency and comment gates, the build and its
-`sw.js` stamp, every discovered unit, desktop and tool test
-(`npm run test:all`), and the smoke and CSP browser suites
-(`01-core.txt`, `52-csp.txt`).
+**CI** (`.github/workflows/ci.yml`) classifies paths before running code checks.
+Markdown prose skips them except `docs/help.md`, an app build input. Code changes
+run lint, types, the dependency and comment gates, generated-file checks and
+every discovered unit, desktop and tool test in four shards. App changes also
+run core/CSP and the selected save, typing, undo, export and Writer suites.
 [docs/architecture/testing.md](architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
 --only-target dev` against an Xvfb display (#89) on pull requests and pushes that touch app or desktop code — that
-is where `main.ts` and `preload.js` are actually executed, ~600 checks of it.
+is where `main.ts` and the generated preloads are actually executed.
 It is its own job because it launches ~60 real Electron processes — 6.3
 minutes on a Windows 11 x64 machine, far longer on a slow shared runner —
 which is more than everything else together. None of this is the full
@@ -177,9 +179,9 @@ The release packages in `dist/` run only the hook-free groups; the full
 smoke runs on the test package in `dist-test/` (`npm run dist:win:test`,
 never published). See [WINDOWS-CHECKS.md, Before you start](WINDOWS-CHECKS.md#before-you-start).
 
-On Linux (#89) the same dev target runs, and CI runs it on every pull
-request. It needs a display of its own and, on a first checkout, an explicit
-fetch of the Electron binary — Electron 44 has no postinstall. The fetch
+On Linux (#89) the same dev target runs for app/desktop-affecting pull requests
+and pushes. It needs a display of its own and, on a first checkout, an explicit
+fetch of the Electron binary — Electron 45 has no postinstall. The fetch
 script selects the machine architecture, including Windows ARM64 with x64
 Node running under emulation:
 
@@ -283,12 +285,14 @@ field must be added in **two** places: `migrateRows()` and `mergeStates()`'s
 merge literal — missing from the latter, it's silently destroyed on every
 merge (happened to `people` and `productionTags`).
 
-### 3.3 Tags are atomic
+### 3.3 Finished tags are protected
 
-`.tag-anchor` spans carry `contenteditable="false"` (`walkSanitize()`), so
-the caret can't enter one and typing/backspace can't corrupt its
-`data-tag-name`. Anything mutating text must skip `.tag-anchor` content
-(in the document model a tag is one atom, so no DOM walk is needed: [INV-03](architecture/invariants.md)).
+Canonical `.tag-anchor` spans carry `contenteditable="false"`. Edit tag
+temporarily opens one occurrence so its words can be selected, edited and
+given fully contained inner labels; Done protects it again. The model
+stores ordered enclosing tag marks, and the temporary editing state never
+enters saved HTML. Other text operations retain their tag protection rules:
+[INV-03](architecture/invariants.md).
 
 ### 3.4 Tags are derived; the *registry* is not
 
@@ -433,7 +437,7 @@ correct rename. Fix: blur before `jsclick`.
 
 ### 3.13 The desktop shell
 
-`desktop/main.ts` + `desktop/preload.js` (Electron 44 + electron-builder 26)
+`desktop/main.ts` + generated `desktop/preload.js` (Electron 45 + electron-builder 26)
 turn the web app into a native Windows app; optional shell. Since the
 2026-09-14 tabs build it manages **multiple windows, each with multiple
 tabs**.
@@ -629,6 +633,17 @@ tabs**.
   `desktop/test/attach-ipc.test.mjs` holds the refusals and
   `caseGalleryAttachFile` in smoke.mjs runs a PDF through drop, copy,
   restart and open.
+- **Moving a dropped file into the folder** (#260,
+  [rows-video-files.md](architecture/rows-video-files.md#moving-into-the-folder-260)).
+  `splitpage:bundle-move(token, job)` moves only the path main's session grant
+  holds for a drop's token (`moveIn` in `desktop/bundle-copy.ts`, a queued job in
+  `bundle-jobs.ts`): a rename on the same volume, otherwise copy, check byte for
+  byte, publish, then delete the original only if it is unchanged since the
+  grant. A grant is bound to its tab and records the file's stamp; one
+  checkpoint (`guarded`) runs before each rename, delete and publish. A missing
+  stored path falls back to the same name and size in the tab's script folder.
+  `desktop/test/bundle-move.test.mjs` holds the steps and refusals.
+- **Create bundle (#260).** `src/features/gallery/create-bundle.ts` inspects path links after an open, after the first landed save and from File > Create bundle…. It uses the existing bundle dialog, queue, progress panel, Hide chip and Cancel. Main validates paths with the open-path checks; Copy creates no grant, and Move requires the tab's existing file-stamped grant and reuses `moveIn`. Files already in the script's folder become bundled names; missing files stay paths. See INV-34 and `desktop/test/bundle-move.test.mjs`.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -1166,7 +1181,7 @@ had homes (`splitpage-hide-shot`, `splitpage-autosave`,
 stores the value and then fires `document`'s
 `"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
 setting listens for its key, so a change made anywhere shows everywhere.
-File ▸ Export app data carries them (`settingsAppData()`).
+Settings ▸ Data ▸ Export app data carries them (`settingsAppData()`).
 `splitpage-microphone` (#1162: the `deviceId` Follow My Voice listens on,
 absent = the system default) is the exception: device ids belong to one
 browser on one machine, so it is neither exported nor imported. Both the
@@ -1267,7 +1282,7 @@ Other source: `src/page.html` (shell), `src/styles/` (visual),
 `src/seed-state.json` (demo document). `docs/help.md` is a build input too —
 `build.mjs`'s `mdToHtml()` renders it into the Help modal at build time. It
 was `README.md` until #80, with developer-only sections fenced off by
-`<!-- help:skip-start/end -->` markers; splitting the user guide out into its
+the old Help skip markers; splitting the user guide out into its
 own file retired the markers, and means editing the repo's README no longer
 rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
 visible text on the Help page — keep any inside a fenced code block.
@@ -1301,21 +1316,15 @@ parents) carry `data-submenu` instead, so no listener mistakes them for one.
 
 ### Merging main into a branch that has `src/`
 
-Main still edits `index.html` directly. Split main's `index.html` on the
-same boundaries `src/` was cut on; prove the splitter reproduces this
-branch's `src/` byte-for-byte from the merge base first; cut main's JS into
-the same pieces by matching each base piece's first line as a unique
-anchor; `git merge-file` each piece against its base; normalise trailing
-newlines first; rebuild and read every **removal** in the diff against
-main's `index.html` — a removal you can't name is main's work being dropped.
-
-Since #66 the bundled `index.html` is minified, so this recipe no longer
-applies to anything built from this branch: the two sides are no longer the
-same shape of text. Re-derive it if it is ever needed again.
+The old split-file merge recipe is retired. `main` uses `src/`, and
+`index.html` is generated and ignored. Merge source changes, then rebuild.
 
 ---
 
 ## 7. Where to pick up
+
+Read [ROADMAP.md](ROADMAP.md), then check the assigned issue on GitHub.
+The architecture milestones and AQ queue are finished. Do not restart them.
 
 **Bugs and features live in GitHub Issues** —
 https://github.com/RetroGorilla/splitpage/issues. That is the tracker: open
@@ -1328,8 +1337,15 @@ can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
 Follow My Voice on desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
 `desktop/voice/listen.ps1`, driven by `desktop/voice-helper.ts`, which
-`desktop/voice-composition.ts` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
-session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3.
+`desktop/voice-composition.ts` creates and routes (invariants #45–#47).
+AQ-37 merged in #1016. Microphone selection later merged in #1258 and
+#1292. These merges do not prove a manual real-microphone check passed;
+that check has no current confirmation in this record. The manual recipe
+is in `docs/WINDOWS-CHECKS.md` §3.
+
+### Historical implementation notes
+
+These notes explain earlier changes. They are not tasks to pick next.
 
 **The header after Direction B (#169).** The row no longer overlaps
 itself at any width (#174): its right column is never narrower than its
@@ -1374,8 +1390,7 @@ recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
 starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.ts`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
-and its home becomes the imported file (`setHome("import")`,
-`src/application/location/document-location.ts`), which replaces either Save target. It used to replace only `state.rows` and the title and keep the rest, which meant an
+and, since #982, it has no save destination. It used to replace only `state.rows` and the title and keep the rest, which meant an
 unrelated Word file inherited the last script's breakdown, cast list and
 review comments, and Save still pointed at the previous project's file.
 

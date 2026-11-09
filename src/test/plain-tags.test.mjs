@@ -169,6 +169,16 @@ test("a name given (an item already tracked) is used, the words keep their casin
   assert.equal(res.name, "red mug");
 });
 
+test("outer keyword completion keeps completed inner labels, formatting and visible words", () => {
+  const child = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Umbrella" contenteditable="false"><strong>umbrella</strong></span>';
+  const cell = fromHtml("sfx: rain on " + child + " roof");
+  const result = applyPlainTag(cell, 0, projection(cell).length, "sound");
+  assert.ok(result);
+  assert.equal(result.name, "rain on umbrella roof");
+  assert.equal(toHtml(result.cell), '<span class="tag-anchor" data-tag-cat="sound" data-tag-name="rain on umbrella roof" contenteditable="false">rain on ' + child + ' roof</span>');
+  assert.deepEqual(fromHtml(toHtml(result.cell)), result.cell);
+});
+
 test("refused when the words there are not a keyword of that category and something after it", () => {
   assert.equal(tagAt("VFX:", "VFX:", "vfx").res, null);
   assert.equal(tagAt("VFX:   ", "VFX:", "vfx").res, null);

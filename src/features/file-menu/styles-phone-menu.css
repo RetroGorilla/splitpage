@@ -14,7 +14,7 @@
         transform-origin: bottom center;
       }
       @starting-style {
-        .menu-wrap .menu:not([hidden]) { opacity: 0; transform: translateY(24px); }
+        .menu-wrap .menu:not([hidden]) { opacity: 0; transform: translateY(16px); }
       }
       .menu-backdrop { display: block; }
       .menu-head {
@@ -24,5 +24,4 @@
         padding: var(--space-8) var(--space-8) var(--space-4) var(--space-16);
       }
       .mi { min-height: 44px; }
-      .mi.mi-foot { min-height: 38px; }
 }

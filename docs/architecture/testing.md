@@ -15,7 +15,7 @@ runs the fast gates in the order CI does.
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
 | `npm run test:all` | All three sets |
-| `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
+| `npm run verify` | lint, typecheck, check:deps, check:comments, app and preload builds, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), `check-preload`, test:all |
 
 The full browser regression and the desktop smoke run by hand at milestone
 and release gates, after `node build.mjs --test`: `node tools/run-suites.mjs <out-dir> [regex]` on
@@ -56,12 +56,22 @@ fell through to PATH's browser and failed with `e: missing glyph on page 1`.
 Whether the browser or its system libraries caused that wasn't established.
 
 While a pull request is being written, run the focused checks for what it
-touches. CI then runs every fast gate on every pull request: lint, types, the
+touches. CI classifies paths with `tools/ci-changes.mjs` first: Markdown prose
+skips the code jobs, except `docs/help.md`, which feeds the app build. A prose-only
+PR still runs `changes` and `gate`. No label is needed for that path. For code
+changes CI runs lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
 tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool. CI
 distributes the full discovered test set across four required shards, while
 lint, types and the other checks run in a separate job.
+
+App-affecting changes also require the dev desktop smoke. Test-only changes
+outside desktop do not build the app in the checks job; desktop test changes
+still run the smoke. On a push to main, `ci-tested-tree.mjs` can reuse a passed
+run of the exact tree. The authoritative suite lists and conditions live in
+`.github/workflows/ci.yml`; the browser jobs cover core/CSP plus save, typing,
+undo, export and Writer flows, not the full nightly suite set.
 
 The shard allocator sorts discovered files by the measured milliseconds in
 `tools/test-weights.json`, heaviest first, and puts each on the currently
@@ -85,6 +95,7 @@ committing it; timings vary with runner load.
 | --- | --- |
 | A pure rule in one feature or core policy | Its unit tests (`npm test -- --only <folder>`), `npm run typecheck`, `npm run lint`, `npm run check:deps`, `npm run check:comments` |
 | A feature's controller, view or bindings | The feature's tests, and the browser suites for its real input, focus and selection |
+| The in-app guide (`docs/help.md`) | Build with `node build.mjs --test`, inspect the rendered guide and contents links, then run `14-help.txt` and `273-help-actions-every-surface.txt` |
 | A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
 | Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`) |
 | Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
@@ -127,7 +138,7 @@ the absence of that object and capture/copy/export without instrumentation.
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.
 It also times an image-heavy case (ten fresh 1 MiB pictures in comment bodies:
-open, load from IndexedDB, and a hosted merge of two sides that each add ten);
+open, load from IndexedDB, and a local conflict merge of two sides that each add ten);
 `--only short,long,images` picks fixtures, and `PERF_PORT_BASE` moves its two
 ports. `--built` skips the build and requires an existing test build; `perf-ab`
 uses it after building each side (or the plain build on older commits without
@@ -441,16 +452,15 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only; CI runs the whole set through all three required shards.
+only; CI runs the whole set through all four required shards.
 
-`--shard <index/total>` distributes each group's sorted files round-robin by
-index. With three shards, the slow desktop IPC test is assigned to shard 3 to
-balance CI. For example, `npm run test:all -- --shard 1/3`, `--shard 2/3` and `--shard 3/3`
+`--shard <index/total>` balances files using the recorded timing weights
+described above. CI uses four shards (#1282). `npm run test:all -- --shard 1/4`, `--shard 2/4`, `--shard 3/4` and `--shard 4/4`
 together run every discovered file exactly once. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no
 assigned files at all fails. Invalid shard coordinates and combining `--shard`
-with `--only` are errors. `--list --shard 1/3` lists the first shard without
+with `--only` are errors. `--list --shard 1/4` lists the first shard without
 executing it. A shard's success covers only its printed share; all shards must
 pass. Local `npm run verify` remains an unsharded full run.
 
@@ -694,8 +704,8 @@ to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing els
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 21 suites covering save, typing, undo, export, writer position and typing work (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
-| `tests` | Three independent matrix jobs run `test:all -- --shard 1/3`, `2/3` and `3/3`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
-| `gate` | Requires successful classification, `checks`, all three test shards and, when the change touches app or desktop code, `desktop-smoke` for code changes; for prose only, or a tree another run already passed, requires `checks`, `tests` and `desktop-smoke` to be skipped. After they pass it uploads the `ci-passed-tree-<tree>` marker |
+| `tests` | Four independent matrix jobs run `test:all -- --shard 1/4`, `2/4`, `3/4` and `4/4`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
+| `gate` | Requires successful classification, `checks`, all four test shards and, when the change touches app or desktop code, `desktop-smoke` for code changes; for prose only, or a tree another run already passed, requires `checks`, `tests` and `desktop-smoke` to be skipped. After they pass it uploads the `ci-passed-tree-<tree>` marker |
 | `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
 
 The persistence suite costs little: on its first hosted run (PR #270,
@@ -720,8 +730,8 @@ classed as prose.
 `.github/workflows/release.yml` builds the
 Windows installers from a tag. [ci.md](ci.md) explains the settings in the workflow files that the files themselves cannot.
 
-The full browser regression, the Windows runs and the packaged x64 check
-are local milestone and release gates; the Linux full run and the packaged
-ARM64 check are local gates at the 4.0 release only (plan section 4). The
+The completed architecture run used the milestone and release gates in plan
+section 4. For current release checks, use [RELEASING.md](../RELEASING.md)
+and the owner's release decision. The
 repository is public, so never register a self-hosted runner on it
 ([ci.md](ci.md)).

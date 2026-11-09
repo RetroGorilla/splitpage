@@ -1,0 +1,150 @@
+{
+  "schema": 2,
+  "title": "Keepwarm Travel Mug — 30s",
+  "wordsPerMinute": 150,
+  "rows": [
+    {
+      "id": "r1",
+      "status": "ready",
+      "visualText": "<strong>0:00–0:05</strong> A paper cup of coffee on a car roof in the rain, no steam left. <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Commuter car park\" contenteditable=\"false\">Commuter car park</span>, early morning, cold blue light.",
+      "audioText": "SFX: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"rain on the roof\" contenteditable=\"false\">rain on the roof</span>.<br>VO: Your coffee has about eleven minutes before it gives up on you.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r2",
+      "status": "ready",
+      "visualText": "<strong>0:05–0:10</strong> Match cut: the same hand, now holding the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Keepwarm mug\" contenteditable=\"false\">Keepwarm mug</span>. Steam rises; the grade warms up.",
+      "audioText": "MUSIC: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"acoustic track\" contenteditable=\"false\">acoustic track</span> kicks in.<br>VO: This one doesn't. Keepwarm keeps it hot for six hours.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r3",
+      "status": "todo",
+      "visualText": "<strong>0:10–0:16</strong> Macro: a thumb slides the lid lock shut. The mug turns upside down over an open laptop bag. Not a drop.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Super\" contenteditable=\"false\">Super</span>: “Leakproof. Actually.”",
+      "audioText": "VO: Lock the lid and throw it in your bag. It won't leak. We checked. A lot.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r4",
+      "status": "todo",
+      "visualText": "<strong>0:16–0:22</strong> Three quick cuts: a <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"train platform\" contenteditable=\"false\">train platform</span>, a desk, a trail at sunrise.<br><span class=\"broll-key\" data-broll-id=\"bs_sp_life\" contenteditable=\"false\">B-roll:</span> the mug in all three places, two seconds each, same framing",
+      "audioText": "VO: Train, desk, trail — it fits every cup holder we could find.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r5",
+      "status": "todo",
+      "visualText": "<strong>0:22–0:26</strong> Back on the car roof. The rain has stopped. First sip — she smiles.",
+      "audioText": "VO: Six hours later, it still tastes like the first sip.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r6",
+      "status": "todo",
+      "visualText": "<strong>0:26–0:30</strong> Packshot: <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Keepwarm mug\" contenteditable=\"false\">Keepwarm mug</span> on seamless, lid open, steam curling up. <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Logo end card\" contenteditable=\"false\">Logo end card</span> with the web address.<br><span class=\"broll-key\" data-broll-id=\"bs_sp_pack\" contenteditable=\"false\">B-roll:</span> packshot plate with no graphics, for the edit",
+      "audioText": "VO: Keepwarm. Stays hot. Stays put.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    }
+  ],
+  "comments": [],
+  "people": [],
+  "productionTags": [
+    {
+      "cat": "location",
+      "name": "Commuter car park",
+      "status": "sourcing",
+      "owner": "",
+      "notes": "",
+      "id": "t_us72wy16pydo6"
+    },
+    {
+      "cat": "sound",
+      "name": "rain on the roof",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_1327pc2pd43dk"
+    },
+    {
+      "cat": "prop",
+      "name": "Keepwarm mug",
+      "status": "have",
+      "owner": "",
+      "notes": "Hero mug is the matte green one. Bring two — one for the upside-down shot.",
+      "id": "t_fjtjwn1s0uhyy"
+    },
+    {
+      "cat": "sound",
+      "name": "acoustic track",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_1vo3j8s123o82f"
+    },
+    {
+      "cat": "vfx",
+      "name": "Super",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_10cp4i4pceah2"
+    },
+    {
+      "cat": "location",
+      "name": "train platform",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_13jmpuzd2pvty"
+    },
+    {
+      "cat": "vfx",
+      "name": "Logo end card",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_f4mv4b8le7e7"
+    }
+  ],
+  "brollShots": [
+    {
+      "id": "bs_sp_life",
+      "name": "the mug in all three places, two seconds each, same framing",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "props": [],
+      "audioRef": "VO: Train, desk, trail — it fits every cup holder we could find.",
+      "location": "train platform",
+      "origin": "script"
+    },
+    {
+      "id": "bs_sp_pack",
+      "name": "packshot plate with no graphics, for the edit",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "props": [],
+      "audioRef": "VO: Keepwarm. Stays hot. Stays put.",
+      "location": "",
+      "origin": "script"
+    }
+  ],
+  "rev": 0
+}

@@ -16,6 +16,7 @@ function running(): VideoFileMount {
 }
 
 export const videoFiles: VideoFiles = {
+  movedPath: (path) => running().movedPath(path),
   grant: (file, link) => running().grant(file, link),
   has: (link) => running().has(link),
   url: (link) => running().url(link),
@@ -23,6 +24,7 @@ export const videoFiles: VideoFiles = {
   openFile: (link) => running().openFile(link),
   openGallery: (rowId, slot, key) => running().openGallery(rowId, slot, key),
   bundle: (link, job, onProgress) => running().bundle(link, job, onProgress),
+  move: (link, job, onProgress) => running().move(link, job, onProgress),
   cancelBundle: (job) => running().cancelBundle(job)
 };
 

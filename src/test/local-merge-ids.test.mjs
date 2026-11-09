@@ -24,11 +24,11 @@ function doc(rows, people) {
 
 const row = (id, text) => ({ id: id, audioText: text, visualText: "", status: "todo" });
 
-async function review(mine, theirs) {
+async function review(mine, theirs, base) {
   shell();
   loadTestDocument(migrateRows(JSON.parse(JSON.stringify(mine))));
   const file = new File([JSON.stringify(theirs)], "disk.splitpage", { type: "application/json" });
-  await merge.offer(file, null);
+  await merge.offer(file, base ? { diskBase: migrateRows(base) } : null);
   assert.equal(document.getElementById("file-conflict-merge").hidden, false, "the merge is offered");
   merge.open();
   const heads = Array.from(document.querySelectorAll("#merge-review-list .merge-group-head"), (el) => el.firstChild.textContent);
@@ -36,6 +36,26 @@ async function review(mine, theirs) {
   merge.reset();
   return { heads: heads, text: text };
 }
+
+test("merge review: thumbnail and link removal are combined, rather than both video links kept (#1278)", async () => {
+  const saved = currentDocument();
+  try {
+    const ref = { sha256: "b".repeat(64), width: 1, height: 1, mime: "image/png" };
+    const link = { href: "https://example.test/video", poster: true };
+    const base = doc([{ ...row("r1", "one"), imageRef: { ...ref, sha256: "a".repeat(64) }, moreImages: [{ links: [link] }] }]);
+    const removed = structuredClone(base), changed = structuredClone(base);
+    delete removed.rows[0].moreImages;
+    changed.rows[0].moreImages[0].imageRef = ref;
+    for (const [mine, theirs] of [[removed, changed], [changed, removed]]) {
+      const result = await review(mine, theirs, base);
+      assert.match(result.text, /both sets of changes are combined/);
+      assert.doesNotMatch(result.text, /Both sides are kept|location is kept/);
+    }
+  } finally {
+    loadTestDocument(saved);
+    document.body.innerHTML = "";
+  }
+});
 
 test("merge review: a scene only I hold named constructor is listed, and a scene __proto__ gets its number (#278)", async () => {
   const saved = currentDocument();

@@ -70,6 +70,9 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly videoFilePath: (file: unknown) => string | null;
   readonly openVideoPath: DesktopCall<"splitpage:video-path-open">;
   readonly bundleVideoFile: (token: string, job: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-file">>;
+  readonly moveVideoFile: (token: string, job: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-move">>;
+  readonly planCreateBundle: DesktopCall<"splitpage:bundle-create-plan">;
+  readonly bundlePath: (path: string, job: string, choice: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-path">>;
   readonly onBundleCarry: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:bundle-carry">[0]>) => void;
   readonly cancelBundle: (...args: DesktopIpcArgs<"splitpage:bundle-cancel">) => void;
   readonly openBundledFile: DesktopCall<"splitpage:bundled-file-open">;
@@ -115,7 +118,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
   "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath",
-  "bundleVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave",
+  "bundleVideoFile", "moveVideoFile", "planCreateBundle", "bundlePath", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave",
   "planBundleExport", "exportBundle", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
@@ -129,9 +132,19 @@ export const UNUSED_DESKTOP_MEMBERS = [
 
 let attached: DesktopPort | null = null;
 let current: DesktopPort | null = null;
+const changeListeners: (() => void)[] = [];
 
 function use(port: DesktopPort | null | undefined): void {
   current = port || null;
+  changeListeners.slice().forEach((listener) => { listener(); });
+}
+
+export function onDesktopChange(listener: () => void): () => void {
+  changeListeners.push(listener);
+  return () => {
+    const at = changeListeners.indexOf(listener);
+    if (at !== -1) changeListeners.splice(at, 1);
+  };
 }
 
 export function attachDesktop(bridge: DesktopPort | null | undefined): void {
@@ -149,10 +162,6 @@ export function runningOnDesktop(): boolean {
 
 export function canOpenPrompterInBrowser(): boolean {
   return current !== null && typeof current.openPrompterInBrowser === "function";
-}
-
-export function canOpenPrompterInChromium(): boolean {
-  return current !== null && typeof current.openPrompterInChromium === "function";
 }
 
 export function useDesktopForTest(fake: DesktopTestPort | DesktopFaultInjectionPort | null | undefined): void {

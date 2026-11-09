@@ -32,7 +32,7 @@ const stop = startPreferences({
   announce: (change) => document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: change }))
 });
 after(stop);
-document.body.innerHTML = '<div id="root"></div><div id="rows"></div><div id="rundown"></div><button id="menu-rundown-min"></button><div id="desktop-app-bar" hidden><span id="desktop-app-bar-text"></span><button id="desktop-app-bar-action"></button></div>';
+document.body.innerHTML = '<div id="root"></div><div id="rows"></div><div id="rundown"></div><div id="desktop-app-bar" hidden><span id="desktop-app-bar-text"></span><button id="desktop-app-bar-action"></button></div>';
 initRundown();
 initZoom();
 const { dismissDesktopAppNotice, renderDesktopAppNotice } = mountUpdateFeature();
@@ -44,7 +44,8 @@ test("rundown toggles announce once to another listener and owner changes update
   toggleRundownMinimized();
   assert.equal(isRundownMinimized(), true);
   assert.equal(preferences().rundownMin(), true);
-  assert.equal(document.getElementById("menu-rundown-min").getAttribute("aria-checked"), "true");
+  assert.equal(document.querySelector("#rundown .rundown-toggle").getAttribute("aria-expanded"), "false");
+  assert.equal(document.querySelector("#rundown .rundown-toggle").textContent, "Show rundown");
   assert.deepEqual(heard, [{ key: "splitpage-rundown-min", value: "1" }]);
   preferences().setRundownMin(false);
   assert.equal(isRundownMinimized(), false);

@@ -3,6 +3,7 @@ import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { ProductionSelection } from "../../application/editing/production-selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
@@ -19,6 +20,7 @@ import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
 import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
 import type { Marks } from "../../core/text/runs.ts";
 import type { BrollEntry } from "../../core/production/broll.ts";
+import type { PreferenceChanges, Preferences } from "../../application/preferences/preferences.ts";
 
 export interface TagPanelMount extends TagPanelCommands {
   readonly openProductionPanel: () => void;
@@ -27,6 +29,7 @@ export interface TagPanelMount extends TagPanelCommands {
 }
 
 export interface PlainTagPorts {
+  readonly panels: Pick<SidePanels, "close">;
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
@@ -36,18 +39,21 @@ export interface PlainTagPorts {
 export type TagCaretRefusal = "audio" | "link" | "tag" | "tag-selection" | "open" | "elsewhere";
 
 export interface PlainTagControl {
+  readonly mountEditing: () => () => void;
   readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => TagCaretRefusal | null;
   readonly chooseCategory: (cat: string | null) => boolean;
   readonly cancelCategory: () => boolean;
   readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
   readonly refresh: () => void;
-  readonly beforeWrite: (cellEl: Element) => (() => void) | null;
+  readonly beforeWrite: (cellEl: Element) => ((selection?: CellRange | null) => void) | null;
+  readonly finishEditing: () => boolean;
   readonly noteInput: (cellEl: Element) => void;
   readonly cancel: () => void;
   readonly close: () => boolean;
   readonly isOpen: (cellEl?: Element | null) => boolean;
   readonly emptyAtCaret: () => boolean;
   readonly cancelOnBackspace: () => boolean;
+  readonly dismissSuggestion: () => boolean;
   readonly onTagged: (listener: () => void) => () => void;
 }
 
@@ -75,7 +81,9 @@ export interface WhoListMount extends WhoListControl {
 }
 
 export interface TagPanelPorts {
-  readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
+  readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setGearGroupBy" | "setProductionGroupBy" | "setTagAddingPerson" | "setTagExpanded" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
+  readonly preferences: Pick<Preferences, "panelGrouping">;
+  readonly changes: PreferenceChanges;
   readonly focus: Pick<FocusMemory<HTMLElement>, "lastRow">;
   readonly beats: { readonly setFilmed: (rowId: string, filmed: boolean) => void; readonly reveal: (rowId: string) => void };
   readonly footage: { readonly entries: () => readonly BrollEntry[]; readonly open: (id: string) => void };

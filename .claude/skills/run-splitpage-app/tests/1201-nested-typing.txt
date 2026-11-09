@@ -1,0 +1,71 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.U=window.__undoTest; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:5,title:'Nested typing',paragraphsDecided:true,productionTags:[{id:'t_umbrella',cat:'prop',name:'umbrella',owner:'',notes:'Red one',status:'have'},{id:'t_rain',cat:'sound',name:'rain on umbrella roof',owner:'',notes:'Outdoor',status:'have'}],rows:Array.from({length:8},function(_,i){return {id:'r'+i,audioText:'Beat '+i,visualText:''};}),comments:[]})],'nested.splitpage'))
+wait F.state().title === 'Nested typing'
+eval window.c=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.go=function(i){var el=c(i);el.focus();var r=document.createRange();r.selectNodeContents(el);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);}; window.kw=function(el){return !!el.querySelector('.plain-tag-keyword');}; window.clean=function(el){return el.textContent.replace(/\u200b/g,'');}; go(0)
+press sfx: rain on [umbrella]
+expect kw(c(0))
+expect c(0).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+expect document.getElementById('tag-open-hint').classList.contains('is-visible')
+key Tab
+expect !kw(c(0))
+expect clean(c(0)) === 'rain on umbrella'
+expect c(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
+expect c(0).querySelector('[data-tag-cat="sound"]').dataset.tagName === 'rain on umbrella'
+expect getComputedStyle(c(0).querySelector('[data-tag-cat="sound"]')).outlineStyle === 'solid'
+expect getComputedStyle(c(0).querySelector('[data-tag-cat="prop"]')).getPropertyValue('--tag-color') !== getComputedStyle(c(0).querySelector('[data-tag-cat="sound"]')).getPropertyValue('--tag-color')
+expect getComputedStyle(c(0).querySelector('[data-tag-cat="prop"]')).boxShadow !== getComputedStyle(c(0).querySelector('[data-tag-cat="sound"]')).boxShadow
+shot 1201-nested-tags
+key ctrl KeyZ
+expect c(0).querySelector('[data-tag-cat="sound"]') === null
+expect c(0).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+key ctrl KeyY
+expect c(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]') !== null
+eval go(1)
+press sfx: rain on [umb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+key Tab
+expect kw(c(1))
+expect c(1).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+mouse click (function(){var r=document.getElementById('tag-open-hint').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
+expect c(1).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]') !== null
+expect clean(c(1)) === 'rain on umbrella'
+eval go(2)
+press sfx: rain on [umb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+key Escape
+expect !document.getElementById('tag-ghost').classList.contains('is-visible') && kw(c(2))
+key Escape
+expect !kw(c(2))
+expect clean(c(2)) === 'sfx: rain on [umb'
+eval go(3)
+press sfx: rain on [umbrella]
+key Escape
+expect !kw(c(3)) && c(3).querySelector('[data-tag-cat="prop"]') !== null
+expect clean(c(3)) === 'sfx: rain on umbrella'
+eval go(4)
+press sfx: rain vfx: flash {park} ~glow~ <camera>
+key Tab
+expect c(4).querySelector('[data-tag-cat="sound"]').textContent.replace(/\u00a0/g,' ') === 'rain vfx: flash park glow camera'
+expect c(4).querySelectorAll('[data-tag-cat="sound"] .tag-anchor').length === 3
+eval go(5)
+press sfx: rain on [umbrella] roof
+key Tab
+expect F.state().productionTags.filter(function(t){return t.cat==='sound'&&t.name==='rain on umbrella roof';}).length === 1
+expect F.state().productionTags.find(function(t){return t.id==='t_rain';}).notes === 'Outdoor'
+expect F.state().productionTags.find(function(t){return t.id==='t_umbrella';}).status === 'have'
+click #btn-write
+wait W.on()
+eval W.openVisual('r6'); window.v=function(){return document.querySelector('.wr-flow-visual-text');}; true
+press sfx: rain on [umb
+key Tab
+expect kw(v()) && v().querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+key Tab
+expect v().querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]') !== null
+expect clean(v()) === 'rain on umbrella'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('r7'); true
+press sfx: rain on [umbrella]
+key Escape
+expect v().querySelector('[data-tag-cat="prop"]') !== null && !kw(v())
+expect clean(v()) === 'sfx: rain on umbrella'
+quit

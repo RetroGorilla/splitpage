@@ -20,6 +20,7 @@ export type Marks = {
   cue?: true;
   href?: string;
   tag?: string;
+  innerTags?: readonly string[];
   cmt?: readonly string[];
 };
 
@@ -65,6 +66,19 @@ export function tagNameOf(id: unknown): TagName | null {
 
 export function namedTagId(cat: string, name: string): string {
   return defaultTagId(cat, name);
+}
+
+export function tagStack(marks: Marks): readonly string[] {
+  return marks.tag ? [marks.tag, ...(marks.innerTags || [])] : [];
+}
+
+export function withTagStack(marks: Marks, ids: readonly string[]): Marks {
+  const out = Object.assign({}, marks);
+  delete out.tag;
+  delete out.innerTags;
+  if (ids.length) out.tag = ids[0] as string;
+  if (ids.length > 1) out.innerTags = ids.slice(1);
+  return out;
 }
 
 function cellChars(t: unknown): string {
@@ -149,6 +163,10 @@ export function cleanMarks(marks: unknown, forAtom?: boolean): Marks {
     if (href) out.href = href;
   }
   if (!forAtom && typeof m.tag === "string" && m.tag) out.tag = m.tag;
+  if (out.tag && Array.isArray(m.innerTags)) {
+    const inner = (m.innerTags as unknown[]).filter(function (id): id is string { return typeof id === "string" && !!id; });
+    if (inner.length) out.innerTags = inner;
+  }
   if (Array.isArray(m.cmt)) {
     let ids = (m.cmt as unknown[]).filter(function (id) { return typeof id === "string" && id; }) as string[];
     ids = ids.filter(function (id, i) { return ids.indexOf(id) === i; }).sort();
@@ -162,10 +180,10 @@ export function sameMarks(a: Marks, b: Marks): boolean {
   if (ka.length !== kb.length) return false;
   for (let i = 0; i < ka.length; i++) {
     const k = ka[i] as MarkName;
-    if (k === "cmt") {
-      const ac = a.cmt as readonly string[];
-      if (!b.cmt || ac.length !== b.cmt.length) return false;
-      for (let j = 0; j < ac.length; j++) if (ac[j] !== b.cmt[j]) return false;
+    if (k === "cmt" || k === "innerTags") {
+      const ac = a[k] as readonly string[], bc = b[k];
+      if (!bc || ac.length !== bc.length) return false;
+      for (let j = 0; j < ac.length; j++) if (ac[j] !== bc[j]) return false;
     } else if (a[k] !== b[k]) {
       return false;
     }
@@ -175,7 +193,7 @@ export function sameMarks(a: Marks, b: Marks): boolean {
 
 export function orderedMarks(m: Marks): Marks {
   const out: Record<string, unknown> = {};
-  (["b", "i", "u", "s", "hl", "dir", "cue", "href", "tag", "cmt"] as const).forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
+  (["b", "i", "u", "s", "hl", "dir", "cue", "href", "tag", "innerTags", "cmt"] as const).forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
   return out as Marks;
 }
 
@@ -215,8 +233,8 @@ export function normalizeCell(cell: CellInput, opts?: NormalizeOptions | null): 
     }
     const t = cellChars(r.text);
     if (!t) return;
-    const m = cleanMarks(r.marks, false);
-    if (opts.hasTag && m.tag && !opts.hasTag(m.tag)) delete m.tag;
+    let m = cleanMarks(r.marks, false);
+    if (opts.hasTag && m.tag) m = withTagStack(m, tagStack(m).filter(opts.hasTag));
     if (opts.hasComment && m.cmt) {
       m.cmt = m.cmt.filter(opts.hasComment);
       if (!m.cmt.length) delete m.cmt;
@@ -320,7 +338,7 @@ export function commentIds(cell: CellInput): string[] {
 export function tagIds(cell: CellInput): string[] {
   const ids: string[] = [];
   normalizeCell(cell).forEach(function (r) {
-    if (!r.atom && r.marks.tag && ids.indexOf(r.marks.tag) === -1) ids.push(r.marks.tag);
+    if (!r.atom) tagStack(r.marks).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
   });
   return ids;
 }

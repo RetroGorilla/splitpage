@@ -18,7 +18,10 @@ wait !window.oldGearCard.isConnected
 expect document.querySelector('#gear-list .tag-rename-input').value == Camera draft
 expect document.activeElement === document.querySelector('#gear-list .tag-rename-input')
 expect document.activeElement.selectionStart === 3 && document.activeElement.selectionEnd === 7 && document.activeElement.selectionDirection === 'backward'
+eval document.querySelector('#gear-list [data-action="tag-rename-save"]').focus()
 jsclick #gear-list [data-action="tag-rename-save"]
 wait document.querySelector('#gear-list .tag-entity-name').textContent === 'Camera draft'
 expect document.querySelector('#gear-list .tag-rename-input') === null
+expect document.querySelector('#gear-list .tag-entity').classList.contains('is-expanded')
+expect document.querySelector('#gear-list .tag-entity').contains(document.activeElement)
 expect document.querySelector('#rows .audio-cell .cell-editable').textContent.includes('xy')

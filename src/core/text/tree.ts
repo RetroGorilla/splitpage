@@ -1,4 +1,4 @@
-import { FORMAT_MARKS, defaultTagOf, normalizeCell } from "./runs.ts";
+import { FORMAT_MARKS, defaultTagOf, normalizeCell, tagStack, withTagStack } from "./runs.ts";
 import type { AtomRun, CellInput, FormatMark, Marks } from "./runs.ts";
 import type { TagName } from "../document/tags.ts";
 
@@ -28,7 +28,10 @@ function elementKeys(marks: Marks, isAtom: boolean): ElementKey[] {
   (marks.cmt || []).forEach(function (id) { keys.push({ k: "cmt", v: id }); });
   if (marks.dir && !isAtom) keys.push({ k: "dir", v: true });
   if (marks.href) keys.push({ k: "href", v: marks.href });
-  if (marks.tag && !isAtom) keys.push({ k: "tag", v: marks.tag });
+  if (marks.tag && !isAtom) {
+    keys.push({ k: "tag", v: marks.tag });
+    (marks.innerTags || []).forEach(function (id) { keys.push({ k: "tag", v: id }); });
+  }
   FORMAT_MARKS.forEach(function (f) { if (marks[f]) keys.push({ k: f, v: true }); });
   return keys;
 }
@@ -53,9 +56,11 @@ export function buildTree(cell: CellInput, opts?: TreeOptions | null): CellTree 
   }
   normalizeCell(cell).forEach(function (r) {
     let marks = r.marks;
-    if (!r.atom && marks.tag && !tagOf(marks.tag)) {
-      marks = Object.assign({}, marks);
-      delete marks.tag;
+    if (!r.atom && marks.innerTags) {
+      const ids = tagStack(marks);
+      if (ids.some(function (id) { return !tagOf(id); })) marks = withTagStack(marks, ids.filter(function (id) { return !!tagOf(id); }));
+    } else if (!r.atom && marks.tag && !tagOf(marks.tag)) {
+      marks = withTagStack(marks, []);
     }
     sync(elementKeys(marks, !!r.atom));
     const here = (stack[stack.length - 1] as TreeParent).kids;

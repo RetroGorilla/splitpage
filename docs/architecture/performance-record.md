@@ -1,5 +1,16 @@
 # Performance record
 
+## Media-heavy bundle
+
+Install ffmpeg on PATH, then run `node tools/make-media-bundle.mjs` from the repository root.
+It creates `D:\vibecoding\Splitpage\scratch\media-bundle` with a `.splitpage` script and its
+adjacent files folder. The output folder must not already exist and must be outside the repository.
+Pass another output folder as the first argument, `--small` for a quick sample, or `--photos N`
+and `--videos N` to set counts. The default has 30 scenes, 150 beats, 300 pictures and 60 videos.
+Open the script in Splitpage desktop with the files folder beside it. Pictures are embedded in the
+script; bundled video links resolve through the desktop app. Browser Splitpage displays the gallery
+but cannot open local video files from a saved bundle. This fixture is separate from `perf-ab`.
+
 Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe this machine and browser; compare a later run only under the same conditions.
 
 ## Conditions (Linux)
@@ -362,6 +373,48 @@ The other cases (delete every scene, stamp, hide shot scenes, display preference
 ### Reading it
 
 No case is slower beyond the spread of its own runs, and every p50 is well inside its limit. The two undo cases read about 10% higher at p50 (short +1.3 ms, long +3.3 ms), and short typing's p50 is 0.2 ms higher, but each head value sits inside the range the base runs and the head runs cover together: short undo, base 11.2 to 12.5 and head 11.2 to 16.6; long undo, base 30.7 to 42.4 and head 29.1 to 44.5. Five rounds can't separate that from noise, so the undo medians are a watch item for the next comparison, not a finding. Per the rule above, they are not called a slowdown, and the batch was not rerun. Long new scene's p95 reads +6.1% (34.2 to 36.3), again inside both builds' spreads.
+
+## Batch of 2026-11-08, 76f4cc2c to 377c252f
+
+Recorded 2026-11-08 on the Windows PC by `node tools/perf-ab.mjs 76f4cc2c 377c252f --only short,long --rounds 5`, with smoke.lock and perf.lock held by this run. It covers the typing, editing and undo changes #1303 (open tag highlight), #1308 (keyword tag autocomplete), #1312 (the undo hold bound to the session epoch), #1318 (header name line) and #1322 (Production and Gear grouped by scene), plus everything else merged in that range.
+
+### Input latency, median of 5 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 2.5 | 2.6 | 15.3 | 14 | 8 |
+| long typing | 2.5 | 2.5 | 14.9 | 14.9 | 8 |
+| short new scene | 17.7 | 18.5 | 25.6 | 24.6 | 65 |
+| long new scene | 30.2 | 29.1 | 35.2 | 32.5 | 65 |
+| short undo the delete | 10.7 | 10.5 | 10.7 | 10.5 | 45 |
+| long undo the delete | 33.4 | 30 | 33.4 | 30 | 70 |
+
+The other cases (short and long delete every scene, long stamp a scene, long hide shot scenes, long display preference, and the three exports at both fixtures) moved between -16.4% and +36.4% at p50 on base values of 0.4 to 18.3 ms. The largest rise is short `.md` project export, 1.1 to 1.5 ms (+0.4 ms); the largest fall is long hide shot scenes, 18.3 to 15.3 ms. Limits apply to the p50.
+
+### Reading it
+
+No case is slower beyond the spread of its runs: for every row, the head p50 sits inside the range that the base and head runs cover, and every p50 is well inside its limit. Undo did move, and it moved down: short undo is -1.9% (10.7 to 10.5 ms) and long undo is -10.2% (33.4 to 30 ms). The +10% undo medians flagged as a watch item in the previous batch did not repeat. The long undo base runs include one 69.2 ms outlier, so part of the drop is base noise; the head runs span 28.4 to 32.4 ms, tighter than the base. Five rounds don't separate a real gain from noise, so the honest reading is that undo did not get slower, and the watch item is closed. Typing and new scene stay flat: short typing's p50 is +0.1 ms and short new scene's is +0.8 ms (+4.5%), both inside the base and head runs together.
+
+## Batch of 2026-11-09, 377c252f to 8d607637
+
+Recorded 2026-11-09 on the Windows PC by `node tools/perf-ab.mjs 377c252f 0add8ba2 --only short,long --rounds 5`, with smoke.lock and perf.lock held by this run. Head `0add8ba2` has the same `src/` as `8d607637` (no diff under `src/`); it adds only the recorder change in `tools/perf-record.mjs` and its test. Base 377c252f has the hide-shot control as the File menu item, not the header switch, so the recorder reaches that control by the old route in base. Only the route changed; the measured action is the same toggle in both builds. Limits are the ones the 2026-11-08 batch used. The batch covers the typing, editing and undo changes #1331 (awaiting-tag underline), #1336, #1343 and #1346 (nested tags: model, panels, typing and Edit tag), #1332 and #1347 (By scene rendering), and #1338 and #1345 (header controls), plus everything else merged in that range.
+
+### Input latency, median of 5 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 2.9 | 3.1 | 14.1 | 13 | 8 |
+| long typing | 2.5 | 3 | 13.4 | 15.5 | 8 |
+| short new scene | 22.1 | 23.8 | 40.3 | 34.3 | 65 |
+| long new scene | 29.5 | 33.4 | 33 | 38.2 | 65 |
+| short undo the delete | 10.6 | 14 | 10.6 | 14 | 45 |
+| long undo the delete | 26.5 | 41.4 | 26.5 | 41.4 | 70 |
+
+The undo rows have one key, so p95 equals p50. The other cases (short and long split open tag spaces and name, short and long writer open tag spaces and name, short and long delete every scene, long stamp a scene, long hide shot scenes, long display preference, and the six exports) moved between -44.7% and +55.6% at p50 on base values of 0.5 to 19.9 ms. The largest rise is long export Standalone HTML, 1.8 to 2.8 ms (+55.6%); the largest fall is long writer open tag spaces, 8.5 to 4.7 ms (-44.7%). Limits apply to the p50.
+
+### Reading it
+
+No case is slower than its spread. For every row, the head p50 sits inside the range that the base and head runs cover together, and every head p50 is well inside its limit (the closest is long undo, 41.4 ms against 70). Several cases moved far more than that: short undo +32.1%, long undo +56.2%, long delete every scene +28.7%, long stamp +22.4%, and the long exports +49% to +56%. Their spreads are wide. Long undo runs span 26.2 to 51.2 ms in base and 26.9 to 54 ms in head, and the long export runs overlap. Five rounds on this machine can't separate those moves from noise, so none is called a slowdown. The two undo cases and the long exports are the watch items for the next batch. The open-tag spaces cases doubled their `Range.getClientRects` calls in head (40 to 80 per run). That is a call count, not a latency, and no latency case in that group left its spread.
 
 ## Comparing two commits
 

@@ -11,23 +11,14 @@ export function desktopActions(current: () => DesktopMount | null, ports: Deskto
   return [
     {
       id: "prompter-open-in-browser",
-      label: "Present in browser (Follow My Voice)",
+      label: "Present in browser…",
       group: "This document",
       icon: "i-present",
       keys: () => (ports.running() ? ["mod+shift+p"] : []),
       bindKeys: () => false,
-      words: "teleprompter browser follow my voice present",
-      availability: () => current() ? loaded(shownWhen(ports.canOpenPrompter.browser())) : { enabled: false },
+      words: "teleprompter browser follow my voice present speech recognition chrome edge",
+      availability: () => current() ? loaded(shownWhen(ports.canOpenPrompterInBrowser())) : { enabled: false },
       run: async () => { await current()?.openPrompterInBrowser(); }
-    },
-    {
-      id: "prompter-open-in-chromium",
-      label: "Use Chromium Speech Recognition",
-      group: "This document",
-      icon: "i-mic",
-      words: "teleprompter chrome edge chromium speech recognition voice",
-      availability: () => current() ? loaded(shownWhen(ports.canOpenPrompter.chromium())) : { enabled: false },
-      run: async () => { await current()?.openPrompterInChromium(); }
     }
   ];
 }

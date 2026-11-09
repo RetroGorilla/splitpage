@@ -19,10 +19,10 @@ test("B-roll export scope is available without a feature and follows the shared 
   assert.deepEqual(h.owner.printView({ filter: "invalid", group: "invalid" }), { filter: "all", group: "scene" });
   assert.deepEqual(h.owner.printView({ filter: "", group: "" }), { filter: "flagged", group: "person" });
   assert.deepEqual(h.owner.printView(), { filter: "flagged", group: "person" });
-  assert.deepEqual(JSON.parse(h.saved() || ""), { filter: "flagged", group: "flat", pageGroup: "person" });
+  assert.deepEqual(JSON.parse(h.saved() || ""), { filter: "flagged", pageGroup: "person" });
   const restored = fixture(h.saved()).owner;
   restored.load();
-  assert.deepEqual(restored.current(), h.owner.current());
+  assert.deepEqual(restored.current(), { filter: "flagged", group: "scene", pageGroup: "person" });
   Object.assign(restored.current(), { filter: "shot" });
   assert.deepEqual(restored.printView(), { filter: "flagged", group: "person" });
 });

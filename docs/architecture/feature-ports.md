@@ -98,7 +98,7 @@ A feature imports from `src/application/` only types and pure functions, such as
   | `startup.ts` | Startup readiness, draft resume and seed checking |
   | `identity.ts` | IDs and clock |
 
-  The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. Moving that logic to its final owner remains a separate audit follow-up. Port contract types remain with their application or core owners. The remaining `06-rows.js` video-file functions are now owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
+  The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. It does not schedule another move. Port contract types remain with their application or core owners. The former `06-rows.js` video-file functions are owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
 - **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.ts`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
 - **Stopping.** Features mounted from the composition root's list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
 
@@ -144,7 +144,9 @@ A quick test: if feature B is about to call `a.something()`, then A does somethi
 
 ## The shared ports
 
-Each is built in its responsibility module under `src/bootstrap/wiring/ports/` from the owners and, until they retire, the bridges. Each lands with the first move that needs it, not on its own, because a port nobody uses yet moves no responsibility. A port marked Opus lands in an Opus PR: with the first Opus move that needs it, or, when Codex moves need it first, in its own Opus PR before them. A Codex move only uses an Opus port after it has landed. "Files" counts the numbered files that import the bridge names it replaces.
+Current shared ports live under `src/bootstrap/wiring/ports/` and are built from the owners. The bridges and numbered frontend files are gone (#906). Use `node tools/code-map.mjs` for the current map.
+
+The table below is the historical migration schedule. “New”, “Lands with” and “Files” describe that run, not pending work or current counts. It does not authorize new ports or feature moves.
 
 | Port | Type and where it lives | What a feature gets | Built from | Files | Lands with | Who |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -185,10 +187,20 @@ The three surfaces intentionally keep different orchestration:
 
 | Surface | Input order | Keyboard and focus policy |
 | --- | --- | --- |
-| Split cells | note plain-tag input; auto-tag, direction, cue, B-roll shortcuts; open plain tag; sync cell; open Who list; settle composition; caret/refresh/stats/prompt/ghost work | Row menu, toolbar, video, draft undo and document undo precede Who list, open tag, ghost, then untagged mention. Who-list consumption and open-tag Escape hide the ghost. Escape mutes an untagged prompt. Navigation dismisses ghosts. |
-| Writer Visual box | Save first; auto-tag, B-roll, open plain tag, refresh plain tag, open Who list, update ghost | Composition suppresses input policy and keys. Undo closes the box before replay; Who list precedes plain tag and ghost. Who-list consumption and plain-tag Escape do not explicitly hide the ghost. Unconsumed Escape closes the box. There is no untagged-mention acceptance or generic navigation dismissal here. Leaving cancels Who, closes an open plain tag, sanitizes unconditionally, syncs, anchors B-roll, then hides ghost. |
+| Split cells | note plain-tag input; auto-tag, direction, cue, B-roll shortcuts; open plain tag; sync cell; open Who list; settle composition; caret/refresh/stats/prompt/ghost work | Row menu, toolbar, video, draft undo and document undo precede Who list. Outside composition, the inner ghost precedes the open outer tag, then occurrence editing and untagged mention. Who-list consumption and open-tag Escape hide the ghost. Escape mutes an untagged prompt. Navigation dismisses ghosts. |
+| Writer Visual box | Save first; auto-tag, B-roll, open plain tag, refresh plain tag, open Who list, update ghost | Composition suppresses input policy and keys. Undo closes the box before replay; Who list precedes the inner ghost, open outer tag and occurrence editing. Escape dismisses the ghost, cancels the open tag, then finishes occurrence editing before an unconsumed Escape closes the box. There is no untagged-mention acceptance or generic navigation dismissal here. Leaving cancels Who, closes an open plain tag, sanitizes unconditionally, syncs, anchors B-roll, then hides ghost. |
 | Writer narration | Auto-tag, direction, cue shortcuts before beat sync (model typing paths retain their own dispatch) | Surface composition gate and undo/find/beat-move precedence remain before beat completion. No Who list or open plain-tag keyboard policy. Escape on its own ghost consumes the event and remembers the dismissed phrase/offset/row across selection refresh; Tab accepts; navigation dismisses. Selection leaving narration clears dismissal memory. |
 
 Split blur sanitizes only when clean HTML differs from stored DOM HTML, then syncs and anchors B-roll unless undo is applying. Narration leave additionally refuses writes during paint, undo or stale-screen state, conditionally sanitizes, syncs and anchors. Split focus cleanup cancels both lists and clears prompts; narration selection and Visual box close retain their own lifecycle. Split composition remains owned by its composition routes, rather than receiving a new blanket key gate from this extraction.
 
 These differences preserve existing undo boundaries: the helper never flushes, syncs, edits or coalesces history itself. Open/cancel without an edit preserves the surrounding typing group; name edits and Tab conversion retain the tag owner's boundaries (INV-53). Narration structural selection/replay stays with the flow surface and session (INV-15). No sanitizing or input operation has moved across these boundaries.
+
+`features/tags/plain-tags.ts` owns the open keyword draft, category picker and
+the occurrence editor from `features/tags/occurrence-editor.ts`. The latter
+temporarily opens only the selected finished tag and restores protection on
+Done or departure. The editor and writer receive `beforeWrite` from this
+control so a canonical cell rewrite can restore that occurrence and its
+selection. Wiring supplies these callbacks; neither surface imports the tags
+feature. Nested labels use the ordered tag path described in
+[DOCUMENT-MODEL.md](../DOCUMENT-MODEL.md); the protection and containment rules
+are [INV-03](invariants.md#inv-03--finished-tags-are-protected-outside-their-explicit-editor).

@@ -41,6 +41,31 @@ async function documentXml(bytes) {
   return doc;
 }
 
+test("nested labels appear independently in the breakdown and use the inner colour in Word", async () => {
+  const inner = tag("prop", "Umbrella");
+  const html = `<span class="tag-anchor" data-tag-cat="sound" data-tag-name="Rain" contenteditable="false">rain on ${inner}</span>`;
+  const covered = `<span class="tag-anchor" data-tag-cat="sound" data-tag-name="Hum" contenteditable="false">${tag("gear", "Fan")}</span>`;
+  loadTestDocument(migrateRows({ schema: 2, title: "Nested", comments: [],
+    rows: [{ id: "r0", visualText: html, audioText: "", status: "todo" }, { id: "r1", visualText: "", audioText: covered, status: "todo" }] }));
+  const rows = breakdownRows(exportDocumentOf(currentDocument()));
+  assert.deepEqual(rows.map(r => [r.catId, r.name]).sort(),
+    [["gear", "Fan"], ["prop", "Umbrella"], ["sound", "Hum"], ["sound", "Rain"]]);
+  const hum = rows.find(r => r.name === "Hum");
+  assert.ok(hum);
+  assert.equal(hum.mentions, 1);
+  assert.equal(hum.inScript, "yes");
+  assert.deepEqual(hum.beats, ["A.2"]);
+  const xml = await documentXml(buildDocx(...liveWithAssets()));
+  const tables = xml.getElementsByTagNameNS(W, "tbl");
+  const script = tables[0];
+  const runs = Array.from(script.getElementsByTagNameNS(W, "r"));
+  assert.equal(runs.map(r => r.textContent).join("").split("Umbrella").length - 1, 1);
+  const word = runs.find(r => r.textContent === "Umbrella");
+  assert.ok(word);
+  const color = word.getElementsByTagNameNS(W, "color")[0];
+  assert.equal(color.getAttributeNS(W, "val") || color.getAttribute("w:val"), TAG_PRINT_COLORS.prop);
+});
+
 test("breakdownRows says which category each row is", () => {
   load();
   const rows = breakdownRows(exportDocumentOf(currentDocument()));

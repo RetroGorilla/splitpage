@@ -32,6 +32,7 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { cellLength, commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
+import { inheritOpenedTags } from "../common/clipboard-tags.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
 import { toHtml } from "../../core/text/html.ts";
 import {
@@ -342,7 +343,8 @@ function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: Clipb
     result.done = false;
     return result;
   }
-  const pasted: Pasted = got.text !== null ? { kind: "text", text: got.text } : { kind: "cell", runs: got.cell };
+  const piece = inheritOpenedTags(cellEl, open.sel, got.cell);
+  const pasted: Pasted = got.text !== null && piece === got.cell ? { kind: "text", text: got.text } : { kind: "cell", runs: piece };
   const paste = pasteCommand(pasteRequest(rowId, field, open.sel, pasted, got, attach), clipboardPorts());
   const outcome = (ports as CellClipboardPorts).edits.run(paste.command);
   if (outcome.kind === "failed") throw outcome.error;

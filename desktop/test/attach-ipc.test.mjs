@@ -48,7 +48,7 @@ function shellIpc({ source = null, grants = [] } = {}) {
   const openedPaths = [];
   const sent = [];
   const targets = new Map();
-  const videoFileGrants = new Map(grants);
+  const videoFileGrants = new Map(grants.map(([token, p]) => [token, { path: p, sender: 3, move: null }]));
   const tab = { id: "tab-a", source: source ? { kind: "file", absPath: source } : { kind: "blank" } };
   const bundleJobs = createBundleJobs({
     copier: createBundleCopier({ bundleFiles, progressEveryMs: 0 }), allow: ATTACHABLE_FILE,
@@ -115,7 +115,7 @@ test("a granted document opens through its token; a forged token, a path as a to
     assert.deepEqual(await ipc.call("splitpage:video-file-open", "planted"), { ok: false, code: "REFUSED" }, "a program in the grant table");
     assert.deepEqual(await ipc.call("splitpage:video-file-open", "bare"), { ok: false, code: "REFUSED" }, "an extensionless file in the grant table");
     if (junction(s.drops, path.join(s.dir, "j"))) {
-      ipc.videoFileGrants.set("through", path.join(s.dir, "j", "brief.pdf"));
+      ipc.videoFileGrants.set("through", { path: path.join(s.dir, "j", "brief.pdf"), sender: 3, move: null });
       assert.deepEqual(await ipc.call("splitpage:video-file-open", "through"), { ok: true }, "a document reached through a junction");
     }
     assert.equal(ipc.openedPaths.length, ipc.videoFileGrants.has("through") ? 2 : 1);

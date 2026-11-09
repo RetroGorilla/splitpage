@@ -13,6 +13,7 @@ type DecodedMarks = {
   cue?: true;
   href?: string | null;
   tag?: string;
+  innerTags?: readonly string[];
   cmt?: (string | null)[];
 };
 
@@ -73,7 +74,9 @@ export function decodeBody(body: Node, opts?: DecodeOptions | null): Run[] {
       else if (tag === "MARK") next.hl = true;
       else if (tag === "A") next.href = el.getAttribute("href");
       else if (tag === "SPAN" && cls && cls.contains("tag-anchor")) {
-        next.tag = tagId(el.getAttribute("data-tag-cat") as string, el.getAttribute("data-tag-name") as string);
+        const id = tagId(el.getAttribute("data-tag-cat") as string, el.getAttribute("data-tag-name") as string);
+        if (marks.tag) next.innerTags = (marks.innerTags || []).concat(id);
+        else next.tag = id;
       } else if (tag === "SPAN" && cls && cls.contains("cmt-anchor")) {
         next.cmt = (marks.cmt || []).concat([el.getAttribute("data-cmt")]);
       } else if (tag === "SPAN" && cls && cls.contains("stage-dir")) {

@@ -12,7 +12,7 @@ import { fakeActions, fakeDocument, fakePreferenceChanges, fakeScreen } from "..
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
 function setup(initial: DocumentView | null = null) {
-  document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><div class="audio-cell"><div class="cell-editable" tabindex="0"></div></div></div></div><div id="rundown"><div class="rundown-track"><div class="rundown-blocks"></div><div class="rundown-ruler"></div></div></div><button id="menu-rundown-min"></button>';
+  document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><div class="audio-cell"><div class="cell-editable" tabindex="0"></div></div></div></div><div id="rundown"><div class="rundown-track"><div class="rundown-blocks"></div><div class="rundown-ruler"></div></div></div>';
   const stored: boolean[] = [];
   const drag: string[] = [];
   const changes = fakePreferenceChanges();
@@ -38,12 +38,15 @@ test("rundown: the toggle runs its action and minimising stores through the pref
   const { stored, actions, owner } = setup();
   const toggle = document.querySelector<HTMLButtonElement>(".rundown-toggle");
   assert.ok(toggle);
+  assert.equal(toggle.textContent, "Minimise rundown");
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
   toggle.click();
   assert.deepEqual(actions.calls, [{ id: "toggle-rundown-min", source: "button" }]);
   toggleRundownMinimized();
   assert.equal(isRundownMinimized(), true);
   assert.deepEqual(stored, [true]);
-  assert.equal(document.getElementById("menu-rundown-min")?.getAttribute("aria-checked"), "true");
+  assert.equal(toggle.textContent, "Show rundown");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
   owner.dispose();
 });
 

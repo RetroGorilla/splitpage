@@ -30,10 +30,10 @@ export const desktopVideo: DesktopVideo = {
     const found = port.videoFilePath(file);
     return typeof found === "string" && found ? found : null;
   },
-  openPath: (path) => {
+  openPath: (path, size) => {
     const port = desktopPort();
     if (!port || typeof port.openVideoPath !== "function") return Promise.resolve(null);
-    return Promise.resolve(port.openVideoPath(path));
+    return Promise.resolve(port.openVideoPath(path, size));
   },
   openBundled: (name) => {
     const port = desktopPort();
@@ -44,6 +44,22 @@ export const desktopVideo: DesktopVideo = {
     const port = desktopPort();
     if (!presence.running() || !port || typeof port.bundleVideoFile !== "function") return Promise.resolve(null);
     return Promise.resolve(port.bundleVideoFile(token, job, onProgress));
+  },
+  move: (token, job, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.moveVideoFile !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.moveVideoFile(token, job, onProgress));
+  },
+  planCreate: async (paths) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.planCreateBundle !== "function") return null;
+    const answer = await port.planCreateBundle([...paths]);
+    return answer && answer.ok ? answer.plan : null;
+  },
+  bundlePath: (path, job, choice, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.bundlePath !== "function") return Promise.resolve(null);
+    return port.bundlePath(path, job, choice, onProgress);
   },
   onCarry: (listener) => {
     const port = desktopPort();
@@ -75,10 +91,10 @@ export const desktopVideo: DesktopVideo = {
     const answer = await port.planBundleExport(job, scriptName, new TextEncoder().encode(body), desktopIdOf(script) || "");
     return answer && answer.ok ? answer.plan : null;
   },
-  pickExport: async (suggestedName) => {
+  pickExport: async (suggestedName, job) => {
     const port = desktopPort();
     if (!presence.running() || !port) return null;
-    const picked = await port.saveFileDialog({ suggestedName, filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true });
+    const picked = await port.saveFileDialog({ suggestedName, filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true, exportJob: job });
     return picked ? { id: picked.id, name: picked.name } : null;
   },
   exportBundle: (job, fileId, onProgress) => {

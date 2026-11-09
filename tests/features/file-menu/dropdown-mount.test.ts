@@ -21,8 +21,7 @@ realm.document = win.document;
 function page() {
   win.document.body.innerHTML = '<div class="menu-wrap"><button id="btn-file" aria-expanded="false">File</button>' +
     '<div id="file-menu" hidden tabindex="-1"><div class="menu-body"><div id="fm-card-name"></div><div id="fm-card-meta"></div>' +
-    '<div class="menu-group"><button class="mi" data-file-action="paste"><span class="mi-why" hidden></span></button>' +
-    '<button class="mi" id="menu-present-browser">Browser</button><button class="mi" id="menu-present-chromium">Chromium</button></div>' +
+    '<div class="menu-group"><button class="mi" data-file-action="paste"><span class="mi-why" hidden></span></button></div>' +
     '<div class="menu-group"><button class="mi mi-parent" id="menu-recent" data-submenu="recent" aria-controls="menu-sub-recent" aria-expanded="false">Recent</button>' +
     '<div class="menu-sub" id="menu-sub-recent" hidden></div></div></div></div></div>' +
     '<div id="file-menu-backdrop" hidden></div><div id="rows"></div>';
@@ -43,7 +42,7 @@ function harness() {
   const state = {
     document: documentOf({ title: "Before", docId: "d-old", rows: [{ id: "a" }] }) as DocumentView | null,
     home: { kind: "none" } as ReturnType<FileMenuDropdownPorts["place"]["home"]>,
-    desktop: false, browser: false, chromium: false,
+    desktop: false,
     busy: false, unsaved: false, kept: { label: "kept" } as unknown, recent: [] as unknown[]
   };
   const notices = fakeNotices();
@@ -58,7 +57,6 @@ function harness() {
       read: async (id) => { calls.push(["readFile", id]); return { id, name: "Recent.splitpage" } as MalformedDesktopReply<RecentFileData>; }
     },
     recentHandle: (entry) => { calls.push(["makeDesktopHandle", entry]); return { getFile: async () => new win.File(["file"], (entry as NonNullable<typeof entry>).name) }; },
-    canOpenPrompter: { browser: () => state.browser, chromium: () => state.chromium },
     opening: { open: async (opening) => { calls.push(["openDocument", opening]); return true; } },
     transitions: { startNew: (arrival) => { calls.push(["startNew", arrival]); assert.ok("document" in arrival.from); return { document: arrival.from.document, forkedFrom: null, kept: false }; } },
     history: { keep: (...args) => { calls.push(["keepSnapshot", ...args]); return state.kept; } },
@@ -154,18 +152,15 @@ test("while loading, neither a new script nor the demo touches the document owne
   } finally { mounted.dispose(); }
 });
 
-test("refreshing reads prompter, desktop and save facts through the ports", () => {
+test("refreshing reads desktop and save facts through the ports", () => {
   page();
   const h = harness();
-  h.state.browser = true;
   h.state.unsaved = true;
   h.state.home = { kind: "file", name: "Script.md", format: "md", lastModified: 1 } as ReturnType<FileMenuDropdownPorts["place"]["home"]>;
   const mounted = startFileMenu(h.ports);
   try {
     mounted.toggleFileMenu(true);
     assert.equal(mounted.fileMenuOpen(), true);
-    assert.equal(win.document.getElementById("menu-present-browser")?.hidden, false);
-    assert.equal(win.document.getElementById("menu-present-chromium")?.hidden, true);
     assert.equal(win.document.getElementById("menu-recent")?.hidden, true);
     assert.equal(win.document.getElementById("fm-card-name")?.textContent, "Script.md");
     assert.equal(win.document.getElementById("fm-card-meta")?.textContent, "Unsaved changes · Markdown");
@@ -272,6 +267,8 @@ test("the file menu's actions refuse while it is unmounted and reach the mounted
   const screen = fakeScreen();
   const registry = createActionRegistry();
   const stop = registerAll(registry, fileMenuActions(() => owner as FileMenuControls | null, {
+    createBundle: async () => { ran.push("create-bundle"); },
+    canCreateBundle: () => false,
     screen: screen.screen,
     desktop: () => false,
     saves: { busy: () => false },
@@ -280,7 +277,7 @@ test("the file menu's actions refuse while it is unmounted and reach the mounted
     openImport: () => { ran.push("paste"); }
   }));
   try {
-    assert.deepEqual(registry.list().map((definition) => definition.id), ["save", "save-as", "open", "close-file-menu", "new", "paste", "long-demo"]);
+    assert.deepEqual(registry.list().map((definition) => definition.id), ["save", "save-as", "open", "close-file-menu", "new", "paste", "long-demo", "create-bundle"]);
     for (const id of ["save", "save-as", "open", "new", "paste", "long-demo"]) assert.equal(registry.view(id, "menu")?.enabled, false, id);
     owner = startFileMenu(h.ports);
     owner.toggleFileMenu(true);

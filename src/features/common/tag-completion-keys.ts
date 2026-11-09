@@ -3,6 +3,7 @@ export interface PlainTagKeyTarget {
   readonly cancel: () => void;
   readonly emptyAtCaret: () => boolean;
   readonly cancelOnBackspace: () => boolean;
+  readonly dismissSuggestion: () => boolean;
 }
 
 export function plainTagKeydown(event: KeyboardEvent, tag: PlainTagKeyTarget, beforeCancel: () => void): boolean {
@@ -10,6 +11,7 @@ export function plainTagKeydown(event: KeyboardEvent, tag: PlainTagKeyTarget, be
   if (event.key === "Escape") {
     event.preventDefault();
     event.stopPropagation();
+    if (tag.dismissSuggestion()) return true;
     beforeCancel();
     tag.cancel();
     return true;

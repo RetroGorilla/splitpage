@@ -11,7 +11,7 @@ import { createBrollView } from "../../application/preferences/broll-view.ts";
 import type { BrollView } from "../../application/preferences/broll-view.ts";
 import { createPanelWidths } from "../../application/preferences/panel-widths.ts";
 import type { PanelWidths } from "../../application/preferences/panel-widths.ts";
-import { createPreferences } from "../../application/preferences/preferences.ts";
+import { BROLL_VIEW_KEY, createPreferences } from "../../application/preferences/preferences.ts";
 import type { PreferenceChange, PreferencePorts, Preferences } from "../../application/preferences/preferences.ts";
 import { createViewFlags } from "../../application/preferences/view-flags.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
@@ -31,8 +31,6 @@ interface Started {
   readonly importMode: ImportMode;
   readonly brollAnchoring: BrollAnchorDeclines;
 }
-
-const BROLL_VIEW_KEY = "splitpage-broll-view";
 
 let started: Started | null = null;
 

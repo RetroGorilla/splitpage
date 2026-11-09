@@ -28,6 +28,8 @@ function fixture() {
   const ports: BrollPanelPorts = {
     screen: fakeScreen().screen,
     view,
+    preferences: { panelGrouping: () => null, setPanelGrouping: () => {} },
+    changes: { onChange: () => () => {} },
     document: fakeDocument().document,
     edits: fakeEdits().edits,
     text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) } },
@@ -57,6 +59,16 @@ function click(id: string) {
   assert.ok(el);
   el.click();
 }
+
+test("B-roll disposes its preference subscription", () => {
+  const h = fixture();
+  let active = 0;
+  const state = startBrollPanel({ ...h.ports, changes: { onChange: () => { active++; return () => { active--; }; } } });
+  assert.equal(active, 1);
+  state.dispose();
+  state.dispose();
+  assert.equal(active, 0);
+});
 
 test("B-roll mounts with fake ports, keeps live export scope and removes listeners on replacement and disposal", () => {
   const h = fixture();
