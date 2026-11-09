@@ -5,6 +5,7 @@ import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { brollView, commentSorting } from "../bootstrap/wiring/ports/preferences.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
+import { openProductionPanel, openGearPanel } from "../features/tags/panels.ts";
 
 await bootApp();
 const nodeCustomEvent = globalThis.CustomEvent;
@@ -42,6 +43,35 @@ test("app data: panel choices survive export and import", async () => {
   assert.equal(commentSorting.current(), "by-scene");
   localStorage.clear();
   commentSorting.choose("position");
+});
+
+test("app data: Production and Gear choices round trip independently and update open panels", async () => {
+  localStorage.clear();
+  preferences().setPanelGrouping("production", "by-scene");
+  preferences().setPanelGrouping("gear", "by-scene");
+  const exported = await window.__appDataTest.build();
+  localStorage.clear();
+  preferences().setPanelGrouping("broll", "flat");
+  openProductionPanel();
+  openGearPanel();
+  await window.__appDataTest.importText(JSON.stringify(exported));
+  assert.equal(preferences().panelGrouping("broll"), "flat");
+  assert.equal(preferences().panelGrouping("production"), "by-scene");
+  assert.equal(preferences().panelGrouping("gear"), "by-scene");
+  assert.equal(document.querySelector('#gear-modes [data-group="by-scene"]').getAttribute("aria-checked"), "true");
+  openProductionPanel();
+  assert.equal(document.querySelector('#production-modes [data-group="by-scene"]').getAttribute("aria-checked"), "true");
+  localStorage.clear();
+});
+
+test("app data: existing Production and Gear choices survive a conflicting import", async () => {
+  localStorage.clear();
+  preferences().setPanelGrouping("production", "cat");
+  preferences().setPanelGrouping("gear", "flat");
+  await window.__appDataTest.importText(JSON.stringify({ format: "splitpage-app-data", version: 1, history: { docs: [], older: [] }, prefs: { panelGrouping: '{"production":"by-scene","gear":"by-scene"}' } }));
+  assert.equal(preferences().panelGrouping("production"), "cat");
+  assert.equal(preferences().panelGrouping("gear"), "flat");
+  localStorage.clear();
 });
 
 test("app data: imported legacy grouping uses the Comments sort as its single source", async () => {

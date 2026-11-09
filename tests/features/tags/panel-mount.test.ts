@@ -34,6 +34,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const calls: string[] = [];
   let renaming: string | null = null;
   let addingPerson: string | null = null;
+  let expanded: string | null = null;
   const pending = new Map<unknown, () => void>();
   let timerId = 0;
   const timers = {
@@ -44,16 +45,19 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const selection = createProductionSelection(timers);
   const prep = createProductionPrepState();
   const ports: TagPanelPorts = {
+    preferences: { panelGrouping: () => null },
+    changes: { onChange: () => () => {} },
     focus: { lastRow: () => null },
     beats: { setFilmed: () => {}, reveal: () => {} },
     footage: { entries: () => [], open: () => {} },
     view: {
       prep: () => prep,
       gearGroupBy: () => "flat", productionGroupBy: () => "cat",
+      setGearGroupBy: () => {}, setProductionGroupBy: () => {},
       setTagAddingPerson: (key) => { addingPerson = key; },
       setTagRenaming: (key) => { renaming = key; },
       tagAddingPersonKey: () => addingPerson, tagRenamingKey: () => renaming,
-      tagExpandedKey: () => null
+      tagExpandedKey: () => expanded, setTagExpanded: (key) => { expanded = key; }
     },
     document: document.document,
     lifetime: document.lifetime,
@@ -107,6 +111,16 @@ function prepFixture(focus: string | null = null) {
   }
   return { ...h, doc, ports, calls, mounted, click };
 }
+
+test("tag panels unsubscribe from preference changes on disposal", () => {
+  const h = fixture();
+  let listeners = 0;
+  const mounted = startTagPanels({ ...h.ports, changes: { onChange: () => { listeners++; return () => { listeners--; }; } } });
+  assert.equal(listeners, 1);
+  mounted.dispose();
+  mounted.dispose();
+  assert.equal(listeners, 0);
+});
 
 test("Scene prep handles 200 beats as six scene groups, reveals the focused beat, and keeps browsing stable across refresh", () => {
   const h = prepFixture("r119");
@@ -378,8 +392,8 @@ test("replaced and disposed panel controls cannot act on the next mount", () => 
   first.openProductionPanel();
   first.openGearPanel();
   first.renderProduction();
-  first.saveTagRename(entry.key);
-  first.addPersonForTag(entry.key);
+  first.saveTagRename(entry.key, "name");
+  first.addPersonForTag(entry.key, "name");
   first.setTagOwner(entry.key, "ada");
   first.setTagNotes(entry.key, "Stale");
   first.dispose();
@@ -429,8 +443,8 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const calls: unknown[][] = [];
   const handlers = (label: string): commands.TagPanelCommands => ({
     renderProduction: () => { calls.push([label, "render"]); },
-    saveTagRename: (key) => { calls.push([label, "rename", key]); },
-    addPersonForTag: (key) => { calls.push([label, "person", key]); },
+    saveTagRename: (key, value) => { calls.push([label, "rename", key, value]); return key; },
+    addPersonForTag: (key, value) => { calls.push([label, "person", key, value]); },
     setTagOwner: (key, person) => { calls.push([label, "owner", key, person]); },
     setTagNotes: (key, text) => { calls.push([label, "notes", key, text]); }
   });
@@ -438,11 +452,11 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const second = commands.installTagPanelCommands(handlers("second"));
   first();
   commands.renderProduction();
-  commands.saveTagRename("hat");
-  commands.addPersonForTag("hat");
+  commands.saveTagRename("hat", "cap");
+  commands.addPersonForTag("hat", "Alice");
   commands.setTagOwner("hat", "ada");
   commands.setTagNotes("hat", "Packed");
-  assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat"], ["second", "person", "hat"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
+  assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat", "cap"], ["second", "person", "hat", "Alice"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
   second();
   assert.throws(commands.renderProduction, /not installed yet/);
 });

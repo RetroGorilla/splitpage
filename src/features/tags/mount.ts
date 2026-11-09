@@ -5,8 +5,8 @@ type TagEvent = MouseEvent & { readonly target: HTMLElement & { value: string };
 interface EntityPorts {
   readonly rootClick: (e: MouseEvent) => void;
   readonly renderProduction: () => void;
-  readonly saveTagRename: (key: string | null) => void;
-  readonly addPersonForTag: (key: string | null) => void;
+  readonly saveTagRename: (key: string | null, value: string) => string | null | undefined;
+  readonly addPersonForTag: (key: string | null, value: string) => void;
   readonly setRenaming: (value: string | null) => void;
   readonly setAddingPerson: (value: string | null) => void;
   readonly setTagOwner: (key: string | null, value: string) => void;
@@ -69,6 +69,22 @@ export interface TagsRoutes {
   readonly anchorMouseDown: (e: MouseEvent) => void;
   readonly dispose: () => void;
 }
+
+function cardFocus(origin: Element): (selector: string, key?: string | null) => void {
+  const panel = origin.closest("#production-panel, #gear-panel");
+  const originalCard = origin.closest(".tag-entity");
+  const scene = origin.closest("[data-scene-group]")?.getAttribute("data-scene-group");
+  const context = originalCard?.getAttribute("data-prep-context");
+  const originalKey = originalCard?.getAttribute("data-key");
+  return (selector, key) => {
+    if (!panel || !originalCard) return;
+    const scope = scene ? Array.from(panel.querySelectorAll("[data-scene-group]")).find(el => el.getAttribute("data-scene-group") === scene) : panel;
+    const card = Array.from(scope?.querySelectorAll(".tag-entity") ?? []).find(el =>
+      el.getAttribute("data-key") === (key ?? originalKey) && (!context || el.getAttribute("data-prep-context") === context));
+    card?.querySelector<HTMLElement>(selector)?.focus();
+  };
+}
+
 export function mountTagEntityContainer(mount: { window: Window; id: string; ports: EntityPorts }): () => void {
   const doc = mount.window.document;
   const ports = mount.ports;
@@ -79,13 +95,18 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
   listen(el, "keydown", function (e) {
     if (!e.target.classList) return;
     if (e.target.classList.contains("tag-rename-input")) {
-      if (e.key === "Enter") { e.preventDefault(); ports.saveTagRename(e.target.getAttribute("data-key")); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const refocus = cardFocus(e.target);
+        const key = ports.saveTagRename(e.target.getAttribute("data-key"), e.target.value);
+        refocus(".tag-entity-head, .prep-resource-name", key);
+      }
       else if (e.key === "Escape") { e.preventDefault(); ports.setRenaming(null); ports.renderProduction(); }
       return;
     }
     if (e.target.classList.contains("tag-person-input")) {
-      if (e.key === "Enter") { e.preventDefault(); ports.addPersonForTag(e.target.getAttribute("data-key")); }
-      else if (e.key === "Escape") { e.preventDefault(); ports.setAddingPerson(null); ports.renderProduction(); }
+      if (e.key === "Enter") { e.preventDefault(); const refocus = cardFocus(e.target); ports.addPersonForTag(e.target.getAttribute("data-key"), e.target.value); refocus('[data-action="tag-person-new"]'); }
+      else if (e.key === "Escape") { e.preventDefault(); const refocus = cardFocus(e.target); ports.setAddingPerson(null); ports.renderProduction(); refocus('[data-action="tag-person-new"]'); }
     }
   });
   listen(el, "change", function (e) {
@@ -307,19 +328,26 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
 
       const personNewBtn = e.target.closest('[data-action="tag-person-new"]');
       if (personNewBtn) {
+        const scene = personNewBtn.closest("[data-scene-group]")?.getAttribute("data-scene-group");
+        const panel = personNewBtn.closest("#production-panel, #gear-panel");
         ports.setAddingPerson(personNewBtn.getAttribute("data-key"));
         ports.renderProduction();
-        const newInput = doc.querySelector<HTMLElement>('.tag-person-input[data-key="' +
+        const scope = scene ? panel?.querySelector('[data-scene-group="' + ports.cssAttr(scene) + '"]') : panel;
+        const newInput = scope?.querySelector<HTMLElement>('.tag-person-input[data-key="' +
         ports.cssAttr(ports.addingPerson()) + '"]');
         if (newInput) newInput.focus();
         return true;
       }
 
       const personSaveBtn = e.target.closest('[data-action="tag-person-save"]');
-      if (personSaveBtn) { ports.addPersonForTag(personSaveBtn.getAttribute("data-key")); return true; }
+      if (personSaveBtn) {
+        const input = personSaveBtn.closest(".tag-entity")?.querySelector<HTMLInputElement>(".tag-person-input");
+        if (input) { const refocus = cardFocus(personSaveBtn); ports.addPersonForTag(personSaveBtn.getAttribute("data-key"), input.value); refocus('[data-action="tag-person-new"]'); }
+        return true;
+      }
 
       const personCancelBtn = e.target.closest('[data-action="tag-person-cancel"]');
-      if (personCancelBtn) { ports.setAddingPerson(null); ports.renderProduction(); return true; }
+      if (personCancelBtn) { const refocus = cardFocus(personCancelBtn); ports.setAddingPerson(null); ports.renderProduction(); refocus('[data-action="tag-person-new"]'); return true; }
 
       const personDeleteBtn = e.target.closest('[data-action="person-delete"]');
       if (personDeleteBtn) { ports.armPersonDelete(personDeleteBtn, personDeleteBtn.getAttribute("data-person")); return true; }
@@ -344,7 +372,15 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       if (tagRenameBtn) { ports.setRenaming(tagRenameBtn.getAttribute("data-key")); ports.renderProduction(); return true; }
 
       const tagRenameSave = e.target.closest('[data-action="tag-rename-save"]');
-      if (tagRenameSave) { ports.saveTagRename(tagRenameSave.getAttribute("data-key")); return true; }
+      if (tagRenameSave) {
+        const input = tagRenameSave.closest(".tag-entity")?.querySelector<HTMLInputElement>(".tag-rename-input");
+        if (input) {
+          const refocus = cardFocus(tagRenameSave);
+          const key = ports.saveTagRename(tagRenameSave.getAttribute("data-key"), input.value);
+          refocus(".tag-entity-head, .prep-resource-name", key);
+        }
+        return true;
+      }
 
       const tagRenameCancel = e.target.closest('[data-action="tag-rename-cancel"]');
       if (tagRenameCancel) { ports.setRenaming(null); ports.renderProduction(); return true; }

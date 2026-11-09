@@ -1,0 +1,55 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){var tag=function(cat,name){return '<span class="tag-anchor" data-tag-cat="'+cat+'" data-tag-name="'+name+'">'+name+'</span>';};var doc={schema:2,title:'Scene grouping',rows:[{id:'r1',visualText:tag('gear','Camera')+tag('prop','Hat'),audioText:'Opening',status:'todo'},{id:'r2',visualText:tag('gear','Camera')+tag('prop','Hat'),audioText:'Harbour',status:'todo'},{id:'r3',visualText:tag('gear','Lens'),audioText:'Market',status:'todo'}],sections:[{id:'s2',name:'Harbour',firstSceneId:'r2'},{id:'s3',name:'Market',firstSceneId:'r3'}],productionTags:[{id:'t_camera',cat:'gear',name:'Camera'},{id:'t_hat',cat:'prop',name:'Hat'},{id:'t_lens',cat:'gear',name:'Lens'},{id:'t_loose',cat:'gear',name:'Loose'}]};window.__splitpageFormats.openFile(new File([JSON.stringify(doc)],'scenes.splitpage'));return true;})()
+wait document.querySelector('#rows .row[data-id="r3"]')
+jsclick #btn-production
+jsclick #production-modes [data-group="by-scene"]
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group-head')).map(e=>e.textContent.trim()).join('|') === 'Scene A|Scene B · Harbour|Scene C · Market|No scene'
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group')).map(e=>e.querySelectorAll('.tag-entity').length).join('|') === '2|2|1|1'
+shot l1170b-production
+jsclick #btn-gear
+jsclick #gear-modes [data-group="by-scene"]
+expect Array.from(document.querySelectorAll('#gear-list .tag-scene-group-head')).map(e=>e.textContent.trim()).join('|') === 'Scene A|Scene B · Harbour|Scene C · Market|No scene'
+expect Array.from(document.querySelectorAll('#gear-list .tag-scene-group')).map(e=>e.querySelectorAll('.tag-entity').length).join('|') === '1|1|1|1'
+shot l1170b-gear
+expect JSON.parse(localStorage.getItem('splitpage-panel-grouping')).production === 'by-scene' && JSON.parse(localStorage.getItem('splitpage-panel-grouping')).gear === 'by-scene'
+jsclick #gear-modes [data-group="flat"]
+eval localStorage.setItem('splitpage-panel-grouping',JSON.stringify({broll:'flat'}))
+eval window.__appDataTest.importText(JSON.stringify({format:'splitpage-app-data',version:1,history:{docs:[],older:[]},prefs:{panelGrouping:'{"production":"by-scene","gear":"by-scene"}'}}))
+expect JSON.parse(localStorage.getItem('splitpage-panel-grouping')).broll === 'flat' && JSON.parse(localStorage.getItem('splitpage-panel-grouping')).production === 'by-scene' && JSON.parse(localStorage.getItem('splitpage-panel-grouping')).gear === 'by-scene'
+expect document.querySelector('#gear-modes [data-group="by-scene"]').getAttribute('aria-checked') === 'true'
+jsclick #btn-production
+expect document.querySelector('#production-modes [data-group="by-scene"]').getAttribute('aria-checked') === 'true'
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+jsclick #btn-production
+expect document.querySelector('#production-modes [data-group="by-scene"]').getAttribute('aria-checked') === 'true'
+jsclick #btn-gear
+expect document.querySelector('#gear-modes [data-group="by-scene"]').getAttribute('aria-checked') === 'true'
+eval (function(){var tag=function(cat,name){return '<span class="tag-anchor" data-tag-cat="'+cat+'" data-tag-name="'+name+'">'+name+'</span>';};var doc={schema:2,title:'Repeated cards',rows:[{id:'r1',visualText:tag('gear','Camera'),audioText:'Opening',status:'todo'},{id:'r2',visualText:tag('gear','Camera'),audioText:'Harbour',status:'todo'}],sections:[{id:'s2',name:'Harbour',firstSceneId:'r2'}],productionTags:[{id:'t_camera',cat:'gear',name:'Camera'}]};window.__splitpageFormats.openFile(new File([JSON.stringify(doc)],'repeated.splitpage'));return true;})()
+wait document.querySelector('#rows .row[data-id="r2"]')
+jsclick #btn-production
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-entity-head
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-person-input')
+eval document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]')
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-person-input').value='Alice'
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-save"]').focus()
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-save"]
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child option')).some(e=>e.selected && e.textContent.trim()==='Alice')
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]')
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
+eval (function(){var input=document.activeElement;input.value='Bob';input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));return true;})()
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child option')).some(e=>e.selected && e.textContent.trim()==='Bob')
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]')
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename"]
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-rename-input')
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-rename-input').value='Cinema camera'
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename-save"]').focus()
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename-save"]
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity-name')).some(e=>e.textContent.trim()==='Cinema camera')
+expect document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child').classList.contains('is-expanded')
+expect document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child').contains(document.activeElement)
+quit

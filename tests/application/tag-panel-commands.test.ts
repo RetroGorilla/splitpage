@@ -13,8 +13,8 @@ import type { TagPanelCommands } from "../../src/application/tag-panel-commands.
 function recording(log: string[], name = ""): TagPanelCommands {
   return {
     renderProduction: () => { log.push(name + "render"); },
-    saveTagRename: (key) => { log.push(name + "rename:" + key); },
-    addPersonForTag: (key) => { log.push(name + "person:" + key); },
+    saveTagRename: (key, value) => { log.push(name + "rename:" + key + ":" + value); return key; },
+    addPersonForTag: (key, value) => { log.push(name + "person:" + key + ":" + value); },
     setTagOwner: (key, personId) => { log.push(name + "owner:" + key + ":" + personId); },
     setTagNotes: (key, text) => { log.push(name + "notes:" + key + ":" + text); }
   };
@@ -22,8 +22,8 @@ function recording(log: string[], name = ""): TagPanelCommands {
 
 test("every command throws while nothing is installed", () => {
   assert.throws(() => renderProduction(), /not installed yet/);
-  assert.throws(() => saveTagRename("k"), /not installed yet/);
-  assert.throws(() => addPersonForTag("k"), /not installed yet/);
+  assert.throws(() => saveTagRename("k", "name"), /not installed yet/);
+  assert.throws(() => addPersonForTag("k", "name"), /not installed yet/);
   assert.throws(() => setTagOwner("k", "p"), /not installed yet/);
   assert.throws(() => setTagNotes("k", "t"), /not installed yet/);
 });
@@ -33,11 +33,11 @@ test("each command reaches the installed command with its arguments", () => {
   const stop = installTagPanelCommands(recording(log));
   try {
     renderProduction();
-    saveTagRename("prop:mug");
-    addPersonForTag("prop:mug");
+    saveTagRename("prop:mug", "cup");
+    addPersonForTag("prop:mug", "Alice");
     setTagOwner("prop:mug", "p1");
     setTagNotes("prop:mug", "chipped");
-    assert.deepEqual(log, ["render", "rename:prop:mug", "person:prop:mug", "owner:prop:mug:p1", "notes:prop:mug:chipped"]);
+    assert.deepEqual(log, ["render", "rename:prop:mug:cup", "person:prop:mug:Alice", "owner:prop:mug:p1", "notes:prop:mug:chipped"]);
   } finally {
     stop();
   }
