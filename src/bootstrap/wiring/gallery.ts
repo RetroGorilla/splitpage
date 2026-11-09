@@ -20,7 +20,7 @@ import { cellEditing, pickPictureFor } from "./editor-owners.ts";
 import { preferences } from "./preferences-owner.ts";
 import { desktopVideo } from "./desktop-video.ts";
 import { presence } from "./ports/desktop-presence.ts";
-import { currentHome } from "./location-owner.ts";
+import { currentHome, locationStarted } from "./location-owner.ts";
 import { place } from "./ports/location.ts";
 
 const gallery = owned<GalleryMount>();
@@ -109,7 +109,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
 }
 
 function scriptOnDisk(): string | null {
-  if (!presence.running()) return null;
+  if (!presence.running() || !locationStarted()) return null;
   const home = currentHome();
   const handle = home.handle as { readonly _desktopId?: unknown; readonly name?: unknown } | null | undefined;
   return home.kind === "file" && handle && handle._desktopId && typeof handle.name === "string" && handle.name ? handle.name : null;

@@ -44,8 +44,9 @@ export function startCreateBundle(ports: VideoBundlePorts, ui: {
   }
 
   async function inspect(show: boolean, automatic = false): Promise<void> {
+    if (!ui.active() || ui.blocked()) return;
     const script = ports.script();
-    if (!ui.active() || !script || ui.blocked()) return;
+    if (!script) return;
     const mine = ++sequence;
     const ctx = ports.ownership.capture();
     const plan = await ports.create.planCreate(paths()).catch(() => null);
@@ -112,8 +113,9 @@ export function startCreateBundle(ports: VideoBundlePorts, ui: {
     void Promise.resolve().then(() => {
       if (!ui.active()) return;
       arriving = false;
-      written = ports.place.writtenOut();
-      return inspect(false);
+      const script = ports.script();
+      written = !!script && ports.place.writtenOut();
+      if (script) return inspect(false);
     });
   }
 
