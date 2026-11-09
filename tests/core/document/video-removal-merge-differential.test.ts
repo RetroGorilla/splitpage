@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeGalleryField as currentMergeGalleryField, galleryItemKey, videoLinkKey } from "../../../src/core/document/gallery.ts";
+import { mergeGalleryField as currentMergeGalleryField, galleryItemKey, mergeGalleryThumbnailRemovals, videoLinkKey } from "../../../src/core/document/gallery.ts";
 import type { GalleryItem, GallerySide, VideoLink } from "../../../src/core/document/gallery.ts";
 import type { ImageRef } from "../../../src/core/document/ports.ts";
 
@@ -71,6 +71,54 @@ function seeded(seed: number): () => number {
 function image(n: number): ImageRef {
   return { sha256: n.toString(16).padStart(64, "0"), width: 1, height: 1, mime: "image/png" };
 }
+
+for (const [shape, label] of ["original moved to primary", "second successor in primary", "base item moved from primary", "two further successors"].entries()) test("video removals (#1278, seeded differential): " + label + " retains main's decision", () => {
+  for (let seed = 1; seed <= 1000; seed++) {
+    const r = seeded(seed);
+    const video: VideoLink = r() < 0.5 ? { href: "https://example.test/" + seed, poster: true } :
+      { name: "take-" + seed + ".mp4", size: seed, poster: true, location: { kind: "bundled", name: "take.mp4" } };
+    const original: GalleryItem = { imageRef: image(1), links: [video] };
+    const replacement: GalleryItem = { imageRef: image(2), links: [copy(video)] };
+    const addition: GalleryItem = { imageRef: image(3), links: [copy(video)] };
+    const base = { imageRef: image(10), moreImages: [original] };
+    const changed = copy(base), removed = copy(base);
+    delete removed.moreImages[0]?.links;
+    changed.moreImages = [replacement];
+    switch (shape) {
+      case 0:
+        changed.imageRef = image(1);
+        Object.assign(changed, { imageLinks: [copy(video)] });
+        break;
+      case 1:
+        changed.imageRef = image(3);
+        Object.assign(changed, { imageLinks: [copy(video)] });
+        break;
+      case 2:
+        base.imageRef = image(1);
+        Object.assign(base, { imageLinks: [copy(video)] });
+        base.moreImages = [];
+        removed.imageRef = image(1);
+        removed.moreImages = [];
+        changed.moreImages = [original, addition];
+        break;
+      case 3:
+        changed.moreImages.push(addition);
+        break;
+    }
+    if (r() < 0.5) changed.moreImages.reverse();
+    for (const [mine, theirs] of [[changed, removed], [removed, changed]] as const) {
+      const before = JSON.stringify([base, mine, theirs]);
+      for (const field of ["imageLinks", "moreImages"]) {
+        const expected = baseMergeGalleryField(field, base, mine, theirs);
+        assert.deepEqual(currentMergeGalleryField(field, base, mine, theirs), expected,
+          "seed " + seed + ", shape " + shape + ", field " + field + ", changed " + (mine === changed ? "mine" : "theirs"));
+      }
+      assert.equal(mergeGalleryThumbnailRemovals(base, mine, theirs), false,
+        "seed " + seed + ", shape " + shape + ": the review must not claim thumbnail removals were combined");
+      assert.equal(JSON.stringify([base, mine, theirs]), before, "seed " + seed + ": inputs unchanged");
+    }
+  }
+});
 
 test("video removals (#1278, seeded differential): main differs only for a removal against a thumbnail-only edit", () => {
   const seen = { approved: 0, reverse: 0, url: 0, file: 0, replace: 0, secondary: 0, wholeItem: 0, noBase: 0, head: 0, control: 0 };

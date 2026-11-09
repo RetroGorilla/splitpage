@@ -676,6 +676,9 @@ function mergeSet<T>(base: readonly T[] | null | undefined, mine: readonly T[] |
 }
 
 export interface GallerySide {
+  imageRef?: ImageRef | null | undefined;
+  imageName?: string | undefined;
+  imageAnnotation?: Annotation | null | undefined;
   imageLinks?: VideoLink[] | undefined;
   moreImages?: GalleryItem[] | undefined;
 }
@@ -693,20 +696,37 @@ function mergeLink(b: VideoLink | undefined, m: VideoLink, t: VideoLink): VideoL
   return out;
 }
 
+function gallerySideItems(side: GallerySide): GalleryItem[] {
+  const first: GalleryItem = {};
+  if (side.imageRef) first.imageRef = side.imageRef;
+  if (side.imageName) first.name = side.imageName;
+  if (side.imageAnnotation) first.annotation = side.imageAnnotation;
+  if (side.imageLinks) first.links = side.imageLinks;
+  return [first].concat(side.moreImages || []);
+}
+
+function thumbnailMatches(base: GalleryItem, candidate: GalleryItem): boolean {
+  return !!candidate.imageRef && base.imageRef?.sha256 !== candidate.imageRef.sha256 &&
+    (base.name || "") === (candidate.name || "") &&
+    JSON.stringify(base.annotation || null) === JSON.stringify(candidate.annotation || null) &&
+    JSON.stringify(base.links || []) === JSON.stringify(candidate.links || []);
+}
+
 function thumbnailRemovals(base: GallerySide | null | undefined, side: GallerySide, other: GallerySide): Map<string, Set<string>> {
   const removed = new Map<string, Set<string>>();
+  const candidates = gallerySideItems(side);
   const kept = new Set((other.imageLinks || []).map(videoLinkKey));
   (other.moreImages || []).forEach(function (it) { (it.links || []).forEach(function (l) { kept.add(videoLinkKey(l)); }); });
   (side.moreImages || []).forEach(function (it) {
     if (!it.imageRef || !(it.links || []).some(function (l) { return l.poster; })) return;
     const ancestors = (base && base.moreImages || []).filter(function (bi) {
-      return bi.imageRef?.sha256 !== it.imageRef?.sha256 && (bi.name || "") === (it.name || "") &&
-        JSON.stringify(bi.annotation || null) === JSON.stringify(it.annotation || null) &&
-        JSON.stringify(bi.links || []) === JSON.stringify(it.links || []);
+      return thumbnailMatches(bi, it);
     });
-    if (ancestors.length !== 1) return;
-    const originalKey = galleryItemKey(ancestors[0]);
-    if ((side.moreImages || []).some(function (item) { return galleryItemKey(item) === originalKey; })) return;
+    const ancestor = ancestors[0];
+    if (ancestors.length !== 1 || !ancestor) return;
+    const originalKey = galleryItemKey(ancestor);
+    if (candidates.some(function (item) { return galleryItemKey(item) === originalKey; })) return;
+    if (candidates.filter(function (item) { return thumbnailMatches(ancestor, item); }).length !== 1) return;
     const keys = new Set((it.links || []).map(videoLinkKey).filter(function (k) { return !kept.has(k); }));
     if (keys.size) removed.set(galleryItemKey(it), keys);
   });
