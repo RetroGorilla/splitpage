@@ -44,6 +44,7 @@ function setup(opts: Setup = {}) {
   const reader = fakeDocument(doc);
   const placeListeners = new Set<(change: "home" | "writtenOut") => void>();
   const pathCalls: { path: string; job: string; choice: string }[] = [];
+  const forgotten: string[] = [];
   const calls: { link: VideoLink; job: string }[] = [];
   const moves: { link: VideoLink; job: string }[] = [];
   const cancels: string[] = [];
@@ -64,6 +65,7 @@ function setup(opts: Setup = {}) {
     window: window,
     script: () => at.script,
     files: {
+      movedPath: (path) => { forgotten.push(path); },
       bundle: (link, job, onProgress) => {
         calls.push({ link, job });
         return opts.answer ? opts.answer(link, job, onProgress) : Promise.resolve({ ok: true, name: "take one (2).mp4" });
@@ -107,7 +109,7 @@ function setup(opts: Setup = {}) {
     assert.ok(heard, "the feature listens for carries from main");
     heard(note);
   };
-  return { at, doc, notices, ownership, calls, moves, cancels, carry, folds, edits, plans, choices, exportCalls, owner, el, pathCalls,
+  return { at, doc, notices, ownership, calls, moves, cancels, carry, folds, edits, plans, choices, exportCalls, owner, el, pathCalls, forgotten,
     firstSave: () => { at.script = "Episode 12.splitpage"; at.written = true; placeListeners.forEach((listener) => listener("writtenOut")); },
     reopen: () => { ownership.replace(); reader.replace(doc); },
     location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
@@ -165,6 +167,7 @@ test("Create bundle after the first save waits for the landed save, offers grant
   h.el("bundle-move").click();
   await settle();
   assert.deepEqual(h.pathCalls.map((c) => [c.path, c.choice]), [[DROP.path, "move"]]);
+  assert.deepEqual(h.forgotten, [DROP.path]);
   for (const r of h.doc.rows) assert.deepEqual(rowSlots(r)[0]?.links[0]?.location, { kind: "bundled", name: "take one.mp4" });
   assert.ok(h.notices.shown.some((n) => n.message === "Moved 1 file to “Episode 12 files”."));
   assert.deepEqual(h.calls, []);

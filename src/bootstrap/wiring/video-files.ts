@@ -16,6 +16,7 @@ function running(): VideoFileMount {
 }
 
 export const videoFiles: VideoFiles = {
+  movedPath: (path) => running().movedPath(path),
   grant: (file, link) => running().grant(file, link),
   has: (link) => running().has(link),
   url: (link) => running().url(link),

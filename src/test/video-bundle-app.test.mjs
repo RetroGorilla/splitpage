@@ -43,7 +43,9 @@ test("Create bundle follows a first landed save, the File menu and reopen, with 
     homeModule.setHome("none");
     homeModule.documentLocation().markWrittenOut(false);
     loadTestDocument(script("Episode 12", ID("c")));
+    videoFiles.grant(new File([new Uint8Array(DROP.size)], DROP.name, { type: "video/mp4" }), LINK);
     await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(videoFiles.has(LINK), true);
     assert.equal(modal().hidden, true, "an unsaved script never asks");
     const write = fake.writeFile;
     let wrote = false;
@@ -66,6 +68,10 @@ test("Create bundle follows a first landed save, the File menu and reopen, with 
     document.getElementById("bundle-move").click();
     assert.ok(await until(() => linkIn(currentDocument())?.kind === "bundled"));
     assert.deepEqual(calls.map((c) => [c.path, c.choice]), [[DROP.path, "move"]]);
+    assert.equal(videoFiles.has(LINK), false, "the old session file is forgotten along with main's grant");
+    videoFiles.openFile(LINK);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(fake._videoPathOpens, [DROP.path], "restoring the old path can reach main's same-name-and-size fallback");
     assert.equal(unsavedChanges(), true, "relinking is a document edit awaiting the normal save");
     await saveDoc({});
     assert.equal(unsavedChanges(), false);

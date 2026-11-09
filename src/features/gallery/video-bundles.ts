@@ -264,6 +264,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   function copied(c: Copy, res: DesktopBundleCopy | DesktopBundleMove): void {
     if (res.ok) {
+      if (c.created && "outcome" in res && res.outcome === "moved") ports.files.movedPath(c.video.path);
       // why: a Save As stopped waiting for this copy, so its bytes may already be captured without the link
       if (c.cancelled && saving) return;
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;

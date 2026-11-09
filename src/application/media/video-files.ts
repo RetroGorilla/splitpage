@@ -7,6 +7,7 @@ export interface VideoPosterFrame {
 }
 
 export interface VideoFiles {
+  readonly movedPath: (path: string) => void;
   readonly grant: (file: unknown, link: VideoLink) => void;
   readonly has: (link: VideoLink | null | undefined) => boolean;
   readonly url: (link: VideoLink) => string | null;

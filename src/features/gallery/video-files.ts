@@ -11,6 +11,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
   let videoFileTokens: Record<string, string> = {};
   let sessionVideoFiles: Record<string, unknown> = {};
   let pendingGrants: Record<string, Promise<string | null>> = {};
+  let sessionVideoPaths: Record<string, string> = {};
   const sessionVideoUrls: Record<string, string> = {};
 
   function grantVideoFile(file: unknown, link: VideoLink): void {
@@ -18,6 +19,10 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     const l = normalizeVideoLink(link) || link;
     // why: a link that names where its file is may use only a grant from that place; one without keeps name-and-size
     const keys = l.location ? [videoLinkKey(l), locatedVideoKey(l)] : [videoLinkKey(l)];
+    keys.forEach((key) => {
+      if (l.location?.kind === "path") sessionVideoPaths[key] = l.location.path;
+      else Reflect.deleteProperty(sessionVideoPaths, key);
+    });
     if (file && typeof (file as { size?: unknown }).size === "number") {
       keys.forEach(function (key) {
         if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
@@ -31,7 +36,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     if (granting === null) return;
     const settled = Promise.resolve(granting).then(function (token: string | null) {
       if (disposed) return null;
-      if (typeof token === "string" && token) keys.forEach(function (key) { videoFileTokens[key] = token; });
+      if (typeof token === "string" && token) keys.forEach(function (key) { if (pendingGrants[key] === settled) videoFileTokens[key] = token; });
       return typeof token === "string" && token ? token : null;
     }, function () { return null; });
     keys.forEach(function (key) { pendingGrants[key] = settled; });
@@ -56,6 +61,19 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
   function forgetToken(token: string): void {
     Object.keys(videoFileTokens).forEach(function (key) {
       if (videoFileTokens[key] !== token) return;
+      Reflect.deleteProperty(videoFileTokens, key);
+      Reflect.deleteProperty(pendingGrants, key);
+    });
+  }
+
+  function movedPath(path: string): void {
+    if (disposed) return;
+    const keys = Object.keys(sessionVideoPaths).filter((key) => sessionVideoPaths[key] === path);
+    keys.forEach((key) => {
+      if (sessionVideoUrls[key]) { try { URL.revokeObjectURL(sessionVideoUrls[key] as string); } catch { } }
+      Reflect.deleteProperty(sessionVideoUrls, key);
+      Reflect.deleteProperty(sessionVideoFiles, key);
+      Reflect.deleteProperty(sessionVideoPaths, key);
       Reflect.deleteProperty(videoFileTokens, key);
       Reflect.deleteProperty(pendingGrants, key);
     });
@@ -149,6 +167,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
 
   const off = ports.document.onReplaced(releaseSessionVideoUrls);
   return {
+    movedPath,
     grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl,
     releaseUrls: releaseSessionVideoUrls, openFile: openVideoFile, openGallery: openGalleryLink,
     bundle: bundleVideoFile,
@@ -162,6 +181,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
       sessionVideoFiles = {};
       videoFileTokens = {};
       pendingGrants = {};
+      sessionVideoPaths = {};
     }
   };
 }
