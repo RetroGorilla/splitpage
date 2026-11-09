@@ -13,7 +13,7 @@ test("About keeps its Help metadata and calls showAbout through the update actio
   const registry = createActionRegistry();
   const stop = registerAll(registry, updateActions({ screen: () => NOTHING, showAbout: () => { opened++; } }));
   assert.deepEqual(registry.list(), [{
-    id: "about", label: "About Splitpage", group: "Help", icon: "i-info", words: "version about",
+    id: "about", label: "About Splitpage", group: "Help", icon: "i-info", words: "version about", aliases: [],
     keys: [], enabled: true, visible: true, reason: "", checked: null
   }]);
   assert.deepEqual(registry.invoke("about", "menu"), { kind: "ran", id: "about" });
