@@ -181,6 +181,45 @@ test("video removals (#1278, seeded differential): unchanged items sharing links
   for (const [what, n] of Object.entries(ambiguousShapes)) assert.ok(n > 200, what + " covered only " + n + " times");
 });
 
+test("video removals (#1278, seeded differential): a link reassigned onto an existing base key retains main's decision", () => {
+  const seen = { primaryAncestor: 0, primaryTarget: 0, primaryUnchanged: 0, further: 0, movedTarget: 0, copyAdded: 0 };
+  for (let seed = 1; seed <= 4000; seed++) {
+    const r = seeded(seed);
+    const v: VideoLink = r() < 0.5 ? { href: "https://example.test/reassigned/" + seed, poster: true } :
+      { name: "reassigned-" + seed + ".mp4", size: seed, poster: true };
+    const w: VideoLink = { href: "https://example.test/original/" + seed, poster: true };
+    const item = (n: number, link?: VideoLink): GalleryItem => ({ imageRef: image(n), ...(link ? { links: [copy(link)] } : {}) });
+    const primary = Math.floor(r() * 4), moved = primary === 1 && r() < 0.5;
+    const place = (items: GalleryItem[], at: number): GallerySide => {
+      const head = items.find((it) => it.imageRef?.sha256 === image(at + 1).sha256);
+      return { imageRef: head?.imageRef || image(10), imageLinks: head?.links, moreImages: items.filter((it) => it !== head) };
+    };
+    const base = place([item(1, v), item(2, w), item(3, v)], primary);
+    const copyAdded = r() < 0.25;
+    const changed = place([item(2, v), item(3, v), ...(copyAdded ? [item(5, v)] : [])], moved ? 3 : primary);
+    const removed = place([item(1), item(2, w), item(3)], primary);
+    if (r() < 0.5) changed.moreImages?.reverse();
+    if (r() < 0.5) removed.moreImages?.reverse();
+    for (const [mine, theirs] of [[changed, removed], [removed, changed]] as const) {
+      const before = JSON.stringify([base, mine, theirs]);
+      for (const field of ["imageLinks", "moreImages"]) {
+        assert.deepEqual(currentMergeGalleryField(field, base, mine, theirs), baseMergeGalleryField(field, base, mine, theirs),
+          "seed " + seed + ", primary " + primary + ", moved " + moved + ", field " + field + ", changed " + (mine === changed ? "mine" : "theirs"));
+      }
+      assert.equal(mergeGalleryThumbnailRemovals(base, mine, theirs), false,
+        "seed " + seed + ": reassignment is not a thumbnail removal in the review");
+      assert.equal(JSON.stringify([base, mine, theirs]), before, "seed " + seed + ": inputs unchanged");
+    }
+    seen.primaryAncestor += primary === 0 ? 1 : 0;
+    seen.primaryTarget += primary === 1 ? 1 : 0;
+    seen.primaryUnchanged += primary === 2 ? 1 : 0;
+    seen.further += primary === 3 ? 1 : 0;
+    seen.movedTarget += moved ? 1 : 0;
+    seen.copyAdded += copyAdded ? 1 : 0;
+  }
+  for (const [what, n] of Object.entries(seen)) assert.ok(n > (what === "movedTarget" ? 300 : 700), what + " covered only " + n + " times");
+});
+
 test("video removals (#1278, seeded differential): main differs only for a removal against a thumbnail-only edit", () => {
   const seen = { approved: 0, reverse: 0, url: 0, file: 0, replace: 0, secondary: 0, wholeItem: 0, noBase: 0, head: 0, control: 0 };
   const changes = Array.from({ length: 14 }, () => 0);

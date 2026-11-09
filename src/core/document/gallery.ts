@@ -724,15 +724,17 @@ function thumbnailMatches(base: GalleryItem, candidate: GalleryItem): boolean {
 function thumbnailRemovals(base: GallerySide | null | undefined, side: GallerySide, other: GallerySide): Map<string, Set<string>> {
   const removed = new Map<string, Set<string>>();
   const originals = base ? gallerySideItems(base) : [];
+  const baseKeys = new Set(originals.map(galleryItemKey));
   const candidates = gallerySideItems(side).filter(function (it) {
     const at = originals.findIndex(function (bi) { return galleryItemsUnchanged(bi, it); });
     if (at < 0) return true;
     originals.splice(at, 1);
     return false;
   });
+  const successors = candidates.filter(function (it) { return !baseKeys.has(galleryItemKey(it)); });
   const kept = new Set((other.imageLinks || []).map(videoLinkKey));
   (other.moreImages || []).forEach(function (it) { (it.links || []).forEach(function (l) { kept.add(videoLinkKey(l)); }); });
-  candidates.forEach(function (it) {
+  successors.forEach(function (it) {
     if (!(side.moreImages || []).includes(it) || !it.imageRef || !(it.links || []).some(function (l) { return l.poster; })) return;
     const ancestors = originals.filter(function (bi) {
       return thumbnailMatches(bi, it);
@@ -741,6 +743,7 @@ function thumbnailRemovals(base: GallerySide | null | undefined, side: GallerySi
     if (ancestors.length !== 1 || !ancestor) return;
     const originalKey = galleryItemKey(ancestor);
     if (candidates.some(function (item) { return galleryItemKey(item) === originalKey; })) return;
+    // why: an existing item's link edit can also explain a new copy, so it still makes the match ambiguous
     if (candidates.filter(function (item) { return thumbnailMatches(ancestor, item); }).length !== 1) return;
     const keys = new Set((it.links || []).map(videoLinkKey).filter(function (k) { return !kept.has(k); }));
     if (keys.size) removed.set(galleryItemKey(it), keys);

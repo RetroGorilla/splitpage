@@ -67,6 +67,25 @@ test("mergeStates pairs unchanged pictures sharing a video before matching a cha
   }
 });
 
+test("mergeStates keeps a video reassigned onto an existing picture key (#1278)", () => {
+  const v = { name: "reassigned.mp4", size: 3, poster: true };
+  const w = { name: "original.mp4", size: 4, poster: true };
+  const filler = intern(jpegBytes(75, 75, 4));
+  const base = doc([{ imageRef: filler, moreImages: [
+    { imageRef: P1, links: [v] }, { imageRef: P2, links: [w] }, { imageRef: P3, links: [v] }
+  ] }]);
+  const removed = structuredClone(base), changed = structuredClone(base);
+  changed.rows[0].moreImages.shift();
+  changed.rows[0].moreImages[0].links = [v];
+  delete removed.rows[0].moreImages[0].links;
+  delete removed.rows[0].moreImages[2].links;
+  for (const [mine, theirs] of [[removed, changed], [changed, removed]]) {
+    const result = mergeStates(base, mine, theirs);
+    assert.deepEqual(result.conflicts, []);
+    assert.deepEqual(result.merged.rows[0].moreImages, [{ imageRef: P2, links: [v] }, { imageRef: P3 }]);
+  }
+});
+
 test("migrateRows keeps a gallery, and makes it safe", () => {
   const s = doc([
     { imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }, { href: "javascript:alert(1)" }, { href: "https://youtu.be/abc" }, { name: "<b>take</b>.mp4", size: 12, extra: 1 }, "junk"],
