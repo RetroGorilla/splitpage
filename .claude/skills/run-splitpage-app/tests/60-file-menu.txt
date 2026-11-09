@@ -79,7 +79,6 @@ expect Math.round(document.querySelector('#file-menu [data-file-action="open"]')
 expect document.querySelectorAll('#file-menu .mi-icon').length > 20
 expect getComputedStyle(document.getElementById('file-menu')).transitionDuration == 0.12s, 0.12s
 
-# --- two full-width footer rows: Settings, and Help with its submenu --------
 expect Array.prototype.map.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){return b.id;}).join(',') === 'menu-settings,menu-help'
 expect Array.prototype.every.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){return b.getBoundingClientRect().width >= b.parentElement.clientWidth - 10;})
 expect Array.prototype.every.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){return Math.round(b.getBoundingClientRect().height) >= 32 && getComputedStyle(b).fontSize === '14px';})
