@@ -3,7 +3,7 @@ import { clickProductionOutline, changeProductionOutline, revealProductionItem }
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startTagPanels, IS_TOUCH, openProductionPanel, setTagNotes } from "../../../src/features/tags/panels.ts";
+import { startTagPanels, IS_TOUCH, openProductionPanel, saveTagRename, setTagNotes } from "../../../src/features/tags/panels.ts";
 import type { TagPanelPorts } from "../../../src/features/tags/ports.ts";
 import { createProductionSelection } from "../../../src/application/editing/production-selection.ts";
 import { createDeleteConfirm } from "../../../src/application/editing/delete-confirm.ts";
@@ -14,6 +14,9 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
 import { tagPanelActions } from "../../../src/features/tags/actions.ts";
 import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
+import { tagKey } from "../../../src/core/document/tags.ts";
+import { changeSet } from "../../../src/application/session/change-set.ts";
+import { prepContext } from "../../../src/features/tags/outline.ts";
 import { tagStatusLampHtml } from "../../../src/features/common/tag-status.ts";
 import * as commands from "../../../src/application/tag-panel-commands.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
@@ -218,6 +221,23 @@ for (const focused of [true, false]) {
     } finally { h.mounted.dispose(); }
   });
 }
+
+test("Scene prep rename moves the open detail to the item's new key", () => {
+  const h = prepFixture("r2");
+  try {
+    h.click('.prep-resource-name [data-prep="notes"]');
+    const item = h.ports.production.entries(h.doc)[0];
+    assert.ok(item);
+    h.ports.view.setTagRenaming(item.key);
+    h.mounted.renderProduction();
+    const open = h.ports.view.prep().current().notes;
+    assert.ok(open);
+    h.edits.answer({ kind: "applied", generation: 1, changes: changeSet({}) });
+    assert.equal(saveTagRename(item.key, "Cap"), tagKey("prop", "Cap"));
+    const [container] = JSON.parse(open) as [string];
+    assert.equal(h.ports.view.prep().current().notes, prepContext(container, tagKey("prop", "Cap")));
+  } finally { h.mounted.dispose(); }
+});
 
 test("a requirement that becomes ready stays in place; initially ready items use an explicit fold", () => {
   const h = prepFixture("r2");

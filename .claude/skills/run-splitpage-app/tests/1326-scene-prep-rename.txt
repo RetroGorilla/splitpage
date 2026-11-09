@@ -1,0 +1,19 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){var tag=function(cat,name){return '<span class="tag-anchor" data-tag-cat="'+cat+'" data-tag-name="'+name+'">'+name+'</span>';};var doc={schema:2,title:'Scene prep rename',rows:[{id:'r1',visualText:tag('prop','Hat'),audioText:'Opening',status:'todo'}],sections:[{id:'s1',name:'Harbour',firstSceneId:'r1'}],productionTags:[{id:'t_hat',cat:'prop',name:'Hat'}]};window.__splitpageFormats.openFile(new File([JSON.stringify(doc)],'prep.splitpage'));return true;})()
+wait document.querySelector('#rows .row[data-id="r1"]')
+jsclick #btn-production
+wait document.querySelector('#production-list [data-prep="requirements"]') !== null
+jsclick #production-list [data-prep="requirements"]
+jsclick #production-list .prep-resource-name [data-prep="notes"]
+expect document.querySelector('#production-list .prep-resource-detail .tag-notes-input') !== null
+jsclick #production-list [data-action="tag-rename"]
+eval (function(){var i=document.querySelector('#production-list .tag-rename-input');i.value='Cinema camera';i.focus();return true;})()
+eval document.querySelector('#production-list [data-action="tag-rename-save"]').focus()
+jsclick #production-list [data-action="tag-rename-save"]
+wait document.querySelector('#production-list .prep-resource[data-key="prop cinema camera"]') !== null
+expect document.querySelector('#production-list .tag-rename-input') === null
+expect document.querySelector('#production-list .prep-resource-detail .tag-notes-input') !== null
+expect document.querySelector('#production-list .prep-resource[data-key="prop cinema camera"] .prep-resource-detail') !== null
+expect document.querySelector('#production-list .prep-resource[data-key="prop cinema camera"]').contains(document.activeElement)
+quit
