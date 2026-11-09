@@ -1,7 +1,7 @@
 export interface TagPanelCommands {
   readonly renderProduction: () => void;
-  readonly saveTagRename: (key: string) => void;
-  readonly addPersonForTag: (key: string) => void;
+  readonly saveTagRename: (key: string, value: string) => void;
+  readonly addPersonForTag: (key: string, value: string) => void;
   readonly setTagOwner: (key: string, personId: string) => void;
   readonly setTagNotes: (key: string, text: string) => void;
 }
@@ -19,7 +19,7 @@ export function installTagPanelCommands(next: TagPanelCommands): () => void {
 }
 
 export function renderProduction(): void { current().renderProduction(); }
-export function saveTagRename(key: string): void { current().saveTagRename(key); }
-export function addPersonForTag(key: string): void { current().addPersonForTag(key); }
+export function saveTagRename(key: string, value: string): void { current().saveTagRename(key, value); }
+export function addPersonForTag(key: string, value: string): void { current().addPersonForTag(key, value); }
 export function setTagOwner(key: string, personId: string): void { current().setTagOwner(key, personId); }
 export function setTagNotes(key: string, text: string): void { current().setTagNotes(key, text); }

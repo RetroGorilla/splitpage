@@ -26,4 +26,18 @@ jsclick #btn-production
 expect document.querySelector('#production-modes [data-group="by-scene"]').getAttribute('aria-checked') === 'true'
 jsclick #btn-gear
 expect document.querySelector('#gear-modes [data-group="by-scene"]').getAttribute('aria-checked') === 'true'
+eval (function(){var tag=function(cat,name){return '<span class="tag-anchor" data-tag-cat="'+cat+'" data-tag-name="'+name+'">'+name+'</span>';};var doc={schema:2,title:'Repeated cards',rows:[{id:'r1',visualText:tag('gear','Camera'),audioText:'Opening',status:'todo'},{id:'r2',visualText:tag('gear','Camera'),audioText:'Harbour',status:'todo'}],sections:[{id:'s2',name:'Harbour',firstSceneId:'r2'}],productionTags:[{id:'t_camera',cat:'gear',name:'Camera'}]};window.__splitpageFormats.openFile(new File([JSON.stringify(doc)],'repeated.splitpage'));return true;})()
+wait document.querySelector('#rows .row[data-id="r2"]')
+jsclick #btn-production
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-entity-head
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-person-input')
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-person-input').value='Alice'
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-save"]
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child option')).some(e=>e.selected && e.textContent.trim()==='Alice')
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename"]
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-rename-input')
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-rename-input').value='Cinema camera'
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename-save"]
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity-name')).some(e=>e.textContent.trim()==='Cinema camera')
 quit

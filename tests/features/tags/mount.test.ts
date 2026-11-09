@@ -78,11 +78,13 @@ function harness() {
   }
   const click = (attrs: string, init: Record<string, unknown> = {}): void => {
     const holder = doc.createElement("div");
-    holder.innerHTML = '<button ' + attrs + ' data-key="prop:Hat" data-row="r1" data-status="ready" data-person="p1"></button>';
-    const button = holder.firstElementChild as HTMLElement;
-    el("production-panel").append(button);
+    holder.className = "tag-entity";
+    holder.innerHTML = '<input class="tag-person-input" value="Alice"><input class="tag-rename-input" value="Cap">' +
+      '<button ' + attrs + ' data-key="prop:Hat" data-row="r1" data-status="ready" data-person="p1"></button>';
+    const button = holder.querySelector("button") as HTMLElement;
+    el("production-panel").append(holder);
     fire(button, "click", init);
-    button.remove();
+    holder.remove();
   };
   const card = (): HTMLElement => el("production-list").querySelector(".tag-entity") as HTMLElement;
   card().scrollIntoView = () => { calls.push("scroll-card"); };
@@ -123,10 +125,10 @@ const branches: readonly [string, string][] = [
   ["jump-tag", "jump:r1,prop:Hat"], ["bulk-clear", "clear"], ["bulk-delete", "arm-bulk"],
   ["bulk-person-new", "adding:__bulk__"], ["bulk-person-save", "bulk-person"], ["bulk-person-cancel", "adding:null"],
   ["tag-status-cycle", "status:prop:Hat,null"], ["tag-status-set", "status:prop:Hat,ready"],
-  ["tag-expand", "expanded:prop:Hat"], ["tag-person-new", "adding:prop:Hat"], ["tag-person-save", "person-save:prop:Hat"],
+  ["tag-expand", "expanded:prop:Hat"], ["tag-person-new", "adding:prop:Hat"], ["tag-person-save", "person-save:prop:Hat,Alice"],
   ["tag-person-cancel", "adding:null"], ["person-delete", "delete-person"], ["export-breakdown", "export:breakdown"],
   ["export-packing-gear", "run-export:export-packing-gear"], ["tag-rename", "renaming:prop:Hat"],
-  ["tag-rename-save", "rename-save:prop:Hat"], ["tag-rename-cancel", "renaming:null"],
+  ["tag-rename-save", "rename-save:prop:Hat,Cap"], ["tag-rename-cancel", "renaming:null"],
   ["tag-all-mentions", "mentions:prop:Hat"], ["tag-remove", "remove-tag"], ["tag-delete", "delete-tag"]
 ];
 

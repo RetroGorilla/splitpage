@@ -481,7 +481,7 @@ function renderProductionByScene(entries: readonly PresentedProductionEntry[], g
   const result = groupItemsByScene(doc ?? { rows: [] }, mentions, mention => mention.rowId);
   const assigned = new Set(result.groups.flatMap(group => group.items.map(mention => mention.item.key)));
   const section = (title: string, items: readonly PresentedProductionEntry[], suffix: string) =>
-    '<section class="tag-scene-group"><h3 class="tag-scene-group-head">' + escapeHtml(title) + '</h3>' +
+    '<section class="tag-scene-group" data-scene-group="' + escapeHtml(suffix) + '"><h3 class="tag-scene-group-head">' + escapeHtml(title) + '</h3>' +
     '<ul class="tag-list">' + items.map(item => tagEntityHtml(item, { gear, idSuffix: suffix })).join("") + '</ul></section>';
   const groups = result.groups.map((group, index) => {
     const items = Array.from(new Map(group.items.map(mention => [mention.item.key, mention.item])).values());
@@ -1081,13 +1081,11 @@ export function setTagNotes(key: string | null, text: string) {
   updateTags([item], { notes: cappedLongText(plainText(text), 2000) });
 }
 
-export function addPersonForTag(key: string | null) {
-  const input = document.querySelector<HTMLInputElement>('.tag-person-input[data-key="' + cssAttr(key) + '"]');
-  if (!input) return;
+export function addPersonForTag(key: string | null, value: string) {
   (ports as TagPanelPorts).view.setTagAddingPerson(null);
   const item = findTagByKey(key);
-  if (item) updateTags([item], { owner: { name: input.value } });
-  else (ports as TagPanelPorts).edits.edit(addPersonCommand(input.value, (ports as TagPanelPorts).ids));
+  if (item) updateTags([item], { owner: { name: value } });
+  else (ports as TagPanelPorts).edits.edit(addPersonCommand(value, (ports as TagPanelPorts).ids));
   renderProduction();
 }
 
@@ -1107,11 +1105,9 @@ export function armPersonDelete(btn: Element, personId: string | null) {
   }, function () { disarm = armButton(btn); });
 }
 
-export function saveTagRename(key: string | null) {
-  const input = document.querySelector<HTMLInputElement>('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
+export function saveTagRename(key: string | null, renamed: string) {
   const item = findTagByKey(key);
-  if (!input || !item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return; }
-  const renamed = input.value;
+  if (!item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return; }
   (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
   const changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts as RemoveTagPorts);
@@ -1154,11 +1150,14 @@ function openTagMenuFor(btn: HTMLElement, focusFirst: boolean) {
   }
 }
 
-function refocusIn(panel: Element | null, key: string | null, selector: string) {
+function refocusIn(panel: Element | null, origin: Element, selector: string) {
   const a = document.activeElement;
   if (a && a !== document.body && a.isConnected) return;
   if (!panel) return;
-  const el = panel.querySelector<HTMLElement>('.tag-entity[data-key="' + cssAttr(key) + '"] ' + selector);
+  const scene = origin.closest("[data-scene-group]")?.getAttribute("data-scene-group");
+  const scope = scene ? panel.querySelector('[data-scene-group="' + cssAttr(scene) + '"]') : panel;
+  const key = origin.closest(".tag-entity")?.getAttribute("data-key") ?? origin.getAttribute("data-key");
+  const el = scope?.querySelector<HTMLElement>('.tag-entity[data-key="' + cssAttr(key) + '"] ' + selector);
   if (el) el.focus();
 }
 
@@ -1170,13 +1169,16 @@ function onTagMenuClick(e: MouseEvent) {
 
   const rename = t.closest('[data-action="tag-rename"]');
   if (rename) {
-    const input = panel && panel.querySelector<HTMLInputElement>(".tag-rename-input");
+    const scene = rename.closest("[data-scene-group]")?.getAttribute("data-scene-group");
+    const scope = scene ? panel?.querySelector('[data-scene-group="' + cssAttr(scene) + '"]') : panel;
+    const key = rename.closest(".tag-entity")?.getAttribute("data-key");
+    const input = scope?.querySelector<HTMLInputElement>('.tag-entity[data-key="' + cssAttr(key ?? null) + '"] .tag-rename-input');
     if (input) { input.focus(); input.select(); }
   }
 
   const redrawn = t.closest(".tag-entity-head, .tag-status-pill");
   if (redrawn && !redrawn.isConnected) {
-    refocusIn(panel, redrawn.getAttribute("data-key"),
+    refocusIn(panel, redrawn,
       redrawn.getAttribute("data-action") === "tag-status-cycle" ? ".tag-status-pill" : ".tag-entity-head");
     return;
   }
@@ -1192,7 +1194,7 @@ function onTagMenuClick(e: MouseEvent) {
   if (!openTagMenu) {
     const picked = t.closest('.tag-status-seg [data-action="tag-status-set"]');
     if (picked && !picked.isConnected) {
-      refocusIn(panel, picked.getAttribute("data-key"), picked.classList.contains("tag-status-choice")
+      refocusIn(panel, picked, picked.classList.contains("tag-status-choice")
         ? '.tag-status-choice[data-status="' + cssAttr(picked.getAttribute("data-status")) + '"]'
         : ".tag-status-menu-btn");
     }
@@ -1201,10 +1203,9 @@ function onTagMenuClick(e: MouseEvent) {
   const item = t.closest(".tag-menu-item");
   if (item && openTagMenu.contains(item)) {
     if (item.classList.contains("armed")) return;
-    const key = item.getAttribute("data-key");
     const fromStatus = item.getAttribute("data-action") === "tag-status-set";
     closeTagMenu(item.isConnected);
-    if (fromStatus) refocusIn(panel, key, ".tag-status-menu-btn");
+    if (fromStatus) refocusIn(panel, item, ".tag-status-menu-btn");
     return;
   }
   if (openTagMenu.contains(t)) return;

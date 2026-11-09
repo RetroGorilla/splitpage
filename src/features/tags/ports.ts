@@ -78,7 +78,7 @@ export interface WhoListMount extends WhoListControl {
 
 export interface TagPanelPorts {
   readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setGearGroupBy" | "setProductionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
-  readonly preferences: Pick<Preferences, "panelGrouping" | "setPanelGrouping">;
+  readonly preferences: Pick<Preferences, "panelGrouping">;
   readonly changes: PreferenceChanges;
   readonly focus: Pick<FocusMemory<HTMLElement>, "lastRow">;
   readonly beats: { readonly setFilmed: (rowId: string, filmed: boolean) => void; readonly reveal: (rowId: string) => void };

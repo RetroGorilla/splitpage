@@ -76,7 +76,7 @@ export function mountTagPanelsFeature(): TagPanelMount {
     const ports: TagPanelPorts = {
       focus: portFocus, footage: productionFootage,
       beats: { setFilmed: setBeatFilmed, reveal: (id) => { portActions.invoke("reveal-row", "button", id); } },
-      view: portView, preferences: preferenceValues, changes, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
+      view: portView, preferences: { panelGrouping: preferenceValues.panelGrouping }, changes, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
       panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
       notices: portNotices, undo: portUndo, ids: portIds, bulkTag: bulkTagRows
@@ -90,8 +90,8 @@ export function mountTagPanelsFeature(): TagPanelMount {
       ports: {
         rootClick: rootClick,
         renderProduction: tagPanelCommands.renderProduction,
-        saveTagRename: (key) => tagPanelCommands.saveTagRename(key as string),
-        addPersonForTag: (key) => tagPanelCommands.addPersonForTag(key as string),
+        saveTagRename: (key, value) => tagPanelCommands.saveTagRename(key as string, value),
+        addPersonForTag: (key, value) => tagPanelCommands.addPersonForTag(key as string, value),
         setRenaming: portView.setTagRenaming,
         setAddingPerson: portView.setTagAddingPerson,
         setTagOwner: (key, value) => tagPanelCommands.setTagOwner(key as string, value),

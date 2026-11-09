@@ -44,7 +44,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const selection = createProductionSelection(timers);
   const prep = createProductionPrepState();
   const ports: TagPanelPorts = {
-    preferences: { panelGrouping: () => null, setPanelGrouping: () => {} },
+    preferences: { panelGrouping: () => null },
     changes: { onChange: () => () => {} },
     focus: { lastRow: () => null },
     beats: { setFilmed: () => {}, reveal: () => {} },
@@ -391,8 +391,8 @@ test("replaced and disposed panel controls cannot act on the next mount", () => 
   first.openProductionPanel();
   first.openGearPanel();
   first.renderProduction();
-  first.saveTagRename(entry.key);
-  first.addPersonForTag(entry.key);
+  first.saveTagRename(entry.key, "name");
+  first.addPersonForTag(entry.key, "name");
   first.setTagOwner(entry.key, "ada");
   first.setTagNotes(entry.key, "Stale");
   first.dispose();
@@ -442,8 +442,8 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const calls: unknown[][] = [];
   const handlers = (label: string): commands.TagPanelCommands => ({
     renderProduction: () => { calls.push([label, "render"]); },
-    saveTagRename: (key) => { calls.push([label, "rename", key]); },
-    addPersonForTag: (key) => { calls.push([label, "person", key]); },
+    saveTagRename: (key, value) => { calls.push([label, "rename", key, value]); },
+    addPersonForTag: (key, value) => { calls.push([label, "person", key, value]); },
     setTagOwner: (key, person) => { calls.push([label, "owner", key, person]); },
     setTagNotes: (key, text) => { calls.push([label, "notes", key, text]); }
   });
@@ -451,11 +451,11 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const second = commands.installTagPanelCommands(handlers("second"));
   first();
   commands.renderProduction();
-  commands.saveTagRename("hat");
-  commands.addPersonForTag("hat");
+  commands.saveTagRename("hat", "cap");
+  commands.addPersonForTag("hat", "Alice");
   commands.setTagOwner("hat", "ada");
   commands.setTagNotes("hat", "Packed");
-  assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat"], ["second", "person", "hat"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
+  assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat", "cap"], ["second", "person", "hat", "Alice"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
   second();
   assert.throws(commands.renderProduction, /not installed yet/);
 });
