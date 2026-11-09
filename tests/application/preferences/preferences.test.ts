@@ -24,21 +24,38 @@ function setup() {
 test("panel grouping preferences persist independently across preference owners", () => {
   const { storage, prefs } = setup();
   prefs.setPanelGrouping("broll", "by-scene");
-  prefs.setPanelGrouping("comments", "recent");
+  prefs.setPanelGrouping("gear", "recent");
   prefs.setPanelGrouping("production", "by-scene");
   const restored = createPreferences({ storage: () => storage, announce: () => {} });
   assert.equal(restored.panelGrouping("broll"), "by-scene");
-  assert.equal(restored.panelGrouping("comments"), "recent");
+  assert.equal(restored.panelGrouping("gear"), "recent");
   assert.equal(restored.panelGrouping("production"), "by-scene");
-  assert.equal(restored.panelGrouping("gear"), null);
 });
 
 test("app data adds missing panel choices while preserving each local choice", () => {
   const { prefs } = setup();
-  prefs.setPanelGrouping("comments", "recent");
-  assert.deepEqual(prefs.appDataImport({ panelGrouping: '{"broll":"by-scene","comments":"by-scene"}' }, []), ["panelGrouping"]);
+  prefs.setPanelGrouping("gear", "recent");
+  assert.deepEqual(prefs.appDataImport({ panelGrouping: '{"broll":"by-scene","gear":"by-scene"}' }, []), ["panelGrouping"]);
   assert.equal(prefs.panelGrouping("broll"), "by-scene");
-  assert.equal(prefs.panelGrouping("comments"), "recent");
+  assert.equal(prefs.panelGrouping("gear"), "recent");
+});
+
+test("old Comments grouping migrates to the sort preference without changing other panels", () => {
+  const { prefs, storage } = setup();
+  storage.items.set("splitpage-panel-grouping", '{"broll":"by-scene","comments":"recent"}');
+  assert.equal(prefs.commentsSort(), "recent");
+  assert.equal(storage.items.get("splitpage-comments-sort"), "recent");
+  assert.equal(storage.items.get("splitpage-panel-grouping"), '{"broll":"by-scene"}');
+  prefs.setCommentsSort("by-scene");
+  assert.equal(prefs.commentsSort(), "by-scene");
+});
+
+test("a legacy B-roll grouping moves into the per-panel preference without duplicating it", () => {
+  const { prefs, storage } = setup();
+  storage.items.set("splitpage-broll-view", '{"filter":"shot","group":"location","pageGroup":"person"}');
+  assert.equal(prefs.panelGrouping("broll"), "location");
+  assert.deepEqual(JSON.parse(storage.items.get("splitpage-broll-view") || ""), { filter: "shot", pageGroup: "person" });
+  assert.deepEqual(JSON.parse(storage.items.get("splitpage-panel-grouping") || ""), { broll: "location" });
 });
 
 test("the stored keys keep the 3.x names, and each key maps back to its preference", () => {
@@ -496,7 +513,7 @@ test("comments writes still announce when storage is unavailable", () => {
   }
 });
 
-test("app data owns comments sort validation, imports silently and preserves the export bytes", () => {
+test("app data owns comments sort validation, announces imports and preserves the export bytes", () => {
   const { prefs, storage, announced } = setup();
   assert.equal(JSON.stringify(prefs.appDataExport(settingsAppData())), '{"onboarding":null,"tourDone":null,"commentAuthor":null,"writerSize":null,"taggingHelpDismissed":null,"autosave":null,"commentsSort":null,"panelGrouping":null,"theme":null,"clock":null,"personColor":null,"defaultWpm":null,"hideShot":null,"prompterMirror":null,"prompterFlip":null,"prompterSceneMode":null,"rundownMin":null,"videoThumbs":null,"tagIcons":null,"scriptScale":null}');
   for (const commentsSort of ["unknown", "Recent", "", 1, null]) {
@@ -514,8 +531,8 @@ test("app data owns comments sort validation, imports silently and preserves the
   assert.deepEqual(target.prefs.appDataImport(exported, settingsAppData()), ["commentsSort"]);
   assert.equal(JSON.stringify(target.prefs.appDataExport(settingsAppData())), JSON.stringify(exported));
   assert.equal(Object.hasOwn(exported, "commentFilter"), false);
-  assert.equal(announced.length, 1);
-  assert.deepEqual(target.announced, []);
+  assert.equal(announced.length, 4);
+  assert.deepEqual(target.announced, [{ key: "splitpage-comments-sort", value: "by-scene" }]);
 });
 
 test("exporting the app data lists every owned preference by name, with the onboarding record parsed and absent values as none", () => {

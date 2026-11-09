@@ -1,6 +1,7 @@
 import type { BrollAnchorDeclines } from "../../application/broll-anchoring.ts";
 import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
+import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
@@ -66,6 +67,7 @@ export interface BrollPanelPorts {
   readonly screen: () => ScreenState;
   readonly view: Pick<BrollView, "load" | "current" | "setFilter" | "setGroup" | "setPageGroup">;
   readonly preferences: Pick<Preferences, "panelGrouping" | "setPanelGrouping">;
+  readonly changes: PreferenceChanges;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit">;
   readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;

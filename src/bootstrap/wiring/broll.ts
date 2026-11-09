@@ -3,7 +3,7 @@ import { startBrollPanel as mountPanelState, mountBrollPanel } from "../../featu
 import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
 import { ids as portIds } from "./ports/identity.ts";
-import { brollAnchoring, flags as portFlags, brollView as portBrollView, preferenceValues as portPreferences } from "./ports/preferences.ts";
+import { brollAnchoring, changes, flags as portFlags, brollView as portBrollView, preferenceValues as portPreferences } from "./ports/preferences.ts";
 import { panelControl as portPanels } from "./ports/panels.ts";
 import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
 import { personColors as portPersonColors } from "./ports/person-colors.ts";
@@ -96,6 +96,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       screen: portScreen,
       view: portBrollView,
       preferences: portPreferences,
+      changes,
       document: portDocument,
       edits: portEdits,
       text: portText,

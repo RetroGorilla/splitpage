@@ -32,7 +32,6 @@ function setup() {
     preferences: {
       appDataExport: (extra) => { note("preferences.export", extra); return {}; },
       appDataImport: (incoming, extra) => { note("preferences.import", incoming, extra); return ["commentsSort", "writerSize"]; },
-      panelGrouping: () => null,
       commentsSort: () => { note("preferences.commentsSort"); return "recent"; }
     },
     desktop: () => false,

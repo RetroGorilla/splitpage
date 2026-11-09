@@ -5,6 +5,7 @@ import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts"
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
+import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { Operations } from "../../application/session/operation.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
@@ -20,7 +21,8 @@ export interface CommentStatePorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed" | "panelGrouping" | "setPanelGrouping">;
+  readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed">;
+  readonly changes: PreferenceChanges;
   readonly sidePanels: Pick<SidePanels, "open" | "close">;
   readonly text: Pick<TextServices<HTMLElement>, "inertBody" | "sanitizeHtml">;
   readonly ids: Pick<IdSource, "id">;

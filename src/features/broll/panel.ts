@@ -1285,6 +1285,13 @@ export function startBrollPanel(nextPorts: BrollPanelPorts): BrollPanelState {
   (ports as PanelPortUse).view.load();
   const savedGroup = (ports as PanelPortUse).preferences.panelGrouping("broll");
   if (savedGroup) (ports as PanelPortUse).view.setGroup(savedGroup);
+  const stopPreferenceChanges = nextPorts.changes.onChange(function (change) {
+    if (change.name !== "panelGrouping") return;
+    const group = nextPorts.preferences.panelGrouping("broll");
+    if (!group || group === nextPorts.view.current().group) return;
+    nextPorts.view.setGroup(group);
+    renderBrollViews();
+  });
   let withdrawHook: (() => void) | null = null;
   exposeTestHook("__brollTest", function () { return {
     view: function () { return (ports as PanelPortUse).view.current(); },
@@ -1302,6 +1309,7 @@ export function startBrollPanel(nextPorts: BrollPanelPorts): BrollPanelState {
   }, openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
     if (!active) return;
     active = false;
+    stopPreferenceChanges();
     stopBrollFeature();
     ports = null;
     if (withdrawHook) withdrawHook();

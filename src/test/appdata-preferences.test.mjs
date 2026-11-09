@@ -7,7 +7,9 @@ import { openBrollPanel } from "../features/broll/panel.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
 
 await bootApp();
-after(closeApp);
+const nodeCustomEvent = globalThis.CustomEvent;
+globalThis.CustomEvent = window.CustomEvent;
+after(async () => { globalThis.CustomEvent = nodeCustomEvent; await closeApp(); });
 
 const EXPORTED_PREFS = '{"onboarding":null,"tourDone":null,"commentAuthor":null,"writerSize":null,"taggingHelpDismissed":null,"autosave":null,"commentsSort":"recent","panelGrouping":null,"theme":null,"clock":null,"personColor":null,"defaultWpm":null,"hideShot":null,"prompterMirror":null,"prompterFlip":null,"prompterSceneMode":null,"rundownMin":null,"videoThumbs":null,"tagIcons":null,"scriptScale":null}';
 const PARSED_PREFS = '{"onboarding":null,"tourDone":null,"commentAuthor":null,"commentsSort":"recent","panelGrouping":null,"writerSize":null,"taggingHelpDismissed":null,"autosave":null,"theme":null,"clock":null,"personColor":null,"defaultWpm":null,"hideShot":null,"prompterMirror":null,"prompterFlip":null,"prompterSceneMode":null,"rundownMin":null,"videoThumbs":null,"tagIcons":null,"scriptScale":null}';
@@ -31,15 +33,45 @@ test("app data: comments sort round trip keeps the exported and parsed preferenc
 test("app data: panel choices survive export and import", async () => {
   localStorage.clear();
   preferences().setPanelGrouping("broll", "by-scene");
-  preferences().setPanelGrouping("comments", "by-scene");
+  preferences().setCommentsSort("by-scene");
   const exported = await window.__appDataTest.build();
   localStorage.clear();
   await window.__appDataTest.importText(JSON.stringify(exported));
   assert.equal(preferences().panelGrouping("broll"), "by-scene");
-  assert.equal(preferences().panelGrouping("comments"), "by-scene");
+  assert.equal(preferences().commentsSort(), "by-scene");
   assert.equal(commentSorting.current(), "by-scene");
   localStorage.clear();
   commentSorting.choose("position");
+});
+
+test("app data: imported legacy grouping uses the Comments sort as its single source", async () => {
+  localStorage.clear();
+  await window.__appDataTest.importText(JSON.stringify({ format: "splitpage-app-data", version: 1, history: { docs: [], older: [] }, prefs: { panelGrouping: '{"comments":"by-scene"}' } }));
+  assert.equal(preferences().commentsSort(), "by-scene");
+  assert.equal(localStorage.getItem("splitpage-panel-grouping"), null);
+  openCommentsPanel();
+  preferences().setCommentsSort("recent");
+  assert.equal(commentSorting.current(), "recent");
+  assert.equal(document.getElementById("comments-sort").value, "recent");
+  localStorage.clear();
+});
+
+test("app data: importing a choice updates an already open B-roll panel", async () => {
+  localStorage.clear();
+  brollView.setGroup("scene");
+  openBrollPanel();
+  await window.__appDataTest.importText(JSON.stringify({ format: "splitpage-app-data", version: 1, history: { docs: [], older: [] }, prefs: { panelGrouping: '{"broll":"by-scene"}' } }));
+  assert.equal(window.__brollTest.view().group, "by-scene");
+  localStorage.clear();
+});
+
+test("app data: importing a choice updates an already open Comments panel", async () => {
+  localStorage.clear();
+  commentSorting.choose("position");
+  openCommentsPanel();
+  await window.__appDataTest.importText(JSON.stringify({ format: "splitpage-app-data", version: 1, history: { docs: [], older: [] }, prefs: { commentsSort: "by-scene" } }));
+  assert.equal(document.getElementById("comments-sort").value, "by-scene");
+  localStorage.clear();
 });
 
 test("app data: imported comments grouping preserves an existing legacy sort after restart", async () => {
@@ -51,7 +83,7 @@ test("app data: imported comments grouping preserves an existing legacy sort aft
     prefs: { panelGrouping: '{"comments":"by-scene"}' }
   }));
   assert.equal(commentSorting.current(), "recent");
-  assert.equal(preferences().panelGrouping("comments") ?? preferences().commentsSort(), "recent");
+  assert.equal(preferences().commentsSort(), "recent");
   localStorage.clear();
 });
 

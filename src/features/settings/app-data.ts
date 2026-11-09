@@ -286,7 +286,7 @@ function appDataMergePrefs(prefs: Parameters<AppDataPorts["preferences"]["appDat
   const written = ports.preferences.appDataImport(prefs, appDataExtraPrefs());
   try {
     if (written.indexOf("commentsSort") !== -1 || written.indexOf("panelGrouping") !== -1) {
-      ports.commentSorting.choose(ports.preferences.panelGrouping("comments") ?? ports.preferences.commentsSort());
+      ports.commentSorting.choose(ports.preferences.commentsSort());
     }
     if (written.indexOf("writerSize") !== -1) ports.writer.setSize(ports.writer.size(), false);
   } catch (e) {}

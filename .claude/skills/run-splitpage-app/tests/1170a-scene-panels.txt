@@ -8,12 +8,22 @@ click #broll-controls .broll-group-btn
 click #broll-controls [data-group="by-scene"]
 expect Array.from(document.querySelectorAll('#broll-list .broll-group-head .broll-group-title')).map(e=>e.textContent.trim()).join('|') === 'Scene A|Scene B · Harbour|Scene C · Market|No scene'
 shot l1170a-broll
+click #broll-controls .broll-group-btn
+click #broll-controls [data-group="scene"]
+eval localStorage.removeItem('splitpage-panel-grouping')
+eval window.__appDataTest.importText(JSON.stringify({format:'splitpage-app-data',version:1,history:{docs:[],older:[]},prefs:{panelGrouping:'{"broll":"by-scene"}'}}))
+expect document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'By scene'
+expect Array.from(document.querySelectorAll('#broll-list .broll-group-head .broll-group-title')).map(e=>e.textContent.trim()).join('|') === 'Scene A|Scene B · Harbour|Scene C · Market|No scene'
 jsclick #btn-comments
 eval (function(){var s=document.getElementById('comments-sort');s.value='by-scene';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()
 expect Array.from(document.querySelectorAll('#comments-list .comments-scene-heading')).map(e=>e.textContent.trim()).join('|') === 'Scene A|Scene B · Harbour|No scene'
-expect JSON.parse(localStorage.getItem('splitpage-panel-grouping')).broll === 'by-scene' && JSON.parse(localStorage.getItem('splitpage-panel-grouping')).comments === 'by-scene'
+expect JSON.parse(localStorage.getItem('splitpage-panel-grouping')).broll === 'by-scene' && localStorage.getItem('splitpage-comments-sort') === 'by-scene'
 sleep 600
 shot l1170a-comments
+eval (function(){var s=document.getElementById('comments-sort');s.value='position';s.dispatchEvent(new Event('change',{bubbles:true}));localStorage.removeItem('splitpage-comments-sort');return true;})()
+eval window.__appDataTest.importText(JSON.stringify({format:'splitpage-app-data',version:1,history:{docs:[],older:[]},prefs:{commentsSort:'by-scene'}}))
+expect document.getElementById('comments-sort').value === 'by-scene'
+expect Array.from(document.querySelectorAll('#comments-list .comments-scene-heading')).map(e=>e.textContent.trim()).join('|') === 'Scene A|Scene B · Harbour|No scene'
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 jsclick #btn-comments

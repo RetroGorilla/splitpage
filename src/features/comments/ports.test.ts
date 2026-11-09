@@ -26,6 +26,16 @@ test("tagging help listeners stop on disposal and install once on remount", () =
   next.dispose();
 });
 
+test("Comments disposes its preference subscription", () => {
+  const fake = fixture();
+  let active = 0;
+  const owner = startComments({ ...fake.ports, changes: { onChange: () => { active++; return () => { active--; }; } } });
+  assert.equal(active, 1);
+  owner.dispose();
+  owner.dispose();
+  assert.equal(active, 0);
+});
+
 function fixture() {
   document.body.innerHTML = '<div id="comment-modal" hidden><div id="comment-modal-quote"></div><input id="comment-name"><div id="comment-body-editable"></div></div><div id="comments-panel" hidden></div>';
   const calls: string[] = [];
@@ -36,13 +46,12 @@ function fixture() {
     edits: { edit: () => { calls.push("edit"); return true; }, stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => { calls.push("notice"); return { isConnected: false, dismiss: () => {}, removeEventListener: () => {} }; } },
     preferences: {
-      panelGrouping: () => null,
-      setPanelGrouping: () => {},
       clock: () => "24", commentAuthor: () => "Ada", rememberCommentAuthor: () => {},
       commentsSort: () => "position", setCommentsSort: () => {},
       commentFilter: () => ({ mode: "open", assignee: "" }), setCommentFilter: () => {},
       taggingHelpShown: () => {}, taggingHelpDismissed: () => {}
     },
+    changes: { onChange: () => () => {} },
     sidePanels: { open: () => {}, close: () => {} },
     text: {
       inertBody: (html) => { const body = document.createElement("div"); body.innerHTML = String(html); return body; },

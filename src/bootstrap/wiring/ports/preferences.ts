@@ -77,11 +77,10 @@ export const brollView: BrollView = {
   printView: (overrides) => brollViewOwner().printView(overrides)
 };
 
-export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort" | "panelGrouping"> = {
+export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort"> = {
   appDataExport: (extra) => preferences().appDataExport(extra),
   appDataImport: (incoming, extra) => preferences().appDataImport(incoming, extra),
-  commentsSort: () => preferences().commentsSort(),
-  panelGrouping: (panel) => preferences().panelGrouping(panel)
+  commentsSort: () => preferences().commentsSort()
 };
 
 export const attributionPreferences: Pick<Preferences, "commentAuthor" | "myColor"> = {

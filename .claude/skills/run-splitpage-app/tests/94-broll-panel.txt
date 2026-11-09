@@ -48,7 +48,7 @@ click #broll-controls .broll-menu-item[data-group="location"]
 wait heads() === 'Fish market|Harbour|No location'
 expect !document.querySelector('#broll-controls .broll-group-menu')
 expect document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'By location'
-expect JSON.parse(localStorage.getItem('splitpage-broll-view')).group === 'location'
+expect JSON.parse(localStorage.getItem('splitpage-panel-grouping')).broll === 'location'
 
 # not an edit: the document is as clean as it was, and the stack as deep
 eval U.flush()

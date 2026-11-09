@@ -73,7 +73,6 @@ test("comments app: panel sort and filter changes announce to another preference
     assert.equal(localStorage.getItem("splitpage-comments-filter"), '{"mode":"all","assignee":""}');
     assert.deepEqual(announced, [
       { key: "splitpage-comments-sort", value: "recent" },
-      { key: "splitpage-panel-grouping", value: '{"comments":"recent"}' },
       { key: "splitpage-comments-filter", value: '{"mode":"all","assignee":""}' }
     ]);
   } finally {
