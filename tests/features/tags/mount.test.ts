@@ -46,7 +46,7 @@ function harness() {
     clickProductionOutline: () => false, changeProductionOutline: () => {}, revealProductionItem: () => {},
     rootClick: (e) => { calls.push("root"); routes.jumpClick(e); routes.click(e); },
     renderProduction: log("render"),
-    saveTagRename: log("rename-save"), addPersonForTag: log("person-save"),
+    saveTagRename: (key, value) => { log("rename-save")(key, value); return key; }, addPersonForTag: log("person-save"),
     setRenaming: log("renaming"), setAddingPerson: (v) => { state.adding = v; log("adding")(v); },
     setTagOwner: log("owner"), setTagNotes: log("notes"), queueAutoSave: log("autosave"),
     acceptTagGhost: log("ghost"), acceptUntaggedMention: log("suggest"), applyTag: log("apply"),

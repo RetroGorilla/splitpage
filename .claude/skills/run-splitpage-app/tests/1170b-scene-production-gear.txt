@@ -32,12 +32,24 @@ jsclick #btn-production
 jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-entity-head
 jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
 expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-person-input')
+eval document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]')
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
 eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-person-input').value='Alice'
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-save"]').focus()
 jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-save"]
 expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child option')).some(e=>e.selected && e.textContent.trim()==='Alice')
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]')
+jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]
+eval (function(){var input=document.activeElement;input.value='Bob';input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));return true;})()
+expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child option')).some(e=>e.selected && e.textContent.trim()==='Bob')
+expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-person-new"]')
 jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename"]
 expect document.activeElement === document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-rename-input')
 eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child .tag-rename-input').value='Cinema camera'
+eval document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename-save"]').focus()
 jsclick #production-list .tag-scene-group:nth-child(2) .tag-entity:first-child [data-action="tag-rename-save"]
 expect Array.from(document.querySelectorAll('#production-list .tag-scene-group:nth-child(2) .tag-entity-name')).some(e=>e.textContent.trim()==='Cinema camera')
+expect document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child').classList.contains('is-expanded')
+expect document.querySelector('#production-list .tag-scene-group:nth-child(2) .tag-entity:first-child').contains(document.activeElement)
 quit

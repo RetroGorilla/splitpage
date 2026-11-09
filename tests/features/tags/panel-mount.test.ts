@@ -34,6 +34,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const calls: string[] = [];
   let renaming: string | null = null;
   let addingPerson: string | null = null;
+  let expanded: string | null = null;
   const pending = new Map<unknown, () => void>();
   let timerId = 0;
   const timers = {
@@ -56,7 +57,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
       setTagAddingPerson: (key) => { addingPerson = key; },
       setTagRenaming: (key) => { renaming = key; },
       tagAddingPersonKey: () => addingPerson, tagRenamingKey: () => renaming,
-      tagExpandedKey: () => null
+      tagExpandedKey: () => expanded, setTagExpanded: (key) => { expanded = key; }
     },
     document: document.document,
     lifetime: document.lifetime,
@@ -442,7 +443,7 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const calls: unknown[][] = [];
   const handlers = (label: string): commands.TagPanelCommands => ({
     renderProduction: () => { calls.push([label, "render"]); },
-    saveTagRename: (key, value) => { calls.push([label, "rename", key, value]); },
+    saveTagRename: (key, value) => { calls.push([label, "rename", key, value]); return key; },
     addPersonForTag: (key, value) => { calls.push([label, "person", key, value]); },
     setTagOwner: (key, person) => { calls.push([label, "owner", key, person]); },
     setTagNotes: (key, text) => { calls.push([label, "notes", key, text]); }

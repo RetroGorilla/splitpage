@@ -27,7 +27,7 @@ type PanelNullableArgs<A extends readonly unknown[], K extends keyof A> = { [P i
 type PanelNullableCall<F extends (...args: never[]) => unknown, K extends keyof Parameters<F>> =
   (...args: PanelNullableArgs<Parameters<F>, K>) => ReturnType<F>;
 import { tagStatusLampHtml } from "../common/tag-status.ts";
-import { nextTagStatus, normalizeTagName } from "../../core/document/tags.ts";
+import { nextTagStatus, normalizeTagName, tagKey } from "../../core/document/tags.ts";
 import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../../core/production/looks.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -1105,9 +1105,14 @@ export function armPersonDelete(btn: Element, personId: string | null) {
   }, function () { disarm = armButton(btn); });
 }
 
-export function saveTagRename(key: string | null, renamed: string) {
+export function saveTagRename(key: string | null, renamed: string): string | null {
   const item = findTagByKey(key);
-  if (!item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return; }
+  if (!item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return null; }
+  const p = ports as TagPanelPorts;
+  const previousExpanded = p.view.tagExpandedKey();
+  const clean = cappedText(renamed, 80);
+  const nextKey = clean ? tagKey(item.cat.id, clean) : key;
+  if (previousExpanded === key) p.view.setTagExpanded(nextKey);
   (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
   const changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts as RemoveTagPorts);
@@ -1115,8 +1120,10 @@ export function saveTagRename(key: string | null, renamed: string) {
     (ports as TagPanelPorts).undo.breakCoalescing();
     (ports as TagPanelPorts).notices.show("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
+    p.view.setTagExpanded(previousExpanded);
     renderProduction();
   }
+  return changed ? nextKey : key;
 }
 
 let openTagMenu: HTMLElement | null = null;
@@ -1285,7 +1292,7 @@ export function startTagPanels(nextPorts: TagPanelPorts) {
     openProductionPanel: command(openProductionPanel),
     openGearPanel: command(openGearPanel),
     renderProduction: command(renderProduction),
-    saveTagRename: command(saveTagRename),
+    saveTagRename: (...args: Parameters<typeof saveTagRename>) => command(saveTagRename)(...args) ?? null,
     addPersonForTag: command(addPersonForTag),
     setTagOwner: command(setTagOwner),
     setTagNotes: command(setTagNotes),

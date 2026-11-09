@@ -13,7 +13,7 @@ import type { TagPanelCommands } from "../../src/application/tag-panel-commands.
 function recording(log: string[], name = ""): TagPanelCommands {
   return {
     renderProduction: () => { log.push(name + "render"); },
-    saveTagRename: (key, value) => { log.push(name + "rename:" + key + ":" + value); },
+    saveTagRename: (key, value) => { log.push(name + "rename:" + key + ":" + value); return key; },
     addPersonForTag: (key, value) => { log.push(name + "person:" + key + ":" + value); },
     setTagOwner: (key, personId) => { log.push(name + "owner:" + key + ":" + personId); },
     setTagNotes: (key, text) => { log.push(name + "notes:" + key + ":" + text); }
