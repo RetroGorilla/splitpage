@@ -150,6 +150,19 @@ export function missingRegistryTags(
     have[key] = true;
     out.push({ cat: t.catId, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] });
   });
+  (rows || []).forEach(function (row) {
+    TAG_FIELDS.forEach(function (field) {
+      tagIds(readers.cellOf(row[field] || "")).forEach(function (id) {
+        const tag = tagNameOf(id);
+        const cat = tag && tagCategoryId(tag.cat);
+        if (!tag || !cat) return;
+        const name = cappedText(tag.name, 80), key = registryKey(tag.cat, name);
+        if (!name || have[key]) return;
+        have[key] = true;
+        out.push({ cat: cat, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] });
+      });
+    });
+  });
   return out;
 }
 

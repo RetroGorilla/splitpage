@@ -267,7 +267,7 @@ function resolveCell(runs: HtmlRunDecoder, live: unknown, step: { before: unknow
   const mine = runs(live), base = runs(step.before), want = runs(step.after);
   if (JSON.stringify(mine) === JSON.stringify(base)) return { value: step.after };
   const r = mergeCells(base, mine, want);
-  if (r.conflict) return null;
+  if (r.conflict || r.markConflicts) return null;
   return { value: toHtml(normalizeCell(r.cell)) };
 }
 

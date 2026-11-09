@@ -1,4 +1,4 @@
-import { FORMAT_MARKS, OBJ, atomId, cleanMarks, normalizeCell, orderedMarks, sameMarks } from "../text/runs.ts";
+import { FORMAT_MARKS, OBJ, atomId, cleanMarks, normalizeCell, orderedMarks, sameMarks, tagStack, withTagStack } from "../text/runs.ts";
 import type { CellInput, Marks, Run } from "../text/runs.ts";
 import { explode, implode } from "../text/edits.ts";
 import type { AtomChar, Char, TextChar } from "../text/edits.ts";
@@ -10,6 +10,11 @@ type MarksMerge = { marks: Marks; conflict: boolean };
 type Token = { key: string; chars: Char[] };
 
 type MarkSet = Record<string, true>;
+
+function sameTagPath(a: Marks, b: Marks): boolean {
+  const ai = a.innerTags || [], bi = b.innerTags || [];
+  return a.tag === b.tag && ai.length === bi.length && ai.every(function (id, i) { return id === bi[i]; });
+}
 
 function tokenize(chars: readonly Char[]): Token[] {
   const toks: Token[] = [];
@@ -82,6 +87,14 @@ function marksFromSet(set: MarkSet): Marks {
 }
 
 export function mergeMarks(o: Marks, a: Marks, b: Marks): MarksMerge {
+  if (o.innerTags || a.innerTags || b.innerTags) {
+    const agree = sameTagPath(a, b), mineUnchanged = sameTagPath(o, a), theirsUnchanged = sameTagPath(o, b);
+    const merged = mergeMarks(withTagStack(o, []), withTagStack(a, []), withTagStack(b, []));
+    return {
+      marks: withTagStack(merged.marks, tagStack(theirsUnchanged ? a : b)),
+      conflict: merged.conflict || (!agree && !mineUnchanged && !theirsUnchanged)
+    };
+  }
   const so = markSet(o), sa = markSet(a), sb = markSet(b);
   const keys: Record<string, true> = {};
   [so, sa, sb].forEach(function (s) { Object.keys(s).forEach(function (k) { keys[k] = true; }); });
@@ -121,6 +134,16 @@ function sameKeys(x: readonly Token[], y: readonly Token[]): boolean {
   return true;
 }
 
+function nestingChanged(base: readonly Token[], side: readonly Token[]): boolean {
+  return base.some(function (token, i) {
+    return token.chars.some(function (c, j) {
+      const other = (side[i] as Token).chars[j] as Char;
+      if (c.atom || other.atom) return false;
+      return !!(c.marks.innerTags || other.marks.innerTags) && !sameTagPath(c.marks, other.marks);
+    });
+  });
+}
+
 export function mergeCells(base: CellInput, mine: CellInput, theirs: CellInput): CellMerge {
   const o = tokenize(explode(base)), a = tokenize(explode(mine)), b = tokenize(explode(theirs));
   const ma = lcsMap(o, a), mb = lcsMap(o, b);
@@ -154,8 +177,10 @@ export function mergeCells(base: CellInput, mine: CellInput, theirs: CellInput):
     if (aSame && bSame) {
       for (let i = 0; i < oS.length; i++) emitStable(oS[i] as Token, aS[i] as Token, bS[i] as Token);
     } else if (aSame) {
+      if (nestingChanged(oS, aS)) conflict = true;
       emit(bS);
     } else if (bSame) {
+      if (nestingChanged(oS, bS)) conflict = true;
       emit(aS);
     } else if (sameTokens(aS, bS)) {
       emit(aS);

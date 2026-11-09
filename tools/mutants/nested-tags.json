@@ -1,0 +1,87 @@
+{
+  "tests": [
+    "src/test/nested-tags.test.mjs",
+    "src/test/nested-tags-project.test.mjs",
+    "src/test/cut-paste-app.test.mjs"
+  ],
+  "mutants": [
+    {
+      "label": "undo-ignores-tag-path-conflicts",
+      "file": "src/application/editing/undo/history.ts",
+      "find": "if (r.conflict || r.markConflicts) return null;",
+      "replace": "if (r.conflict) return null;"
+    },
+    {
+      "label": "tag-placement-allows-crossings",
+      "file": "src/core/text/edits.ts",
+      "find": "if (!containsTag && !insideTag) return null;",
+      "replace": ""
+    },
+    {
+      "label": "tag-wrapping-erases-enclosed-labels",
+      "file": "src/core/text/edits.ts",
+      "find": "[...path.slice(0, depth), value as string, ...path.slice(depth)]",
+      "replace": "[value as string]"
+    },
+    {
+      "label": "decode-keeps-only-inner",
+      "file": "src/adapters/richtext/decode.ts",
+      "find": "if (marks.tag) next.innerTags = (marks.innerTags || []).concat(id);",
+      "replace": "if (marks.tag) next.tag = id;"
+    },
+    {
+      "label": "html-drops-inner-wrappers",
+      "file": "src/core/text/tree.ts",
+      "find": "(marks.innerTags || []).forEach(function (id) { keys.push({ k: \"tag\", v: id }); });",
+      "replace": ""
+    },
+    {
+      "label": "normalization-drops-inner-path",
+      "file": "src/core/text/runs.ts",
+      "find": "if (inner.length) out.innerTags = inner;",
+      "replace": ""
+    },
+    {
+      "label": "retag-ignores-inner",
+      "file": "src/core/text/edits.ts",
+      "find": "if (r.atom || tagStack(r.marks).indexOf(fromId) === -1) return r;",
+      "replace": "if (r.atom || r.marks.tag !== fromId) return r;"
+    },
+    {
+      "label": "competing-paths-not-conflicts",
+      "file": "src/core/merge/cells.ts",
+      "find": "conflict: merged.conflict || (!agree && !mineUnchanged && !theirsUnchanged)",
+      "replace": "conflict: merged.conflict"
+    },
+    {
+      "label": "rewrite-loses-new-inner",
+      "file": "src/core/merge/cells.ts",
+      "find": "if (nestingChanged(oS, aS)) conflict = true;",
+      "replace": ""
+    },
+    {
+      "label": "migration-drops-enclosing-record",
+      "file": "src/core/production/tags.ts",
+      "find": "tagIds(readers.cellOf(row[field] || \"\")).forEach(function (id) {",
+      "replace": "[].forEach(function (id) {"
+    },
+    {
+      "label": "beat-copy-drops-enclosing-record",
+      "file": "src/features/clipboard/beat-clip.ts",
+      "find": "tagIds(cell).forEach(function (id) {",
+      "replace": "[].forEach(function (id) {"
+    },
+    {
+      "label": "typing-carries-inner-path",
+      "file": "src/core/text/edits.ts",
+      "find": "delete m.innerTags;",
+      "replace": ""
+    },
+    {
+      "label": "inner-paths-compared-by-reference",
+      "file": "src/core/text/runs.ts",
+      "find": "if (k === \"cmt\" || k === \"innerTags\") {",
+      "replace": "if (k === \"cmt\") {"
+    }
+  ]
+}

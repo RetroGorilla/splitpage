@@ -326,16 +326,17 @@ test("tagsInField: on the shapes where spans and the model disagree, it counts w
   const broll = '<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span>';
   const cases = [
     [tagSpan("prop", "Mug", "mug") + tagSpan("prop", "Mug", "mug"), 2, [["Mug", "mugmug"]]],
-    [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, [["Mug", "a"], ["Cup", "b"], ["Mug", "c"]]],
+    [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, [["Mug", "a"], ["Cup", "b"], ["Mug", "c"]], 2],
     ["x" + tagSpan("prop", "Mug", "") + "y", 1, []],
     [tagSpan("prop", "Mug", "a" + broll + "b"), 1, [["Mug", "a"], ["Mug", "b"]]]
   ];
-  for (const [raw, spans, mentions] of cases) {
+  for (const [raw, spans, mentions, nestedSpans] of cases) {
     const html = sanitizeHtml(raw);
     assert.equal(spanCount(html), spans, html);
     assert.deepEqual(tagsInField(html).map((t) => [t.name, t.text]), mentions, html);
     const written = toHtml(cellOf(html));
-    assert.equal(spanCount(written), mentions.length, written);
+    assert.equal(spanCount(written), nestedSpans ?? mentions.length, written);
+    if (nestedSpans !== undefined) assert.equal(written, html);
     assert.deepEqual(tagsInField(written), tagsInField(html), written);
   }
 });

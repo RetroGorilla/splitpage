@@ -165,7 +165,8 @@ atomic inline object, the b-roll key:
 | `b` `i` `u` `s` `hl` | `true` | bold, italic, underline, strike, highlight |
 | `dir` | `true` | a stage direction for the performer (#167, Audio column): stored as `<span class="stage-dir">`, nested just inside the comments; never on the b-roll key; its brackets are added by every reader, never stored; left out of `spokenText()` (the read time) and of the teleprompter's word spans |
 | `href` | string | http, https or mailto only (`safeHref`) |
-| `tag` | registry id | **at most one tag per run** — nested tags have no meaning |
+| `tag` | registry id | the outermost label; ordinary old runs keep this shape |
+| `innerTags` | ordered array of registry ids | labels inside `tag`, from outer to inner; absent for ordinary tags |
 | `cmt` | array of comment ids, sorted | comments may overlap |
 
 **Line breaks** are `"\n"` inside `text`; a line feed inside an HTML text
@@ -201,6 +202,45 @@ array. The issue's own sketch is runs.
 ordinary text with a `tag` mark. The editor keeps the caret out of it and
 deletes it whole, which matches today's `contenteditable=false`. The model
 doesn't need a special node for it.
+
+**Nested containment (#1201, PR 1).** A run inside Sound → Prop has
+`{tag: soundId, innerTags: [propId]}`. `tagStack` reads all enclosing labels;
+`withTagStack` changes the path and promotes the first survivor when an
+outer label is removed. Repeated ids at different depths are retained:
+containment belongs to script occurrences, never to registry records.
+The canonical tree opens each path in order, so each word is stored once.
+Comments, links and directions still cover the entire protected outer tag.
+Typing at an edge carries neither `tag` nor `innerTags`.
+
+Both project formats retain nested canonical HTML with the existing
+category/name attributes and schema 2. The unchanged v0.3.0 seed and tagged
+spot fixtures in `src/test/fixtures/splitpage-0.3.0-*.splitpage` are copied
+from that release's `src/seed-state.json` and
+`src/starters/thirty-second-spot.json`; never regenerate them.
+
+Merge treats an ordered nesting path as one value per character. One-sided
+path edits combine with independent text and formatting edits. Competing
+path changes keep the other side's complete path and report a mark conflict
+through the existing review mechanism; they never invent a nesting order
+by unioning labels. Undo uses the same model comparison and three-way merge.
+Creation remains disabled in the UI until the consumer and interaction PRs.
+The model's `setMark(..., "tag", id)` validates every affected occurrence
+before writing: a complete contained occurrence stays beneath the new
+label, a selection inside a tag gets an inner label, and a crossing range
+is refused with the cell unchanged. Clearing an outer label likewise
+requires its complete occurrence. `replaceWithTag` preserves labelled
+selections whose words are unchanged and refuses replacements that would
+erase their completed labels; a refusal returns the unchanged cell and the
+clamped original range end.
+
+Undo and redo refuse a replay with competing tag paths, just as they refuse
+a text conflict. The entire entry is left unapplied, so later edits remain
+intact. This is the existing all-or-nothing refusal policy, not a merge that
+lets the undo target win the conflict.
+Panel readers retain their existing deepest-label projection until PR 2;
+registry healing and beat clipboard read every enclosing label directly.
+`tests/core/text/before-nested-merge.ts` freezes the merge algorithm at `fa88f976`
+with only its import paths adjusted, for the seeded old-format differential.
 
 ### 3.1 The registry gets ids (built, step 2)
 

@@ -38,7 +38,7 @@ import type { Run } from "../../core/text/runs.ts";
 import { normalizeBrollProps } from "../../core/document/broll.ts";
 import { mintTagId, normalizeTagName, registryKey } from "../../core/document/tags.ts";
 import { isSha256Hex, refsIn } from "../../../shared/blob-policy.ts";
-import { commentIds, normalizeCell } from "../../core/text/runs.ts";
+import { commentIds, normalizeCell, tagIds, tagNameOf } from "../../core/text/runs.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import { syncCommentAnchors } from "../../core/text/anchors.ts";
@@ -107,6 +107,12 @@ export function buildBeatPayload(state: DocumentView | null, rowIds: readonly st
 
   const tagKeys = Object.create(null) as Record<string, boolean>;
   (ports as BeatClipPorts).tagsInRows(rows).forEach(function (t) { tagKeys[registryKey((t.cat as NonNullable<typeof t.cat>).id, t.name)] = true; });
+  cellIdsOf(rows, function (cell) {
+    tagIds(cell).forEach(function (id) {
+      const tag = tagNameOf(id);
+      if (tag) tagKeys[registryKey(tag.cat, tag.name)] = true;
+    });
+  });
   const keyIds = cellIdsOf(rows, function (cell, out) {
     cell.forEach(function (r) { if (r.atom && r.id) out[r.id] = true; });
   });
