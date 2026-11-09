@@ -139,7 +139,9 @@ What that costs, with the numbers from when this design began:
 - New inline formatting. Cells remain flat runs with line breaks. Writer
   headings are scenes, and paragraphs derive from beat boundaries and flags;
   neither requires a nested cell format. Lists, fonts and colours remain out of scope.
-- Real-time co-editing (CRDT/OT). ROADMAP rejected it. Collaboration stays
+- Real-time co-editing inside this model. Collaboration is planned separately
+  on Yjs, with a read-only projection onto this model:
+  [COLLABORATION-PLAN.md](COLLABORATION-PLAN.md). Standalone editing stays
   save, pull and three-way merge.
 - Comments spanning rows. A comment stays inside one cell.
 - Changing what anyone types. Delimiters, shortcuts and auto-tagging keep

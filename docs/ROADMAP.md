@@ -44,7 +44,7 @@ Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged 
 
 ## New features (not in 4.1 unless Adam says so)
 
-- Collaboration rebuilt with Yjs. Held by Adam.
+- Collaboration rebuilt with Yjs on a self-hosted server: [COLLABORATION-PLAN.md](COLLABORATION-PLAN.md) is the plan of record. Nothing is built; the next task is its Stage 0 audit. Held by Adam.
 
 I-31, I-32 and I-33 were here; Adam brought them into 4.1 and they are listed under Done.
 
