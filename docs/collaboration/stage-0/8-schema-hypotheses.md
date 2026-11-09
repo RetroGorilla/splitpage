@@ -9,18 +9,19 @@ Baseline commit: `0ca1929177ffc84bced412ad2be3aa99690761d0`. Package source read
 | Fact | Where | Serves |
 | --- | --- | --- |
 | A beat is a row `{id, audioText, visualText, imageRef, imageLinks, moreImages, status, lengthSeconds?, paragraphStart?, updatedAt?, updatedBy?}`; cells are canonical HTML of runs | `src/core/document/validated.ts` `DocumentRow`, `src/core/document/fields.ts` `ROW_FIELDS` | PROJ |
-| A scene is `{id, name, firstSceneId}`; name at most 200 characters, plain text, no tags or comments | `src/core/document/scenes.ts` `DocumentScene`, `src/core/flow/flow.ts` `SCENE_NAME_MAX`, `finalizeHeading` | T08, PROJ |
-| The flow surface edits narration (`audioText`) only; headings edit `scene.name` | `src/core/flow/flow.ts` `writeCell`, `renameHeading` | T01–T09 |
+| A scene is `{id, name, firstSceneId}`; name at most 200 characters, plain text, no tags or comments; a scene with an empty name is dropped on load | `src/core/document/scenes.ts` `DocumentScene`, `normalizeScenes`; `src/core/flow/flow.ts` `SCENE_NAME_MAX`, `finalizeHeading` | T08, PROJ |
+| The flow surface edits narration (`audioText`) only; headings edit `scene.name` | `flow.ts` `writeCell`, `renameHeading` | T01–T09 |
 | Split: `splitCell` at the caret, new row after with a minted id | `flow.ts` `splitBeat`, `startBeat` | T05, T12 |
-| Join: narration `joinCells(a, b, glue)` with one space unless `a` ends in whitespace; visuals joined as stored HTML `first + "<br>" + second`; pictures combined, deduplicated by sha256; status takes the higher rank; refused across a scene header or over 61 pictures | `flow.ts` `joinWithPrevious`, `joinedVisualText`, `joinedPictures`, `STATUS_RANK` | T06, T07 |
+| Join: narration `joinCells(a, b, glue)` with one space unless `a` ends in whitespace or either side is empty; the glue carries `href` only if both neighbours share it, the comments both neighbours carry, and `dir` if both are directions; visuals joined as stored HTML `first + "<br>" + second`; pictures combined, deduplicated by sha256; status takes the higher rank; refused across a scene header or over 61 pictures | `flow.ts` `joinWithPrevious`, `joinedVisualText`, `joinedPictures`, `STATUS_RANK`; `src/core/text/edits.ts` `joinCells` | T06, T07 |
 | Remove header: the scene name becomes the narration of a new beat before the scene's first beat, which gets `paragraphStart` | `flow.ts` `removeHeader` | T08 |
-| Create header from `# name`: the name is copied into `scene.name`, `# ` and the name are deleted from narration; an emptied beat is removed | `flow.ts` `finalizeHeading` | T08 |
-| Cross-beat replace: fully covered beats are removed, partly covered beats lose the range, a beat holding the selection start may be replaced by a fresh row | `flow.ts` `replaceRange` | T09 |
-| Marks per run: `b i u s hl dir` (true), `href` (string), `tag` (registry id) plus `innerTags` (outer to inner), `cmt` (sorted ids). Across one tag stretch `cmt` is the union, `href` the first found, `dir` if any | `docs/DOCUMENT-MODEL.md` §3, `normalizeCell` in `src/core/text/runs.ts` | T20, T11 |
+| Create header from `# name`: the name is copied into `scene.name`; `# `, the name and the line break are removed from narration; an emptied beat is removed (or a blank beat created when nothing follows) | `flow.ts` `finalizeHeading` | T08 |
+| Cross-beat replace: fully covered beats are removed, partly covered beats lose the range | `flow.ts` `replaceRange` | T09 |
+| Marks per run: `b i u s hl dir` (true), `href` (string), `tag` plus `innerTags` (outer to inner), `cmt` (sorted ids). Across one tag stretch `cmt` is the union, `href` the first found, `dir` if any | `docs/DOCUMENT-MODEL.md` §3, `normalizeCell` in `src/core/text/runs.ts` | T11, T20 |
 | Typing at a tag edge carries neither `tag` nor `innerTags` | `docs/DOCUMENT-MODEL.md` §3 "Nested containment" | T20 |
 | Comment anchor = runs carrying its id; `rowId`/`field` derived: first marked cell in document order | `src/core/text/anchors.ts` `syncCommentAnchors` | T11 |
 | Typing groups 1 s, 200 entries | `src/application/editing/undo/history.ts` `COALESCE_MS`, `MAX_ENTRIES` | T12, T21 |
-| Painting into a focused beat restores the caret; repaint is owed, not done, while composing | `src/features/writer/flow-surface.ts` `repaint`, `remapForRepaint`; the per-element `rendered` map is each beat's last painted HTML | T01, T02, T04 |
+| Repaint of a focused beat restores the caret by model position; owed, not done, while composing | `src/features/writer/flow-surface.ts` `repaint`, `remapForRepaint` | T01, T02, T04 |
+| The surface's `rendered` map is a paint cache: `paint` reads it to skip unchanged beats, `syncBeatEl` overwrites it with the typed result. It holds no identities and is not an editor base | `flow-surface.ts` `rendered`, `syncBeatEl` | T02, T04, SLICE |
 | Ordinary typing goes native, then the whole beat is decoded back to runs | `flow-surface.ts` `syncBeatEl` | T01–T04, SLICE |
 
 ## Notation
@@ -28,272 +29,302 @@ Baseline commit: `0ca1929177ffc84bced412ad2be3aa99690761d0`. Package source read
 | Symbol | Meaning |
 | --- | --- |
 | S, A, B, C | Seed writer (clientID 10), Alice (1), Bob (2), Carol (3, late joiner). The fixture sets `doc.clientID` explicitly |
-| `abcd = s1..s4` | Characters and their identities, in order. `a1` is Alice's first new character, `b1` Bob's |
+| `abcd = s1..s4` | Characters and their identities in order. Seed identities are numbered across the whole fixture. `a1` is Alice's first new item, `b1` Bob's |
+| `s2*` | A character restored by undo: `redoItem` creates a new item with the undoing client's id and copied content and sets `s2.redone` to it (`yjs` `structs/Item.js` `redoItem`). It is a new identity, not `s2` |
 | `R1 "ab"` | Beat R1 with narration `ab`. `V(R1) "v"` is its visual text. `#H1 "In"` is a scene heading |
-| `⟦R2⟧`, `⟦#H1⟧` | Candidate A boundary atom (a `Y.Text` embed); in Candidate B the same boundary is a cut record |
-| `x̂` | A character restored by undo: Yjs re-creates it with a new id linked from the old one (`redoItem`) |
-| Same-gap rule | Concurrent insertions with the same left origin are ordered by clientID, lower first (`yjs` `Item.integrate`, case 1). So with A=1, B=2, Alice's insertion lands left of Bob's |
-| D1 | Full concurrency: each client applies its own operations, then updates are exchanged |
-| D2 | Sequential: Alice's updates reach Bob before Bob acts |
+| `⟦R2⟧`, `⟦#H1⟧` | A boundary embed (`{b: rowId}`, `{h: sceneId}`) in a `Y.Text` |
+| `|` in a caret | `"a|Xd"`: the caret's place in the projected beat |
+| Same-gap rule | Concurrent insertions with the same left origin are ordered by clientID, lower first (`yjs` `Item.integrate`, case 1). With A=1, B=2, Alice's insertion lands left of Bob's |
+| Map-conflict rule | Concurrent writes to one map key: the later item in the key's list wins, and concurrent items are ordered by the same clientID rule, so Bob's value wins over Alice's |
+| D1 | Full concurrency: both clients apply their operations, then exchange updates |
+| D2 | Sequential: the first client's updates reach the second before it acts |
 | D3 | Hazard order: Bob's update reaches Alice's replica after her buffer started and before it commits |
 | dup | Every update delivered twice |
-| rev | Updates from one client delivered in reverse creation order (Yjs holds the later one pending) |
+| rev | One client's updates delivered in reverse order (Yjs holds the later one pending) |
 | late-C | Carol joins after all operations, from the server state or a third replica's state only |
 
 ## 1 Candidates as concrete layouts
 
 ### Shared layer (both candidates)
 
-| Root (`doc.getMap`/`getText` name) | Type | Holds | Serves |
+| Root | Type | Holds | Serves |
 | --- | --- | --- | --- |
-| `beats` | `Y.Map<rowId, Y.Map>` | Per-beat scalars: `status` (LWW), `lengthSeconds` (LWW), `paragraphStart` (LWW, written only by explicit commands), `joinedInto` (rowId or absent), `glue` (`" "` or `""`, set with `joinedInto`), `removed` (removal id or absent), `stamp` (see edit stamps). No narration, no visual | T05–T10, PROJ |
-| `visuals` | `Y.Map<componentId, Y.Map{text: Y.Text, beat: rowId, rank: string}>` | Visual text as components. A beat's `visualText` = its components ordered by `rank`, empty ones skipped, joined with `<br>` (today's `joinedVisualText`) | T06, T07 |
-| `gallery` | `Y.Map<itemId, Y.Map{beat, rank, ref, name, annotation, links}>` | Pictures and links as items owned by a beat; `ref` keeps the sha256 reference, bytes outside Yjs. A link's `location` is not here (per-device table) | T06, T16 |
-| `comments` | `Y.Map<commentId, Y.Map{author, createdAt, text, quote, resolved, resolvedAt, resolvedBy, assignee}>` | Comment records; anchor is the `c:<commentId>` attribute on characters; `rowId`/`field` derived | T11, T21 |
-| `replies` | `Y.Map<replyId, Y.Map{commentId, author, createdAt, text}>` | Replies; display order `(createdAt, replyId)` | T11 |
-| `people`, `tags`, `shots` | `Y.Map<id, Y.Map>` with a `rank` field | Registry records (people, `productionTags`, `brollShots`); array order derived from `rank` then id | PROJ |
-| `meta` | `Y.Map` | `title` (`Y.Text`), `titleOrigin`, `titleVersion`, `wordsPerMinute`, `targetSeconds`, `paragraphsDecided` (true-if-either: only ever set), `schemaVersion` | PROJ |
-| `removals` | `Y.Map<removalId, Y.Map{kind, by, at, observed, atoms, beats, components}>` | Durable structural-removal record: `kind` (`beat`, `range`, `header`, `became-heading`), `observed` = identity ranges `[{client, clock, len}]` of the characters the user saw removed (read through relative positions, §6 Y1), the boundary ids and visual components involved | T09–T11 |
-| Character attributes | on every `Y.Text` | `b i u s hl dir` (true), `href` (string), `c:<commentId>` (true; one key per comment), `t:<occurrenceId>` (`{tag: registryId, parent: occurrenceId or null}`; one key per tag occurrence) | T11, T20, T21 |
+| `beats` | `Y.Map<rowId, Y.Map>` | `status` (LWW), `lengthSeconds` (LWW), `paragraphStart` (LWW, written only by explicit commands), `joins: Y.Map<joinId, {into: rowId, glue: " " or ""}>`, `removals: Y.Map<removalId, true>`, `stamp` (see edit stamps). Join and removal are per-writer entries, never one shared flag, so a local undo deletes only its own entry and always changes something (§6 Y7) | T05–T10, PROJ |
+| `visuals` | `Y.Map<componentId, Y.Map{text: Y.Text, beat: rowId, rank: string}>` | `beat` is the component's origin beat and is never rewritten by a join. A beat's `visualText` = components of every beat in its join group, ordered by beat order then `rank` then componentId, empty ones skipped, joined with `<br>` | T06, T07 |
+| `gallery` | `Y.Map<itemId, Y.Map{beat, rank, ref, name, annotation, links}>` | Pictures and links of an origin beat; `ref` keeps the sha256 reference, bytes outside Yjs; a link's `location` is in a per-device table, not here | T06, T16 |
+| `comments` | `Y.Map<commentId, Y.Map{author, createdAt, text, quote, resolved, resolvedAt, resolvedBy, assignee}>` | Comment records; anchor is the `c:<commentId>` attribute; `rowId`/`field` derived | T11, T21 |
+| `replies` | `Y.Map<replyId, Y.Map{commentId, author, createdAt, text}>` | Display order `(createdAt, replyId)` | T11, T21 |
+| `people`, `tags`, `shots` | `Y.Map<id, Y.Map>` with `rank` | Registry records; order by `rank`, ties by id | PROJ |
+| `meta` | `Y.Map` | `title` (`Y.Text`), `titleOrigin`, `titleVersion`, `wordsPerMinute`, `targetSeconds`, `paragraphsDecided` (only ever set), `schemaVersion` | PROJ |
+| `removalRecords` | `Y.Map<removalId, Y.Map{kind, by, at, observed, atoms, components}>` | `kind` (`beat`, `range`, `header`, `became-heading`), `observed` = identity ranges `[{client, clock, len}]` the user saw removed (§6 Y1), boundary ids and components involved | T09–T11 |
+| Character attributes | every `Y.Text` | `b i u s hl dir` (true); `c:<commentId>` (true); `t:<occurrenceId>` (registry id); `l:<linkId>` (URL). One key per comment, tag occurrence and link, so concurrent marks never compete for one key | T11, T20, T21 |
 | Awareness | outside the document | Participant name and connection state | S2 |
 
-Soft removal: deleting a whole beat sets `beats[R].removed` and writes a `removals` record; its characters and components stay live in Yjs. Range deletion inside beats is a real Yjs delete of the observed identities. Restoring or undoing a removal clears the field; nothing is re-inserted.
+Typed text is always inserted with explicit attributes computed by Splitpage's rules (§6 Y12).
 
-Join: sets `beats[R2].joinedInto = R1` and `glue`, reassigns R2's components (`beat = R1`, `rank` after R1's last) and gallery items. No character is copied, no boundary deleted. The glue is a projected character, not stored text; deleting it is a command that sets `glue: ""`.
+Soft removal: removing a whole beat adds an entry to `beats[R].removals` and writes a `removalRecords` entry; characters, components and gallery items stay live. Range deletion inside beats is a Yjs delete of the observed identities. Undo deletes the entry; nothing is re-inserted.
+
+Join: adds `beats[R2].joins[joinId] = {into: R1, glue}`; `glue` is decided by today's `joinCells` rule at join time. No character is copied, no boundary deleted, no component or gallery item rewritten. The glue is projected, not stored; deleting it is a command that writes `glue: ""` into every live join entry of that beat.
 
 ### Candidate A: one document-wide sequence
 
 | Element | Representation |
 | --- | --- |
-| Narration and heading text | One root `Y.Text` `flow`. Characters carry the attributes above |
-| Beat start | Embed `{b: rowId}` (`insertEmbed`, `ContentEmbed`). A beat is its atom plus the characters up to the next atom |
-| Scene start | Embed `{h: sceneId}`. Heading text is the characters between `⟦#H⟧` and the next `⟦R⟧`; that beat is `firstSceneId` |
+| Narration and heading text | One root `Y.Text` `flow` |
+| Beat start | Embed `{b: rowId}`; a beat is its embed plus the characters up to the next embed |
+| Scene start | Embed `{h: sceneId}`; heading text is the characters up to the next embed; the next `{b}` is `firstSceneId` |
 | B-roll key | Embed `{k: shotId}` inside narration |
-| Line break | `"\n"` character |
 | Split | Insert `⟦Rnew⟧` at the caret plus a `beats` record |
-| Join | Shared layer join; `⟦R2⟧` stays in `flow` and projects as glue |
-| Remove header | Delete `⟦#H⟧`, insert `⟦Rn⟧` at the same index: the heading characters become Rn's narration with their identities |
-| Create header from `# name` | Delete `# `; insert `⟦#Hn⟧` before the name and, if text follows, delete the `"\n"` after the name and insert `{b: R2}` after the name, deleting the old `⟦R2⟧`. The row id survives in the embed JSON; the Yjs item is new |
-| Beat identity | The `b` id in the embed. Two live atoms with one id: the first in document order wins, later ones project as glue-less joins |
-| Second visual during a join | Component `V2` changes owner; another replica keeps typing into the same `Y.Text` |
+| Remove header | Delete `⟦#H⟧`, insert `⟦Rn⟧` at its index: the heading characters become Rn's narration with their identities |
+| Create header, name only | Delete `# `; delete `⟦R2⟧`, insert `⟦#Hn⟧` at its index; add a removal entry of kind `became-heading` to R2. If no beat follows, also insert `⟦Rnew⟧` after the name (today's blank beat) |
+| Create header, text follows | Delete `# ` and the line break; insert `⟦#Hn⟧` at `⟦R2⟧`'s index, delete `⟦R2⟧`, insert `{b: R2}` after the name. The row id survives in the embed; the Yjs item is new |
+| Two live embeds with one id | First in document order wins; later ones project as nothing (no boundary, no glue) |
 
 ### Candidate B: stable text segments with explicit membership
 
 | Element | Representation |
 | --- | --- |
-| Text | `segments: Y.Map<segId, Y.Text>`; one segment per beat narration or heading at creation |
-| Order | `order: Y.Array<segId>`. The only order authority |
-| Beat and scene boundaries | `cuts: Y.Map<cutId, Y.Map{seg, at, kind, id}>`. `at` is a JSON relative position (`relativePositionToJSON`), `kind` is `beat` or `heading`, `id` the rowId or sceneId. A beat or heading runs from its cut to the next cut in (segment order, resolved index, cutId) order |
-| Cut affinity | `assoc = 0` (attached to the character after the cut): text typed exactly at the cut stays before it, with the preceding beat |
-| Split | Add a cut record at the caret plus a `beats` record. No text moves |
-| Join, removal, visuals, marks | Shared layer |
-| Remove header | Change the heading cut's `kind` to `beat` with a new rowId (a map write, no text moves) |
-| Create header from `# name` | Delete `# `; add a heading cut before the name and a beat cut after it |
-| Move a whole-segment beat | Delete and insert its `segId` in `order`; the `Y.Text` keeps its identity. A beat that is part of a segment must first be cut out into a new segment, which copies text: refused in shared mode until MOVE passes |
+| Text | `segments: Y.Map<segId, Y.Map{text: Y.Text, head: {b: rowId} or {h: sceneId}}>`; one segment per beat or heading at creation |
+| Order | `order: Y.Array<segId>`, the only order authority between segments |
+| Boundaries | A segment's first boundary is its `head` (a map field). Boundaries inside a segment are embeds `{b}` / `{h}` exactly as in Candidate A. A relative position cannot be a boundary: it cannot tell text typed at the end of one beat from text typed at the start of the next (§6 Y3) |
+| Split | Insert `⟦Rnew⟧` in the segment at the caret plus a `beats` record |
+| Remove header | If the heading is a segment head: set `head = {b: Rn}`. If it is an inner embed: as Candidate A |
+| Create header | If R2 is a segment head: delete `# `; set `head = {h: Hn}`; if text follows, delete the line break and insert `{b: R2}` after the name, else add a `became-heading` removal entry to R2 (and add a new empty segment `{b: Rnew}` after it in `order` if no beat follows) |
+| Move a beat that is a whole segment | Delete and insert its `segId` in `order`; the `Y.Text` keeps its identity. Two live entries of one `segId`: first wins |
+| Move part of a segment, cross-scene cut-and-paste of beats | Would copy text: refused in shared mode before any change and before consuming a cut |
 
 ### Projection answers for merged states (both candidates)
 
-| Merged state | Candidate A | Candidate B | Serves |
-| --- | --- | --- | --- |
-| Scene with no live beat | Heading kept visible; scene listed in recovery as "scene with no beats"; left out of `sections` export until a beat exists | Same | T08, T10, PROJ |
-| Script with no live beats | Empty script shown; the first keystroke runs an explicit add-beat command. No synthetic row in the projection | Same | T09, T10 |
-| Paragraph flag on a beat whose start is implicit, joined or removed | Ignored by the projection; stored value untouched; exports write it only for visible beats | Same | PROJ |
-| Duplicate b-roll key id (INV-54) | First key in document order keeps the id; later ones project with a derived id `<id>~<client>.<clock>` of the atom's Yjs id, unanchored in the shot list; an explicit command may persist a new id | Same, key atom lives in the segment | PROJ |
-| Comment mark on characters of two beats | Allowed as today; anchor = first marked cell | Same | T11 |
-| Tag occurrence cut by a concurrent split | Each part projects as its own occurrence of the same registry tag | Same | T20, T05 |
-| Crossing tag occurrences (INV-03) | Occurrences ordered by occurrence id; a later occurrence that crosses an accepted one projects untagged and appears in recovery | Same | T20 |
-| Comment or link over part of a tag | `normalizeCell` rule: comment union over the whole tag stretch, first `href` found; shared state not rewritten | Same | T20 |
-| Mark attribute on an atom or a heading character | Ignored; a comment only on heading characters is detached | Same (cut records carry no marks) | T08, T11 |
-| Scene name over 200 characters after merge | Projected in full with a notice; further growth refused by the input rule | Same | T08 |
-| Gallery over 61 pictures after merge | First 61 by `rank` shown; the rest listed in recovery, kept in state | Same | T06 |
-| Tag attribute naming a deleted registry entry | Projected untagged (today's `normalizeCell` drops unresolved ids); recovery lists it | Same | T20 |
-| Edit stamps (`updatedAt`, `updatedBy`, `rev`, `lastEditedBy`, `lastEditedAt`, `personColors`) | `beats[R].stamp = {by, at}` written once when a local typing group closes, never per keystroke; `rev` and `lastEdited*` absent from shared state and set at export; `personColors` derived from `people` | Same | PROJ, PERF |
+| Merged state | Answer | Serves |
+| --- | --- | --- |
+| Beat with join entries | Joined into the `into` of its smallest joinId; chains (R3 into R2 into R1) resolve to the first live beat. A beat whose join target is removed is projected inside the removed group | T06, T07, T12 |
+| Status of a join group | Highest rank across the group's beat records. A status command on a group writes the value into every member, so a reset is possible; concurrent writes still give the highest rank | T06 |
+| Component or gallery item whose origin beat is removed | Shown with that beat in recovery; restored with it | T10, T07 |
+| Scene with no live beat | Heading kept visible; listed in recovery as "scene with no beats"; left out of `sections` export until a beat exists | T08, T10, PROJ |
+| Heading embed with no characters before the next embed | No scene (today's `normalizeScenes` drops an empty name) | T08 race |
+| Script with no live beats | Empty script shown; the first keystroke runs an explicit add-beat command; no synthetic row | T09, T10 |
+| Paragraph flag on a beat whose start is implicit, joined or removed | Ignored; stored value untouched; exports write it only for visible beats | PROJ |
+| Duplicate b-roll key id (INV-54) | First key in document order keeps the id; later ones project with `<id>~<client>.<clock>` of the embed's Yjs id and are unanchored in the shot list until an explicit command assigns a new id | PROJ |
+| Comment mark on characters of two beats | Allowed as today; anchor = first marked cell | T11 |
+| Tag stack per character | Ignore any stored nesting. Take each occurrence's extent (its characters in one beat). Accept occurrences in order of (extent start, longer first, occurrenceId); an occurrence that overlaps an accepted one without containing or being contained by it is rejected. Stack outer to inner by extent length, then occurrenceId | T20 |
+| Rejected (crossing) occurrence | Projected untagged; listed in recovery with its words and tag | T20 |
+| Tag occurrence cut by a concurrent split | Each part is its own extent of the same occurrence key, projected per beat | T20, T05 |
+| Several links on one character | The smallest linkId wins per character; across a tag stretch, the first found (`normalizeCell`) | T20 |
+| Comment or link over part of a tag | `normalizeCell`: comment union over the stretch, first link; shared state not rewritten | T20 |
+| Glue marks | Today's `joinCells` rule, computed from the live last character before and first character after the joined boundary | T06 |
+| Mark attribute on an embed or a heading character | Ignored; a comment only on heading characters is detached | T08, T11 |
+| Scene name over 200 characters after merge | Projected in full with a notice; further growth refused by the input rule | T08 |
+| Gallery over 61 pictures after merge | First 61 by (beat order, `rank`, itemId) shown; the rest listed in recovery, kept in state | T06 |
+| Tag attribute naming a deleted registry entry | Projected untagged; recovery lists it | T20 |
+| Tag or shot `owner` naming a person removed concurrently | Owner kept as stored text; the person is listed in recovery as removed while assigned | PROJ |
+| Two rank values equal | Ties broken by record id | PROJ |
+| Edit stamps | `beats[R].stamp = {by, at}` written once when a local typing group closes; `rev` and `lastEdited*` absent and set at export; `personColors` derived from `people` | PROJ, PERF |
 
 ### Hypotheses Stage 1 must confirm or refute
 
 | Id | Hypothesis | Refuted by | Serves |
 | --- | --- | --- | --- |
-| A-H1 | Split, join, header removal and header creation never give a narration or heading character a new identity, except undo restores (`x̂`) | Checker finds a new-id character whose text equals a removed one in T05, T06, T08 | T05, T06, T08 |
-| A-H2 | Soft removal keeps concurrent edits to a removed beat discoverable on every replica, late ones included, and undo restores without duplicates | T10 result differs from the table, or C's recovery differs from A's | T10 |
-| A-H3 | Removal classified by observed identities: a beat created concurrently inside removed content is itself removed | T11 shows `cd` active | T11, T09 |
-| A-H4 | Join as record fields gives one glue under two concurrent joins | T06 shows `ab  cd` | T06 |
-| A-H5 | Visual components keep a remote visual edit in the joined beat | T07 shows `Q` outside R1's visual | T07 |
-| A-H6 | Concurrent split and insertion at one gap are deterministic by clientID | T05 differs across delivery orders | T05 |
-| A-H7 | Capture and projection per keystroke stay beat-local on one document-wide `Y.Text` | PERF under T02 on the 2 MiB fixture exceeds the Stage 0 input budget; `createRelativePositionFromTypeIndex` walks from the type start (§6 Y1) | T02, PERF |
-| A-H8 | Per-id attribute keys plus the projection rules give the same well-formed nesting everywhere | T20 differs across replicas or crosses | T20 |
-| A-H9 | `UndoManager` scoped to the local origin reverts only local changes, keeps typing groups with `stopCapturing`, and a no-op undo is detectable | T12, T21; §6 Y7 skip observed | T12, T21 |
-| A-H10 | Projection derives `rows`, `sections`, `firstSceneId`, paragraph flags and exports; canonical fixtures round-trip | Any field differs after round-trip | PROJ |
-| A-H11 | A duplicated `b` id in two atoms resolves first-wins with no visible duplicate | T08 create-header race, T12 redo race | T08, T12 |
-| B-H1 | Cut affinity, not clientID, decides where text typed at a split point goes | T05 differs across client id swaps | T05 |
-| B-H2 | Whole-segment moves keep identity and a concurrent edit | MOVE loses `X` | MOVE |
-| B-H3 | `order` plus cut positions is the only order authority; no projection needs a second order | T05 two splits, T08 | T05, T08 |
-| B-H4 | A cut whose anchor character is deleted still resolves (deleted items keep their place until their parent is collected, §6 Y8) | T09, T01 at a boundary: a cut resolves to `null` | T09 |
-| B-H5 | Cross-segment selection maps to per-segment deletes in one transaction | T09 | T09 |
-| B-H6 | Per-keystroke cost local to one segment | PERF | PERF |
-| B-H7 | Undo of a split deletes its cut record; redo restores it by map key | T12 | T12 |
-| B-H8 | Shared-layer hypotheses A-H2, A-H3, A-H4, A-H5, A-H8, A-H9, A-H10 hold unchanged | Same traces | T06–T11, T20, T21, PROJ |
+| A-H1 | Split, join, header removal and creation never give an existing narration or heading character a new identity; only undo restores create `x*` | Checker finds a new-id character outside an undo restore in T05, T06, T08 | T05, T06, T08 |
+| A-H2 | Soft removal keeps concurrent edits to a removed beat discoverable on every replica and undo restores without duplicates | T10 | T10 |
+| A-H3 | Removal is classified by observed identities: a beat created concurrently inside removed content is removed too | T11 | T11, T09 |
+| A-H4 | Join entries give one glue under two concurrent joins | T06 | T06 |
+| A-H5 | Components keep a remote visual edit in the joined beat | T07 | T07 |
+| A-H6 | Same-gap races resolve deterministically by clientID | T05 differs across delivery orders | T05 |
+| A-H7 | Identity capture and projection per keystroke stay beat-local on one document-wide `Y.Text` | PERF under T02 on the 2 MiB fixture over the Stage 0 input budget | T02, PERF |
+| A-H8 | Per-id attribute keys plus the tag-stack rule give the same well-formed nesting everywhere | T20 | T20 |
+| A-H9 | `UndoManager` scoped to the local origin reverts only local changes with today's grouping | T12, T21 | T12, T21 |
+| A-H10 | Projection derives every field and canonical fixtures round-trip | PROJ | PROJ |
+| A-H11 | Two embeds with one row id (concurrent header creation) project once | T08 race | T08 |
+| U-H1 | An undo step that changes nothing can be stopped from reaching an older step by running `undo()` with only the top item on `undoStack` | T21 scalar | T21 |
+| B-H1 | Segment heads plus inner embeds give the same results as Candidate A for T05, T08, T09, T12 | Those traces | T05, T08, T09, T12 |
+| B-H2 | Whole-segment moves keep identity and a concurrent edit | MOVE concurrent | MOVE |
+| B-H3 | `order` is the only order authority between segments; no projection needs another | MOVE, T08 | MOVE, T08 |
+| B-H4 | Cross-segment selection maps to per-segment deletes in one transaction | T09 | T09 |
+| B-H5 | Per-keystroke cost local to one segment | PERF | PERF |
+| B-H6 | Shared-layer hypotheses A-H2–A-H5, A-H8–A-H10, U-H1 hold unchanged | Same traces | T06–T11, T20, T21, PROJ |
 
 ## 2 Buffer mechanisms for the stale-base experiment
 
-A buffer starts at the first native input in a beat after its last paint, or at `compositionstart`. All three capture the epoch, beat or heading id, the last painted HTML from the surface's `rendered` map, the selection as relative positions, the intended operation for intercepted keys, and the local undo group.
+The base must be what was painted, not what the replica holds when native input starts: in T02 the replica has already changed and the beat has not been repainted, and no later capture or deferral can recover what was on screen.
 
-| Mechanism | Also captured at buffer start | Commit | Expected failures | Serves |
-| --- | --- | --- | --- | --- |
-| M1 Deferral, one document | Replica state vector; inbound updates from then on go to a bounded queue instead of `applyUpdate` | Diff DOM against the painted base (today's `syncBeatEl` decode) into operations at base indices; apply them in one local-origin transaction on the unchanged replica; then apply queued updates in arrival order; repaint | The provider applies sync messages straight to its document (`MessageReceiver.applySyncMessage`), so a real provider path bypasses the queue unless wrapped (§6 H11); every other inbound path must be gated too (hydration, recovery restore); a long composition grows the queue to its bound and must force a commit; save status and presence lag while held; the plan's "replica accepts remote updates during composition" rule changes | T01, T02, T04 |
-| M2 Immediate integration, identity mapping | The Yjs id of every character and atom in the base (one pass of relative positions, §6 Y1) and the caret's left-neighbour id | Diff DOM against base; a deletion deletes exactly the base ids still live; an insertion goes right after its base left neighbour's current index (or that neighbour's nearest live left base character); then `repaint()` the beat with the caret restored from its relative position, before the next native input. Outside composition, remote changes are painted at once | Per-character id capture walks the type from its start: O(document) per capture in Candidate A (A-H7); deletedness has no documented check (§6 Y2); an insertion whose left neighbour was removed by a remote structural edit has no target and must go to recovery; caret restore during typing bursts; the DOM diff can be ambiguous with repeated text (T03) | T01–T04, PERF |
-| M3 Deferral through two documents | As M1, on the editor document E. The provider holds network document N | E applies the commit; E's local-origin updates are forwarded to N only when image ordering allows; N's inbound updates are forwarded to E only while no buffer is dirty (`applyUpdate(E, u, NET)`); forwarding is idempotent | Double memory and update work; the replica to persist is ambiguous (N holds received updates E has not seen, E holds local updates N has not released): both must be stored, and a crash between them must be tested; echo loops if the origin filter is wrong; text typed after a held image waits (Yjs per-client order); queue bounds as M1 | T01, T04, T16, STORE |
+| Part | Rule | Serves |
+| --- | --- | --- |
+| Paint-time retention (all mechanisms) | Every paint of a beat or heading records `{epoch, id, painted runs, painted identities in order, replica version of that beat}`. One pass of relative positions per painted beat (§6 Y1). This replaces the `rendered` paint cache as the editor base | T01–T04 |
+| Stale-beat safeguard (all mechanisms, outside composition) | In `beforeinput`, if the beat's replica version is newer than its painted version, cancel the native input, apply it as a model edit at the caret mapped through painted identities, repaint. Today's pending-mark path already cancels `insertText` and inserts through the model | T02 |
+| Composition | Cannot be cancelled; the commit at `compositionend` diffs DOM against the paint-time base and maps through painted identities | T04 |
 
-Run order (plan §4): T04 composition first under M1, M2 and M3, then T01, then T02 across a beat boundary, with repeated text (T03) and through undo. M2 starts from today's `repaint()` and `rendered` map and is measured first.
+| Mechanism | Commit | Expected failures | Serves |
+| --- | --- | --- | --- |
+| M1 Deferral, one document | From buffer start, inbound updates go to a bounded queue. Commit diffs DOM against the paint-time base, maps operations through painted identities (the replica may still be ahead of the paint, T02), applies them in one local-origin transaction, then applies the queue in order and repaints | The provider applies inbound sync to its own document with no hook (`MessageReceiver.applySyncMessage`), so a real provider bypasses the queue unless wrapped; other inbound paths (hydration, recovery restore) need the same gate; a long composition reaches the queue bound; status and presence lag | T01, T02, T04 |
+| M2 Immediate integration, identity mapping | Remote updates integrate at once; outside composition the beat is repainted before the next native input. Commit diffs DOM against the paint-time base: a deletion deletes exactly the painted identities still live; an insertion goes after its painted left neighbour's current position (or that neighbour's nearest live left painted character); then repaint with the caret restored | Candidate A identity capture walks the whole `flow` (A-H7); no documented deletedness check (§6 Y2); an insertion whose painted neighbours were all removed has no target and must go to recovery; repeated text needs caret or target-range evidence (T03) | T01–T04, PERF |
+| M3 Deferral through two documents | As M1 on editor document E; the provider holds network document N. E's local updates go to N when image ordering allows; N's inbound updates go to E only while no buffer is dirty (`applyUpdate(E, u, NET)`, idempotent) | Double memory and work; both N (received, not yet in E) and E (local, not yet released) must persist, and a crash between the two writes must be tested; echo loops if origins are wrong; text typed after a held image waits | T01, T04, T16, STORE |
 
-Stale-base defect for all three: commit the whole beat from DOM HTML against the current replica (today's whole-beat sync). T01 must then fail with `ad`.
+Run order (plan §4): T04 under M1, M2 and M3 first, then T01, then T02 across a beat boundary, T03, and each through undo. M2 is measured first.
 
 ## 3 Trace table
 
-Expected results hold for every listed delivery order unless a row says otherwise. Candidate columns differ only where noted "A:" / "B:".
+Expected results hold for every listed delivery order unless the row says otherwise, and for both candidates unless it says "A:" or "B:". Undo means the named client's next Ctrl+Z after all updates are exchanged.
 
 ### Stage 1a: editing feasibility (two replicas and the deterministic queue, no server)
 
-| Serves | Initial | Operations in order | Delivery | Expected visible script | Recovery | Undo outcome | Entry paths |
+| Serves | Initial | Operations in order | Delivery | Expected visible script, carets | Recovery | Undo outcome | Entry paths |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| T01 | `R1 "abcd" = s1..s4` | A: buffer starts on painted `abcd`; A deletes `bc` (selection, Backspace; composition variant: composes `β` over `bc`). B: inserts `X` between `b` and `c`. A commits | D1, D3, dup, rev, late-C; under M1, M2, M3 | `R1 "aXd" = s1 b1 s4`. Composition variant: `R1 "aβXd" = s1 a1 b1 s4` | empty | A undo: `R1 "abXcd" = s1 ŝ2 b1 ŝ3 s4` (each restore goes back beside its old place, so `X` stays between them); variant: the same, `β` removed | |
-| T02 | `R1 "ab" = s1 s2`; A's caret at end of R1 | B: inserts `X` at R1 offset 0. A's replica has it, R1 not repainted. A types `c` | D3, dup, late-C; M1, M2, M3 | `R1 "Xabc" = b1 s1 s2 a1`; A's caret after `c` (offset 4) | empty | A undo: `R1 "Xab"` | |
-| T02 boundary | `R1 "ab"`, `R2 "cd"`; A's caret at R2 offset 0 | B: appends `Y` to R1. A types `Z` | D3 | `R1 "abY"`, `R2 "Zcd"` | empty | A undo: `R2 "cd"`, `R1 "abY"` | |
-| T03 | `R1 "the the" = s1..s7` | B: bolds `the` = s1..s3. A: caret at end, Backspace ×4 (deletes s4..s7 by caret evidence, not by text diff) | D1, D3 | `R1 "the"` = s1..s3, bold | empty | A undo: `R1 "the the"`, first `the` bold | |
-| T03 replace | `R1 "the the" = s1..s7` | A: selects second `the` (s5..s7), types `a`. B: appends `n` after s7 | D1, D3, dup | `R1 "the an" = s1..s4 a1 b1` | empty | A undo: `R1 "the then"` | |
-| T04 | `R1 "abcd" = s1..s4`, `R2 "ef"`; both surfaces (flow and Split view) | A: `compositionstart` after `b`, composes `xy`. During it B inserts `Z` at R1 offset 0 and deletes `d`. A: `compositionend` | D3, dup, late-C; M1, M2, M3 | `R1 "Zabxyc" = b1 s1 s2 a1 a2 s3`, `R2 "ef"` | empty | A undo: `R1 "Zabc"` | |
-| T04 removed | as T04 | During A's composition B removes beat R1. A ends composition | D3, late-C | `R2 "ef"` only | `R1 "abxycd"` removed by Bob; `xy` marked as Alice's edit after removal | A undo: `xy` leaves the recovery copy; recovery shows `R1 "abcd"` | |
-| T05 | `R1 "abcd" = s1..s4` | A: Enter at `b|c` (split, new beat Ra). B: types `X` at the same gap | D1, dup, rev, late-C | A: `R1 "ab"`, `Ra "Xcd"` (Alice's atom sorts left of `X` by clientID); with clientIDs swapped `R1 "abX"`, `Ra "cd"`. B: `R1 "abX"`, `Ra "cd"` in both id orders. A's caret at Ra 0; B's caret after `X` | empty | A undo: `R1 "abXcd"` | |
-| T05 two splits | `R1 "abcd"` | A and B both press Enter at `b|c` | D1, dup, rev, late-C | Provisional: `R1 "ab"`, `Ra ""`, `Rb "cd"` (both breaks visible; A: Ra left by clientID; B: cuts ordered by cutId). Alternative: the empty concurrent beat is hidden, `R1 "ab"`, `Rb "cd"` | empty | A undo: `R1 "ab"`, `Rb "cd"` | |
-| T06 | `R1 "ab"` `V(R1) "v"`; `R2 "cd"` `V(R2) "w"`, picture `P` (sha `p`) on R2, status `ready` | A and B both join R2 into R1 | D1, dup, rev, late-C | `R1 "ab cd"` (one space), `V(R1) "v<br>w"`, pictures `[P]`, status `ready` | empty | A undo: unchanged (Bob's identical join stands); provisional, see Decisions | |
-| T07 | `R1` `V(R1) "v"`; `R2` `V(R2) "wz"` | A: joins R2 into R1. B: types `Q` in R2's visual between `w` and `z` | D1, D3, dup, late-C | `V(R1) "v<br>wQz"` | empty | A undo: `V(R1) "v"`, `V(R2) "wQz"` | |
-| T08 remove | `R0 "x"`, `#H1 "In"`, `R1 "ab"` | A: Backspace at heading start. B: types `Z` at heading end and `Y` at R1 end | D1, D3, dup, late-C | `R0 "x"`, `Rn "InZ"` (heading characters keep ids), `R1 "abY"` with `paragraphStart`; no heading | empty | A undo: `R0 "x"`, `#H1 "InZ"`, `R1 "abY"` | |
-| T08 create | `R1 "x"`, `R2 "# Ab"` (pending heading, starts a paragraph), `R3 "cd"` | A: Enter at end of R2 (becomes scene H2, R2 emptied and removed, R3 first beat). B: types `e` after `Ab` and `Q` at R3 start | D1, D3, dup, late-C | `R1 "x"`, `#H2 "Abe"`, `R3 "Qcd"`; `Ab` keep ids | empty (R2's removal kind `became-heading` is not listed) | A undo: `R1 "x"`, `R2 "# Abe"`, `R3 "Qcd"` | |
-| T09 | `R1 "abc"`, `R2 "de"`, `R3 "fgh"` | A: selects R1 offset 1 to R3 offset 2, types `Z`. B: types `W` between `b` and `c`, `X` in R2 (`dXe`), `Y` between `g` and `h` | D1, D3, dup, late-C | `R1 "aZW"`, `R3 "Yh"` (same paragraph as R1) | `R2 "dXe"` removed by Alice; `X` marked as Bob's edit after removal | A undo: `R1 "abWc"`, `R2 "dXe"`, `R3 "fgYh"` | |
-| T09 header | `R1 "ab"`, `#H1 "Cd"`, `R2 "ef"` | A: selects R1 offset 1 to heading offset 1, Backspace. B: types `Q` at heading end | D1, D3 | `R1 "a"`, `#H1 "dQ"`, `R2 "ef"` | empty | A undo: `R1 "ab"`, `#H1 "CdQ"` | |
-| T10 | `R1 "ab"`, `R2 "cd"`, `R3 "ef"` | A: deletes beat R2. B offline: types `X` in R2 (`cXd`). B reconnects. C joins. A undoes the deletion | D1, dup, rev, late-C | Before undo: `R1 "ab"`, `R3 "ef"`. After undo: `R1 "ab"`, `R2 "cXd"`, `R3 "ef"`; no second `cd` anywhere | Before undo, on A, B and C alike: `R2 "cXd"` removed by Alice, `X` edited after removal by Bob. After undo: empty | as Expected | |
-| T11 | `R1 "abcd"`, `R2 "ef"` | A: comment C1 on `bc`. B: comment C2 on `cd`. B receives C1, replies r1. A removes R1. B (not yet seeing it) splits R1 at `b|c` into R1 + Rb | D1, D2, dup, rev, late-C | `R2 "ef"` | Removed by Alice: `R1 "ab"` + `Rb "cd"` (split by Bob after removal); C1 on `b`+`c` across both, with r1; C2 on `cd` | A undo: `R1 "ab"`, `Rb "cd"`, `R2 "ef"`; C1 active, anchor R1; C2 anchor Rb; recovery empty | |
-| T12 | `R1 "abcd"` | A: splits at `b|c` (R1, Ra). B: types `Y` at R1 end, `X` at Ra start. A undoes the split. A redoes | D1, dup, late-C | After undo: `R1 "abYXcd"`; caret between `Y` and `X`. After redo: `R1 "abY"`, `Ra "Xcd"` | empty | as Expected | |
-| T12 join | `R1 "ab"`, `R2 "cd"` | A: joins. B: types `Z` after `c`. A undoes | D1 | After undo: `R1 "ab"`, `R2 "cZd"` | empty | as Expected | |
-| T20 nest | `R1 "the red mug" = s1..s11` | A: tags `red mug` as Prop P (occurrence oA). B: tags `mug` as Sound S (oB) | D1, dup, late-C | `red mug` tag P with `mug` inner S (`tag: P, innerTags: [S]`) | empty | A undo: `mug` tag S only | |
-| T20 cross | as above | A: tags `red mug` (oA). B: tags `the red` (oB) | D1, dup, rev, late-C | Provisional: `red mug` tag P; `the red` untagged on every replica. Alternative: `the` tagged S | Tag S on `the red` conflicts with Prop on `red mug` | B undo: recovery entry gone | |
-| T20 mark | as above | A applies tag P. B, not yet seeing it: comment C1 on `mug`, link `http://x` on `red` | D1, D3 | Comment C1 and link projected over all of `red mug`; shared attributes unchanged | empty | B undo of C1: no comment; link stays | |
-| T21 | `R1 "abcd"` | A: bolds `bc`. B (not seeing it): inserts `X` between `b` and `c`. A undoes the bold | D1, D3, late-C | `R1 "abXcd"`, no bold | empty | as Expected | |
-| T21 comment | `R1 "abcd"` | A: comment C1 on `bc`. B: reply r1 to C1; comment C2 on `cd`. A undoes C1 | D2, late-C | `R1 "abcd"` with C2 on `cd` only | Provisional: r1 listed as "reply to a removed comment" | A redo: C1 back with r1 | |
-| MOVE | `R1 "ab"`, `R2 "cd"`, `R3 "ef"` (B: each its own segment) | A: moves R3 before R1. B: moves R3 after R1 and types `X` in R3 (`eXf`) | D1, dup, late-C | A: refused in shared mode before any change (move would copy text). B: `R3 "eXf"`, `R1 "ab"`, `R2 "cd"` (first `order` entry wins) | empty | A undo of the move (B): `R1`, `R3 "eXf"`, `R2` | |
+| T01 | `R1 "abcd" = s1..s4`, painted | A: selects `bc`, Backspace (composition variant: composes `β` over `bc`). B: inserts `X` (b1) after `s2`. A commits | D1, D3, dup, rev, late-C; M1, M2, M3 | `R1 "aXd" = s1 b1 s4`, A's caret `"a|Xd"`. Variant: `"aβXd" = s1 a1 b1 s4`, caret `"aβ|Xd"` | empty | `R1 "abXcd" = s1 s2* b1 s3* s4`, selection `s2*` through `s3*` (`bXc`). Variant: the same, `a1` deleted | |
+| T02 | `R1 "ab" = s1 s2` painted; A's caret `"ab|"` | B: inserts `X` (b1) at R1 offset 0; A's replica integrates it; R1 not repainted. A types `c` (a1) | D3, dup, late-C; M1, M2, M3 | `R1 "Xabc" = b1 s1 s2 a1`, A's caret `"Xabc|"` | empty | `R1 "Xab" = b1 s1 s2`, caret `"Xab|"` | |
+| T02 boundary | `R1 "ab" = s1 s2`, `R2 "cd" = s3 s4`; A's caret `R2 "|cd"` | B: appends `Y` (b1) to R1. A types `Z` (a1) | D3 | `R1 "abY" = s1 s2 b1`, `R2 "Zcd" = a1 s3 s4`, caret `R2 "Z|cd"` | empty | `R2 "cd"`, caret `R2 "|cd"` | |
+| T03 | `R1 "the the" = s1..s7`; A's caret at end | B: bolds `s1..s3`. A: Backspace ×4 (targets `s7..s4`) | D1, D3 | `R1 "the" = s1 s2 s3`, bold; A's caret at end | empty | `R1 "the the" = s1 s2 s3 s4* s5* s6* s7*`, first word bold, caret at end | |
+| T03 replace | `R1 "the the" = s1..s7` | A: selects `s5..s7`, types `a` (a1). B: appends `n` (b1) after `s7` | D1, D3, dup | `R1 "the an" = s1..s4 a1 b1`, caret `"the a|n"` | empty | `R1 "the then" = s1..s4 s5* s6* s7* b1`, selection `s5*..s7*` | |
+| T04 | `R1 "abcd" = s1..s4`, `R2 "ef" = s5 s6`; flow surface and Split view | A: `compositionstart` after `s2`, composes `xy` (a1 a2). Meanwhile B inserts `Z` (b1) at R1 offset 0 and deletes `s4`. A: `compositionend` | D3, dup, late-C; M1, M2, M3 | `R1 "Zabxyc" = b1 s1 s2 a1 a2 s3`, caret `"Zabxy|c"`; `R2 "ef"` | empty | `R1 "Zabc" = b1 s1 s2 s3`, caret `"Zab|c"` | |
+| T04 removed | as T04 | During A's composition B removes beat R1. A ends composition | D3, late-C | `R2 "ef"`; A's caret `R2 "|ef"` | `R1 "abxycd" = s1 s2 a1 a2 s3 s4`, removed by Bob; `a1 a2` marked as Alice's edit after removal | Recovery `R1 "abcd" = s1..s4` | |
+| T05 | `R1 "abcd" = s1..s4` | A: Enter at `s2|s3` (embed a1 `{b: Ra}`). B: types `X` (b1) at the same gap | D1, dup, rev, late-C | `R1 "ab" = s1 s2`, `Ra "Xcd" = b1 s3 s4`; A's caret `Ra "|Xcd"`, B's `Ra "X|cd"`. With clientIDs swapped: `R1 "abX"`, `Ra "cd"` | empty | `R1 "abXcd" = s1 s2 b1 s3 s4`, caret `"abX|cd"` (restored selection is anchored to `s3`) | |
+| T05 two splits | `R1 "abcd" = s1..s4` | A and B both press Enter at `s2|s3` (a1 `{b: Ra}`, b1 `{b: Rb}`) | D1, dup, rev, late-C | Provisional: `R1 "ab"`, `Ra ""`, `Rb "cd" = s3 s4`; A's caret `Ra` 0, B's `Rb` 0. Alternative: the empty concurrent beat is hidden | empty | `R1 "ab"`, `Rb "cd"` | |
+| T06 | `R1 "ab" = s1 s2`, `V(R1) "v" = v1`, status `todo`; `R2 "cd" = s3 s4`, `V(R2) "w" = w1`, picture `P` (item gP), status `ready`. A earlier bolded `ab` (its own undo step) | A and B both join R2 into R1 (entries jA, jB) | D1, dup, rev, late-C | `R1 "ab cd" = s1 s2 [glue] s3 s4`, bold on `ab`; `V(R1) "v<br>w" = v1, w1`; pictures `[P]`; status `ready`. Each caret `"ab |cd"` | empty | A's first undo deletes jA; jB keeps the join: visible unchanged, bold kept (notice). Second undo removes the bold | |
+| T07 | `V(R1) "v" = v1`; `V(R2) "wz" = w1 w2` | A: joins R2 into R1. B: types `Q` (b1) between `w1` and `w2` | D1, D3, dup, late-C | `V(R1) "v<br>wQz" = v1, w1 b1 w2`; B's caret after `Q` in R1's visual | empty | `V(R1) "v"`, `V(R2) "wQz"` | |
+| T08 remove | `R0 "x" = s1`, `#H1 "In" = s2 s3`, `R1 "ab" = s4 s5` | A: Backspace at heading start. B: types `Z` (b1) at heading end, `Y` (b2) at R1 end | D1, D3, dup, late-C | `R0 "x"`, `Rn "InZ" = s2 s3 b1`, `R1 "abY" = s4 s5 b2` with `paragraphStart`; no heading. A's caret `Rn "|InZ"` | empty | `R0 "x"`, `#H1 "InZ"` (new embed `{h: H1}`; B: head restored), `R1 "abY"`; caret at heading start | |
+| T08 create | `R1 "x" = s1`, `R2 "# Ab" = s2..s5` (starts a paragraph), `R3 "cd" = s6 s7` | A: Enter at end of R2. B: types `e` (b1) after `s5`, `Q` (b2) before `s6` | D1, D3, dup, late-C | `R1 "x"`, `#H2 "Abe" = s4 s5 b1`, `R3 "Qcd" = b2 s6 s7`; A's caret `R3 "Q|cd"` | empty (R2's `became-heading` entry is not listed) | `R1 "x"`, `R2 "# Abe" = s2* s3* s4 s5 b1`, `R3 "Qcd"` | |
+| T08 race | `R1 "x" = s1`, `R2 "# Ab\nrest" = s2..s10` | A and B both press Enter after `Ab` (A: `{h: Ha}`, `{b: R2}` as a1 a2; B: `{h: Hb}`, `{b: R2}` as b1 b2) | D1, dup, late-C | `R1 "x"`, `#Hb "Ab" = s4 s5`, `R2 "rest" = s7..s10`. A: `⟦#Ha⟧` has no characters (no scene), second `{b: R2}` inert. B: head map conflict gives `Hb`, second embed inert | empty | not exercised | |
+| T09 | `R1 "abc" = s1 s2 s3`, `R2 "de" = s4 s5`, `R3 "fgh" = s6 s7 s8` | A: selects R1 offset 1 to R3 offset 2, types `Z` (a1). B: `W` (b1) after `s2`, `X` (b2) after `s4`, `Y` (b3) after `s7` | D1, D3, dup, late-C | `R1 "aZW" = s1 a1 b1`, `R3 "Yh" = b3 s8` (runs on in R1's paragraph); A's caret `"aZ|W"` | `R2 "dXe" = s4 b2 s5` removed by Alice; `b2` marked as Bob's edit after removal | `R1 "abWc" = s1 s2* b1 s3*`, `R2 "dXe"`, `R3 "fgYh" = s6* s7* b3 s8`; selection R1 offset 1 to R3 offset 2 | |
+| T09 header | `R1 "ab" = s1 s2`, `#H1 "Cd" = s3 s4`, `R2 "ef" = s5 s6` | A: selects R1 offset 1 to heading offset 1, Backspace. B: types `Q` (b1) at heading end | D1, D3 | `R1 "a" = s1`, `#H1 "dQ" = s4 b1`, `R2 "ef"`; A's caret `"a|"` | empty | `R1 "ab" = s1 s2*`, `#H1 "CdQ" = s3* s4 b1` | |
+| T10 | `R1 "ab" = s1 s2`, `R2 "cd" = s3 s4`, `R3 "ef" = s5 s6` | A: removes beat R2 (entry rA). B offline: types `X` (b1) after `s3`. B reconnects. C joins. A undoes | D1, dup, rev, late-C | Before undo: `R1 "ab"`, `R3 "ef"`. After: `R1 "ab"`, `R2 "cXd" = s3 b1 s4`, `R3 "ef"`; A's caret `R2 "|cXd"` | Before undo, identical on A, B, C: `R2 "cXd" = s3 b1 s4` removed by Alice, `b1` edited after removal by Bob. After: empty | as Expected | |
+| T11 | `R1 "abcd" = s1..s4`, `R2 "ef" = s5 s6` | 1. A: comment C1 on `s2 s3`; B: comment C2 on `s3 s4` (D1). 2. C1 reaches B (D2); B replies r1. 3. A removes R1 (rA, observed `s1..s4`, `⟦R1⟧`); B, not yet seeing it, splits R1 at `s2|s3` (b1 `{b: Rb}`) (D1) | as listed, dup, late-C | `R2 "ef"` | Removed by Alice: `R1 "ab" = s1 s2`, `Rb "cd" = s3 s4` (split by Bob after removal); C1 on `s2 s3` with r1; C2 on `s3 s4` | `R1 "ab"`, `Rb "cd"`, `R2 "ef"`; C1 anchored R1, C2 anchored Rb; recovery empty | |
+| T12 | `R1 "abcd" = s1..s4` | 1. A: splits at `s2|s3` (a1 `{b: Ra}`); reaches B (D2). 2. B: `Y` (b1) at R1 end, `X` (b2) at Ra start; reaches A. 3. A undoes, then redoes | as listed, dup, late-C | After undo: `R1 "abYXcd" = s1 s2 b1 b2 s3 s4`, A's caret `"abYX|cd"`. After redo: `R1 "abY"`, `Ra "Xcd" = b2 s3 s4` (new embed `{b: Ra}` after `b1`) | empty | as Expected | |
+| T12 join | `R1 "ab" = s1 s2`, `R2 "cd" = s3 s4` | 1. A joins (jA); reaches B. 2. B types `Z` (b1) after `s3`; reaches A. 3. A undoes | as listed | Before undo `R1 "ab cZd"`; after `R1 "ab"`, `R2 "cZd" = s3 b1 s4` | empty | as Expected | |
+| T20 nest | `R1 "the red mug" = s1..s11` | A: tags `s5..s11` Prop P (`t:oA`). B: tags `s9..s11` Sound S (`t:oB`) | D1, dup, late-C | `s5..s8` stack `[P]`; `s9..s11` stack `[P, S]` (`tag: P, innerTags: [S]`) | empty | A: `s9..s11` stack `[S]` | |
+| T20 cross | as above | A: tags `s5..s11` P (oA). B: tags `s1..s7` S (oB) | D1, dup, rev, late-C | Provisional, on every replica: `the red` (`s1..s7`) tag S; `red mug` carries no P. Alternative: P kept on `s8..s11` | P on `red mug` conflicts with S on `the red` | B: oB gone, `red mug` tag P, recovery empty | |
+| T20 mark | as above | A: tags `s5..s11` P. B, not yet seeing it: comment C1 on `s9..s11`, link L1 `http://x` on `s5..s7` | D1, D3 | Run `red mug` (`s5..s11`): tag P, comment C1, link `http://x`; stored `c:C1` still only on `s9..s11` | empty | B undo of L1: link gone; C1 stays | |
+| T21 | `R1 "abcd" = s1..s4` | A: bolds `s2 s3`. B, not yet seeing it: inserts `X` (b1) after `s2`, no attributes. A undoes | D1, D3, late-C | Before undo `"abXcd"`, `s2 s3` bold, `b1` plain. After: `"abXcd" = s1 s2 b1 s3 s4`, no bold; selection `s2..s3` (`bXc`) | empty | as Expected | |
+| T21 comment | `R1 "abcd" = s1..s4` | A: C1 on `s2 s3`; reaches B. B: reply r1; C2 on `s3 s4`. A undoes C1 | D2, late-C | `R1 "abcd"`, C2 on `s3 s4` | Provisional: r1 listed as a reply to a removed comment | A redo: C1 back on `s2 s3` with r1 | |
+| T21 scalar | `R1 "ab" = s1 s2`, status `todo` | A types `Z` (a1) after `s2` (its own undo step). A sets status `ready`; B concurrently `shot` | D1 | Status `shot` (map-conflict rule), `R1 "abZ"` | empty | A's first undo: status write overwritten, nothing to undo: status `shot`, `Z` kept, notice (U-H1). Plain `UndoManager` instead removes `Z`. Second undo removes `Z` | |
+| MOVE concurrent | `R1 "ab" = s1 s2`, `R2 "cd" = s3 s4`, `R3 "ef" = s5 s6`; B: each its own segment | A: moves R3 before R1. B: moves R3 after R1 and types `X` (b1) after `s5` | D1, dup, late-C | A: refused before any change. B: `R3 "eXf" = s5 b1 s6`, `R1`, `R2` (first live `order` entry wins) | empty | B (Alice's move undone): `R1`, `R3 "eXf"`, `R2` | |
+| MOVE delete | as above, B layout | A: moves R3 before R1. B: removes R3 | D1, late-C | `R1 "ab"`, `R2 "cd"` (provisional: removal wins) | `R3 "ef"` removed by Bob | B undo: `R3 "ef"` before R1 | |
+| MOVE cut-paste | `#H1 "A"`, `R1 "ab"`, `#H2 "B"`, `R2 "cd"` | A: cuts R1, pastes after R2 | — | Refused in shared mode before content changes and before the cut is consumed (both candidates) | empty | none | |
 
 ### Stage 1b: service feasibility
 
+Updates are concrete Yjs updates on `R1 "abcd" = s1..s4` from client A unless stated: `u1` inserts `e` at R1 offset 4 (A:1), `u2` inserts `f` after it (A:2), `u3` inserts `g` (A:3), `u4` inserts `h` (A:4), `ud` deletes `s2` (delete set only).
+
 | Serves | Initial | Event sequence | Expected receipt, status (plan §8 wording) or refusal | Entry paths |
 | --- | --- | --- | --- | --- |
-| T13 | Owner's standalone script, generation g0 `R1 "abcd"`, image `P` | Collaborate (creation op id k). Upload of g0 and `P` starts. Owner types `X` (g1), `Y` (g2). Server commits the instance. Local replica built from g0 plus the g1–g2 journal. Retry of k after a lost response. Restart during upload | Server and local state `R1 "abcdXY"`, `P` durable. Retry returns the same pending instance; restart leaves the standalone file or a recoverable membership, never two instances. Guest join while pending: refused. Invitation shown only after both persistence contracts; then "Your changes saved to server" after the receipt covering g2 | |
-| T14 | Barriers. Connection K1, server sequence 0 | u1 accepted (seq 1); store S1 captures `{state, seq 1}` and is slow. u2 = delete of one character (seq 2; state vector unchanged). Flush f1 (requires 2). S1 completes. S2 captures seq 2, completes | No receipt on S1. Receipt for f1 on S2, reporting captured seq 2. Status "Saved on this device, sending" until then, then "Your changes saved to server" | |
-| T15 | Barriers, K1 | f1 requires 3, f2 requires 5. f2's store completes first: coverage 5. f1's late completion (3) arrives. K1 closes; K2 opens; local edit u6 unsent; a receipt for f3 tagged K1 arrives | Coverage stays 5 after the late f1; f1 counts as covered. The K1 receipt changes nothing; u6 pending: "Saved on this device, sending" until a K2 barrier covers it | |
-| T16 upload-before-sync | A online, then offline. `R1 "ab"` | A inserts image `P` in R1 offline (blob stored and verified locally, then the record), types `Z`. Reconnect | While offline: "Offline, saved on this device". Online, upload pending: "Saved on this device, waiting for images to upload"; neither `P`'s reference nor `Z` reaches N or the server, including the provider's initial full-state exchange. After `P`'s membership is durable: document sync released, then "Your changes saved to server" | |
-| T16 pending-image | as above | as above | The reference reaches the server marked pending with `Z`; B shows a placeholder for `P`. A: "Saved on this device, waiting for images to upload" until `P`'s bytes and membership are durable; no client shows `P` saved before that; then "Your changes saved to server". If A never returns: B keeps the placeholder; export discloses the missing image | |
-| T17 | A and B edited; last receipt covers `R1 "abcd"` and `P` | All clients leave. Server killed, restarted. C joins with a valid invitation | C loads `R1 "abcd"` and `P` from journal, checkpoint and blobs; editing enabled after hydration; C's status "Saved on this device" (nothing of C's pending) | |
-| T18 | Instance open on K1 | (a) Frame over the configured payload limit. (b) Truncated update (delete set cut short). (c) Update pushing total state over the limit. (d) Rate above the limit | (a) Socket closed before processing. (b) Refused in `beforeSync` before the journal; nothing broadcast; connection set read-only, answered "not applied". (c) As (b), permanent. (d) Temporary refusal, retried after backoff. Never "Your changes saved to server" for the refused update; user told how to export and rejoin (wording: Decisions) | |
-| T19 | Device holds rejected update u_bad (permanent) and u_tmp (temporary: its image not yet durable) | Reconnect: provider sends SyncStep1; server answers SyncStep2 and SyncStep1; provider answers SyncStep2 containing u_bad and u_tmp | u_bad refused again in `beforeSync`; client stops automatic publication after the first permanent refusal (provider detached), keeps work exportable: no reconnect loop. u_tmp accepted once its image is durable | |
-| T22 | Journal in `beforeSync` | A sends u1. `beforeSync` commits u1's bytes to SQLite, returns. Server applies, sends status "applied". Server SIGKILL before the 2 s store | Provider count 0; "Your changes saved to server". After restart the journal replays u1. Defect: status sent before the journal commit makes the checker fail | |
-| T23 | u1 acknowledged, u2 sent unacknowledged, u3 queued while the socket was closed (dropped by the provider) | Reconnect: count reset to 1; SyncStep2 from the provider carries u2 and u3; server journals and acknowledges | "Your changes saved to server" covers u1 only until that acknowledgement; then u1–u3. Saved generation advances by the application's own FIFO matching, never by the provider count alone | |
+| T13 | Owner's standalone script, generation g0 `R1 "abcd"`, image `P` | Collaborate (creation op id k); upload of g0 and `P` starts; owner types `X` (g1), `Y` (g2); server commits the instance; local replica = g0 plus g1–g2 as updates; a lost response then retry of k; separately, restart during upload | Server and local `R1 "abcdXY"`, `P` durable. Retry returns the same pending instance; restart leaves the standalone file or a recoverable membership, never two instances. A guest join while pending is refused. Invitation shown only after both persistence contracts; "Your changes saved to server" after the receipt covering g2 | |
+| T14 | Barriers; connection K1, sequence 0 | `u1` accepted (seq 1); store S1 captures `{state, seq 1}`, slow. `ud` accepted (seq 2; state vector unchanged). Flush f1 (requires 2). S1 completes. S2 captures seq 2 and completes | No receipt on S1. Receipt f1 on S2, reporting 2. "Saved on this device, sending" until then; then "Your changes saved to server" | |
+| T15 | Barriers, K1 after `u1..u4`, `ud` (seq 1–5) | f1 requires 3, f2 requires 5. f2's store completes (coverage 5); f1's store completes late (3). K1 closes; K2 opens; A types `i` (A:5), unsent; a receipt for f3 tagged K1 arrives | Coverage stays 5; f1 covered. The K1 receipt changes nothing; `i` pending: "Saved on this device, sending" until a K2 barrier covers it | |
+| T16 upload-before-sync | A online, then offline; `R1 "ab"` | Offline A inserts picture `P` (sha p; blob stored and verified locally, then gallery item gP), types `Z` (A:k). Reconnect | Offline: "Offline, saved on this device". Online, upload pending: "Saved on this device, waiting for images to upload"; neither gP nor `Z` reaches N or the server, including the provider's SyncStep2 after reconnect. After `p`'s membership is durable, release; "Your changes saved to server" after the covering acknowledgement | |
+| T16 pending-image | as above | as above | gP arrives at the server marked pending, with `Z`; B shows a placeholder for `P`. A: "Saved on this device, waiting for images to upload" until `p`'s bytes and membership are durable; no client shows `P` saved before; then "Your changes saved to server". If A never returns: B keeps the placeholder; export discloses the missing image | |
+| T17 | A and B edited; last receipt covers `R1 "abcd"`, `P` | All clients leave; server killed and restarted; C joins with a valid invitation | C loads `R1 "abcd"` and `P` from journal, checkpoint and blobs; editing enabled after hydration; C's status "Saved on this device" | |
+| T18 | Instance open on K1 | (a) a 20 MiB frame; (b) `u1` with its last 3 bytes cut (delete set truncated); (c) an insert of 3 MiB of text against a 2 MiB state limit; (d) 200 updates per second against a limit of 50 | (a) Socket closed before processing. (b) Refused in `beforeSync` before the journal; nothing applied or broadcast; connection set read-only for it, answered "not applied", stateless refusal sent. (c) As (b), permanent. (d) Temporary refusal as in T19 (c). No "Your changes saved to server" for any of them | |
+| T19 (a) | Device holds `ubig` (3 MiB insert) | Sent as an incremental update | `beforeSync` refuses: read-only, "not applied", stateless "rejected". Client detaches the provider (stops publication), keeps work exportable, shows the rejoin explanation (wording: Decisions) | |
+| T19 (b) | Device restarts with `ubig` in its replica | Reconnect: provider sends SyncStep1; server sends SyncStep1, then SyncStep2; provider answers SyncStep2 containing `ubig` | Refused again in `beforeSync`; client detaches after this first refusal: no reconnect loop | |
+| T19 (c) | Device holds `up` (gallery item naming blob p, not yet durable on the server) | Sent; `beforeSync` sets read-only for this message, sends stateless "retry after p"; `afterHandleMessage` clears read-only. Client uploads p; on durable membership calls `provider.forceSync()`; provider sends SyncStep1; SyncStep2 carries `up` | First send "not applied"; after p is durable, `up` journaled and "applied"; "Your changes saved to server" | |
+| T22 | Journal in `beforeSync` | A sends `u1`. `beforeSync` commits its bytes to SQLite and returns; server applies; status "applied". SIGKILL before the 2 s store | Provider count 0; "Your changes saved to server". After restart the journal replays `u1`: `R1 "abcde"` | |
+| T23 (i) ordinary close | `u1` acknowledged; `u2` sent, unacknowledged; network drops (socket `close` event); A types `u3` while closed (queued in the provider's websocket queue) | Reconnect: provider sends token and SyncStep1 (count reset to 1); the first server message flushes the queued `u3`; server sends SyncStep1 then SyncStep2; provider answers SyncStep2 carrying `u2`, `u3`; A types `u4` before the acknowledgements arrive | Status: "Offline, saved on this device" while closed; "Saved on this device, sending" until the application has matched one acknowledgement for `u3` and one for the SyncStep2, then until `u4` is acknowledged; only then "Your changes saved to server" covering `u1..u4`. The provider count reaches 0 after `u3`'s acknowledgement while the SyncStep2 is still unacknowledged (predicted, §6 H3) | |
+| T23 (ii) discarded queue | as (i), but the socket is replaced or `disconnect()` is called | Queue emptied; reconnect; SyncStep2 carries `u2`, `u3` | As (i) with one expected acknowledgement for the SyncStep2 before `u4` | |
 | T24 | Browser tab 1 holds the Web Lock for (deployment, instance) | Tab 2 opens the instance; tab 1 crashes; tab 2 retries | Tab 2 refused or read-only with an explanation; after the crash the lock is released, tab 2 becomes writable after hydration; every write tab 1 reported saved is present | |
 
 ## 4 Expected failure traces
 
 | Under | Expected to break | Why | Serves |
 | --- | --- | --- | --- |
-| Candidate A | T05 (product, not correctness) | Text typed at a split point goes left or right by clientID; Alice and Bob see the rule as arbitrary | T05 |
-| Candidate A | PERF in T02 | Identity capture and index lookups walk one `Y.Text` holding the whole script | T02, PERF |
-| Candidate A | T08 create, T12 redo | Re-inserting `{b: R2}` can leave two atoms with one id under a race; relies on first-wins | T08, T12 |
-| Candidate A | MOVE | Moving text copies it; a concurrent edit stays with the removed original | MOVE |
-| Candidate B | T05 two splits, T09 | Cut ordering at one resolved index needs the cutId tiebreak; a cut anchored to a deleted character must still resolve | T05, T09 |
-| Candidate B | T08 create | Heading creation in the middle of a segment adds two cuts and a delete; three writes must land in one transaction | T08 |
-| Candidate B | T12 | Undo of a cut-record insertion is a map-key delete; redo is re-creation of the key, which a concurrent overwrite blocks (§6 Y7) | T12 |
-| Both, without soft removal | T10, T11 | Text inserted into a deleted nested type is deleted on arrival and never redone by undo (§6 Y6); with `gc: true` it is gone | T10, T11 |
-| Both, copy-on-join | T07 | Bob's `Q` lands in the original R2 visual, not the joined one | T07 |
-| Both, glue as a character | T06 | Two joins insert two glue spaces | T06 |
-| Both, implicit attribute inheritance | T20, T11 | `Y.Text.insert` without attributes copies every attribute at the position, including `c:` and `t:` keys (§6 Y12) | T20, T11 |
-| Both, `UndoManager` defaults | T12, T21 | 500 ms capture merges across beats; a no-op stack item makes one Ctrl+Z undo an older action (§6 Y7) | T12, T21 |
-| M1 | T04 with a real provider, T16 | The provider applies inbound sync without a hook; deferral needs a wrapped or second document | T04, T16 |
-| M1, M3 | T04 long composition | Queue reaches its bound while composing | T04 |
-| M2 | T03 | Repeated text makes the DOM diff ambiguous without caret or target-range evidence | T03 |
-| M2 | T04 removed | The buffered insertion's left neighbour is gone; mapping must route it to recovery, not to a neighbour | T04 |
-| M3 | STORE restart | Crash between persisting N and E loses either received or local updates | STORE |
-| Write-ahead journal | T18 (b) | Without a `beforeSync` decode check the built-in path acknowledges an undecodable update as applied (§6 H2) | T18, T22 |
-| Write-ahead journal | T23 | Status acknowledgements carry no id; a dropped queued update breaks naive counting | T23 |
+| Both candidates | T05 (product, not correctness) | Text typed at a split point goes left or right by clientID | T05 |
+| Candidate A | PERF in T02 | Identity capture walks one `Y.Text` holding the whole script | T02, PERF |
+| Candidate A | MOVE | Moving text copies it; refused | MOVE |
+| Candidate B | T08 create, T08 race | Head conversion plus inner embed must land in one transaction; head is a map field, so the race resolves by map conflict | T08 |
+| Both, without soft removal | T10, T11 | Text inserted into a deleted nested type is deleted on arrival and not restored by the deleting client's undo (§6 Y6) | T10, T11 |
+| Both, join as one shared flag | T06 | Alice's undo either does nothing (then `UndoManager` undoes her older bold) or unjoins despite Bob's join, depending on clientID | T06 |
+| Both, copy-on-join | T07 | `Q` lands in R2's original visual | T07 |
+| Both, glue as a character | T06 | Two joins insert two spaces | T06 |
+| Both, implicit attribute inheritance | T20, T11 | `Y.Text.insert` without attributes copies every attribute, including `c:` and `t:` keys (§6 Y12) | T20, T11 |
+| Both, plain `UndoManager` | T21 scalar, T12 | 500 ms capture merges across beats; an ineffective item makes one undo revert an older one (§6 Y7) | T21, T12 |
+| Any mechanism, base taken at input start | T02, T04 | The replica is ahead of the paint | T02, T04 |
+| M1 | T04 with a real provider, T16 | Inbound sync has no hook | T04, T16 |
+| M1, M3 | T04 long composition | Queue reaches its bound | T04 |
+| M2 | T03 | Repeated text makes the DOM diff ambiguous | T03 |
+| M2 | T04 removed | The insertion's painted neighbours are gone; mapping must route it to recovery | T04 |
+| M3 | STORE restart | Crash between persisting N and E | STORE |
+| Write-ahead journal | T18 (b) | Without a decode check the built-in path acknowledges a failing update as applied (§6 H2) | T18, T22 |
+| Write-ahead journal | T23 (i) | Acknowledgements carry no id and the provider count is reset while queued updates are still in flight | T23 |
 | Barriers | T15 | Stateless callbacks are not awaited; completions reorder | T15 |
 
 ## 5 The checker's deliberate defects
 
-| Defect | Injection | Trace that must fail | Serves |
-| --- | --- | --- | --- |
-| Lost remote character | Binding commits the whole beat from DOM (stale whole-beat sync) | T01 (`ad` instead of `aXd`), T02 (`abc`) | T01, T02 |
-| Duplicated identity | Join copies R2's narration into R1 as new characters and soft-removes R2 | T06 (recovery shows `cd` as removed) and T10 undo (`cd` twice) | T06, T10 |
-| Omitted field | Projection drops `lengthSeconds` (and separately `paragraphsDecided`) | PROJ round-trip of the canonical fixtures | PROJ |
-| Stale base | M2 maps a deletion by base offsets instead of base ids | T01 (`aXd` becomes `abd` or `ad` depending on order) | T01 |
-| Lost mark | Insert without explicit attributes, then strip all `c:` keys from typed text after the fact (or projection ignores `t:` keys) | T20 nest (inner tag missing), T21 comment | T20, T21 |
-| Premature receipt | Send the "applied" status before the journal commit returns, or let a barrier accept an older snapshot's sequence | T22 (u1 missing after kill), T14 (receipt on S1) | T22, T14 |
+| Defect | Injection | Triggering history | Failing oracle | Serves |
+| --- | --- | --- | --- | --- |
+| Lost remote character | Commit replaces the whole beat with the DOM result (today's whole-beat sync) | T01, D3, M2 | Expected `s1 b1 s4`; got `"ad"` with `b1` deleted | T01 |
+| Stale base | M2 maps the deletion by base offsets 1–2 instead of painted identities | T01, D3, M2 | Expected `"aXd" = s1 b1 s4`; got `"acd" = s1 s3 s4` (`b1` and `s2` deleted) | T01 |
+| Duplicated identity | Undo of a removal re-inserts the removal record's observed text as new characters, then deletes the removal entry | T10, D1, late-C | Expected after undo `R2 = s3 b1 s4`; got `R2 "cdcXd"` with two new-id characters equal to `s3`, `s4` | T10 |
+| Duplicated identity (join) | Join copies R2's narration into R1 as new characters and adds the join entry | T06, D1 | Expected `R1 = s1 s2 [glue] s3 s4`; got `R1 "ab cdcd"` | T06 |
+| Omitted field | Projection drops `lengthSeconds` | PROJ fixture: `R1 {lengthSeconds: 12}` loaded, projected, serialized | `rows[0].lengthSeconds` missing | PROJ |
+| Lost mark | Comments stored in one attribute key `cmt` instead of one key per id | T11 step 1, D1 | Expected `s3` carrying C1 and C2; got one of them | T11 |
+| Lost mark (tag) | Tags stored in one attribute key `tag` | T20 nest, D1 | Expected `s9..s11` stack `[P, S]`; got `[P]` or `[S]` | T20 |
+| Premature receipt | Server sends the "applied" status, then commits the journal; SIGKILL between them | T22 | Harness record: acknowledgement for `u1` received; recovered journal lacks `u1` | T22 |
+| Premature receipt (barrier) | Barrier accepts the first completing store regardless of its captured sequence | T14 | Receipt for f1 after S1 (coverage 1 < 2) | T14 |
 
 ## 6 Supported-API questions
 
-Risk: **public** = documented API; **exported** = exported but undocumented low-level; **internal** = needs fields or functions outside the export (a feasibility risk per plan §4).
+Risk: **public** = documented API; **exported** = exported but undocumented; **internal** = needs fields or functions outside the export (a feasibility risk per plan §4).
 
 | Id | Question | What the source says | Prototype must still prove | Risk | Serves |
 | --- | --- | --- | --- | --- | --- |
-| Y1 | Can the binding read the identity of each character a selection covered? | `yjs@13.6.33` `utils/RelativePosition.js` `createRelativePositionFromTypeIndex(type, i, 0).item` is the id `{client, clock + offset}` of the live character at index `i`; the walk starts at `type._start` each call | Capture of a whole beat in one pass; cost on the 2 MiB fixture in Candidate A | public | T01, T03, T09, PERF |
-| Y2 | Can it tell whether a captured character was deleted? | `createAbsolutePositionFromRelativePosition` returns the position a deleted character occupied, without saying it is deleted; it returns `null` only when the struct was replaced by a GC struct. `isDeleted(ds, id)` and `createDeleteSetFromStructStore(store)` are exported but need `doc.store` | Use a fresh id scan and set difference instead; prove equal results | exported (`doc.store` internal) | T01, T04 |
-| Y3 | Relative positions and deleted anchors | Same function, `followUndoneDeletions = true` by default follows `redone` links, which only the undoing client knows (yjs issue 638) | Stored and shared positions (cuts, presence) pass `false`; local caret restore may pass `true` | public | T12, T05 |
-| Y4 | Can an insertion choose its side relative to a concurrent one? | No. `structs/Item.js` `integrate` orders same-origin insertions by clientID, lower left | T05 outcome per candidate | public behaviour | T05 |
-| Y5 | `UndoManager` scope and tracked origins | `utils/UndoManager.js` constructor: `trackedOrigins` default `{null}` plus the manager; a transaction is captured only if its origin (or its constructor) is tracked; `captureTimeout` default 500 ms merges any captured transaction in the window regardless of beat; `stopCapturing()`; `stack-item-added/popped` carry `meta` for selections; no size limit option (`undoStack` is a plain array) | Local origin object, 1 s groups via `captureTimeout: 1000` plus `stopCapturing` on word and cell changes, manual 200 limit, redo cleared on new local change as today | public | T12, T21 |
-| Y6 | What does undo of a deletion restore? | `structs/Item.js` `redoItem` creates a new item with the local clientID and copied content, linked by `redone`; a nested type is re-created empty and its children redone into it; an item inserted remotely into a deleted parent is deleted on integrate (`Item.integrate`, "delete if parent is deleted") and is not in the stack item, so it is not restored | Soft removal avoids both effects; checker accepts `x̂` restores as non-duplicates | public behaviour | T10, T12 |
-| Y7 | What if the undone value was overwritten remotely? | `redoItem` for a map key returns `null` when a newer value exists (unless `ignoreRemoteMapChanges`); `popStackItem` keeps popping while nothing changed, so one `undo()` can revert an older stack item | Detect empty pops (`undo()` result, `stack-item-popped`) and stop; product rule in Decisions | public behaviour | T06, T12, T21 |
-| Y8 | Does deleted text survive for recovery? | `Doc` option `gc` defaults true; `utils/Transaction.js` cleanup runs `tryGcDeleteSet`: a deleted item not `keep` and passing `gcFilter` gets `ContentDeleted`; it becomes a `GC` struct only when its parent is collected. `UndoManager` sets `keep` on its own deletions. Server default `yDocOptions: {gc: true}` (`Hocuspocus.ts` `defaultConfiguration`) | Recovery never relies on tombstones; growth of soft-removed text measured | public | T10, T11, T17 |
-| Y9 | Do candidates need snapshots or subdocuments? | Snapshot rendering of deleted text (`YText.toDelta(snapshot, prevSnapshot)`) needs `gc: false`. Subdocuments need `shouldLoad`/`autoLoad` and a provider per document; Hocuspocus syncs one `Y.Doc` per provider | Neither candidate uses them; keep it so | public | T10 |
-| Y10 | Embeds as structural atoms | `types/YText.js` `insertEmbed(index, Object or AbstractType, attributes)`; `toDelta` returns `{insert: object}`; `format` applies to embeds too | Projection ignores marks on atoms; embed JSON immutable | public | T05, T08 |
-| Y11 | One attribute key per comment and tag occurrence | `format(index, length, attributes)` writes one `ContentFormat` per key; concurrent writes to one key leave one winner per character; keys are free strings | Cost of many keys on long texts; `cleanupYTextFormatting` exported | public | T11, T20 |
-| Y12 | Does typed text inherit marks? | `YText.insert` without `attributes` copies every attribute at the position (`pos.currentAttributes`) | Always pass explicit attributes computed from Splitpage rules (no `t:` at edges) | public | T20, T11 |
-| Y13 | Can an update be validated without applying it? | `utils/updates.js` `decodeUpdate`, `parseUpdateMeta`, `encodeStateVectorFromUpdate` work on bytes. `utils/encoding.js` `readUpdateV2` integrates structs before reading the delete set, so a corrupt tail can leave a partial apply; missing dependencies sit in `store.pendingStructs` / `pendingDs` with no public signal | Decode fully in `beforeSync` before journal or apply; detect missing dependencies by comparing `parseUpdateMeta(u).from` with the server state vector | exported; pending state internal | T18, T19 |
-| Y14 | Do pure deletes advance the state vector? | Deletes travel in the delete set; `encodeStateVector` counts inserted clocks only | Receipt by sequence, shown with a delete-only update | public | T14 |
-| Y15 | y-protocols error handling | `y-protocols@1.0.7` `sync.js` `readSyncStep2` (and `readUpdate`, the same function) catches any error from `applyUpdate`, logs it, and returns normally unless an `errorHandler` is passed | See H2 | public | T18 |
-| H1 | Does `beforeSync` see the raw bytes before apply? | `@hocuspocus/server@4.8.0` `MessageReceiver.readSyncMessage` awaits `connection.callbacks.beforeSync(connection, {type, payload: message.peekVarUint8Array()})` before `readSyncStep1/2` or `readUpdate`; `Connection.processMessages` awaits each message in turn. `type` 0 carries a state vector, 1 and 2 an update | Journal commit cost per update on the deployment disk (plan §8 proof 1) | public | T22 |
-| H2 | Status message values | `readSyncMessage` sends `writeSyncStatus(true)` after `readSyncStep2` and after `readUpdate`. Because Hocuspocus passes no `errorHandler` (Y15), an update that throws is still answered "applied". Read-only: an update message is always answered "not applied"; a SyncStep2 is answered "applied" if `snapshotContainsUpdate` says it adds nothing, else "not applied". An update with missing dependencies is answered "applied" while its structs wait pending | Refuse undecodable input in `beforeSync` (plan §8 proof 2); journal and receipt must treat "pending" updates explicitly | public | T18, T22 |
-| H3 | Provider's unacknowledged count | `@hocuspocus/provider@4.8.0` `HocuspocusProvider.documentUpdateHandler` increments `unsyncedChanges` per update (per batch with `flushDelay`); `startSync` calls `resetUnsyncedChanges()` which sets 1; `MessageReceiver.applySyncStatusMessage` decrements only on "applied"; "not applied" changes nothing and emits nothing | Application matches acknowledgements FIFO per connection; detects "not applied" through a server stateless message (H8), not the count | public | T19, T23 |
-| H4 | Are unsent updates dropped on close? | `HocuspocusProviderWebsocket.send` queues while the socket is not open (`addToQueue`); the queue is emptied in `createWebSocketConnection`, `disconnect` and on close | The next SyncStep2 carries them again (T23) | public behaviour | T23 |
+| Y1 | Can the binding read the identity of each painted character? | `yjs@13.6.33` `utils/RelativePosition.js` `createRelativePositionFromTypeIndex(type, i, 0).item` is the id `{client, clock + offset}` of the live item at index `i`; each call walks from `type._start` | One pass per painted beat; cost on the 2 MiB fixture in Candidate A | public | T01–T04, PERF |
+| Y2 | Can it tell what happened to a captured character? | `createAbsolutePositionFromRelativePosition` returns `null` when the item's client clock has not arrived (`getState(store, client) <= clock`) or the struct is a `GC` struct; for a deleted item it returns the position it occupied, without saying it is deleted. `isDeleted(ds, id)` and `createDeleteSetFromStructStore(store)` are exported but need `doc.store` | Distinguish "not arrived" (wait) from "collected" (recovery); detect deletion by a fresh identity scan and set difference | exported (`doc.store` internal) | T01, T04 |
+| Y3 | Relative positions as anchors | The same function attaches a position to one item (`assoc >= 0` the item after, `< 0` the item before); text inserted at that gap lands on one side of every such position, so a position cannot separate the end of one beat from the start of the next. `followUndoneDeletions` defaults to true and follows `redone` links only the undoing client knows (yjs issue 638) | Carets and selections only, never boundaries; stored positions pass `false` | public | T05, T08, T12 |
+| Y4 | Can an insertion choose its side relative to a concurrent one? | No. `structs/Item.js` `integrate` orders same-origin insertions by clientID | T05 outcome | public behaviour | T05 |
+| Y5 | `UndoManager` scope and tracked origins | `utils/UndoManager.js`: `trackedOrigins` default `{null}` plus the manager; a transaction is captured only if its origin or its origin's constructor is tracked; `captureTimeout` 500 ms merges any captured transaction in the window; `stopCapturing()`; `stack-item-added/popped` carry `meta`; no size limit option | Local origin object, `captureTimeout: 1000` plus `stopCapturing` on word and cell changes, manual 200 limit | public | T12, T21 |
+| Y6 | What does undo of a deletion restore? | `redoItem` creates a new item with the local clientID, copied content and a `redone` link; a nested type is re-created empty and its deleted children redone into it. An item inserted into an already deleted parent is deleted on integrate (`Item.integrate`). Caveat: that loss concerns remote work outside the deletion's own undo entry; items inside the entry are redone | Soft removal avoids it; checker accepts `x*` restores as non-duplicates | public behaviour | T10, T12 |
+| Y7 | What if the undone change was overwritten remotely? | `redoItem` for a map key returns `null` when a newer value exists (unless `ignoreRemoteMapChanges`). `popStackItem` keeps popping while nothing changed and emits `stack-item-popped` only for the item that finally changed something; `undo()` returns that item. Neither can stop an older step that is already undone. No documented mechanism prevents it | Per-writer entries for join and removal (always effective). For scalars, U-H1: move all but the top item out of the public `undoStack` array, call `undo()`, restore the rest; T21 scalar | public fields, undocumented use | T06, T21 |
+| Y8 | Does deleted text survive for recovery? | `Doc` option `gc` defaults true; `utils/Transaction.js` cleanup `tryGcDeleteSet` replaces a deleted, not `keep`, `gcFilter`-passing item's content with `ContentDeleted`; it becomes a `GC` struct only when its parent is collected. `UndoManager` keeps its own deletions. Server default `yDocOptions: {gc: true}` (`Hocuspocus.ts` `defaultConfiguration`) | Recovery never relies on tombstones; growth of soft-removed text measured | public | T10, T11, T17 |
+| Y9 | Snapshots or subdocuments? | Snapshot rendering of deleted text needs `gc: false`; subdocuments need their own provider. Neither candidate uses them | Keep it so | public | T10 |
+| Y10 | Embeds as boundaries | `types/YText.js` `insertEmbed(index, Object or AbstractType, attributes)`; `toDelta` returns `{insert: object}`; `format` also formats embeds | Projection ignores marks on embeds | public | T05, T08 |
+| Y11 | One attribute key per comment, tag occurrence and link | `format` writes one `ContentFormat` per key; one winner per character per key; keys are free strings | Cost of many keys on long texts | public | T11, T20 |
+| Y12 | Does typed text inherit marks? | `YText.insert` without `attributes` copies every attribute at the position (`pos.currentAttributes`) | Explicit attributes on every insert | public | T11, T20 |
+| Y13 | Can an update's dependencies be checked without applying it? | `utils/updates.js` `parseUpdateMetaV2` reports only each client's inserted clock range. `structs/Item.js` `getMissing` also depends on cross-client `origin`, `rightOrigin` and `parent`; delete-only dependencies live in the delete set. `decodeUpdate` exposes structs (with those fields) and the delete set. `utils/encoding.js` `readUpdateV2` integrates structs before reading the delete set, so a corrupt tail can leave a partial apply; unresolved parts sit in `store.pendingStructs` / `pendingDs` | Experiment over three histories, each sent out of order to the server: a same-client gap, a cross-client origin dependency, a delete of an item not yet received. Record what a check over `decodeUpdate` catches; no completeness claim before that | exported; pending state internal | T18, T19 |
+| Y14 | Do pure deletes advance the state vector? | `encodeStateVector` counts inserted clocks only | Receipt by sequence, shown with `ud` | public | T14 |
+| Y15 | y-protocols error handling | `y-protocols@1.0.7` `sync.js` `readSyncStep2` (and `readUpdate`, the same function) catches an error from `applyUpdate`, logs it, and returns normally; an `errorHandler` only propagates it if the handler throws. Caveat: malformed framing (the outer `readVarUint8Array`) fails before this catch | See H2 | public | T18 |
+| H1 | Does `beforeSync` see the raw bytes before apply? | `@hocuspocus/server@4.8.0` `MessageReceiver.readSyncMessage` awaits `connection.callbacks.beforeSync(connection, {type, payload: message.peekVarUint8Array()})` before handling; `Connection.processMessages` awaits each message in turn. Type 0 carries a state vector, 1 and 2 an update | Journal commit cost per update on the deployment disk | public | T22 |
+| H2 | Status message values | `readSyncMessage` writes `writeSyncStatus(true)` after `readSyncStep2` and after `readUpdate`, and Hocuspocus passes no `errorHandler`, so an update whose apply threw is answered "applied". An update with missing dependencies is also "applied" while its structs wait pending. Read-only: every update message gets "not applied"; a SyncStep2 gets "applied" if `snapshotContainsUpdate` finds nothing new, else "not applied", and a malformed SyncStep2 can throw inside that check (closing the connection) | Decode and size checks in `beforeSync`; pending updates handled explicitly in receipts | public | T18, T22 |
+| H3 | Provider's acknowledgement count | `@hocuspocus/provider@4.8.0` `HocuspocusProvider.documentUpdateHandler` increments `unsyncedChanges` per update (per batch with `flushDelay`); `startSync` calls `resetUnsyncedChanges()`, which sets 1; `applySyncStatusMessage` decrements only on "applied", never below 0; "not applied" changes nothing and emits nothing. With a retained queue (H4) the queued update is flushed before the SyncStep2, so the count reaches 0 while the SyncStep2 is unacknowledged | FIFO matching per connection in the application; "not applied" learned from a server stateless message | public | T19, T23 |
+| H4 | When are queued updates kept or dropped? | `HocuspocusProviderWebsocket.send` queues while the socket is not open. Kept: `onClose` calls `cleanupWebSocket` (which nulls the socket) without clearing the queue; the next `createWebSocketConnection` skips its clear because the socket is null; `resolveConnectionAttempt`, run on the first received message, sends the queue. Dropped: `disconnect()`, `createWebSocketConnection` while a socket still exists (replacement), and the connection checker's early forced close (`this.webSocket?.close(); this.messageQueue = []`) | T23 (i) and (ii) | public behaviour | T23 |
 | H5 | Store hook errors | `Hocuspocus.storeDocumentHooks` catches, logs "Document stays in memory to avoid data loss", returns normally | Splitpage's own store code reports failure | public | T14, T22 |
-| H6 | Store completion | `util/debounce.ts` `debounce` resolves when the timer is set; `executeNow` returns the run promise but `flushPendingStores()` discards it; `storeDocumentHooks(document, payload, true)` returns a promise that resolves after the store hooks, also after a logged failure; defaults 2 s / 10 s | Barriers never treat that promise as success | public method, undocumented | T14, T15 |
-| H7 | `onChange` and broadcast order | `Hocuspocus.handleDocumentUpdate` calls `onChange` without await, synchronously from the document `update` event; `Document.handleUpdate` then broadcasts, batched with `setImmediate` by default (`flushDelay: 0`); the sender's status is written right after apply, so it can precede fan-out | Nothing is broadcast before `beforeSync` returns; journal-first therefore covers fan-out | public | T22, T18 |
-| H8 | Stateless messages | Server: `MessageReceiver` stateless case calls `statelessCallback` without await; `Connection.sendStateless`, `Document.broadcastStateless`. Provider: `sendStateless`, `stateless` event | Barrier requests and refusal notices ride this path; out-of-order completion handled (T15) | public | T15, T19 |
-| H9 | Read-only refusal without disconnect | `connection.readOnly` is a public mutable field checked after `beforeSync` in the same call; the connection stays open | Setting it inside `beforeSync` refuses that very update with "not applied" and no reconnect loop | public field | T18, T19 |
-| H10 | Hook exceptions | `Connection.processMessages` catch: closes with the error's code or reset and empties the queue | Never used for permanent refusal (reconnect replays the update) | public | T18 |
-| H11 | Can the app hold back the provider's initial full-state exchange? | `startSync` sends SyncStep1; the server answers SyncStep2 then SyncStep1; the provider answers with `Y.encodeStateAsUpdate(provider.document, serverStateVector)`; `documentUpdateHandler` sends every non-provider-origin update at once. No filter hook exists; only `attach()`/`detach()` | Hold through M3's network document N | public | T16, T19 |
-| H12 | Per-connection revocation | `onAuthenticate` runs once per connection; `connection.context` holds what it set; `Hocuspocus.closeConnections(documentName)` closes a whole document; per connection: `document.getConnections()` filtered by context, then `connection.close()`. `close()` does not clear `messageQueue`, so already queued messages may still be applied after it | `beforeSync` rechecks a revocation flag; prove no queued update lands after revoke | public | T18 |
+| H6 | Store completion | `util/debounce.ts` `debounce` resolves when the timer is set; `executeNow` returns the run promise but `flushPendingStores()` discards it; `storeDocumentHooks(document, payload, true)` returns a promise that resolves after the store hooks, also after a logged failure | Barriers never treat that promise as success | public method, undocumented | T14, T15 |
+| H7 | `onChange` and broadcast order | `Hocuspocus.handleDocumentUpdate` calls `onChange` without await from the document `update` event; `Document.handleUpdate` then broadcasts, batched with `setImmediate` by default (`flushDelay: 0`); the sender's status is written after apply and can precede fan-out | Nothing is broadcast before `beforeSync` returns | public | T22, T18 |
+| H8 | Stateless messages | Server: stateless case calls `statelessCallback` without await; `Connection.sendStateless`, `Document.broadcastStateless`. Provider: `sendStateless`, `stateless` event | Barrier requests and refusal notices ride this path | public | T15, T19 |
+| H9 | Read-only refusal without disconnect | `connection.readOnly` is a public mutable field checked after `beforeSync` in the same call; the connection stays open. `afterHandleMessage` runs after apply | Setting it in `beforeSync` refuses that update; clearing it in `afterHandleMessage` makes the refusal temporary (T19 c) | public field | T18, T19 |
+| H10 | Hook exceptions | `Connection.processMessages` catch: closes with the error's code or reset and empties the queue | Never used for permanent refusal | public | T18 |
+| H11 | Can the app hold back the provider's initial exchange? | `startSync` sends SyncStep1. Server `readSyncMessage` for SyncStep1 writes SyncStep2 into the reply buffer and sends its own SyncStep1 at once (`connection.send`); `apply` sends the buffered SyncStep2 afterwards. The provider answers the server's SyncStep1 with `Y.encodeStateAsUpdate(provider.document, serverStateVector)`. `documentUpdateHandler` sends every non-provider-origin update at once. No filter hook; only `attach()`/`detach()` | Hold through M3's network document N | public | T16, T19 |
+| H12 | Per-connection revocation | `onAuthenticate` runs once per connection; `connection.context` holds what it set; `Hocuspocus.closeConnections(documentName)` closes a whole document; per connection: `document.getConnections()` filtered by context, then `connection.close()`, which does not clear `messageQueue` | `beforeSync` rechecks a revocation flag; no queued update lands after revoke | public | T18 |
 | H13 | Limits before processing | `ClientConnection`: `maxUnauthenticatedQueueSize` 5 MiB, `maxUnauthenticatedQueueMessages` 1000, `maxPendingDocuments` 100; `Server.ts` passes WebSocket server options such as `maxPayload`, applied before authentication | Values for T18 (a) | public | T18 |
-| H14 | Loading does not re-trigger stores | `Hocuspocus.createDocument` applies what `onLoadDocument` returns, then registers `onUpdate` | Replay from journal on restart causes no store or broadcast | public | T17 |
-| P1 | Local replica write completion | `y-indexeddb@9.0.12` `_storeUpdate` calls `idb.addAutoKey` without reporting completion | Own adapter (plan §8) | n/a | STORE |
+| H14 | Loading does not re-trigger stores | `Hocuspocus.createDocument` applies what `onLoadDocument` returns, then registers `onUpdate` | Journal replay causes no store or broadcast | public | T17 |
+| P1 | Local replica write completion | `y-indexeddb@9.0.12` `_storeUpdate` calls `idb.addAutoKey` without reporting completion | Own adapter | n/a | STORE |
 
 ## Open questions
 
 | Question | Settled by | Serves |
 | --- | --- | --- |
-| Does a one-pass id capture of a beat in Candidate A stay under the input budget on the 2 MiB fixture, or does it need a beat-start index cache? | PERF run under T02 | T02, PERF |
-| Does soft-removed text keep server and replica growth within the Stage 0 limits under repeated delete and restore? | Growth measurement with T10 looped | T10, PERF |
-| Can M2 tell which repeated word a native deletion removed from `beforeinput` target ranges alone? | T03 under M2 in Chromium | T03 |
-| Does setting `connection.readOnly` inside `beforeSync` refuse the current update in 4.8.0 as read (H9)? | T18 (b) in the 1b container | T18 |
-| Does a revoked connection's queued update still apply after `close()` (H12)? | Revocation test in 1b | T18 |
-| Is the M3 crash window between persisting N and E closable with one storage transaction? | STORE restart test | STORE, T16 |
+| Does one identity pass per painted beat in Candidate A stay under the input budget on the 2 MiB fixture? | PERF under T02 | T02, PERF |
+| Does soft-removed text keep growth within the Stage 0 limits under repeated delete and restore? | T10 looped | T10, PERF |
+| Can M2 tell which repeated word a native deletion removed from `beforeinput` target ranges? | T03 under M2 | T03 |
+| Does U-H1 (truncating `undoStack` around `undo()`) stop the skip without side effects on redo? | T21 scalar | T21 |
+| Does setting and clearing `connection.readOnly` around one message behave as H9 reads? | T18 (b), T19 (c) | T18, T19 |
+| Does a revoked connection's queued update still apply after `close()`? | Revocation test in 1b | T18 |
+| Which dependency forms can a pre-apply check detect (Y13)? | Y13 experiment | T18, T19 |
+| Can the N and E writes of M3 share one storage transaction? | STORE restart test | STORE, T16 |
 
 ## Decisions for Adam
 
 | Decision | Assumed meanwhile | Serves |
 | --- | --- | --- |
-| Two people press Enter at the same point | Both breaks show, leaving an empty beat between; alternative: hide the empty one | T05 |
-| Someone types exactly where another splits | Text stays with the words before it (Candidate B); Candidate A cannot promise a side | T05 |
+| Two people press Enter at the same point | Both breaks show, leaving an empty beat; alternative: hide it | T05 |
+| Someone types exactly where another splits | Which side the text lands on depends on internal client order; accepted as long as every replica agrees | T05 |
 | An edit to a beat someone else removed | Goes to recovery, not into a neighbouring beat | T04, T09, T10 |
-| A beat split by someone after another removed it | The split parts stay removed | T11 |
-| Two tags cross after merging | The later tag shows untagged and is listed in recovery; alternative: keep it on its non-overlapping words | T20 |
-| A reply to a comment whose creation was undone | Kept in recovery as a reply to a removed comment | T21 |
-| Undo when another person made the same change (both joined) | Nothing visible changes and the undo step is used up, with a short notice | T06, T12 |
-| Edit stamps in shared mode | Beat `updatedAt`/`updatedBy` written once per typing group; `rev` and `lastEdited*` set only on export | PROJ |
-| A scene left with no beats, or a script with none | Scene listed in recovery; empty script waits for the first keystroke | T10 |
+| A beat split after another person removed it | The parts stay removed | T11 |
+| Two tags cross after merging | The tag starting later is shown untagged and listed in recovery | T20 |
+| A reply to a comment whose creation was undone | Kept in recovery | T21 |
+| Undo when another person made the same change | Nothing visible changes, the step is used up, a short notice | T06, T21 |
+| A join group's status | Highest status across the joined beats; setting status on the group sets every member | T06 |
+| Edit stamps | Beat `updatedAt`/`updatedBy` once per typing group; `rev` and `lastEdited*` only on export | PROJ |
+| A scene left with no beats, a script with none | Scene listed in recovery; empty script waits for the first keystroke | T10 |
+| A scene name over 200 characters after merging | Shown in full with a notice; it can't grow further | T08 |
+| Two b-roll keys with one id after merging | The later key gets a derived id and is unanchored in the shot list until reassigned | PROJ |
+| An owner assigned to a person someone removed | Assignment kept as text; the person listed in recovery | PROJ |
 | Wording for a refused update (T18, T19) | Not in the plan's status table; to be written with the status wording | T18, T19 |
 
 ## Doc mismatches
@@ -301,4 +332,5 @@ Risk: **public** = documented API; **exported** = exported but undocumented low-
 | Doc | Code | Serves |
 | --- | --- | --- |
 | `docs/COLLABORATION-PLAN.md` §8 and §10: a read-only connection is answered "not applied" for an update that carries new changes | 4.8.0 answers every update message "not applied" on a read-only connection; only SyncStep2 is checked with `snapshotContainsUpdate` | T18 |
-| Same sections: the built-in acknowledgement means "applied in memory" | It is also sent when `applyUpdate` threw and the error was swallowed (Y15, H2) | T18, T22 |
+| Same sections: the built-in acknowledgement means "applied in memory" | It is also sent when `applyUpdate` threw and the error was swallowed, and for updates whose structs wait pending (Y15, H2) | T18, T22 |
+| Same, §8: "unsent buffered updates are dropped when the socket closes" | Kept on an ordinary close and sent after reconnect; dropped on `disconnect()`, socket replacement and the connection checker's early close (H4) | T23 |
