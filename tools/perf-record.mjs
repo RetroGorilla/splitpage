@@ -108,7 +108,8 @@ export const BEATS = `(function () {
       perf.reset();
       need(strips() === 0, 'shot scenes were already hidden');
       for (var i = 0; i < ${HIDE_TOGGLES}; i++) {
-        await measure('#hide-shot-toggle');
+        // why: builds before #1338 have only the File menu item, so the header switch is used only when present
+        await measure(document.querySelector('#hide-shot-toggle') ? '#hide-shot-toggle' : '#file-menu [data-file-action="toggle-hide-shot"]');
         need((strips() > 0) === (i % 2 === 0), 'toggle ' + i + ' left ' + strips() + ' strips');
       }
       return perf.take('long hide shot scenes');
