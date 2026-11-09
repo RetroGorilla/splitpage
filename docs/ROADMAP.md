@@ -1,12 +1,12 @@
 # Roadmap
 
-First refresh pass checked against GitHub, source and merge history at `63a6af75` on 2026-11-08. GitHub issues hold the current backlog. Recheck them before starting work. A second documentation pass is planned just before 0.4.3; this page describes only merged behaviour as done.
+Final pre-0.4.3 documentation pass checked against GitHub, source and merge history at `8d607637` on 2026-11-09. GitHub issues hold the current backlog. Recheck them before starting work. This page describes only merged behaviour as done.
 
 ## Current release
 
 Splitpage **0.4.1** was released on **2026-11-02**, tagged [v0.4.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1). `VERSION` and `desktop/package.json` still say `0.4.1`. Changes merged after that tag are development work; they are not in the published release.
 
-The next release is **0.4.3**. It has no release date here. The old plans used “3.x”, “4.0” and “4.1” as milestone names. The remote tags now use `v0.3.*` and `v0.4.*`. Use the remote tags and [releases](https://github.com/RetroGorilla/splitpage/releases), rather than old plan headings, for shipped versions.
+The next release, **0.4.3**, is being prepared; it is not released. It has no release date here. The old plans used “3.x”, “4.0” and “4.1” as milestone names. The remote tags now use `v0.3.*` and `v0.4.*`. Use the remote tags and [releases](https://github.com/RetroGorilla/splitpage/releases), rather than old plan headings, for shipped versions.
 
 ## Completed foundation
 
@@ -37,20 +37,23 @@ The next release is **0.4.3**. It has no release date here. The old plans used �
 | Microphone selection, desktop-to-browser relay choice, and `@Name` assignment while tagging. | #1256, #1258, #1259, #1292 |
 | Export dialog and Help explain Create bundle before exporting outside files. | #260 item 4; #1329 |
 | Local media-heavy test bundle generator (developer tooling, not a starter or release asset). | #1325 via #1330; [usage](DEVELOPING.md#media-heavy-test-bundles) |
+| Shoot view beats grouped under scenes in responsive cells, with filmed and current indicators. | #1159 via #1332 |
+| Nested tags preserved through saves, clipboard, undo and merge; shown in production and exports; created while typing or through Edit tag / Done. | #1201 via #1336, #1343, #1346 |
+| Hide filmed beats beside the filmed count, Minimise / Show rundown, and Present ▸ Present in browser…; regrouped File menu and Help submenu. | #1163 via #1338, #1345 |
+| Scene prep keeps an item's detail open and focus on the item after renaming. | #1326 via #1337 |
+| Printed shot-list Notes lines spaced 8 mm apart for handwriting. | #1023 via #1334 |
+| Desktop updates verify installer release name, tag, API digest and size. | #1288 via #1335 |
+| Production and Gear By-scene views reuse cached document numbering. | #1344 via #1347 |
+| Printed-output wording and beat multi-selection browser suites brought up to date. | #1339 via #1340; #1341 via #1342 |
+| First roadmap, Help and contributor documentation refresh. | #1327 pass 1 via #1333 |
 
 Scene descriptions (#1171) were closed as not planned. They are not queued work.
 
-## Planned before 0.4.3
+## Preparing 0.4.3
 
-- [#1159](https://github.com/RetroGorilla/splitpage/issues/1159): Shoot view scene cells.
-- [#1201](https://github.com/RetroGorilla/splitpage/issues/1201): nested tags, planned as three PRs.
-- [#1163](https://github.com/RetroGorilla/splitpage/issues/1163): Settings revamp and File menu placement.
-- [#1326](https://github.com/RetroGorilla/splitpage/issues/1326): keep the Scene prep detail open and focused during rename.
-- [#1023](https://github.com/RetroGorilla/splitpage/issues/1023): more writing space in printed lists' Notes cells.
-- [#1288](https://github.com/RetroGorilla/splitpage/issues/1288): bind the desktop installer to its release metadata.
-- [#1327](https://github.com/RetroGorilla/splitpage/issues/1327): this documentation refresh, with a second pass just before release.
-
-These are plans, not descriptions of the current app. Do not document their unmerged behaviour as available.
+All planned product changes for 0.4.3 are merged. [#1327](https://github.com/RetroGorilla/splitpage/issues/1327)
+is this final documentation pass. Release validation and publishing remain separate
+steps under [RELEASING.md](RELEASING.md); merged work does not establish release readiness.
 
 ## Parked and manual checks
 

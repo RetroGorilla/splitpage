@@ -187,10 +187,20 @@ The three surfaces intentionally keep different orchestration:
 
 | Surface | Input order | Keyboard and focus policy |
 | --- | --- | --- |
-| Split cells | note plain-tag input; auto-tag, direction, cue, B-roll shortcuts; open plain tag; sync cell; open Who list; settle composition; caret/refresh/stats/prompt/ghost work | Row menu, toolbar, video, draft undo and document undo precede Who list, open tag, ghost, then untagged mention. Who-list consumption and open-tag Escape hide the ghost. Escape mutes an untagged prompt. Navigation dismisses ghosts. |
-| Writer Visual box | Save first; auto-tag, B-roll, open plain tag, refresh plain tag, open Who list, update ghost | Composition suppresses input policy and keys. Undo closes the box before replay; Who list precedes plain tag and ghost. Who-list consumption and plain-tag Escape do not explicitly hide the ghost. Unconsumed Escape closes the box. There is no untagged-mention acceptance or generic navigation dismissal here. Leaving cancels Who, closes an open plain tag, sanitizes unconditionally, syncs, anchors B-roll, then hides ghost. |
+| Split cells | note plain-tag input; auto-tag, direction, cue, B-roll shortcuts; open plain tag; sync cell; open Who list; settle composition; caret/refresh/stats/prompt/ghost work | Row menu, toolbar, video, draft undo and document undo precede Who list. Outside composition, the inner ghost precedes the open outer tag, then occurrence editing and untagged mention. Who-list consumption and open-tag Escape hide the ghost. Escape mutes an untagged prompt. Navigation dismisses ghosts. |
+| Writer Visual box | Save first; auto-tag, B-roll, open plain tag, refresh plain tag, open Who list, update ghost | Composition suppresses input policy and keys. Undo closes the box before replay; Who list precedes the inner ghost, open outer tag and occurrence editing. Escape dismisses the ghost, cancels the open tag, then finishes occurrence editing before an unconsumed Escape closes the box. There is no untagged-mention acceptance or generic navigation dismissal here. Leaving cancels Who, closes an open plain tag, sanitizes unconditionally, syncs, anchors B-roll, then hides ghost. |
 | Writer narration | Auto-tag, direction, cue shortcuts before beat sync (model typing paths retain their own dispatch) | Surface composition gate and undo/find/beat-move precedence remain before beat completion. No Who list or open plain-tag keyboard policy. Escape on its own ghost consumes the event and remembers the dismissed phrase/offset/row across selection refresh; Tab accepts; navigation dismisses. Selection leaving narration clears dismissal memory. |
 
 Split blur sanitizes only when clean HTML differs from stored DOM HTML, then syncs and anchors B-roll unless undo is applying. Narration leave additionally refuses writes during paint, undo or stale-screen state, conditionally sanitizes, syncs and anchors. Split focus cleanup cancels both lists and clears prompts; narration selection and Visual box close retain their own lifecycle. Split composition remains owned by its composition routes, rather than receiving a new blanket key gate from this extraction.
 
 These differences preserve existing undo boundaries: the helper never flushes, syncs, edits or coalesces history itself. Open/cancel without an edit preserves the surrounding typing group; name edits and Tab conversion retain the tag owner's boundaries (INV-53). Narration structural selection/replay stays with the flow surface and session (INV-15). No sanitizing or input operation has moved across these boundaries.
+
+`features/tags/plain-tags.ts` owns the open keyword draft, category picker and
+the occurrence editor from `features/tags/occurrence-editor.ts`. The latter
+temporarily opens only the selected finished tag and restores protection on
+Done or departure. The editor and writer receive `beforeWrite` from this
+control so a canonical cell rewrite can restore that occurrence and its
+selection. Wiring supplies these callbacks; neither surface imports the tags
+feature. Nested labels use the ordered tag path described in
+[DOCUMENT-MODEL.md](../DOCUMENT-MODEL.md); the protection and containment rules
+are [INV-03](invariants.md#inv-03--finished-tags-are-protected-outside-their-explicit-editor).

@@ -87,7 +87,7 @@ and both the menu's painting and the action's availability call it:
 | State | Function |
 | --- | --- |
 | Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.ts` |
-| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `importShown`, `src/bootstrap/wiring/settings.ts` |
+| Present in browser, Import app data | `canOpenPrompterInBrowser()`, `src/adapters/desktop/desktop-port.ts`, controls the Present dropdown and command-menu entry; `importShown`, `src/bootstrap/wiring/settings.ts`, controls Import in Settings ▸ Data |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
@@ -100,15 +100,15 @@ menu follow it.
 
 `visible: false` only keeps an action out of the command menu. It still runs
 from a surface that has it: the desktop app's native menu reaches items the
-File menu hides (Present in browser), and their handlers explain
+browser app hides (Present in browser), and their handlers explain
 the refusal themselves. Export again is never listed (its availability always
 says `visible: false`), because the 3.1 command menu did not offer it.
 
 ## The command menu
 
 `src/features/command-menu/command-menu.ts` lists `appActions.list()` each time it renders, with
-nothing cached between openings, plus the export formats, which are not
-actions until milestone 5's format registry. `LIST_BEFORE_EXPORTS` and
+nothing cached between openings, plus the export formats from the separate
+export registry (`src/application/export/registry.ts`). `LIST_BEFORE_EXPORTS` and
 `LIST_AFTER_EXPORTS` there keep the 3.1 order. An action it does not name is listed after the named ones, in the
 order it was registered, under its own `group`; a group the command menu does
 not know is listed after the known groups. So an action registered anywhere
@@ -204,7 +204,7 @@ started over one of them.
 | `paste`, `gdoc-import` | still loading, a dialog, the tour |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
 | `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400) |
-| The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
+| Export formats (export registry, not action registry) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide filmed beats still act in the writer, Present, the
 shot list and the tour, and Find, Hide filmed beats and Search commands behind
@@ -343,8 +343,8 @@ native menu cannot grey an item out, and in 3.1 it did nothing there, so
 the action (`src/features/file-menu/actions.ts`) gives such a refusal no reason for that source, and the native path does
 nothing at all for a refusal without one; a dialog or other overlay in front
 of a greyed-out item is still named, as it is checked first. The export
-formats are not actions yet (milestone 5) and keep the File menu item's own
-dispatch, but the runner refuses one under a dialog or the command menu
+formats use the export registry and the local-file controller's dispatch,
+but the runner refuses one under a dialog or the command menu
 first, through the presenter the bootstrap gives it, so a refused format is
 neither run nor remembered for Export again. Before that check it runs the
 `onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `src/features/file-menu/local-files.ts`),
@@ -389,8 +389,9 @@ open when a command runs from the keyboard or a menu.
 | `prompter-open-in-browser` | The dropdown beside Present, command menu, desktop menu (Ctrl+Shift+P) | `mountPrompterOpen` in `src/features/prompter/mount.ts`, `18d-command-menu.js` |
 | `script-zoom-in`, `script-zoom-out`, `script-zoom-reset` | Desktop View menu, Ctrl + "+" / "-" / "0" (not listed in the command menu) | `20f-desktop.js` via `runScriptZoomCommand`, the `05s-script-zoom.js` keydown listener |
 
-The File menu's export formats (`export-pdf` and the rest) still dispatch in
-`18-local-files.js`; milestone 5's format registry takes them over. The New
+The export formats (`export-pdf` and the rest) dispatch through
+`src/features/file-menu/local-files.ts` to the export registry wired in
+`src/bootstrap/wiring/export-registry.ts`. The New
 Tab page's Tour runs the `tour` action (source `button`; it cannot be
 refused, so nothing changed for it). Its other buttons are different actions (a blank new script, a
 starter, paste as a new script, open into this tab) and stay its own.

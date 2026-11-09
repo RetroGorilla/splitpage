@@ -19,7 +19,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 | `src/features/common/` | Stateless DOM helpers shared by features | as features |
 | `src/bootstrap/wiring/<name>.ts` | Builds one feature's ports from the real owners and mounts it | anything |
 | `src/bootstrap/wiring/ports/` | Shared ports, one module per responsibility (document, editing, text, preferences, screen, effects...) | anything |
-| `src/bootstrap/actions.ts` | The one ordered list of actions. Order is what the command menu shows; `tests/bootstrap/action-order.test.ts` pins it | anything |
+| `src/bootstrap/actions.ts` | The one ordered list of action registrations, pinned by `tests/bootstrap/action-order.test.ts`. The command menu applies its own display order; see [feature-ports.md, Rule 6](docs/architecture/feature-ports.md#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order) | anything |
 | `src/bootstrap/main.ts` | The composition root and build entry: wires the app, then mounts owners and features in a fixed order. `tests/bootstrap/composition-root.test.ts` pins the order | anything in `src/bootstrap/`; outside it, only its frozen set |
 | `server/`, `desktop/`, `shared/` | Static file server for `start.mjs`, Electron shell, code shared by all three | see the layer table |
 
