@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: complete. All phases merged to `main` through #1238 on 2026-11-05; #264 is closed. The flow writer is the only writer and the switch is gone. This landed after the published 0.4.1 release. Scene header work #1166 and #1168 also merged (#1318, #1313). The remaining shared-bar work is [#1167](https://github.com/RetroGorilla/splitpage/issues/1167); current priorities are in [ROADMAP.md](ROADMAP.md).
+Status: complete. All phases merged to `main` through #1238 on 2026-11-05; #264 is closed. The flow writer is the only writer and the switch is gone. This landed after the published 0.4.1 release. Scene header work #1166 and #1168 also merged (#1318, #1313). The shared top bar (#1167) is complete: [Adam counts the save status as met](https://github.com/RetroGorilla/splitpage/issues/1167#issuecomment-6730027512), and the issue is closed. Current priorities are in [ROADMAP.md](ROADMAP.md).
 
 Sections 1–8 record the design decisions; sections 9–15 record results at their named commits. Earlier phase limits do not override later results or the merge to `main`. A real-script trial was unconfirmed when #1238 merged; this record has no later owner confirmation.
 

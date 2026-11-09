@@ -19,6 +19,7 @@ The old plans used “3.x”, “4.0” and “4.1” as milestone names. The re
 | Scene headers, first-save title/version naming, and open tags. | #1028, #1029, #1031, #1027, #1026 |
 | The default performance run reaches its images fixture again. | #1039, fixed by #1121 |
 | Flow Writer replaced the old Writer. | #264, #1238; [design and measured results](WRITER-FLOW-PLAN.md) |
+| The shared top bar meets all six requests, including the save status. #1167 is closed as completed. | [Adam's decision](https://github.com/RetroGorilla/splitpage/issues/1167#issuecomment-6730027512) |
 | Attach files, copy local files beside the script, and carry bundled files on Save As. | #1277, #1267, #1281 |
 | Export with files and confirmed Replace. Attach offers Copy / Move / Leave. Create bundle gathers outside files. | #260 items 1–3; #1294, #1310, #1311, #1319 |
 | Scene header styling and in-place naming. | #1168 via #1313; #1166 via #1318 |
@@ -31,8 +32,8 @@ Scene descriptions (#1171) were closed as not planned. They are not queued work.
 ## Next
 
 - [#1170](https://github.com/RetroGorilla/splitpage/issues/1170): part b, Production and Gear grouping by scene. Part a is done.
-- [#1167](https://github.com/RetroGorilla/splitpage/issues/1167): the shared top-bar audit leaves the save control unresolved. File menu placement belongs to [#1163](https://github.com/RetroGorilla/splitpage/issues/1163).
-- #260 item 4: the Export dialog sentence, Help and CHANGELOG updates remain under Adam's November 8 decision. The issue itself is closed; confirm its tracking with Adam before starting. A separate docs PR owns Help and CHANGELOG.
+- File menu placement belongs to [#1163](https://github.com/RetroGorilla/splitpage/issues/1163).
+- The coordinator's batch docs PR owns #260 item 4: the Export dialog sentence and Help page. #260 stays closed.
 
 Other work, including parked print spacing [#1023](https://github.com/RetroGorilla/splitpage/issues/1023), stays in the [open issues](https://github.com/RetroGorilla/splitpage/issues?q=is%3Aissue%20state%3Aopen). This page does not assign it to a release or set its order.
 
