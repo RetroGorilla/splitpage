@@ -7,12 +7,13 @@ export function helpActions(current: () => HelpControls | null, ports: HelpActio
   return [
     {
       id: "help",
-      label: "Help",
+      label: "User guide",
       group: "Help",
       icon: "i-help",
       keys: () => (ports.desktop() ? ["F1"] : []),
       bindKeys: () => false,
       words: "guide manual docs user guide how",
+      aliases: ["Help"],
       availability,
       run: () => { current()?.openHelp(); }
     },

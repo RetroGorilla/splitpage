@@ -22,7 +22,7 @@ function el(id: string) { return document.getElementById(id) as HTMLInputElement
 const OWN_ACTION = "command-menu";
 
 const LIST_BEFORE_EXPORTS = [
-  "save", "save-as", "autosave", "new", "open", "paste", "gdoc-import", "export"
+  "save", "save-as", "create-bundle", "autosave", "new", "open", "paste", "gdoc-import", "export"
 ];
 
 const LIST_AFTER_EXPORTS = [
@@ -40,14 +40,14 @@ function exportEntry(exporter: Exporter) {
   const action = exporter.action as string;
   const why = ports.exportActionReason(action);
   return {
-    cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), run: function () { ports.runExportAction(action); } },
+    cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), aliases: [] as readonly string[], run: function () { ports.runExportAction(action); } },
     view: { label: "Export as " + ports.exportActionName(action), icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
   };
 }
 
 function actionEntry(view: ActionView) {
   return {
-    cmd: { id: view.id, group: view.group, words: view.words, run: function () { ports.actions.invoke(view.id, "command-menu"); } },
+    cmd: { id: view.id, group: view.group, words: view.words, aliases: view.aliases, run: function () { ports.actions.invoke(view.id, "command-menu"); } },
     view: {
       label: view.label,
       icon: view.icon || "i-file",
@@ -88,7 +88,8 @@ function noteRecent(id: string) {
 
 function scoreFor(view: Entry["view"], cmd: Entry["cmd"], terms: string[]) {
   const label = view.label.toLowerCase();
-  const labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
+  const aliases = cmd.aliases.map(function (a) { return a.toLowerCase(); });
+  const labelWords = [label].concat(aliases).join(" ").split(/[^a-z0-9]+/).filter(Boolean);
   const otherWords = (cmd.words + " " + cmd.group).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   let total = 0;
   for (let i = 0; i < terms.length; i++) {
@@ -101,7 +102,8 @@ function scoreFor(view: Entry["view"], cmd: Entry["cmd"], terms: string[]) {
     if (!s) return 0;
     total += s;
   }
-  if (label.indexOf(terms.join(" ")) === 0) total += 2;
+  const phrase = terms.join(" ");
+  if ([label].concat(aliases).some(function (name) { return name.indexOf(phrase) === 0; })) total += 2;
   return total;
 }
 

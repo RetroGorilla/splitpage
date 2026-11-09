@@ -131,9 +131,11 @@ test("the view carries label, keys, checked state and reason", () => {
     availability: () => ({ enabled: false, reason: "Still loading…", checked: true }), run: () => {}
   });
   assert.deepEqual(registry.view("hide"), {
-    id: "hide", label: "Hide shot scenes", group: "This document", icon: "i-eye-off", keys: ["mod+alt+h"], words: "collapse",
+    id: "hide", label: "Hide shot scenes", group: "This document", icon: "i-eye-off", keys: ["mod+alt+h"], words: "collapse", aliases: [],
     enabled: false, visible: true, reason: "Still loading…", checked: true
   });
+  registry.register({ id: "guide", label: "User guide", group: "Help", aliases: ["Help"], run: () => {} });
+  assert.deepEqual(registry.view("guide")?.aliases, ["Help"]);
   assert.equal(registry.view("missing"), undefined);
 });
 

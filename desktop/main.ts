@@ -1684,7 +1684,7 @@ function buildMenu() {
     label: "File",
     submenu: [
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuCommand("save") },
-      { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
+      { label: "Save a copy…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
       { label: "Create bundle…", click: () => sendMenuCommand("create-bundle") },
       { type: "separator" },
       { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
@@ -1802,11 +1802,10 @@ function buildMenu() {
   const helpMenu: Electron.MenuItemConstructorOptions = {
     label: "Help",
     submenu: [
-      { label: "User guide…", accelerator: "F1", click: () => sendMenuCommand("help") },
-      { label: "Tagging reference", click: () => sendMenuCommand("tagging-help") },
+      { label: "User guide", accelerator: "F1", click: () => sendMenuCommand("help") },
       { label: "Take the tour", click: () => sendMenuCommand("tour") },
-      { label: "Set up Splitpage…", click: () => sendMenuCommand("setup") },
-      { type: "separator" },
+      { label: "Getting started…", click: () => sendMenuCommand("setup") },
+      { label: "Tagging reference", click: () => sendMenuCommand("tagging-help") },
       { label: "About Splitpage", click: () => sendMenuCommand("about") }
     ]
   };

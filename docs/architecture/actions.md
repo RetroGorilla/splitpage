@@ -87,7 +87,7 @@ and both the menu's painting and the action's availability call it:
 | State | Function |
 | --- | --- |
 | Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.ts` |
-| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `appDataImportShown()`, `src/features/desktop/desktop.ts` |
+| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `importShown`, `src/bootstrap/wiring/settings.ts` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
@@ -380,8 +380,9 @@ open when a command runs from the keyboard or a menu.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
-| `settings`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Help and Tour also from the Settings dialog's and the setup wizard's buttons; Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
-| `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
+| `settings`, `help`, `tour`, `setup` | File menu (Settings, and Help ▸ User guide, Take the tour, Getting started…), command menu, desktop menu (F1 for the user guide); Help and Tour also from the Settings dialog's and the setup wizard's buttons; Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
+| `about`, `tagging-help` | File menu (Help ▸), command menu, desktop menu; Tagging reference also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
+| `export-app-data`, `import-app-data` | Settings ▸ Data, command menu (since #1163 no longer the File menu) | `20s-settings.js` direct calls, `18d-command-menu.js` |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
 | `new`, `paste`, `gdoc-import`, `autosave`, `export-again` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
 | `set-target` | Command menu | `18d-command-menu.js` |

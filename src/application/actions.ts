@@ -25,6 +25,7 @@ export interface ActionDefinition {
   readonly bindKeys?: () => boolean;
   readonly claimKeys?: boolean;
   readonly words?: string;
+  readonly aliases?: readonly string[];
   readonly availability?: (source: ActionSource) => Availability;
   readonly run: (source: ActionSource, input?: unknown) => void | Promise<void>;
 }
@@ -36,6 +37,7 @@ export interface ActionView {
   readonly icon: string;
   readonly keys: readonly string[];
   readonly words: string;
+  readonly aliases: readonly string[];
   readonly enabled: boolean;
   readonly visible: boolean;
   readonly reason: string;
@@ -94,6 +96,7 @@ function toView(definition: ActionDefinition, source: ActionSource): ActionView 
     icon: definition.icon ?? "",
     keys: keysOf(definition),
     words: definition.words ?? "",
+    aliases: definition.aliases ?? [],
     enabled: a.enabled,
     visible,
     reason: a.enabled ? "" : a.reason ?? "",

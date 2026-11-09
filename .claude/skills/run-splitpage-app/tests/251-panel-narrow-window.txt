@@ -93,6 +93,8 @@ eval window.scrollTo(0, 0)
 sleep 600
 click #btn-file
 sleep 300
+click #menu-help
+sleep 200
 click #file-menu [data-file-action="tagging-help"]
 wait !document.getElementById('tagging-help').hidden
 sleep 400
