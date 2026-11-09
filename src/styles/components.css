@@ -763,9 +763,10 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
   align-items: center;
   gap: calc(9 * var(--u));
   min-height: calc(32 * var(--u));
-  padding: calc(2 * var(--u)) calc(12 * var(--u));
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border-strong);
+  margin-top: calc(27 * var(--u));
+  padding: calc(10 * var(--u)) calc(12 * var(--u));
+  background: transparent;
+  border-top: 1px solid var(--border);
   color: var(--text);
   font: calc(13 * var(--u))/1.4 var(--font-body);
 }
@@ -782,8 +783,12 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 .section-header button:disabled { opacity: .45; cursor: default; }
 .section-header .section-grip { color: var(--text-faint); cursor: grab; font-size: calc(17 * var(--u)); line-height: 1; }
 .section-fold { width: calc(24 * var(--u)); flex: none; }
-.section-header [role="heading"] { min-width: 0; }
-.section-header .section-name { font-weight: 600; text-align: left; overflow-wrap: anywhere; }
+.section-header .section-fold { color: var(--text-faint); }
+.section-header [role="heading"] { min-width: 0; font-size: calc(22.5 * var(--u)); font-weight: 600; line-height: 1.3; }
+#rows .section-header [role="heading"] {
+  font-size: calc(1.25 * max(var(--script-floor), calc(var(--script-audio-size) * var(--script-scale))));
+}
+.section-header .section-name { padding: 0; font-weight: 600; text-align: left; overflow-wrap: anywhere; }
 .section-header .section-name-empty { color: var(--text-faint); font-weight: 450; }
 .section-stats { flex: none; color: var(--text-faint); font: calc(11 * var(--u)) var(--font-display); white-space: nowrap; }
 .section-more { margin-left: auto; flex: none; }
@@ -829,6 +834,15 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 .section-header, .section-rename { --u: calc(var(--script-scale, 1) * 1px); }
 #writer-doc .section-header, #writer-doc .section-rename { --u: calc(var(--wr-font) / 19); }
 #writer-doc .section-header { margin: calc(12 * var(--u)) 0; }
+@media (hover: hover) and (pointer: fine) {
+  .section-header .section-grip, .section-more > summary { opacity: 0; }
+  .section-header:is(:hover, :focus-within) .section-grip,
+  .section-header:is(:hover, :focus-within) .section-more > summary,
+  .section-more[open] > summary { opacity: 1; }
+}
+@media (hover: none), (any-pointer: coarse) {
+  .section-header .section-grip, .section-more > summary { opacity: 1; }
+}
 @media (hover: none), (pointer: coarse) {
   .section-header, .section-rename { --u: max(1px, calc(var(--script-scale, 1) * 1px)); }
   #writer-doc .section-header, #writer-doc .section-rename { --u: max(1px, calc(var(--wr-font) / 19)); }
