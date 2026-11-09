@@ -803,7 +803,8 @@ and its "<script name> files" folder. Whoever unzips it can open the script and
 every file in that folder, wherever they unzip it. Only files in the script's
 folder go in: files that are missing, linked from elsewhere on your computer,
 or of a type Splitpage doesn't attach are left out, and Splitpage tells you how
-many. You can keep working while it exports, hide the progress, or press
+many. To include files outside the folder, use **File ▸ Create bundle…** first.
+You can keep working while it exports, hide the progress, or press
 **Cancel**, which leaves no zip behind. In the browser, the card exports the
 script on its own.
 
@@ -951,6 +952,18 @@ Double-clicking a `.splitpage` file opens it here.
   tab by tab, at the next launch.
 - **Closing with unsaved work** asks first. With several unsaved tabs, one
   dialog lists them all, with **Review** to go through them.
+- **Attaching a file** to a saved script (dropping, pasting or picking a video
+  or other file on a beat) asks whether to **Copy it** (the default), **Move
+  it**, or **Leave it where it is**. Copy and Move put the file in a
+  "<script name> files" folder next to the script, so it opens wherever the
+  script goes. Move takes it out of where it was, so other scripts that link it
+  there lose it. Leave keeps the link to where the file is now. Move is offered
+  only for a file you added since Splitpage started.
+- **Files outside the script's folder**: when a script links files outside its
+  "<script name> files" folder, a bar across the top says how many. **Create
+  bundle…** copies them into that folder, or moves the ones you added this
+  session, so they open wherever the script goes. The × hides the bar until you
+  open the script again. **File ▸ Create bundle…** does the same at any time.
 
 ### Tabs
 
