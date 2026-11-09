@@ -1,6 +1,6 @@
 # Terminology rename inventory
 
-This inventory is for PR 2 of #1186. Old "scene" means beat and old "section" means scene. Internal names can change, but the following boundaries must keep their wire names. Line numbers refer to the source at the time of this inventory. Preserve old readers as well as writers; snapshots and clipboard payloads can outlive the process that wrote them.
+This is the completed inventory for #1186 (#1187, #1188, #1190, #1191). The issue is closed. It is not a pending rename plan. Old "scene" means beat and old "section" means scene. The following saved and external boundaries keep their wire names. Line numbers refer to the source at the time of this inventory. Preserve old readers as well as writers; snapshots and clipboard payloads can outlive the process that wrote them.
 
 ## Saved and external boundaries
 

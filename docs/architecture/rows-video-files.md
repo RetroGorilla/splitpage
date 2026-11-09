@@ -91,9 +91,11 @@ The zip holds `<script>.splitpage` (compressed) and `<script> files/` with the f
 
 Afterwards: "Exported “Episode 12 (with files).zip” with 2 files.", plus, when links were left out, a notice that stays until dismissed: "1 file couldn't be included in “Episode 12 (with files).zip”. It is missing, outside the script's folder, or a type Splitpage doesn't attach, so it isn't in the zip." (or "2 files … They are … so they aren't in the zip."). Cancel says "Stopped exporting “Episode 12 (with files).zip”. Nothing was saved."; a taken name says "Could not export — “Episode 12 (with files).zip” already exists. Export again and choose a new name."; any other failure "Could not export “Episode 12 (with files).zip”.". A second export while one runs says "Splitpage is already exporting “…”. Wait for it to finish, then export again.".
 
-The `open-picture-link` action retains its ID, registration position, availability and input validation. The build entry stays `_entry.js`; only its retired initializer is replaced by the explicit feature mount.
+The `open-picture-link` action retains its ID, registration position, availability and input validation. The extraction originally kept `_entry.js`; the current build entry is `src/bootstrap/main.ts`.
 
 ## Verification
+
+This section records the original extraction at base `9b3df215`, not current module counts or a pending move. Later bundle work merged in #1267, #1281, #1294, #1310, #1311 and #1319. [ROADMAP.md](../ROADMAP.md) tracks the remaining owner-directed docs item.
 
 The first commit adds six characterization tests that passed on base `9b3df215ba72e1a6576d21ad98132e3da0f8d218` before production code moved. They retain the old URL-cache, retained-grant, warning, token and native-failure behavior after repointing. Additional isolated feature tests cover link routing and owner disposal, and a wiring test covers explicit mount/remount/stop. Existing application opener, document-replacement and action-order tests remain in place. The rows load manifest replaces `06-rows.js` with the feature and wiring targets; configuration spies cover the new mount.
 

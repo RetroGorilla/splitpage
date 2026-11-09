@@ -1,5 +1,7 @@
 # Captured HTML print layout
 
+The AQ print work is complete and included in 0.4.1 (#994, #998, #1015, #1000, #1004, #1024). Validation sections record the named PR's runs. They are not current release gates or proof of later manual checks; see [ROADMAP.md](../ROADMAP.md).
+
 AQ-40 and AQ-41 implement roadmap C6 P1 and P2. AQ-43 wires these layouts to
 browser PDF actions through a separate print-dialog adapter, and AQ-42 (P3)
 prints the same pages to PDF files on desktop with Electron's `printToPDF`.
@@ -434,9 +436,11 @@ Review round 1 repeated the full gate with all 571 files passing. The focused
 adapter/workflow/app tests passed 12/12, including a print call returning after
 cancellation. Changed suites 65, 96 and 384 passed 55/55, 81/81 and 36/36
 checks on a fresh test build with three lanes and 12.7 GB free RAM beforehand.
-The latest counts across the fourteen suites total 962/962. Browser PDF scope
-is now also recorded in INV-60/61, awaiting Adam's decision; desktop PDF keeps
-both rules. Delta review and Adam's real-dialog/PDF checks remain pending.
+The counts at that checkpoint across the fourteen suites total 962/962.
+Browser PDF scope is recorded in INV-60/61 as awaiting Adam's decision.
+Desktop PDF pins dates for same-day bytes; its footer artifact exception was
+accepted by Adam on 2026-10-31 (INV-61). The P4 record did not confirm the
+manual real-dialog/PDF checks. This file has no later confirmation of them.
 
 The six tests in `tests/adapters/formats/script-print.test.mjs` cover rich text,
 tags/keys/directions/cues, facts, comments/replies, raster/gallery/legacy images,

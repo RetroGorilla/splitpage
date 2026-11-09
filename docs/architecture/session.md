@@ -264,6 +264,8 @@ The click routing needs the booted app, because it lives in the views. `src/test
 
 ## 8. Known gaps and exceptions
 
+This table keeps the milestone findings and their recorded dispositions. Numbered files, runtime-loop counts and future-tense milestone assignments describe those checkpoints. The milestones and legacy reduction are complete; check each linked issue's current state before treating a row as open work. Current priorities are in [ROADMAP.md](../ROADMAP.md).
+
 | Gap or exception | Where it stands |
 | --- | --- |
 | Importing into a new document still calls `noteSessionEdit` (a whole-document change set, no reconciliation); every other writer is a command | Cell edits: #452. The rest moved in milestones 4 to 6 and 4.1 |

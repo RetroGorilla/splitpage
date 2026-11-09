@@ -2,6 +2,8 @@
 
 This ledger holds the 62 invariants, `INV-01` to `INV-62`, under the numbers they had in `docs/HANDOFF.md` §5, which now points here. The behaviour tests of a rule absorbed into code stay. Update a row in the same PR that changes its tests, owner or class.
 
+Milestone numbers, replacement plans and “As built” entries record the completed refactor, not a future work queue. The rules and their explicit exceptions still apply. Current work is tracked in GitHub; [ROADMAP.md](../ROADMAP.md) links to it. An unresolved manual check or owner decision is not proved by a merged PR or release tag.
+
 ## Legend
 
 - **keep**: the rule stays explicit, held by its tests. No planned structure makes breaking it impossible.
