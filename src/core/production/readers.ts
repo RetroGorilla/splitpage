@@ -5,7 +5,7 @@ import type { TagName } from "../document/tags.ts";
 import { cuesInCell } from "../text/cues.ts";
 import type { CellDecoder } from "../text/ports.ts";
 import { spokenText } from "../text/projections.ts";
-import { tagNameOf } from "../text/runs.ts";
+import { tagNameOf, tagStack } from "../text/runs.ts";
 import { whoSentences } from "../text/who.ts";
 import { brollInCell, brollPropsInCell } from "./broll.ts";
 import type { FieldTag, FieldWho, ProductionReaders, WhoPair } from "./ports.ts";
@@ -14,16 +14,19 @@ type TagSpan = { id: string; catId: string; name: string; text: string };
 
 function readTags(cellOf: CellDecoder, html: string): FieldTag[] {
   const out: TagSpan[] = [];
-  let last: TagSpan | null = null;
+  let active: TagSpan[] = [];
   cellOf(html).forEach(function (r) {
-    const id = r.atom ? null : r.marks.innerTags?.at(-1) || r.marks.tag;
-    if (id && last && last.id === id) { last.text += r.text; return; }
-    last = null;
-    const t = id ? tagNameOf(id) : null;
-    const name = t ? t.name.trim() : "";
-    if (!name) return;
-    last = { id: id as string, catId: (t as TagName).cat, name: name, text: r.text };
-    out.push(last);
+    const ids = r.atom ? [] : tagStack(r.marks);
+    let shared = 0;
+    while (shared < ids.length && shared < active.length && active[shared]?.id === ids[shared]) shared++;
+    active = active.slice(0, shared);
+    ids.slice(shared).forEach(function (id) {
+      const t = tagNameOf(id);
+      const span = { id: id, catId: t?.cat || "", name: t?.name.trim() || "", text: "" };
+      active.push(span);
+      if (span.name) out.push(span);
+    });
+    active.forEach(function (span) { span.text += r.text; });
   });
   const found = out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
   if (html.indexOf("audio-cue") !== -1) {

@@ -1,0 +1,20 @@
+open
+eval (async function(){window.P=(await import('/tests/adapters/print/capture-browser-print.js')).captureBrowserPrint();window.F=window.__splitpageFormats;var h='<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> <span class="tag-anchor" data-tag-cat="sound" data-tag-name="Rain" contenteditable="false">rain on <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Umbrella" contenteditable="false">umbrella</span></span> with <span class="tag-anchor" data-tag-cat="sound" data-tag-name="Rig sound" contenteditable="false">the <span class="tag-anchor" data-tag-cat="gear" data-tag-name="Rig" contenteditable="false">rig</span></span>';var doc={schema:2,title:'Nested consumers',rows:[{id:'r1',visualText:h,audioText:'',status:'todo'}],productionTags:[{cat:'sound',name:'Rain',status:'have',notes:'outside'},{cat:'prop',name:'Umbrella',status:'sourcing',notes:'dry'},{cat:'sound',name:'Rig sound'},{cat:'gear',name:'Rig'}],brollShots:[{id:'bs1',name:'rain on umbrella with the rig',props:[]}],comments:[]};F.openFile(new File([JSON.stringify(doc)],'nested.splitpage'));return true;})()
+wait F.state().title === 'Nested consumers'
+jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
+wait document.querySelectorAll('#production-list .tag-entity').length === 4
+expect Array.from(document.querySelectorAll('#production-list .tag-entity-name')).map(function(e){return e.textContent;}).sort().join('|') === 'Rain|Rig|Rig sound|Umbrella'
+jsclick #btn-gear
+wait document.querySelectorAll('#gear-list .tag-entity').length === 1
+expect document.querySelector('#gear-list .tag-entity-name').textContent === 'Rig'
+jsclick #btn-broll
+wait !!document.querySelector('#broll-list .broll-row[data-id="bs1"] .broll-meta-props')
+expect document.querySelector('#broll-list .broll-row[data-id="bs1"] .broll-meta-props').textContent === 'Umbrella'
+expect F.state().brollShots[0].props.length === 0
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+wait P.pages.length > 0
+eval (function(){window.d=new DOMParser().parseFromString(P.pages[P.pages.length-1].html,'text/html');return true;})()
+expect d.querySelector('#production-breakdown').textContent.includes('Rain') && d.querySelector('#production-breakdown').textContent.includes('Umbrella') && d.querySelector('#production-breakdown').textContent.includes('Rig')
+expect Array.from(d.querySelectorAll('.script-table .tag')).some(function(e){return e.textContent === 'umbrella' && e.style.color === 'rgb(118, 74, 162)';})

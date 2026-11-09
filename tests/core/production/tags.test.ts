@@ -238,6 +238,20 @@ test("deriveProductionIndex lists registry entries in order, then the live tags 
   assert.deepEqual(ix.tagSig.slice(18, 24), [null, null, null, null, null, null]);
 });
 
+test("nested Production and Gear entries retain their own records and mentions", () => {
+  const html = cells.html([T("rain on ", { tag: "t:sound:Rain" }),
+    T("rig", { tag: "t:sound:Rain", innerTags: ["t:gear:Rig"] })]);
+  const state = doc({ docId: "d1", rows: [{ id: "r1", visualText: html, audioText: EMPTY }], productionTags: [
+    registered("sound", "Rain", { id: "t_rain", owner: "p1", notes: "outside", status: "have" }),
+    registered("gear", "Rig", { id: "t_rig", owner: "p2", notes: "charge", status: "sourcing" })
+  ] });
+  const entries = deriveProductionIndex(state, readers).entries;
+  assert.deepEqual(entries.map(e => [e.catId, e.name, e.owner, e.notes, e.status, e.mentions.length]), [
+    ["sound", "Rain", "p1", "outside", "have", 1], ["gear", "Rig", "p2", "charge", "sourcing", 1]
+  ]);
+  assert.deepEqual(entries.filter(e => e.catId === "gear").map(e => e.name), ["Rig"]);
+});
+
 test("an index is kept through prose edits and goes stale when what it reads changes", () => {
   const state = tagState();
   const ix = deriveProductionIndex(state, readers);

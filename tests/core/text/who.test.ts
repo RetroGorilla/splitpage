@@ -91,6 +91,12 @@ test("whoSentences pairs each sentence's names with that sentence's tags only", 
   assert.deepEqual(whoSentences([KETTLE, T(" only")]), []);
 });
 
+test("whoSentences associates a person with every nested label", () => {
+  assert.deepEqual(whoSentences([who("Sam"), T(" "), T("umbrella", {
+    tag: "t:sound:Rain", innerTags: ["t:prop:Umbrella"]
+  })]), [{ tags: ["t:sound:Rain", "t:prop:Umbrella"], names: ["Sam"] }]);
+});
+
 test("find skips the chip, so a search for its name or the @ never matches inside it", () => {
   const cell = normalizeCell([T("Sam says "), who("Sam"), T(" @ home")]);
   assert.deepEqual(findInCell(cell, "Sam", false).length, 1);

@@ -1,6 +1,6 @@
 import { deleteRange, explode, implode, clampRange } from "./edits.ts";
 import type { EditedCell } from "./edits.ts";
-import { isWhoRun, normalizeCell, whoName } from "./runs.ts";
+import { isWhoRun, normalizeCell, tagStack, whoName } from "./runs.ts";
 import type { CellInput, Marks, Run } from "./runs.ts";
 
 export type WhoSentence = { tags: string[]; names: string[] };
@@ -59,7 +59,7 @@ export function whoSentences(cell: CellInput): WhoSentence[] {
   runs.forEach(function (r, ri) {
     if (isWhoRun(r)) { cur.names.push(r.name); return; }
     if (r.atom) return;
-    if (r.marks.tag) { if (cur.tags.indexOf(r.marks.tag) === -1) cur.tags.push(r.marks.tag); return; }
+    if (r.marks.tag) { tagStack(r.marks).forEach(function (id) { if (cur.tags.indexOf(id) === -1) cur.tags.push(id); }); return; }
     const text = r.text;
     for (let i = 0; i < text.length; i++) {
       const ch = text.charAt(i);
