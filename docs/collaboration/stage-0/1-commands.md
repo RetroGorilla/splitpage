@@ -15,7 +15,7 @@ Audited against `0ca1929177ffc84bced412ad2be3aa99690761d0`.
 
 1. A `Command` reaches `DocumentSession.run` (`src/application/session/document-session.ts`). `needs: "edit"` commands are refused when `capability.edit()` says no; `cellTextCommand` has `needs: "nothing"` and refuses inside its own plan unless only comment anchors moved.
 2. `plan(doc)` runs against the live document at that moment. Nothing carries an editor base version: positions come from the DOM or the held selection, captured in the same task.
-3. `transact` applies the plan to the plain object, then three writers that are not the user's edit: `attribution.attribute` (edit stamps), `reconcile.records` (tag and shot records minted from text) and, when the change set needs it, `reconcile.anchors` (comment anchor repair). A throw rolls all of it back.
+3. `transact` applies the plan to the plain object, then three writers that are not the user's edit: `attribution.attribute` (`myColorPlan` in `src/application/save/session-effects.ts`, which writes `personColors`), `reconcile.records` (tag, shot and person records minted from text) and, when the change set needs it, `reconcile.anchors` (comment anchor repair). A throw rolls all of it back. Row stamps (`updatedAt`, `updatedBy`) are written by the commands themselves; save stamps by `confirmWrite` (W15).
 4. `commit("edit")` bumps `generation`, calls `undo.record` (wired in `src/bootstrap/wiring/undo.ts` to `Undo.noteEdit`), runs the effect scheduler (`dirty`, `draft`, `save`, and the debounced `production`/`broll` derive jobs, 180 ms idle, 1 s max) and publishes the change to listeners.
 5. Undo is a snapshot diff, not an operation log. `Undo.noteEdit` queues a microtask `flush` (immediately when the command carries a selection pair) that runs `diffStates(base, live)` in `src/application/editing/undo/history.ts` and records whole-field `rowField` steps plus index-based `insertRow`, `deleteRow`, `moveRow` and `docField` steps. Typing groups: same cell, under 1000 ms, no selection pair on either entry, not starting a new word after a space (`record`). 200 entries max. `breakCoalescing` ends a group.
 6. Listeners repaint: `paintSessionChange` in `rr`. Edits made inside `paintGuard().whileShown` (every surface sync and flow commit) skip repainting the text fields already on screen.
@@ -106,6 +106,7 @@ Undo replay re-enters through `DocumentSession.replay` (kind `replay`: no undo r
 | R7 | Remove scene header | Split view | `scene-controls.ts` action `remove`; `src/bootstrap/wiring/scene-headers.ts` → `removeSceneCommand` | boundary change (header remove) | cmd `removeSceneCommand` | T08 |
 | R8 | Move scene (menu up/down, drag), drop a beat on a header | Split view | `scene-controls.ts` → `moveSceneCommand`, `moveBeatCommand(…, intoScene)` | movement | cmd | MOVE |
 | R9 | Beat status cycle, hide shot | Split view | P25, P27 | record change | cmd | S2 |
+| R10 | Drop a beat on the rundown strip | rundown | `src/features/rundown/rundown.ts` `onStripDrop` → `ce` `moveRow` → `moveBeatCommand` | movement | cmd `moveBeatCommand` | MOVE |
 
 ## 6 Panels, records and pictures
 
@@ -119,8 +120,8 @@ Shorthand: `cm` = `src/features/comments/comments.ts`, `tp` = `src/features/tags
 | P4 | Resolve, reopen | panel | `cm` `toggleResolve` → `toggleResolveCommand` | record change | cmd | T11 |
 | P5 | Comment assignee | panel | `cm` `setCommentAssignee` → `setCommentAssigneeCommand` | record change | S2 | S2 |
 | P6 | Delete a comment | panel | `cm` `deleteComment` → `deleteCommentCommand` (unwraps the anchor) | record change, mark/format | cmd, rewrite | T11, T21 |
-| P7 | Restore a conflict card's value | panel | `cm` `restoreConflictValue` → `restoreConflictCommand` | whole-field replacement of one cell | S2 | S2 |
-| P8 | Tag a selection (composer: one occurrence, or all) | Split view | `pt` `applyTag` → `ce.sync`, then `pr` `tagCellsCommand("tag-occurrence" / "tag-all-occurrences")` | mark/format, record change | cmd, rewrite + `addRegistryTag` | T20, T21 |
+| P7 | Restore a conflict card's value | panel | `cm` `restoreConflictValue` → `restoreConflictCommand`: replaces a whole text cell, the title, or a row's `imageRef` (dropping `visualImage`), and removes the conflict record | whole-field replacement, record change | S2 | S2 |
+| P8 | Tag a selection (composer: one occurrence, or all) | Split view | `pt` `applyTag` → for one occurrence `ce.sync` first; then `pr` `tagCellsCommand("tag-occurrence" / "tag-all-occurrences")` | mark/format, record change | cmd, rewrite + `addRegistryTag` | T20, T21 |
 | P9 | Tag at caret, category pick, `keyword:` plain tag, ghost and suggestion accept | Split view | `src/features/tags/plain-tags.ts` `chooseCategory`, `closePlainTag`; `pt` `acceptTagGhost`, `acceptUntaggedMention` → `tagTextRange` → `ce.edit` → `cellTextCommand` with `records.tags` | mark/format | cmd via `ce.edit` (whole cell) | T20, T21 |
 | P10 | Edit a finished tag's text | Split view | `src/features/tags/occurrence-editor.ts` `activate`; typing goes through S1; `finish` → `closePlainTag` | insert text inside a tag | DOM → `ce.sync` | T20 |
 | P11 | `@` who-list pick | Split view | `src/features/tags/who-list.ts` `pick` → `ce.edit` → `cellTextCommand`; the person record is minted by the records reconciler | insert text | S2 | S2 |
@@ -175,7 +176,7 @@ Shorthand: `cm` = `src/features/comments/comments.ts`, `tp` = `src/features/tags
 | W3 | Reload project from disk (conflict modal) | `src/features/file-menu/mount.ts` `mountConflicts` → `local-files.ts` `reloadProjectFromDisk` | adopt | cleared | SLICE |
 | W4 | Reload an imported file | `local-files.ts` `reloadFileFromDisk` → `loadFileIntoEditor({ reload })` → `noteReload` → `DocumentSession.absorbReload` (same object), `settle("reload")` | reload | overlapping entries forgotten (`Undo.absorbRemote`) | SLICE, T12 |
 | W5 | New script, long demo, new tab blank or starter | `src/features/file-menu/file-menu.ts` `startNewScript`, `openLongDemo`; `src/features/newtab/newtab.ts` `startBlankScript`, `startStarterScript` → `transitions.startNew` | adopt | cleared | SLICE |
-| W6 | Paste as a new script | `newtab.ts` `openPasteAsNewDocument` → `imports.ts` `confirmImport` → `adoptNewDocument`, then `noteSessionEdit` | adopt, then an edit | cleared | S2 |
+| W6 | Paste as a new script | `newtab.ts` `openPasteAsNewDocument` → `imports.ts` `confirmImport` → `adoptNewDocument`, then `noteSessionEdit` | adopt, then an edit | cleared | SLICE |
 | W7 | New script from selected beats | C8 | adopt, then `pasteBeatsCommand` | cleared, then one entry | SLICE |
 | W8 | File-conflict merge | `src/features/merge/local-merge.ts` `confirmFileMerge` → `src/application/recovery/stashed-work.ts` `applyStashedWork` → `src/bootstrap/wiring/document-merge.ts` `applyMerge` → `src/application/session/apply-merge.ts` `applyIncomingMerge` → `noteMerged` | `absorbMerged("disk")`; autosave halted | partial (`Undo.noteRemote` → `history.forget`); snapshot for the banner's Undo | SLICE, T12 |
 | W9 | Startup document and conflict stash | `src/bootstrap/startup/initial-document.ts` `adopt` → `src/bootstrap/wiring/startup.ts` `applyStash` | `absorbMerged("recovery")`, `absorbRecovery`, or adopt | partial or cleared | SLICE, T17 |
@@ -184,6 +185,8 @@ Shorthand: `cm` = `src/features/comments/comments.ts`, `tp` = `src/features/tags
 | W12 | Desktop tab restore at launch | `desktop/session-restore.ts` `restoreSessionAtLaunch` → W11 or W1 | as those | as those | T24 |
 | W13 | Import rows with "replace" checked | `imports.ts` `confirmImport` → `importRowsCommand`: every row removed, scenes cleared, title kept | edit | one entry; snapshot first | SLICE |
 | W14 | Document id reassignment (desktop IPC, other tab) | `src/application/identity/document-identity.ts` `reassignDocId` → `documentIdStamp` via `DocumentSession.stamp` | stamp; no undo, no dirty | none | SLICE |
+| W15 | Save completion: actions `save` (mod+s) and `save-as` (`src/features/file-menu/actions.ts`), autosave, forced overwrite | `src/application/save/file-saving.ts` → `src/application/save/save-completion.ts` `confirmWrite`: `editStamp` (rev, last editor, time) via `DocumentSession.stamp`; `adoptSavedCopyDocId` → `documentIdStamp` when the save forked the id; `history.amendRows(pathVideoLinks)` relinks bundled video paths (amend); `fileTitleCommand` via `edits.edit` when the file name renames the title | stamps and an amend without undo; the title rename is an undoable edit; `history.reset()` when the save retargeted the file | title rename: one entry; reset clears all | SLICE |
+| W16 | Superseded save | `file-saving.ts` `obsolete` → `adoptSavedCopyDocId(…, false)`: copies history to the forked id, no document write | none | none | S2 |
 
 ## 10 Command builders sorted by what they change
 
@@ -199,7 +202,7 @@ This sizes Stage 2. Every builder writes the plain object through `Plan.apply` a
 
 Notes on the groups:
 
-- The three whole-string fields are translatable only as last writer wins. `titleCommand` runs on every keystroke, so two people typing in the title would replace each other's whole title.
+- The three whole-string builders write the whole title or scene name; `titleCommand` runs on every keystroke. Plan section 5 requires character-level collaboration for the title and editable headings, so in shared mode they need text intent too: effectively 23 field builders and 13 text builders.
 - Every text-group builder ends in a whole-field assignment: `cellTextCommand` from runs, the rest through `applyRewrites` or their own `apply`. The intent, where one existed, sits in the caller: a range in `ce.edit`, a planner in `rewrittenCopies`, a `TextRange` in `cutCommand`.
 - In the structure group, `moveBeatCommand`, `swapBeatsCommand` and `moveSceneCommand` know the moved ids and the target, but apply by `live.rows.splice(0, n, ...reordered)` and declare `rowsMoved: true` with no ids. `flowCommand` declares the cells it found by `JSON.stringify` diff and then replaces the whole `rows` array with deep copies.
 
@@ -232,7 +235,7 @@ The plan proposes an ordered list of operations on `FlowEdit` beside `rows`. "Kn
 | `insertBeats` | inside `pasteText`, `pasteFlowRange` | known |
 | `startBeat`, `moveBeats`, `replaceAll` | none in the app | known; unused |
 
-Counts: 24 operations. 22 know their intent when `FlowEdit` is built (3 of them unused, and `selectionToOwnBeat` reached only through V4), 1 is partly surface-built (inline markdown), 1 has lost it (`renameHeading`). The bigger loss is outside `FlowEdit`: every native-input path (F1, F2, F4's sync, F22, V1, V2, S1, S2) reaches the document as `cellTextCommand` with the whole field, with no `FlowEdit` at all.
+Counts: 24 operations. 22 know their intent when `FlowEdit` is built (3 of them unused, and `selectionToOwnBeat` reached only through V4), 1 is partly surface-built (inline markdown), 1 has lost it (`renameHeading`). The bigger loss is outside `FlowEdit`: native input into a beat or cell (F1, F2's beats, F4's sync, F22, V1 and V2 after the first save, S1, S2) reaches the document as `cellTextCommand` with the whole field, with no `FlowEdit` at all. Two exceptions do build a `FlowEdit`: heading input (`fs` `onInput` and `syncComposition` → `renameHeading` → `flowCommand`), which carries only the whole name, and the first visual-selection save (`fw` `save` → `setVisualForRange`).
 
 ## Detail blocks
 
@@ -305,7 +308,7 @@ Grouped by mechanism. Each names the rows it covers; the trunk above is not repe
   3. A native DOM wrap, then a sync (S11 `wrapRangeInComment` → `ce.sync`).
 - **Base held:** the caller's range (`ce.open` reads the DOM selection) for shapes 1 and 3; none for shape 2.
 - **Effects:** the records reconciler mints tag and person records at commit; `syncCommentAnchors` (`src/core/text/anchors.ts`) moves a comment's `rowId`/`field` to wherever its anchor id now is; `production` derive.
-- **Undo grouping:** tag panel and bulk operations break coalescing before and after: one entry each. A comment is two commands, the anchor (`cellTextCommand`) and the record (`addCommentCommand` on Post), so two entries; Cancel removes the anchor with a third.
+- **Undo grouping:** tag panel and bulk operations break coalescing before and after: one entry each. A comment has two alternative sequences, each two commands and two entries: the anchor (`cellTextCommand`) then Post (`cm` `postComment` → `addCommentCommand`, which clears `pendingComment`), or the anchor then Cancel (`cm` `closeCommentComposer(true)` → `unwrapCommentAnchorCommand`, only while the comment is still unposted).
 - **Replay after other edits (T21):** text fields go through `resolveCell`, a three-way `mergeCells(before, live, after)` refused on a text or mark conflict ("that beat's text has changed since"). `comments` and `productionTags` doc-field steps refuse when changed, unless `listMergeFor` covers the key.
 
 ### D10 Undo and redo (U1, U2)
@@ -319,11 +322,11 @@ Grouped by mechanism. Each names the rows it covers; the trunk above is not repe
 - **Base held:** the cell element and a `capture()` owner token. `routes.ts` `insert` awaits `readMedia`, then checks `stillOwns(owner)`, else reports "not added". Otherwise it re-finds the cell by row and field, restores the place and runs `pasteCommand` with `attach`.
 - Gallery fields are written as whole arrays (`attachToGallery`, `galleryCommand`). An image added offline is a whole-array write against whatever the array is at commit (T16).
 
-### D12 Slice hooks and automatic writers (F23, W1 to W14)
+### D12 Slice hooks and automatic writers (F23, W1 to W15)
 
 - `ww` `__writerFlowTest` exposes `outsideEdit`, `outsideVisual` (`cellTextCommand` on a beat) and `outsideRemove` (`deleteBeatCommand`). They run outside `whileShown`, so the writer repaints them like a remote edit: a usable injector for T02 and T07 before a provider exists.
 - Opening the writer runs `initializeFlowParagraphs` through `DocumentSession.amend`: a write with no undo entry, once per document (`paragraphsDecided`).
-- Every W row replaces or absorbs the whole session. The slice must route or disable each (plan deliverable 4).
+- W1 to W13 replace or absorb the whole session; W14 and W15 stamp identity and save metadata, and W15 can rename the title and reset undo. The slice must route or disable each (plan deliverable 4).
 
 ## Reconcile paths: DOM content back into runs
 
@@ -345,6 +348,8 @@ Every path decodes the whole element and writes the whole field. None compares w
 | `ed` `blurredCell` → `ce.sync` | Split view | focusout (after sanitize; then `anchorBrollInLeftCell`) | the cell's field |
 | `ce` `open` → sync | Split view | before every `ce.edit`, cut and paste | the cell's field |
 | `ed` keydown syncs | Split view | before Alt+Enter, Alt+Up/Down, Ctrl+Enter; `beat-select.ts` `pasteBeatsAt` | the cell's field |
+| `src/features/rows/beats.ts` `armDelete` | Split view | delete button: syncs both cells of the row before testing for a blank beat and arming | both fields |
+| `pt` `applyTag` | Split view, flow | tag composer, one occurrence: syncs the beat or cell before tagging | the field |
 | `rr` `handleToolbarCmd` comment | Split view | after `wrapRangeInComment` | the cell's field |
 | `src/features/tags/occurrence-editor.ts` | Split view | typing inside a tag reaches `onRootInput` | the cell's field |
 | `src/features/title/routes.ts` `take` | both | every title `input` | `title`, whole string |
@@ -361,9 +366,15 @@ Every path decodes the whole element and writes the whole field. None compares w
 | `ce` `close` → `src/features/editing/cell-page.ts` `write` | the cell or beat's `innerHTML` after `ce.edit` (shortcuts, direction edge, marks) | yes, then refocuses | writer: not while composing (`fs` `onInput` returns first). Split view: `ed` `onRootInput` runs the shortcuts with no composing check; whether each shortcut ignores `insertCompositionText` was not traced |
 | `ww` `leaveBeat`, `ed` `blurredCell`, `ww` `visualLeave` sanitize | the element being left | at blur | at blur |
 | `flow-visual-box.ts` `open`, `refresh`, `rejected`, `paste` | the box | `refresh` repaints a focused box when it is not composing, dirty or saving, and keeps the selection | `refresh` skips |
-| `rr` `commitRowPatch` / `paintOneRow` | the whole row element, focused cell included, when its signature differs | yes; `rememberCellSelection` / `placeEditorSelection` restore the caret. Edits under `whileShown` skip text fields (`ON_SCREEN_ALREADY`) | no guard |
+| `rr` `commitRowPatch` (from `paintOneRow`) | only the changed parts of a row (`planRowPatch`), each by `replaceChild`; a changed narration or visual field replaces that cell's element, focused or not | yes; `paintOneRow` remembers the focused cell's selection and calls `placeEditorSelection` if the cell was detached. Edits under `whileShown` skip text fields (`ON_SCREEN_ALREADY`) | no guard |
+| `rr` `paintOneRow` whole-row fallback | the whole row element (`newRowEl`) when no patch can be planned | yes, same caret restore | no guard |
 | `rr` `render` → `paintAll` → `commitRows` | all rows | yes; `captureRenderFocus` / `restoreRenderFocus`, not while the writer is open | no guard |
 | `rr` `ensureTrailingCaretSpot` | a trailing caret spot in a cell | yes | no guard |
+| `src/features/broll/records.ts` `anchorBrollInLeftCell` | the visual cell's `innerHTML`, under `whileShown`, after its `cellTextCommand` | runs at blur (`ed` `blurredCell`, `ww` `leaveBeat`, `ww` `visualLeave`), so the cell is being left | at blur; no composing check of its own |
+| `fs` `repairOrphans` | moves stray nodes back into beats (`replaceWith`, `insertAdjacentText`), then syncs the beat | yes, from `onInput` | not during: runs at composition end through `syncComposition` |
+| `src/features/editing/draft-edit.ts` `editDraft`, `restore` | a comment or reply draft box's `innerHTML` (draft marks, draft undo and redo) | yes, then refocuses | `restore` (via `draftUndo`/`draftRedo`) is skipped while the box is composing; `editDraft` has no check of its own, its typing callers check `isComposing` |
+| `cm` `openCommentComposer`, `closeCommentComposer`, `postComment` | the composer body, emptied | on open, close and post | no guard |
+| `cm` `renderComments` | the whole comment list, reply boxes included, rebuilt with `innerHTML` (reply text kept by `captureReplyDrafts`) | no focus check in `renderComments` | no guard |
 | `rr` `paintAll` title | `#doc-title` | skipped while focused | n/a |
 | `rr` `paintSessionChange` title | `#doc-title`, `#writer-title` | written even when focused, on `title` + `titleVersion` or on replay | no guard |
 
@@ -377,17 +388,16 @@ What `repaint()` does today, against the plan's section 4:
 ## Open questions
 
 1. Does an outside edit to the composed beat survive composition end? The code says no (D3). Experiment: in the writer, start a composition, call `__writerFlowTest.outsideEdit` on the same beat, end the composition, compare the model. This is the T04 baseline.
-2. Can a Split view cell be replaced mid-composition? `commitRowPatch` has no composing guard. Experiment: compose in a narration cell, commit a `cellTextCommand` to the same row's visual field from a test hook, check that the IME text and the composition survive.
-3. Is text typed while `editingBlocked()` is true ever written? `syncBeatEl` drops the sync; the next sync of that beat would pick the DOM up, unless a paint replaces it first. Experiment: dispatch `input` inside `paintGuard().whilePainting`, then trigger a repaint, and compare DOM and model.
+2. Can a Split view cell be replaced mid-composition? `commitRowPatch` has no composing guard and replaces a changed field's element. Experiment: compose in a narration cell, commit a `cellTextCommand` to that same narration field from a test hook (not the visual field, which need not replace the narration element), check whether the IME text and the composition survive.
+3. What happens to text typed while `editingBlocked()` is true? Blocked typing skips synchronization; whether it is later recovered or lost depends on whether the next sync of that beat or a paint of it comes first. Experiment: dispatch `input` inside `paintGuard().whilePainting`, then run each order (sync first, paint first) and compare DOM and model.
 4. Can undo of a move move the wrong beat? `planSteps` checks only that a `moveRow` step's indexes exist. Experiment: a unit test on `src/application/editing/undo/history.ts`: record a move, insert a beat above it in the live document, undo, check which id moved (T12).
 5. Does "replace one" fold into a typing undo group? `replaceCurrent` does not call `breakCoalescing`. Experiment: type in a cell, replace a match in the same cell within one second, undo once.
 6. Do the Split view input shortcuts ignore composition input? Experiment: a unit test per shortcut with `inputType: "insertCompositionText"`.
 
 ## Decisions for Adam
 
-1. Title and scene names are whole strings today, the title written on every keystroke. Should two people be able to type in them at once with both edits kept, or does the last writer win? Assumed meanwhile: last writer wins.
-2. A comment is two undo entries today (the anchor, then the record on Post). Should one undo remove both? Assumed meanwhile: keep two.
-3. Cutting beats removes them at once and pasting re-inserts them later, so collaborators see the beats disappear between the two steps. Is that acceptable, or should a cut-then-paste become one move? Assumed meanwhile: keep two commands; T10 covers it.
+1. A comment is two undo entries today (the anchor, then the record on Post). Should one undo remove both? Assumed meanwhile: keep two.
+2. Cutting beats removes them at once and pasting re-inserts them later, so collaborators see the beats disappear between the two steps. Is that acceptable, or should a cut-then-paste become one move? Assumed meanwhile: keep two commands; T10 covers it.
 
 ## Doc mismatches
 
