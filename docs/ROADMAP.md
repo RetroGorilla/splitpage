@@ -1,6 +1,6 @@
 # Roadmap
 
-First refresh pass checked against GitHub, source and merge history at `fa88f976` on 2026-11-08. GitHub issues hold the current backlog. Recheck them before starting work. A second documentation pass is planned just before 0.4.3; this page describes only merged behaviour as done.
+First refresh pass checked against GitHub, source and merge history at `63a6af75` on 2026-11-08. GitHub issues hold the current backlog. Recheck them before starting work. A second documentation pass is planned just before 0.4.3; this page describes only merged behaviour as done.
 
 ## Current release
 
@@ -31,6 +31,7 @@ The next release is **0.4.3**. It has no release date here. The old plans used â
 | Scene header styling and in-place naming. | #1168 via #1313; #1166 via #1318 |
 | By scene grouping in B-roll, Comments, Production and Gear. Items repeat in every scene that uses them; unplaced entries follow under No scene. | #1170; #1317, #1322 |
 | Open-tag highlight, keyword suggestions, video-merge review, save/undo ownership, and thumbnail-merge fixes. | #1303, #1308, #1309, #1312, #1314 |
+| An underline marks an open tag awaiting its name at the caret. | #1264 via #1331 |
 | Browser target activation and stale browser-suite selectors fixed. | #1304, #1315, #1316 |
 | Comment identity preferences update everywhere; unnamed-scene labels use their letter. | #1299, #1298 |
 | Microphone selection, desktop-to-browser relay choice, and `@Name` assignment while tagging. | #1256, #1258, #1259, #1292 |
@@ -41,7 +42,6 @@ Scene descriptions (#1171) were closed as not planned. They are not queued work.
 
 ## Planned before 0.4.3
 
-- [#1264](https://github.com/RetroGorilla/splitpage/issues/1264): awaiting-tag underline at the caret.
 - [#1159](https://github.com/RetroGorilla/splitpage/issues/1159): Shoot view scene cells.
 - [#1201](https://github.com/RetroGorilla/splitpage/issues/1201): nested tags, planned as three PRs.
 - [#1163](https://github.com/RetroGorilla/splitpage/issues/1163): Settings revamp and File menu placement.

@@ -31,6 +31,7 @@ release is still 0.4.1. The instructions below describe the current app.
   A successful Save a copy to a picked file resets Undo; cancellation does not.
 - **Complete tag names**: type `Prop: ca` and press Tab to accept an existing
   matching name. Esc dismisses the suggestion so you can keep your own words.
+- An underline at the caret shows when a tag is waiting for its name.
 - **Assign as you write**: an `@Name` chip assigns tags in its sentence to that
   person. See [Assigning with @Name](#assigning-with-name).
 - **Choose a microphone** in Present, including when the desktop app does the
@@ -793,10 +794,11 @@ There is no extra filename prompt.
 
 **Save a copy…** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) writes a new
 file. With a desktop dialog or browser file picker, that new file becomes the
-destination for later saves; the original stays on disk. A successful Save a
-copy clears Undo and Redo. Cancelling or failing keeps the original destination
-and history. Download-only browsers download a copy and cannot choose a new
-in-place destination.
+destination for later saves; the original stays on disk. Saving the copy to a
+file you chose in that dialog clears Undo and Redo. Cancelling or failing keeps
+the original destination and history. In browsers that save by downloading,
+Save a copy downloads a file and keeps Undo and Redo; it cannot choose a new
+destination for later saves.
 
 In the desktop app, if the script has bundled files, **Copy files** puts them
 beside the new script. **Don't copy the files** links the new script to their old
