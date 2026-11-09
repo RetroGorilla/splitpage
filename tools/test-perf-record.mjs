@@ -11,7 +11,7 @@ const failures = [];
 
 function boot(code) {
   const formats = { clone: (x) => JSON.parse(JSON.stringify(x)), state: () => ({ rows: [{ id: "r1" }], comments: [] }) };
-  const window = { __splitpageFormats: formats, __blobsTest: {}, __hostedTest: {} };
+  const window = { __splitpageFormats: formats, __blobsTest: {} };
   vm.runInNewContext(code, { window, btoa, File, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
   return window.__perfImg;
 }
