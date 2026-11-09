@@ -786,29 +786,30 @@ export function onRootKeydown(e: KeyboardEvent): void {
   const target = e.target as Element | null;
   const cellEl = target?.closest(".cell-editable");
   if (!cellEl) return;
-  if (e.isComposing || e.keyCode === 229) return;
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;
   if (currentWhoList()?.keydown(e, cellEl)) { hideTagGhost(); return; }
-  const plainTag = currentPlainTags();
-  const ghost = shownTagGhost();
-  if (e.key === "Escape" && ghost?.cellEl === cellEl) {
-    e.preventDefault(); e.stopPropagation(); hideTagGhost(); return;
-  }
-  if (acceptGhostOnTab(e, ghost?.cellEl === cellEl, acceptTagGhost)) return;
-  if (plainTag && plainTag.isOpen(cellEl) && plainTagKeydown(e, plainTag, hideTagGhost)) return;
-  if (e.key === "Escape" && plainTag?.finishEditing()) { e.preventDefault(); e.stopPropagation(); return; }
-  const suggestion = shownUntaggedSuggestion();
-  if (e.key === "Tab" && !shownTagGhost() && suggestion && suggestion.cellEl === cellEl) {
-    if (acceptUntaggedMention()) { e.preventDefault(); return; }
-  }
-  if (dismissesTagGhost(e.key)) {
-    hideTagGhost();
-  }
-  if (e.key === "Escape" && shownUntaggedSuggestion()) {
-    focusMemory().mutePrompt(cellEl);
-    hideUntaggedPrompt();
+  if (!e.isComposing && e.keyCode !== 229) {
+    const plainTag = currentPlainTags();
+    const ghost = shownTagGhost();
+    if (e.key === "Escape" && ghost?.cellEl === cellEl) {
+      e.preventDefault(); e.stopPropagation(); hideTagGhost(); return;
+    }
+    if (acceptGhostOnTab(e, ghost?.cellEl === cellEl, acceptTagGhost)) return;
+    if (plainTag && plainTag.isOpen(cellEl) && plainTagKeydown(e, plainTag, hideTagGhost)) return;
+    if (e.key === "Escape" && plainTag?.finishEditing()) { e.preventDefault(); e.stopPropagation(); return; }
+    const suggestion = shownUntaggedSuggestion();
+    if (e.key === "Tab" && !shownTagGhost() && suggestion && suggestion.cellEl === cellEl) {
+      if (acceptUntaggedMention()) { e.preventDefault(); return; }
+    }
+    if (dismissesTagGhost(e.key)) {
+      hideTagGhost();
+    }
+    if (e.key === "Escape" && shownUntaggedSuggestion()) {
+      focusMemory().mutePrompt(cellEl);
+      hideUntaggedPrompt();
+    }
   }
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {
