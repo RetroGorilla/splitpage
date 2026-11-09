@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../../../src/features/prompter/mount.ts";
-import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../../src/features/prompter/mount.ts";
+import type { PrompterVisibilityPorts } from "../../../src/features/prompter/mount.ts";
+import type { PrompterOpenPorts, PrompterPorts } from "../../../src/features/prompter/ports.ts";
 import { viewHarness } from "../view-harness.ts";
 import type { Registration } from "../view-harness.ts";
 

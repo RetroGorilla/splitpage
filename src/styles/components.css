@@ -1638,15 +1638,8 @@ button.stat-chip:hover { color: var(--text); border-color: var(--text-dim); }
   .hide-shot-track, .hide-shot-thumb { transition: none; }
 }
 @media (min-width: 761px) and (max-width: 1099px) {
-  .hide-shot-switch { margin-left: var(--space-8); }
-  .hide-shot-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
+  .hide-shot-switch { gap: var(--space-4); margin-left: var(--space-8); white-space: normal; }
+  .hide-shot-label { width: min-content; font-size: 11px; line-height: 12px; text-align: left; }
 }
 .tagging-help {
   --layer-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));

@@ -1,4 +1,4 @@
-import type { ButtonActions } from "../../application/actions.ts";
+import type { PrompterOpenPorts, PrompterPorts } from "./ports.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { IS_MAC, keyChipsHtml } from "../common/key-chips.ts";
 
@@ -17,13 +17,6 @@ export function mountPrompterVisibility(mount: { window: Window; ports: Prompter
     if (document.visibilityState === "visible" && ports.isOpen()) ports.acquireWakeLock(life.active);
   });
   return { dispose: life.dispose };
-}
-
-export interface PrompterOpenPorts extends Pick<ButtonActions, "runFromButton"> {
-  readonly presentInBrowser: {
-    readonly offered: () => boolean;
-    readonly onChange: (listener: () => void) => () => void;
-  };
 }
 
 export function mountPrompterOpen(mount: { window: Window; ports: PrompterOpenPorts }): { dispose: () => void } {
@@ -100,37 +93,6 @@ export function mountPrompterOpen(mount: { window: Window; ports: PrompterOpenPo
   life.release(ports.presentInBrowser.onChange(refresh));
   refresh();
   return { dispose: life.dispose };
-}
-
-export interface PrompterPorts {
-  readonly disposeRuntime: () => void;
-  readonly closePrompter: () => void;
-  readonly closeFind: () => boolean;
-  readonly stopVoiceFollow: () => void;
-  readonly startVoiceFollow: () => void;
-  readonly chooseMicrophone: (id: string) => void;
-  readonly setPrompterPlaying: (value: boolean) => void;
-  readonly setPrompterSpeed: (value: number) => void;
-  readonly applyPrompterSize: () => void;
-  readonly stepPrompterSpeed: (value: number) => void;
-  readonly stepPrompterSize: (value: number) => void;
-  readonly updatePrompterStatus: () => void;
-  readonly buildPrompterContent: () => void;
-  readonly updateVoiceAvailability: () => void;
-  readonly cueBeatForCurrentPosition: () => void;
-  readonly updateBeatReadout: () => void;
-  readonly setPrompterMirror: (value: boolean) => void;
-  readonly setPrompterFlip: (value: boolean) => void;
-  readonly setPrompterBeatMode: (value: boolean) => void;
-  readonly stepBeat: (value: number) => void;
-  readonly voiceActive: () => boolean;
-  readonly playing: () => boolean;
-  readonly isOpen: () => boolean;
-  readonly skipShot: () => boolean;
-  readonly setSkipShot: (value: boolean) => void;
-  readonly mirror: () => boolean;
-  readonly flip: () => boolean;
-  readonly beatMode: () => boolean;
 }
 
 export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): { dispose: () => void } {

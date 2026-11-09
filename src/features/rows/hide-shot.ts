@@ -26,11 +26,16 @@ export function hiddenShotStripHtml(ids: readonly string[]): string {
     '</button>';
 }
 
-export function mountHideShotSwitch(button: Element | null, toggle: () => void): () => void {
+export function mountHideShotSwitch(button: Element | null, toggle: () => void, refresh: () => void): () => void {
   if (!button) return () => {};
   const onClick = (): void => { toggle(); };
+  const onBlur = (): void => { refresh(); };
   button.addEventListener("click", onClick);
-  return () => { button.removeEventListener("click", onClick); };
+  button.addEventListener("focusout", onBlur);
+  return () => {
+    button.removeEventListener("click", onClick);
+    button.removeEventListener("focusout", onBlur);
+  };
 }
 
 export function createHideShot(ports: HideShotPorts): HideShotControls {

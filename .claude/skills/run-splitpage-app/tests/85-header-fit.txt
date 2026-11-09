@@ -305,6 +305,10 @@ expect !window.__d().getElementById('file-chip').hidden
 expect !window.__d().getElementById('progress-chip').hidden
 expect !window.__d().getElementById('hide-shot-toggle').hidden
 expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 4
+# narrow, the switch keeps its words: wrapped and smaller, never hidden (#1163)
+eval window.__at(800)
+wait (function(){ var d=window.__d(); var lab=d.querySelector('#hide-shot-toggle .hide-shot-label'); var l=lab.getBoundingClientRect(); var s=getComputedStyle(lab); var row=d.querySelector('.topbar-row').getBoundingClientRect(); return lab.textContent === 'Hide filmed beats' && l.width >= 24 && l.height >= 11 && s.clipPath === 'none' && s.position === 'static' && parseFloat(s.fontSize) >= 11 && l.top >= row.top && l.bottom <= row.bottom; })()
+eval window.__at(1440)
 eval window.__d().getElementById('doc-title').blur()
 sleep 300
 eval window.__check(761)

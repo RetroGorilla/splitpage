@@ -41,17 +41,22 @@ test("hide shot: toggling sets the owner, flips the header switch and says what 
   ]);
 });
 
-test("hide shot: the header switch runs its toggle on each click until it is unmounted", () => {
+test("hide shot: the header switch runs its toggle on each click and refreshes when focus leaves, until it is unmounted", () => {
   setup();
   const button = document.getElementById("hide-shot-toggle");
   let runs = 0;
-  const unmount = mountHideShotSwitch(button, () => { runs++; });
+  let refreshes = 0;
+  const unmount = mountHideShotSwitch(button, () => { runs++; }, () => { refreshes++; });
   button?.click();
   button?.click();
+  const focusOut = () => new (document.defaultView as Window & typeof globalThis).Event("focusout", { bubbles: true });
+  button?.dispatchEvent(focusOut());
   unmount();
   button?.click();
+  button?.dispatchEvent(focusOut());
   assert.equal(runs, 2);
-  assert.doesNotThrow(() => { mountHideShotSwitch(null, () => { runs++; })(); });
+  assert.equal(refreshes, 1);
+  assert.doesNotThrow(() => { mountHideShotSwitch(null, () => { runs++; }, () => { refreshes++; })(); });
 });
 
 test("hide shot: a strip's ids expand through the owner, and groups render as strips and rows", () => {

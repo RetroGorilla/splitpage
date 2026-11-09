@@ -8,6 +8,7 @@ import type { HideShotControls } from "../../features/rows/hide-shot.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { shotHiding } from "./shot-hiding.ts";
+import { updateScriptStats } from "./beat-status.ts";
 
 type HideShotMount = HideShotControls & { readonly dispose: () => void };
 
@@ -25,7 +26,7 @@ export function mountHideShotFeature(): HideShotMount {
       notices: portNotices,
       switchButton: () => document.getElementById("hide-shot-toggle")
     });
-    const unmount = mountHideShotSwitch(document.getElementById("hide-shot-toggle"), () => { runFromButton("toggle-hide-shot"); });
+    const unmount = mountHideShotSwitch(document.getElementById("hide-shot-toggle"), () => { runFromButton("toggle-hide-shot"); }, updateScriptStats);
     return { ...controls, dispose: unmount };
   });
 }

@@ -78,7 +78,7 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
     const shot = rows.filter(function (r) { return r.status === "shot"; }).length;
     const shown = shot > 0 || ports.hideShot();
     chip.hidden = !shown;
-    if (toggle) toggle.hidden = !shown;
+    if (toggle) toggle.hidden = !shown && toggle.ownerDocument.activeElement !== toggle;
     if (shown) text.textContent = shot + "/" + rows.length + " filmed";
   }
 

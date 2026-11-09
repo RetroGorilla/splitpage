@@ -1,7 +1,8 @@
 import { updateControls } from "./update.ts";
 import type { Disposable, Owned } from "../../features/routing/owned.ts";
 import type { NoticesPorts } from "../../features/notices/mount.ts";
-import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../features/prompter/mount.ts";
+import type { PrompterVisibilityPorts } from "../../features/prompter/mount.ts";
+import type { PrompterOpenPorts, PrompterPorts } from "../../features/prompter/ports.ts";
 import type { IdentityPorts } from "../../features/settings/mount.ts";
 import type { AppearancePorts } from "../../features/settings/appearance.ts";
 import type { HistoryPorts } from "../../features/history/mount.ts";

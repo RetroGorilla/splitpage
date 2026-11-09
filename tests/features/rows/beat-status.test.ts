@@ -31,7 +31,7 @@ test("setting Filmed is a no-op for a missing beat or an unchanged status", () =
   assert.deepEqual(h.grace, []);
 });
 
-function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: string; applies?: boolean } = {}) {
+function setup(opts: { targetSeconds?: number; hideShot?: boolean; hiding?: () => boolean; status?: string; applies?: boolean } = {}) {
   document.body.innerHTML = '<button id="runtime-chip"><span class="rd-length-total"></span><span class="rd-length-slot"></span></button>' +
     '<span id="progress-chip" hidden><span id="progress-text"></span></span><button id="hide-shot-toggle" hidden></button>';
   const doc = migrateRows({
@@ -58,7 +58,7 @@ function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: stri
       stamps: edits.edits.stamps
     } : edits.edits,
     text: { productionReaders },
-    hideShot: () => !!opts.hideShot,
+    hideShot: opts.hiding || (() => !!opts.hideShot),
     shots: { armGrace: (id) => { grace.push("arm:" + id); }, clearGrace: (id) => { grace.push("clear:" + id); } },
     element: (id) => document.getElementById(id)
   });
@@ -103,6 +103,23 @@ test("scene status: while filmed beats are hidden the count and its switch stay,
   assert.equal(document.getElementById("progress-chip")?.hidden, false);
   assert.equal(document.getElementById("hide-shot-toggle")?.hidden, false);
   assert.equal(document.getElementById("progress-text")?.textContent, "0/2 filmed");
+});
+
+test("scene status: turning hiding off with nothing filmed keeps the focused switch shown until focus leaves it", () => {
+  let hiding = true;
+  const { owner } = setup({ hiding: () => hiding });
+  const toggle = document.getElementById("hide-shot-toggle") as HTMLButtonElement;
+  owner.updateScriptStats();
+  assert.equal(toggle.hidden, false);
+  toggle.focus();
+  hiding = false;
+  owner.updateScriptStats();
+  assert.equal(document.getElementById("progress-chip")?.hidden, true);
+  assert.equal(toggle.hidden, false);
+  assert.equal(document.activeElement, toggle);
+  toggle.blur();
+  owner.updateScriptStats();
+  assert.equal(toggle.hidden, true);
 });
 
 test("scene status: the stats follow status, length and target changes only", () => {
