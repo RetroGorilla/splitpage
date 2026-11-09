@@ -143,6 +143,34 @@ test("shoot rendering derives document numbering once for many location groups",
   } finally { mounted.dispose(); }
 });
 
+test("By-scene rendering derives document numbering once per render, not once per group", () => {
+  const migration = fakeMigration();
+  const h = fixture("prop", migration);
+  const doc = migrateRows({ schema: 2, rows: Array.from({ length: 94 }, (_, i) => ({
+    id: "r" + i, visualText: migration.cell([{ text: "Hat " + i, marks: { tag: "t:prop:Hat " + i } }]), audioText: ""
+  })), sections: [{ id: "s1", name: "Opening", firstSceneId: "r0" }, { id: "s2", name: "Second", firstSceneId: "r60" }],
+  productionTags: Array.from({ length: 94 }, (_, i) => ({ id: "t_" + i, cat: "prop", name: "Hat " + i })) }, migration.ports);
+  const entries = h.ports.production.entries(doc);
+  let derivations = 0;
+  const counted = new Proxy(doc, { get(target, key, receiver) {
+    if (key === "sections") derivations++;
+    return Reflect.get(target, key, receiver) as unknown;
+  } });
+  let held: ReturnType<typeof deriveDocumentNumbering> | null = null;
+  win.document.body.innerHTML = '<div id="production-panel"><div id="production-list"></div></div>';
+  const ports: TagPanelPorts = { ...h.ports,
+    document: { ...h.ports.document, current: () => counted, numbering: () => { if (!held) held = deriveDocumentNumbering(counted); return held; } },
+    production: { ...h.ports.production, entries: () => entries },
+    view: { ...h.ports.view, productionGroupBy: () => "by-scene" }
+  };
+  const mounted = startTagPanels(ports);
+  try {
+    mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll('#production-list .tag-scene-group').length, 2);
+    assert.equal(derivations, 1);
+  } finally { mounted.dispose(); }
+});
+
 test("tag panels unsubscribe from preference changes on disposal", () => {
   const h = fixture();
   let listeners = 0;

@@ -477,8 +477,9 @@ function tagEntityHtml(item: PresentedProductionEntry, opts?: { gear?: boolean; 
 
 function renderProductionByScene(entries: readonly PresentedProductionEntry[], gear: boolean): string {
   const doc = (ports as TagPanelPorts).document.current();
+  const numbering = (ports as TagPanelPorts).document.numbering();
   const mentions = entries.flatMap(item => item.mentions.map(mention => ({ item, rowId: mention.rowId })));
-  const result = groupItemsByScene(doc ?? { rows: [] }, mentions, mention => mention.rowId);
+  const result = groupItemsByScene(doc ?? { rows: [] }, mentions, mention => mention.rowId, numbering);
   const assigned = new Set(result.groups.flatMap(group => group.items.map(mention => mention.item.key)));
   const section = (title: string, items: readonly PresentedProductionEntry[], suffix: string) =>
     '<section class="tag-scene-group" data-scene-group="' + escapeHtml(suffix) + '"><h3 class="tag-scene-group-head">' + escapeHtml(title) + '</h3>' +
