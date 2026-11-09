@@ -229,10 +229,11 @@ expect true
 wait window.__wide(2560) === ''
 wait window.__wide(3440) === ''
 wait window.__wide(1920) === ''
-# the strip's blocks take the width: the track is the window's less its
-# 20px either side, and the blocks are laid out across it (the ruler runs
-# on past the script's end to a round time, so they stop short of it)
-expect (function(){ var d=window.__d(); var vw=d.documentElement.clientWidth; var t=d.querySelector('#rundown .rundown-track').getBoundingClientRect(); var bl=d.querySelectorAll('#rundown .rd-block'); var last=bl[bl.length-1].getBoundingClientRect(); return Math.abs(t.width - (vw - 40)) < 1 && last.right - t.left > t.width / 2; })()
+# the strip's blocks take the width: the track runs from the window's 20px
+# margin to the labelled Minimise rundown control at the right (#1163), and
+# the blocks are laid out across it (the ruler runs on past the script's end
+# to a round time, so they stop short of it)
+expect (function(){ var d=window.__d(); var vw=d.documentElement.clientWidth; var t=d.querySelector('#rundown .rundown-track').getBoundingClientRect(); var g=d.querySelector('#rundown .rundown-toggle').getBoundingClientRect(); var bl=d.querySelectorAll('#rundown .rd-block'); var last=bl[bl.length-1].getBoundingClientRect(); return Math.abs(t.left - 20) < 1 && t.right <= g.left + 0.5 && g.left - t.right < 20 && g.right <= vw && t.width > vw - 160 && last.right - t.left > t.width / 2; })()
 eval window.__panel('btn-production')
 sleep 500
 wait window.__wide(2560) === ''
@@ -302,7 +303,8 @@ eval (function(){ var d=window.__d(); d.getElementById('file-chip').hidden=false
 expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
 expect !window.__d().getElementById('file-chip').hidden
 expect !window.__d().getElementById('progress-chip').hidden
-expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 3
+expect !window.__d().getElementById('hide-shot-toggle').hidden
+expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 4
 eval window.__d().getElementById('doc-title').blur()
 sleep 300
 eval window.__check(761)

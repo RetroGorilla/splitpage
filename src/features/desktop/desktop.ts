@@ -29,8 +29,7 @@ const PROMPTER_BROWSER_MESSAGES = {
   TOO_LARGE: "This script is too large to hand to the browser.",
   SERVE_FAILED: "Could not open the script in your browser.",
   OPEN_FAILED: "Could not open your browser.",
-  NO_TAB: "Could not open the script in your browser.",
-  NO_CHROMIUM: "No Chromium browser (Edge, Chrome, Brave…) was found on this computer. Use Present in browser instead."
+  NO_TAB: "Could not open the script in your browser."
 };
 
 function prompterBrowserResult(ok: boolean, message: string, kind?: Parameters<DesktopPorts["notices"]["show"]>[1]) {
@@ -38,16 +37,8 @@ function prompterBrowserResult(ok: boolean, message: string, kind?: Parameters<D
   return { ok: ok, message: message };
 }
 
-function openPrompterInBrowser() {
-  return openPrompterElsewhere(false);
-}
-
-function openPrompterInChromium() {
-  return openPrompterElsewhere(true);
-}
-
-async function openPrompterElsewhere(chromium: boolean) {
-  if (!(chromium ? (ports as DesktopPorts).canOpenPrompter.chromium() : (ports as DesktopPorts).canOpenPrompter.browser())) return { ok: false, message: "" };
+async function openPrompterInBrowser() {
+  if (!(ports as DesktopPorts).canOpenPrompterInBrowser()) return { ok: false, message: "" };
   if (prompterBrowserBusy) return { ok: false, message: "" };
   prompterBrowserBusy = true;
   try {
@@ -61,13 +52,8 @@ async function openPrompterElsewhere(chromium: boolean) {
       if ((ports as DesktopPorts).saves.unsaved()) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
     }
     let answer;
-    try { answer = await (chromium ? ((ports as DesktopPorts).shell() as DesktopShell).openPrompterInChromium() : ((ports as DesktopPorts).shell() as DesktopShell).openPrompterInBrowser()); }
+    try { answer = await ((ports as DesktopPorts).shell() as DesktopShell).openPrompterInBrowser(); }
     catch (e) { answer = { ok: false, code: "OPEN_FAILED" }; }
-    if (answer && answer.ok && chromium) {
-      const browserName = typeof answer.browser === "string" && answer.browser ? answer.browser : "a Chromium browser";
-      return prompterBrowserResult(true, "Opened in " + browserName +
-        ". Follow My Voice there uses the browser's own speech recognition — this window stays open for editing.");
-    }
     if (answer && answer.ok) {
       return prompterBrowserResult(true, answer.voice === "relay"
         ? "Opened in your browser. Follow My Voice there listens through this app — this window stays open for editing."
@@ -145,7 +131,6 @@ export function startDesktopView(given: DesktopPorts) {
   const mounted = ports;
   return {
     openPrompterInBrowser: openPrompterInBrowser,
-    openPrompterInChromium: openPrompterInChromium,
     initDesktop: initDesktop,
     runMenuCommand: runDesktopMenuCommand,
     wireReassignDocId: wireReassignDocId,

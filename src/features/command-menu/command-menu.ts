@@ -28,7 +28,7 @@ const LIST_BEFORE_EXPORTS = [
 const LIST_AFTER_EXPORTS = [
   "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
   "history", "find", "toggle-hide-shot", "toggle-rundown-min", "set-target",
-  "prompter-open-in-browser", "prompter-open-in-chromium",
+  "prompter-open-in-browser",
   "settings", "help", "tour", "long-demo", "setup", "about", "tagging-help", "export-app-data", "import-app-data"
 ];
 

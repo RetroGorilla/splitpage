@@ -1,8 +1,8 @@
 # One action, every surface (4.0 milestone 1): Hide shot scenes, Minimise the
-# rundown and Version history do the same thing from the File menu, the
-# command menu, their shortcut and their own button, and are refused the same
-# way where they are not allowed. Written before the three moved onto the
-# action registry, and kept unchanged after.
+# rundown and Version history do the same thing from their own control, the
+# command menu, their shortcut and (for history) the File menu, and are
+# refused the same way where they are not allowed. The first two left the
+# File menu for controls beside what they act on (#1163).
 
 open
 viewport 1400 900
@@ -12,7 +12,7 @@ eval (function(){ localStorage.removeItem('splitpage-hide-shot'); localStorage.r
 expect __cmd('hide shot', 'toggle-hide-shot').label == Hide filmed beats
 expect __cmd('hide shot', 'toggle-hide-shot').disabled == false
 expect __cmd('hide filmed', 'toggle-hide-shot').label == Hide filmed beats
-expect __cmd('minimise rundown', 'toggle-rundown-min').label == Minimise the rundown
+expect __cmd('minimise rundown', 'toggle-rundown-min').label == Minimise rundown
 expect __cmd('version history', 'history').label == Version history…
 expect __cmd('version history', 'history').disabled == false
 
@@ -25,25 +25,20 @@ expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="toggle-hide-shot"
 key Escape
 sleep 200
 
-# --- Hide shot scenes: shortcut, File menu, command menu -------------------
+# --- Hide shot scenes: shortcut, header switch, command menu ---------------
 eval __clearToasts()
 key ctrl+alt KeyH
 sleep 200
 expect localStorage.getItem('splitpage-hide-shot') == 1
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == true
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') == true
 expect __toasts().indexOf('Hiding filmed beats') !== -1
 
 eval __clearToasts()
-click #btn-file
-sleep 200
-jsclick #menu-hide-shot
+click #hide-shot-toggle
 sleep 200
 expect localStorage.getItem('splitpage-hide-shot') == 0
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == false
-expect !document.getElementById('file-menu').hidden
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') == false
 expect __toasts().indexOf('Showing every beat again.') !== -1
-jsclick #file-menu-close
-sleep 200
 
 eval __clearToasts()
 key ctrl KeyK
@@ -73,22 +68,16 @@ key ctrl+alt KeyH
 sleep 200
 expect localStorage.getItem('splitpage-hide-shot') == 0
 
-# --- Minimise the rundown: its own button, File menu, command menu ---------
+# --- Minimise the rundown: its own button, command menu --------------------
 expect !document.querySelector('.rundown-toggle').closest('.is-min')
 jsclick .rundown-toggle
 sleep 200
 expect localStorage.getItem('splitpage-rundown-min') == 1
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
-
-click #btn-file
-sleep 200
-jsclick #menu-rundown-min
+expect document.querySelector('.rundown-toggle').getAttribute('aria-expanded') == false
+jsclick .rundown-toggle
 sleep 200
 expect localStorage.getItem('splitpage-rundown-min') == 0
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
-expect !document.getElementById('file-menu').hidden
-jsclick #file-menu-close
-sleep 200
+expect document.querySelector('.rundown-toggle').getAttribute('aria-expanded') == true
 
 key ctrl KeyK
 sleep 200

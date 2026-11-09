@@ -6030,8 +6030,8 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     record(tag + ": main holds no share afterwards", !!status2 && status2.listening === false && status2.shares.length === 0, JSON.stringify(status2));
 
     const pristineBefore = await dialogsSeen(witness);
-    const inPage = await evalPage(witness, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-browser'); var shown = !!b && !b.hidden && !document.getElementById('file-menu').hidden; if (shown) b.click(); return shown; })()");
-    record(tag + ": File ▸ This document ▸ Present in browser is offered in the desktop app", inPage === true, String(inPage));
+    const inPage = await evalPage(witness, "(function(){ var more = document.getElementById('btn-present-more'); if (!more || more.hidden) return false; more.click(); var b = document.getElementById('present-menu-browser'); var shown = !document.getElementById('present-menu').hidden && b.textContent.indexOf('Present in browser…') === 0; if (shown) b.click(); return shown; })()");
+    record(tag + ": Present ▸ Present in browser… is offered in the desktop app", inPage === true, String(inPage));
     const saveFirst = await toastContaining(witness, "Save this script first", 10000);
     record(tag + ": an unsaved new document is told to save first", !!saveFirst, String(saveFirst));
     await sleep(500);
@@ -6304,8 +6304,10 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     const arity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInChromium === 'function' && window.splitpageDesktop.openPrompterInChromium.length");
     record(tag + ": the bridge has openPrompterInChromium() and it takes no argument", arity === 0, "length=" + arity);
 
-    const inPage = await evalPage(cdp, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-chromium'); var shown = !!b && !b.hidden && b.textContent === 'Use Chromium Speech Recognition'; if (shown) b.click(); return shown; })()");
-    record(tag + ": File ▸ This document ▸ Use Chromium Speech Recognition is offered", inPage === true, String(inPage));
+    const offered = await evalPage(cdp, "!document.getElementById('menu-present-chromium') && !document.querySelector('[data-cmd=\"prompter-open-in-chromium\"]')");
+    record(tag + ": the page offers no separate Chromium entry", offered === true, String(offered));
+    const answer = await evalPage(cdp, "window.splitpageDesktop.openPrompterInChromium()");
+    record(tag + ": the bridge answers ok and names the browser", !!answer && answer.ok === true && answer.browser === "Microsoft Edge", JSON.stringify(answer));
     const launched = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length ? l : null; }, 15000).catch(() => null);
     record(tag + ": main starts the Chromium browser it found, once", !!launched && launched.length === 1 && launched[0].browser === "edge", JSON.stringify(launched));
     const m = launched && PROMPTER_URL_RE.exec(launched[0].url);
@@ -6317,12 +6319,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     }
     const opens = await externalOpens(cdp);
     record(tag + ": the default browser is not asked", opens.length === 0, JSON.stringify(opens));
-    const toast = await toastContaining(cdp, "Opened in Microsoft Edge", 10000);
-    record(tag + ": the page names the browser and its own speech recognition", !!toast && toast.indexOf("own speech recognition") !== -1, String(toast));
-
-    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
-    const twice = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length >= 2 ? l : null; }, 15000).catch(() => null);
-    record(tag + ": View ▸ Use Chromium Speech Recognition does the same", !!twice && twice.length === 2 && PROMPTER_URL_RE.test(twice[1].url), JSON.stringify(twice));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
@@ -6333,9 +6329,8 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — chromium"), 20000);
-    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
-    const none = await toastContaining(cdp, "No Chromium browser", 10000);
-    record(tag + ": with none installed the page says so and points at Present in browser", !!none && none.indexOf("Present in browser") !== -1, String(none));
+    const none = await evalPage(cdp, "window.splitpageDesktop.openPrompterInChromium()");
+    record(tag + ": with none installed the bridge refuses with NO_CHROMIUM", !!none && none.ok === false && none.code === "NO_CHROMIUM", JSON.stringify(none));
     record(tag + ": ... nothing is started", (await chromiumLaunches(cdp)).length === 0);
     record(tag + ": ... nor handed to the default browser", (await externalOpens(cdp)).length === 0);
     const status = await shell(cdp, "prompterShareStatus", {});

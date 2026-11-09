@@ -1,5 +1,8 @@
 import type { ButtonActions } from "../../application/actions.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { IS_MAC, keyChipsHtml } from "../common/key-chips.ts";
+
+const PRESENT_IN_BROWSER_KEYS = "mod+shift+p";
 
 export interface PrompterVisibilityPorts {
   readonly acquireWakeLock: (owns: () => boolean) => void;
@@ -16,14 +19,86 @@ export function mountPrompterVisibility(mount: { window: Window; ports: Prompter
   return { dispose: life.dispose };
 }
 
-export type PrompterOpenPorts = Pick<ButtonActions, "runFromButton">;
+export interface PrompterOpenPorts extends Pick<ButtonActions, "runFromButton"> {
+  readonly presentInBrowser: {
+    readonly offered: () => boolean;
+    readonly onChange: (listener: () => void) => () => void;
+  };
+}
 
 export function mountPrompterOpen(mount: { window: Window; ports: PrompterOpenPorts }): { dispose: () => void } {
   const { window, ports } = mount;
   const document = window.document;
   const life = createViewLifetime(window);
-  const element = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
-  life.listen(element("btn-present"), "click", function () { ports.runFromButton("present"); });
+  const element = (id: string): HTMLElement | null => document.getElementById(id);
+  const present = element("btn-present");
+  if (present) life.listen(present, "click", function () { ports.runFromButton("present"); });
+  const split = element("present-split");
+  const more = element("btn-present-more");
+  const menu = element("present-menu");
+  const browser = element("present-menu-browser");
+  if (!split || !more || !menu || !browser) return { dispose: life.dispose };
+  const parts = { split, more, menu, browser };
+  if (!browser.querySelector(".mi-keys")) {
+    const keys = document.createElement("span");
+    keys.className = "mi-keys";
+    keys.setAttribute("aria-hidden", "true");
+    keys.innerHTML = keyChipsHtml(PRESENT_IN_BROWSER_KEYS);
+    browser.appendChild(keys);
+    browser.setAttribute("aria-keyshortcuts", (IS_MAC ? "Meta" : "Control") + "+Shift+P");
+  }
+
+  function setOpen(open: boolean, focus: "item" | "button" | null): void {
+    parts.menu.hidden = !open;
+    parts.more.setAttribute("aria-expanded", open ? "true" : "false");
+    if (focus === "item") parts.browser.focus();
+    else if (focus === "button") parts.more.focus();
+  }
+
+  function refresh(): void {
+    const offered = ports.presentInBrowser.offered();
+    parts.more.hidden = !offered;
+    parts.split.classList.toggle("has-more", offered);
+    if (!offered && !parts.menu.hidden) setOpen(false, null);
+  }
+
+  life.listen(more, "click", function (e) {
+    if (!parts.menu.hidden) { setOpen(false, null); return; }
+    setOpen(true, e.detail === 0 ? "item" : null);
+  });
+  life.listen(more, "keydown", function (e) {
+    if (e.key === "Escape" && !parts.menu.hidden) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false, null);
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    setOpen(true, "item");
+  });
+  life.listen(browser, "click", function () {
+    setOpen(false, "button");
+    ports.runFromButton("prompter-open-in-browser");
+  });
+  life.listen(menu, "keydown", function (e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false, "button");
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      parts.browser.focus();
+    } else if (e.key === "Tab") {
+      setOpen(false, null);
+    }
+  });
+  life.listen(split, "focusout", function (e) {
+    const next = e.relatedTarget as Node | null;
+    if (!parts.menu.hidden && !(next && parts.split.contains(next))) setOpen(false, null);
+  });
+  life.release(ports.presentInBrowser.onChange(refresh));
+  refresh();
   return { dispose: life.dispose };
 }
 

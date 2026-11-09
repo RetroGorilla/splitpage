@@ -33,7 +33,7 @@ test("setting Filmed is a no-op for a missing beat or an unchanged status", () =
 
 function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: string; applies?: boolean } = {}) {
   document.body.innerHTML = '<button id="runtime-chip"><span class="rd-length-total"></span><span class="rd-length-slot"></span></button>' +
-    '<span id="progress-chip" hidden><span id="progress-text"></span></span>';
+    '<span id="progress-chip" hidden><span id="progress-text"></span></span><button id="hide-shot-toggle" hidden></button>';
   const doc = migrateRows({
     title: "Status",
     targetSeconds: opts.targetSeconds,
@@ -85,14 +85,24 @@ test("scene status: the stats paint the read time against the target and tell li
   assert.deepEqual(heard, [60]);
 });
 
-test("scene status: the progress chip shows only once a scene is shot", () => {
+test("scene status: with filmed beats shown, the progress chip shows only once a scene is shot", () => {
   const first = setup();
   first.owner.updateScriptStats();
   assert.equal(document.getElementById("progress-chip")?.hidden, true);
+  assert.equal(document.getElementById("hide-shot-toggle")?.hidden, true);
   const second = setup({ status: "shot" });
   second.owner.updateScriptStats();
   assert.equal(document.getElementById("progress-chip")?.hidden, false);
+  assert.equal(document.getElementById("hide-shot-toggle")?.hidden, false);
   assert.equal(document.getElementById("progress-text")?.textContent, "1/2 filmed");
+});
+
+test("scene status: while filmed beats are hidden the count and its switch stay, even with nothing filmed", () => {
+  const { owner } = setup({ hideShot: true });
+  owner.updateScriptStats();
+  assert.equal(document.getElementById("progress-chip")?.hidden, false);
+  assert.equal(document.getElementById("hide-shot-toggle")?.hidden, false);
+  assert.equal(document.getElementById("progress-text")?.textContent, "0/2 filmed");
 });
 
 test("scene status: the stats follow status, length and target changes only", () => {

@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow display',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha <span class="stage-dir">quiet</span> words',visualText:''},{id:'b',audioText:'<span class="audio-cue">SFX: Wave</span><br><span class="audio-cue">Music: Piano</span><br>Bravo',visualText:'',status:'shot'},{id:'c',audioText:'',visualText:'The quay',lengthSeconds:0,status:'shot'}],sections:[{id:'s',name:'Harbour',firstSceneId:'b'}],comments:[]})],'display.splitpage'))
 wait F.state().title === 'Flow display'
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 click #rows .section-header[data-section-id="s"] .section-fold
 click #btn-write
 wait W.on()

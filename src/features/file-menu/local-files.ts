@@ -236,7 +236,7 @@ function runExportAction(action: string | null) {
 
 function handleFileMenuAction(action: string | null, source?: Parameters<LocalFileMenuPorts["actions"]["invoke"]>[1]) {
   noteFileMenuChoice(action);
-  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") running().actions.invoke("close-file-menu", "button");
+  if (action !== "autosave") running().actions.invoke("close-file-menu", "button");
   if (isExportAction(action)) rememberExport(action);
   if (running().actions.has(action)) {
     running().actions.invoke(action, source || "menu");

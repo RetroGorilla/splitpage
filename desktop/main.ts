@@ -1753,14 +1753,13 @@ function buildMenu() {
       { label: "Write", click: () => sendMenuCommand("write") },
       { label: "Present", click: () => sendMenuCommand("present") },
       {
-        label: "Present in Browser (Follow My Voice)",
+        label: "Present in browser…",
         accelerator: "CmdOrCtrl+Shift+P",
         click: () => sendMenuCommand("prompter-open-in-browser")
       },
-      { label: "Use Chromium Speech Recognition", click: () => sendMenuCommand("prompter-open-in-chromium") },
       { type: "separator" },
       { label: "Hide filmed beats", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
-      { label: "Minimise the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
+      { label: "Minimise rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" as const },

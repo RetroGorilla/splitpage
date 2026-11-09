@@ -146,10 +146,6 @@
               <div class="menu-group-head" id="fm-g-doc">This document</div>
               <button type="button" role="menuitem" class="mi" data-file-action="history"><svg class="mi-icon" aria-hidden="true"><use href="#i-history"/></svg><span class="mi-text"><span class="mi-label">Version history…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="find" data-keys="mod+f"><svg class="mi-icon" aria-hidden="true"><use href="#i-find"/></svg><span class="mi-text"><span class="mi-label">Find &amp; replace</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse beats marked Filmed into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide filmed beats</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimise the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-browser" id="menu-present-browser" data-keys="mod+shift+p" data-keys-only="desktop" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser (Follow My Voice)</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Use Chromium Speech Recognition</span><span class="mi-why" hidden></span></span></button>
             </div>
           </div>
           <div class="menu-foot" role="group" aria-label="Help and settings">
@@ -180,6 +176,7 @@
           <span class="stat-chip" id="progress-chip" hidden>
             <span class="stat-dot"></span><span id="progress-text"></span>
           </span>
+          <button type="button" class="hide-shot-switch" id="hide-shot-toggle" role="switch" aria-checked="false" title="Hide filmed beats: collapse beats marked Filmed into a thin strip" hidden><span class="hide-shot-track" aria-hidden="true"><span class="hide-shot-thumb"></span></span><span class="hide-shot-label">Hide filmed beats</span></button>
           <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
             <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
           </button>
@@ -196,7 +193,13 @@
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
-        <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
+        <div class="present-split" id="present-split">
+          <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
+          <button class="btn btn-accent present-more" id="btn-present-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="present-menu" aria-label="More ways to present" title="More ways to present" hidden><svg class="btn-icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+          <div class="menu present-menu" id="present-menu" role="menu" aria-label="More ways to present" hidden>
+            <button type="button" role="menuitem" class="mi" id="present-menu-browser" title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser…</span></span></button>
+          </div>
+        </div>
       </div>
     </div>
     <section class="rundown" id="rundown" aria-label="Rundown" hidden>

@@ -11,4 +11,6 @@
       }
       #btn-present .tally-dot { display: none; }
       #btn-present .btn-phone-icon { display: block; width: 20px; height: 20px; }
+      .present-more { width: 30px; height: 44px; padding: var(--space-2) var(--space-2) var(--space-2) 0; background-clip: content-box; border-left: 0; border-radius: 0 8px 8px 0; }
+      .present-split.has-more #btn-present { padding-right: 0; border-radius: 8px 0 0 8px; }
 }

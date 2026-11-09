@@ -93,14 +93,12 @@ expect document.getElementById('prompter').hidden == true
 expect F.state().title == Browser Read
 eval (function(){ window.fetch = window.__realFetch; return true; })()
 
-# --- the browser build's File menu has no Present in browser ---------------
-# (it is the desktop app's in-page route to View ▸ Present in Browser, whose
-# menu bar Windows never draws — the title bar is the tab strip)
-jsclick #btn-file
-wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-browser').hidden === true
-jsclick #file-menu-close
-wait document.getElementById('file-menu').hidden
+# --- the browser build offers no Present in browser -------------------------
+# (the dropdown beside Present is the desktop app's in-page route to View ▸
+# Present in browser, whose menu bar Windows never draws; #1163)
+expect document.getElementById('btn-present-more').hidden === true
+expect !document.getElementById('present-split').classList.contains('has-more')
+expect document.getElementById('menu-present-browser') === null
 
 # --- the desktop end: a document with nowhere to live is not saved ---------
 eval (function(){ window.D = window.__desktopTest; window.fakeP = D.makeFakeBackend(); D.setBackend(window.fakeP); return !!D; })()
@@ -141,19 +139,31 @@ jsclick #pp-voice
 wait window.fakeP._prompterCalls === 3
 wait document.getElementById('pp-voice-status').textContent.indexOf("Could not read the saved file") !== -1
 
-# --- File ▸ This document ▸ Present in browser: the in-page route ----------
-# Offered on desktop, in the File menu's This document group (never
-# collapsed since #145), and it hands off through the same bridge call.
+# --- Present ▸ Present in browser…: the in-page route (#1163) ---------------
+# Offered on desktop, in the dropdown beside Present, and it hands off
+# through the same bridge call. Present itself still opens the in-app reader.
 eval (function(){ window.fakeP._prompterAnswer = null; return true; })()
-jsclick #btn-file
-wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-browser').hidden === false
-expect document.getElementById('menu-present-browser').closest('.menu-group').getAttribute('data-menu-group') == document
-expect document.getElementById('menu-present-browser').getBoundingClientRect().height > 0
-expect document.getElementById('menu-present-browser').getAttribute('data-file-action') == prompter-open-in-browser
-jsclick #menu-present-browser
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+expect document.getElementById('btn-present-more').hidden === false
+expect document.getElementById('present-split').classList.contains('has-more')
+expect document.getElementById('present-menu').hidden === true
+click #btn-present-more
+wait !document.getElementById('present-menu').hidden
+expect document.getElementById('btn-present-more').getAttribute('aria-expanded') == true
+expect document.getElementById('present-menu-browser').getBoundingClientRect().height > 0
+expect document.getElementById('present-menu-browser').textContent.trim().indexOf('Present in browser…') === 0
+click #present-menu-browser
 wait window.fakeP._prompterCalls === 4
-expect document.getElementById('file-menu').hidden === true
+expect document.getElementById('present-menu').hidden === true
+expect document.getElementById('prompter').hidden === true
+# Escape closes the dropdown and gives focus back to its button
+click #btn-present-more
+wait !document.getElementById('present-menu').hidden
+key Escape
+wait document.getElementById('present-menu').hidden
+expect document.activeElement.id == btn-present-more
+expect window.fakeP._prompterCalls === 4
 wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('Opened in your browser') !== -1) return true; return false; })()
 # the native View menu item runs the same action as that button, so the two
 # cannot drift: one more call, and the same toast
@@ -171,11 +181,7 @@ wait !document.getElementById('prompter').hidden
 expect document.getElementById('pp-voice').disabled === true
 expect document.getElementById('pp-voice').textContent == Follow My Voice
 expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in this desktop app") !== -1
-jsclick #btn-file
-wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-browser').hidden === true
-jsclick #file-menu-close
-wait document.getElementById('file-menu').hidden
+expect document.getElementById('btn-present-more').hidden === true
 
 # --- back to the browser build ---------------------------------------------
 eval (function(){ D.restoreBackend(); return true; })()
@@ -187,9 +193,7 @@ expect document.getElementById('pp-voice').disabled === false
 expect document.getElementById('pp-voice').textContent == Follow My Voice
 jsclick #pp-close
 expect !window.splitpageDesktop
-jsclick #btn-file
-wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-browser').hidden === true
-jsclick #file-menu-close
+expect document.getElementById('btn-present-more').hidden === true
+expect !document.getElementById('present-split').classList.contains('has-more')
 
 quit

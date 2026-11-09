@@ -2,9 +2,9 @@
 # view setting in localStorage "splitpage-rundown-min", never the document.
 # Minimized, the strip is a thin bar — the blocks as a coloured line and the
 # playhead, no ruler, no labels — and the whole bar is the button that
-# brings it back. Flipped from the chevron on the strip, File ▸ This
-# document ▸ Minimize the rundown, the desktop View menu (the native item
-# clicks the File item, like Hide shot scenes) and the Settings dialog's
+# brings it back, with a labelled "Show rundown" control at its right edge
+# (#1163). Flipped from that control, the desktop View menu, the command
+# menu and the Settings dialog's
 # `splitpage:pref` event. Remembered across a reload; side panels still open
 # right under the header's row; the condensing header does not flip back
 # and forth when it changes height.
@@ -23,16 +23,17 @@ wait document.querySelectorAll('#rundown .rd-block').length === document.querySe
 expect localStorage.getItem('splitpage-rundown-min') === null
 expect !document.getElementById('rundown').classList.contains('is-min')
 expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == true
-expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-label') == Minimise the rundown
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
-expect document.getElementById('menu-rundown-min').getAttribute('role') == menuitemcheckbox
+expect document.querySelector('#rundown .rundown-toggle').textContent == Minimise rundown
+expect document.querySelector('#rundown .rundown-toggle svg use').getAttribute('href') == #i-chevron-down
+expect getComputedStyle(document.querySelector('#rundown .rundown-toggle svg')).transform !== 'none'
+expect document.getElementById('menu-rundown-min') === null
 
 # --- remembered across a reload ---------------------------------------------
 eval localStorage.setItem('splitpage-rundown-min', '1')
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 wait document.getElementById('rundown').classList.contains('is-min')
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == false
 expect document.querySelectorAll('#rundown .rd-seg').length === document.querySelectorAll('#rows .row').length
 eval localStorage.setItem('splitpage-rundown-min', '0')
 goto /index.html
@@ -47,7 +48,7 @@ expect window.__fullH > 60
 click #rundown .rundown-toggle
 wait document.getElementById('rundown').classList.contains('is-min')
 expect localStorage.getItem('splitpage-rundown-min') == 1
-expect document.getElementById('rundown').getBoundingClientRect().height <= 12
+expect document.getElementById('rundown').getBoundingClientRect().height <= 26
 expect getComputedStyle(document.querySelector('#rundown .rundown-ruler')).display == none
 # the blocks are a coloured line: one segment per scene, no buttons, no labels
 expect document.querySelectorAll('#rundown .rd-block').length === 0
@@ -55,8 +56,10 @@ expect document.querySelectorAll('#rundown .rd-seg').length === document.querySe
 expect document.querySelectorAll('#rundown .rd-num').length === 0
 expect getComputedStyle(document.querySelector('#rundown .rd-seg.is-ready, #rundown .rd-seg.is-todo, #rundown .rd-seg.is-shot')).height == 3px
 expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == false
-expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-label') == Show the rundown
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+expect document.querySelector('#rundown .rundown-toggle').textContent == Show rundown
+expect getComputedStyle(document.querySelector('#rundown .rundown-toggle svg')).transform === 'none'
+# the labelled control sits at the strip's right edge and stays a fair size to tap
+expect (function(){ var r = document.getElementById('rundown').getBoundingClientRect(); var f = document.querySelector('#rundown .rundown-toggle-face').getBoundingClientRect(); return f.width >= 100 && f.height >= 18 && r.right - f.right <= 16; })()
 # a view setting, not an edit
 expect document.getElementById('save-status').hidden
 expect document.getElementById('btn-save').textContent == Not saved yet
@@ -93,32 +96,26 @@ expect Math.abs(document.getElementById('rundown').getBoundingClientRect().heigh
 expect document.querySelectorAll('#rundown .rd-tick').length > 3
 expect getComputedStyle(document.querySelector('#rundown .rundown-ruler')).display !== 'none'
 
-# --- the File menu's switch, which leaves the menu open ----------------------
+# --- the File menu no longer carries it (#1163) ------------------------------
 click #btn-file
 wait !document.getElementById('file-menu').hidden
-click #menu-rundown-min
-wait document.getElementById('rundown').classList.contains('is-min')
-expect !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
-click #menu-rundown-min
-wait !document.getElementById('rundown').classList.contains('is-min')
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
+expect !Array.prototype.some.call(document.querySelectorAll('#file-menu .mi'), function(m){ return /minimi[sz]e/i.test(m.textContent); })
 key Escape
 wait document.getElementById('file-menu').hidden
 
-# --- the desktop View menu: the native item clicks the File item -------------
+# --- the desktop View menu runs the same action -------------------------------
 eval window.__desktopTest.runMenuCommand('toggle-rundown-min')
 wait document.getElementById('rundown').classList.contains('is-min')
 eval window.__desktopTest.runMenuCommand('toggle-rundown-min')
 wait !document.getElementById('rundown').classList.contains('is-min')
 
 # --- the command menu offers it too -------------------------------------------
-expect window.__commandTest.results('rundown').some(function(g){ return g.items.some(function(it){ return it.id === 'toggle-rundown-min' && it.label === 'Minimise the rundown'; }); })
+expect window.__commandTest.results('rundown').some(function(g){ return g.items.some(function(it){ return it.id === 'toggle-rundown-min' && it.label === 'Minimise rundown'; }); })
 
 # --- the Settings dialog's event (lane C writes the key, then says so) -------
 eval (function(){ localStorage.setItem('splitpage-rundown-min', '1'); document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-rundown-min', value: '1' } })); return true; })()
 wait document.getElementById('rundown').classList.contains('is-min')
-expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+expect document.querySelector('#rundown .rundown-toggle').textContent == Show rundown
 # another key is not ours
 eval (function(){ document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-hide-shot', value: '0' } })); return true; })()
 sleep 100

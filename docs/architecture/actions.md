@@ -35,7 +35,7 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 
 | Action | Difference kept from 3.1 |
 | --- | --- |
-| `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
+| `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the native menu does |
 | `find` | With the bar already open, Ctrl+F only puts the focus back in it and selects its query; the File menu, the command menu and the native Edit menu open the bar again, taking the selected words as the query (`run` looks at its source; `286-find-from-every-surface.txt`) |
 | `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source). The header's Search button is refused without a reason, so nothing is shown, as `openCommandMenu()` returned quietly in 3.1 |
 
@@ -191,7 +191,7 @@ started over one of them.
 | Action | Refused under |
 | --- | --- |
 | `save`, `save-as` | still loading, a dialog, the command menu |
-| `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
+| `prompter-open-in-browser` | still loading, a dialog, the command menu (then its own state) |
 | `open`, `export` | still loading, every overlay |
 | `command-menu` | still loading, every overlay but itself |
 | `find` | still loading, every overlay but the command menu |
@@ -368,8 +368,8 @@ open when a command runs from the keyboard or a menu.
 
 | Action id | Surfaces | Old owner |
 | --- | --- | --- |
-| `toggle-hide-shot` | File menu, command menu, `mod+alt+h` (Shift held too, as before) | `18-local-files.js` dispatch, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
-| `toggle-rundown-min` | File menu, command menu, the rundown's own button | `18-local-files.js`, `18d-command-menu.js`, `05f-rundown.js` click listener |
+| `toggle-hide-shot` | The header's Hide filmed beats switch, command menu, `mod+alt+h` (Shift held too, as before) | `mountHideShotSwitch` in `src/features/rows/hide-shot.ts`, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
+| `toggle-rundown-min` | The rundown's own Minimise rundown / Show rundown button, command menu, desktop menu | `05f-rundown.js` click listener, `18d-command-menu.js` |
 | `history` | File menu, command menu | `18-local-files.js`, `18d-command-menu.js` |
 | `find` | File menu, command menu, `mod+f` (Shift or Alt held too, as before) | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
 | `export` | File menu, command menu, `mod+e` | `18-local-files.js`, `18d-command-menu.js`, an `18c-export-dialog.js` keydown listener |
@@ -385,7 +385,7 @@ open when a command runs from the keyboard or a menu.
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
 | `new`, `paste`, `gdoc-import`, `autosave`, `export-again` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
 | `set-target` | Command menu | `18d-command-menu.js` |
-| `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |
+| `prompter-open-in-browser` | The dropdown beside Present, command menu, desktop menu (Ctrl+Shift+P) | `mountPrompterOpen` in `src/features/prompter/mount.ts`, `18d-command-menu.js` |
 | `script-zoom-in`, `script-zoom-out`, `script-zoom-reset` | Desktop View menu, Ctrl + "+" / "-" / "0" (not listed in the command menu) | `20f-desktop.js` via `runScriptZoomCommand`, the `05s-script-zoom.js` keydown listener |
 
 The File menu's export formats (`export-pdf` and the rest) still dispatch in

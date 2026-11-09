@@ -5,11 +5,11 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 interface HideShotPorts {
   readonly shots: Pick<ShotHiding, "on" | "set" | "expand" | "groups">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly menuItem: () => Element | null;
+  readonly switchButton: () => Element | null;
 }
 
 export interface HideShotControls {
-  readonly updateMenu: () => void;
+  readonly updateSwitch: () => void;
   readonly set: (on: boolean) => void;
   readonly toggle: () => void;
   readonly expand: (idsAttr: string | null | undefined) => void;
@@ -26,19 +26,26 @@ export function hiddenShotStripHtml(ids: readonly string[]): string {
     '</button>';
 }
 
+export function mountHideShotSwitch(button: Element | null, toggle: () => void): () => void {
+  if (!button) return () => {};
+  const onClick = (): void => { toggle(); };
+  button.addEventListener("click", onClick);
+  return () => { button.removeEventListener("click", onClick); };
+}
+
 export function createHideShot(ports: HideShotPorts): HideShotControls {
-  function updateMenu(): void {
-    const item = ports.menuItem();
-    if (!item) return;
-    item.setAttribute("aria-checked", ports.shots.on() ? "true" : "false");
+  function updateSwitch(): void {
+    const button = ports.switchButton();
+    if (!button) return;
+    button.setAttribute("aria-checked", ports.shots.on() ? "true" : "false");
   }
 
   function set(on: boolean): void {
-    if (ports.shots.set(on)) updateMenu();
+    if (ports.shots.set(on)) updateSwitch();
   }
 
   return {
-    updateMenu,
+    updateSwitch,
     set,
     toggle: function () {
       set(!ports.shots.on());

@@ -15,6 +15,26 @@ const expected: readonly Registration[] = [
     "click"
   ],
   [
+    "btn-present-more",
+    "click"
+  ],
+  [
+    "btn-present-more",
+    "keydown"
+  ],
+  [
+    "present-menu-browser",
+    "click"
+  ],
+  [
+    "present-menu",
+    "keydown"
+  ],
+  [
+    "present-split",
+    "focusout"
+  ],
+  [
     "pp-close",
     "click"
   ],
@@ -109,7 +129,8 @@ export function setup() {
     isOpen: () => false
   };
   const p1: PrompterOpenPorts = {
-    runFromButton: h.log("runFromButton")
+    runFromButton: h.log("runFromButton"),
+    presentInBrowser: { offered: () => true, onChange: () => () => {} }
   };
   const p2: PrompterPorts = {
     disposeRuntime: h.log("disposeRuntime"),
@@ -148,6 +169,78 @@ export function setup() {
 test("prompter: every target, event, phase and multiplicity across dispose and remount", () => {
   const h = setup();
   h.assertRemount(h.mount, expected);
+  h.window.close();
+});
+
+test("present: the browser choice beside Present shows only while the desktop offers it, and follows changes", () => {
+  const h = setup();
+  let offered = false;
+  const hook: { changed: (() => void) | null } = { changed: null };
+  const owner = mountPrompterOpen({ window: h.window, ports: { ...h.p1, presentInBrowser: {
+    offered: () => offered,
+    onChange: (listener) => { hook.changed = listener; return () => { hook.changed = null; }; }
+  } } });
+  assert.equal(h.el("btn-present-more").hidden, true);
+  assert.equal(h.el("present-split").classList.contains("has-more"), false);
+  offered = true;
+  hook.changed?.();
+  assert.equal(h.el("btn-present-more").hidden, false);
+  assert.equal(h.el("present-split").classList.contains("has-more"), true);
+  h.fire(h.el("btn-present-more"), "click", { detail: 1 });
+  assert.equal(h.el("present-menu").hidden, false);
+  offered = false;
+  hook.changed?.();
+  assert.equal(h.el("btn-present-more").hidden, true);
+  assert.equal(h.el("present-menu").hidden, true);
+  owner.dispose();
+  assert.equal(hook.changed, null);
+  h.window.close();
+});
+
+test("present: Present still opens the teleprompter, and the one menu item opens the browser and returns focus", () => {
+  const h = setup();
+  const owner = mountPrompterOpen({ window: h.window, ports: h.p1 });
+  h.fire(h.el("btn-present"), "click");
+  h.fire(h.el("btn-present-more"), "click", { detail: 0 });
+  assert.equal(h.el("present-menu").hidden, false);
+  assert.equal(h.el("btn-present-more").getAttribute("aria-expanded"), "true");
+  assert.equal(h.document.activeElement, h.el("present-menu-browser"));
+  assert.equal(h.el("present-menu-browser").querySelector(".mi-label")?.textContent, "Present in browser…");
+  assert.equal(Array.from(h.el("present-menu-browser").querySelectorAll(".mi-keys kbd"), (k) => k.textContent).join("+"), "Ctrl+Shift+P");
+  assert.equal(h.el("present-menu-browser").getAttribute("aria-keyshortcuts"), "Control+Shift+P");
+  h.fire(h.el("present-menu-browser"), "click");
+  assert.equal(h.el("present-menu").hidden, true);
+  assert.equal(h.el("btn-present-more").getAttribute("aria-expanded"), "false");
+  assert.equal(h.document.activeElement, h.el("btn-present-more"));
+  assert.deepEqual(h.calls, [{ name: "runFromButton", args: ["present"] }, { name: "runFromButton", args: ["prompter-open-in-browser"] }]);
+  owner.dispose();
+  h.window.close();
+});
+
+test("present: the browser menu opens from the keyboard and Escape closes it back onto its button", () => {
+  const h = setup();
+  const owner = mountPrompterOpen({ window: h.window, ports: h.p1 });
+  assert.equal(h.fire(h.el("btn-present-more"), "keydown", { key: "ArrowDown" }).defaultPrevented, true);
+  assert.equal(h.el("present-menu").hidden, false);
+  assert.equal(h.document.activeElement, h.el("present-menu-browser"));
+  h.fire(h.el("present-menu-browser"), "keydown", { key: "Escape" });
+  assert.equal(h.el("present-menu").hidden, true);
+  assert.equal(h.document.activeElement, h.el("btn-present-more"));
+  h.fire(h.el("btn-present-more"), "click", { detail: 1 });
+  h.fire(h.el("btn-present-more"), "click", { detail: 1 });
+  assert.equal(h.el("present-menu").hidden, true);
+  h.fire(h.el("btn-present-more"), "click", { detail: 1 });
+  assert.equal(h.el("present-menu").hidden, false);
+  assert.equal(h.fire(h.el("btn-present-more"), "keydown", { key: "Escape" }).defaultPrevented, true);
+  assert.equal(h.el("present-menu").hidden, true);
+  assert.equal(h.fire(h.el("btn-present-more"), "keydown", { key: "Escape" }).defaultPrevented, false);
+  h.fire(h.el("btn-present-more"), "click", { detail: 1 });
+  assert.equal(h.el("present-menu").hidden, false);
+  h.el("btn-present-more").focus();
+  h.el("doc-title").focus();
+  assert.equal(h.el("present-menu").hidden, true);
+  assert.deepEqual(h.calls, []);
+  owner.dispose();
   h.window.close();
 });
 

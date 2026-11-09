@@ -21,7 +21,7 @@ test("bootstrap preserves the complete action registration order when export def
       "tagging-help", "export-app-data", "import-app-data",
       "autosave", "new", "paste", "gdoc-import", "show-gdoc-import",
       "export-again", "set-target",
-      "prompter-open-in-browser", "prompter-open-in-chromium",
+      "prompter-open-in-browser",
       "script-zoom-in", "script-zoom-out", "script-zoom-reset",
       "go-to-scene", "annotate-picture", "open-picture-link", "comment-on-selection", "tag-selection", "reveal-row"
     ]);
