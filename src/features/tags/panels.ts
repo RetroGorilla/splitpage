@@ -1119,6 +1119,11 @@ export function armPersonDelete(btn: Element, personId: string | null) {
   }, function () { disarm = armButton(btn); });
 }
 
+function renamedNotes(context: string, key: string | null, nextKey: string | null): string | null {
+  const [container, open] = JSON.parse(context) as [string, string];
+  return nextKey !== null && open === key ? prepContext(container, nextKey) : null;
+}
+
 export function saveTagRename(key: string | null, renamed: string): string | null {
   const item = findTagByKey(key);
   if (!item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return null; }
@@ -1127,6 +1132,10 @@ export function saveTagRename(key: string | null, renamed: string): string | nul
   const clean = cappedText(renamed, 80);
   const nextKey = clean ? tagKey(item.cat.id, clean) : key;
   if (previousExpanded === key) p.view.setTagExpanded(nextKey);
+  const prep = p.view.prep();
+  const notes = prep.current().notes;
+  const movedNotes = notes === null ? null : renamedNotes(notes, key, nextKey);
+  if (notes !== null && movedNotes !== null) prep.renameNotes(notes, movedNotes);
   (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
   const changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts as RemoveTagPorts);
@@ -1135,6 +1144,7 @@ export function saveTagRename(key: string | null, renamed: string): string | nul
     (ports as TagPanelPorts).notices.show("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
     p.view.setTagExpanded(previousExpanded);
+    if (notes !== null && movedNotes !== null) prep.renameNotes(movedNotes, notes);
     renderProduction();
   }
   return changed ? nextKey : key;

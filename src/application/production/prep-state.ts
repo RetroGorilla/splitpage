@@ -18,6 +18,7 @@ export interface ProductionPrepState {
   readonly toggleScene: (scene: string) => void;
   readonly toggleBeat: (beat: string) => void;
   readonly toggleNotes: (context: string) => void;
+  readonly renameNotes: (from: string, to: string) => void;
   readonly showMore: (scene: string) => void;
   readonly showEarlier: (scene: string) => void;
   readonly toggleFilmed: (scene: string) => void;
@@ -86,6 +87,9 @@ export function createProductionPrepState(): ProductionPrepState {
     },
     toggleNotes: (context: string) => {
       notes = notes === context ? null : context;
+    },
+    renameNotes: (from: string, to: string) => {
+      if (notes === from) notes = to;
     },
     showMore: (scene: string) => {
       shown.set(scene, (shown.get(scene) ?? 8) + 8);

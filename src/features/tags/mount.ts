@@ -1,5 +1,6 @@
 import type { ButtonActions } from "../../application/actions.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { prepContext } from "./outline.ts";
 
 type TagEvent = MouseEvent & { readonly target: HTMLElement & { value: string }; readonly key: string; readonly pointerType: string };
 interface EntityPorts {
@@ -78,11 +79,18 @@ function cardFocus(origin: Element): (selector: string, key?: string | null) => 
   const originalKey = originalCard?.getAttribute("data-key");
   return (selector, key) => {
     if (!panel || !originalCard) return;
+    const target = key ?? originalKey;
+    const wanted = context && target ? retargetPrepContext(context, target) : context;
     const scope = scene ? Array.from(panel.querySelectorAll("[data-scene-group]")).find(el => el.getAttribute("data-scene-group") === scene) : panel;
     const card = Array.from(scope?.querySelectorAll(".tag-entity") ?? []).find(el =>
-      el.getAttribute("data-key") === (key ?? originalKey) && (!context || el.getAttribute("data-prep-context") === context));
+      el.getAttribute("data-key") === target && (!wanted || el.getAttribute("data-prep-context") === wanted));
     card?.querySelector<HTMLElement>(selector)?.focus();
   };
+}
+
+function retargetPrepContext(context: string, key: string): string {
+  const [container] = JSON.parse(context) as [string];
+  return prepContext(container, key);
 }
 
 export function mountTagEntityContainer(mount: { window: Window; id: string; ports: EntityPorts }): () => void {
@@ -99,7 +107,7 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
         e.preventDefault();
         const refocus = cardFocus(e.target);
         const key = ports.saveTagRename(e.target.getAttribute("data-key"), e.target.value);
-        refocus(".tag-entity-head, .prep-resource-name", key);
+        refocus('.tag-entity-head, [data-prep="notes"]', key);
       }
       else if (e.key === "Escape") { e.preventDefault(); ports.setRenaming(null); ports.renderProduction(); }
       return;
@@ -377,7 +385,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
         if (input) {
           const refocus = cardFocus(tagRenameSave);
           const key = ports.saveTagRename(tagRenameSave.getAttribute("data-key"), input.value);
-          refocus(".tag-entity-head, .prep-resource-name", key);
+          refocus('.tag-entity-head, [data-prep="notes"]', key);
         }
         return true;
       }
