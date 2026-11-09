@@ -215,6 +215,8 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       if (onProgress) onProgress({ done: 1, total: 1 });
       return Promise.resolve(this._moveAnswer || { ok: true, name: name, outcome: "moved" as const });
     },
+    planCreateBundle: function () { return Promise.resolve({ ok: true as const, plan: { files: [], bundled: [], missing: 0 } }); },
+    bundlePath: function () { return Promise.resolve({ ok: false as const, code: "UNAVAILABLE" }); },
     onBundleCarry: function (cb: Parameters<DesktopPort["onBundleCarry"]>[0]) { this._bundleCarry = cb; },
     cancelBundle: function (job: string) { (this._bundleCancels = this._bundleCancels || []).push(job); },
     openBundledFile: function (name: string) {

@@ -136,6 +136,8 @@ export interface FileMenuDropdownPorts {
 }
 
 export interface FileMenuActionPorts {
+  readonly createBundle: () => Promise<void>;
+  readonly canCreateBundle: () => boolean;
   readonly screen: () => ScreenState;
   readonly desktop: () => boolean;
   readonly saves: Pick<SaveState, "busy">;

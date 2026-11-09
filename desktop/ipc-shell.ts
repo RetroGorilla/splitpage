@@ -1,6 +1,7 @@
 "use strict";
 
 import type { createDraftStore } from "./drafts.ts";
+import type { DesktopWireCreateBundlePlan } from "../shared/desktop-contract.d.ts";
 
 import type * as NodeCrypto from "node:crypto";
 
@@ -46,6 +47,15 @@ function createShellIpc({
     if (TEST_MODE) { testVideoOpens.push(found.path); return { ok: true as const }; }
     const failed = await shell.openPath(found.path);
     return failed ? { ok: false as const, code: "OPEN_FAILED" } : { ok: true as const };
+  }
+
+  function pathGrant(event: DesktopIpcEvent, source: string): VideoFileGrant | null {
+    return [...videoFileGrants.values()].findLast((g) => g.path === source && g.sender === event.sender.id && g.move) || null;
+  }
+
+  function forgetMoved(source: string): void {
+    // why: the original is gone once moved, so no grant may name it again or reach the moved file in the folder
+    for (const [token, grant] of videoFileGrants) if (grant.path === source) videoFileGrants.delete(token);
   }
 
   function registerShellIpc({ ipcHandle, ipcOn, ipcOnSync }: Parameters<DesktopRegisterIpcGroup>[0]) {
@@ -139,15 +149,46 @@ function createShellIpc({
       const granted = grantOf(event, token);
       if (!granted) return { ok: false, code: "UNKNOWN" };
       if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job) || !granted.move) return { ok: false, code: "REFUSED" };
-      const moved = () => {
-        // why: the original is gone once moved, so no grant may name it again or reach the moved file in the folder
-        for (const [t, g] of videoFileGrants) if (g.path === granted.path) videoFileGrants.delete(t);
-      };
+      const moved = () => forgetMoved(granted.path);
       return bundleJobs.move(event.sender, tab.id, job, granted.path, granted.move, script, moved);
     });
 
     ipcOn("splitpage:bundle-cancel", (event, job) => {
       if (typeof job === "string") bundleJobs.cancel(event.sender, job);
+    });
+
+    ipcHandle("splitpage:bundle-create-plan", async (event, paths) => {
+      const script = scriptOf(event);
+      if (!script) return { ok: false, code: "NO_FOLDER" };
+      if (!Array.isArray(paths) || paths.length > 2000 || paths.some((p) => typeof p !== "string" || p.length > 32768)) return { ok: false, code: "REFUSED" };
+      const files: { path: string; size: number; move: boolean }[] = [];
+      const bundled: { path: string; name: string }[] = [];
+      let missing = 0;
+      for (const source of new Set(paths)) {
+        const found = await bundleJobs.inspectPath(source, script);
+        if (found === "missing") { missing++; continue; }
+        if (!found) continue;
+        if (found.name) { bundled.push({ path: source, name: found.name }); continue; }
+        const grant = pathGrant(event, source);
+        files.push({ path: source, size: found.size, move: !!grant && sameMoveGrant(grant.move, await bundleJobs.moveGrantOf(source)) });
+      }
+      if (scriptOf(event) !== script) return { ok: false, code: "DROPPED" };
+      const plan: DesktopWireCreateBundlePlan = { files, bundled, missing };
+      return { ok: true, plan };
+    });
+
+    ipcHandle("splitpage:bundle-path", (event, source, job, choice) => {
+      const tab = tabOf(event);
+      const script = scriptOf(event);
+      if (!tab || !script) return { ok: false, code: "NO_FOLDER" };
+      if (typeof source !== "string" || typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
+      if (choice === "copy") return bundleJobs.copy(event.sender, tab.id, job, source, script, true);
+      const grant = choice === "move" ? pathGrant(event, source) : null;
+      if (!grant || !grant.move) return { ok: false, code: "REFUSED" };
+      return bundleJobs.move(event.sender, tab.id, job, source, grant.move, script, () => forgetMoved(source), async () => {
+        const found = await bundleJobs.inspectPath(source, script);
+        return !!found && found !== "missing" && !found.name && sameMoveGrant(grant.move, await bundleJobs.moveGrantOf(source));
+      });
     });
 
     ipcHandle("splitpage:bundled-file-open", async (event, name) => {

@@ -101,6 +101,21 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
       words: "demo example sample long thirty 30 beats scenes test try every feature",
       availability: () => current() ? { enabled: true } : UNMOUNTED,
       run: () => { current()?.openLongDemo(); }
+    },
+    {
+      id: "create-bundle",
+      label: "Create bundle…",
+      group: "File",
+      icon: "i-folder",
+      words: "copy move linked files folder",
+      availability: () => ({ ...firstRefusal(availableUnless(OPENS_ONE, ports.screen()),
+        { enabled: !!current() && ports.canCreateBundle() && !ports.saves.busy() }), visible: ports.desktop() }),
+      run: () => {
+        const owner = current();
+        if (!owner) return;
+        closeFileMenu(owner);
+        return ports.createBundle();
+      }
     }
   ];
 }

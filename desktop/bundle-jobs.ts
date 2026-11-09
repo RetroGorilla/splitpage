@@ -1,11 +1,13 @@
 "use strict";
 
 import type * as NodeCrypto from "node:crypto";
+import type * as NodePath from "node:path";
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
 import type { BundleCarryResult, BundleCopyResult, BundleMoveGrant, BundleMoveResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
 
 const crypto: typeof NodeCrypto = require("node:crypto");
+const path: typeof NodePath = require("node:path");
 
 type BundleSender = {
   readonly id: number;
@@ -152,7 +154,7 @@ function createBundleJobs(options: {
     }
   }
 
-  function copy(sender: BundleSender, tabId: string, job: string, source: string, script: string): Promise<BundleJobResult> {
+  function copy(sender: BundleSender, tabId: string, job: string, source: string, script: string, stored = false): Promise<BundleJobResult> {
     return new Promise((finish) => {
       let settled = false;
       const done = (result: BundleJobResult) => { if (!settled) { settled = true; finish(result); } };
@@ -162,7 +164,10 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const now = scriptOfTab(tabId);
           if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
-          done(await copier.copyIn(source, script, allow, progress, signal));
+          const checked = stored ? await copier.openStored(source, allow) : { ok: true as const, path: source };
+          if (!checked.ok) { done({ ok: false, code: "REFUSED" }); return; }
+          if (signal.aborted) { done({ ok: false, code: "CANCELLED" }); return; }
+          done(await copier.copyIn(checked.path, script, allow, progress, signal));
         }
       });
     });
@@ -173,7 +178,7 @@ function createBundleJobs(options: {
   }
 
   function move(sender: BundleSender, tabId: string, job: string, source: string, grant: BundleMoveGrant, script: string,
-    onMoved: () => void = () => {}): Promise<BundleMoveJobResult> {
+    onMoved: () => void = () => {}, validate?: () => Promise<boolean>): Promise<BundleMoveJobResult> {
     return new Promise((finish) => {
       let settled = false;
       const done = (result: BundleMoveJobResult) => { if (!settled) { settled = true; finish(result); } };
@@ -183,6 +188,8 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const now = scriptOfTab(tabId);
           if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
+          if (validate && !(await validate())) { done({ ok: false, code: "REFUSED" }); return; }
+          if (signal.aborted) { done({ ok: false, code: "CANCELLED" }); return; }
           const moved = await copier.moveIn(source, script, allow, progress, signal, grant);
           if (!moved.ok) { done(moved); return; }
           if (moved.outcome === "moved") onMoved();
@@ -453,6 +460,17 @@ function createBundleJobs(options: {
     return copier.besideScript(script, stored, size, allow);
   }
 
+  async function inspectPath(source: string, script: string): Promise<{ size: number; name: string | null } | "missing" | null> {
+    const found = await copier.openStored(source, allow);
+    if (!found.ok) return found.code === "GONE" ? "missing" : null;
+    const size = await copier.sizeOfFile(found.path);
+    if (size === null) return "missing";
+    if (size < 0) return null;
+    const name = path.basename(found.path);
+    const beside = await copier.resolveIn(script, name, allow);
+    return { size, name: beside.ok && same(beside.path, found.path) ? name : null };
+  }
+
   function noteScript(tabId: string, script: string | null): void {
     for (const open of [...opens]) {
       const kept = !!script && (same(script, open.to) || (!open.landed && same(script, open.from)));
@@ -483,7 +501,7 @@ function createBundleJobs(options: {
   }
 
   return {
-    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, move, moveGrantOf, noteExportTarget, noteSaveTarget, noteScript, openBeside,
+    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, inspectPath, move, moveGrantOf, noteExportTarget, noteSaveTarget, noteScript, openBeside,
     openBundled,
     planExport, planSave,
     prepareWrite, startExport

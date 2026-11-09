@@ -388,14 +388,19 @@ function grantSync(p) {
   return { path: p, sender: MAIN, move: { stamp, parent: fs.realpathSync.native(path.dirname(p)) } };
 }
 
-function harness({ script = null, grants = [], copierOptions = {}, holdMove = null } = {}) {
+function harness({ script = null, grants = [], copierOptions = {}, holdMove = null, holdOpen = null } = {}) {
   const handlers = new Map();
   const listeners = new Map();
   const testVideoOpens = [];
   const tab = { id: "tab-a", windowId: "w1", source: script ? { kind: "file", absPath: script } : { kind: "blank" } };
   const videoFileGrants = new Map(grants.map(([token, p]) => [token, grantSync(p)]));
   const real = copierWith(copierOptions);
-  const copier = { ...real, moveIn: async (...args) => { if (holdMove) await holdMove; return real.moveIn(...args); } };
+  const attempts = [];
+  const copier = { ...real,
+    openStored: async (...args) => { if (holdOpen) await holdOpen; return real.openStored(...args); },
+    copyIn: async (...args) => { attempts.push(["copy", args[0]]); return real.copyIn(...args); },
+    moveIn: async (...args) => { if (holdMove) await holdMove; attempts.push(["move", args[0]]); return real.moveIn(...args); }
+  };
   const bundleJobs = createBundleJobs({
     copier, allow: ATTACHABLE_FILE, scriptOfTab: (id) => (id === tab.id && tab.source.kind === "file" ? tab.source.absPath : null),
     pathOf: () => null, namesInProject: bundleFiles.bundledNamesInProject, quitGraceMs: 200
@@ -411,8 +416,52 @@ function harness({ script = null, grants = [], copierOptions = {}, holdMove = nu
   const callAs = (other, name, ...args) => handlers.get(name)({ sender: main.sender, tab: other }, ...args);
   const callFrom = (from, other, name, ...args) => handlers.get(name)({ sender: from.sender, tab: other }, ...args);
   const send = (name, ...args) => listeners.get(name)({ sender: main.sender }, ...args);
-  return { tab, call, callAs, callFrom, send, main, bundleJobs, videoFileGrants, testVideoOpens };
+  return { tab, call, callAs, callFrom, send, main, bundleJobs, videoFileGrants, testVideoOpens, attempts };
 }
+
+test("Create bundle checks document paths, copies without granting Move, and refuses ungranted move attempts", async () => {
+  const s = scratch();
+  const attempts = [];
+  try {
+    const ipc = harness({ script: s.script, copierOptions: {
+      moveFile: async (...args) => { attempts.push(["rename", ...args]); return fsp.rename(...args); },
+      removeOriginal: async (...args) => { attempts.push(["delete", ...args]); return fsp.unlink(...args); }
+    } });
+    const gone = path.join(s.drops, "gone.pdf");
+    const plan = await ipc.call("splitpage:bundle-create-plan", [s.clip, s.clip, gone, "\\\\server\\share\\clip.mp4"]);
+    assert.deepEqual(plan, { ok: true, plan: { files: [{ path: s.clip, size: SIZE, move: false }], bundled: [], missing: 1 } });
+    assert.equal(ipc.videoFileGrants.size, 0, "reading document paths never creates grants");
+    assert.deepEqual(await ipc.call("splitpage:bundle-path", s.clip, "create1", "move"), { ok: false, code: "REFUSED" });
+    assert.deepEqual(attempts, [], "no forbidden rename or delete was attempted");
+    assert.deepEqual(await ipc.call("splitpage:bundle-path", s.clip, "create2", "copy"), { ok: true, name: "take one.mp4" });
+    assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
+    assert.equal(ipc.videoFileGrants.size, 0);
+    assert.deepEqual(attempts, []);
+  } finally { s.done(); }
+});
+
+test("Create bundle offers Move only for the same file and tab's existing grant", async () => {
+  const s = scratch();
+  const attempts = [];
+  try {
+    const ipc = harness({ script: s.script, grants: [["tok", s.clip]], copierOptions: {
+      moveFile: async (...args) => { attempts.push(args); return fsp.rename(...args); }
+    } });
+    const plan = await ipc.call("splitpage:bundle-create-plan", [s.clip]);
+    assert.equal(plan.plan.files[0].move, true);
+    const other = makeSender(MAIN + 1);
+    const otherTab = { ...ipc.tab, id: "tab-b" };
+    assert.equal((await ipc.callFrom(other, otherTab, "splitpage:bundle-create-plan", [s.clip])).plan.files[0].move, false);
+    assert.deepEqual(await ipc.callFrom(other, otherTab, "splitpage:bundle-path", s.clip, "create1", "move"), { ok: false, code: "REFUSED" });
+    touch(s.clip);
+    assert.equal((await ipc.call("splitpage:bundle-create-plan", [s.clip])).plan.files[0].move, false);
+    assert.deepEqual(await ipc.call("splitpage:bundle-path", s.clip, "create2", "move"), { ok: false, code: "REFUSED" });
+    assert.deepEqual(attempts, [], "neither another tab nor a changed file can attempt a rename");
+    await ipc.call("splitpage:video-file-grant", s.clip);
+    assert.equal((await ipc.call("splitpage:bundle-create-plan", [s.clip])).plan.files[0].move, true, "picking the changed file again replaces the stale eligibility");
+  } finally { s.done(); }
+});
 
 test("main moves only a file it granted this session, by token, into the tab's own script folder", async () => {
   const s = scratch();
@@ -542,6 +591,73 @@ test("Cancel and Quit anyway stop a move before its publish, so the original is 
       assert.deepEqual(fs.existsSync(s.folder) ? fs.readdirSync(s.folder) : [], [], how);
     } finally { s.done(); }
   }
+});
+
+test("Create bundle refuses unsafe and nonregular document paths before trying to copy, and recognizes files already in the folder", async () => {
+  const s = scratch();
+  try {
+    const ipc = harness({ script: s.script });
+    const program = path.join(s.drops, "program.exe");
+    fs.writeFileSync(program, "MZ");
+    const directory = path.join(s.drops, "directory.pdf");
+    fs.mkdirSync(directory);
+    const bad = [program, directory, "relative.pdf", "\\\\server\\share\\clip.mp4", "C:\\x\\..\\clip.mp4", "C:\\x\\clip.mp4:stream"];
+    const alias = path.join(s.drops, "alias.pdf");
+    try { fs.symlinkSync(program, alias, "file"); bad.push(alias); } catch { }
+    for (const source of bad) assert.deepEqual(await ipc.call("splitpage:bundle-path", source, "create1", "copy"), { ok: false, code: "REFUSED" }, source);
+    assert.deepEqual(ipc.attempts, [], "no copy or move was even tried for a refused path");
+    fs.mkdirSync(s.folder);
+    const inside = path.join(s.folder, "inside.pdf");
+    fs.writeFileSync(inside, "pdf");
+    const planned = await ipc.call("splitpage:bundle-create-plan", [...bad, inside]);
+    assert.deepEqual(planned, { ok: true, plan: { files: [], bundled: [{ path: inside, name: "inside.pdf" }], missing: 0 } });
+    assert.deepEqual(await ipc.call("splitpage:bundle-create-plan", [42]), { ok: false, code: "REFUSED" });
+    assert.deepEqual(await ipc.call("splitpage:bundle-create-plan", Array(2001).fill(s.clip)), { ok: false, code: "REFUSED" });
+    assert.deepEqual(ipc.attempts, []);
+  } finally { s.done(); }
+});
+
+test("Create bundle Cancel and Quit anyway during path validation prevent every copy, publish, rename and delete attempt", async () => {
+  for (const choice of ["copy", "move"]) for (const how of ["cancel", "quit"]) {
+    const s = scratch();
+    const irreversible = [];
+    try {
+      let release = () => {};
+      const ipc = harness({ script: s.script, grants: [["tok", s.clip]], holdOpen: new Promise((resolve) => { release = resolve; }), copierOptions: {
+        link: async (...args) => { irreversible.push(["publish", ...args]); return fsp.link(...args); },
+        moveFile: async (...args) => { irreversible.push(["rename", ...args]); return fsp.rename(...args); },
+        removeOriginal: async (...args) => { irreversible.push(["delete", ...args]); return fsp.unlink(...args); }
+      } });
+      const running = ipc.call("splitpage:bundle-path", s.clip, "create1", choice);
+      assert.equal(ipc.bundleJobs.busy(), true);
+      const stopping = how === "cancel" ? (ipc.send("splitpage:bundle-cancel", "create1"), Promise.resolve()) : ipc.bundleJobs.abortAll();
+      release();
+      await stopping;
+      assert.deepEqual(await running, { ok: false, code: "CANCELLED" });
+      assert.deepEqual(ipc.attempts, [], "cancel during the awaited check prevents even entry to copyIn or moveIn");
+      assert.deepEqual(irreversible, [], "no irreversible action was attempted");
+      assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
+      assert.equal(fs.existsSync(s.folder), false);
+    } finally { s.done(); }
+  }
+});
+
+test("Create bundle uses the existing move, consumes its grant, and serializes path copies in the same queue", async () => {
+  const s = scratch();
+  try {
+    const ipc = harness({ script: s.script, grants: [["tok", s.clip]] });
+    assert.deepEqual(await ipc.call("splitpage:bundle-path", s.clip, "create1", "move"), { ok: true, name: "take one.mp4", outcome: "moved" });
+    assert.equal(ipc.videoFileGrants.has("tok"), false);
+    assert.equal(fs.existsSync(s.clip), false);
+    assert.deepEqual(ipc.attempts, [["move", s.clip]]);
+    const a = path.join(s.drops, "a.pdf");
+    const b = path.join(s.drops, "b.pdf");
+    fs.writeFileSync(a, "a"); fs.writeFileSync(b, "b");
+    const results = await Promise.all([ipc.call("splitpage:bundle-path", a, "create2", "copy"), ipc.call("splitpage:bundle-path", b, "create3", "copy")]);
+    assert.deepEqual(results, [{ ok: true, name: "a.pdf" }, { ok: true, name: "b.pdf" }]);
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
+    assert.deepEqual(ipc.attempts.slice(1), [["copy", fs.realpathSync.native(a)], ["copy", fs.realpathSync.native(b)]]);
+  } finally { s.done(); }
 });
 
 let failed = 0;

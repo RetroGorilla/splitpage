@@ -48,6 +48,8 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
       })
     },
     bundles: {
+      create: { planCreate: async () => null, bundlePath: async () => null },
+      place: { writtenOut: () => false, onChange: () => () => {} },
       window: window,
       script: () => null,
       files: { bundle: async () => ({ ok: false, code: "UNAVAILABLE" }), move: async () => ({ ok: false, code: "UNAVAILABLE" }), cancelBundle: () => {} },

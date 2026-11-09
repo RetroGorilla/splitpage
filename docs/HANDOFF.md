@@ -639,6 +639,7 @@ tabs**.
   checkpoint (`guarded`) runs before each rename, delete and publish. A missing
   stored path falls back to the same name and size in the tab's script folder.
   `desktop/test/bundle-move.test.mjs` holds the steps and refusals.
+- **Create bundle (#260).** `src/features/gallery/create-bundle.ts` inspects path links after an open, after the first landed save and from File > Create bundle…. It uses the existing bundle dialog, queue, progress panel, Hide chip and Cancel. Main validates paths with the open-path checks; Copy creates no grant, and Move requires the tab's existing file-stamped grant and reuses `moveIn`. Files already in the script's folder become bundled names; missing files stay paths. See INV-34 and `desktop/test/bundle-move.test.mjs`.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —

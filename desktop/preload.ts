@@ -305,6 +305,15 @@ if (location.origin === "splitpage://app") {
       return bundleJob(id, onProgress, () => invoke("splitpage:bundle-move", String(token || ""), id));
     },
 
+    planCreateBundle(paths) {
+      return invoke("splitpage:bundle-create-plan", paths);
+    },
+
+    bundlePath(path, job, choice, onProgress) {
+      const id = String(job || "");
+      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-path", path, id, choice));
+    },
+
     onBundleCarry(cb) {
       bundleCarryCallback = typeof cb === "function" ? cb : null;
     },

@@ -1,0 +1,54 @@
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+click #btn-file
+expect document.querySelector('[data-file-action="create-bundle"]').hidden
+click #btn-file
+eval (function(){ window.D = window.__desktopTest; window.F = window.__splitpageFormats; window.B = D.makeFakeBackend(); window.P = 'C:\\Production\\Episode 12\\Original footage\\take one.mp4'; B.planCreateBundle = async function(paths){ return {ok:true,plan:{files:paths.includes(P)?[{path:P,size:1288490189,move:false}]:[],bundled:[],missing:2}}; }; B.bundlePath = function(path,job,choice,progress){ window.bundleCalled = {path,job,choice}; window.bundleProgress = progress; return new Promise(function(resolve){ window.bundleFinish = resolve; }); }; D.setBackend(B); var s = JSON.parse(JSON.stringify(F.state())); s.title = 'Episode 12'; s.rows[0].imageLinks = [{name:'take one.mp4',size:9,location:{kind:'path',path:P},poster:true}]; window.scriptId = B._addFile('Episode 12.splitpage',JSON.stringify(s)); return true; })()
+eval (async function(){ var handle = D.makeHandle({id:scriptId,name:'Episode 12.splitpage'}); await F.openFile(await handle.getFile(),handle); return true; })()
+wait !document.getElementById('bundle-outside-bar').hidden
+expect document.getElementById('bundle-outside-text').textContent == 1 file is outside this script's folder.
+expect document.getElementById('bundle-modal').hidden
+click #bundle-outside-create
+wait !document.getElementById('bundle-modal').hidden
+expect document.getElementById('bundle-title').textContent == Create bundle?
+expect document.getElementById('bundle-create-paths').textContent === P
+expect document.getElementById('bundle-create-missing').textContent == 2 more can't be found, so they stay as they are.
+expect document.getElementById('bundle-create-move').textContent == Move is only offered for files you added since Splitpage started. To move these, copy them, then delete the originals yourself.
+expect !document.getElementById('bundle-create-warning').hidden
+expect document.getElementById('bundle-move').hidden
+expect document.getElementById('bundle-accept').textContent == Copy (1.2 GB)
+expect document.activeElement.id == bundle-accept
+expect document.querySelector('#bundle-modal .modal-panel').getBoundingClientRect().bottom <= innerHeight
+sleep 300
+shot 260-create-bundle
+key Escape
+expect document.getElementById('bundle-modal').hidden
+expect document.activeElement.id == bundle-outside-create
+click #bundle-outside-dismiss
+expect document.getElementById('bundle-outside-bar').hidden
+click #btn-file
+expect !document.querySelector('[data-file-action="create-bundle"]').hidden
+click [data-file-action="create-bundle"]
+wait !document.getElementById('bundle-modal').hidden
+click #bundle-accept
+wait !!window.bundleCalled
+expect bundleCalled.path === P && bundleCalled.choice === 'copy'
+eval bundleProgress({done:3,total:9})
+eval document.getElementById('toast-host').replaceChildren()
+expect document.getElementById('bundle-progress-text').textContent.includes('33%')
+click #bundle-hide
+expect !document.getElementById('bundle-indicator').hidden
+click #bundle-indicator
+click #bundle-cancel
+expect B._bundleCancels.includes(bundleCalled.job)
+eval bundleFinish({ok:false,code:'CANCELLED'})
+wait document.getElementById('bundle-progress').hidden
+expect F.state().rows[0].imageLinks[0].location.kind === 'path'
+eval (function(){ B.bundlePath = async function(){ return {ok:true,name:'take one.mp4'}; }; D.runMenuCommand('create-bundle'); return true; })()
+wait !document.getElementById('bundle-modal').hidden
+click #bundle-accept
+wait F.state().rows[0].imageLinks[0].location.kind === 'bundled'
+expect F.state().rows[0].imageLinks[0].location.name == take one.mp4
+eval (async function(){ await F.save(); return true; })()
+expect document.getElementById('bundle-modal').hidden
+eval D.restoreBackend()

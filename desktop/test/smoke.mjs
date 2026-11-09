@@ -4130,6 +4130,55 @@ async function caseGalleryVideoBundle(target) {
   }
 }
 
+async function caseCreateBundle(target) {
+  const tag = target.name + " Create bundle: old document paths copy without granting Move (#260)";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-create-bundle-"));
+  const outside = path.join(dir, "outside");
+  fs.mkdirSync(outside);
+  const source = path.join(outside, "brief.pdf");
+  const bytes = Buffer.from("production brief");
+  fs.writeFileSync(source, bytes);
+  const script = writeFixture(dir, "Episode 12.splitpage", "Create Bundle Smoke", [["Wide", "One."]]);
+  const state = JSON.parse(fs.readFileSync(script, "utf8"));
+  state.rows[0].imageLinks = [{ name: "brief.pdf", size: bytes.length, location: { kind: "path", path: source }, poster: true }];
+  fs.writeFileSync(script, JSON.stringify(state));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "create-bundle", userDataDir, fixtures: [script] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const bar = await poll(cdp, "!document.getElementById('bundle-outside-bar').hidden", 10000).catch(() => false);
+    record(tag + ": opening the old script shows the outside-files bar without a dialog", bar === true &&
+      await evalPage(cdp, "document.getElementById('bundle-modal').hidden"));
+    await evalPage(cdp, "document.getElementById('bundle-outside-create').click()");
+    const asked = await poll(cdp, "!document.getElementById('bundle-modal').hidden", 10000).catch(() => false);
+    const text = await evalPage(cdp, "({title:document.getElementById('bundle-title').textContent,path:document.getElementById('bundle-create-paths').textContent," +
+      "moveHidden:document.getElementById('bundle-move').hidden,focused:document.activeElement.id})");
+    record(tag + ": the dialog lists the full path, defaults to Copy and hides Move", asked && text.title === "Create bundle?" &&
+      text.path === source && text.moveHidden && text.focused === "bundle-accept", JSON.stringify(text));
+    const refused = await evalPage(cdp, "window.splitpageDesktop.bundlePath(" + JSON.stringify(source) + ", 'forgedmove', 'move')");
+    record(tag + ": main refuses a forged Move for the document path", refused && refused.ok === false && refused.code === "REFUSED", JSON.stringify(refused));
+    await evalPage(cdp, "document.getElementById('bundle-accept').click()");
+    const copied = path.join(dir, "Episode 12 files", "brief.pdf");
+    const linked = await poll(cdp, "(window.__splitpageFormats.state().rows[0].imageLinks||[]).some(function(l){return l.location && l.location.kind === 'bundled' && l.location.name === 'brief.pdf';})", 10000).catch(() => false);
+    record(tag + ": Copy links the published file and keeps the original byte for byte", linked && fs.existsSync(copied) &&
+      fs.readFileSync(copied).equals(bytes) && fs.readFileSync(source).equals(bytes));
+    await evalPage(cdp, "window.__splitpageFormats.save()");
+    const saved = await pollNode(async () => JSON.parse(fs.readFileSync(script, "utf8")).rows[0].imageLinks[0].location.kind === "bundled", 10000).catch(() => false);
+    record(tag + ": the normal save writes the bundled name", saved === true);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('create-bundle')", { awaitPromise: false });
+    const menu = await poll(cdp, "!document.getElementById('bundle-modal').hidden", 10000).catch(() => false);
+    record(tag + ": the native File command opens the same dialog, with nothing left to copy", menu &&
+      await evalPage(cdp, "document.getElementById('bundle-accept').disabled && document.getElementById('bundle-move').hidden"));
+    await evalPage(cdp, "document.getElementById('bundle-decline').click()");
+  } finally {
+    if (app) await teardown(app, tag);
+    rmrf(userDataDir);
+    rmrf(dir);
+  }
+}
+
 async function caseGalleryAttachFile(target) {
   const tag = target.name + " gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)";
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-attach-"));
@@ -6391,6 +6440,7 @@ async function runTargetSuite(target, groupFilter) {
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
     ["gallery: a dropped video is copied beside the script and opens from there after a restart (#259)", () => caseGalleryVideoBundle(target)],
     ["gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)", () => caseGalleryAttachFile(target)],
+    ["gallery: Create bundle copies old document paths without granting Move (#260)", () => caseCreateBundle(target)],
     ["gallery: Export with the script's files writes one zip whose script links its files by bundled name (#260)", () => caseGalleryExportWithFiles(target)],
     ["gallery: a pasted video link's thumbnail comes through main, by host and id (#141)", () => caseGalleryVideoThumbnail(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],

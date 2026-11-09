@@ -1,6 +1,7 @@
 import { VIDEO_FILE_EXT, bundleFolderName } from "../../../shared/video-path.ts";
 import { bundledNamesInProject } from "../../../shared/video-embed.ts";
-import { bundleVideoLinks } from "../../core/document/gallery.ts";
+import { bundleVideoLinks, rowSlots } from "../../core/document/gallery.ts";
+import { startCreateBundle } from "./create-bundle.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
@@ -38,6 +39,7 @@ interface Copy {
   readonly from: VideoLink;
   readonly move: boolean;
   cancelled: boolean;
+  readonly created?: (result: DesktopBundleCopy | DesktopBundleMove) => void;
 }
 
 type BundleChoice = "copy" | "move" | "leave";
@@ -143,6 +145,20 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   let exporting: { readonly job: string; readonly name: string } | null = null;
   let exportJobs = 0;
 
+  const creation = startCreateBundle(ports, {
+    active: life.active,
+    blocked: () => !!(saving || carrying || asking.length || saveAsk || exporting || pending.length),
+    size: sizeText,
+    warning: (bytes) => bytes > BUNDLE_WARN_BYTES ? BIG_COPY : null,
+    relink: relinkPath,
+    enqueue: (file, move, done) => {
+      const video = { name: file.path.split(/[\\/]/).pop() || file.path, path: file.path, size: file.size };
+      const offer: Offer = { rowId: "", videos: [video], entry: null, ctx: ports.ownership.capture(), folder: bundleFolderName(ports.script() || "") };
+      submit(offer, video, move, done);
+      showNext();
+    }
+  });
+
   function waitingOn(): Copy[] { return pending.filter(function (c) { return !c.cancelled; }); }
 
   function busy(): boolean { return waitingOn().length > 0 || !!carrying; }
@@ -153,12 +169,18 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const m = modal();
     const first = asking[0];
     if (!m || !first) return;
+    creation.close();
+    ["bundle-create-paths", "bundle-create-missing", "bundle-create-move", "bundle-create-warning"].forEach((id) => { const node = el(id); if (node) node.hidden = true; });
+    const copy = el("bundle-accept") as HTMLButtonElement | null;
+    if (copy) copy.disabled = false;
     const text = bundlePromptText(asking.flatMap(function (o) { return o.videos.map(function (v) { return v.name; }); }), first.folder);
     const set = function (id: string, value: string): void { const node = el(id); if (node) node.textContent = value; };
     set("bundle-title", text.title);
     set("bundle-detail", text.detail);
     set("bundle-decline", text.leave);
     set("bundle-move", text.move);
+    const move = el("bundle-move");
+    if (move) move.hidden = false;
     set("bundle-accept", text.copy);
     m.hidden = false;
     const accept = el("bundle-accept");
@@ -229,12 +251,32 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     ports.viewer.refresh();
   }
 
+  function relinkPath(path: string, name: string): void {
+    const rows = ports.document.read((doc) => (doc?.rows ?? []).map((row) => row.id));
+    rows.forEach((id) => ports.cells.editGallery(id, "Linked to the copy in “" + bundleFolderName(ports.script() || "") + "”", (row) => {
+      const from = rowSlots(row).flatMap((slot) => slot.links).filter((link) => !link.href && link.location?.kind === "path" && link.location.path === path);
+      let changed = false;
+      from.forEach((link) => { if (bundleVideoLinks([row], link, name)) changed = true; });
+      return changed;
+    }));
+    ports.viewer.refresh();
+  }
+
   function copied(c: Copy, res: DesktopBundleCopy | DesktopBundleMove): void {
     if (res.ok) {
       // why: a Save As stopped waiting for this copy, so its bytes may already be captured without the link
       if (c.cancelled && saving) return;
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;
-      relink(c.offer, c.from, res.name);
+      if (c.created) relinkPath(c.video.path, res.name);
+      else relink(c.offer, c.from, res.name);
+    }
+    if (c.created) {
+      if (c.move && (!res.ok || ("outcome" in res && res.outcome !== "moved"))) {
+        const said = movedText(c.video.name, c.offer.folder, res as DesktopBundleMove);
+        if (said) ports.notices.show(said.text, said.kind);
+      }
+      c.created(res);
+      return;
     }
     if (c.move) {
       const said = movedText(c.video.name, c.offer.folder, res as DesktopBundleMove);
@@ -298,19 +340,22 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     drained();
   }
 
-  function submit(o: Offer, video: DroppedVideo, move: boolean): void {
+  function submit(o: Offer, video: DroppedVideo, move: boolean, created?: Copy["created"]): void {
     const c: Copy = {
-      job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } }, move, cancelled: false
+      job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } }, move, cancelled: false,
+      ...(created ? { created } : {})
     };
     pending.push(c);
     const onProgress = function (p: { done: number; total: number }): void {
       if (life.active() && !carrying && !c.cancelled) showCopy(c, p.done, p.total);
     };
-    const running: Promise<DesktopBundleCopy | DesktopBundleMove> = move ? ports.files.move(c.from, c.job, onProgress) : ports.files.bundle(c.from, c.job, onProgress);
+    const running = created ? ports.create.bundlePath(video.path, c.job, move ? "move" : "copy", onProgress).then((res) => res || { ok: false as const, code: "FAILED" }) :
+      move ? ports.files.move(c.from, c.job, onProgress) : ports.files.bundle(c.from, c.job, onProgress);
     running.then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
   }
 
   function answer(choice: BundleChoice): void {
+    if (creation.answer(choice)) return;
     const m = modal();
     if (!m || m.hidden) return;
     m.hidden = true;
@@ -432,8 +477,9 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (!life.active()) return { drained: null, ask: function () { return Promise.resolve([]); }, end: function () { } };
     saving++;
     answer("leave");
+    creation.close();
     let open = true;
-    const end = function (): void { if (open) { open = false; saving--; } };
+    const end = function (): void { if (open) { open = false; saving--; creation.ready(); } };
     if (!busy()) return { drained: null, ask, end };
     tuck(false);
     showNext();
@@ -447,6 +493,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   life.listen(el("bundle-cancel"), "click", cancel);
   life.listen(el("bundle-hide"), "click", function () { tuck(true, true); });
   life.listen(el("bundle-indicator"), "click", function () { tuck(false, true); });
+  life.listen(el("bundle-outside-create"), "click", function () { void creation.open(); });
+  life.listen(el("bundle-outside-dismiss"), "click", creation.dismiss);
   life.listen(el("bundle-save-copy"), "click", function () { chose("copy"); });
   life.listen(el("bundle-save-link"), "click", function () { chose("link"); });
   life.listen(el("bundle-save-cancel"), "click", function () { closeSaveAsk(); });
@@ -458,12 +506,14 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   });
 
   return {
+    createBundle: creation.open,
     offerAfterDrop: offer,
     beginSave,
     exportPlan,
     exportWithFiles,
     dispose: function (): void {
       if (!life.active()) return;
+      creation.dispose();
       pending.forEach(function (c) { ports.files.cancelBundle(c.job); });
       if (exporting) ports.files.cancelBundle(exporting.job);
       exporting = null;
