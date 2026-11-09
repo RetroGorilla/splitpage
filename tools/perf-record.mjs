@@ -108,7 +108,7 @@ export const BEATS = `(function () {
       perf.reset();
       need(strips() === 0, 'shot scenes were already hidden');
       for (var i = 0; i < ${HIDE_TOGGLES}; i++) {
-        await measure('#file-menu [data-file-action="toggle-hide-shot"]');
+        await measure('#hide-shot-toggle');
         need((strips() > 0) === (i % 2 === 0), 'toggle ' + i + ' left ' + strips() + ' strips');
       }
       return perf.take('long hide shot scenes');

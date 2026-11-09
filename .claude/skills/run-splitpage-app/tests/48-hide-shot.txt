@@ -50,20 +50,17 @@ expect document.querySelector('#rows .row[data-id="r2"]').classList.contains('is
 expect document.querySelectorAll('#rows .row').length == 4
 expect document.querySelectorAll('.hidden-shot-strip').length == 0
 
-# --- File menu entry: a switch, off by default (#145) ----------------------
-click #btn-file
-sleep 200
-expect document.getElementById('menu-hide-shot').getAttribute('role') == menuitemcheckbox
-expect document.getElementById('menu-hide-shot').querySelector('.mi-switch-track') !== null
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == false
-
-# a switch leaves the menu open, so it is seen to move
-jsclick #menu-hide-shot
+# --- the header switch beside the filmed count, off by default (#1163) ----
+expect !document.getElementById('progress-chip').hidden
+expect !document.getElementById('hide-shot-toggle').hidden
+expect document.getElementById('hide-shot-toggle').getAttribute('role') == switch
+expect document.getElementById('hide-shot-toggle').textContent == Hide filmed beats
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') == false
+expect document.getElementById('menu-hide-shot') === null
+click #hide-shot-toggle
 sleep 300
-expect !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == true
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') == true
 expect localStorage.getItem('splitpage-hide-shot') == 1
-jsclick #file-menu-close
 
 # r2 is the only Shot scene so far: one strip, everything else still shown
 expect document.querySelectorAll('#rows .row').length == 3
@@ -74,11 +71,9 @@ expect document.querySelector('#rows .row[data-id="r2"]') === null
 # --- the runtime chip shows remaining / total while the toggle is on -------
 expect document.getElementById('runtime-total').textContent.indexOf("/") !== -1
 
-# --- the switch still says so the next time the menu opens -----------------
-click #btn-file
-sleep 200
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == true
-jsclick #file-menu-close
+# --- the switch keeps showing its state while hiding is on -----------------
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') == true
+expect !document.getElementById('hide-shot-toggle').hidden
 
 # --- click a strip open, then reset with the keyboard shortcut -------------
 jsclick .hidden-shot-strip

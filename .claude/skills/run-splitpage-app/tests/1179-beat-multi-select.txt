@@ -164,12 +164,12 @@ jsclick #export-close
 wait document.getElementById('export-modal').hidden
 eval out()
 
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 wait !row('r3') && document.querySelector('#rows .hidden-shot-strip')
 key ctrl KeyA
 expect T.ids().join() === 'r1,r2,r4,r5,r6,r7'
 key Escape
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 wait row('r3') && !document.querySelector('#rows .hidden-shot-strip')
 jsclick .section-header[data-section-id="s2"] [data-section-action="fold"]
 wait !row('r5')

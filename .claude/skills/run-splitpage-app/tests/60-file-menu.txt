@@ -75,7 +75,7 @@ expect document.querySelectorAll('#file-menu .mi-icon').length > 20
 expect Array.prototype.map.call(document.querySelectorAll('#file-menu [data-file-action="save-as"] .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Shift+S'
 expect Array.prototype.map.call(document.querySelectorAll('#file-menu [data-file-action="open"] .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+O'
 expect Array.prototype.map.call(document.querySelectorAll('#file-menu [data-file-action="find"] .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+F'
-expect Array.prototype.map.call(document.querySelectorAll('#menu-hide-shot .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Alt+H'
+expect document.getElementById('menu-hide-shot') === null
 expect document.querySelector('#file-menu [data-file-action="save-as"]').getAttribute('aria-keyshortcuts') == Control+Shift+S
 # F1 and Ctrl+Shift+P are the desktop app's native menu only
 expect document.querySelector('#file-menu [data-file-action="help"] .mi-keys') === null
@@ -171,8 +171,9 @@ expect F.docId() === window.__docId0
 # The old flat menu's (tests and the desktop native menu click them), less
 # the server, Collaborate and Google Drive items and Save to file, plus New script, Export… / Export again (#146) — the seventeen formats' own
 # buttons wait, hidden, in the Export group for the dialog to click — and
-# Search commands… (#147), Minimize the rundown (#178) and Settings (#181).
-eval (function(){var ids=["settings","save-as","autosave","open","paste","gdoc-import","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-splitpage","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","toggle-hide-shot","toggle-rundown-min","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu","create-bundle"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
+# Search commands… (#147) and Settings (#181). Hide filmed beats, Minimise
+# rundown and Present in browser moved beside what they act on (#1163).
+eval (function(){var ids=["settings","save-as","autosave","open","paste","gdoc-import","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-splitpage","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","setup","tagging-help","help","tour","about","export-app-data","import-app-data","new","export","export-again","command-menu","create-bundle"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
 expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 
@@ -204,8 +205,8 @@ expect window.__hits.length === 3
 click #btn-file
 sleep 300
 expect document.querySelector('#file-menu [data-file-action="help"] .mi-keys').textContent == F1
-expect !document.getElementById('menu-present-browser').hidden
-expect Array.prototype.map.call(document.querySelectorAll('#menu-present-browser .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Shift+P'
+expect !document.getElementById('btn-present-more').hidden
+expect Array.prototype.map.call(document.querySelectorAll('#present-menu-browser .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Shift+P'
 
 # --- Open recent (desktop): main's list, never a path ----------------------
 expect !document.getElementById('menu-recent').hidden

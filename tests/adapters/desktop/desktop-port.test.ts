@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import {
-  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort,
+  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, desktopPort, onDesktopChange,
   restoreDesktop, runningOnDesktop, useDesktopForTest
 } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopMember, DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
@@ -291,12 +291,25 @@ test("the attached bridge is the port, and the test seam swaps it and restores i
   attachDesktop(null);
 });
 
-test("the prompter can open in a browser or Chromium only when the attached desktop app offers it", () => {
+test("the prompter can open in a browser only when the attached desktop app offers it", () => {
   useDesktopForTest(null);
-  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, false]);
+  assert.equal(canOpenPrompterInBrowser(), false);
   useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
-  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [true, false]);
+  assert.equal(canOpenPrompterInBrowser(), true);
   useDesktopForTest({ openPrompterInChromium: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
-  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, true]);
+  assert.equal(canOpenPrompterInBrowser(), false);
   restoreDesktop();
+});
+
+test("every change of desktop bridge is announced until the listener stops", () => {
+  let heard = 0;
+  const stop = onDesktopChange(() => { heard++; });
+  useDesktopForTest(null);
+  useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
+  restoreDesktop();
+  assert.equal(heard, 3);
+  stop();
+  useDesktopForTest(null);
+  restoreDesktop();
+  assert.equal(heard, 3);
 });

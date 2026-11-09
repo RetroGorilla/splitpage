@@ -8,7 +8,7 @@ import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu
 import type { FileMenuDropdownMount, FileMenuDropdownPorts } from "../../features/file-menu/ports.ts";
 import { autoSavePolicy, saveDoc, savesStarted, toggleAutoSave } from "./save-owners.ts";
 import { documentReader } from "./ports/document.ts";
-import { prompterWindows, recents } from "./ports/desktop.ts";
+import { recents } from "./ports/desktop.ts";
 import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 import { place } from "./ports/location.ts";
@@ -33,7 +33,6 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
       desktop: presence.running,
       recents,
       recentHandle: (entry) => makeDesktopHandle(entry),
-      canOpenPrompter: prompterWindows,
       opening,
       transitions,
       history,

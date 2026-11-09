@@ -47,7 +47,7 @@ expect __same.join(',') == export-md,export-md-table,export-csv,export-html,expo
 expect __live() === __settled
 
 # --- what the view is doing does not reach the Markdown ---------------------------
-eval (async function(){ document.querySelector('#file-menu [data-file-action="toggle-hide-shot"]').click(); await new Promise(function (r) { setTimeout(r, 300); }); var r = await __export('export-md'); window.__hidden = [localStorage.getItem('splitpage-hide-shot'), r.hash === __out['export-md'].hash].join(','); document.querySelector('#file-menu [data-file-action="toggle-hide-shot"]').click(); return true; })()
+eval (async function(){ document.querySelector('#hide-shot-toggle').click(); await new Promise(function (r) { setTimeout(r, 300); }); var r = await __export('export-md'); window.__hidden = [localStorage.getItem('splitpage-hide-shot'), r.hash === __out['export-md'].hash].join(','); document.querySelector('#hide-shot-toggle').click(); return true; })()
 wait !!window.__hidden
 expect __hidden == 1,true
 jsclick #btn-write

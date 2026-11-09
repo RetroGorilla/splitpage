@@ -132,9 +132,19 @@ export const UNUSED_DESKTOP_MEMBERS = [
 
 let attached: DesktopPort | null = null;
 let current: DesktopPort | null = null;
+const changeListeners: (() => void)[] = [];
 
 function use(port: DesktopPort | null | undefined): void {
   current = port || null;
+  changeListeners.slice().forEach((listener) => { listener(); });
+}
+
+export function onDesktopChange(listener: () => void): () => void {
+  changeListeners.push(listener);
+  return () => {
+    const at = changeListeners.indexOf(listener);
+    if (at !== -1) changeListeners.splice(at, 1);
+  };
 }
 
 export function attachDesktop(bridge: DesktopPort | null | undefined): void {
@@ -152,10 +162,6 @@ export function runningOnDesktop(): boolean {
 
 export function canOpenPrompterInBrowser(): boolean {
   return current !== null && typeof current.openPrompterInBrowser === "function";
-}
-
-export function canOpenPrompterInChromium(): boolean {
-  return current !== null && typeof current.openPrompterInChromium === "function";
 }
 
 export function useDesktopForTest(fake: DesktopTestPort | DesktopFaultInjectionPort | null | undefined): void {

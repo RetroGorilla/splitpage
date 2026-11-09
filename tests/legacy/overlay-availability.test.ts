@@ -129,7 +129,7 @@ function refusal(registry: ActionRegistry, id: string, source: ActionSource = "n
   return view.enabled ? null : view.reason;
 }
 
-const NO_DIALOG_COMMANDS = ["prompter-open-in-browser", "prompter-open-in-chromium"];
+const NO_DIALOG_COMMANDS = ["prompter-open-in-browser"];
 
 const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
 

@@ -115,7 +115,7 @@ const RESOURCE_ROWS = {
   prompterMicrophone: ["#pp-mic change/B"],
   sceneControls: ["document pointerdown/C", "document pointercancel/B", "window blur/B", "document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],
   phoneBar: ["#phone-bar click/B"],
-  writerZoom: ["#writer wheel/B"],
+  presentChoices: ["#btn-present-more click/B", "#btn-present-more keydown/B", "#present-menu-browser click/B", "#present-menu keydown/B", "#present-split focusout/B"],  writerZoom: ["#writer wheel/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],
   S27: ["#gear-panel change/B", "#gear-panel click/B", "#gear-panel focusout/B", "#gear-panel input/B", "#gear-panel keydown/B"],

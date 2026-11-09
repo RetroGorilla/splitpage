@@ -206,25 +206,50 @@
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-standard);
 }
+#rundown {
+  --rundown-toggle-w: 96px;
+  padding-right: calc(var(--rundown-toggle-w) + var(--space-16));
+}
+#rundown.is-min {
+  --rundown-toggle-w: 132px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
 .rundown-toggle {
   position: absolute;
-  top: 5px;
-  right: 2px;
+  top: 0;
+  right: var(--space-8);
+  bottom: 0;
   z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: var(--rundown-toggle-w);
   padding: 0;
   border: 0;
-  border-radius: 4px;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-dim);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14px;
   cursor: pointer;
 }
+.rundown-toggle-face {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-align: left;
+}
+.rundown-toggle-label { width: min-content; }
 .rundown-toggle svg {
-  width: 12px;
-  height: 12px;
+  flex: none;
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -232,16 +257,23 @@
   stroke-linejoin: round;
   transform: rotate(180deg);
 }
-.rundown-toggle:hover { color: var(--text); background: var(--hover); }
+.rundown-toggle:hover { color: var(--text); }
+.rundown-toggle:hover .rundown-toggle-face { background: var(--hover); border-color: var(--border-strong); }
+.rundown-toggle:focus-visible { outline: none; }
+.rundown-toggle:focus-visible .rundown-toggle-face { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 #rundown.is-min:hover { background: var(--hover); }
 #rundown.is-min .rundown-toggle {
-  top: 0; right: 0; bottom: 0; left: 0;
+  left: 0;
+  right: 0;
   width: auto;
-  height: auto;
-  place-items: center end;
-  padding-right: var(--space-4);
-  border-radius: 0;
-  background: transparent;
+  padding-right: var(--space-8);
+}
+#rundown.is-min .rundown-toggle-label { width: auto; white-space: nowrap; }
+#rundown.is-min .rundown-toggle-face { padding: var(--space-2) var(--space-8); }
+#rundown.is-min .rundown-toggle svg { transform: none; }
+@media (any-pointer: coarse) {
+  #rundown.is-min { padding-top: 12px; padding-bottom: 12px; }
+  #rundown.is-min .rundown-toggle-face { padding: var(--space-6) var(--space-10); }
 }
 .rd-seg {
   position: absolute;

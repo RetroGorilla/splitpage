@@ -1,6 +1,6 @@
 import type { LocalFileData, LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { DesktopDocumentStateOwner } from "../../application/desktop/document-state.ts";
-import type { DesktopHandOff, DesktopOpenedFile, DesktopShell, PrompterElsewhere } from "../../application/desktop/shell.ts";
+import type { DesktopHandOff, DesktopOpenedFile, DesktopShell } from "../../application/desktop/shell.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -17,7 +17,6 @@ export type DesktopOpening = {
 type DesktopFileSource = Pick<LocalFileHandle, "getFile">;
 
 export interface DesktopMount extends DesktopHandOff {
-  readonly openPrompterInChromium: () => Promise<PrompterElsewhere>;
   readonly initDesktop: () => void;
   readonly runMenuCommand: (command: string) => void;
   readonly wireReassignDocId: () => void;
@@ -27,7 +26,7 @@ export interface DesktopMount extends DesktopHandOff {
 export interface DesktopPorts {
   readonly running: () => boolean;
   readonly shell: () => DesktopShell | null;
-  readonly canOpenPrompter: { readonly browser: () => boolean; readonly chromium: () => boolean };
+  readonly canOpenPrompterInBrowser: () => boolean;
   readonly makeHandle: (entry: DesktopOpenedFile) => DesktopFileSource;
   readonly wireBlobs: () => void;
   readonly document: Pick<DocumentReader, "current">;
@@ -45,5 +44,5 @@ export interface DesktopPorts {
 export interface DesktopActionPorts {
   readonly screen: () => ScreenState;
   readonly running: () => boolean;
-  readonly canOpenPrompter: DesktopPorts["canOpenPrompter"];
+  readonly canOpenPrompterInBrowser: DesktopPorts["canOpenPrompterInBrowser"];
 }

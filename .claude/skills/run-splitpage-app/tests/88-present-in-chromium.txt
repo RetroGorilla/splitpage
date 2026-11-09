@@ -1,14 +1,11 @@
-# "Use Chromium Speech Recognition" (issue #123), the renderer's half.
+# "Use Chromium Speech Recognition" (issue #123) is no longer offered (#1163).
 #
-# The desktop app's second way to read in a browser: the same script as
-# Present in browser, but started in an installed Chromium browser (Edge,
-# Chrome, Brave…) whatever the default is, where Follow My Voice uses that
-# browser's own speech recognition instead of the desktop app's relay (#122).
-# Driven under the in-memory fake desktop backend (20f-desktop.js), like
-# 58-prompter-open-in-browser.txt: the File-drawer item, save-first, the
-# argument-free bridge call and what the page says back. Main's half (finding
-# the browser, starting it on the URL, no relay in it) is desktop/test/
-# smoke.mjs's "present in chromium" group and chromium-browsers.test.mjs.
+# The desktop app reads in a browser one way: Present ▸ Present in browser…
+# (58-prompter-open-in-browser.txt). The Chromium entry left the File drawer
+# and the command menu; this suite holds that it stays gone, in the browser
+# build and under the in-memory fake desktop backend (20f-desktop.js), whose
+# bridge still answers the old call. Main's half, which is kept, is
+# desktop/test/smoke.mjs's "present in chromium" group.
 #
 # Every `eval` is one physical line (the driver splits on newlines).
 
@@ -18,54 +15,27 @@ eval (function(){ window.F = window.__splitpageFormats; window.D = window.__desk
 expect true
 
 # --- the browser build has nothing to offer ---------------------------------
-jsclick #btn-file
-wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-chromium').hidden === true
-jsclick #file-menu-close
-wait document.getElementById('file-menu').hidden
+expect document.getElementById('menu-present-chromium') === null
+expect !window.__commandTest.results('chromium').some(function(g){ return g.items.length > 0; })
 
-# --- desktop: offered in File ▸ This document, beside Present in browser ----
-eval (function(){ window.fakeC = D.makeFakeBackend(); D.setBackend(window.fakeC); window.__cid = window.fakeC._addFile('chromium.md', F.buildMarkdown()); return true; })()
+# --- desktop, with a bridge that can still start Chromium: not offered ------
+eval (function(){ window.fakeC = D.makeFakeBackend(); D.setBackend(window.fakeC); window.__cid = window.fakeC._addFile('chromium.md', F.buildMarkdown()); return typeof window.fakeC.openPrompterInChromium === 'function'; })()
+expect true
 eval (async function(){ var h = D.makeHandle({ id: window.__cid, name: 'chromium.md' }); var f = await h.getFile(); await F.openFile(f, h); return true; })()
 wait F.docFile().name === 'chromium.md'
 jsclick #btn-file
 wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-chromium').hidden === false
-expect document.getElementById('menu-present-chromium').textContent == Use Chromium Speech Recognition
-expect document.getElementById('menu-present-chromium').closest('.menu-group').getAttribute('data-menu-group') == document
-expect document.getElementById('menu-present-chromium').previousElementSibling.id == menu-present-browser
-jsclick #menu-present-chromium
-wait window.fakeC._chromiumCalls === 1
-expect !window.fakeC._prompterCalls
-expect window.fakeC.openPrompterInChromium.length === 0
-expect document.getElementById('file-menu').hidden === true
-wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf("Opened in Microsoft Edge. Follow My Voice there uses the browser's own speech recognition") !== -1) return true; return false; })()
+expect document.getElementById('menu-present-chromium') === null
+expect !Array.prototype.some.call(document.querySelectorAll('#file-menu .mi'), function(m){ return /chromium/i.test(m.textContent + ' ' + (m.getAttribute('data-file-action') || '')); })
+jsclick #file-menu-close
+wait document.getElementById('file-menu').hidden
+expect document.getElementById('btn-present-more').hidden === false
+expect document.querySelectorAll('#present-menu [role="menuitem"]').length === 1
+expect !/chromium/i.test(document.getElementById('present-menu').textContent)
+expect !window.__commandTest.results('chromium').some(function(g){ return g.items.some(function(it){ return /chromium/i.test(it.id + ' ' + it.label); }); })
+eval (function(){ D.runMenuCommand('prompter-open-in-chromium'); return true; })()
+sleep 300
+expect !window.fakeC._chromiumCalls
 
-# --- dirty: saved first, then asked -----------------------------------------
-eval (function(){ F.state().title = 'Saved before Chromium'; D.markDirtyForTest(); return true; })()
-wait document.getElementById('save-status').textContent === 'Unsaved changes'
-eval D.runMenuCommand('prompter-open-in-chromium')
-wait window.fakeC._chromiumCalls === 2
-expect window.fakeC._text(window.__cid).indexOf('Saved before Chromium') !== -1
-expect window.fakeC._chromiumDocState.dirty === false
-
-# --- none installed: said plainly, pointing at Present in browser -----------
-eval (function(){ window.fakeC._chromiumAnswer = { ok: false, code: 'NO_CHROMIUM' }; return true; })()
-eval D.runMenuCommand('prompter-open-in-chromium')
-wait window.fakeC._chromiumCalls === 3
-wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('No Chromium browser') !== -1 && t[i].textContent.indexOf('Present in browser') !== -1) return true; return false; })()
-
-# --- a browser name from main is text, never markup -------------------------
-eval (function(){ window.fakeC._chromiumAnswer = { ok: true, kind: 'file', browser: '<img src=x onerror=window.__pwned=1>' }; return true; })()
-eval D.runMenuCommand('prompter-open-in-chromium')
-wait window.fakeC._chromiumCalls === 4
-wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('Opened in <img') !== -1) return true; return false; })()
-expect !window.__pwned
-expect document.querySelectorAll('.toast img').length === 0
-
-# --- an older bridge without the call: not offered --------------------------
-eval (function(){ window.fakeOld = D.makeFakeBackend(); delete window.fakeOld.openPrompterInChromium; D.setBackend(window.fakeOld); return true; })()
-jsclick #btn-file
-wait !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-present-chromium').hidden === true
-expect document.getElementById('menu-present-browser').hidden === false
+eval (function(){ D.restoreBackend(); return true; })()
+quit

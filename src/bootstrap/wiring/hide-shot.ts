@@ -1,12 +1,14 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { runFromButton } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { hideShotActions as definitions } from "../../features/rows/actions.ts";
-import { createHideShot } from "../../features/rows/hide-shot.ts";
+import { createHideShot, mountHideShotSwitch } from "../../features/rows/hide-shot.ts";
 import type { HideShotControls } from "../../features/rows/hide-shot.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { shotHiding } from "./shot-hiding.ts";
+import { updateScriptStats } from "./beat-status.ts";
 
 type HideShotMount = HideShotControls & { readonly dispose: () => void };
 
@@ -22,16 +24,17 @@ export function mountHideShotFeature(): HideShotMount {
         groups: (rows) => shotHiding().groups(rows)
       },
       notices: portNotices,
-      menuItem: () => document.getElementById("menu-hide-shot")
+      switchButton: () => document.getElementById("hide-shot-toggle")
     });
-    return { ...controls, dispose: () => {} };
+    const unmount = mountHideShotSwitch(document.getElementById("hide-shot-toggle"), () => { runFromButton("toggle-hide-shot"); }, updateScriptStats);
+    return { ...controls, dispose: unmount };
   });
 }
 
 export const stopHideShotFeature = hideShot.stop;
 
-export function updateHideShotMenu(): void {
-  hideShot.owner()?.updateMenu();
+export function updateHideShotSwitch(): void {
+  hideShot.owner()?.updateSwitch();
 }
 
 export function expandHiddenShotStrip(idsAttr: string | null | undefined): void {

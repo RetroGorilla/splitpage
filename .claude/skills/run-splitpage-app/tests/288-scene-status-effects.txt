@@ -5,7 +5,7 @@ wait F.docFile().kind === 'splitpage' && document.querySelector('#rows .row[data
 expect document.getElementById('save-status').textContent === 'Saved'
 eval (function(){ A.timing().idle = 4000; A.timing().max = 8000; window.__log = []; new MutationObserver(function(ms){ ms.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 3) window.__log.push(n.data); }); }); }).observe(document.getElementById('save-status'), {childList: true}); window.__st = function(){ return document.getElementById('save-status').textContent; }; window.__arm = function(){ window.__log = []; window.__w0 = window.__written; return true; }; window.__saving = function(){ return window.__log.indexOf('Saving…') !== -1; }; window.__cycled = function(){ var l = window.__log, a = l.indexOf('Unsaved changes'), b = a === -1 ? -1 : l.indexOf('Saving…', a + 1), c = b === -1 ? -1 : l.indexOf('Saved', b + 1); return c !== -1 && window.__written > window.__w0 && window.__st() === 'Saved'; }; window.__disk = function(id){ return JSON.parse(window.__body).rows.filter(function(r){ return r.id === id; })[0]; }; window.__same = function(){ return window.__st() === 'Saved' && window.__body === F.buildSplitpage(F.state()); }; window.__live = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.__shown = function(id){ return !!document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.__stripped = function(id){ return Array.prototype.some.call(document.querySelectorAll('#rows .hidden-shot-strip'), function(s){ return s.getAttribute('data-ids').split(',').indexOf(id) !== -1; }); }; window.__mark = function(){ window.__pm = document.createElement('i'); document.getElementById('production-list').appendChild(window.__pm); return window.__pm.isConnected; }; window.__click = function(id, keep){ document.activeElement.blur(); U.flush(); window.__u0 = U.sizes().undo; window.__stamp0 = __live(id).updatedAt; R.reset(); if (!keep) __arm(); document.querySelector('#rows .row[data-id="' + id + '"] [data-action="cycle-status"]').click(); window.__at = { dirty: (document.getElementById('save-status').textContent === 'Unsaved changes'), counts: R.counts(), status: __live(id).status, stamped: __live(id).updatedAt !== window.__stamp0 }; U.flush(); window.__at.undo = U.sizes().undo - window.__u0; return true; }; window.__undo = function(id){ document.activeElement.blur(); window.__stamp1 = __live(id).updatedAt; __arm(); R.reset(); return true; }; return true; })()
 expect U.sizes().undo === 0
-expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'false'
+expect document.getElementById('hide-shot-toggle').getAttribute('aria-checked') === 'false'
 
 eval __click('r2')
 expect window.__at.status === 'ready'
@@ -113,8 +113,8 @@ wait __cycled()
 sleep 300
 expect __same()
 
-jsclick #menu-hide-shot
-wait document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
+jsclick #hide-shot-toggle
+wait document.getElementById('hide-shot-toggle').getAttribute('aria-checked') === 'true'
 expect __shown('r3')
 eval __click('r3')
 expect window.__at.status === 'shot'
@@ -154,8 +154,8 @@ expect __shown('r3')
 expect !__stripped('r3')
 expect R.counts().render === 0
 
-jsclick #menu-hide-shot
-wait document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'false'
+jsclick #hide-shot-toggle
+wait document.getElementById('hide-shot-toggle').getAttribute('aria-checked') === 'false'
 sleep 300
 expect __same()
 expect A.pending() === false

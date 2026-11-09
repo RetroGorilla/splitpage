@@ -15,10 +15,10 @@ export function rundownMinimizeActions(current: () => RundownControls | null, sc
   return [
     {
       id: "toggle-rundown-min",
-      label: "Minimise the rundown",
+      label: "Minimise rundown",
       group: "This document",
       icon: "i-rundown-min",
-      words: "rundown strip timeline minimize collapse thin bar more room",
+      words: "rundown strip timeline minimize minimise show collapse thin bar more room",
       availability: (source) => {
         const rundown = current();
         return rundown ? availableUnless(source === "button" ? [] : ["loading"], screen(), rundown.minimized()) : OFF;

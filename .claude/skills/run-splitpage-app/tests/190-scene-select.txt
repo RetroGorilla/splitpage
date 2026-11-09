@@ -157,12 +157,12 @@ expect T.ids().length === 0
 expect document.querySelector('#scene-menu').hidden
 
 # ---- 7b. shot scenes hidden: a folded one between is not selected ---------
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 wait !row('r2') && document.querySelector('#rows .hidden-shot-strip')
 eval T.select('r1', 'r3')
 expect T.ids().join() === 'r1,r3'
 key Escape
-jsclick #menu-hide-shot
+jsclick #hide-shot-toggle
 wait row('r2') && !document.querySelector('#rows .hidden-shot-strip')
 
 # ---- 8. the grip still moves one scene, and starts no selection -------------

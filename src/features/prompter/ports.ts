@@ -10,8 +10,46 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { PrompterState } from "../../application/prompter-state.ts";
 import type { PrompterDesktop, PrompterVoice } from "../../application/prompter-services.ts";
-import type { PrompterPorts } from "./mount.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { ButtonActions } from "../../application/actions.ts";
+
+export interface PrompterPorts {
+  readonly disposeRuntime: () => void;
+  readonly closePrompter: () => void;
+  readonly closeFind: () => boolean;
+  readonly stopVoiceFollow: () => void;
+  readonly startVoiceFollow: () => void;
+  readonly chooseMicrophone: (id: string) => void;
+  readonly setPrompterPlaying: (value: boolean) => void;
+  readonly setPrompterSpeed: (value: number) => void;
+  readonly applyPrompterSize: () => void;
+  readonly stepPrompterSpeed: (value: number) => void;
+  readonly stepPrompterSize: (value: number) => void;
+  readonly updatePrompterStatus: () => void;
+  readonly buildPrompterContent: () => void;
+  readonly updateVoiceAvailability: () => void;
+  readonly cueBeatForCurrentPosition: () => void;
+  readonly updateBeatReadout: () => void;
+  readonly setPrompterMirror: (value: boolean) => void;
+  readonly setPrompterFlip: (value: boolean) => void;
+  readonly setPrompterBeatMode: (value: boolean) => void;
+  readonly stepBeat: (value: number) => void;
+  readonly voiceActive: () => boolean;
+  readonly playing: () => boolean;
+  readonly isOpen: () => boolean;
+  readonly skipShot: () => boolean;
+  readonly setSkipShot: (value: boolean) => void;
+  readonly mirror: () => boolean;
+  readonly flip: () => boolean;
+  readonly beatMode: () => boolean;
+}
+
+export interface PrompterOpenPorts extends Pick<ButtonActions, "runFromButton"> {
+  readonly presentInBrowser: {
+    readonly offered: PrompterDesktop["canOpen"];
+    readonly onChange: (listener: () => void) => () => void;
+  };
+}
 
 interface PrompterOpening {
   readonly kind: "file";
