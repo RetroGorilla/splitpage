@@ -10,8 +10,8 @@ and read the narration from a teleprompter.
 
 ## Get Splitpage
 
-The latest published release is [0.4.1, released 2026-11-02](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1).
-The source on `main` includes the merged changes for **0.4.3**, which is being prepared and is not released. See the [roadmap](docs/ROADMAP.md) for completed work and remaining release checks.
+The latest published release is [0.4.3, released 2026-11-09](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3).
+See the [roadmap](docs/ROADMAP.md) for what it contains.
 
 Download the Windows installer or the portable zip from the
 [latest release](https://github.com/RetroGorilla/splitpage/releases/latest).
