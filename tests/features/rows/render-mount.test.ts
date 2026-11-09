@@ -194,3 +194,19 @@ test("disposing a stale screen removes its event gate and retires the retained R
   assert.equal(second.tracks(), 0);
   replacement.dispose();
 });
+
+test("a legacy embedded picture draws in the gallery tile, not the empty Attach button (#1307)", () => {
+  document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
+  const legacy = "data:image/png;base64,iVBORw0KGgo=";
+  const first = fixture(false);
+  const doc = fakeDocument(migrateRows({ schema: 2, title: "Legacy", rows: [{ id: "r1", audioText: "One" }] }, fakeMigration().ports));
+  (doc.document.current()?.rows[0] as { visualImage?: string }).visualImage = legacy;
+  const mounted = startRowsRender({ ...first.ports, document: doc.document });
+  try {
+    mounted.renderFirstDraw();
+    const tile = document.querySelector('#rows .row[data-id="r1"] .image-thumb-wrap .scene-gallery-tile');
+    assert.ok(tile);
+    assert.equal(tile.innerHTML.indexOf('<img src="' + legacy + '" alt="">'), 0);
+    assert.equal(document.querySelector('#rows .row[data-id="r1"] .image-clip'), null);
+  } finally { mounted.dispose(); }
+});

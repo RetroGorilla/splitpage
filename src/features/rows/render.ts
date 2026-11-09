@@ -363,7 +363,7 @@ function rowGalleryHtml(row: Row, slots: readonly Slot[]): string {
 function rowMediaHtml(row: Row): string {
   let imageBlock: string;
   const all = rowSlots(row);
-  const linksOnly = all.length === 1 && !(all[0] as Slot).ref && !slotPoster(all[0] as Slot);
+  const linksOnly = all.length === 1 && !(all[0] as Slot).ref && !(all[0] as Slot).dataUrl && !slotPoster(all[0] as Slot);
   const slots = linksOnly ? [] : all;
   const img = slots.length ? slots[0] : null;
   if (img) {
