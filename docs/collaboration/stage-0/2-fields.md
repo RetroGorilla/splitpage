@@ -160,7 +160,7 @@ Stored as HTML; `decodeBody` (`src/adapters/richtext/decode.ts`) turns sanitized
 
 | Mark | Identity in storage | Nesting and overlap | Enforcement today |
 | --- | --- | --- | --- |
-| Comment | `data-cmt` = comment `anchorId` | Overlap allowed: each character carries a set (`cmt`, sorted). `walkSanitize` peels a comment span off a tag, b-roll, who or direction span so the comment is outermost; a span that is both comment and cue is the exception, and there the comment goes inside the cue | INV-18: the mark is the anchor; INV-03: a comment covers all of a tag or none (`normalizeCell` spreads `cmt` over a tag stretch) |
+| Comment | `data-cmt` = comment `anchorId` | Overlap allowed: each character carries a set (`cmt`, sorted). `walkSanitize` peels a comment span off a tag, b-roll, who or direction span so the comment is outermost; a span that is both comment and cue, and carries none of the tag, b-roll, who or direction classes (`CUE_OUTRANKED`), is the exception, and there the comment goes inside the cue | INV-18: the mark is the anchor; INV-03: a comment covers all of a tag or none (`normalizeCell` spreads `cmt` over a tag stretch) |
 | Tag | `(data-tag-cat, data-tag-name)`; the stored HTML carries no tag id | Strict nesting: each character carries a stack, `tag` then `innerTags`; a tag is wholly inside or outside another | INV-03 in the edit functions (`src/core/text/edits.ts`) and `normalizeCell`; the editor keeps the caret out (`contenteditable="false"`) |
 | Link | The `href` value; no id | One `href` per character; the first wins across a tag stretch | `normalizeCell`; `splitLinkAround` |
 
