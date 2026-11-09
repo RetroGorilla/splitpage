@@ -68,6 +68,7 @@ const ENVIRONMENT = `(function () {
     scenes: document.querySelectorAll('#rows .row').length });
 })()`;
 
+// why: builds before #1338 have only the File menu item, so the hide run uses the header switch only when it exists
 export const BEATS = `(function () {
   if (window.__perfScene) return 'ready';
   var perf = window.__perf, F = window.__splitpageFormats;
@@ -108,7 +109,7 @@ export const BEATS = `(function () {
       perf.reset();
       need(strips() === 0, 'shot scenes were already hidden');
       for (var i = 0; i < ${HIDE_TOGGLES}; i++) {
-        await measure('#hide-shot-toggle');
+        await measure(document.querySelector('#hide-shot-toggle') ? '#hide-shot-toggle' : '#file-menu [data-file-action="toggle-hide-shot"]');
         need((strips() > 0) === (i % 2 === 0), 'toggle ' + i + ' left ' + strips() + ' strips');
       }
       return perf.take('long hide shot scenes');
