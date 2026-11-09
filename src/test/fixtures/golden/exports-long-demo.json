@@ -1,23 +1,23 @@
 {
   "splitpage": {
-    "bytes": 38432,
-    "sha256": "82ac7f916c90f5e1525bcdbc9d1ec5a834b3e723f7aaa7535c2106e20a789836"
+    "bytes": 38823,
+    "sha256": "df6ab62ef3159a8b5b8c37da2958b4cf12f0c3baac0d45b5e431a57dd20db7a3"
   },
   "markdownProject": {
-    "bytes": 52930,
-    "sha256": "a6207cebd444f6eec47ff56ef888ef0fc7c2cc1a3cf28122ba047c63b6a22560"
+    "bytes": 53321,
+    "sha256": "ac60b889f092d3655a70d4e4c27e5e5bd143aa9e9348a79d0a6d6de07d815279"
   },
   "standaloneHtml": {
     "stateData": {
-      "bytes": 32976,
-      "sha256": "46661125be01ab891cb1da6c6bf17e56a6fc6e6fcf826b2e1bbfba25564b8aeb"
+      "bytes": 33196,
+      "sha256": "7e492ec91d2301b96db5c482d7a181c6c564c9723de0e1adff2a0934807a526a"
     },
     "title": "I Fixed a $40 Film Camera (and Shot a Roll With It) — SplitShare",
     "description": "30 beats · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 filmed · October 13, 2026"
   },
   "markdownExport": {
-    "bytes": 17395,
-    "sha256": "7395435fe64135f2abe849d273e785ff5bb3170544c91b2b5e3d883c4a3503d0"
+    "bytes": 17591,
+    "sha256": "6511b359994f76cdaed1cb81b0b74ad08f7c75374bcd6b8976852b61fb4a2f66"
   },
   "markdownExportPreview": {
     "bytes": 1546,
