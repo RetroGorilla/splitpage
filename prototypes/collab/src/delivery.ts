@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import { IdentityBook } from "./model.ts";
 import type { SchemaCandidate, SeedBeat } from "./schema.ts";
 import { SchemaReplica } from "./schema.ts";
+import { eventHistory } from "./event-history.ts";
 
 export const deliveryOrders = ["D1", "D2", "D3", "dup", "rev", "late-C"] as const;
 export type DeliveryOrder = typeof deliveryOrders[number];
@@ -16,13 +17,14 @@ export interface QueuedDelivery {
 
 export class DeliveryQueue {
   readonly pending: QueuedDelivery[] = [];
-  readonly history: string[] = [];
+  readonly history: string[];
   private serial = 0;
   private readonly replicas: Map<ReplicaName, SchemaReplica>;
   private readonly inbound: (replica: ReplicaName, update: Uint8Array) => void;
   private readonly listeners = new Map<ReplicaName, (update: Uint8Array, origin: unknown) => void>();
 
-  constructor(replicas: { A: SchemaReplica; B: SchemaReplica }, inbound?: (replica: ReplicaName, update: Uint8Array) => void) {
+  constructor(replicas: { A: SchemaReplica; B: SchemaReplica }, inbound?: (replica: ReplicaName, update: Uint8Array) => void, record?: (line: string) => void) {
+    this.history = eventHistory(record);
     this.replicas = new Map();
     this.inbound = inbound ?? ((name, update) => {
       const replica = this.replicas.get(name);
@@ -51,12 +53,13 @@ export class DeliveryQueue {
 
   deliver(id: string, copies = 1): void {
     const index = this.pending.findIndex(message => message.id === id);
-    const [message] = index < 0 ? [] : this.pending.splice(index, 1);
+    const message = this.pending[index];
     if (!message) throw new Error(`No queued delivery ${id}`);
     for (let copy = 0; copy < copies; copy++) {
       this.history.push(`deliver ${id} ${message.from}->${message.to} copy ${copy + 1}`);
       this.inbound(message.to, message.update.slice());
     }
+    this.pending.splice(index, 1);
   }
 
   deliverFrom(from: ReplicaName, order: DeliveryOrder): void {

@@ -6,7 +6,7 @@ import type { DeliveryOrder } from "../src/delivery.ts";
 import { checkModel } from "../src/model.ts";
 import type { ScriptOracle } from "../src/model.ts";
 import { readReplica } from "../src/reader.ts";
-import type { ReplicaCarets } from "../src/reader.ts";
+import type { ReplicaCaretAnchor, ReplicaCarets } from "../src/reader.ts";
 import type { SchemaCandidate } from "../src/schema.ts";
 import { copyOnJoin, copyOnRestore, deleteStaleOffsets, omitLength, replaceWithStaleBeat, singleCommentMark } from "../src/defects.ts";
 import { commentsOracle, deletionOracle, joinOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
@@ -132,7 +132,8 @@ for (const candidate of ["A", "B"] as const) {
     const undo = harness.alice.undoManager();
     try {
       const restores = harness.alice.captureUndoIdentities(["s2", "s3"]);
-      const carets = new Map([["A", { position: caret(harness, "R1", 1, -1) }]]);
+      const carets = new Map<string, ReplicaCaretAnchor>([["A", { position: caret(harness, "R1", 1, -1) }]]);
+      const selectionEnd = caret(harness, "R1", 3);
       harness.bob.insert("R1", 2, "X", ["b1"]);
       harness.queue.deliverFrom("B", "D3");
       harness.alice.deleteIdentities(["s2", "s3"]);
@@ -140,11 +141,16 @@ for (const candidate of ["A", "B"] as const) {
       checkEvery(harness, deletionOracle, carets);
       undo.undo();
       harness.alice.bindUndoRestores(restores);
+      const firstRestore = restores[0];
+      assert.ok(firstRestore);
+      const restoredStart = Y.createAbsolutePositionFromRelativePosition(firstRestore.position, harness.alice.doc, true);
+      assert.ok(restoredStart);
+      carets.set("A", { position: Y.createRelativePositionFromTypeIndex(restoredStart.type, restoredStart.index, 0), selectionEnd });
       harness.queue.flush("dup");
       harness.lateJoin();
       checkEvery(harness, {
         rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", {}], ["b1", "X", {}], ["s3*", "c", {}], ["s4", "d", {}]] }],
-        carets: { A: { beat: "R1", offset: 1 } }, recovery: []
+        carets: { A: { beat: "R1", offset: 1, selection: { beat: "R1", from: 1, to: 4 } } }, recovery: []
       }, carets);
     } finally {
       undo.destroy();
