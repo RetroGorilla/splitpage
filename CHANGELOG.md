@@ -8,6 +8,7 @@ appear in the app under **Help**. The format follows
 
 ### Fixed
 - Click buttons through the empty space beside and between notifications.
+- Keep every tag picker choice clickable while editing a tag, with Done available when the picker closes.
 
 ## 0.4.3 — 2026-11-09
 
