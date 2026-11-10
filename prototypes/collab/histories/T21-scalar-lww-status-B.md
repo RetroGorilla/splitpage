@@ -14,6 +14,7 @@ enqueue B4 B->A 19 bytes
 deliver A2 A->B copy 1
 deliver A3 A->B copy 1
 deliver B4 B->A copy 1
+late-C full state from client 2
 check T21 scalar
 FAIL T21 scalar/client1.rows[0].status: expected "todo", got "shot"
 ```

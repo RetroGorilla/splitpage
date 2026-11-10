@@ -6,6 +6,8 @@ import type { ReplicaCaretAnchor } from "../reader.ts";
 import type { StructuralRangeCapture } from "../structure-selection.ts";
 import { restoreStructuralAnchor } from "../structure-selection.ts";
 import { undoOne } from "../structure.ts";
+import { readStatusEvent, resolveBeatStatus, statusHeads } from "./status-resolution.ts";
+import type { BeatStatusEvent } from "./status-resolution.ts";
 
 export function formatCapturedMarks(replica: SchemaReplica, selection: StructuralRangeCapture, marks: CollabMarks): void {
   const start = Y.createAbsolutePositionFromRelativePosition(selection.selection.position, replica.doc, false);
@@ -50,34 +52,30 @@ export function ensureTag(replica: SchemaReplica, kind: string, name: string): s
   return id;
 }
 
-interface StatusEvent {
-  target: string;
-  value: string;
-  prior: string;
-  parents: string[];
-  by: string;
+function statusEvents(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {
+  const result: [string, BeatStatusEvent][] = [];
+  for (const [id, raw] of replica.doc.getMap("statusEvents")) {
+    const event = readStatusEvent(raw); if (event?.target === target) result.push([id, event]);
+  }
+  return result;
 }
 
-function statusEvents(replica: SchemaReplica, target: string): [string, StatusEvent][] {
-  return [...replica.doc.getMap<StatusEvent>("statusEvents")].filter(([, event]) => event.target === target);
-}
-
-export function statusFrontier(replica: SchemaReplica, target: string): [string, StatusEvent][] {
-  const events = statusEvents(replica, target);
-  const parents = new Set(events.flatMap(([, event]) => event.parents));
-  return events.filter(([id]) => !parents.has(id));
+export function statusFrontier(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {
+  const events = new Map(statusEvents(replica, target));
+  const heads = new Set(statusHeads(events));
+  return [...events].filter(([id]) => heads.has(id));
 }
 
 export function statusValue(replica: SchemaReplica, target: string): string {
-  const frontier = statusFrontier(replica, target);
-  if (!frontier.length) return String(mapValue(replica.doc.getMap("beats").get(target)).get("status"));
-  const values = frontier.map(([id, event]) => replica.doc.getMap("retiredStatus").has(id) ? event.prior : event.value);
-  return new Set(values).size === 1 ? values[0] ?? "todo" : frontier[0]?.[1].prior ?? "todo";
+  return resolveBeatStatus(new Map(statusEvents(replica, target)), replica.doc.getMap("retiredStatus"),
+    String(mapValue(replica.doc.getMap("beats").get(target)).get("status")));
 }
 
 export function changeStatus(replica: SchemaReplica, manager: Y.UndoManager, target: string, id: string, value: string, by: string): void {
   const frontier = statusFrontier(replica, target);
-  const event: StatusEvent = { target, value, prior: statusValue(replica, target), parents: frontier.map(([key]) => key).sort(), by };
+  const validated = readStatusEvent({ target, value, parents: frontier.map(([key]) => key).sort(), by });
+  if (!validated) throw new Error("Invalid status command");
+  const event = { target: validated.target, value: validated.value, prior: statusValue(replica, target), parents: validated.parents, by: validated.by };
   manager.stopCapturing();
   replica.doc.transact(() => replica.doc.getMap("statusEvents").set(id, event), replica.localOrigin);
   const item = manager.undoStack.at(-1);
@@ -89,7 +87,7 @@ export function changeStatus(replica: SchemaReplica, manager: Y.UndoManager, tar
 export function undoStatus(replica: SchemaReplica, manager: Y.UndoManager): void {
   const id: unknown = manager.undoStack.at(-1)?.meta.get("statusEvent");
   if (typeof id !== "string") throw new Error("Top undo item is not a status command");
-  const event = replica.doc.getMap<StatusEvent>("statusEvents").get(id);
+  const event = readStatusEvent(replica.doc.getMap("statusEvents").get(id));
   if (!event) throw new Error("Missing local status command");
   const frontier = statusFrontier(replica, event.target);
   if (frontier.some(([key]) => key === id)) {

@@ -391,8 +391,8 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": ".filter(([, event]) => event.target === target)",
-          "after": ""
+          "before": "event?.target === target",
+          "after": "event"
         }
       ]
     },
@@ -417,15 +417,16 @@
       "id": "status-prior-after-retirement",
       "outcome": "DETECTED",
       "failedTests": [
-        "A: a later status command captures the actual prior value after identical undo",
-        "B: a later status command captures the actual prior value after identical undo"
+        "A: status event parents and prior values stay local to their target beat",
+        "A: A-H12 different status values D1, normal ids, Alice undoes",
+        "A: A-H12 different status values D1, normal ids, Bob undoes"
       ],
-      "failedTestCount": 2,
+      "failedTestCount": 34,
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": "replica.doc.getMap(\"retiredStatus\").has(id) ? event.prior : event.value",
-          "after": "event.value"
+          "before": "resolveBeatStatus(new Map(statusEvents(replica, target)), replica.doc.getMap(\"retiredStatus\"),",
+          "after": "resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),"
         }
       ]
     },
@@ -440,9 +441,9 @@
       "failedTestCount": 16,
       "edits": [
         {
-          "file": "src/marks/projection.ts",
-          "before": "relevant.filter(([id]) => !parents.has(id))",
-          "after": "relevant"
+          "file": "src/marks/status-resolution.ts",
+          "before": "return resolve(statusHeads(events));",
+          "after": "return resolve([...events.keys()]);"
         }
       ]
     },
@@ -457,8 +458,8 @@
       "failedTestCount": 38,
       "edits": [
         {
-          "file": "src/marks/projection.ts",
-          "before": "doc.getMap(\"retiredStatus\").has(id) ? event.prior : event.value",
+          "file": "src/marks/status-resolution.ts",
+          "before": "retired.has(id) ? resolve(event.parents.filter(parent => events.has(parent))) : event.value",
           "after": "event.value"
         }
       ]
@@ -474,9 +475,9 @@
       "failedTestCount": 18,
       "edits": [
         {
-          "file": "src/marks/projection.ts",
-          "before": "frontier[0]?.[1].prior ?? \"todo\"",
-          "after": "values.at(-1) ?? \"todo\""
+          "file": "src/marks/status-resolution.ts",
+          "before": "heads = statusHeads(shared);",
+          "after": "return values.at(-1) ?? stored;"
         }
       ]
     },

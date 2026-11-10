@@ -80,7 +80,13 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
       scan(textRecord(segment.get("text")), segment.get("head"));
     }
   }
-  const model: CollabModel = { rows: [], carets: {}, recovery: [] };
+  const model: CollabModel = { rows: spans.map(span => span.row), carets: {}, recovery: [] };
+  for (const row of model.rows) if (!row.kind) {
+    const beat = record(doc.getMap("beats").get(row.id));
+    if (typeof beat.get("status") === "string") row.status = String(beat.get("status"));
+  }
+  projectStatus(model, doc);
+  model.rows = [];
   const destinations = new Map<string, { row: CollabRow; prefix: number }>();
   const activeRemovals: Y.Map<unknown>[] = [];
   for (const value of doc.getMap("beats").values()) {
@@ -102,7 +108,6 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
     }
     const beat = record(doc.getMap("beats").get(row.id));
     if (beat.get("paragraphStart") === true) row.paragraphStart = true;
-    if (typeof beat.get("status") === "string") row.status = String(beat.get("status"));
     const removal = activeRemovals.find(item => item.get("beat") === row.id || row.characters.some(character => hasIdentity(character, item)));
     if (removal) {
       const splitBy = removal.get("beat") === row.id ? undefined : beat.get("splitBy");
@@ -193,6 +198,5 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
   }
   projectStructuralMarks(model, doc);
   projectComments(model, doc);
-  projectStatus(model, doc);
   return model;
 }

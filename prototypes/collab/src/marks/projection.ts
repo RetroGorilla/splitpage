@@ -1,5 +1,8 @@
 import * as Y from "yjs";
 import type { CollabMarks, CollabModel, CollabRow } from "../model.ts";
+import { mapValue } from "../schema.ts";
+import { readStatusEvent, resolveBeatStatus } from "./status-resolution.ts";
+import type { BeatStatusEvent } from "./status-resolution.ts";
 
 interface TagExtent {
   key: string;
@@ -98,14 +101,13 @@ export function storedMarkNames(key: string, characters: readonly { text: Y.Text
 }
 
 export function projectStatus(model: CollabModel, doc: Y.Doc): void {
-  const events = [...doc.getMap<{ target: string; value: string; prior: string; parents: string[]; by: string }>("statusEvents")];
+  const events: [string, BeatStatusEvent][] = [];
+  for (const [id, raw] of doc.getMap("statusEvents")) { const event = readStatusEvent(raw); if (event) events.push([id, event]); }
   if (!events.length) return;
-  for (const row of model.rows) {
+  for (const row of [...model.rows, ...model.recovery.map(entry => entry.row)]) {
     const relevant = events.filter(([, event]) => event.target === row.id);
-    const parents = new Set(relevant.flatMap(([, event]) => event.parents));
-    const frontier = relevant.filter(([id]) => !parents.has(id)).sort(([a], [b]) => a.localeCompare(b));
-    const values = frontier.map(([id, event]) => doc.getMap("retiredStatus").has(id) ? event.prior : event.value);
-    if (frontier.length) row.status = new Set(values).size === 1 ? values[0] ?? "todo" : frontier[0]?.[1].prior ?? "todo";
+    if (relevant.length) row.status = resolveBeatStatus(new Map(relevant), doc.getMap("retiredStatus"),
+      String(mapValue(doc.getMap("beats").get(row.id)).get("status")));
     const conflict = relevant.filter(([, event]) => relevant.some(([, other]) => event.value !== other.value && JSON.stringify(event.parents) === JSON.stringify(other.parents)));
     if (conflict.length) model.notices = [...new Set(conflict.map(([, event]) => `${event.by}: concurrent status change did not apply`))].sort();
   }

@@ -1,0 +1,190 @@
+{
+  "trackingIssue": "https://github.com/RetroGorilla/splitpage/issues/1376",
+  "retainedRows": "All retained timing rows predate status resolution, cycle handling and wire-stable validation; no timings run.",
+  "dependencies": {
+    "before": "73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663",
+    "after": "6f2ac34929f49560737ba125ce845ffd8cbebac254bf172d2d1d8cc16235d89e"
+  },
+  "files": [
+    {
+      "path": "src/marks/commands.ts",
+      "before": "f22be3c2332b59cf55303361d9f7f9ea13ed13c5b4fc00e0ffb796d09812edad",
+      "after": "4cb5cc5027f2f643c2c7fea15b30f9f43ce37c6d12ab05bfade5882904ac3c0b",
+      "change": "Delegate command reads to causal resolution; prior is diagnostic metadata."
+    },
+    {
+      "path": "src/marks/status-resolution.ts",
+      "before": null,
+      "after": "227642c1e6629d875e37d52b7107419063a36168cfbcd4f9022ffc0c854d6bba",
+      "change": "Add the common-ancestor resolution and retired-parent rule."
+    },
+    {
+      "path": "src/marks/status-source-audit.ts",
+      "before": null,
+      "after": "e92e47230267846a468a31c093cc87c673a3686c4b0a7bd1de5453f529f5f99d",
+      "change": "Validate the explicit post-timing source declarations."
+    },
+    {
+      "path": "src/marks/projection.ts",
+      "before": "45b7062c652dd0ce01c5f96651617808bb058421b9fda95330dd495880eca785",
+      "after": "aabb8e7f2d5f1a06f5796e7812af890dc7bdf930d44b41860617c9a1aaa1cfab",
+      "change": "Use the shared resolver in the model reader."
+    },
+    {
+      "path": "src/structure-reader.ts",
+      "before": "b5c86b9f5eea668c82b6fc621ca56aae46ceb1d6554912bbe9f1c079304e5167",
+      "after": "551b7ad61881848d488bd2ce0085b72a50be54574af756c4cb0cb718970565d1",
+      "change": "Resolve each beat before join aggregation and recovery."
+    },
+    {
+      "path": "src/perf/setup.ts",
+      "before": "d7f4c90d829a042a2f786bb4fdf40acc8a560a63e5ccbbf77c01cc148bf41dec",
+      "after": "06ba3c03d23346d6ba9d4eec2d6711b67e9f697f96773a10e31b0960d9d5b8ea",
+      "change": "Include the resolver in source digests and audit declared status changes."
+    },
+    {
+      "path": "src/perf/report.ts",
+      "before": "f223c2bf13248cb9f8e9dbd3cbd8f46dc8875313486df7d088c4450a5634776f",
+      "after": "af4263f7a37c5602020a5b6a92153ea238f2953a474c6fd294fc3c5eb633dc71",
+      "change": "Label retained remote status/comment rows as predating this fix."
+    },
+    {
+      "path": "src/perf/lifetime/projector.ts",
+      "before": "d095807f2c081e4dc268de8e79f90d930d1c83baf30aff3dae15c622dc01b03c",
+      "after": "bda850500e9e4dec66f08dc30ad25ccb5ae558ed2ecebfcaca425d4013e11841",
+      "change": "Use causal resolution, validate stored-status cache keys, update only changed event keys."
+    },
+    {
+      "path": "src/perf/lifetime/audit.ts",
+      "before": "127437e9ce4cf06c127837ce6a62df694262a10a36b4e35483ac8c94a7dc46e9",
+      "after": "491e857397c360ff7813de37e1a84a7c3a10889b15c640dc5d28115fa865ef3a",
+      "change": "Pin changed sampled work and dependency digest without replacing the timed archive."
+    },
+    {
+      "path": "src/perf/lifetime/report.ts",
+      "before": "191c0b69fd1ad3db6017f3ebd314e8189febd7d6ce93d3985b93cf642f47e89d",
+      "after": "de1947b13189bf206753083fa60e5e55d60de33dc991c3be0e860071ccbfb892",
+      "change": "Label all retained structure/component/withIdentity rows as predating this fix."
+    },
+    {
+      "path": "src/perf/lifetime/status-order.ts",
+      "before": "9672cf03c632a57ea5f08188da8118bd91b1e5cea9ff82dc69a6afbad19a086a",
+      "after": "c3aaa2b32823b42f1f524829c293c2dcd36ea9cd0643af91cdf5eb485b4b1802",
+      "change": "Retain original evidence and allow all-reader and retirement checks."
+    }
+  ],
+  "counts": {
+    "before": "2943866c556dda17609fc1ca9a9bd0c670bc76e0cf703dbcdfdbde884b3e7674",
+    "after": "3066eb7755b85eba1a54210a28c08c480a21b2230b18fa2cd5d5e110313e2166"
+  },
+  "reviewChanges": [
+    {
+      "path": "src/marks/commands.ts",
+      "before": "4cb5cc5027f2f643c2c7fea15b30f9f43ce37c6d12ab05bfade5882904ac3c0b",
+      "after": "fae60b27d869d653bd0b362b509259f9b5d1d81d53056a031061b9e692450116"
+    },
+    {
+      "path": "src/marks/status-resolution.ts",
+      "before": "227642c1e6629d875e37d52b7107419063a36168cfbcd4f9022ffc0c854d6bba",
+      "after": "edbca284e8238291b8cd1a86133bd77b9eb9f4387a7c5253b88520859702cc84"
+    },
+    {
+      "path": "src/marks/status-source-audit.ts",
+      "before": "e92e47230267846a468a31c093cc87c673a3686c4b0a7bd1de5453f529f5f99d",
+      "after": "2e5212448b00713a98e908dc1168ef06a42776e489278fae95a2046860d6b6f1"
+    },
+    {
+      "path": "src/marks/projection.ts",
+      "before": "aabb8e7f2d5f1a06f5796e7812af890dc7bdf930d44b41860617c9a1aaa1cfab",
+      "after": "d775fb0cc4c1ef98378c92eededc9dfa742331dfe9af2a02814dcc50e48017f5"
+    },
+    {
+      "path": "src/perf/setup.ts",
+      "before": "06ba3c03d23346d6ba9d4eec2d6711b67e9f697f96773a10e31b0960d9d5b8ea",
+      "after": "e9c9fd479560cace7ea89ad8f7e525e2ed74bc1c39f62250d6fd1fe51aa34c97"
+    },
+    {
+      "path": "src/perf/lifetime/projector.ts",
+      "before": "bda850500e9e4dec66f08dc30ad25ccb5ae558ed2ecebfcaca425d4013e11841",
+      "after": "97c650a34570517508f1ce852f5b07d42f564558f0f1d939ccc7bba3084a0d3d"
+    },
+    {
+      "path": "src/perf/lifetime/audit.ts",
+      "before": "491e857397c360ff7813de37e1a84a7c3a10889b15c640dc5d28115fa865ef3a",
+      "after": "cddce20c2da4d4fd769cf487db59911b267674f2c78c7ffdf636d48a5ef59b1f"
+    },
+    {
+      "path": "src/perf/lifetime/report.ts",
+      "before": "de1947b13189bf206753083fa60e5e55d60de33dc991c3be0e860071ccbfb892",
+      "after": "1ef557fd788fb4705b292a80fe21179a37003841a95b4d014399b5c585c3fa0e"
+    },
+    {
+      "path": "src/perf/lifetime/status-order.ts",
+      "before": "c3aaa2b32823b42f1f524829c293c2dcd36ea9cd0643af91cdf5eb485b4b1802",
+      "after": "bd9f30706b54523acbd31a913410f673c0a37215c7cfdb546980b9ad90a7ca8a"
+    }
+  ],
+  "reviewDependencies": {
+    "before": "6f2ac34929f49560737ba125ce845ffd8cbebac254bf172d2d1d8cc16235d89e",
+    "after": "cc88dfeb2d10d283648d5bf3845884b6de8a06c6f8557db35692ddf0f3ad9f0a"
+  },
+  "reviewCounts": {
+    "before": "3066eb7755b85eba1a54210a28c08c480a21b2230b18fa2cd5d5e110313e2166",
+    "after": "c23d8b8d53f2a26c23fd7c709c53d45614c31390b89fed0829983e11d9ed31e2"
+  },
+  "validationChanges": [
+    {
+      "path": "src/marks/commands.ts",
+      "before": "fae60b27d869d653bd0b362b509259f9b5d1d81d53056a031061b9e692450116",
+      "after": "15370304e84d43df359df6c6e6da6bb376c66d598ce07ff370dbb4ca41b3934c"
+    },
+    {
+      "path": "src/marks/status-resolution.ts",
+      "before": "edbca284e8238291b8cd1a86133bd77b9eb9f4387a7c5253b88520859702cc84",
+      "after": "b48146ad3ced02868f258087bb4f5b8971aa6e31792d77a2691c53af4124e41c"
+    },
+    {
+      "path": "src/marks/status-source-audit.ts",
+      "before": "2e5212448b00713a98e908dc1168ef06a42776e489278fae95a2046860d6b6f1",
+      "after": "5530bc48625a5dd8856ab86e91ae6a2b439626bd6e890670a847b719140a8a1d"
+    },
+    {
+      "path": "src/marks/projection.ts",
+      "before": "d775fb0cc4c1ef98378c92eededc9dfa742331dfe9af2a02814dcc50e48017f5",
+      "after": "80cdfe27d9ca834570746624f77607e2e2fb59b99e7ba924551393988951e3a7"
+    },
+    {
+      "path": "src/perf/setup.ts",
+      "before": "e9c9fd479560cace7ea89ad8f7e525e2ed74bc1c39f62250d6fd1fe51aa34c97",
+      "after": "516c8589a1b1785dda4a873083a4588e4a879ff8210ef9897c139a6633c6679c"
+    },
+    {
+      "path": "src/perf/lifetime/projector.ts",
+      "before": "97c650a34570517508f1ce852f5b07d42f564558f0f1d939ccc7bba3084a0d3d",
+      "after": "2c3dfb2f0b0183a1258794ad901ab32ef4c7d24560f3d903db874505933a5647"
+    },
+    {
+      "path": "src/perf/lifetime/audit.ts",
+      "before": "cddce20c2da4d4fd769cf487db59911b267674f2c78c7ffdf636d48a5ef59b1f",
+      "after": "998f537cba081a0034ef6e42650fc753716ce27f71db7d623c4f73022b498233"
+    },
+    {
+      "path": "src/perf/lifetime/status-order.ts",
+      "before": "bd9f30706b54523acbd31a913410f673c0a37215c7cfdb546980b9ad90a7ca8a",
+      "after": "159302fb3444bcd3f3e58c8dd15d2b1b5099f18ae2566d712d4cbaced5680124"
+    },
+    {
+      "path": "src/perf/operations.ts",
+      "before": "de42db8a339eb65a6f2364e12ed74cc577f2f854701bfab6f6307a9c0b055b41",
+      "after": "68919c8ea437cd351549216c7bb539a0402d272edc2dc568eb8a6586e07ae61e"
+    }
+  ],
+  "validationDependencies": {
+    "before": "cc88dfeb2d10d283648d5bf3845884b6de8a06c6f8557db35692ddf0f3ad9f0a",
+    "after": "3ef67a25a054d08783995254774aac057143b98805fa0bf9832f2019ba27659f"
+  },
+  "validationCounts": {
+    "before": "c23d8b8d53f2a26c23fd7c709c53d45614c31390b89fed0829983e11d9ed31e2",
+    "after": "c23d8b8d53f2a26c23fd7c709c53d45614c31390b89fed0829983e11d9ed31e2"
+  }
+}
