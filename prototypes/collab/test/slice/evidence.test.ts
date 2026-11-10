@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bufferOracles, bufferTraceOrder } from "../buffer-oracles.ts";
 import type { BufferTrace } from "../buffer-oracles.ts";
+import { replacementIntentFixtures } from "../buffer-replacements.ts";
 import { bufferMechanisms } from "../../src/editing-buffer.ts";
 import { checkSliceArtifacts, checkSliceSnapshot, readSliceEvidence } from "../../src/slice/report.ts";
 
@@ -129,14 +130,19 @@ test("ordinary stale native operations can be cancelled before synchronous ident
   }
 });
 
-test("identical native selection replacement exposes the unchanged mapper limitation under every mechanism", () => {
+test("identical native selection replacement commits new identities and undoes to selected restored identities", () => {
+  const fixture = present(replacementIntentFixtures[0]);
   for (const mechanism of bufferMechanisms) {
-    const probe = present(probeStages(`T03 replace identical text ${mechanism}`)[0]);
+    const stages = probeStages(`T03 replace identical text ${mechanism}`);
+    assert.equal(stages.length, 2);
+    const probe = present(stages[0]);
     assert.equal(probe.text, "the the");
     assert.deepEqual(probe.events.find(event => event.type === "beforeinput")?.ranges, [[4, 7]]);
-    assert.deepEqual(probe.errors, ["Ambiguous native diff: 0 minimal splices; target evidence present"]);
-    assert.equal(probe.dirty, true);
-    assert.deepEqual(probe.commits, []);
+    checkSliceSnapshot(probe, fixture.expected, mechanism, "dup");
+    assert.deepEqual(probe.commits, ["input"]);
+    const undone = present(stages[1]);
+    checkSliceSnapshot(undone, fixture.undo, mechanism, "dup");
+    assert.deepEqual(undone.commits, ["input", "beforeinput:historyUndo"]);
   }
 });
 

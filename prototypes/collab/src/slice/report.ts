@@ -49,7 +49,12 @@ function history(evidence: SliceEvidence, names: string[], shows: string): strin
         const previousEvents = index === 0 ? 0 : probe.stages[index - 1]?.events.length ?? 0;
         return [`stage ${index}: text=${encoded(stage.text)} selection=${encoded(stage.selection)}`,
           ...stage.events.slice(previousEvents).filter(event => event.type !== "keydown" && event.type !== "keyup").map(event => `${eventName(event)} data=${encoded(event.data)} ranges=${encoded(event.ranges)} cancelable=${event.cancelable} cancelled=${event.cancelled}`),
-          ...stage.errors.map(error => `STOP: ${error}`)];
+          ...stage.errors.map(error => `STOP: ${error}`),
+          ...(name.startsWith("T03 replace identical text") ? [
+            `settled dirty=${stage.dirty} commits=${encoded(stage.commits)}`,
+            `R1 identities=${stage.models["A.E"]?.rows[0]?.characters.map(character => character.notation).join(" ")}`,
+            ...stage.history.filter(line => line.startsWith("A commit ") || line.startsWith("A undo "))
+          ] : [])];
       }), "```", ""];
     })].join("\n");
 }
@@ -64,7 +69,7 @@ export function sliceArtifacts(evidence: SliceEvidence): Map<string, string> {
     "Replacing the active text node interrupts composition and leaves the earlier provisional text behind."));
   files.set("histories/T03-replace-browser-identical.md", history(evidence,
     bufferMechanisms.map(mechanism => `T03 replace identical text ${mechanism}`),
-    "Replacing selected repeated text with identical text supplies an exact target, but the minimal-string-splice contract cannot represent it."));
+    "PASS: replacing selected repeated text with identical text commits new identities under M1/M2/M3; undo selects the restored word."));
   files.set("histories/T02-browser-selection-repaint.md", history(evidence,
     ["whole repaint selection", "text repaint selection", "whole repaint explicit selection restoration"],
     "A selection does not survive DOM replacement automatically; retained offsets restore it on unchanged content."));
@@ -118,16 +123,16 @@ export function sliceArtifacts(evidence: SliceEvidence): Map<string, string> {
     "D1 keeps B's updates until after A commits. Other rows deliver B while the buffer is dirty, except T02's deliberate clean-but-unpainted integration. dup delivers every update twice; rev reverses messages; late-C hydrates from B's network document and receives undo through the same queue. M3 checks every E and N document, including C. Queue emptiness and released held bytes are checked after undo.", "",
     "## Assumptions tested", "",
     "| Assumption | Result | Observation |", "| --- | --- | --- |",
-    "| Retain and match every painted identity after native edits | Holds for tested text edits; shared mapper fails identical replacement | Real target offsets disambiguate all T03 Backspaces. Replacing selected `the` with `the` produces exact targets but 0 compatible minimal splices |",
+    "| Retain and match every painted identity after native edits | Holds for tested text edits, including identical replacement | Real target offsets disambiguate all T03 Backspaces. Replacing selected `the` with `the` now deletes s5/s6/s7 and inserts a1/a2/a3, caret after a3; undo selects s5*/s6*/s7* |",
     "| beforeinput identifies selected painted content | Holds for tested native text/delete/paste/cut; conditional for composition; insufficient for undo | Initial composition selection addresses painted identities; later ranges refer to provisional text. historyUndo reports only the current caret. Enter needs structural intent |",
     "| Insert replacement at painted gap before deleting selected identities | Holds for tested replacements | T01 composition produces aβXd under every listed order and all mechanisms; no delete-first implementation was introduced |",
     "| Remote integration leaves native composition undisturbed | Holds only when DOM is preserved | T04 passes with immediate M2 integration and held M1/M3 delivery. Replacing the whole beat or the active text node starts a second composition on the next update and leaves the earlier x behind |",
     "| Cancel stale beforeinput, repaint synchronously, restore selection | Holds for tested ordinary text inputs; fails as a composition strategy | T02 and stale Backspace/Delete/selected deletion/Ctrl+Backspace/paste/cut probes cancel successfully. Composition input cannot be cancelled. An unchanged-DOM repaint resets caret 4 to 0 (whole beat) or 3 (active text node); explicit restoration preserves a 4:7 selection |", "",
     "A clean M2 remote bold update repaints `<strong>the</strong> the` before returning and restores caret 7. During composition, even restoring the numeric selection after DOM replacement does not restore the browser's composition range: the later update yields `the xxythe` instead of `the xythe`. A native commit can run synchronously in input: the probe ends with text `the a`, caret 5, dirty=false and commit source input. Composition commits finish in compositionend; they do not wait for a timer.", "",
-    "## Retained failure histories", "",
+    "## Retained browser histories", "",
     "- [T04 whole-beat repaint](histories/T04-browser-whole-repaint.md): composition interrupted, with and without selection restoration.",
     "- [T04 active-text-node replacement](histories/T04-browser-text-replacement.md): same failure with a smaller DOM mutation.",
-    "- [T03 identical replacement](histories/T03-replace-browser-identical.md): all mechanisms stop in the unchanged shared mapper; the native buffer is retained dirty.",
+    "- [T03 identical replacement](histories/T03-replace-browser-identical.md): PASS under all three mechanisms, including identity checks on every replica, synchronous input commit and selective undo. Previously all three stopped with 0 compatible minimal splices; the target-evidenced planner now preserves the replacement intent.",
     "- [T02 selection repaint](histories/T02-browser-selection-repaint.md): automatic selection survival fails; explicit restoration succeeds.",
     "- [T03 native undo range](histories/T03-browser-native-undo.md): affected identities cannot be recovered from the target range alone.",
     "- [T02 boundary native Enter](histories/T02-boundary-browser-Enter.md): native default changes structure outside one beat's text.", "",
@@ -139,10 +144,10 @@ export function sliceArtifacts(evidence: SliceEvidence): Map<string, string> {
     "2. No app code is imported. The renderer copies the tested basic DOM shape and mark tags; tags, comments, links, direction/cue wrappers, protected atoms, images, decoration, beat numbering, paragraph grouping and app CSS are absent. Spellcheck is disabled. No claim covers those nodes, graphemes or surrogate pairs.",
     "3. The page binds Yjs directly through BufferHarness and EditableBeatBuffer. There is no session owner, document projection, capability/epoch replacement, attribution, registry repair, save state, persistence, transport provider, draft system, recovery panel or app undo owner. Recovery is checked as data, not displayed.",
     "4. The app's syncBeatEl reads the whole beat's HTML into runs and uses rendered as a paint cache; this slice preserves paint-time identities and captures native targets, checks actual DOM against the buffer, and commits only those identities. A snapshot of strings alone is not the binding contract.",
-    "5. The shared buffer exposes synthetic dispatch methods. The binding calls them only from real browser event observations; ordinary inserted text is measured from DOM against the captured target and composition input.data is checked against actual DOM. Its plan() excludes nonminimal splices, so identical-text replacement cannot commit; this is a needed editing-buffer.ts change for a later lane, left untouched here.",
+    "5. The shared buffer exposes synthetic dispatch methods. The binding calls them only from real browser event observations; ordinary inserted text is measured from DOM against the captured target and composition input.data is checked against actual DOM. Its plan() derives replacements from retained origins when targets exist, including identical or nonminimal replacements; without targets the minimal-string-diff ambiguity guard remains.",
     "6. Normal trace commits are deliberately delayed to test D3; composition and stale guards commit in their event handlers. The synchronous input probe covers an ordinary replacement. The slice intercepts undo in beforeinput; the app also catches Ctrl+Z on keydown. The app routes Enter, paste and cut to explicit commands; this page observes their native defaults separately and maps only ordinary single-beat paste/cut probes.",
     "7. A textarea exists solely as a real clipboard fixture. The driver selects beats with keyboard movement/Shift; script sets selection only after paint, as the binding must. Reset removes native Enter's extra DOM. The page is bundled into a temporary local HTML file using a prototype-only build dependency; no automation or WebSocket dependency was added.", "",
-    "All mechanisms need a paint snapshot with epoch, beat version, identities/runs and identity-relative selection; beforeinput targets retained before mutation; input/composition synchronization that never re-captures the base from live state; insertion-before-deletion; removed-target recovery; and selective undo with selection restoration. They also need an intent planner that accepts target-evidenced identical replacements without relying exclusively on minimal string differences.", "",
+    "All mechanisms need a paint snapshot with epoch, beat version, identities/runs and identity-relative selection; beforeinput targets retained before mutation; input/composition synchronization that never re-captures the base from live state; insertion-before-deletion; removed-target recovery; and selective undo with selection restoration. The prototype now demonstrates target-evidenced identical replacement intent without relying exclusively on minimal string differences.", "",
     "M1 additionally needs every provider/hydration/recovery ingress behind one bounded hold gate. M2 needs immediate integration with synchronous clean-beat projection and a stale-beforeinput guard, while composition suppresses all writes to its DOM nodes. M3 needs origin-filtered E↔N forwarding with a dirty-buffer hold and coordinated durable ownership of both documents. Existing buffer-results.md remains the evidence for queue-bound/provider behavior. Binding the app's real editor is the later lane, not part of this prototype.", "",
     "## Reproduction", "",
     "Install with npm ci in prototypes/collab using Node 24.22.1. Set TEMP and TMP to the lane's temporary folder. From the repository root, invoke `& D:\\vibecoding\\Splitpage\\tools\\with-lock.ps1 -Lock smoke -Owner s1a-browser-slice -Command 'npm run slice --prefix prototypes/collab'`. Edge chooses a free debugging port, uses a temporary profile with msImplicitSignin disabled, and is closed in finally. Set SLICE_EDGE only to use another Edge executable.", "",

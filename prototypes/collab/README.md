@@ -37,7 +37,7 @@ Read [buffer-results.md](buffer-results.md) for the measured matrix, failure pro
 
 ## Browser beat slice
 
-Read [slice-results.md](slice-results.md) for real browser input observations, the 72-case trace matrix, retained failures and the differences from the app. This is an isolated one-beat page, not the app's editor binding. Candidate A runs under all three mechanisms with the existing literal buffer oracles. Repainting active composition and identical-text replacements expose limitations despite the prescribed traces passing.
+Read [slice-results.md](slice-results.md) for real browser input observations, the 72-case trace matrix, retained histories and the differences from the app. This is an isolated one-beat page, not the app's editor binding. Candidate A runs under all three mechanisms with the existing literal buffer oracles. Target-evidenced identical-text replacement now passes commit and undo under every mechanism; repainting active composition still exposes a limitation.
 
 `npm run slice` builds `slice.html` into a temporary local file, drives one headless Edge through its debugging protocol, and records `slice-evidence.json`, the generated report and histories. Run it through the smoke-lock wrapper described in the report; set the lane's TEMP/TMP first. The browser chooses a free port and temporary profile and is closed in finally. `SLICE_EDGE` can override its executable path. The prototype-only `esbuild` 0.28.2 dev dependency bundles the TypeScript page and Yjs; the protocol client uses Node's built-in WebSocket.
 

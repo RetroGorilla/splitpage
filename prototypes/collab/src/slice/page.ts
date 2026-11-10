@@ -5,6 +5,7 @@ import type { SchemaReplica } from "../schema.ts";
 import { readReplica } from "../reader.ts";
 import { bufferOracles } from "../../test/buffer-oracles.ts";
 import type { BufferTrace } from "../../test/buffer-oracles.ts";
+import { replacementIntentFixtures } from "../../test/buffer-replacements.ts";
 import { paintRuns, recordEvent, selectedOffsets, selectOffsets } from "./dom.ts";
 import type { SliceEvent } from "./dom.ts";
 
@@ -204,6 +205,14 @@ const api = {
     paint();
     api.checkDom(true);
     if (h.queue.pending.length || [...h.sessions.values()].some(session => session.heldBytes)) throw new Error("Undrained delivery queue");
+  },
+  checkIdentical(undo: boolean): void {
+    const fixture = replacementIntentFixtures[0];
+    if (!fixture) throw new Error("Missing identical replacement oracle");
+    const h = session();
+    h.queue.flush("dup");
+    h.check(undo ? fixture.undo : fixture.expected);
+    paint();
   },
   repaint(mode: "whole" | "text", restore: boolean): void {
     const selected = selectedOffsets(beat);
