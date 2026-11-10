@@ -3,6 +3,7 @@ import { appendFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMain } from "./main-module.mjs";
+import { COLLAB_ORACLE_COPIES } from "./collab-oracle-copies.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -13,6 +14,8 @@ const PROSE_ONLY = [
 ];
 
 const BUILD_PROSE = new Set(["docs/help.md"]);
+
+const COPIED_PROTOTYPE_FILES = new Set(COLLAB_ORACLE_COPIES.map((pair) => pair.original));
 
 const NON_APP = [
   /^prototypes\//,
@@ -36,7 +39,7 @@ export function needsCollabChecks(files) {
 
 export function needsRootTests(files) {
   if (files === null || files.length === 0) return true;
-  return files.some((f) => !f.startsWith("prototypes/collab/") && needsChecks([f]));
+  return files.some((f) => COPIED_PROTOTYPE_FILES.has(f) || (!f.startsWith("prototypes/collab/") && needsChecks([f])));
 }
 
 export function needsAppChecks(files) {

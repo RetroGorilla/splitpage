@@ -67,6 +67,8 @@ for (const path of ["package.json", "package-lock.json", "tsconfig.json", "src/p
   eq(`prototype-only ${path} skips all root test shards`, needsRootTests(files), false);
 }
 eq("prototype changes plus unrelated prose still skip root tests", needsRootTests(["prototypes/collab/README.md", "docs/ROADMAP.md"]), false);
+eq("a prototype oracle copied into tests/collab runs the root tests that pin the copy", needsRootTests(["prototypes/collab/test/oracles.ts"]), true);
+eq("and still needs no app or desktop browser checks", [needsAppChecks(["prototypes/collab/test/oracles.ts"]), needsDesktopChecks(["prototypes/collab/test/oracles.ts"])], [false, false]);
 for (const files of [null, [], ["src/bootstrap/main.ts"], ["tests/application/session.test.ts"], ["desktop/test/smoke.mjs"], ["tools/ci-changes.mjs"], [".github/workflows/ci.yml"], ["package.json"], ["unknown/new.file"]]) {
   eq(`existing root test requirements remain for ${JSON.stringify(files)}`, needsRootTests(files), true);
 }
