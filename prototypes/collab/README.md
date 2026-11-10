@@ -48,3 +48,9 @@ Browser execution is separate from `npm test`. Browser-free tests recheck retain
 [structure-results.md](structure-results.md) records the beat and movement matrix. `node src/structure-report.ts` reruns it; `--write` refreshes the report and native-undo failure histories. `test/structure.test.ts` checks every required delivery order, specified undo checkpoint and retained artifact. Full T06 includes visual identities, folded gallery links, unchanged stored gallery items, statuses, both join undos and the earlier bold step. Its narration-only deliberate-defect probe remains separately named.
 
 `src/structure-reader.ts` independently scans candidate state, including headings, removed identities, visual components and gallery items. The model checks those fields against literal data. Join retirement and top-item-only undo are explicit prototype mechanisms with their storage and reader costs listed in the report. Nothing here selects a schema or changes app code.
+
+## Marks and scalar traces
+
+[mark-results.md](mark-results.md) records full T11, all T20/T21 rows, status mechanism probes and a fully-deleted-comment limitation. `node src/marks/report.ts` reproduces it; `--write` refreshes the generated report and retained histories. `test/marks/marks.test.ts` checks the literal oracles and generated artifacts. T11's overlap-only deliberate-defect oracle remains separately named; its full oracle now includes R2, replies, the split/removal, recovery, carets and undo.
+
+`src/marks/` holds the prototype commands, mark/comment/status reader rules and evidence generation. Candidate A fails the supplemental fully-deleted-comment history without scoped undo retention; both pass with that retention. The report distinguishes this failure from the passing soft-removal trace and makes no durable recovery claim. Full PROJ belongs to a separate lane; the existing omitted-field defect stays active.

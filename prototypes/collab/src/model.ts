@@ -3,7 +3,7 @@ export interface CollabIdentity {
   clock: number;
 }
 
-export type CollabMarks = Readonly<Record<string, string | boolean>>;
+export type CollabMarks = Readonly<Record<string, string | boolean | readonly string[]>>;
 
 export interface CollabCharacter {
   identity: CollabIdentity | null;
@@ -35,6 +35,7 @@ export interface CollabRecovery {
   row: CollabRow;
   by: string;
   edited: string[];
+  splitBy?: string;
 }
 
 export interface CollabModel {
@@ -62,7 +63,7 @@ export interface OracleRow {
 export interface ScriptOracle {
   rows: readonly OracleRow[];
   carets: Readonly<Record<string, CollabCaret>>;
-  recovery: readonly { row: OracleRow; by: string; edited: string[] }[];
+  recovery: readonly { row: OracleRow; by: string; edited: string[]; splitBy?: string }[];
   records?: Record<string, unknown>;
   notices?: string[];
 }

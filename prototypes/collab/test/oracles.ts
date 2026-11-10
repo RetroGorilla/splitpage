@@ -61,13 +61,57 @@ export const joinBoldUndoOracle: ScriptOracle = {
   ], carets: { A: { beat: "R2", offset: 0 }, B: { beat: "R2", offset: 0 } }, recovery: [], records: { ...joinOracle.records }
 };
 
-export const commentsOracle: ScriptOracle = {
+export const commentsOverlapOracle: ScriptOracle = {
   rows: [{ id: "R1", characters: [
     ["s1", "a", {}], ["s2", "b", { "c:C1": true }],
     ["s3", "c", { "c:C1": true, "c:C2": true }], ["s4", "d", { "c:C2": true }]
   ] }],
   carets: {},
   recovery: []
+};
+
+export const commentsOracle: ScriptOracle = {
+  rows: [
+    { id: "R1", characters: [["s1", "a", {}], ["s2", "b", { "c:C1": true }], ["s3", "c", { "c:C1": true, "c:C2": true }], ["s4", "d", { "c:C2": true }]] },
+    { id: "R2", characters: [["s5", "e", {}], ["s6", "f", {}]] }
+  ], carets: {}, recovery: [], records: { comments: {
+    C1: { author: "Alice", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [] },
+    C2: { author: "Bob", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [] }
+  }, recoveryReplies: [] }
+};
+
+export const commentsReplyOracle: ScriptOracle = {
+  rows: [
+    { id: "R1", characters: [["s1", "a", {}], ["s2", "b", { "c:C1": true }], ["s3", "c", { "c:C1": true, "c:C2": true }], ["s4", "d", { "c:C2": true }]] },
+    { id: "R2", characters: [["s5", "e", {}], ["s6", "f", {}]] }
+  ], carets: {}, recovery: [], records: { comments: {
+    C1: { author: "Alice", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [{ id: "r1", commentId: "C1", author: "Bob", createdAt: 0, text: "" }] },
+    C2: { author: "Bob", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [] }
+  }, recoveryReplies: [] }
+};
+
+export const commentsRemovedOracle: ScriptOracle = {
+  rows: [{ id: "R2", characters: [["s5", "e", {}], ["s6", "f", {}]] }],
+  carets: { A: { beat: "R2", offset: 0 }, B: { beat: "R2", offset: 0 } },
+  recovery: [
+    { row: { id: "R1", characters: [["s1", "a", {}], ["s2", "b", { "c:C1": true }]] }, by: "Alice", edited: [] },
+    { row: { id: "Rb", characters: [["s3", "c", { "c:C1": true, "c:C2": true }], ["s4", "d", { "c:C2": true }]] }, by: "Alice", edited: [], splitBy: "Bob" }
+  ], records: { comments: {
+    C1: { author: "Alice", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: true, replies: [{ id: "r1", commentId: "C1", author: "Bob", createdAt: 0, text: "" }] },
+    C2: { author: "Bob", createdAt: 0, text: "", rowId: "Rb", field: "audioText", recovery: true, replies: [] }
+  }, recoveryReplies: [] }
+};
+
+export const commentsRestoredOracle: ScriptOracle = {
+  rows: [
+    { id: "R1", characters: [["s1", "a", {}], ["s2", "b", { "c:C1": true }]] },
+    { id: "Rb", characters: [["s3", "c", { "c:C1": true, "c:C2": true }], ["s4", "d", { "c:C2": true }]] },
+    { id: "R2", characters: [["s5", "e", {}], ["s6", "f", {}]] }
+  ], carets: { A: { beat: "R1", offset: 0 }, B: { beat: "Rb", offset: 0 } }, recovery: [],
+  records: { comments: {
+    C1: { author: "Alice", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [{ id: "r1", commentId: "C1", author: "Bob", createdAt: 0, text: "" }] },
+    C2: { author: "Bob", createdAt: 0, text: "", rowId: "Rb", field: "audioText", recovery: false, replies: [] }
+  }, recoveryReplies: [] }
 };
 
 export const lengthOracle: ScriptOracle = {

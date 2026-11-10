@@ -179,12 +179,13 @@ export class SchemaReplica {
     }, this.localOrigin);
   }
 
-  split(beat: string, offset: number, newBeat: string, name: string): void {
+  split(beat: string, offset: number, newBeat: string, name: string, by?: string): void {
     this.doc.transact(() => {
       const { text, start } = this.locate(beat);
       text.insertEmbed(start + offset, { b: newBeat }, {});
       this.identities.bind(name, identityAt(text, start + offset));
       this.addBeat(newBeat);
+      if (by) mapValue(this.doc.getMap("beats").get(newBeat)).set("splitBy", by);
     }, this.localOrigin);
   }
 

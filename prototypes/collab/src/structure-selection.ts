@@ -41,8 +41,8 @@ export function insertWithCaret(replica: SchemaReplica, beat: string, offset: nu
   return caretAfterInserted(replica, names);
 }
 
-export function splitWithCaret(replica: SchemaReplica, beat: string, offset: number, next: string, name: string): ReplicaCaretAnchor {
-  replica.split(beat, offset, next, name);
+export function splitWithCaret(replica: SchemaReplica, beat: string, offset: number, next: string, name: string, by?: string): ReplicaCaretAnchor {
+  replica.split(beat, offset, next, name, by);
   return { position: structuralCaret(replica, next, 0, -1) };
 }
 
