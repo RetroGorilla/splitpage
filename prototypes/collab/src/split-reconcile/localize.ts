@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { withSliceBrowser } from "../slice/protocol.ts";
 import { publicBEvidence } from "../b-surfaces/public.ts";
+import { redactPerfText } from "../perf/privacy.ts";
 
 const folder = fileURLToPath(new URL("../../", import.meta.url));
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -24,7 +25,7 @@ const probes = [
 const temporary = await mkdtemp(join(tmpdir(), "split-localize-"));
 try {
   const pages: { name: string; commit: string; html: string; hash: string }[] = [];
-  for (const [name, commit] of [["binding", "c67139b8806d04231d2f2c5bb89814370bab8ef6"], ["standalone", "efcd94c2"]] as const) {
+  for (const [name, commit] of [["binding", "c67139b8806d04231d2f2c5bb89814370bab8ef6"], ["guarded", "224b60c580dd03d2541f4edd58a9324b07ff389c"], ["standalone", "efcd94c2"]] as const) {
     const directory = join(temporary, name); await mkdir(directory);
     const archive = join(temporary, `${name}.tar`);
     await writeFile(archive, execFileSync("git", ["archive", "--format=tar", commit], { cwd: repo, maxBuffer: 64 * 1024 * 1024 }));
@@ -45,13 +46,19 @@ try {
     pages.push({ name, commit, html, hash: createHash("sha256").update(html).digest("hex") });
   }
   const traceBundle = (await build({ absWorkingDir: repo, entryPoints: [join(folder, "src/split-reconcile/trace-page.ts")], bundle: true, write: false, platform: "browser", format: "iife" })).outputFiles?.[0]?.text;
-  const binding = (await build({ absWorkingDir: repo, entryPoints: [join(folder, "src/b-surfaces/split-page.ts")], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023", plugins: [{ name: "observe-binding-paint", setup(plugin) {
-    plugin.onLoad({ filter: /b-surfaces[\\/]split-page\.ts$/ }, async args => {
+  const makeBinding = async (entry: string): Promise<string> => {
+    const output = (await build({ absWorkingDir: repo, entryPoints: [join(folder, entry)], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023", plugins: [{ name: "observe-binding-paint", setup(plugin) {
+    plugin.onLoad({ filter: /(?:b-surfaces[\\/]split-page|split-reconcile[\\/]page)\.ts$/ }, async args => {
       const source = await readFile(args.path, "utf8");
       return { contents: source.replace("function paint(): void {", "function paint(): void {" + call("binding.paint")), loader: "ts" };
     });
-  } }] })).outputFiles?.[0]?.text;
-  if (!traceBundle || !binding) throw new Error("Missing diagnostic bundle");
+    } }] })).outputFiles?.[0]?.text;
+    if (!output) throw new Error("Missing diagnostic binding bundle");
+    return output;
+  };
+  const binding = await makeBinding("src/b-surfaces/split-page.ts");
+  const guarded = await makeBinding("src/split-reconcile/page.ts");
+  if (!traceBundle) throw new Error("Missing trace bundle");
   const results = await withSliceBrowser(async (protocol, version, browserDirectory) => {
     await protocol.call("Page.enable");
     protocol.socket.addEventListener("message", event => {
@@ -60,13 +67,13 @@ try {
     });
     await protocol.call("Page.addScriptToEvaluateOnNewDocument", { source: "window.__splitpageNoNewTab=true;window.__splitpageNoOnboarding=true;" + traceBundle });
     const cases: unknown[] = [];
-    for (const page of pages) for (const kind of page.name === "binding" ? ["T04", "T04 removed"] : ["composition-and-blur", "delete-focused-row"]) {
+    for (const page of pages) for (const kind of page.name !== "standalone" ? ["T04", "T04 removed"] : ["composition-and-blur", "delete-focused-row"]) {
       const path = join(browserDirectory, "diagnostic.html"); await writeFile(path, page.html);
-      await protocol.call("Page.navigate", { url: pathToFileURL(path).href + (page.name === "binding" ? "?app-binding=1" : "") });
+      await protocol.call("Page.navigate", { url: pathToFileURL(path).href + (page.name !== "standalone" ? "?app-binding=1" : "") });
       await protocol.evaluate("new Promise((resolve,reject)=>{const end=Date.now()+10000;const check=()=>{if(window.__renderTest&&window.__writerFlowTest)resolve(true);else if(Date.now()>end)reject(new Error('App did not start'));else setTimeout(check,20)};check()})");
       let failure: string | null = null;
-      if (page.name === "binding") {
-        await protocol.evaluate(binding + "\n//# sourceURL=split-binding.js");
+      if (page.name !== "standalone") {
+        await protocol.evaluate((page.name === "guarded" ? guarded : binding) + "\n//# sourceURL=split-binding.js");
         await protocol.evaluate(`appBinding.reset(${JSON.stringify(kind)},'M1',true);appBinding.select(2);appBinding.clear();splitTrace.clear()`);
         await protocol.compose("x"); await protocol.evaluate("appBinding.remote('D3')");
         await protocol.compose("xy"); await protocol.insert("xy");
@@ -82,11 +89,12 @@ try {
         }
       }
       cases.push({ mode: page.name, kind, sourceCommit: page.commit, diagnosticHtmlHash: page.hash, failure,
-        trace: await protocol.evaluate("splitTrace.snapshot()"), snapshot: await protocol.evaluate(page.name === "binding" ? "appBinding.snapshot()" : "({rows:document.querySelectorAll('#rows .row').length,model:__splitpageFormats.state().rows.map(row=>({id:row.id,audioText:row.audioText})),dom:[...document.querySelectorAll('#rows .cell-editable[data-field=audioText]')].map(el=>({id:el.dataset.id,text:el.textContent}))})") });
+        trace: await protocol.evaluate("splitTrace.snapshot()"), snapshot: await protocol.evaluate(page.name !== "standalone" ? "appBinding.snapshot()" : "({rows:document.querySelectorAll('#rows .row').length,model:__splitpageFormats.state().rows.map(row=>({id:row.id,audioText:row.audioText})),dom:[...document.querySelectorAll('#rows .cell-editable[data-field=audioText]')].map(el=>({id:el.dataset.id,text:el.textContent}))})") });
       process.stdout.write(`${page.name}/${kind}: ${failure ? "FAIL" : "completed"}\n`);
     }
-    return { browser: version.product, diagnostic: "unminified exact archived source plus observational call probes and native Node wrappers; no repair", probes: probes.map(([file, , site]) => ({ file, site })), cases };
+    return { browser: version.product, diagnostic: "unminified archived source plus observational call probes and native Node wrappers; guarded mode changes only the prototype", probes: probes.map(([file, , site]) => ({ file, site })), cases };
   });
   await mkdir(join(folder, "split-reconcile"), { recursive: true });
-  await writeFile(join(folder, "split-reconcile/localization.json"), publicBEvidence(results) + "\n");
+  const redacted = JSON.parse(JSON.stringify(results, (_key, value: unknown) => typeof value === "string" ? redactPerfText(value) : value)) as unknown;
+  await writeFile(join(folder, "split-reconcile/localization.json"), publicBEvidence(redacted) + "\n");
 } finally { await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }

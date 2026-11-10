@@ -13,7 +13,13 @@ function log(site: string, detail?: unknown): void {
   traceLog.push({ site, depth: domDepth, stack: new Error(site).stack ?? "", ...(detail === undefined ? {} : { detail }) });
 }
 traceRealm.__splitCall = site => { log(site); };
-const nodeLabel = (node: Node): string => node instanceof Element ? `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}.${node.className}[${node.getAttribute("data-id") ?? ""}]` : node.nodeName;
+const nodeIds = new WeakMap<Node, number>();
+let nextNode = 1;
+const nodeLabel = (node: Node): string => {
+  if (!nodeIds.has(node)) nodeIds.set(node, nextNode++);
+  const label = node instanceof Element ? `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}.${node.className}[${node.getAttribute("data-id") ?? ""}]` : node.nodeName;
+  return `${label}@${nodeIds.get(node)}`;
+};
 const replace = Node.prototype.replaceChild;
 const remove = Node.prototype.removeChild;
 Node.prototype.replaceChild = function <T extends Node>(fresh: Node, old: T): T {
