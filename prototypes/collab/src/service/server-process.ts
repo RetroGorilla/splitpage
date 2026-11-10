@@ -3,6 +3,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import * as Y from "yjs";
 import { JournalWorkerClient } from "./journal-client.ts";
 import { refusalBoundary } from "./refusal/boundary.ts";
+import { InstanceGateway } from "./instance/gateway.ts";
+import { instanceBoundary } from "./instance/extension.ts";
+import type { InstanceSnapshot } from "./instance/storage.ts";
+import { loadingProbe } from "./instance/loading-probe.ts";
 
 const path = process.argv[2];
 if (!path) throw new Error("Database path required");
@@ -30,15 +34,27 @@ const gate = (name: string): Promise<void> => new Promise(resolve => {
   gates.set(name, resolve);
   emit(name);
 });
+let instanceHold = "";
+const snapshots = new Map<string, InstanceSnapshot>();
+const instances = process.env.INSTANCE_OWNER ? new InstanceGateway(journal, async phase => {
+  if (instanceHold === phase) await gate(`instance-${phase}`);
+}) : null;
 const server = new Server({
   port: 0, address: "127.0.0.1", quiet: true, stopOnSignals: false,
+  extensions: [
+    ...(process.env.INSTANCE_PROBE ? [loadingProbe(emit)] : []),
+    ...(instances ? [instanceBoundary(instances, String(process.env.INSTANCE_OWNER), async () => {}, async () => {
+      if (instanceHold === "before-receipt") await gate("instance-before-receipt");
+    }, () => emit("instance-request-chunk"))] : []),
+    ...(process.env.REFUSAL_POLICY ? [refusalBoundary(process.env.REFUSAL_FROZEN_CLOCK ? () => 0 : Date.now)] : []),
+  ],
   ...(process.env.REFUSAL_POLICY ? {
-    extensions: [refusalBoundary(process.env.REFUSAL_FROZEN_CLOCK ? () => 0 : Date.now)],
     websocketOptions: { maxPayload: 4194304 },
   } : {}),
   ...(process.env.MAX_PAYLOAD ? { websocketOptions: { maxPayload: Number(process.env.MAX_PAYLOAD) } } : {}),
   debounce: 2000, maxDebounce: 10000,
   async onLoadDocument({ documentName, document }) {
+    if (instances) return document;
     for (const row of await journal.read(documentName)) Y.applyUpdate(document, row.payload);
     return document;
   },
@@ -111,6 +127,7 @@ async function handleCommand(message: unknown): Promise<void> {
   if (typeof message !== "object" || message === null || !("command" in message)) return;
   const m = message as Record<string, unknown>;
   if (m.command === "configure") {
+    instanceHold = String(m.instanceHold ?? "");
     hold = typeof m.hold === "string" ? m.hold : "";
     premature = m.premature === true;
     prematureAfter20 = m.prematureAfter20 === true;
@@ -124,6 +141,16 @@ async function handleCommand(message: unknown): Promise<void> {
     storeHold = m.storeHold === true;
     changeHold = m.changeHold === true;
     emit("configured");
+  } else if (m.command === "instance-capture" && instances) {
+    snapshots.set(String(m.label), await instances.capture(String(m.document)));
+    emit("instance-captured");
+  } else if (m.command === "instance-checkpoint" && instances) {
+    const snapshot = snapshots.get(String(m.label));
+    if (!snapshot) throw new Error("Unknown captured checkpoint");
+    try { emit("instance-checkpointed", { installed: await instances.checkpoint(snapshot) }); }
+    catch { emit("instance-checkpoint-failed"); }
+  } else if (m.command === "instance-prune" && instances) {
+    emit("instance-pruned", { sequence: await instances.prune(String(m.document)) });
   } else if (m.command === "release") {
     gates.get(String(m.gate))?.();
     gates.delete(String(m.gate));
