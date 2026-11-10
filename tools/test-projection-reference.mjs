@@ -21,7 +21,10 @@ try {
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /manifest is stale/);
   assert.equal(readFileSync(projectionManifestPath, "utf8"), original);
-  console.log("projection-reference: 7 checks passed");
+  const experiments = spawnSync(process.execPath, [command, "--check", "--input", "prototypes/collab/test/proj/experiment-inputs.json", "--manifest", "prototypes/collab/test/proj/experiment-reference.json"], { encoding: "utf8", timeout: 60000, windowsHide: true });
+  assert.equal(experiments.status, 0, experiments.stderr);
+  assert.match(experiments.stdout, /585 fixtures, manifest matches/);
+  console.log("projection-reference: 9 checks passed");
 } finally {
   try { unlinkSync(stale); } catch {}
   rmdirSync(directory);

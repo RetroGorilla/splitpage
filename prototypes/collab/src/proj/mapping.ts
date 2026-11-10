@@ -89,7 +89,7 @@ const shared: readonly [string, string][] = [
   ["`brollShots[].notes`, `.audioRef`, `.location`", "shots[id].notes,audioRef,location"],
   ["`brollShots[].owner`", "shots[id].owner"],
   ["`brollShots[].origin`", "shots[id].origin"],
-  ["`brollShots[].props[]`", "shots[id].props atomic JSON (merged set not yet implemented)"],
+  ["`brollShots[].props[]`", "shots[id].props map keyed by brollPropKey, each value plus rank"],
   ["Characters and line breaks", "Y.Text characters; newline projects to br; bodies atomic HTML"],
   ["Bold, italic, underline, strike, highlight", "Y.Text b,i,u,s,hl attributes; bodies atomic HTML"],
   ["Link", "Y.Text l:occurrence attributes; bodies atomic HTML"],

@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import { videoLinkKey } from "../../../../src/core/document/gallery.ts";
 import type { VideoLink } from "../../../../src/core/document/gallery.ts";
+import { brollPropKey } from "../../../../src/core/document/broll.ts";
 import { IdentityBook } from "../model.ts";
 import { SchemaReplica, mapValue, textValue } from "../schema.ts";
 import type { SchemaCandidate } from "../schema.ts";
@@ -16,7 +17,7 @@ const COMMENT = ["id", "rowId", "field", "anchorId", "author", "createdAt", "upd
 const REPLY = ["id", "author", "createdAt"];
 const PERSON = ["id", "name"];
 const TAG = ["id", "cat", "name", "owner", "notes", "status"];
-const SHOT = ["id", "name", "desc", "status", "reshoot", "notes", "audioRef", "location", "owner", "origin", "props"];
+const SHOT = ["id", "name", "desc", "status", "reshoot", "notes", "audioRef", "location", "owner", "origin"];
 const ROW_SPECIAL = ["audioText", "visualText", "updatedAt", "updatedBy", "imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"];
 const COMMENT_SPECIAL = ["body", "quotedText", "resolved", "resolvedAt", "resolvedBy", "replies"];
 
@@ -36,15 +37,30 @@ function putRegistry(doc: Y.Doc, root: string, source: unknown, fields: readonly
   records(source).forEach((entry, index) => {
     const value = new Y.Map<unknown>();
     doc.getMap(root).set(String(entry.id), value);
-    writeRecord(value, entry, fields);
+    writeRecord(value, root === "shots" ? without(entry, ["props"]) : entry, fields);
+    value.set("keys", Object.keys(entry));
     value.set("rank", rank(index));
+    if (root === "shots") {
+      const props = new Y.Map<unknown>();
+      value.set("props", props);
+      records(entry.props).forEach((prop, propIndex) => {
+        addProjectionProp(props, prop, propIndex);
+      });
+    }
   });
 }
 
-function gallerySlot(doc: Y.Doc, row: ProjectionBag, slot: ProjectionBag, index: number): void {
+export function addProjectionProp(props: Y.Map<unknown>, prop: ProjectionBag, index: number): void {
+  const record = new Y.Map<unknown>();
+  props.set(brollPropKey(String(prop.id ?? ""), String(prop.name ?? "")), record);
+  record.set("value", copy(prop));
+  record.set("rank", rank(index));
+}
+
+export function addProjectionGallerySlot(doc: Y.Doc, row: string, slot: ProjectionBag, index: number, id = `${row}:slot:${index}`): void {
   const value = new Y.Map<unknown>();
-  doc.getMap("gallery").set(`${String(row.id)}:slot:${index}`, value);
-  value.set("beat", row.id);
+  doc.getMap("gallery").set(id, value);
+  value.set("beat", row);
   value.set("rank", rank(index));
   value.set("keys", Object.keys(slot));
   const picture: ProjectionBag = {};
@@ -76,11 +92,17 @@ function addText(replica: SchemaReplica, id: string, kind: "b" | "h", value: str
     replica.doc.getArray<string>("order").push([`seg-${kind}-${id}`]);
   }
   if (kind === "h") text.insert(text.length, value, {});
-  else insertHtml(text, value, source.productionTags, source.comments);
+  else insertHtml(text, value, source.productionTags, source.comments, `${id}:audioText`);
+}
+
+export function createProjectionReplica(candidate: SchemaCandidate, client = 10): SchemaReplica {
+  const replica = new SchemaReplica(candidate, client, new IdentityBook());
+  replica.doc.getMap("headings");
+  return replica;
 }
 
 export function fromDocument(source: ProjectionBag, candidate: SchemaCandidate, client = 10): SchemaReplica {
-  const replica = new SchemaReplica(candidate, client, new IdentityBook());
+  const replica = createProjectionReplica(candidate, client);
   replica.doc.transact(() => {
     const meta = replica.doc.getMap("meta");
     writeRecord(meta, without(source, ["title", "rows", "sections", "comments", "people", "productionTags", "brollShots", ...CAPTURE]), META);
@@ -118,14 +140,14 @@ export function fromDocument(source: ProjectionBag, candidate: SchemaCandidate, 
       visual.set("rank", rank(0));
       const text = new Y.Text();
       visual.set("text", text);
-      insertHtml(text, String(row.visualText ?? ""), source.productionTags, source.comments);
+      insertHtml(text, String(row.visualText ?? ""), source.productionTags, source.comments, `${String(row.id)}:visualText`);
       const first: ProjectionBag = {};
       setIf(row, "imageRef", first);
       setIf(row, "imageName", first, "name");
       setIf(row, "imageAnnotation", first, "annotation");
       setIf(row, "imageLinks", first, "links");
-      gallerySlot(replica.doc, row, first, 0);
-      records(row.moreImages).forEach((slot, index) => gallerySlot(replica.doc, row, slot, index + 1));
+      addProjectionGallerySlot(replica.doc, String(row.id), first, 0);
+      records(row.moreImages).forEach((slot, index) => addProjectionGallerySlot(replica.doc, String(row.id), slot, index + 1));
     }
     records(source.comments).forEach((comment, index) => {
       const record = new Y.Map<unknown>();
@@ -190,7 +212,14 @@ export function projectionBlocks(doc: Y.Doc, candidate: SchemaCandidate): Projec
 }
 
 function registry(doc: Y.Doc, root: string, fields: readonly string[]): ProjectionBag[] {
-  return ranked(doc.getMap(root)).map(([, value]) => readRecord(value, fields));
+  return ranked(doc.getMap(root)).map(([, value]) => {
+    const record = readRecord(value, fields);
+    if (root === "shots") {
+      const props = ranked(mapValue(value.get("props"))).map(([, prop]) => copy(prop.get("value")));
+      if (props.length || (value.get("keys") as string[]).includes("props")) record.props = props;
+    }
+    return ordered(record, value.get("keys"));
+  });
 }
 
 function galleryFor(doc: Y.Doc, id: string): ProjectionBag[] {
@@ -225,6 +254,12 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
   result.comments = comments;
   const rows: ProjectionBag[] = [];
   const sections: ProjectionBag[] = [];
+  const anchors = new Map<string, { rowId: string; field: string }>();
+  function collectAnchors(delta: readonly ProjectionDelta[], rowId: string, field: string): void {
+    for (const item of delta) for (const [key, value] of Object.entries(item.attributes ?? {})) {
+      if (value && key.startsWith("c:") && !anchors.has(key.slice(2))) anchors.set(key.slice(2), { rowId, field });
+    }
+  }
   let heading: ProjectionBlock | null = null;
   for (const block of projectionBlocks(doc, candidate)) {
     if (block.kind === "h") { heading = block; continue; }
@@ -235,7 +270,12 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     setIf(stamp, "at", row, "updatedAt");
     row.audioText = deltaToHtml(block.delta, result.productionTags, comments, options.deriveCue);
     row.visualText = ranked(doc.getMap("visuals")).filter(([, value]) => value.get("beat") === block.id)
-      .map(([, value]) => deltaToHtml(readDelta(textValue(value.get("text"))), result.productionTags, comments, options.deriveCue)).filter(Boolean).join("<br>");
+      .map(([, value]) => {
+        const delta = readDelta(textValue(value.get("text")));
+        collectAnchors(delta, block.id, "visualText");
+        return deltaToHtml(delta, result.productionTags, comments, options.deriveCue);
+      }).filter(Boolean).join("<br>");
+    collectAnchors(block.delta, block.id, "audioText");
     const slots = galleryFor(doc, block.id);
     const first = slots[0] ?? {};
     setIf(first, "imageRef", row);
@@ -251,6 +291,10 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     }
   }
   result.rows = rows;
+  for (const comment of comments) {
+    const anchor = anchors.get(String(comment.id));
+    if (anchor) Object.assign(comment, anchor);
+  }
   if (sections.length || (meta.get("keys") as string[]).includes("sections")) result.sections = sections;
   return ordered(result, meta.get("keys"));
 }

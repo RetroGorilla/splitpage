@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { fromDocument, toDocument } from "../../src/proj/document.ts";
+import { createProjectionReplica, fromDocument, toDocument } from "../../src/proj/document.ts";
 import { projectionReferences, serializeProjection } from "../../src/proj/reference.ts";
 import { records } from "../../src/proj/value.ts";
 
@@ -73,7 +73,7 @@ for (const candidate of ["A", "B"] as const) {
       assert.equal(reference.appSaved.sha256, createHash("sha256").update(bytes as string).digest("hex"));
       assert.equal(records(reference.document.rows)[0]?.visualText, expected);
       const replica = fromDocument(reference.document, candidate);
-      const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
       try {
         Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
         assert.equal(records(toDocument(other, candidate).rows)[0]?.visualText, expected);
@@ -86,7 +86,7 @@ for (const candidate of ["A", "B"] as const) {
     const reference = projectionReferences().find(reference => reference.name === "special-keys.splitpage");
     assert.ok(reference);
     const replica = fromDocument(reference.document, candidate);
-    const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
       const document = toDocument(other, candidate);
@@ -122,7 +122,7 @@ for (const candidate of ["A", "B"] as const) {
     ];
     assert.deepEqual(records(reference.document.rows).map(row => row.visualText), expected);
     const replica = fromDocument(reference.document, candidate);
-    const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
       assert.deepEqual(records(toDocument(other, candidate).rows).map(row => row.visualText), expected);

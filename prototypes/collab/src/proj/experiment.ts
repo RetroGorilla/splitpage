@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import * as Y from "yjs";
 import { canonicalFixtures } from "./fixtures.ts";
-import { fromDocument, toDocument } from "./document.ts";
+import { createProjectionReplica, fromDocument, toDocument } from "./document.ts";
 import { projectionReferences, serializeProjection } from "./reference.ts";
 import type { ProjectionBag } from "./value.ts";
 import type { SchemaCandidate } from "../schema.ts";
@@ -51,13 +51,13 @@ export function runRoundTrips() {
   for (const candidate of ["A", "B"] as const) {
     references.forEach((reference, index) => {
       const replica = fromDocument(reference.document, candidate);
-      const second = new Y.Doc();
+      const second = createProjectionReplica(candidate, 11);
       try {
         const update = Y.encodeStateAsUpdate(replica.doc);
-        Y.applyUpdate(second, update);
-        const vector = Y.encodeStateVector(second);
-        const document = toDocument(second, candidate);
-        if (Buffer.compare(vector, Y.encodeStateVector(second)) !== 0) throw new Error("Projection wrote shared state");
+        Y.applyUpdate(second.doc, update);
+        const vector = Y.encodeStateVector(second.doc);
+        const document = toDocument(second.doc, candidate);
+        if (Buffer.compare(vector, Y.encodeStateVector(second.doc)) !== 0) throw new Error("Projection wrote shared state");
         projections.push({ candidate, index, document, encoded: update.byteLength, plainDifferences: differences(reference.document, document) });
       } finally {
         replica.destroy();

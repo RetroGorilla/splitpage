@@ -34,7 +34,18 @@ export function projectionReferenceInputs() {
   return result;
 }
 
-export async function generateProjectionManifest() {
+export function projectionDocumentInputs(source) {
+  const input = JSON.parse(readFileSync(join(REPO, source), "utf8"));
+  if (!Array.isArray(input.cases)) throw new Error("projection-reference: input needs cases");
+  const names = new Set();
+  return input.cases.map((entry, index) => {
+    if (typeof entry.name !== "string" || names.has(entry.name)) throw new Error("projection-reference: input names must be unique strings");
+    names.add(entry.name);
+    return { name: entry.name, source, selection: ["cases", String(index), "document"], bytes: JSON.stringify(entry.document, null, 2) };
+  });
+}
+
+export async function generateProjectionManifest(inputs = projectionReferenceInputs(), verifyStable = false) {
   const { dom } = await import("../src/test/_dom.mjs");
   const { migrateRows, withDocumentPorts } = await import("../src/bootstrap/document-ports.ts");
   const { migrateDocument } = await import("../src/core/migrate.ts");
@@ -42,12 +53,18 @@ export async function generateProjectionManifest() {
   const { buildSplitpageFile } = await import("../src/adapters/formats/project-file.ts");
   const { parseSplitpageFile } = await import("../src/adapters/formats/splitpage-file.ts");
   try {
-    const fixtures = projectionReferenceInputs().map(fixture => {
+    const fixtures = inputs.map(fixture => {
       const parsed = parseSplitpageFile(fixture.bytes);
       const document = withDocumentPorts(STATE_FIELDS, ports => migrateDocument(parsed, { kind: "file" }, ports));
       const saved = buildSplitpageFile({ document }, { migrateRows });
+      let stability = {};
+      if (verifyStable) {
+        const reopened = withDocumentPorts(STATE_FIELDS, ports => migrateDocument(parseSplitpageFile(saved), { kind: "file" }, ports));
+        const resaved = buildSplitpageFile({ document: reopened }, { migrateRows });
+        stability = { stableAppSave: saved === resaved, ...(saved === resaved ? {} : { resaved }) };
+      }
       return { name: fixture.name, source: fixture.source, selection: fixture.selection, original: digest(fixture.bytes), document,
-        appSaved: { ...digest(saved), ...(saved === fixture.bytes ? {} : { full: saved }) } };
+        appSaved: { ...digest(saved), ...(saved === fixture.bytes ? {} : { full: saved }) }, ...stability };
     });
     return { version: 1, producer: "node tools/projection-reference.mjs --write", fixtures };
   } finally { dom.window.close(); }
@@ -66,9 +83,14 @@ export async function runProjectionReference(args) {
   const options = [...args];
   const mode = options.shift();
   let destination = projectionManifestPath;
-  if (options[0] === "--manifest" && options[1]) { destination = options[1]; options.splice(0, 2); }
-  if (!["--check", "--write"].includes(mode) || options.length) throw new Error("usage: node tools/projection-reference.mjs --check|--write [--manifest path]");
-  const manifest = await generateProjectionManifest();
+  let input = null;
+  while (options.length && ["--manifest", "--input"].includes(options[0]) && options[1]) {
+    const flag = options.shift(), value = options.shift();
+    if (flag === "--input") input = value;
+    else destination = value;
+  }
+  if (!["--check", "--write"].includes(mode) || options.length) throw new Error("usage: node tools/projection-reference.mjs --check|--write [--manifest path] [--input repo-relative-path]");
+  const manifest = await generateProjectionManifest(input ? projectionDocumentInputs(input) : undefined, input !== null);
   const text = projectionManifestText(manifest);
   if (mode === "--check") checkProjectionManifest(readFileSync(destination, "utf8"), text);
   else writeFileSync(destination, text);
