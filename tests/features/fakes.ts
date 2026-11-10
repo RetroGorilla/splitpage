@@ -26,6 +26,7 @@ import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
+import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
 import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
@@ -69,6 +70,7 @@ export function fakeWriterPorts(initial: DocumentView) {
       flow: { cells: html => [{ text: String(html ?? ""), marks: {} }], newId: () => "new", hasVisual: row => !!row.visualText },
       decode: html => [{ text: html, marks: {} }], storedHtml: html => html, run: editing.edits.run, moveBeat: swapBeatsCommand,
       shown: edit => edit(), editingBlocked: () => false, text: { ...editing.edits.stamps, cells: () => [] },
+      wholeFieldText: createWholeFieldTextCommit({ run: editing.edits.run, text: { ...editing.edits.stamps, cells: () => [] } }),
       undo: { step, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
       caretAfterStep: () => 0, notice: () => {}, changed: () => {}, plainVisual: () => "",
       beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false, beatSelection: () => {},

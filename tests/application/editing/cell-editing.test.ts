@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createCellEditing } from "../../../src/application/editing/cell-editing.ts";
 import type { CellEditing, CellRange, ShownRow } from "../../../src/application/editing/cell-editing.ts";
 import type { CellTextPorts } from "../../../src/application/session/ports.ts";
+import type { Command } from "../../../src/application/session/document-session.ts";
+import { createWholeFieldTextCommit } from "../../../src/application/editing/whole-field-text.ts";
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
@@ -65,6 +67,14 @@ function rig(opts: { failing?: boolean } = {}): Rig {
   let showing = 0;
   const flags = { stale: false, applying: false };
   let entries = 0;
+  const run = (command: Command) => {
+    calls.push("run:" + command.name);
+    if (showing) shownRuns.push(command.name);
+    const outcome = h.session.run(command);
+    if (outcome.kind === "applied" || outcome.kind === "committed") entries++;
+    return outcome;
+  };
+  const text = textPorts(opts.failing);
   const editing = createCellEditing<Cell>({
     page: {
       address: function (cell) { return { rowId: cell.rowId, field: cell.field }; },
@@ -75,14 +85,9 @@ function rig(opts: { failing?: boolean } = {}): Rig {
       focus: function (cell, sel) { calls.push("page.focus"); cell.sel = sel || null; }
     },
     document: function () { return h.session.read(function (doc) { return doc; }); },
-    run: function (command) {
-      calls.push("run:" + command.name);
-      if (showing) shownRuns.push(command.name);
-      const outcome = h.session.run(command);
-      if (outcome.kind === "applied" || outcome.kind === "committed") entries++;
-      return outcome;
-    },
-    text: textPorts(opts.failing),
+    run,
+    text,
+    wholeFieldText: createWholeFieldTextCommit({ run, text }),
     decode: { text: plain, withMedia: plain },
     undo: {
       applying: function () { return flags.applying; },

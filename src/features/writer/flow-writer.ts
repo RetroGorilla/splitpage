@@ -1,20 +1,14 @@
-import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { flowCommand } from "../../application/commands/flow.ts";
-import type { Undo, UndoDirection } from "../../application/editing/undo/undo.ts";
-import type { EditorSelection } from "../../application/editing/selection.ts";
-import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
-import type { CellTextPorts } from "../../application/session/ports.ts";
-import type { CellRange } from "../../application/editing/cell-editing.ts";
+import type { UndoDirection } from "../../application/editing/undo/undo.ts";
+import type { Command, CommandOutcome } from "../../application/session/document-session.ts";
 import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
 import { setVisualForRange } from "../../core/flow/visual.ts";
-import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowOutcome, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
 import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/edits.ts";
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
-import type { SurfacePorts } from "./flow-surface.ts";
+import type { FlowWriter, FlowWriterPorts } from "./ports.ts";
 import { flowMatchStart, replaceFlowMatches, searchFlow, visualMatchHighlight } from "./flow-find.ts";
-import type { WriterFindAccess } from "../common/writer-find.ts";
-import type { PictureStore } from "../../application/media/picture-store.ts";
 import { rowSlots } from "../../core/document/gallery.ts";
 import { escapeHtml, safeImageSrc } from "../../core/document/text-policy.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -24,66 +18,6 @@ import { createFlowVisualBox } from "./flow-visual-box.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 import { inheritOpenedTags } from "../common/clipboard-tags.ts";
-
-export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | "last" | "nextRedo"> {
-  readonly step: (dir: UndoDirection) => void;
-}
-
-export interface FlowWriterPorts {
-  readonly openFind?: () => void;
-  readonly closeFind?: () => void;
-  readonly pictures?: Pick<PictureStore, "imgHtml">;
-  readonly visualInput?: (event: InputEvent, cell: HTMLElement) => void;
-  readonly visualBeforeWrite?: (cell: Element) => ((selection?: CellRange | null) => void) | null;
-  readonly visualLeave?: (cell: HTMLElement) => void;
-  readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
-  readonly clipboard?: SurfacePorts["clipboard"];
-  readonly lifetime: Pick<DocumentSession, "epoch">;
-  readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
-  readonly root: HTMLElement;
-  readonly doc: () => FlowDoc;
-  readonly flow: FlowPorts;
-  readonly decode: (html: string) => Run[];
-  readonly storedHtml: (html: string) => string;
-  readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
-  readonly run: (command: Command) => CommandOutcome;
-  readonly shown: <T>(edit: () => T) => T;
-  readonly editingBlocked: () => boolean;
-  readonly text: CellTextPorts;
-  readonly undo: FlowUndoPorts;
-  readonly caretAfterStep: (step: { readonly before?: unknown; readonly after?: unknown }) => number;
-  readonly notice: (text: string, tone: "ok" | "warn") => void;
-  readonly changed: () => void;
-  readonly selectionMoved: () => void;
-  readonly plainVisual: (row: FlowRow) => string;
-  readonly beatInput: (event: InputEvent, beat: HTMLElement) => void;
-  readonly typeAtBeatEdge: (beat: HTMLElement, text: string) => boolean;
-  readonly beatKeydown: (event: KeyboardEvent, beat: HTMLElement) => boolean;
-  readonly beatSelection: (beat: HTMLElement | null) => void;
-  readonly leaveBeat: (beat: HTMLElement) => void;
-  readonly newCommentId: () => string;
-  readonly openComment: (at: { readonly id: string; readonly rowId: string; readonly field: string; readonly quotedText: string }) => void;
-}
-
-export interface FlowWriter {
-  readonly find: WriterFindAccess;
-  readonly openVisual: (rowId: string, highlight?: { from: number; to: number }) => void;
-  readonly isCurrent: () => boolean;
-  readonly finish: () => FlowRange | null;
-  readonly repaint: () => void;
-  readonly caret: (rowId: string, offset: number | "end") => void;
-  readonly format: (command: string) => void;
-  readonly marks: () => Record<string, boolean>;
-  readonly beforeReplay: (dir: UndoDirection) => void;
-  readonly afterReplay: (steps: readonly unknown[]) => void;
-  readonly comment: () => void;
-  readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
-  readonly selection: () => FlowRange | null;
-  readonly selectedText: () => string | null;
-  readonly place: (range: FlowRange, scroll?: boolean) => void;
-  readonly check: () => string[];
-  readonly dispose: () => void;
-}
 
 const MARK_OF: Readonly<Record<string, MarkName>> = { bold: "b", italic: "i", underline: "u", strikeThrough: "s", highlight: "hl", direction: "dir" };
 const SHOWN_TAGS: Readonly<Record<string, string>> = { bold: "strong", italic: "em", underline: "u", strikeThrough: "s", highlight: "mark", direction: ".stage-dir" };
@@ -115,7 +49,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   // why: the surface paints its own edits, and the rows behind the writer are redrawn when it closes
   function syncBeat(rowId: string, runs: readonly Run[]): void {
     if (!isCurrent() || ports.editingBlocked()) return;
-    ports.shown(() => { took(ports.run(cellTextCommand(rowId, "audioText", cellRuns(runs), ports.text))); });
+    ports.shown(() => { took(ports.wholeFieldText.commit(rowId, "audioText", runs)); });
   }
 
   function runPlanned(command: Command): CommandOutcome {
@@ -202,7 +136,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         if (!result || !("selection" in result)) return null;
         after = result.selection;
       } else {
-        const outcome = ports.shown(() => ports.run(cellTextCommand(range.head.kind === "beat" ? range.head.rowId : "", "visualText", cellRuns(ports.decode(clean)), ports.text)));
+        const outcome = ports.shown(() => ports.wholeFieldText.commit(range.head.kind === "beat" ? range.head.rowId : "", "visualText", ports.decode(clean)));
         if (!took(outcome) && outcome.kind !== "noop") return null;
       }
       ports.heldSelection.rememberFlow(epoch, after);
