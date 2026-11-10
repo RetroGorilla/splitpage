@@ -194,10 +194,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.argv[2] = "slice";
     await import("../b-surfaces/run.ts");
   } else {
-  const evidence = await runSlice();
-  await writeFile(new URL("../../slice-evidence.json", import.meta.url), serializeSliceEvidence(evidence));
-  writeSliceArtifacts(evidence);
-  process.stdout.write(`Edge ${String(evidence.version.product)}: ${evidence.traces.filter(result => result.status === "PASS").length}/${evidence.traces.length} trace cases\n`);
-  if (evidence.traces.some(result => result.status === "FAIL")) process.exitCode = 1;
+    const evidence = await runSlice();
+    await writeFile(new URL("../../slice-evidence.json", import.meta.url), serializeSliceEvidence(evidence));
+    writeSliceArtifacts(evidence);
+    process.stdout.write(`Edge ${String(evidence.version.product)}: ${evidence.traces.filter(result => result.status === "PASS").length}/${evidence.traces.length} trace cases\n`);
+    if (evidence.traces.some(result => result.status === "FAIL")) process.exitCode = 1;
   }
 }

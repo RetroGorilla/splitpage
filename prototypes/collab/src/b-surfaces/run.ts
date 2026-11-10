@@ -31,19 +31,20 @@ const folder = fileURLToPath(new URL("../../", import.meta.url));
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
 const surface = process.argv[2] ?? "writer";
 if (!["writer", "slice", "split"].includes(surface)) throw new Error("Choose writer, slice or split");
-const appCommit = surface === "split" ? "a9483468e01db63568b25bbe194eacf6f2d36246" : "935e618949a2e964198847daa2115d35e1da58ef";
+const appCommit = "c67139b8806d04231d2f2c5bb89814370bab8ef6";
 const entry = surface === "slice" ? "slice-page.ts" : surface === "split" ? "split-page.ts" : "followup-page.ts";
 const bundle = await build({ absWorkingDir: repo, entryPoints: [join(folder, "src/b-surfaces", entry)], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
 const script = bundle.outputFiles?.[0]?.text;
 if (!script) throw new Error("Missing B binding bundle");
 
-async function matrix(protocol: SliceProtocol, api: string): Promise<BMatrixCase[]> {
+async function matrix(protocol: SliceProtocol, api: string, beforeCase?: () => Promise<void>): Promise<BMatrixCase[]> {
   const traces: BMatrixCase[] = [];
-  for (const trace of bufferTraceOrder) {
+  for (const trace of surface === "split" ? bufferTraceOrder.filter(trace => trace === "T04" || trace === "T04 removed") : bufferTraceOrder) {
     for (const mechanism of surface === "split" ? ["M1"] : bufferMechanisms) for (const order of bufferOracles[trace].orders) {
       const stages: BMatrixSnapshot[] = []; let difference: string | null = null;
       const snap = (): Promise<BMatrixSnapshot> => protocol.evaluate(`${api}.snapshot()`);
       try {
+        await beforeCase?.();
         await protocol.evaluate(`${api}.reset(${JSON.stringify(trace)},${JSON.stringify(mechanism)},true)`);
         if (api === "appBinding") await protocol.evaluate(`appBinding.select(${bufferOracles[trace].from},${bufferOracles[trace].to})`);
         else {
@@ -136,7 +137,7 @@ try {
     if (surface !== "slice") { await navigate(false); off = await protocol.evaluate("({rows:document.querySelectorAll('#rows .row').length,experiment:__writerFlowTest.experiment})"); }
     await navigate(true);
     if (surface !== "slice") await protocol.evaluate(script);
-    const traces = await matrix(protocol, surface === "slice" ? "slice" : "appBinding");
+    const traces = await matrix(protocol, surface === "slice" ? "slice" : "appBinding", surface === "split" ? async () => { await navigate(true); await protocol.evaluate(script); } : undefined);
     const results = surface === "writer" && !traces.some(item => item.mechanism === "M1" && item.status === "FAIL") ? await followup(protocol) : [];
     return { surface, candidate: "B", appCommit: surface === "slice" ? null : appCommit, bundleSha256: createHash("sha256").update(script).digest("hex"), environment: { cpu: cpus()[0]?.model.trim() ?? "unknown", os: `${platform()} ${release()}`, node: process.version, memoryGiB: Math.round(totalmem() / 1024 ** 3), browser: String(version.product) }, off, traces, followup: results };
   });

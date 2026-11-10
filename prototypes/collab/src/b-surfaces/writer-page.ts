@@ -6,6 +6,7 @@ import { checkModel } from "../model.ts";
 import { toHtml } from "../../../../src/core/text/html.ts";
 import { bufferOracles } from "../../test/buffer-oracles.ts";
 import type { BufferTrace } from "../../test/buffer-oracles.ts";
+import { observeBSchema } from "./schema-observation.ts";
 
 interface ExperimentPoint { node: Node; offset: number }
 interface ExperimentRange { anchor: { kind: "beat"; rowId: string; offset: number }; head: { kind: "beat"; rowId: string; offset: number } }
@@ -279,7 +280,7 @@ const api = {
         }
       }
     }
-    return { candidate: h.alice.editor.candidate, segments: h.alice.editor.doc.getArray("order").toArray(), events, errors, commits, syncs, breakSync, html: host.innerHTML, text: value(), rawText: beat().textContent, selection: selected(), app: appSnapshot(),
+    return { candidate: h.alice.editor.candidate, schema: observeBSchema(h), segments: h.alice.editor.doc.getArray("order").toArray(), events, errors, commits, syncs, breakSync, html: host.innerHTML, text: value(), rawText: beat().textContent, selection: selected(), app: appSnapshot(),
       history: h.history(), dirty: h.alice.dirty, composing: h.alice.composing, heldBytes: h.alice.heldBytes,
       models: Object.fromEntries([...h.sessions].flatMap(([name, buffer]) => {
         const read = (doc: typeof buffer.editor.doc) => {

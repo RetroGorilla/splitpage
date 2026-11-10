@@ -10,6 +10,7 @@ import { checkBindingFollowup } from "../app-binding-2/checker.ts";
 import type { BindingFollowupFacts, BindingFollowupObservation } from "../app-binding-2/checker.ts";
 import type { CollabIdentity, CollabModel } from "../model.ts";
 import type { FlowOutcome, FlowRange } from "../../../../src/core/flow/flow.ts";
+import { observeBSchema } from "./schema-observation.ts";
 
 const context = bWriterBindingContext();
 const { host, bridge, api } = context;
@@ -186,7 +187,7 @@ const followup = {
     const h = context.session();
     const base = context.api.snapshot();
     const rawModels = base.models as Record<string, CollabModel>;
-    return { ...observation(), facts, timings, reentry, remoteDOM, peak, paints: commandBridge.paintEvents(), history: h.history(), events: base.events,
+    return { schema: observeBSchema(h), ...observation(), facts, timings, reentry, remoteDOM, peak, paints: commandBridge.paintEvents(), history: h.history(), events: base.events,
       rawLocalMarks: rawModels["A.E"]?.rows.flatMap(row => row.characters.filter(character => character.identity?.client === 1).map(character => ({ name: character.notation, marks: character.marks }))),
       app: base.app, heldBytes: h.alice.heldBytes, heldMessages: h.alice.held.length,
       native: h.alice.nativeValue, commits: [...context.state().commits], syncs: [...context.state().syncs], queuePending: h.queue.pending.length };
