@@ -29,11 +29,11 @@ The six deliberate defects run against literal oracles under both layouts. Their
 
 ## Simulated editable beat
 
-`src/editing-buffer.ts` retains each paint's text, identities, marks, epoch, beat version and selection positions. Synthetic composition events and native edit ranges mutate a separate string. Commit enumerates minimal differences, uses the retained native target evidence to distinguish repeated words, maps deletions by identity and inserts replacements before deleting their selected content. A removed beat's retained text is the explicit recovery destination. Undo reanchors both ends of a selection to the new restored identities before those positions are shared with other replicas.
+`src/editing-buffer.ts` retains each paint's text, identities, marks, epoch, beat version and selection positions. Synthetic composition events and native edit ranges mutate a separate string. Commit derives the replacement from retained character origins when target evidence exists, including identical or nonminimal replacements; without that evidence it requires an unambiguous minimal difference. It maps deletions by identity and inserts replacements before deleting their selected content. A removed beat's retained text is the explicit recovery destination. Undo reanchors both ends of a selection to the new restored identities before those positions are shared with other replicas.
 
 M1 holds inbound bytes while dirty. M2 integrates them immediately, repaints clean buffers synchronously and cancels a stale `beforeinput` into a model edit. M3 has separate network and editor documents with origin-filtered forwarding. All run under A and B; these are simulations of the binding contract, not real editor integration or a mechanism selection.
 
-Read [buffer-results.md](buffer-results.md) for the measured matrix, failure probes and remaining limits. `npm run experiments` reproduces it; `node src/buffer-report.ts --write` refreshes the generated report and histories after an intentional experiment change. The tests require those artifacts to match the experiment exactly. Literal expected states remain in `test/buffer-oracles.ts`; regenerating evidence does not alter them.
+Read [buffer-results.md](buffer-results.md) for the measured matrix, failure probes and remaining limits. `npm run experiments` reproduces it; `node src/buffer-report.ts --write` refreshes the generated report and histories after an intentional experiment change. The tests require those artifacts to match the experiment exactly. Literal expected states remain in `test/buffer-oracles.ts` and `test/buffer-replacements.ts`; regenerating evidence does not alter them.
 
 ## Browser beat slice
 
