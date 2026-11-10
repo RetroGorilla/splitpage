@@ -46,5 +46,8 @@ export function readRecord(source: Y.Map<unknown>, fields: readonly string[]): P
 
 export function ranked(source: Y.Map<unknown>): [string, Y.Map<unknown>][] {
   return [...source.entries()].map(([id, value]): [string, Y.Map<unknown>] => [id, mapValue(value)])
-    .sort(([a, left], [b, right]) => String(left.get("rank")).localeCompare(String(right.get("rank"))) || a.localeCompare(b));
+    .sort(([a, left], [b, right]) => {
+      const l = String(left.get("rank")), r = String(right.get("rank"));
+      return l < r ? -1 : l > r ? 1 : a < b ? -1 : a > b ? 1 : 0;
+    });
 }

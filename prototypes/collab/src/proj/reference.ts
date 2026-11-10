@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { bag, copy, records } from "./value.ts";
 import type { ProjectionBag } from "./value.ts";
 
@@ -12,12 +13,22 @@ export interface ProjectionReference {
   original: { bytes: number; sha256: string };
   document: ProjectionBag;
   appSaved: { bytes: number; sha256: string; full?: string };
+  stableAppSave?: boolean;
+  resaved?: string;
 }
 
-export function projectionReferences(): ProjectionReference[] {
-  const manifest = JSON.parse(readFileSync(new URL("../../test/proj/app-reference.json", import.meta.url), "utf8")) as { version: number; fixtures: ProjectionReference[] };
+export function projectionReferences(file = "app-reference.json"): ProjectionReference[] {
+  const manifest = JSON.parse(readFileSync(new URL(`../../test/proj/${file}`, import.meta.url), "utf8")) as { version: number; fixtures: ProjectionReference[] };
   if (manifest.version !== 1) throw new Error("Unsupported projection reference manifest");
   return manifest.fixtures;
+}
+
+export function assertProjectionInput(reference: ProjectionReference | undefined, document: ProjectionBag): asserts reference is ProjectionReference {
+  if (!reference) throw new Error("Missing projection experiment reference");
+  const text = JSON.stringify(document, null, 2);
+  if (reference.original.bytes !== Buffer.byteLength(text) || reference.original.sha256 !== createHash("sha256").update(text).digest("hex")) {
+    throw new Error(`Stale experiment input: ${reference.name}`);
+  }
 }
 
 export function serializeProjection(document: ProjectionBag): string {

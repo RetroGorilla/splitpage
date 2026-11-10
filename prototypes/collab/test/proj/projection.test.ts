@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import * as Y from "yjs";
-import { fromDocument, toDocument } from "../../src/proj/document.ts";
+import { createProjectionReplica, fromDocument, toDocument } from "../../src/proj/document.ts";
 import { inventoryFields, runRoundTrips } from "../../src/proj/experiment.ts";
 import { assertProjectionMapping, projectionFieldMapping } from "../../src/proj/mapping.ts";
-import { mapValue } from "../../src/schema.ts";
+import { mapValue, textValue } from "../../src/schema.ts";
 import { projectionReferences } from "../../src/proj/reference.ts";
 
 test("PROJ inventory: every current field row has a location in both candidates", () => {
@@ -15,6 +15,35 @@ test("PROJ inventory: every current field row has a location in both candidates"
 });
 
 for (const candidate of ["A", "B"] as const) {
+  test(`PROJ imported tag and link occurrences have distinct identities across fields ${candidate}`, () => {
+    const html = '<a href="https://example.com" target="_blank" rel="noopener"><span class="tag-anchor" data-tag-cat="prop" data-tag-name="Cup" contenteditable="false">Cup</span></a>';
+    const source = { schema: 2, rows: [{ id: "R1", audioText: html, visualText: html }, { id: "R2", audioText: html, visualText: "" }],
+      productionTags: [{ id: "t_cup", cat: "prop", name: "Cup" }] };
+    const imported = fromDocument(source, candidate);
+    const received = createProjectionReplica(candidate, 11);
+    try {
+      Y.applyUpdate(received.doc, Y.encodeStateAsUpdate(imported.doc));
+      const texts = candidate === "A" ? [received.doc.getText("flow")] : [...received.doc.getMap("segments").values()].map(value => textValue(mapValue(value).get("text")));
+      texts.push(...[...received.doc.getMap("visuals").values()].map(value => textValue(mapValue(value).get("text"))));
+      const keys = texts.flatMap(text => (text.toDelta() as { attributes?: Record<string, unknown> }[]).flatMap(delta => Object.keys(delta.attributes ?? {})));
+      assert.equal(new Set(keys.filter(key => key.startsWith("t:"))).size, 3);
+      assert.equal(new Set(keys.filter(key => key.startsWith("l:"))).size, 3);
+    } finally { imported.destroy(); received.destroy(); }
+  });
+
+  test(`PROJ receiver declares typed roots before remote state ${candidate}`, () => {
+    const receiver = createProjectionReplica(candidate, 11);
+    try {
+      assert.ok(receiver.doc.share.get("meta") instanceof Y.Map);
+      assert.ok(receiver.doc.share.get("headings") instanceof Y.Map);
+      if (candidate === "A") assert.ok(receiver.doc.share.get("flow") instanceof Y.Text);
+      else {
+        assert.ok(receiver.doc.share.get("segments") instanceof Y.Map);
+        assert.ok(receiver.doc.share.get("order") instanceof Y.Array);
+      }
+    } finally { receiver.destroy(); }
+  });
+
   for (const field of projectionFieldMapping) test(`PROJ omitted mapping ${candidate}: ${field.field}`, () => {
     const broken = projectionFieldMapping.map(entry => entry === field ? { ...entry, [candidate]: "" } : entry);
     assert.throws(() => assertProjectionMapping(inventoryFields(), broken), /Unmapped field/);
@@ -40,7 +69,7 @@ for (const candidate of ["A", "B"] as const) {
       brollShots: [{ id: "s1", name: "No key", origin: "list", mystery: 6 }]
     };
     const replica = fromDocument(raw, candidate);
-    const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
       assert.deepEqual(toDocument(other, candidate), raw);
@@ -50,7 +79,7 @@ for (const candidate of ["A", "B"] as const) {
   test(`PROJ media comment retains literal null anchor and load location ${candidate}`, () => {
     const source = JSON.parse(readFileSync(new URL("supplement.splitpage", import.meta.url), "utf8")) as Record<string, unknown>;
     const replica = fromDocument(source, candidate);
-    const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
       const comment = (toDocument(other, candidate).comments as Record<string, unknown>[])[0];
@@ -68,7 +97,7 @@ for (const candidate of ["A", "B"] as const) {
       brollShots: [{ id: "S1", props: [{ id: "t_cup", name: "Cup" }] }]
     };
     const replica = fromDocument(source, candidate);
-    const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
       const projected = toDocument(other, candidate);
@@ -82,7 +111,7 @@ for (const candidate of ["A", "B"] as const) {
     const reference = projectionReferences().find(reference => reference.name === "supplement.splitpage");
     assert.ok(reference);
     const replica = fromDocument(reference.document, candidate);
-    const other = new Y.Doc();
+    const other = createProjectionReplica(candidate, 11).doc;
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
       const row = (toDocument(other, candidate).rows as Record<string, unknown>[])[0];

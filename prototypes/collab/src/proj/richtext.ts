@@ -152,8 +152,11 @@ export function deltaToHtml(delta: readonly ProjectionDelta[], tags: unknown, co
   });
 }
 
-export function insertHtml(text: Y.Text, html: string, tags: unknown, comments: unknown): void {
+export function insertHtml(text: Y.Text, html: string, tags: unknown, comments: unknown, scope: string): void {
   const delta = htmlToDelta(html, tags, comments);
+  for (const item of delta) item.attributes = Object.fromEntries(Object.entries(item.attributes ?? {}).map(([key, value]) => [
+    key.startsWith("t:") || key.startsWith("l:") ? `${key.slice(0, 2)}${scope}:${key.slice(2)}` : key, value
+  ]));
   text.applyDelta([{ retain: text.length }, ...delta]);
 }
 
