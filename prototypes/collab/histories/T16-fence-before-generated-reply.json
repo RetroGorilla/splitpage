@@ -1,0 +1,9 @@
+{
+  "shows": "A stateless fence covers preceding sends, not a SyncStep2 the provider has yet to generate. Holding inbound Step1 reproduced the CI race; reply-generation gating fixes it without a delay.",
+  "held": "server SyncStep1 before provider dispatch",
+  "beforeFixControlFrames": 2,
+  "expectedControlFramesWhileHeld": 1,
+  "observedControlFramesWhileHeld": 1,
+  "afterRelease": "provider generates SyncStep2, then the harness emits its ordered fence and observes the covering receipt",
+  "replay": "node --test --test-concurrency=1 test/service/images/images.test.ts"
+}
