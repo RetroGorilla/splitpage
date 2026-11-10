@@ -6,6 +6,9 @@ import { saveChangeNotes, saves } from "./ports/saving.ts";
 import { draftChanges } from "./ports/startup.ts";
 
 export function sessionEffects(): SessionEffects {
+  if (new URLSearchParams(location.search).get("app-binding") === "1") return {
+    dirty: () => {}, draft: () => {}, save: () => {}, edit: () => ({ allowed: true }), attribute: () => null
+  };
   return createSessionEffects({
     saves,
     changes: saveChangeNotes,

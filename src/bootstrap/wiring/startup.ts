@@ -39,6 +39,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       load: loadInitialState,
       clone: cloneState,
       applyStash: function (loaded, options) {
+        if (new URLSearchParams(location.search).get("app-binding") === "1") return { state: loaded };
         const applied = applyStashedWork(loaded, null, { ...options });
         if (applied instanceof Promise) throw new Error("The stashed work opened at startup must merge without waiting for an undo point");
         const result: StashResult<ValidatedDocument | null, MergedStates> = applied;
@@ -57,7 +58,9 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       refreshChrome: [updateAutoSaveMenu, updateHideShotSwitch, updateSaveStatus],
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
-      resumeLastProject: (...args: Parameters<ReturnType<typeof localFilesOwner>["tryResumeLastProject"]>) => localFilesOwner().tryResumeLastProject(...args),
+      resumeLastProject: (...args: Parameters<ReturnType<typeof localFilesOwner>["tryResumeLastProject"]>) => {
+        if (new URLSearchParams(location.search).get("app-binding") !== "1") return localFilesOwner().tryResumeLastProject(...args);
+      },
       syncIdentity: documentIdentity.syncDocIdentity,
       openIdentityChannel: function () { documentIdentityOwner().initDocIdentityChannel(); },
       notifyDesktop: notifyDesktopDocumentState,

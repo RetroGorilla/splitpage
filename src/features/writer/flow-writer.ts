@@ -47,6 +47,7 @@ export interface FlowWriterPorts {
   readonly storedHtml: (html: string) => string;
   readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
   readonly run: (command: Command) => CommandOutcome;
+  readonly syncBeatOverride?: (rowId: string, runs: readonly Run[]) => boolean;
   readonly shown: <T>(edit: () => T) => T;
   readonly editingBlocked: () => boolean;
   readonly text: CellTextPorts;
@@ -115,6 +116,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   // why: the surface paints its own edits, and the rows behind the writer are redrawn when it closes
   function syncBeat(rowId: string, runs: readonly Run[]): void {
     if (!isCurrent() || ports.editingBlocked()) return;
+    if (ports.syncBeatOverride?.(rowId, runs)) return;
     ports.shown(() => { took(ports.run(cellTextCommand(rowId, "audioText", cellRuns(runs), ports.text))); });
   }
 

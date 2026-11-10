@@ -39,6 +39,11 @@ import { mountFlowClipboardRoutes } from "../../features/clipboard/routes.ts";
 import { copyFlowClipboard, pasteFlowClipboard } from "../../features/clipboard/flow-clip.ts";
 import { randomHexBytes } from "../../adapters/identity/ids.ts";
 import { migrateRows } from "../document-ports.ts";
+import { WHOLE_DOCUMENT } from "../../application/session/change-set.ts";
+import { domToPos, posToDom } from "../../features/common/cell-dom.ts";
+
+const bindingSwitch = new URLSearchParams(location.search).get("app-binding") === "1";
+let experimentBinding: { sync: (id: string, runs: readonly Run[]) => void; undo: () => void } | null = null;
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
@@ -153,12 +158,20 @@ export function mountWriterRuntimeFeature() {
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,
+            syncBeatOverride: (id, runs) => {
+              if (!bindingSwitch || !experimentBinding) return false;
+              experimentBinding.sync(id, runs);
+              return true;
+            },
             moveBeat: swapBeatsCommand,
             shown: edit => paintGuard().whileShown(edit),
             editingBlocked: () => paintGuard().painting() || undoGuard().applying() || screenIsStale(),
             text: edits.text,
             undo: {
-              step: undoStep,
+              step: dir => {
+                if (bindingSwitch && experimentBinding) { experimentBinding.undo(); return; }
+                undoStep(dir);
+              },
               flush: () => { undoOwner().flush(); },
               breakCoalescing: () => { undoOwner().breakCoalescing(); },
               last: () => undoOwner().last(),
@@ -197,6 +210,7 @@ export function mountWriterRuntimeFeature() {
               else dismissedGhost = null;
             },
             leaveBeat: beat => {
+              if (bindingSwitch && experimentBinding) return;
               if (paintGuard().painting() || undoGuard().applying() || screenIsStale()) return;
               const clean = text.sanitizeHtml(beat.innerHTML);
               if (clean !== text.storedHtmlFromDom(beat.innerHTML)) beat.innerHTML = clean;
@@ -221,6 +235,26 @@ export function mountWriterRuntimeFeature() {
     const mounted = startWriter(ports);
     let withdrawHook: (() => void) | null = null;
     exposeTestHook("__writerFlowTest", () => ({
+      experiment: bindingSwitch ? {
+        install: (binding: typeof experimentBinding) => { experimentBinding = binding; },
+        model: () => ({ document: documentReader.current(), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes() }),
+        offset: (el: HTMLElement, node: Node, offset: number) => domToPos(el, node, offset),
+        point: (el: HTMLElement, offset: number) => posToDom(el, offset),
+        hold: () => undoOwner().hold(),
+        open: () => mounted.openWriter(),
+        project: (rows: readonly { id: string; audioText: string }[]) => {
+          const outcome = liveSession().stamp({ name: "app-binding-projection", plan: doc => ({
+            changes: WHOLE_DOCUMENT,
+            apply: live => {
+              const projected = rows.map(row => ({ ...(doc.rows.find(old => old.id === row.id) ?? { visualText: "", imageRef: null, status: "todo" as const }), ...row }));
+              live.rows.splice(0, live.rows.length, ...projected);
+              live.paragraphsDecided = true;
+            }
+          }) });
+          if (outcome.kind === "failed") throw outcome.error;
+        },
+        repaint: () => mounted.writerFlowControl()?.repaint()
+      } : null,
       on: () => !!mounted.writerFlowControl(),
       selection: () => mounted.writerFlowControl()?.selection() ?? null,
       place: (range: never) => { mounted.writerFlowControl()?.place(range); },
