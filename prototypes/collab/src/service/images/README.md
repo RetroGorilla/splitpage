@@ -63,6 +63,8 @@ T19 (c) displays `Saved on this device, waiting for images to upload` after the 
 
 The review fix adds identity checks on each named replica at the stated stages: T19 A/B after refusal, after covering sync, and after final Z; upload-first A/E/N at held and released stages and late peer before/after asset hydration; pending-image A/B through pending, flag-clear and download, plus A/B/C in the never-returns branch; both A and B before/after concurrent inbound release; and the restored pending sender after retry. Journal identities remain an additional independent check, not a replacement for live peer checks. `review.ts` adds the three leak probes under both document mechanisms, instance-mismatch/negative-receipt coverage, and the pre-picture W experiment with literal identities and observed release subtypes. No handwritten expected result changed.
 
+`ImageClient.check` itself now requires the caller's literal expected text/identities and checks the live replica before checking journal/receipts. Erasing B immediately before `peer.check` therefore fails inside that checker, in addition to the explicit stage assertions.
+
 Every wait has a throwing deadline. The upload-stage and journal-hook events schedule the next probe; disposition, durable membership, outgoing data and recovered bytes come from harness-owned declarations/reads. No `onChange`, provider count, server timestamp or server journal diagnostic supplies those facts. Children, workers, HTTP listeners, sockets and documents are stopped in `finally`; no browser or app suite runs.
 
 ## Library facts and limits

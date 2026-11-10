@@ -132,7 +132,9 @@ export class ImageClient {
     const label = this.provider.fence();
     await until(() => this.notices.includes(label), "ordered socket image fence");
   }
-  check(path: string): void {
+  check(path: string, expected: "ab" | "abZ" | readonly string[]): void {
+    if (typeof expected === "string") checkText(this.publication.editing, expected === "abZ");
+    else assert.deepEqual(imageIdentities(this.publication.editing), expected);
     assert.deepEqual(this.expectations, [], "Every declared transmission must occur");
     const rows = readRecoveredRows(path);
     for (const sent of this.sent) {

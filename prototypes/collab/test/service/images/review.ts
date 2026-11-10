@@ -67,7 +67,7 @@ export async function observeImageReview(t: TestContext): Promise<void> {
         const recovered = journalDocument(work.path);
         try { checkText(recovered, false); assert.deepEqual([...recovered.getMap("gallery").values()], []); }
         finally { recovered.destroy(); }
-        client.check(work.path);
+        client.check(work.path, "abZ");
       } finally { otherSocket?.destroy(); awareness.destroy(); awarenessDocument.destroy(); client?.destroy(); await work.clean(); }
     });
   }
@@ -113,7 +113,8 @@ export async function observeImageReview(t: TestContext): Promise<void> {
         assert.deepEqual(client.sent.slice(prefix).map(item => item.subtype), mechanism === "one-document" ? [1] : [2, 1]);
         assert.deepEqual(imageIdentities(image.editing), ["a:7:0", "b:7:1", "W:11:0", "Z:11:2"]);
         const after = journalDocument(work.path); documents.push(after);
-        assert.deepEqual(imageIdentities(after), ["a:7:0", "b:7:1", "W:11:0", "Z:11:2"]); client.check(work.path);
+        assert.deepEqual(imageIdentities(after), ["a:7:0", "b:7:1", "W:11:0", "Z:11:2"]);
+        client.check(work.path, ["a:7:0", "b:7:1", "W:11:0", "Z:11:2"]);
       } finally { for (const document of documents) document.destroy(); client?.destroy(); await work.clean(); }
     });
   }

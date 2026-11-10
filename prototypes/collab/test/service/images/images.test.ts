@@ -105,7 +105,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           assert.deepEqual(image.export(), { text: "abZ", images: [sha], missingImages: [] });
           const states = [client.status];
           if (reload) {
-            client.check(work.path);
+            client.check(work.path, "abZ");
             const capture = { replica: image.capture(), acknowledged: { instance: work.path, updates: client.sent.filter(sent => sent.applied).map(sent => sent.payload) } };
             await writeFile(`${work.path}.local`, JSON.stringify(capture)); client.destroy(); clients.pop();
             const restored = JSON.parse(await readFile(`${work.path}.local`, "utf8")) as { replica: ImageReplicaCapture; acknowledged: ImageAcknowledgedCapture };
@@ -157,7 +157,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           await client.saved(); await client.fence(); states.push(client.status);
           checkText(image.editing, true); checkText(image.network, true);
           assert.deepEqual(states, [offline, waiting, saved]);
-          client.observe(work.path); client.check(work.path);
+          client.observe(work.path); client.check(work.path, "abZ");
           await server.kill(); assert.deepEqual((await recoveredStore(work.path)).refs, [sha]);
           const recovered = journalDocument(work.path); docs.push(recovered); checkText(recovered, true);
           assert.deepEqual([...recovered.getMap("gallery").values()], [{ id: "gP", beat: "R1", ref: sha, pending: false }]);
@@ -170,7 +170,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           const bytes = Buffer.from(await download.arrayBuffer()); assert.deepEqual(bytes, png);
           peerImage.blobs.set(sha, bytes); peer.expect("accepted"); peerImage.durable(sha);
           await peer.saved(); await peer.fence(); checkText(peerImage.editing, true);
-          assert.equal(peerImage.picture(sha), "picture"); peer.check(work.path);
+          assert.equal(peerImage.picture(sha), "picture"); peer.check(work.path, "abZ");
         } finally {
           for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy();
           await work.clean(); await pendingUpload?.catch(() => {});
@@ -200,7 +200,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
         assert.deepEqual(peerImage.items, [{ id: "gP", beat: "R1", ref: sha, pending: true }]);
         assert.equal(peerImage.picture(sha), "placeholder"); assert.equal(peer.status, waiting);
         assert.deepEqual(peerImage.export(), { text: "abZ", images: [], missingImages: [sha] });
-        assert.deepEqual(membership(work.path), []); client.check(work.path); peer.check(work.path);
+        assert.deepEqual(membership(work.path), []); client.check(work.path, "abZ"); peer.check(work.path, "abZ");
         if (neverReturns) {
           await client.drop(); checkText(image.editing, true); checkText(peerImage.editing, true); await server.kill();
           const restarted = await work.start({ IMAGE_POLICY: "1" });
@@ -209,7 +209,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           await late.connect(); await late.fence(); checkText(lateImage.editing, true);
           assert.deepEqual(lateImage.items, [{ id: "gP", beat: "R1", ref: sha, pending: true }]);
           assert.equal(lateImage.picture(sha), "placeholder"); assert.equal(late.status, waiting);
-          assert.deepEqual(lateImage.export(), { text: "abZ", images: [], missingImages: [sha] }); late.check(work.path);
+          assert.deepEqual(lateImage.export(), { text: "abZ", images: [], missingImages: [sha] }); late.check(work.path, "abZ");
           checkText(peerImage.editing, true); checkText(image.editing, true);
         } else {
           const uploaded = await upload(server); assert.equal(uploaded.status, 201); await uploaded.arrayBuffer();
@@ -230,7 +230,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           peerImage.blobs.set(sha, bytes); peer.expect("accepted"); peerImage.durable(sha);
           await peer.saved(); await peer.fence(); assert.equal(peerImage.picture(sha), "picture");
           checkText(image.editing, true); checkText(peerImage.editing, true);
-          client.observe(work.path); peer.observe(work.path); client.check(work.path); peer.check(work.path);
+          client.observe(work.path); peer.observe(work.path); client.check(work.path, "abZ"); peer.check(work.path, "abZ");
         }
       } finally { for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy(); await work.clean(); }
     });
@@ -259,10 +259,12 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
         assert.deepEqual(characterIdentities(before), ["a:7:0", "b:7:1", "X:22:0"]);
         const uploaded = await upload(server); assert.equal(uploaded.status, 201); await uploaded.arrayBuffer();
         client.expect(...(mechanism === "two-documents" ? ["accepted", "accepted"] as const : ["accepted"] as const));
-        image.durable(sha); await client.saved(); await client.fence(); client.check(work.path);
+        image.durable(sha); await client.saved(); await client.fence();
+        client.check(work.path, ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
         await peer.fence();
         assert.deepEqual(characterIdentities(image.editing), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
         assert.deepEqual(characterIdentities(peerImage.editing), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
+        peer.check(work.path, ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
         const after = journalDocument(work.path); docs.push(after);
         assert.deepEqual(characterIdentities(after), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
       } finally { for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy(); await work.clean(); }
@@ -276,7 +278,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       const image = publication("pending-image"); const client = new ImageClient(server.port, work.path, image); clients.push(client);
       await client.connect(); await client.saved(); await client.drop();
       image.insert(png, sha); image.editing.getText("R1").insert(2, "Z");
-      client.expect("accepted", "accepted", "accepted"); await client.connect(); await client.fence(); client.check(work.path);
+      client.expect("accepted", "accepted", "accepted"); await client.connect(); await client.fence(); client.check(work.path, "abZ");
       checkText(image.editing, true);
       const capture = { replica: image.capture(), acknowledged: { instance: work.path, updates: client.sent.filter(sent => sent.applied).map(sent => sent.payload) } };
       await writeFile(`${work.path}.local`, JSON.stringify(capture)); client.destroy(); clients.pop();
@@ -287,7 +289,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       assert.deepEqual(resumedImage.items, [{ id: "gP", beat: "R1", ref: sha, pending: true }]);
       await resumed.connect(); await resumed.fence(); assert.equal(resumed.status, waiting);
       const response = await upload(server); assert.equal(response.status, 201); await response.arrayBuffer();
-      resumed.expect("accepted", "accepted"); resumedImage.durable(sha); await resumed.saved(); await resumed.fence(); resumed.check(work.path);
+      resumed.expect("accepted", "accepted"); resumedImage.durable(sha); await resumed.saved(); await resumed.fence(); resumed.check(work.path, "abZ");
       checkText(resumedImage.editing, true);
     } finally { for (const client of clients) client.destroy(); await work.clean(); }
   });
@@ -304,7 +306,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       assert.equal(client.sent.at(-1)?.subtype, 2); assert.equal(client.sent.at(-1)?.applied, true);
       await client.drop(); client.expect("accepted"); await client.connect(); await client.fence();
       assert.equal(client.sent.at(-1)?.subtype, 1); assert.equal(client.sent.at(-1)?.applied, true);
-      assert.ok(notifications >= 2); client.check(work.path);
+      assert.ok(notifications >= 2); client.check(work.path, "ab");
     } finally { client?.destroy(); await work.clean(); }
   });
 
@@ -343,7 +345,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       client.expect("accepted"); image.editing.getText("R1").insert(2, "Z");
       await client.saved(); await client.fence(); assert.equal(new Set(client.frames.map(frame => frame.lifetime)).size, 1);
       await peer.fence(); checkText(image.editing, true); checkText(peerImage.editing, true);
-      client.check(work.path); peer.check(work.path);
+      client.check(work.path, "abZ"); peer.check(work.path, "abZ");
       const recovered = journalDocument(work.path); docs.push(recovered); checkText(recovered, true);
       assert.deepEqual([...recovered.getMap("gallery").values()], [{ id: "gP", beat: "R1", ref: sha, pending: false }]);
     } finally { for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy(); await work.clean(); }
