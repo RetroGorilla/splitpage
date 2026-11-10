@@ -8,7 +8,7 @@ The limits below are the ones these literal fixtures and this generator have fou
 
 Undo runs on a per-writer history of command records: each record holds identities and shared record ids, and undo applies its reverse as a new local transaction. The command-record path calls no library undo or redo (`bound.test.ts` scans for it); the M1 buffer's inherited constructor still builds a `Y.UndoManager`, which is destroyed unused, and the library probes call the library on purpose.
 
-- Retained families: 50 of 50 pass (257/257 runs, `fixtures.test.ts`). The list is derived from the retained test files that contain an undo step: `fixtures.test.ts` scans `test/` for undo calls and fails if a file with one is missing from the list, or if a listed family does not run.
+- Retained families: 53 of 53 pass (360/360 runs, `fixtures.test.ts`). The list is derived from the retained test files that contain an undo step: `fixtures.test.ts` scans `test/` for undo calls and fails if a file with one is missing from the list, or if a listed family does not run.
 - New cases: 20 of 20 rows pass (`cases.test.ts`).
 - Generator: 300 seeded histories in the suite (`generator.test.ts`; set `UNDO_GENERATOR_RUNS` for more). Each violation they produce matches a declared limit.
 - Declared limits: 7, each with a failing literal case, a minimized generator history, or both (`generator.test.ts` re-runs each one). 2 belong to undo; the rest belong to the reader, main's status rule, delivery order or the library's formatting.
@@ -69,6 +69,9 @@ Undo runs on a per-writer history of command records: each record holds identiti
 | replacement: identical replacement with remote at left gap, M1 | `test/buffer-replacement-runner.ts` | PASS 4/4 |
 | replacement: identical replacement with remote inside word, M1 | `test/buffer-replacement-runner.ts` | PASS 4/4 |
 | replacement: identical replacement with remote at right gap, M1 | `test/buffer-replacement-runner.ts` | PASS 4/4 |
+| Reader order: all removers, either undo, early delivery and re-removal | `test/reader-order/readers.test.ts` | PASS 96/96 |
+| Reader order: ineffective removal undo consumes only its own step | `test/reader-order/readers.test.ts` | PASS 6/6 |
+| Reader review: identity-writing commands and status undo | `test/reader-order/review.test.ts` | PASS 1/1 |
 
 The retained families keep their existing literal oracles. Structural and mark traces add a late joiner to their delivery orders.
 
@@ -140,7 +143,7 @@ Counts for the 300 histories in the suite (seeds 1 to 150, two and three writers
 
 | Executed | Count |
 | --- | --- |
-| commands | 6384 (insert 470, delete 479, bold 496, unbold 421, tag 435, comment 429, reply 132, split 436, join 247, remove 440, move 393, status 475, scalar 443, replace 459, heading 270, unheading 359) |
+| commands | 6382 (insert 469, delete 479, bold 496, unbold 421, tag 435, comment 428, reply 132, split 436, join 247, remove 440, move 393, status 475, scalar 443, replace 459, heading 270, unheading 359) |
 | undo | 1386 |
 | redo | 150 |
 | undo-redo | 1322 |
@@ -151,7 +154,7 @@ Counts for the 300 histories in the suite (seeds 1 to 150, two and three writers
 | undo-then-redo round trips checked | 1075 |
 | status events validated | 2257 |
 | status events written by a redo validated | 441 |
-| waited on an out-of-order update | 1406 |
+| waited on an out-of-order update | 1408 |
 
 | Limit | Runs with it | Violations |
 | --- | --- | --- |
@@ -193,7 +196,7 @@ Each control has a test in `test/undo-records/cases.test.ts` that requires it to
 | No shared restoration record | Without the shared map of restored identities, Bob's later undo restores a character Alice already restored. | both undone/client1.rows[0].characters[1].identity.client: expected 1, got 2 | [history](histories/UR-no-restoration-record.md) |
 | Older records do not follow restorations | Without following restored identities, undoing the bold after undoing the delete changes nothing. | format undone changed nothing | [history](histories/UR-no-restoration-chain.md) |
 | Join undo without its own-entry check | Retiring every matching join without checking the writer's own entry lets Bob's stale undo split Alice's later rejoin. | Bob's consumed identical undo reached an older step or wrote state (effective=true, consumed=1, updates=1) | [history](histories/UR-rejoin-retired.md) |
-| Removal undo without its own-entry check | Deleting every removal entry of the beat without checking the writer's own entry lets Bob's stale undo restore Alice's later re-removal. | Bob's consumed identical undo reached an older step or wrote state (effective=true, consumed=1, updates=1) | [history](histories/UR-re-removal-restored.md) |
+| Removal undo without its own-entry check | Cancelling a removal without checking the writer's own entry lets Bob's stale undo restore Alice's later re-removal. | Bob's consumed identical undo reached an older step or wrote state (effective=true, consumed=1, updates=1) | [history](histories/UR-re-removal-restored.md) |
 | Per-writer tag occurrence keys | With one occurrence key per writer, identical simultaneous tags show as a tag nested in itself. | tagged/client1.rows[0].characters[4].marks.innerTags: expected <missing>, got ["P"] | [history](histories/UR-per-writer-tag-keys.md) |
 
 ## Counts
@@ -214,7 +217,7 @@ Record bytes are the UTF-8 length of the record's JSON, a proxy for what the his
 | comment, 2 characters | 484 | 6 | -97 | none |
 | split | 160 | 6 | -6 | none |
 | join | 79 | 25 | 20 | 1 in `retiredJoins` |
-| soft removal | 72 | 6 | 3 | none |
+| soft removal | 72 | 14 | 8 | none |
 | whole-segment move | 160 | 70 | 57 | 1 in `restoredIdentities` |
 | status change | 102 | 26 | 21 | 1 in `retiredStatus` |
 | scalar (LWW) change | 91 | 6 | 2 | none |
@@ -239,7 +242,7 @@ Each command records right after its local transaction commits, not inside it. `
 - Heading create or remove: the deleted or restored marker characters, the boundary embed or the segment's `head` key with its prior value, the beat record's presence, and the removal record the heading replaced. A beat-record undo keeps the record's fields, so its redo restores the joins and removal entries other writers stored in it.
 - Range replacement across beats (cut and paste, header rewrite): the deleted characters as identities with values and attributes, the beats removed whole, and the inserted identities.
 - Plain key of a shared map (segment head, paragraph start): the path, the prior and the written value; undo writes the prior only while the record still exists and the current value is still the written one.
-- Soft removal: the beat and the removal entry id. Undo checks that its own entry exists, then deletes every beat removal entry of that beat and records which; redo sets those entries again.
+- Soft removal: the beat and the removal entry id. Undo uses the reader command's cancellation: it keeps its own entry as false, cancelling identical removals even if delivered later. Redo sets that entry true; a new removal clears the earlier membership and cancellation entries.
 - Whole-segment move: the identities and values of the deleted order entries and the identity of the inserted one.
 - Mark add or remove (bold, link, comment highlight, tag): the key, the first and last identity, and each character's prior value. Undo sets each character now between the two identities to the prior value of the nearest recorded character on its left (the first one if none), which also clears a mark another writer's concurrent insertion picked up. A tag's key is derived from the tag and its first and last identity, so identical simultaneous tags are one mark.
 - Comment or reply creation: the record id and its fields, so redo can recreate them.

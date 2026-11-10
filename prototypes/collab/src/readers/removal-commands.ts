@@ -23,9 +23,13 @@ export function undoRemoval(replica: SchemaReplica, manager: Y.UndoManager): voi
     || typeof command.beat !== "string" || typeof command.id !== "string") throw new Error("Top undo item is not a removal");
   const members = mapValue(mapValue(replica.doc.getMap("beats").get(command.beat)).get("removals"));
   const id = command.id;
-  if (members.has(id) && removalIds(members).length) {
-    // why: Retaining the cancellation also cancels an identical removal delivered after this undo.
-    replica.doc.transact(() => members.set(id, false), "semantic-undo");
-  }
+  replica.doc.transact(() => cancelRemoval(members, id), "semantic-undo");
   manager.undoStack.pop();
+}
+
+export function cancelRemoval(members: Y.Map<unknown>, id: string): boolean {
+  if (!members.has(id) || !removalIds(members).length) return false;
+  // why: Retaining the cancellation also cancels an identical removal delivered after this undo.
+  members.set(id, false);
+  return true;
 }

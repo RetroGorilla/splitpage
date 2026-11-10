@@ -5,6 +5,8 @@ import { mapValue, textValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { statusFrontier, statusValue } from "../marks/commands.ts";
 import { readStatusEvent } from "../marks/status-resolution.ts";
+import { cancelRemoval } from "../readers/removal-commands.ts";
+import { normalizeIdentityTree } from "../readers/identity.ts";
 import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity, selectionOf } from "./identity.ts";
 import type { IdentityPoint, ResolvedIdentity, SelectionRecord, StoredContent } from "./identity.ts";
 
@@ -77,7 +79,7 @@ export class CommandHistory {
   }
 
   record(entry: CommandRecord): void {
-    this.undoStack.push(entry);
+    this.undoStack.push(normalizeIdentityTree(entry) as CommandRecord);
     this.redoStack.length = 0;
     while (this.undoStack.length > this.bound) {
       const oldest = this.undoStack.shift();
@@ -125,7 +127,7 @@ export class CommandHistory {
         return [{ client: client ?? 0, clock: clock ?? 0 }, id];
       });
       if (effective) {
-        to.push({ label: entry.label, parts: inverses, ...(entry.selection ? { selection: entry.selection } : {}) });
+        to.push(normalizeIdentityTree({ label: entry.label, parts: inverses, ...(entry.selection ? { selection: entry.selection } : {}) }) as CommandRecord);
         if (to.length > this.bound) to.shift();
         return { effective, label: entry.label, restored, selection: entry.selection ? this.restoreSelection(entry.selection) : null, consumed };
       }
@@ -208,7 +210,7 @@ export class CommandHistory {
         const beat: unknown = this.replica.doc.getMap("beats").get(part.beat);
         if (!(beat instanceof Y.Map)) return { effective: false, inverse: { kind: "removal", beat: part.beat, entry: part.entry } };
         const removals = mapValue((beat as Y.Map<unknown>).get("removals"));
-        const back = part.retired.filter(id => !removals.has(id));
+        const back = part.retired.filter(id => removals.get(id) !== true);
         for (const id of back) removals.set(id, true);
         return { effective: back.length > 0, inverse: { kind: "removal", beat: part.beat, entry: part.entry } };
       }
@@ -366,21 +368,15 @@ export class CommandHistory {
   }
 
   private reverseRemoval(part: Extract<CommandPart, { kind: "removal" }>): Reversal {
-    const retired: string[] = [];
+    const retired = [part.entry];
     const inverse: CommandPart = { kind: "restored", beat: part.beat, entry: part.entry, retired };
     const beat: unknown = this.replica.doc.getMap("beats").get(part.beat);
     if (!(beat instanceof Y.Map)) return { effective: false, inverse: { ...inverse, retired: [part.entry] } };
     const removals = mapValue((beat as Y.Map<unknown>).get("removals"));
     if (!removals.has(part.entry) && this.defect !== "retire-without-own-entry") return { effective: false, inverse: { ...inverse, retired: [part.entry] } };
-    const records = this.replica.doc.getMap("removalRecords");
-    for (const id of [...removals.keys()]) {
-      const record = records.get(id);
-      if (id === part.entry || (record instanceof Y.Map && record.get("kind") === "beat")) {
-        removals.delete(id);
-        retired.push(id);
-      }
-    }
-    return { effective: retired.length > 0, inverse };
+    const entry = this.defect === "retire-without-own-entry" && !removals.has(part.entry)
+      ? [...removals.keys()][0] ?? part.entry : part.entry;
+    return { effective: cancelRemoval(removals, entry), inverse };
   }
 
   private reverseStatus(part: Extract<CommandPart, { kind: "status" }>): Reversal {

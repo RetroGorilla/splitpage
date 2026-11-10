@@ -76,7 +76,7 @@ Lint, typecheck, check:comments and check:deps pass. Privacy and git diff --chec
 
 Rebased onto origin/main at **3cb3b680**, which contains #1418 (merge 0a58ad91). The original check-only commit 8efcff798f7d92ab890207d414ec2f416b69f695 is now **f4e6429d0771923c23a820f6c165eaceda06c587**, first in the rebased series with the same patch content. Original evidence hashes in the audits still identify the historical source snapshot; the rebase does not rewrite that snapshot. A range comparison confirms the four pre-reconciliation commits replay unchanged.
 
-The first undo-records run on the rebased tree found **44 failing tests out of 441**. Classification counts count each failing test once, not each root cause. Table expansions below identify those tests; `O` is D1, dup, rev, late-C.
+The first undo-records run on the rebased tree found **44 failing tests out of 441**. The following table records the reconciliation at base head 04253f24, before the cancellation and command-identity fixes below. Classification counts count each failing test once, not each root cause; `O` is D1, dup, rev, late-C.
 
 | Class | Tests failing after rebase | Count | Reconciliation |
 | --- | --- | ---: | --- |
@@ -89,8 +89,8 @@ The first undo-records run on the rebased tree found **44 failing tests out of 4
 | 2 | removal own-entry negative control O | 4 | Now reaches its original undo-specific failure rather than failing on earlier attribution. |
 | 2 | ineffective identical undo fall-through control O x Alice/Bob first | 8 | Now reaches its original older-step failure rather than failing on attribution. |
 | 2 (derived aggregate) | command-record undo results and retained histories reproduce exactly | 1 | Report regenerated for the class-1 removals and class-2 literals; counted here once although it depended on both. |
-| 3: other | retained-source inventory assertion in fixtures.test.ts | 1 | Kept failing unchanged; two new reader-order source files have no retained-family mapping. |
-| **Total** | **Class 1: 10; class 2: 33; class 3: 1** | **44** | **No undo mechanism was changed.** |
+| 3: other | retained-source inventory assertion in fixtures.test.ts | 1 | Initially left failing; resolved by the retained-family ports below. |
+| **Total** | **Class 1: 10; class 2: 33; class 3: 1** | **44** | **No undo mechanism changed at that base head.** |
 
 Class-1 literals in fixedReaderOracles pin: insert/remove R1 ax in recovery by Alice, Bob with edited=["a1"]; split Ra retains splitBy Alice beside Bob's direct removal (Rb remains a separate Bob recovery entry); removed join target R1 contains ab + glue + cd in one Bob recovery group, with source identities s3/s4 edited because that removal observed only R1. These follow the recorded reader rules/assumptions. The five UR-join-target / UR-gen-join-target / UR-recovery-edited / UR-gen-recovery-attribution / UR-recovery-split-by history files keep the defect trace and add a fixed-by-#1421 line. The redone-recovery reader limit is separate and remains.
 
@@ -104,33 +104,40 @@ Class-2 literal changes, individually:
 
 The restored rows, Alice-only re-removal, consumed stale undo, older insertion, and redo removal-entry assertions retain their expected results. The own-entry and fall-through controls still require their original undo-specific failures. The report now has 20 passing case rows and seven declared limits, reduced from ten; report.files has 16 generated artifacts instead of 21 because the five repaired histories are retained as historical records rather than regenerated as active failures.
 
-The class-3 failure is minimized in [UR-reader-order-inventory.md](histories/UR-reader-order-inventory.md). The scan finds test/reader-order/readers.test.ts and test/reader-order/review.test.ts, absent from retainedUndoSources. It fails without running a Yjs command; either missing path suffices. Neither the assertion nor its inventory was adjusted, per class 3. The existing 50 listed families pass 257/257 runs. Focused undo-records result after reconciliation: **467 pass / 1 fail / 468 tests**, zero skipped; the remaining failure is that inventory assertion.
+The class-3 inventory history is retained in [UR-reader-order-inventory.md](histories/UR-reader-order-inventory.md). Both missing sources now appear in retainedUndoSources and run under command records, with the inventory assertion unchanged. Three new families add 103 runs: 96 removal histories (all six delivery orders, both client-id orders, both id pairs, either writer undoing first, before/after receiving the concurrent removal), six consumed-removal histories with an earlier insertion, and the status/identity review history. The removal histories include an encoded late joiner, literal restored rows and recovery, later re-removal, and the other writer's ineffective undo writing nothing. The retained total is **53 families / 360 passing runs**; the fixture and generator files together pass **382 tests**.
 
-Generator regeneration uses the same 300 histories (150 seeds for each of two/three writers), length 60. Previous join-target class: **67 runs / 275 violations -> 0 / 0**. Previous recovery-attribution class: **21 / 21 -> 0 / 0**. Remaining matched classes double-restore, status-redo-conflict and pending-update each read **0 / 0** in this finite matrix. **Unmatched: 0 / 0**, unchanged. Effective undo checks increase 2,112 -> 2,184; undo/redo checks 1,041 -> 1,075; status validations 2,244 -> 2,257, including redo 428 -> 441. Commands executed 6,382 -> 6,384; undo 1,386; redo 151 -> 150; undo-redo 1,322; deliveries 4,666; late joins 98; pending waits 1,411 -> 1,406. The corrected readers let the same seeds reach more checks; this is no new proof beyond those runs.
+Generator regeneration uses the same **300 histories** (150 seeds for each of two/three writers), length 60. Previous join-target and recovery-attribution classes remain absent. Matched classes double-restore, status-redo-conflict and pending-update each read **0 runs / 0 violations** in this finite matrix. **Unmatched: 0 / 0**. All **seven declared limits** still reproduce in their dedicated literal/minimized histories; none was added or removed in this round. generator.test.ts passes **21/21 tests**. Current counts: 6,382 commands; 1,386 undo, 150 redo, 1,322 undo-redo, 4,666 deliveries, 98 late joins, 1,408 pending waits; 2,184 effective and 137 ineffective undo checks, 1,075 undo/redo checks; 2,257 status validations including 441 redo events. The regenerated undo-records-results.md checks these counts without a timing run.
+
+### Shared cancellation and command identities
+
+[UR-early-removal-undo.md](histories/UR-early-removal-undo.md) retains the original failure: Alice and Bob concurrently remove empty R1; Alice undoes before Bob's removal arrives. reverseRemoval now calls the same cancelRemoval helper as undoRemoval, leaving its own membership false so the later identical removal stays cancelled. Redo sets that membership true; a new removeBeat clears prior membership and cancellation entries, as removeWithUndo does. early-removal.test.ts asserts the literal `{rows:["R1"],recovery:[]}` on both writers and an encoded late joiner in all six delivery orders, plus delivered-before-undo and nonconcurrent controls. reader-order/removal-controls.test.ts contains the six library-backed controls, keeping the command-record folder free of library undo managers. Together: **24 passing tests**. Existing undo expectations are unchanged.
+
+[UR-reader-status-identity.md](histories/UR-reader-status-identity.md) records the status-key mismatch found during the review-history port. All command-record commands now enter through acceptCommand, which imports the reader writers' existing normalizeIdentityTree; stored records and inverse records use it too. Target, event, record, path, mark and embedded identity strings therefore reach writes through the same normalization path. No status implementation or expected result changed. The one command-identities.test.ts matrix covers all **16 writing commands**, also exercising captureRange and generated tag keys. Each receives surrogate-containing ids, then executes undo, redo and a second undo. Each of the four checkpoints compares the writing copy against an encoded reload with projectionDifference, including raw stored map keys/values, document output and structural output. Move uses the supported seeded layout; the imported-layout limitation is below. The matrix passes.
 
 ### Undo-record shared-state access audit
 
-No undo-record command or history implementation was changed in this reconciliation. Status resolution already uses statusFrontier/statusValue and readStatusEvent (history.ts:48, history.ts:386). The following direct accesses remain outside the malformed-record property claims; this explicitly records them rather than claiming the undo command layer is validated:
+Command arguments and history records now share identity normalization, and removal undo shares reader cancellation. Status resolution still uses statusFrontier/statusValue and readStatusEvent. The following direct accesses remain outside the malformed-record property claims; the command layer is not certified for arbitrary stored records:
 
 | Location under src/undo-records | Remaining direct access |
 | --- | --- |
-| history.ts:141 | restoredIdentities typed-map entry and client/clock fields, without a raw-record validator. |
-| history.ts:174; history.ts:392 | retired join/status membership in reversal commands. Status event content still goes through the common status reader. |
-| history.ts:184-200 | Beat record type guard and toJSON snapshot, then recreation of its fields/joins/removals. |
-| history.ts:208-212; history.ts:371-379 | Beat removal membership and removalRecords.kind during reverse/redo; raw records, not readRemovalRecord. |
-| history.ts:224; history.ts:331; history.ts:341-345 | Beat scalar equality, beat map guard and join membership/into fields. |
-| history.ts:233-240; history.ts:354-364 | Generic record presence and key-path/current-value comparison. |
-| commands.ts:141-154; commands.ts:162-184; commands.ts:273-274 | Segment text/head and order during capture/move, paragraphStart and scalar priors. |
-| identity.ts:44-73 | Native relative-position identity operations, Y.Array values and Y.Text delta/attribute snapshots, without wire/record normalization. |
-| buffer.ts:45-50 | Native identity resolution/content capture through the above identity helpers. |
-| measure.ts:53,109; report.ts | Fixture writes/map count instrumentation and report-local records; no additional shared-content resolution. |
+| history.ts restored/follow | restoredIdentities typed-map entry and client/clock fields, without a raw-record validator. |
+| history.ts reverseJoin/reverseStatus | Retired join/status membership in reversal commands; status content uses the common status reader. |
+| history.ts reverse beat-record case | Beat record type guard and toJSON snapshot, then recreation of its fields/joins/removals. |
+| history.ts reverseRemoval/restored case | Beat removal membership during cancellation/redo, without readRemovalRecord. |
+| history.ts scalar/record/key cases | Beat scalar equality, generic record presence and key-path/current-value comparison. |
+| commands.ts moveBeat/boundaryParts/paragraphPart/setScalar | Segment text/head and order, paragraphStart and scalar priors. |
+| identity.ts | Native relative-position identity operations, Y.Array values and Y.Text delta/attribute snapshots. |
+| buffer.ts commit | Native identity resolution/content capture through those identity helpers. |
+| measure.ts; report.ts | Fixture writes/map count instrumentation and report-local records; no additional shared-content resolution. |
 
-These commands can preserve raw prior fields on undo/redo; malformed inputs are not certified by the reader reload properties. The new undo generator checks finite histories of valid command arguments. The additional production change here is only undo-records/report.ts (generated result text/case aggregation), outside the pinned timed reader paths; no timed source or count data changes in this reconciliation.
+These commands can preserve prior fields on undo/redo; identity normalization does not establish general schema validity. The undo generator checks finite histories of valid command arguments. Changes remain under prototypes/collab; no app code, timed reader source or reader work-counter data changed in this reconciliation.
 
-Final rebased validation: one full prototype run, **2,275 pass / 1 fail / 2,276 tests**, zero skipped/cancelled. The only failure is the unchanged class-3 retained-source inventory assertion. The strict reader harness totals remain **1,708 inspections / 45,080 projections / 35,854 comparisons**. Root lint, typecheck (260 prototype files), check:comments and check:deps pass; privacy and git diff --check pass. No timing, Edge or browser run. This head does not claim a green CI checks job while that inventory failure remains.
+Final validation: **2,404/2,404 prototype tests pass**, zero skipped/cancelled, including the unchanged retained-source inventory assertion and generated-report equality test. Root typecheck (264 prototype files), lint, check:deps and check:comments pass; privacy and git diff --check pass. The first full run exposed stale source metadata and a library control placed inside the command-record-only folder; the metadata was refreshed and the control moved, with all audit assertions retained, before the passing final full run. The strict reader harness totals remain **1,708 inspections / 45,080 projections / 35,854 comparisons**. The refreshed removal-command source hash validates against the current source; all seven archived browser bundles still reproduce exactly. No browser or timing run was performed.
 ## Not shown
 
 Agreement for every possible stored record is not proven. Three review rounds each found a further case. The finite generators and literal controls establish their stated coverage; they do not certify arbitrary stored-record semantics, complete schema validation, arbitrary serializer cloning, or production cost.
+
+[UR-move-imported-segment.md](histories/UR-move-imported-segment.md) records the identity matrix's unrelated imported-document move limitation: moveBeat expects `seg-<beat>`, but fromDocument creates `seg-b-<beat>`, so the command throws `Expected a shared map` before writing. The shared identity entry point does not fix that naming assumption. Move identity/undo/reload checks pass on SchemaReplica's seeded layout; movement of imported segments is not established. No move implementation or expected result was changed.
 
 The Stage 2 production reader inherits these requirements:
 

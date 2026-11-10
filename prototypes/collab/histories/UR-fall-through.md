@@ -18,7 +18,7 @@ deliver A3 A->B copy 1
 deliver B4 B->A copy 1
 check removed
 recovery names client1: Alice, Bob, client2: Alice, Bob
-enqueue A5 A->B 10 bytes
+enqueue A5 A->B 14 bytes
 Alice undo remove effective=true consumed=1
 deliver A5 A->B copy 1
 check restored

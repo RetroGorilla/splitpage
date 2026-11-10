@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import type { DeliveryOrder } from "../../src/delivery.ts";
+import { deliveryOrders } from "../../src/delivery.ts";
 import { statusValue } from "../../src/marks/commands.ts";
 import { readStatusEvent } from "../../src/marks/status-resolution.ts";
 import type { ScriptOracle } from "../../src/model.ts";
@@ -22,6 +23,7 @@ import { attempt, bufferOrders, runBufferTrace, runReplacement } from "./buffer-
 import { Scenario } from "./cases.ts";
 import type { CaseResult, Writer } from "./cases.ts";
 import { runRecord } from "./runner.ts";
+import { runReaderIdentity, runReaderRemovalConsumed, runReaderRemovals } from "./reader-order.ts";
 
 export interface FamilyRun {
   label: string;
@@ -445,10 +447,26 @@ const ingress: RetainedFamily = {
   runs: ["delivery", "hydration", "recovery-restore"].map(path => bufferRun(path, () => runIngress(path)))
 };
 const cleanRemote: RetainedFamily = { name: "T02 clean remote integration repaints, M1", runs: [bufferRun("D3", runCleanRemote)] };
+const readerRemovals: RetainedFamily = {
+  name: "Reader order: all removers, either undo, early delivery and re-removal",
+  runs: deliveryOrders.flatMap(order => [false, true].flatMap(swapped => ([["a", "b"], ["z", "a"]] as const).flatMap(ids => [0, 1].flatMap(first => [false, true].map(early => ({
+    label: `${order}, swapped ${swapped}, ids ${ids}, first ${first}, early ${early}`,
+    run: () => runReaderRemovals(order, swapped, ids, first, early)
+  }))))))
+};
+const readerConsumed: RetainedFamily = {
+  name: "Reader order: ineffective removal undo consumes only its own step",
+  runs: deliveryOrders.map(order => ({ label: order, run: () => runReaderRemovalConsumed(order) }))
+};
+const readerIdentity: RetainedFamily = {
+  name: "Reader review: identity-writing commands and status undo",
+  runs: [{ label: "normalized stored keys", run: runReaderIdentity }]
+};
 
 export const retainedFamilies: RetainedFamily[] = [
   ...structureFamilies, glue, topItem, ...markFamilies, splitInsert, honest, reanchor, statusTests, concurrentStatus,
-  eitherUndo, semanticUndo, ancestry, emits, ...bufferFamilies, ingress, cleanRemote, ...replacementFamilies
+  eitherUndo, semanticUndo, ancestry, emits, ...bufferFamilies, ingress, cleanRemote, ...replacementFamilies,
+  readerRemovals, readerConsumed, readerIdentity
 ];
 
 const names = (families: readonly RetainedFamily[]): string[] => families.map(family => family.name);
@@ -464,5 +482,7 @@ export const retainedUndoSources: Record<string, string[]> = {
   "test/harness.test.ts": [honest.name, splitInsert.name],
   "test/buffer-runner.ts": names(bufferFamilies),
   "test/buffers.test.ts": [...names(bufferFamilies), ingress.name, cleanRemote.name],
-  "test/buffer-replacement-runner.ts": names(replacementFamilies)
+  "test/buffer-replacement-runner.ts": names(replacementFamilies),
+  "test/reader-order/readers.test.ts": [readerRemovals.name, readerConsumed.name],
+  "test/reader-order/review.test.ts": [readerIdentity.name]
 };
