@@ -4,6 +4,11 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## Unreleased
+
+### Fixed
+- Click buttons through the empty space beside and between notifications.
+
 ## 0.4.3 — 2026-11-09
 
 This release brings nested tags, the flowing writer, scenes and beats, files

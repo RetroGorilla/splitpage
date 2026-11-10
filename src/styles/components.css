@@ -880,6 +880,7 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 }
 .empty-state .btn-accent { margin-top: var(--space-14); }
 #toast-host {
+  pointer-events: none;
   position: fixed;
   bottom: 20px;
   left: 50%;
@@ -894,6 +895,7 @@ body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden
   z-index: 20;
 }
 .toast {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--space-10);
