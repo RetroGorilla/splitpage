@@ -9,9 +9,40 @@ import { readSplitRepairEvidence, readSplitLocalization } from "../../src/split-
 import type { SplitRepairSnapshot, SplitLocalizationCase } from "../../src/split-reconcile/records.ts";
 import { hasPrivatePerfMetadata } from "../../src/perf/privacy.ts";
 import { checkSplitReconcileHistories } from "../../src/split-reconcile/report.ts";
+import { assertAllSplitCounters, assertSplitCaseCounters, splitCounterExpectations } from "./lifecycle-expectations.ts";
 
 function present<T>(value: T | null | undefined): T { assert.ok(value !== null && value !== undefined); return value; }
 const evidence = readSplitRepairEvidence(); const localized = readSplitLocalization();
+
+test("every retained Split case and stage has literal expectations for every reported counter", () => assertAllSplitCounters(evidence));
+
+test("doubling ordinary T01 sync counts fails in all five retained runs", () => {
+  for (const item of evidence.cases.filter(item => item.trace === "T01")) {
+    const stages = structuredClone(item.stages);
+    for (const stage of stages) stage.syncs.push(...structuredClone(stage.syncs));
+    assert.throws(() => assertSplitCaseCounters(`cases/${item.trace}/${item.order}`, stages), /literal stage counters/);
+  }
+});
+
+test("zeroing composition lifecycle counters after commit fails at every later stage", () => {
+  for (const group of ["controls", "cases"] as const) for (const item of evidence[group]) {
+    if (!["T04", "T04 removed", "T01 composition"].includes(item.trace)) continue;
+    for (let index = 4; index < item.stages.length; index++) for (const counter of ["compositionMark", "dropEmptySince"] as const) {
+      const stages = structuredClone(item.stages);
+      present(stages[index]).app.counts[counter] = 0;
+      assert.throws(() => assertSplitCaseCounters(`${group}/${item.trace}/${item.order}`, stages), /literal stage counters/);
+    }
+  }
+});
+
+test("a new case, extra stage or missing counter expectation cannot bypass coverage", () => {
+  const extra = structuredClone(evidence); extra.cases.push({ ...present(extra.cases[0]), order: "new-order" });
+  assert.throws(() => assertAllSplitCounters(extra), /literal case coverage/);
+  const stages = structuredClone(present(evidence.cases[0]).stages); stages.push(structuredClone(present(stages[0])));
+  assert.throws(() => assertSplitCaseCounters("cases/T04/D3", stages), /stage coverage/);
+  const expected = { ...splitCounterExpectations, "cases/T04/D3": [[0]] };
+  assert.throws(() => assertSplitCaseCounters("cases/T04/D3", present(evidence.cases[0]).stages.slice(0, 1), expected as unknown as typeof splitCounterExpectations), /counter coverage/);
+});
 
 function literal(snapshot: SplitRepairSnapshot, trace: keyof typeof bufferOracles, undo: boolean, lateJoin = false): void {
   const expected = undo ? bufferOracles[trace].undo : bufferOracles[trace].expected;
