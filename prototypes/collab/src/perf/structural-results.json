@@ -1,0 +1,549 @@
+{
+  "version": 1,
+  "sourceDigest": "23d074e0cf11c6a62e48baf3d53934b9f4383591599e8e676f48c8dccba14168",
+  "timingStatus": "not measured; deterministic structural counts only",
+  "instrumentation": [
+    {
+      "source": "yjs/src/utils/RelativePosition.js",
+      "sha256": "91991efa46cb5f52bbaa07f48cd1009826b2947e2d46be14311a3c52555a43b3"
+    },
+    {
+      "source": "yjs/src/utils/StructStore.js",
+      "sha256": "04f971f2b28dad60969b20797b56f3a10535ca295906b627e084a82a39b6414c"
+    }
+  ],
+  "data": {
+    "rows": [
+      {
+        "fixture": "largest canonical",
+        "candidate": "A",
+        "copies": 1,
+        "fileBytes": 38432,
+        "inputSha256": "6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34",
+        "checkpoints": [
+          {
+            "operations": 0,
+            "encodedBytes": 48649,
+            "counts": {
+              "beats": 30,
+              "removedBeats": 0,
+              "removalFlags": 0,
+              "removalRecords": 0,
+              "joinEntries": 0,
+              "retiredJoins": 0,
+              "statusEvents": 0,
+              "projectedFileBytes": 38432,
+              "activeFileBytes": 38432
+            },
+            "identities": {
+              "target": "r27",
+              "characters": 514,
+              "publicCaptureCalls": 514,
+              "capture": {
+                "relativeItems": 42148,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 82,
+                "absoluteItems": 81,
+                "storeProbes": 12,
+                "projectedSpans": 27
+              },
+              "resolved": {
+                "beat": "r27",
+                "offset": 513
+              }
+            },
+            "gc": true
+          }
+        ]
+      },
+      {
+        "fixture": "largest canonical",
+        "candidate": "B",
+        "copies": 1,
+        "fileBytes": 38432,
+        "inputSha256": "6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34",
+        "checkpoints": [
+          {
+            "operations": 0,
+            "encodedBytes": 50252,
+            "counts": {
+              "beats": 30,
+              "removedBeats": 0,
+              "removalFlags": 0,
+              "removalRecords": 0,
+              "joinEntries": 0,
+              "retiredJoins": 0,
+              "statusEvents": 0,
+              "projectedFileBytes": 38432,
+              "activeFileBytes": 38432
+            },
+            "identities": {
+              "target": "r27",
+              "characters": 514,
+              "publicCaptureCalls": 514,
+              "capture": {
+                "relativeItems": 514,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 1,
+                "absoluteItems": 0,
+                "storeProbes": 11,
+                "projectedSpans": 1
+              },
+              "resolved": {
+                "beat": "r27",
+                "offset": 513
+              }
+            },
+            "gc": true
+          }
+        ]
+      },
+      {
+        "fixture": "large",
+        "candidate": "A",
+        "copies": 10,
+        "fileBytes": 334208,
+        "inputSha256": "e204909250840a85564a5f9290b25d442928027e5be588ed4d88532c1dffd10f",
+        "checkpoints": [
+          {
+            "operations": 0,
+            "encodedBytes": 427695,
+            "counts": {
+              "beats": 300,
+              "removedBeats": 0,
+              "removalFlags": 0,
+              "removalRecords": 0,
+              "joinEntries": 0,
+              "retiredJoins": 0,
+              "statusEvents": 0,
+              "projectedFileBytes": 334208,
+              "activeFileBytes": 334208
+            },
+            "identities": {
+              "target": "r20-9",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 552636,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 918,
+                "absoluteItems": 917,
+                "storeProbes": 15,
+                "projectedSpans": 290
+              },
+              "resolved": {
+                "beat": "r20-9",
+                "offset": 601
+              }
+            },
+            "gc": true
+          },
+          {
+            "operations": 10020,
+            "encodedBytes": 1220382,
+            "counts": {
+              "beats": 400,
+              "removedBeats": 20,
+              "removalFlags": 20,
+              "removalRecords": 120,
+              "joinEntries": 100,
+              "retiredJoins": 100,
+              "statusEvents": 200,
+              "projectedFileBytes": 351321,
+              "activeFileBytes": 346533
+            },
+            "identities": {
+              "target": "r20-9",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 853034,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 1417,
+                "absoluteItems": 1416,
+                "storeProbes": 15,
+                "projectedSpans": 390
+              },
+              "resolved": {
+                "beat": "r20-9",
+                "offset": 601
+              }
+            },
+            "gc": true
+          },
+          {
+            "operations": 25050,
+            "encodedBytes": 2398278,
+            "counts": {
+              "beats": 550,
+              "removedBeats": 50,
+              "removalFlags": 50,
+              "removalRecords": 300,
+              "joinEntries": 250,
+              "retiredJoins": 250,
+              "statusEvents": 500,
+              "projectedFileBytes": 378006,
+              "activeFileBytes": 366523
+            },
+            "identities": {
+              "target": "r20-9",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 1304534,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 2167,
+                "absoluteItems": 2166,
+                "storeProbes": 15,
+                "projectedSpans": 540
+              },
+              "resolved": {
+                "beat": "r20-9",
+                "offset": 601
+              }
+            },
+            "gc": true
+          },
+          {
+            "operations": 50100,
+            "encodedBytes": 3338732,
+            "counts": {
+              "beats": 800,
+              "removedBeats": 100,
+              "removalFlags": 100,
+              "removalRecords": 600,
+              "joinEntries": 500,
+              "retiredJoins": 500,
+              "statusEvents": 1000,
+              "projectedFileBytes": 421890,
+              "activeFileBytes": 401522
+            },
+            "identities": {
+              "target": "history-beat-289",
+              "characters": 592,
+              "publicCaptureCalls": 592,
+              "capture": {
+                "relativeItems": 1880784,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 3177,
+                "absoluteItems": 3176,
+                "storeProbes": 16,
+                "projectedSpans": 780
+              },
+              "resolved": {
+                "beat": "history-beat-289",
+                "offset": 591
+              }
+            },
+            "gc": true
+          }
+        ]
+      },
+      {
+        "fixture": "large",
+        "candidate": "B",
+        "copies": 10,
+        "fileBytes": 334208,
+        "inputSha256": "e204909250840a85564a5f9290b25d442928027e5be588ed4d88532c1dffd10f",
+        "checkpoints": [
+          {
+            "operations": 0,
+            "encodedBytes": 445329,
+            "counts": {
+              "beats": 300,
+              "removedBeats": 0,
+              "removalFlags": 0,
+              "removalRecords": 0,
+              "joinEntries": 0,
+              "retiredJoins": 0,
+              "statusEvents": 0,
+              "projectedFileBytes": 334208,
+              "activeFileBytes": 334208
+            },
+            "identities": {
+              "target": "r20-9",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 602,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 1,
+                "absoluteItems": 0,
+                "storeProbes": 16,
+                "projectedSpans": 1
+              },
+              "resolved": {
+                "beat": "r20-9",
+                "offset": 601
+              }
+            },
+            "gc": true
+          },
+          {
+            "operations": 10020,
+            "encodedBytes": 1237973,
+            "counts": {
+              "beats": 400,
+              "removedBeats": 20,
+              "removalFlags": 20,
+              "removalRecords": 120,
+              "joinEntries": 100,
+              "retiredJoins": 100,
+              "statusEvents": 200,
+              "projectedFileBytes": 351321,
+              "activeFileBytes": 346533
+            },
+            "identities": {
+              "target": "r20-9",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 602,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 1,
+                "absoluteItems": 0,
+                "storeProbes": 16,
+                "projectedSpans": 1
+              },
+              "resolved": {
+                "beat": "r20-9",
+                "offset": 601
+              }
+            },
+            "gc": true
+          },
+          {
+            "operations": 25050,
+            "encodedBytes": 2415709,
+            "counts": {
+              "beats": 550,
+              "removedBeats": 50,
+              "removalFlags": 50,
+              "removalRecords": 300,
+              "joinEntries": 250,
+              "retiredJoins": 250,
+              "statusEvents": 500,
+              "projectedFileBytes": 378006,
+              "activeFileBytes": 366523
+            },
+            "identities": {
+              "target": "r20-9",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 602,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 1,
+                "absoluteItems": 0,
+                "storeProbes": 14,
+                "projectedSpans": 1
+              },
+              "resolved": {
+                "beat": "r20-9",
+                "offset": 601
+              }
+            },
+            "gc": true
+          },
+          {
+            "operations": 50100,
+            "encodedBytes": 3356090,
+            "counts": {
+              "beats": 800,
+              "removedBeats": 100,
+              "removalFlags": 100,
+              "removalRecords": 600,
+              "joinEntries": 500,
+              "retiredJoins": 500,
+              "statusEvents": 1000,
+              "projectedFileBytes": 421890,
+              "activeFileBytes": 401522
+            },
+            "identities": {
+              "target": "history-beat-289",
+              "characters": 592,
+              "publicCaptureCalls": 592,
+              "capture": {
+                "relativeItems": 3552,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 6,
+                "absoluteItems": 5,
+                "storeProbes": 16,
+                "projectedSpans": 2
+              },
+              "resolved": {
+                "beat": "history-beat-289",
+                "offset": 591
+              }
+            },
+            "gc": true
+          }
+        ]
+      },
+      {
+        "fixture": "near 2 MiB",
+        "candidate": "A",
+        "copies": 47,
+        "fileBytes": 1552544,
+        "inputSha256": "10246c13b1b26dc945bcd2bc227e77444645e86937a58297ef5a78a892959503",
+        "checkpoints": [
+          {
+            "operations": 0,
+            "encodedBytes": 2001642,
+            "counts": {
+              "beats": 1410,
+              "removedBeats": 0,
+              "removalFlags": 0,
+              "removalRecords": 0,
+              "joinEntries": 0,
+              "retiredJoins": 0,
+              "statusEvents": 0,
+              "projectedFileBytes": 1552544,
+              "activeFileBytes": 1552544
+            },
+            "identities": {
+              "target": "r20-46",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 2668666,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 4433,
+                "absoluteItems": 4432,
+                "storeProbes": 17,
+                "projectedSpans": 1400
+              },
+              "resolved": {
+                "beat": "r20-46",
+                "offset": 601
+              }
+            },
+            "gc": true
+          }
+        ]
+      },
+      {
+        "fixture": "near 2 MiB",
+        "candidate": "B",
+        "copies": 47,
+        "fileBytes": 1552544,
+        "inputSha256": "10246c13b1b26dc945bcd2bc227e77444645e86937a58297ef5a78a892959503",
+        "checkpoints": [
+          {
+            "operations": 0,
+            "encodedBytes": 2087457,
+            "counts": {
+              "beats": 1410,
+              "removedBeats": 0,
+              "removalFlags": 0,
+              "removalRecords": 0,
+              "joinEntries": 0,
+              "retiredJoins": 0,
+              "statusEvents": 0,
+              "projectedFileBytes": 1552544,
+              "activeFileBytes": 1552544
+            },
+            "identities": {
+              "target": "r20-46",
+              "characters": 602,
+              "publicCaptureCalls": 602,
+              "capture": {
+                "relativeItems": 602,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "lookup": {
+                "relativeItems": 1,
+                "absoluteItems": 0,
+                "storeProbes": 18,
+                "projectedSpans": 1
+              },
+              "resolved": {
+                "beat": "r20-46",
+                "offset": 601
+              }
+            },
+            "gc": true
+          }
+        ]
+      }
+    ],
+    "controls": [
+      {
+        "candidate": "A",
+        "target": "R2",
+        "characters": 2,
+        "publicCaptureCalls": 2,
+        "capture": {
+          "relativeItems": 8,
+          "absoluteItems": 0,
+          "storeProbes": 0
+        },
+        "lookup": {
+          "relativeItems": 4,
+          "absoluteItems": 3,
+          "storeProbes": 6,
+          "projectedSpans": 2
+        },
+        "resolved": {
+          "beat": "R2",
+          "offset": 1
+        }
+      },
+      {
+        "candidate": "B",
+        "target": "R2",
+        "characters": 2,
+        "publicCaptureCalls": 2,
+        "capture": {
+          "relativeItems": 2,
+          "absoluteItems": 0,
+          "storeProbes": 0
+        },
+        "lookup": {
+          "relativeItems": 1,
+          "absoluteItems": 0,
+          "storeProbes": 8,
+          "projectedSpans": 1
+        },
+        "resolved": {
+          "beat": "R2",
+          "offset": 1
+        }
+      }
+    ]
+  }
+}

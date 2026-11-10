@@ -1,0 +1,6 @@
+{
+  "status": "void",
+  "usableForComparisons": false,
+  "reason": "Optional Edge attempt aborted because background CPU after a run exceeded 35%; no browser timing set or timing conclusions retained. A game was running; no retry was made.",
+  "exitCode": 1
+}

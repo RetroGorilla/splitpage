@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "status": "not measured",
+  "reason": "Earlier game-session attempts are void. Coordinator permits one guarded set after the non-measurement PR is opened, with a lighter game running; state each accepted run's background load.",
+  "sourceDigest": "23d074e0cf11c6a62e48baf3d53934b9f4383591599e8e676f48c8dccba14168",
+  "node": "v24.22.1",
+  "yjs": "13.6.33",
+  "rounds": 5,
+  "warmup": 3,
+  "samplesPerCase": 11,
+  "historyCycles": 500,
+  "historyMix": {
+    "typing": 60,
+    "deleting": 15,
+    "retyping": 15,
+    "split": 1,
+    "join": 1,
+    "retireJoin": 1,
+    "remove": 1,
+    "restore": 1,
+    "status": 2,
+    "comment": 3
+  },
+  "cases": [
+    "local character",
+    "remote character",
+    "remote status",
+    "remote comment",
+    "capture identities",
+    "resolve identity",
+    "remote burst 100",
+    "remote burst 100 individual transactions",
+    "remote split",
+    "remote join"
+  ],
+  "locks": [
+    "perf",
+    "smoke"
+  ],
+  "minFreeMemoryBytes": 3221225472,
+  "maxCpuBusyPercent": 35,
+  "maxConsecutiveRefusals": 3,
+  "retryDelayMs": 30000,
+  "rule": "max(base range, 15% of base median, 0.5 ms); candidate differences must exceed the rule in both directions; open floor 5 ms; heap 3% and 0.25 MiB; bytes exact",
+  "omitted": [
+    "paint",
+    "app derivations",
+    "real network",
+    "server receipts",
+    "blobs",
+    "full structural and mark integration"
+  ]
+}

@@ -23,6 +23,7 @@ const COMMENT_SPECIAL = ["body", "quotedText", "resolved", "resolvedAt", "resolv
 
 export interface ProjectionOptions {
   deriveCue?: boolean;
+  blocks?: readonly ProjectionBlock[];
 }
 
 function without(source: ProjectionBag, keys: readonly string[]): ProjectionBag {
@@ -261,7 +262,7 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     }
   }
   let heading: ProjectionBlock | null = null;
-  for (const block of projectionBlocks(doc, candidate)) {
+  for (const block of options.blocks ?? projectionBlocks(doc, candidate)) {
     if (block.kind === "h") { heading = block; continue; }
     const beat = mapValue(doc.getMap("beats").get(block.id));
     const row = readRecord(beat, BEAT);
