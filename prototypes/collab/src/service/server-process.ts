@@ -12,6 +12,7 @@ const journalConfiguration = await journal.ready;
 let hold = "";
 let premature = false;
 let prematureAfter20 = false;
+let acknowledgeBeforeCommit = false;
 let falseRefusal = false;
 let unsafe = false;
 let throwHook = false;
@@ -76,9 +77,10 @@ const server = new Server({
     }
     if (!unsafe) {
       try {
-        const [sequence] = await journal.append(documentName, [payload]);
+        const [sequence] = await journal.append(documentName, [payload], acknowledgeBeforeCommit
+          ? () => connection.send(new OutgoingMessage(connection.messageAddress).writeSyncStatus(true).toUint8Array()) : undefined);
         emit("committed", { sequence });
-        if (holdAfterCommit) await gate("post-commit-held");
+        if (holdAfterCommit || acknowledgeBeforeCommit) await gate("post-commit-held");
       } catch {
         connection.readOnly = true;
         connection.sendStateless(JSON.stringify({ rejected: "journal-write-failed", exportable: true }));
@@ -107,6 +109,7 @@ async function handleCommand(message: unknown): Promise<void> {
     hold = typeof m.hold === "string" ? m.hold : "";
     premature = m.premature === true;
     prematureAfter20 = m.prematureAfter20 === true;
+    acknowledgeBeforeCommit = m.acknowledgeBeforeCommit === true;
     falseRefusal = m.falseRefusal === true;
     unsafe = m.unsafe === true;
     throwHook = m.throwHook === true;
@@ -119,6 +122,9 @@ async function handleCommand(message: unknown): Promise<void> {
   } else if (m.command === "release") {
     gates.get(String(m.gate))?.();
     gates.delete(String(m.gate));
+  } else if (m.command === "terminate-worker") {
+    await journal.worker.terminate();
+    emit("worker-exited");
   } else if (m.command === "inspect") {
     const document = server.hocuspocus.documents.get("fixture");
     emit("inspection", {

@@ -12,7 +12,7 @@ function checkLockedRoundTrip(prefix: readonly boolean[]): void {
   assert.deepEqual(prefix, [], "Acknowledgement crossed the harness write-lock gate before a commit was possible");
 }
 
-for (const mode of ["premature", "ack-wait-commit", "journal"] as const) {
+for (const mode of ["premature", "ack-wait-commit", "journal", "after-unlock-ack"] as const) {
   test(`harness-owned write lock and same-socket ping: ${mode}`, async () => {
     const work = await workspace();
     const doc = fixture();
@@ -42,7 +42,8 @@ for (const mode of ["premature", "ack-wait-commit", "journal"] as const) {
       const vector = Y.encodeStateVector(doc);
       doc.getText("R1").insert(4, "e");
       const update = Y.encodeStateAsUpdate(doc, vector);
-      if (mode !== "journal") await server.command("configure", {
+      if (mode === "after-unlock-ack") await server.command("configure", { acknowledgeBeforeCommit: true });
+      else if (mode !== "journal") await server.command("configure", {
         hold: Buffer.from(update).toString("base64"), premature: mode === "premature", prematureAfter20: mode === "ack-wait-commit",
       });
       lock = new DatabaseSync(work.path, { timeout: 0 });
@@ -74,7 +75,7 @@ for (const mode of ["premature", "ack-wait-commit", "journal"] as const) {
       socket.ping(nonce);
       const prefix = await roundTrip;
       assert.deepEqual(readRecoveredRows(work.path), before);
-      if (mode === "journal") checkLockedRoundTrip(prefix);
+      if (mode === "journal" || mode === "after-unlock-ack") checkLockedRoundTrip(prefix);
       else {
         assert.deepEqual(prefix, [true]);
         assert.throws(() => checkLockedRoundTrip(prefix), /Acknowledgement crossed the harness write-lock gate/);
@@ -83,7 +84,7 @@ for (const mode of ["premature", "ack-wait-commit", "journal"] as const) {
       lock.exec("ROLLBACK");
       locked = false;
       if (mode === "journal") await until(() => wireStatuses.length === 2, "acknowledgement after unlocking");
-      else if (mode === "ack-wait-commit") await until(() => server.events.some(event => event.event === "post-commit-held"), "mutation committed and held after its early acknowledgement");
+      else if (mode === "ack-wait-commit" || mode === "after-unlock-ack") await until(() => server.events.some(event => event.event === "post-commit-held"), "mutation committed and held after its early acknowledgement");
       await server.kill();
       const rows = readRecoveredRows(work.path);
       assert.equal(rows.length, mode === "premature" ? 1 : 2);
@@ -97,10 +98,11 @@ for (const mode of ["premature", "ack-wait-commit", "journal"] as const) {
         } finally { recovered.destroy(); }
       }
       await writeFile(new URL(`../../histories/ordering-${mode}.json`, import.meta.url), `${JSON.stringify({
-        shows: mode === "journal" ? "An independent SQLite write lock blocks commit; the same-socket pong arrives with no preceding update status; unlocking permits commit and acknowledgement."
+        shows: mode === "journal" ? "No acknowledgement precedes the matching pong while the harness holds the write lock; exact update bytes are present after unlocking and a hard kill."
+          : mode === "after-unlock-ack" ? "Not detected by this harness: the early acknowledgement occurs after unlock, outside the frozen pong prefix, before COMMIT returns."
           : "A premature acknowledgement precedes the same-socket pong while an independent write lock makes commit impossible; the ordering checker rejects it even with delayed receipt handling.",
         mode, expectedDisposition: "accepted", writerBusyTimeoutMs: 15000, receiptHandlingDelayMs: 250, statusesBeforePong: prefix,
-        rejectedByOrderingChecker: mode !== "journal", recoveredRows: rows.length,
+        rejectedByOrderingChecker: mode === "premature" || mode === "ack-wait-commit", recoveredRows: rows.length,
         rawUpdateJournaled: rows.some(row => row.payload === Buffer.from(update).toString("base64")),
       }, null, 2)}\n`);
     } finally {

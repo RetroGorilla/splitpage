@@ -1,0 +1,7 @@
+{
+  "shows": "Probabilistic observation: the server was killed in the positive acknowledgement frame callback and the exact sent update was absent from the recovered journal.",
+  "mode": "after-unlock-ack",
+  "iteration": 2,
+  "expectedRawUpdate": "AgELAIQHAwFlAQcABAECUjEEYWJjZAA=",
+  "recoveredRows": []
+}
