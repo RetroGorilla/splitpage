@@ -57,7 +57,7 @@ export function insertSharedHtml(text: Y.Text, html: string, tags: readonly Reco
   for (const token of htmlTokens(html)) {
     if (token[0] !== "<") {
       if (atom) atom.label += unescape(token);
-      else result.push({ insert: unescape(token).replace(/[\n\r]/g, " "), attributes: current() });
+      else result.push({ insert: unescape(token).replace(/[\r\n]+/g, " "), attributes: current() });
       continue;
     }
     const name = /^<\/?([\w-]+)/.exec(token)?.[1]?.toLowerCase();

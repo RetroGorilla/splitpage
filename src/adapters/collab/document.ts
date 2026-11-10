@@ -38,7 +38,8 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
   const state = collabState(handle);
   const trial = new CollabDocumentState();
   try {
-    Y.decodeUpdate(update);
+    const decoded = Y.decodeUpdate(update);
+    if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
     Y.applyUpdate(trial.doc, Y.encodeStateAsUpdate(state.doc));
     Y.applyUpdate(trial.doc, update);
   } catch {

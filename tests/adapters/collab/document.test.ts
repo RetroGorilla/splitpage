@@ -7,6 +7,8 @@ import { collabState } from "../../../src/adapters/collab/state.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import { DeliveryQueue } from "../../collab/delivery.ts";
+import { decodeBody } from "../../../src/adapters/richtext/decode.ts";
+import { jsdomParser } from "../richtext/jsdom.mjs";
 import { validatedFixture, storedValue, readRoots, deliveryReplica } from "./helpers.ts";
 
 test("empty script hydrates all sixteen roots without inventing a beat", () => {
@@ -41,6 +43,27 @@ test("hydration preserves headings, paragraphs, stored characters, marks, atoms 
   assert.deepEqual(storedValue(roots.beats.get("R1")), { extra: "{}", id: "R1", joins: {}, lengthSeconds: 7, paragraphStart: true, removals: {}, stamp: { at: "", by: null }, status: "shot" });
   assert.deepEqual(storedValue(roots.headings), { H1: { extra: "{}", id: "H1" } });
   destroySharedDocument(handle);
+});
+
+test("hydration collapses stored line-end runs exactly like the editor decoder", () => {
+  for (const [html, expected] of [
+    ["a\n\nb", "a b"], ["\r\n", " "], ["\n\na", " a"], ["a\r\n\r", "a "],
+    ["a\n\n<br>\r\nb", "a \n b"], ["\n<br>\n", " \n "]
+  ] as const) {
+    const Parser: new () => DOMParser = jsdomParser();
+    const decoded = decodeBody(new Parser().parseFromString(`<body>${html}</body>`, "text/html").body).map(run => run.text).join("");
+    assert.equal(decoded, expected, JSON.stringify(html));
+    const handle = createSharedDocument();
+    hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: html, visualText: html }] }));
+    for (const record of [collabState(handle).roots.segments.get("b:R1"), collabState(handle).roots.visuals.get("R1")]) {
+      assert.ok(record instanceof Y.Map);
+      const text: unknown = record.get("text");
+      assert.ok(text instanceof Y.Text);
+      assert.equal(text.toString(), expected, JSON.stringify(html));
+      assert.equal(text.toString(), decoded);
+    }
+    destroySharedDocument(handle);
+  }
 });
 
 test("hydration keeps comments, replies, tags, gallery metadata, stamps and unknown fields", () => {
@@ -181,6 +204,34 @@ test("remote formatting cleanup retains the remote origin and releases the origi
   detach();
   destroySharedDocument(a);
   destroySharedDocument(b);
+});
+
+test("zero-length decoded structs are refused in both orders without blocking pending valid dependencies", () => {
+  const zeroLength = new Uint8Array([1, 1, 1, 0, 40, 1, 4, 109, 101, 116, 97, 1, 120, 0, 0]);
+  const writer = new Y.Doc();
+  writer.clientID = 1;
+  writer.getMap("meta").set("x", 1);
+  const normal = Y.encodeStateAsUpdate(writer);
+  const vector = Y.encodeStateVector(writer);
+  writer.getMap("meta").set("x", 2);
+  const dependent = Y.encodeStateAsUpdate(writer, vector);
+  for (const badFirst of [true, false]) {
+    const handle = createSharedDocument();
+    if (!badFirst) assert.deepEqual(applySharedUpdate(handle, normal), { ok: true });
+    const before = encodeSharedState(handle);
+    assert.deepEqual(applySharedUpdate(handle, zeroLength), { ok: false, reason: "invalid-update" });
+    assert.deepEqual(encodeSharedState(handle), before);
+    if (badFirst) assert.deepEqual(applySharedUpdate(handle, normal), { ok: true });
+    assert.equal(collabState(handle).roots.meta.get("x"), 1);
+    destroySharedDocument(handle);
+  }
+  const pending = createSharedDocument();
+  assert.deepEqual(applySharedUpdate(pending, dependent), { ok: true });
+  assert.equal(collabState(pending).roots.meta.get("x"), undefined);
+  assert.deepEqual(applySharedUpdate(pending, normal), { ok: true });
+  assert.equal(collabState(pending).roots.meta.get("x"), 2);
+  destroySharedDocument(pending);
+  writer.destroy();
 });
 
 test("vectors, reverse and duplicated deliveries and a late joiner agree root by root", () => {
