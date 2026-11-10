@@ -95,6 +95,6 @@ M1 additionally needs every provider/hydration/recovery ingress behind one bound
 
 ## Reproduction
 
-Install with npm ci in prototypes/collab using Node 24.22.1. Set TEMP and TMP to the lane's temporary folder. From the repository root, invoke `& D:\vibecoding\Splitpage\tools\with-lock.ps1 -Lock smoke -Owner s1a-browser-slice -Command 'npm run slice --prefix prototypes/collab'`. Edge chooses a free debugging port, uses a temporary profile with msImplicitSignin disabled, and is closed in finally. Set SLICE_EDGE only to use another Edge executable.
+Install with npm ci in prototypes/collab using Node 24.22.1. Set TEMP and TMP to the lane's temporary folder. From the repository root, invoke `& '<lane-tools>/with-lock.ps1' -Lock smoke -Owner s1a-browser-slice -Command 'npm run slice --prefix prototypes/collab'`. Edge chooses a free debugging port, uses a temporary profile with msImplicitSignin disabled, and is closed in finally. Set SLICE_EDGE only to use another Edge executable.
 
 `npm run slice` records slice-evidence.json and generates this report and histories. `node src/slice/report.ts --check` checks generated artifacts without a browser. `npm test` rechecks retained models and asserted failure evidence without launching a browser. The evidence contains raw events, node ranges, creation-time identity bindings, forward/undo models and the browser version. No app/browser suites, native OS input method, server, mechanism choice or performance claim is included.

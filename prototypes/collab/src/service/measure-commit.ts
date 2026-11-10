@@ -56,7 +56,7 @@ for (const batchSize of [1, 5]) {
 }
 const report = {
   scope: process.argv[4] ?? "LOCAL PC DISK ONLY; deployment disk has not been measured", measuredAt: new Date().toISOString(),
-  node: process.version, sqlite: process.versions.sqlite, platform: platform(), osRelease: release(), architecture: arch(), directory,
+  node: process.version, sqlite: process.versions.sqlite, platform: platform(), osRelease: release(), architecture: arch(), directory: "<measurement-directory>",
   durability: { journalMode: "wal", synchronous: 2 },
   method: "Three fresh databases per row, 50 one-character Yjs transactions spaced 100 ms apart per typing repetition, then 1000 without delay per burst repetition. Fixed batches of 1 or 5 separately stored raw updates per BEGIN IMMEDIATE / COMMIT. Timing includes BEGIN, inserts and FULL COMMIT, excludes Yjs encoding and batch wait. No WAL checkpoint inside timed regions. No asynchronous receipt before commit.",
   results,

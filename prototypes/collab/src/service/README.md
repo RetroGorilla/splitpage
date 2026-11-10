@@ -21,7 +21,7 @@ New prototype-only development dependencies: `ws` 8.22.2 supplies the public cli
 From `prototypes/collab/`, with Node 24.22.1:
 
 ```powershell
-$env:TEMP='C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1b-journal'
+$env:TEMP='<temp>/splitpage-lanes/s1b-journal'
 $env:TMP=$env:TEMP
 npm ci
 npm test

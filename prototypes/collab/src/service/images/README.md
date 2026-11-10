@@ -140,7 +140,7 @@ Real-editor wiring would need a completion-aware local blob/replica transaction 
 Node 24.22.1, pinned package versions, combined base `cbda7904` (#1399/#1401), Windows on this PC:
 
 ```powershell
-$env:TEMP='C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1b-images'
+$env:TEMP='<temp>/splitpage-lanes/s1b-images'
 $env:TMP=$env:TEMP
 npm ci
 node --test --test-concurrency=1 test/service/images/images.test.ts

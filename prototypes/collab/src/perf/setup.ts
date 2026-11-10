@@ -31,12 +31,15 @@ export function validateTimedSource(sourceHead: string, sourceDigest: string, au
   assert.equal(sourceDigest, snapshot.sourceDigest);
   const files = perfSourceFiles().filter(file => !["setup.ts", "report.ts", "timing-report.ts", "privacy.ts"].includes(file));
   assert.deepEqual(Object.keys(snapshot.files), files);
-  assert.ok(Object.keys(snapshot.metadataRedactions ?? {}).every(file => file === "conditions.ts"));
+  assert.ok(Object.keys(snapshot.metadataRedactions ?? {}).every(file => ["conditions.ts", "../proj/costs.ts"].includes(file)));
   for (const file of files) {
     let source = readFileSync(new URL(file, import.meta.url), "utf8");
-    if (file === "conditions.ts" && snapshot.metadataRedactions?.[file]) {
+    if (snapshot.metadataRedactions?.[file]) {
       assert.equal(createHash("sha256").update(source).digest("hex"), snapshot.metadataRedactions[file]);
-      for (const [redacted, original] of [["cpus, freemem, release", "cpus, freemem, hostname, release"], ["return { cpu: ", "return { hostname: hostname(), cpu: "]]) {
+      const substitutions = file === "conditions.ts"
+        ? [["cpus, freemem, release", "cpus, freemem, hostname, release"], ["return { cpu: ", "return { hostname: hostname(), cpu: "]]
+        : [["cpus, freemem, release", "cpus, freemem, hostname, release"], ['machine: "<machine>",', "machine: hostname(),"]];
+      for (const [redacted, original] of substitutions) {
         assert.ok(redacted && original);
         assert.equal(source.split(redacted).length, 2);
         source = source.replace(redacted, original);

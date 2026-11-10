@@ -65,7 +65,8 @@ export class SliceProtocol {
 
 export async function withSliceBrowser<T>(run: (protocol: SliceProtocol, version: Record<string, unknown>, directory: string) => Promise<T>): Promise<T> {
   const directory = await mkdtemp(join(tmpdir(), "browser-slice-"));
-  const executable = process.env.SLICE_EDGE ?? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+  const programFiles = process.env["ProgramFiles(x86)"] ?? `${process.env.SystemDrive ?? "C:"}\\Program Files (x86)`;
+  const executable = process.env.SLICE_EDGE ?? join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe");
   const child = spawn(executable, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(directory, "profile")}`, "--no-first-run", "--no-default-browser-check", "--disable-features=Translate,msEdgeSplitScreen,msImplicitSignin", "--disable-sync", "--disable-background-networking", "about:blank"], { windowsHide: true, stdio: "ignore" });
   let spawnError: Error | null = null;
   child.on("error", error => { spawnError = error; });

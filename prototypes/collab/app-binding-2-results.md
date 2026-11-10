@@ -4,7 +4,7 @@
 
 All new results use Candidate A and throwaway app **[`935e618949a2e964198847daa2115d35e1da58ef`](https://github.com/RetroGorilla/splitpage/commit/935e618949a2e964198847daa2115d35e1da58ef)** on `proto/collab-1a-app-binding-throwaway`, never to merge. This extends the earlier app patch with a single-beat paste command seam and observation of actual `flow-surface.paint` boundaries. The deliverable changes only `prototypes/collab/`.
 
-The [measured matrix and all nine timing rows](app-binding-2-measurements.md) are generated from [raw evidence](app-binding-2/evidence.json). Machine: **DESKTOP-NEFVS90**, AMD Ryzen 9 9950X3D2 16-Core Processor, Windows kernel 10.0.26300, Node 24.22.1, headless Edge 157.0.4341.42. Measurements below belong to this machine and pinned app, with one browser under the smoke lock.
+The [measured matrix and all nine timing rows](app-binding-2-measurements.md) are generated from [raw evidence](app-binding-2/evidence.json). Machine: **<machine>**, AMD Ryzen 9 9950X3D2 16-Core Processor, Windows kernel 10.0.26300, Node 24.22.1, headless Edge 157.0.4341.42. Measurements below belong to this machine and pinned app, with one browser under the smoke lock.
 
 ## What is checked
 
@@ -48,7 +48,7 @@ B formats original b/c while A composes xy at their gap. A's original composing 
 
 **M2's three plain-xy results mismatch artifact 8 T21.** T21 requires a concurrent insertion inside the formatted range to be bold, including explicit `{}` inserts and D3 delivery. M1/M3's local transaction is concurrent with B's marks. M2's early integration makes its `{}` insertion causally later internally, but that is not new user intent to remove bold. The bold requirement is not an open product question. The tag containment/comment-union projection subsequently covers the inserted gap even when M2's raw inserted annotation attributes are empty.
 
-All nine bold runs and all nine comment/tag runs pass the existing text/identity and remote-record checks. For bold, the checker checks remote bold only on the original b/c characters, not on new xy; its PASS labels therefore do not establish T21 compliance. The app renders the observed bold/plain difference. **Comment/tag narration projection remains unbound:** the old binding passes raw c:/t: attributes to the core HTML writer without mapping them to the app's cmt/tag representation or installing the comment/tag registries. The final app narration is plain `abxycd` under all three for the annotation case; this is not a successful app-level T11/T20/T21 mark binding.
+All nine bold runs and all nine comment/tag runs pass the existing text/identity and remote-record checks. For bold, the checker checks remote bold only on the original b/c characters, not on new xy; its PASS labels therefore do not establish T21 compliance. The app renders the observed bold/plain difference. **Comment/tag narration projection remains unbound:** the old binding passes raw c: and t: attributes to the core HTML writer without mapping them to the app's cmt/tag representation or installing the comment/tag registries. The final app narration is plain `abxycd` under all three for the annotation case; this is not a successful app-level T11/T20/T21 mark binding.
 
 The replica-level commands and `readStructure` still check C1, its active anchor and P under each mechanism while native DOM is preserved. Completing that binding requires the CRDT-to-app mark adapter, per-occurrence tag/registry mapping, comment records and anchor/recovery projection, then composition-aware paint and selection handling. Local mark/structure commands remain refused. [Mark history](histories/T04-app-remote-marks.md) retains raw and projected differences for every order.
 
@@ -95,9 +95,9 @@ The early hold and M2's additional native paint gate protect against the harness
 From the deliverable branch, root/prototype dependencies installed, Node 24.22.1:
 
 ```powershell
-$env:TEMP = 'C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1a-app-binding-2'
+$env:TEMP = '<temp>/splitpage-lanes/s1a-app-binding-2'
 $env:TMP = $env:TEMP
-& D:\vibecoding\Splitpage\tools\with-lock.ps1 -Lock smoke -Owner s1a-app-binding-2 -Command 'node prototypes/collab/src/app-binding-2/run.ts'
+& '<lane-tools>/with-lock.ps1' -Lock smoke -Owner s1a-app-binding-2 -Command 'node prototypes/collab/src/app-binding-2/run.ts'
 node --test prototypes/collab/test/app-binding-2/evidence.test.ts
 node prototypes/collab/src/app-binding-2/report.ts --check
 ```

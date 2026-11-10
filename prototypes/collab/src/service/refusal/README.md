@@ -82,7 +82,7 @@ Production needs: confirmed local-storage completion and hydration, current-devi
 With Node 24.22.1 from `prototypes/collab/`:
 
 ```powershell
-$env:TEMP='C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1b-refusal'
+$env:TEMP='<temp>/splitpage-lanes/s1b-refusal'
 $env:TMP=$env:TEMP
 npm ci
 node --test --test-concurrency=1 test/service/refusal/refusal.test.ts

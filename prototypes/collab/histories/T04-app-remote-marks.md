@@ -1,6 +1,6 @@
 Remote formatting during composition can produce different marks on the new local identities; comment/tag projection remains unbound in the app.
 
-App 935e618949a2e964198847daa2115d35e1da58ef; Edg/157.0.4341.42; machine DESKTOP-NEFVS90, AMD Ryzen 9 9950X3D2 16-Core Processor         , v24.22.1.
+App 935e618949a2e964198847daa2115d35e1da58ef; Edg/157.0.4341.42; machine <machine>, AMD Ryzen 9 9950X3D2 16-Core Processor         , v24.22.1.
 
 Generated from retained observations. New combinations use invariant checks, not newly invented visible-script oracles.
 
