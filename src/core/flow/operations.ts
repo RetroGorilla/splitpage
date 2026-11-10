@@ -69,7 +69,10 @@ export class FlowOperationTrace {
     this.replace(owner, cell, from, to, [], field);
   }
   insert(owner: string, cell: readonly Run[], offset: number, piece: readonly Run[], field: SharedTextAddress["field"] = "audioText"): void {
+    const recorded = this.ops.length;
     this.replace(owner, cell, offset, offset, piece, field);
+    if (this.ops.length === recorded) this.emit({ kind: "text-insert", target: this.target(owner, field),
+      at: this.gap(owner, field === "heading" ? offset : clamp(cell, offset), field), content: [] });
   }
   replace(owner: string, cell: readonly Run[], from: number, to: number, piece: readonly Run[], field: SharedTextAddress["field"] = "audioText", insertAt?: number): void {
     const range = field === "heading" ? { from, to } : from === to ? { from: clamp(cell, from), to: clamp(cell, to) } : clampRange(cell, from, to);
@@ -169,7 +172,9 @@ export class FlowOperationTrace {
     }
     for (const scene of result.sections ?? []) {
       const original = Array.isArray(this.base.sections) ? this.base.sections.find((item: { id: string }) => item.id === scene.id) as { firstSceneId: string } | undefined : undefined;
-      if (!original || original.firstSceneId === scene.firstSceneId) continue;
+      const creation = this.ops.find(op => op.kind === "heading-create" && op.heading === scene.id);
+      const first = original?.firstSceneId ?? (creation?.kind === "heading-create" ? creation.firstBeat : undefined);
+      if (first === undefined || first === scene.firstSceneId) continue;
       this.emit({ kind: "scalar", target: { scope: "heading", record: flowIdentity(scene.id) }, field: "firstSceneId", value: scene.firstSceneId });
     }
     return { ...out, ops: this.ops };

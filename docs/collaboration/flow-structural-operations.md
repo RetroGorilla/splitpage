@@ -70,12 +70,13 @@ The remaining fixture rows are accounted for below. The first commit moves only 
 
 No operation kind is added. Two optional vocabulary fields preserve observations needed by composition: a range removal can carry comments observed as removed during that step, and a b-roll insertion can carry its displayed text beside its identity. Both fields pass the operation reader. A subsequent paste can reintroduce the same anchor without changing the clearing step's removedComments result. These observations do not implement shared recovery policy or registry creation.
 
-The trace now retains owner, field and UTF-16 position per observed unit through insertions, deletions and splits. Consecutive references are compacted; inserted units refer to their producing operation. Heading provenance remains heading provenance when its tail becomes narration. Narration replacement separately clamps the deletion and the insertion into the remaining cell, matching the app. Headings continue to use raw UTF-16 offsets. By reading, recording consumes no additional ids.
+The trace now retains owner, field and UTF-16 position per observed unit through insertions, deletions and splits. New-heading anchors are tracked through later repairs in the same paste. Consecutive references are compacted; inserted units refer to their producing operation. Heading provenance remains heading provenance when its tail becomes narration. Narration replacement separately clamps the deletion and the insertion into the remaining cell, matching the app. Headings continue to use raw UTF-16 offsets. By reading, recording consumes no additional ids.
 
 Marks carry kind, identity where present, value and observed ranges, emitted per beat in document order. Formatting records the requested on/off intent; identity-bearing changes retain the relevant comment/tag/link ids. A no-effect identity-mark attempt can still canonicalize a touched cell's HTML; a scalar audioText observation preserves that representation change without inventing an unrelated mark intent. Its concurrent interpretation is left to shared integration. The interpreter uses text serialization/normalization but no flow implementation or helper. Its atom formatting exclusions and tag-stack updates reproduce the low-level text policy. Visual creation carries initial HTML; replacing an existing visual uses record-set html. That whole-field value is deliberately not claimed as concurrent text intent.
 
 Fixture corrections, demonstrated by the exact kind checks:
 
+- typeWithMarks retains text-insert for normalized-empty typing: an empty insertion observes the serialization of the touched cell.
 - setMarkAcross includes scalar for a no-effect identity-mark attempt that canonicalizes the stored HTML.
 - pasteFlowRange does not create registries/comments, restore cut records or move source segments; those are clipboard-caller responsibilities. Its row now lists only the kinds this flow entry emits.
 - setVisualForRange includes record-set for existing visual HTML and text-insert for overlapping surrogate slices; its package 9 handoff remains explicit.
@@ -86,24 +87,24 @@ The two-sided kind assertion compares emitted kinds with the fixture's operation
 
 ### Package 4b evidence
 
-The added differential test evaluates the unchanged source generators: fuzz seeds 1-240, reference seeds 1-300 with their six ranges, typing's 160-step seed-371 stream and round-four's 120 gallery cases. It adds a bidirectional surrogate matrix for beat/heading range endpoints, rich pasted text with comments, nested tags, links, line breaks, direction/cue marks and atoms, ten mark-name cases, three all-on identity clears, two supplied-original-id cases, two raw-surrogate pasted headings and empty-heading replacement. Each edit compares complete rows, sections and removedComments, checks recording-off equality, source immutability, wire validity and distinct operation ids. A mismatch reports the seed and a row-reduced input. Counts and changing-edit floors are asserted.
+The added differential test evaluates the unchanged source generators: fuzz seeds 1-240, reference seeds 1-300 with their six ranges, typing's 160-step seed-371 stream and round-four's 120 gallery cases. It adds a bidirectional surrogate matrix for beat/heading range endpoints, rich pasted text with comments, nested tags, links, line breaks, direction/cue marks and atoms, ten mark-name cases, three all-on identity clears, two supplied-original-id cases, two raw-surrogate pasted headings, two colliding pasted-header cases, empty typing of noncanonical HTML, consecutive/nonconsecutive source moves and empty-heading replacement. Each edit compares complete rows, sections and removedComments, checks recording-off equality, source immutability, wire validity and distinct operation ids. A mismatch reports the seed and a row-reduced input. Counts and changing-edit floors are asserted.
 
 | Function | Calls | Changing edits | Asserted floor |
 | --- | ---: | ---: | ---: |
 | replaceRange | 2,402 | 2,364 | 2,360 |
-| typeWithMarks | 2,402 | 1,563 | 1,560 |
+| typeWithMarks | 2,403 | 1,564 | 1,560 |
 | pasteText | 2,402 | 2,364 | 2,360 |
-| pasteFlowRange | 2,405 | 2,403 | 2,400 |
+| pasteFlowRange | 2,407 | 2,405 | 2,400 |
 | replaceFlowMatches | 2,482 | 1,121 | 1,120 |
 | replaceAll | 2,402 | 931 | 930 |
 | setMarkAcross | 2,415 | 1,596 | 1,590 |
 | setVisualForRange | 2,402 | 508 | 500 |
 | selectionToOwnBeat | 2,402 | 230 | 230 |
 | insertBeats | 2,403 | 1,603 | 1,600 |
-| moveBeats | 2,402 | 1,635 | 1,630 |
+| moveBeats | 2,404 | 1,636 | 1,630 |
 | sentenceParagraphs | 2,402 | 401 | 400 |
 
-This is 28,921 added calls and 16,719 changing edits, with zero mismatches. The unchanged 4a test retains its 125,143 calls and 52,323 changing edits. Run node tests/core/flow/standalone-proof.mjs c2e6c55c by hand to compare the recording-off results with the package 4a starting commit, including the original feature-owned replacement loop. The proof runs the same asserted call inventory and removes its temporary modules in finally. Run it separately from inventory checks.
+This is 28,926 added calls and 16,723 changing edits, with zero mismatches. The unchanged 4a test retains its 125,143 calls and 52,323 changing edits. Run node tests/core/flow/standalone-proof.mjs c2e6c55c by hand to compare the recording-off results with the package 4a starting commit, including the original feature-owned replacement loop. The proof runs the same asserted call inventory and removes its temporary modules in finally. Run it separately from inventory checks.
 
 By reading, the added request branches are in replaceRange, typeWithMarks, pasteText, pasteFlowRange, replaceMatch, replaceAll, replaceFlowMatches, setMarkAcross, setVisualForRange, selectionToOwnBeat, insertBeats, moveBeats and sentenceParagraphs. The keystroke path gains branches in replaceRange/typeWithMarks and optional trace calls in their text edits; the existing splitBeat and enterInHeading recording calls now use the provenance-aware split method. The pure find replacement call moves into core. No allocation or performance claim is made; the coordinator owns timings. Undo and save owners are untouched.
 

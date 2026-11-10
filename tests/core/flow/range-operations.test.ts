@@ -33,6 +33,7 @@ interface RangeOperationCase {
   needle: string;
   whole: boolean;
   mark?: MarkName;
+  rowIds?: readonly string[];
 }
 function ports(record: boolean): FlowPorts {
   let next = 0;
@@ -50,7 +51,7 @@ function runRange(input: RangeOperationCase, ports: FlowPorts): FlowOutcome {
     case "setVisualForRange": return setVisualForRange(doc, range, toHtml(input.piece), ports);
     case "selectionToOwnBeat": return flow.selectionToOwnBeat(doc, range, ports);
     case "insertBeats": return flow.insertBeats(doc, pos, input.clip.rows, ports);
-    case "moveBeats": return flow.moveBeats(doc, doc.rows.slice(0, 1).map(row => row.id), pos, ports);
+    case "moveBeats": return flow.moveBeats(doc, input.rowIds ?? doc.rows.slice(0, 1).map(row => row.id), pos, ports);
     case "sentenceParagraphs": {
       const rows = flow.sentenceParagraphs(doc, ports);
       return { rows: rows.slice(), sections: flow.normalizedSections(doc.sections), removedComments: [], selection: range, ...(rows.ops ? { ops: rows.ops } : {}) };
@@ -171,6 +172,16 @@ test("range operations reproduce rows, sections and removed comments over retain
     clip: { rows: [retainedDoc.rows[0] as FlowRow], wholeIds: ["a"], headers: [], text: "Original" } });
   for (const name of ["A\ud83d", "\ude00B"]) counted({ ...rangeCase(retainedDoc, flow.caretAt(flow.beatPos("b", 0)), "raw-heading:" + JSON.stringify(name), 1), name: "pasteFlowRange",
     clip: { rows: [], wholeIds: [], text: name, headers: [{ index: 0, scene: { id: "raw", name, firstSceneId: "unused" } }] } });
+  for (const doc of [retainedDoc, { ...retainedDoc, sections: [{ id: "old", name: "Old", firstSceneId: "b" }] }]) counted({
+    ...rangeCase(doc, flow.caretAt(flow.beatPos("b", 0)), "colliding-pasted-headers:" + !!doc.sections, 1), name: "pasteFlowRange",
+    clip: { text: "Copy", rows: [{ id: "copy", audioText: "Copy" }], wholeIds: ["copy"], headers: [
+      { index: 0, scene: { id: "one", name: "One", firstSceneId: "copy" } }, { index: 0, scene: { id: "two", name: "Two", firstSceneId: "copy" } }
+    ] } });
+  const rawDoc: FlowDoc = { rows: [{ id: "a", audioText: "<b>Bold</b>" }], comments: [] };
+  counted({ ...rangeCase(rawDoc, flow.caretAt(flow.beatPos("a", 0)), "empty-typing-serialization", 0), name: "typeWithMarks", text: "\u200b" });
+  const moveDoc: FlowDoc = { rows: [{ id: "a", audioText: "One", paragraphStart: true }, { id: "b", audioText: "Two" }, { id: "c", audioText: "Destination" }], comments: [] };
+  counted({ ...rangeCase(moveDoc, flow.caretAt(flow.beatPos("c", 2)), "move-consecutive", 1), name: "moveBeats", rowIds: ["a", "b"] });
+  counted({ ...rangeCase(moveDoc, flow.caretAt(flow.beatPos("b", 0)), "move-nonconsecutive", 1), name: "moveBeats", rowIds: ["a", "c"] });
   const markedDoc: FlowDoc = { rows: [{ id: "a", audioText: toHtml([{ text: "tag", marks: { tag: "t:props:Box", innerTags: ["t:props:Red"], cmt: ["one", "two"], href: "https://example.com/" } }]) }], comments: [] };
   const markedRange = { anchor: flow.beatPos("a", 0), head: flow.beatPos("a", 3) };
   for (const mark of ["tag", "cmt", "href"] as const) counted({ ...rangeCase(markedDoc, markedRange, "clear-identity:" + mark, 1), name: "setMarkAcross", mark });
@@ -184,7 +195,7 @@ test("range operations reproduce rows, sections and removed comments over retain
     assert.ok(row);
     assert.deepEqual([...kinds.get(name) ?? []].sort(), row[2].split(" | ").filter(part => part !== "whole-field today, needs package 9" && part !== "partial-segment-move").flatMap(part => part.split(",")).sort(), name + " exact kinds");
     assert.ok((edits.get(name) ?? 0) >= floors[name], name + " changing edit floor");
-    assert.equal(counts.get(name), name === "replaceFlowMatches" ? 2482 : name === "setMarkAcross" ? 2415 : name === "pasteFlowRange" ? 2405 : name === "insertBeats" ? 2403 : 2402, name + " call count");
+    assert.equal(counts.get(name), name === "replaceFlowMatches" ? 2482 : name === "setMarkAcross" ? 2415 : name === "pasteFlowRange" ? 2407 : name === "typeWithMarks" ? 2403 : name === "moveBeats" ? 2404 : name === "insertBeats" ? 2403 : 2402, name + " call count");
     t.diagnostic(name + ": " + counts.get(name) + " calls, " + edits.get(name) + " changing edits, 0 mismatches");
   }
 });

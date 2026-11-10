@@ -178,7 +178,8 @@ export const builderOperationCoverage = [
 export const flowOperationCoverage = [
   ["typeWithMarks", "known", "text-insert", [
     ["insert text with explicit attributes", ["text-insert"]],
-    ["zero-width-space stripping / non-beat/missing row", []]
+    ["normalized-empty typing still serializes its touched cell", ["text-insert"]],
+    ["non-beat/missing row", []]
   ]],
   ["replaceRange", "known", "text-insert,text-delete,segment-create,remove,heading-remove,scalar", [
     ["partial beat or heading edits", ["text-insert", "text-delete"]],
