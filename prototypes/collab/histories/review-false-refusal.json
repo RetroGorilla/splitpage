@@ -1,0 +1,9 @@
+{
+  "shows": "A false refusal notice cannot downgrade a harness-declared accepted snapshot to coverage-only checking.",
+  "expectedDisposition": "accepted",
+  "observedNotice": "invalid-or-oversized",
+  "applied": true,
+  "journalRows": 3,
+  "rejectedForNoticeMismatch": true,
+  "alsoRejectedWithoutNoticeForMissingExactBytes": true
+}

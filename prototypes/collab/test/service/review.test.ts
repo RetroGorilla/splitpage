@@ -25,6 +25,7 @@ async function coveredSnapshot(delivery: "normal" | "ack-before-ipc"): Promise<v
     assert.equal(before.length, coveredExpected.journalRows);
     const release = delivery === "ack-before-ipc" ? server.holdEvent("refused") : null;
     const index = client.history.length;
+    client.expectNextMessage({ disposition: "refused", reason: "oversized", maximumBytes: 2097152 });
     client.socket.send(syncFrame("fixture", 1, snapshot));
     await until(() => client?.history[index]?.applied !== null);
     assert.equal(client.history[index]?.applied, coveredExpected.applied);
@@ -64,7 +65,7 @@ async function coveredSnapshot(delivery: "normal" | "ack-before-ipc"): Promise<v
     const acknowledged = client.history[index];
     assert.ok(acknowledged);
     assert.equal(acknowledged.disposition, "refused");
-    assert.throws(() => checkHistory([{ ...acknowledged, disposition: "accepted" }], rows), /missing exact bytes/);
+    assert.throws(() => checkHistory([{ ...acknowledged, disposition: "accepted", notice: null }], rows), /missing exact bytes/);
   } finally { client?.destroy(); await work.clean(); }
 }
 for (const delivery of ["normal", "ack-before-ipc"] as const) {
@@ -92,6 +93,7 @@ for (const change of ["insertion", "deletion"] as const) {
       const snapshot = Y.encodeStateAsUpdate(candidate);
       const before = readRecoveredRows(work.path);
       const index = client.history.length;
+      client.expectNextMessage({ disposition: "refused", reason: "oversized", maximumBytes: 2097152 });
       client.socket.send(syncFrame("fixture", 1, snapshot));
       await until(() => client?.history[index]?.applied !== null);
       const refused = client.history[index];
@@ -124,6 +126,7 @@ test("review: socket maxPayload closes a covered oversized snapshot, then reconn
     const before = readRecoveredRows(work.path);
     client.socket.configuration.delay = 50;
     client.socket.configuration.minDelay = 50;
+    client.expectNextMessage({ disposition: "refused", reason: "oversized", maximumBytes: 2097152 });
     client.socket.send(syncFrame("fixture", 1, Y.encodeStateAsUpdate(client.document)));
     await until(() => client?.sockets.length === 2, "automatic reconnect");
     await client.saved();
@@ -147,6 +150,9 @@ test("review: socket maxPayload repeatedly closes an uncovered oversized local u
     await client.connect(); await client.saved();
     client.socket.configuration.delay = 50;
     client.socket.configuration.minDelay = 50;
+    for (let transmission = 0; transmission < 3; transmission++) {
+      client.expectNextMessage({ disposition: "refused", reason: "oversized", maximumBytes: 2097152 });
+    }
     client.edit("Z".repeat(2200000));
     await until(() => (client?.closes.length ?? 0) >= 3, "three automatic socket-limit closes");
     client.socket.disconnect();

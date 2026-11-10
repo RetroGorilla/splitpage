@@ -97,9 +97,13 @@ export async function workspace(): Promise<{ path: string; start: (environment?:
   };
 }
 
-export type HarnessTransmission = {
+export type HarnessMessageExpectation =
+  | { disposition: "accepted" }
+  | { disposition: "refused"; reason: "oversized"; maximumBytes: number }
+  | { disposition: "refused"; reason: "undecodable" };
+export type HarnessTransmission = HarnessMessageExpectation & {
   lifetime: number; bytes: string; applied: boolean | null;
-  disposition: "accepted" | "refused"; committedThrough: number | null;
+  journalBeforeSend: number; notice: string | null;
 };
 export type HarnessSavedPromise = { status: string; local: string[]; acknowledged: string[] };
 
@@ -118,12 +122,12 @@ export class FixtureClient {
   readonly closes: { lifetime: number; code: number; reason: string; status: string }[] = [];
   onOpen: (() => void) | null = null;
   private lifetime = 0;
+  private readonly expectations: HarnessMessageExpectation[] = [];
 
   constructor(port: number, document = fixture()) {
     this.document = document;
     const journalPath = journalPaths.get(port);
     assert.ok(journalPath, "Socket must belong to a harness-owned journal");
-    const refusedLifetimes = new Set<number>();
     this.localUpdates.push(Buffer.from(Y.encodeStateAsUpdate(document)).toString("base64"));
     function observedSocket(owner: FixtureClient, journalPath: string): typeof WebSocket {
       return class extends WebSocket {
@@ -141,10 +145,6 @@ export class FixtureClient {
               const sent = owner.history.find(item => item.lifetime === this.lifetime && item.applied === null);
               assert.ok(sent, "harness acknowledgement must match a send");
               sent.applied = frame.subtype === 1;
-              const reader = new DatabaseSync(journalPath, { readOnly: true });
-              try {
-                sent.committedThrough = Number(reader.prepare("SELECT COALESCE(MAX(sequence), 0) AS sequence FROM updates").get()?.sequence);
-              } finally { reader.close(); }
               owner.receipts.received(this.lifetime, bytes);
               queueMicrotask(() => {
                 owner.observations.push({ count: owner.provider.unsyncedChanges, outstanding: owner.receipts.outstanding, status: owner.receipts.status });
@@ -163,9 +163,13 @@ export class FixtureClient {
           if (frame.kind === 0 && frame.subtype === 0) owner.syncStartCounts.push(owner.provider.unsyncedChanges);
           owner.frames.push({ direction: "out", lifetime: this.lifetime, kind: frame.kind, subtype: frame.subtype, payload: Buffer.from(frame.payload).toString("base64") });
           if (frame.kind === 0 && (frame.subtype === 1 || frame.subtype === 2)) {
+            const reader = new DatabaseSync(journalPath, { readOnly: true });
+            let journalBeforeSend: number;
+            try { journalBeforeSend = Number(reader.prepare("SELECT COALESCE(MAX(sequence), 0) AS sequence FROM updates").get()?.sequence); }
+            finally { reader.close(); }
             owner.history.push({
               lifetime: this.lifetime, bytes: Buffer.from(frame.payload).toString("base64"), applied: null,
-              disposition: refusedLifetimes.has(this.lifetime) ? "refused" : "accepted", committedThrough: null,
+              ...(owner.expectations.shift() ?? { disposition: "accepted" }), journalBeforeSend, notice: null,
             });
           }
           owner.receipts.sent(this.lifetime, data);
@@ -189,12 +193,18 @@ export class FixtureClient {
       name: "fixture", document, awareness: null, websocketProvider: this.socket,
       onOpen: () => { queueMicrotask(() => this.onOpen?.()); },
       onStateless: ({ payload }) => {
-        if (!payload.includes('"rejected":')) return;
-        refusedLifetimes.add(this.lifetime);
-        for (const sent of this.history.filter(item => item.lifetime === this.lifetime && item.applied === null)) sent.disposition = "refused";
+        const notice: unknown = JSON.parse(payload);
+        if (typeof notice !== "object" || notice === null || !("rejected" in notice)) return;
+        const sent = this.history.find(item => item.lifetime === this.lifetime && item.applied === null);
+        assert.ok(sent, "Refusal notice must match a transmitted message");
+        sent.notice = String(notice.rejected);
       },
     });
     this.provider.attach();
+  }
+
+  expectNextMessage(expectation: HarnessMessageExpectation): void {
+    this.expectations.push(expectation);
   }
 
   async connect(): Promise<void> {
@@ -260,13 +270,21 @@ export function checkHistory(history: readonly HarnessTransmission[], rows: read
     assert.ok(row.sequence > previous, "journal sequences must increase");
     previous = row.sequence;
   }
-  for (const sent of history.filter(item => item.applied)) {
-    assert.notEqual(sent.committedThrough, null, "Acknowledgement requires a harness-observed commit boundary");
-    const available = rows.filter(row => row.sequence <= Number(sent.committedThrough));
-    if (sent.disposition === "accepted") {
-      assert.ok(available.some(row => row.payload === sent.bytes), "Acknowledged update missing exact bytes from recovered journal before receipt");
+  for (const sent of history) {
+    if (sent.notice !== null) {
+      assert.equal(sent.disposition, "refused", "Server refusal notice disagrees with harness-declared acceptance");
+      assert.equal(sent.notice, "invalid-or-oversized", "Refusal notice disagrees with the declared input refusal");
     }
-    assertCoverage([sent.bytes], available.map(row => row.payload), "Acknowledged update lacks insertion or deletion coverage before receipt");
+    if (sent.disposition === "refused") {
+      if (sent.reason === "oversized") assert.ok(Buffer.from(sent.bytes, "base64").length > sent.maximumBytes, "Harness-declared oversize must exceed the configured limit");
+      else assert.throws(() => Y.decodeUpdate(Buffer.from(sent.bytes, "base64")), "Harness-declared undecodable input must fail independent decode");
+    }
+    if (!sent.applied) continue;
+    const available = sent.disposition === "refused" ? rows.filter(row => row.sequence <= sent.journalBeforeSend) : rows;
+    if (sent.disposition === "accepted") {
+      assert.ok(available.some(row => row.payload === sent.bytes), "Acknowledged update missing exact bytes from recovered journal");
+    }
+    assertCoverage([sent.bytes], available.map(row => row.payload), "Acknowledged update lacks insertion or deletion coverage in its declared journal baseline");
   }
   for (const promise of promises) {
     for (const payload of promise.acknowledged) assert.ok(history.some(sent => sent.applied && sent.bytes === payload), "Saved promise requires an observed acknowledgement");

@@ -18,14 +18,16 @@
       "bytes": "AQEHAAQBAlIxBGFiY2QA",
       "applied": true,
       "disposition": "accepted",
-      "committedThrough": 1
+      "journalBeforeSend": 0,
+      "notice": null
     },
     {
       "lifetime": 1,
       "bytes": "AQELAIQHAwFlAA==",
       "applied": true,
       "disposition": "accepted",
-      "committedThrough": 1
+      "journalBeforeSend": 1,
+      "notice": null
     }
   ],
   "told": [

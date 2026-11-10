@@ -1,15 +1,18 @@
 import { Server, OutgoingMessage } from "@hocuspocus/server";
 import { setTimeout as delay } from "node:timers/promises";
 import * as Y from "yjs";
-import { UpdateJournal } from "./journal.ts";
+import { JournalWorkerClient } from "./journal-client.ts";
 
 const path = process.argv[2];
 if (!path) throw new Error("Database path required");
-const journal = new UpdateJournal(path, {
+const journal = new JournalWorkerClient(path, {
   journalMode: process.env.JOURNAL_MODE ?? "WAL", synchronous: process.env.JOURNAL_SYNC ?? "FULL",
 });
+const journalConfiguration = await journal.ready;
 let hold = "";
 let premature = false;
+let prematureAfter20 = false;
+let falseRefusal = false;
 let unsafe = false;
 let throwHook = false;
 let failWrite = false;
@@ -30,7 +33,7 @@ const server = new Server({
   ...(process.env.MAX_PAYLOAD ? { websocketOptions: { maxPayload: Number(process.env.MAX_PAYLOAD) } } : {}),
   debounce: 2000, maxDebounce: 10000,
   async onLoadDocument({ documentName, document }) {
-    for (const row of journal.read(documentName)) Y.applyUpdate(document, row.payload);
+    for (const row of await journal.read(documentName)) Y.applyUpdate(document, row.payload);
     return document;
   },
   async beforeSync({ type, payload, connection, document, documentName }) {
@@ -39,6 +42,10 @@ const server = new Server({
     if (type !== 1 && type !== 2) return;
     if (throwHook) throw new Error("Injected hook exception");
     if (connection.readOnly) return;
+    if (falseRefusal) {
+      connection.sendStateless(JSON.stringify({ rejected: "invalid-or-oversized" }));
+      return;
+    }
     if (!unsafe) {
       let invalid = payload.byteLength > 2 * 1024 * 1024;
       if (!invalid) {
@@ -51,9 +58,14 @@ const server = new Server({
         return;
       }
     }
+    let holdAfterCommit = false;
     if (hold === Buffer.from(payload).toString("base64")) {
       if (premature) connection.send(new OutgoingMessage(connection.messageAddress).writeSyncStatus(true).toUint8Array());
-      await gate("held");
+      if (prematureAfter20) {
+        connection.send(new OutgoingMessage(connection.messageAddress).writeSyncStatus(true).toUint8Array());
+        await delay(20);
+        holdAfterCommit = true;
+      } else await gate("held");
       hold = "";
     }
     if (failWrite) {
@@ -64,8 +76,9 @@ const server = new Server({
     }
     if (!unsafe) {
       try {
-        const [sequence] = journal.append(documentName, [payload]);
+        const [sequence] = await journal.append(documentName, [payload]);
         emit("committed", { sequence });
+        if (holdAfterCommit) await gate("post-commit-held");
       } catch {
         connection.readOnly = true;
         connection.sendStateless(JSON.stringify({ rejected: "journal-write-failed", exportable: true }));
@@ -85,11 +98,16 @@ const server = new Server({
   },
 });
 process.on("message", (message: unknown) => {
+  void handleCommand(message);
+});
+async function handleCommand(message: unknown): Promise<void> {
   if (typeof message !== "object" || message === null || !("command" in message)) return;
   const m = message as Record<string, unknown>;
   if (m.command === "configure") {
     hold = typeof m.hold === "string" ? m.hold : "";
     premature = m.premature === true;
+    prematureAfter20 = m.prematureAfter20 === true;
+    falseRefusal = m.falseRefusal === true;
     unsafe = m.unsafe === true;
     throwHook = m.throwHook === true;
     failWrite = m.failWrite === true;
@@ -104,7 +122,7 @@ process.on("message", (message: unknown) => {
   } else if (m.command === "inspect") {
     const document = server.hocuspocus.documents.get("fixture");
     emit("inspection", {
-      rows: journal.read("fixture").map(row => ({ sequence: row.sequence, payload: Buffer.from(row.payload).toString("base64") })),
+      rows: (await journal.read("fixture")).map(row => ({ sequence: row.sequence, payload: Buffer.from(row.payload).toString("base64") })),
       state: document ? Buffer.from(Y.encodeStateAsUpdate(document)).toString("base64") : null,
     });
   } else if (m.command === "flush") {
@@ -120,8 +138,10 @@ process.on("message", (message: unknown) => {
     }
   } else if (m.command === "stop") {
     for (const resolve of gates.values()) resolve();
-    void server.destroy().finally(() => { journal.close(); process.exit(0); });
+    await server.destroy();
+    await journal.close();
+    process.exit(0);
   }
-});
+}
 await server.listen();
-emit("ready", { port: server.address.port, configuration: journal.configuration });
+emit("ready", { port: server.address.port, configuration: journalConfiguration });

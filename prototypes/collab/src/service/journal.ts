@@ -4,8 +4,8 @@ export class UpdateJournal {
   readonly database: DatabaseSync;
   readonly configuration: { journalMode: string; synchronous: number };
 
-  constructor(path: string, settings = { journalMode: "WAL", synchronous: "FULL" }) {
-    this.database = new DatabaseSync(path);
+  constructor(path: string, settings = { journalMode: "WAL", synchronous: "FULL" }, timeout = 0) {
+    this.database = new DatabaseSync(path, { timeout });
     try {
       if (!/^(WAL|DELETE|MEMORY)$/.test(settings.journalMode) || !/^(FULL|NORMAL|OFF)$/.test(settings.synchronous)) {
         throw new Error("Unsupported durability setting");

@@ -89,6 +89,8 @@ export async function observeHooks(t: TestContext): Promise<void> {
         let update = Y.encodeStateAsUpdate(copy, vector);
         copy.destroy();
         if (mode === "invalid-update" || mode === "invalid-step2") update = update.slice(0, -3);
+        if (mode === "invalid-update" || mode === "invalid-step2") client.expectNextMessage({ disposition: "refused", reason: "undecodable" });
+        if (mode === "oversized-update") client.expectNextMessage({ disposition: "refused", reason: "oversized", maximumBytes: 2097152 });
         if (mode !== "invalid-update" && mode !== "invalid-step2") client.receipts.localUpdate(update);
         const start = client.history.length;
         client.socket.send(syncFrame("fixture", mode === "invalid-step2" ? 1 : 2, update));

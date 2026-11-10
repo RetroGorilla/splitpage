@@ -1,0 +1,11 @@
+{
+  "shows": "An independent SQLite write lock blocks commit; the same-socket pong arrives with no preceding update status; unlocking permits commit and acknowledgement.",
+  "mode": "journal",
+  "expectedDisposition": "accepted",
+  "writerBusyTimeoutMs": 15000,
+  "receiptHandlingDelayMs": 250,
+  "statusesBeforePong": [],
+  "rejectedByOrderingChecker": false,
+  "recoveredRows": 2,
+  "rawUpdateJournaled": true
+}
