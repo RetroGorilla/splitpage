@@ -1,0 +1,105 @@
+{
+  "scope": "LOCAL PC DISK ONLY; deployment disk has not been measured",
+  "measuredAt": "2026-11-10T04:12:19.599Z",
+  "node": "v24.22.1",
+  "sqlite": "3.53.4",
+  "platform": "linux",
+  "osRelease": "6.18.58-Unraid",
+  "architecture": "x64",
+  "directory": "/data-user",
+  "durability": {
+    "journalMode": "wal",
+    "synchronous": 2
+  },
+  "method": "Three fresh databases per row, 50 one-character Yjs transactions spaced 100 ms apart per typing repetition, then 1000 without delay per burst repetition. Fixed batches of 1 or 5 separately stored raw updates per BEGIN IMMEDIATE / COMMIT. Timing includes BEGIN, inserts and FULL COMMIT, excludes Yjs encoding and batch wait. No WAL checkpoint inside timed regions. No asynchronous receipt before commit.",
+  "results": [
+    {
+      "workload": "typing",
+      "batchSize": 1,
+      "repetitions": 3,
+      "updates": 150,
+      "transactions": 150,
+      "transactionMs": {
+        "p50": 9.7169,
+        "p95": 12.2895,
+        "max": 14.8783
+      },
+      "amortizedCommitMsPerUpdate": {
+        "p50": 9.7169,
+        "p95": 12.2895,
+        "max": 14.8783
+      },
+      "payloadBytes": {
+        "min": 10,
+        "max": 12
+      },
+      "maximumBatchWaitMsAtNominalRate": 0
+    },
+    {
+      "workload": "burst",
+      "batchSize": 1,
+      "repetitions": 3,
+      "updates": 3000,
+      "transactions": 3000,
+      "transactionMs": {
+        "p50": 8.7603,
+        "p95": 43.7443,
+        "max": 893.1075
+      },
+      "amortizedCommitMsPerUpdate": {
+        "p50": 8.7603,
+        "p95": 43.7443,
+        "max": 893.1075
+      },
+      "payloadBytes": {
+        "min": 10,
+        "max": 12
+      },
+      "maximumBatchWaitMsAtNominalRate": 0
+    },
+    {
+      "workload": "typing",
+      "batchSize": 5,
+      "repetitions": 3,
+      "updates": 150,
+      "transactions": 30,
+      "transactionMs": {
+        "p50": 10.2259,
+        "p95": 11.7921,
+        "max": 18.6649
+      },
+      "amortizedCommitMsPerUpdate": {
+        "p50": 2.0452,
+        "p95": 2.3584,
+        "max": 3.733
+      },
+      "payloadBytes": {
+        "min": 10,
+        "max": 12
+      },
+      "maximumBatchWaitMsAtNominalRate": 400
+    },
+    {
+      "workload": "burst",
+      "batchSize": 5,
+      "repetitions": 3,
+      "updates": 3000,
+      "transactions": 600,
+      "transactionMs": {
+        "p50": 8.5674,
+        "p95": 10.8879,
+        "max": 397.6295
+      },
+      "amortizedCommitMsPerUpdate": {
+        "p50": 1.7135,
+        "p95": 2.1776,
+        "max": 79.5259
+      },
+      "payloadBytes": {
+        "min": 10,
+        "max": 12
+      },
+      "maximumBatchWaitMsAtNominalRate": 0
+    }
+  ]
+}

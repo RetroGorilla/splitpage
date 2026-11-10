@@ -33,7 +33,7 @@ node src/service/measure-commit.ts $env:TEMP test/service/commit-cost.local.json
 
 The service binds `127.0.0.1` on port 0 and reports its assigned port. Each fixture owns a temporary database and child-process handles; `finally` kills remaining children by PID and removes their folder. A failed startup is also cleaned. The deliberate defect runs first within the service trace group, and the group proceeds only after its checker has rejected the premature acknowledgement.
 
-To rerun the disk measurement on the deployment server, run the same Node version and `npm ci` in this package, then `node src/service/measure-commit.ts /direct/pool/path /path/to/server-result.json`. The first argument must be an existing directory on the actual target volume. No network or server process participates in this SQLite commit-cost microbenchmark.
+To rerun the disk measurement on the deployment server, run the same Node version and `npm ci` in this package, then `node src/service/measure-commit.ts /direct/pool/path /path/to/server-result.json "DEPLOYMENT DISK: describe volume and mount"`. The first argument must be an existing directory on the actual target volume. The optional third argument labels the report's `scope`; omitting it preserves the original `LOCAL PC DISK ONLY; deployment disk has not been measured` default. No network or server process participates in this SQLite commit-cost microbenchmark.
 
 ## Trace results
 
@@ -112,4 +112,48 @@ Separate reviewer-measured worker overhead: **about 0.040 ms median and 0.073 ms
 
 Each row pools three fresh databases. Each repetition has 50 single-character Yjs updates for typing, or 1000 for burst; updates are 10–12 bytes. Fixed batches store five distinct raw updates in one transaction without merging their bytes. Timing covers BEGIN IMMEDIATE, inserts and FULL COMMIT, excluding encoding and batch wait. Auto-checkpointing is disabled for the microbenchmark and databases are removed after closing; no checkpoint runs within a timed region. Typing batches add up to 400 ms nominal waiting before commit, in addition to the numbers above. These retained measurements exercise the unchanged synchronous transaction body directly; they exclude the subsequently added worker message round trip. They are commit costs, not end-to-end receipt latency or a power-loss experiment.
 
-The service selects **one update per transaction**. A single Hocuspocus connection awaits each `beforeSync`, so a hook cannot wait for five subsequent messages on that same connection to form a batch. The five-update rows measure writer cost only; they do not prove a batching integration. A deployment-volume rerun remains required. No real-editor hooks were needed for this lane; integration needs local-storage completion, local-update registration and socket lifetime/send/status observation.
+The service selects **one update per transaction**. A single Hocuspocus connection awaits each `beforeSync`, so a hook cannot wait for five subsequent messages on that same connection to form a batch. The five-update rows measure writer cost only; they do not prove a batching integration. The deployment disk has now been measured below; other deployment volumes still need their own measurements. No real-editor hooks were needed for this lane; integration needs local-storage completion, local-update registration and socket lifetime/send/status observation.
+
+## Deployment disk commit cost
+
+Adam ran the unchanged measurement script from `origin/main` at `d4eb17bd` on the Unraid server, back to back in the order cache-1, user-1, cache-2, user-2, on 2026-11-10 approximately 04:06–04:12 UTC. These are supplied measurements, not a remote run by this lane. The environment was one Crucial MX500 1 TB SATA SSD, btrfs single profile with `noatime,ssd,discard=async`; kernel `6.18.58-Unraid`, x64, 12 threads and 30 GB RAM. A one-off Ubuntu noble Docker container had 2 CPUs and a 2 GB memory limit, Node 24.22.1 from nodejs.org with its checksum verified, `npm ci --omit=dev`, and SQLite 3.53.4. The live home server had other containers and was not isolated; load average was 0.21 before and 0.66 after.
+
+The direct cache path `/mnt/cache/appdata/...` was mounted at `/data-cache`. The same folder through Unraid's `/mnt/user/appdata/...` FUSE (`shfs`) path was mounted at `/data-user`; that is the path a default Unraid container template would mount. The four raw files under `test/service/` are byte-for-byte copies of the supplied results. Their `scope` field still says `LOCAL PC DISK ONLY; deployment disk has not been measured`: that was the script's then-fixed label, not the scope of these runs. Their `directory`, `platform` (`linux`) and `osRelease` (`6.18.58-Unraid`) identify the run, with the container-to-host path mapping supplied above.
+
+The workload and timing boundaries are those in the local measurement method above: each row pools three fresh databases within that run, with 150 typing updates or 3000 burst updates, 10–12 bytes each. Rounds remain separate. All table values are milliseconds, shown as **p50 / p95 / max**; batch size is the number of distinct raw updates stored in one transaction. Typing emits one update after each 100 ms delay; bursts have no deliberate interval. Timing includes BEGIN IMMEDIATE, inserts and FULL COMMIT, excludes encoding, batch waiting and worker IPC, and disables automatic WAL checkpointing. Closing and cleanup happen outside the timed regions.
+
+### Direct cache pool path
+
+Raw results: [round 1](../../test/service/commit-cost.unraid-cache.round-1.json) (report completed 04:08:01.741 UTC) and [round 2](../../test/service/commit-cost.unraid-cache.round-2.json) (04:10:57.688 UTC).
+
+| Round | Workload | Updates / transaction | Transaction ms p50 / p95 / max | Amortized commit ms / update p50 / p95 / max |
+| --- | --- | --- | --- | --- |
+| 1 | Typing | 1 | 8.8208 / 10.1829 / 12.4284 | 8.8208 / 10.1829 / 12.4284 |
+| 1 | Burst | 1 | 8.0509 / 10.4187 / 217.9055 | 8.0509 / 10.4187 / 217.9055 |
+| 1 | Typing | 5 | 10.2767 / 11.9339 / 44.4500 | 2.0553 / 2.3868 / 8.8900 |
+| 1 | Burst | 5 | 68.2134 / 92.7027 / 772.9672 | 13.6427 / 18.5405 / 154.5934 |
+| 2 | Typing | 1 | 8.3322 / 9.2634 / 10.0971 | 8.3322 / 9.2634 / 10.0971 |
+| 2 | Burst | 1 | 8.6437 / 44.0999 / 715.8849 | 8.6437 / 44.0999 / 715.8849 |
+| 2 | Typing | 5 | 10.5312 / 11.3289 / 12.2711 | 2.1062 / 2.2658 / 2.4542 |
+| 2 | Burst | 5 | 7.3998 / 8.3641 / 9.2935 | 1.4800 / 1.6728 / 1.8587 |
+
+### Unraid user share path (FUSE)
+
+Raw results: [round 1](../../test/service/commit-cost.unraid-user.round-1.json) (report completed 04:09:37.344 UTC) and [round 2](../../test/service/commit-cost.unraid-user.round-2.json) (04:12:19.599 UTC).
+
+| Round | Workload | Updates / transaction | Transaction ms p50 / p95 / max | Amortized commit ms / update p50 / p95 / max |
+| --- | --- | --- | --- | --- |
+| 1 | Typing | 1 | 8.5619 / 9.7468 / 14.4358 | 8.5619 / 9.7468 / 14.4358 |
+| 1 | Burst | 1 | 8.9944 / 44.8379 / 442.4210 | 8.9944 / 44.8379 / 442.4210 |
+| 1 | Typing | 5 | 13.2255 / 50.4934 / 125.4468 | 2.6451 / 10.0987 / 25.0894 |
+| 1 | Burst | 5 | 9.2561 / 12.2472 / 18.6125 | 1.8512 / 2.4494 / 3.7225 |
+| 2 | Typing | 1 | 9.7169 / 12.2895 / 14.8783 | 9.7169 / 12.2895 / 14.8783 |
+| 2 | Burst | 1 | 8.7603 / 43.7443 / 893.1075 | 8.7603 / 43.7443 / 893.1075 |
+| 2 | Typing | 5 | 10.2259 / 11.7921 / 18.6649 | 2.0452 / 2.3584 / 3.7330 |
+| 2 | Burst | 5 | 8.5674 / 10.8879 / 397.6295 | 1.7135 / 2.1776 / 79.5259 |
+
+One-update FULL commits have medians of about 8–10 ms on both paths, versus 0.5–0.9 ms in the retained PC measurement. One-update typing p95 is 9.2634–12.2895 ms. The one-update burst p95 is about 44 ms in three runs and 10.4187 ms in cache round 1; maxima span 217.9055–893.1075 ms. The cause of this tail was not measured. These runs do not distinguish storage, filesystem, FUSE, container scheduling or other server activity as causes, and do not establish a performance difference between the two paths.
+
+Serial one-update commits consume the single writer's time and bound burst throughput. The reciprocal of the observed burst median costs corresponds to roughly 111–124 updates/s at median cost alone, not a measured sustained throughput; the long tail consumes additional time. The reports retain percentiles rather than elapsed totals, so they cannot establish a sustained updates/s rate. Fixed batches of five amortize the commit across five updates: median costs are 1.4800–2.6451 ms/update in seven of eight rows. The exception is cache round 1's burst at 68.2134 ms/transaction (13.6427 ms/update), not reproduced in round 2. Batching did not consistently improve this sample. At the nominal typing rate, forming five-update batches also adds up to 400 ms of waiting before commit. These measurements do not implement batching or alter the service's one-update receipt design.
+
+This is commit cost on one deployment disk, not end-to-end receipt latency, a test isolated from other server load, or evidence of persistence after power loss. Similar timings through FUSE do not validate its SQLite WAL correctness or durability. The receipt still depends on the reviewed commit-before-status code property and its stated test limits above; the benchmark adds no ordering or durability proof.
