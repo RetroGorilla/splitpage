@@ -2,11 +2,28 @@
 
 ## Result
 
-Stage 1a does **not yet meet its exit condition** on merged evidence through `658a5f654a4ecdbd29eb3f28ffd32e911925dab8`: exactly one exit blocker remains, a replica-independent status rule and its independent check for the new T21 scalar history. [Lifetime finding][lifetime], [status history][status-history], [exit condition][exit]. B stands selected with growth recorded and a stated retained-size limit; the indexed remote-character measurements meet the Node component caps at the sampled horizons, not browser message-to-frame budgets. [Product decisions][product-decisions], [lifetime evidence][lifetime]. The checker rejects its named deliberate defects but did not run this status history shape, so the earlier T21 scalar pass cannot endorse it. [Checker][1385], [marks][marks], [#1391][1391], [status observations][status-order]. B/M1 Writer/page and both-surface T04 coverage and the PROJ gate outside its declared exclusion are closed. Split T03 remains the coordinator's unchanged Stage 2 carry-over, not a passing trace or a second exit blocker. [B surfaces][b-surfaces], [Split reconciliation][split-reconcile], [lossless projection][lossless], [Split stale base][split-stale].
+Stage 1a **exits with the listed carry-overs** on merged evidence through `c498f71991e68ea36387c613726c43b657f39b1f`: M1 is the buffer mechanism, B is the schema, and shared undo uses explicit per-writer command records. The status and reader fixes close the draft's convergence blockers within the retained tests; production acceptance remains subject to the later gates. [Exit condition][exit], [product decisions][product-decisions], [status results][status-results], [reader results][reader-results], [undo results][undo-results].
+
+Split T03, imported-layout movement, the declared undo limits and a timing rerun carry to Stage 2 under the coordinator, tracked in [#1414][stage2]. These are carry-overs, not passing results; the table below names the evidence and remaining work. [Split result][split-stale], [reader bounds][reader-bounds], [undo limits][undo-limits], [status timing bounds][status-timings].
+
+## Exit criteria and deliverable
+
+The criteria below are the Stage 1a row in plan section 11, with the editing-trace clause separated so its bounds remain visible. [Plan section 11][exit].
+
+| Exit criterion | Assessment | Merged evidence |
+| --- | --- | --- |
+| Checker fails on a lost remote character before endorsement | Met for the named defect | [harness.test.ts][harness], [lost-character history][lost], [#1385][1385] |
+| Checker fails on a duplicated identity before endorsement | Met for restoration and join injections | [harness.test.ts][harness], [restore history][restore-copy], [join history][join-copy], [#1385][1385] |
+| Checker fails on an omitted field before endorsement | Met for the named serialization injection | [harness.test.ts][harness], [omitted-field history][omitted], [#1385][1385] |
+| Editing traces in section 13 pass | Retained feasibility fixtures pass with the explicit carry-overs below; not met on the real Split surface for T03 | [Trace table](#trace-table), [status repair][status-results], [reader repair][reader-results], [command-record undo][undo-results]. Coordinator owns Stage 2 carry-overs under [#1414][stage2] |
+| A buffer mechanism is selected | Met: M1 | [Product decision][product-decisions], [buffer][buffer], [B surfaces][b-surfaces], [Split reconciliation][split-reconcile] |
+| A schema is selected, or the design returns for revision | Met: B, within recorded capacity bounds | [Product decision][product-decisions], [growth and limits][lifetime], [status repair][status-results], [reader repair][reader-results] |
+
+The deliverable's independent identity model, deterministic queue and encoded late joiner are in the [harness][harness] and [#1385][1385]. The [buffer report][buffer] records the composition-first stale-base experiment; [slice][slice], [app binding][app], [B surfaces][b-surfaces] and [Split reconciliation][split-reconcile] supply the throwaway real-editor evidence without a server. Structural recovery and command undo have separate literal fixtures. [Structure][structure], [undo results][undo-results].
 
 ## Checker
 
-The checker compares literal character identities, marks, carets, selections, records and recovery, using a creation ledger independent of the schema reader. It rejects the following injected defects for both candidates before endorsing their positive controls. These are retained negative tests, not skipped product outcomes. [#1385][1385], [#1391][1391].
+The checker compares literal identities, characters, marks, carets, selections, records and recovery against independently written expectations. Its field-declaration inventory is not a substitute for behavioral assertions. [Harness][harness], [projection results][proj], [#1385][1385].
 
 | Deliberate defect | Rejecting test and retained history |
 | --- | --- |
@@ -18,17 +35,13 @@ The checker compares literal character identities, marks, carets, selections, re
 | Lost comment mark | `checker rejects Lost mark (T11 step 1 D1)` in [harness.test.ts][harness]; one shared key loses an overlapping comment. [History][lost-comment] |
 | Lost tag mark | Single-tag negative probes in [marks.test.ts][mark-tests] reject the missing nested stack. [A history][lost-tag-a], [B history][lost-tag-b] |
 
-The 96 checks per candidate against the field inventory are declaration checks. The exact fixture comparisons, explicit transport tests and omitted-field injection provide behavioral evidence; the declaration count alone does not. [Projection results][proj].
+The original status reader remains a deliberate defect: the independent literal checker reproduces its 80/96 disagreements, while the repaired original matrix passes 96/96 through five readers. The status fixtures cover retirement, deeper branches, semantic undo, reversed/duplicate delivery and encoded late joiners. [Status results][status-results], [#1413][1413].
 
-The repaired PROJ gate also rejects deletion of one stored U+200B or stored cue attributes after encoded transfer to a fresh receiving replica. It uses the unchanged independent app-save bytes. [Lossless projection][lossless], [#1406][1406].
-
-**T21 scalar FAIL:** byte-identical encoded state yields different statuses in 80 of 96 cases: 24 delivery permutations, two author-id assignments, and with/without deletion and recreation of unchanged event c; 40/48 disagree in each recreation condition. [Lifetime finding][lifetime], [status observations][status-order]. In the author-1/author-2 example, a,c,b,d reads ready, reverse delivery reads shot, and a fresh late joiner reads shot; both recreation conditions retain the disagreement. Replica-local map iteration enters the legacy fallback. The index repair matches each replica's own legacy result and does not repair status convergence or choose a replacement policy. [Minimized history][status-history], [status observations][status-order], [#1409][1409].
-
-The earlier T21 scalar pass in the marks lane did not catch this failure: its checker did not run this four-event history shape. Its named deliberate-defect controls remain evidence for those injections, not a general endorsement of status resolution. A replica-independent status rule and an independent check of this history, its delivery permutations, recreation and late join are owed before the editing-trace clause can pass. [Marks results][marks], [#1391][1391], [status-history generator][status-generator], [lifetime finding][lifetime], [acceptance][acceptance].
+The reader checks compare complete outputs strictly, including key order, missing properties, sparse arrays, extra properties, unsupported kinds and accessor indices. The report records 1,708 inspections, 45,080 projections and 35,854 comparisons; these are finite executions, not a proof about arbitrary stored state. [Reader results][reader-results], [strict comparison][strict-comparison].
 
 ## Trace table
 
-“B only” means the candidate was tested directly, without a buffer mechanism. It is not a B-with-M1 pass. The original page/app reports use A; #1407 adds B on Writer/page, #1410 closes Split T04/T01, and #1412 closes Split T02 before stopping at T03. Counts below include complete literal forward/undo checks where marked PASS; the Split results come from separate reviewed runs. Ordinary app typing commits synchronously; ordinary D3 cases deliberately delay sync. Composition spans tasks and commits in compositionend. Delivery labels retain the [Stage 0 definitions][hypotheses]: D1 concurrent exchange, D2 delivery before the next writer acts, D3 delivery during the buffered interval, dup duplicate delivery, rev reverse delivery, late-C full-state third-replica join. [Buffer][buffer], [app][app], [B counts][b-counts], [Split reconciliation][split-reconcile], [Split stale base][split-stale].
+The original structural and mark rows below retain their report's library-backed undo scope; [command-record results][undo-results] separately re-run the retained families without the library's undo stack. A schema-only pass is not a real-editor pass. D1 is concurrent exchange, D2 delivery before the next writer acts, D3 delivery during the buffered interval, dup duplicate delivery, rev reverse delivery, and late-C an encoded-state third-replica join. [Stage 0 definitions][hypotheses], [buffer][buffer], [structure][structure], [marks][marks].
 
 | Trace | Result under B with M1 | Others, in brief | PR | Result file |
 | --- | --- | --- | --- | --- |
@@ -58,318 +71,117 @@ The earlier T21 scalar pass in the marks lane did not catch this failure: its ch
 | T20 mark | Not combined; B only PASS 2/2: D1, D3 | A same; whole-tag comment/link projection, stored membership checked separately | [#1391][1391] | [marks][marks] |
 | T21 | Not combined; B only PASS 3/3: D1, D3, late-C | A same in mark lane; A/M2 composed-text bold fails the follow-up requirement | [#1391][1391], [#1399][1399] | [marks][marks], [follow-up][follow] |
 | T21 comment | Not combined; B only PASS 2/2: D2, late-C | A same; orphan reply recovery and redo checked | [#1391][1391] | [marks][marks] |
-| T21 scalar | B only: old literal D1 fixture PASS 1/1; new four-event history FAILS status agreement in 80/96 cases despite byte-identical state | A retains its old fixture pass; new order matrix runs B, with two author assignments, permutations, recreation and late join | [#1391][1391], [#1409][1409] | [marks][marks], [lifetime][lifetime], [status history][status-history], [observations][status-order] |
+| T21 scalar | Original four-event matrix repaired: PASS 96/96 through five readers | Partial ancestry and status redo remain qualified below; command-record retained fixtures pass | [#1413][1413], [#1418][1418], [#1421][1421] | [status results][status-results], [undo results][undo-results] |
 | MOVE concurrent | Not combined; B only PASS 3/3: D1, dup, late-C | A passes refusal oracle, not movement | [#1388][1388] | [structure][structure] |
 | MOVE destination | Not combined; B only PASS 4/4: D1, D3, dup, late-C | A refuses movement before mutation | [#1388][1388] | [structure][structure] |
 | MOVE delete | Not combined; B only PASS 2/2: D1, late-C | A refuses movement; removal/recovery still checked | [#1388][1388] | [structure][structure] |
 | MOVE cut-paste | Not combined; B only PASS refusal, no delivery | A also refuses before content changes or consuming cut | [#1388][1388] | [structure][structure] |
 | PROJ | B only: PASS 291/291 outside one exact device-local exclusion; 290/291 exact direct-app-save bytes, all 96 mappings | A same; original-byte 7/291 reflects app rewriting, not projection loss; merged limits remain unresolved | [#1406][1406] | [lossless projection][lossless], [exclusion][exclusions] |
 | SLICE | B/M1 Writer/page 24/24 each; Writer follow-up 23 positive composition passes; Split passes T04/T01 in #1410 and T02 in #1412, fails T03 | B Writer/page also run M2/M3 (72/72 each overall); M2 mapper/bold limits recur; re-entry controls separate | [#1407][1407], [#1410][1410], [#1412][1412] | [B surfaces][b-surfaces], [Split reconciliation][split-reconcile], [Split stale base][split-stale] |
-| PERF | B fits one-draft and ten-block stated histories below 2 MiB; baseline crossing in block 36; indexed character component meets 30/50 ms at all seven sampled states | No new A comparison; old stress failures remain historical; pre-review timings exclude changed status-notification cost and browser frames | [#1400][1400], [#1409][1409] | [lifetime][lifetime], [counts][lifetime-counts], [timings][lifetime-timings], [sensitivity][lifetime-sensitivity] |
+| PERF | Growth and capacity recorded; elapsed-time rows are stale for the merged code | One rerun owed as part of the Stage 2 standalone and shared baseline | [#1413][1413], [#1421][1421] | [lifetime][lifetime], [status timing bounds][status-timings], [reader results][reader-results] |
 
-Still not combined under B with M1: T05–T12, T20, T21 and MOVE with an editor buffer, and full PROJ/PERF with the real editor. Split T03 replacement is unrun; visual and editable-heading input remain unbound. Writer's structural/mark/load composition follow-up now has B/M1 evidence, but app comment/tag rendering remains unbound. No standalone A/B performance run was made because shipping code did not change. [B surfaces][b-surfaces], [Split stale base][split-stale], [structure][structure], [marks][marks], [projection][proj], [performance][perf].
+The prototype reports do not combine T05?T12, T20, T21 and MOVE with the real editor buffer, nor full PROJ/PERF with the app. Split replacement stopped after T03; visual/heading input and app annotation rendering remain unbound. [B surfaces][b-surfaces], [Split stale base][split-stale], [structure][structure], [marks][marks], [projection][proj], [performance][perf].
 
-#1407's Split T04/T04-removed 0/3 and 0/2 results stopped before complete all-replica/undo checks. #1410 localizes the second render to the prototype focusout bubble listener recursively replacing/removing the same Node. A harness-only in-flight paint guard closes all five; removing it reproduces all five throws. The real app suppresses blur sync while painting in the recorded standalone and guarded controls; no new production blur hook is established. [Original Split history][split-repaint], [runtime localization][split-localization], [Split reconciliation][split-reconcile].
+## Decisions
 
-#1410 then stops at Split T02 0/3: DOM/caret advance to Xab/3 while the retained base stays ab. #1412 attributes that repaint to the adapter and withholds it while `paintHeld`; genuinely stale DOM ab/2 remains over replica Xab until mapped input and undo pass. Split T03 instead fails both orders when the third Backspace converts a trailing space outside its captured deletion range to U+00A0. The failure precedes remote formatting and commits no local edit. [Parent stale-cell history][split-stale-parent], [stale-contract history][split-stale-history], [native-whitespace history][split-whitespace].
+### 1. M1 buffer
 
-## Decision 1: M1 buffer mechanism
+The product owner selected M1: hold remote changes while typing or composing, commit the local intent against its painted base, then apply the held changes and reconcile. B/M1 has Writer/page and both-surface T04 evidence; Split T03 remains the binding failure listed above. [Product decisions][product-decisions], [buffer][buffer], [B surfaces][b-surfaces], [Split reconciliation][split-reconcile], [Split stale base][split-stale].
 
-**Confirmed by the product owner on 2026-11-09, standing unless the evidence still owed contradicts them.** The remaining qualification concerns status resolution and its check; the lifetime experiment does not instantiate an M1 queue or app binding. [Product decisions][product-decisions], [lifetime][lifetime]. M1 holds remote updates outside one Yjs document while a buffered edit or composition is open, commits the local intent, drains the hold, then reconciles the editor. All three mechanisms pass T01–T04 in A/B simulation and the Writer/page matrices. B/M1 now passes T04 and removed-target on both app surfaces; Split T03 remains a binding failure. [Buffer][buffer], [B surfaces][b-surfaces], [Split reconciliation][split-reconcile], [Split stale base][split-stale].
+M2's retained mapper misplaces composed text after a preceding split and leaves new text plain under remote bold. M3 passes the named composition cases but adds another document and coordinated persistence, whose extra cost is unmeasured. [Composition follow-up][follow], [B surfaces][b-surfaces], [buffer][buffer].
 
-M1 and M3 satisfy every new composition case's scoped checks in #1399. M2 puts composed text in old R1 after a preceding split instead of following the painted neighbor into Rb. This is a limit of its mapper's `painted.id` filter; a cross-beat search/destination/caret fix is proposed but untested. M2 also leaves new xy plain under remote bold, contrary to T21. Those three cases pass the narrower checker because it checks bold only on the original characters. M1/M3 make xy bold. The comment/tag replica checks pass, but their app rendering remains unbound under all three. [Follow-up][follow], [structural history][composition-structure], [mark history][composition-marks].
+A direct provider receiver bypasses the M1 hold; production ingress must obey one gate. Overflow retention, cancellation, crash-safe continuation, complete annotation binding and undo-hold integration remain production work. [Provider-bypass history][provider-bypass], [overflow history][overflow], [app binding][app], [B surfaces][b-surfaces].
 
-B reproduces that comparison without a mechanism-specific mapper. M1 passes all 23 positive Writer composition cases, plus six re-entry interventions; three baseline re-entry controls deliberately fail. B's split remains an inner boundary in its source segment, and the binding observes those bounds and identities directly. M2's split-before and new-xy bold mismatches recur. These are counts and correctness results, not timings. [B surfaces][b-surfaces], [B counts][b-counts].
+### 2. B schema and shared readers
 
-M2 is rejected in its measured form for these mapping and T21 failures, not as an inherently unsafe mechanism. The earlier M2 recommendation applies only to the first Writer matrix. M3 remains feasible on the tested cases but adds a second document, origin-filtered forwarding and coordinated persistence; its extra memory and persistence cost is unmeasured. [App][app], [follow-up][follow], [buffer][buffer].
+The product owner selected stable segments and whole-beat movement, with part-beat movement and cross-scene structural cut/paste refused in shared mode. Growth is recorded for bounded workloads; this does not establish an unlimited writing lifetime. [Product decisions][product-decisions], [structure][structure], [lifetime][lifetime].
 
-M1 has obligations, not just an event-handler choice. Every provider, hydration and recovery ingress that applies a remote update must obey the same hold. The pinned provider receiver demonstrably bypasses an application queue when attached directly; deferral fails even though the identity-mapped T04 content still passes. While held, the Writer sees its retained composing DOM and the pre-remote editor/session state; remote changes are delayed across that document. In the app example DOM is `abxcd`, E/session is `abcd`, and 18 bytes wait until commit produces `Zabxyc`. [Provider-bypass history][provider-bypass], [app comparison][app].
+The writing-shaped scenario retains 67,095/67,096 bytes after one completed block and 591,971/585,436 after ten blocks for two/six writers. Its first crossing of the 2,097,152-byte cap is in block 36; sensitivity crossings are 36/31/34/26/36 for baseline/double status/double corrections/double removals/double revised beats. These are fixture frequencies, not measured human writing rates. Retention and capacity rules belong to the Stage 2 recovery model and Stage 3 durable limits. [Lifetime][lifetime], [counts][lifetime-counts], [sensitivity][lifetime-sensitivity], [stage definitions][exit].
 
-Proof limits: the bounded queue needs overflow, cancellation and recovery handling. The tiny-bound probe retains the overflow message and stops; it does not prove a production overflow policy. The 240-update app runs stay below their bound. The `retainBeforeInput` early hold exists only in the prototype. Its synchronous re-entry controls fail without intervention under M1/M3 too; they demonstrate protection against deliberate harness re-entry, not a demonstrated production network arrival or a new production requirement. B/M1 real-editor evidence is now present, but no crash-safe editing hold or complete annotation binding is established. [Buffer][buffer], [overflow history][overflow], [follow-up][follow], [B surfaces][b-surfaces].
+#1413 replaces the order-dependent status fallback with causal-frontier resolution: agreeing values apply; disagreement resolves the common causal ancestors, falling back to the stored beat status when absent. A retired event contributes its parents' resolution. Status readers, the index, notices and undo consume the same `readStatusEvent` validator; outgoing status commands and redo validate before writing. [Status results][status-results], [undo results][undo-results], [#1413][1413].
 
-## Decision 2: candidate B schema
+#1421 repairs removal attribution, visual order, record validation, identity/key normalization and output key order. Fresh document blocks, the observing index and structural spans use `assembleReaderBlocks`. The valid-command generators cover 352 histories and 2,656 checkpoints; wrong-shape values, identity keys and later fields have separate finite properties. The report records agreement within those cases, including writer-versus-encoded-reload reads. [Reader results][reader-results], [#1421][1421].
 
-**Confirmed by the product owner on 2026-11-09, standing unless the evidence still owed contradicts them.** B stands as the selected representation, with growth recorded and an explicit 2,097,152-byte retained-state limit; this is a bounded selection, not an unlimited writing lifetime or a production schema-gate pass while T21 scalar is blocked. [Product decisions][product-decisions], [lifetime][lifetime], [schema gate][schema-gate]. Stable segments retain text identity while heads and inner boundary embeds describe structure; one order array orders segments. The earlier structural/mark fixtures passed for both candidates and all 96 fields are mapped, but the new status history invalidates a general T21 pass. B supports tested whole-segment beat moves. Most historical editing comparisons were within the fixed noise tolerance; B's near-limit identity capture was 0.062 ms against A's 18.908 ms with those public lookup calls. A retained slightly fewer encoded bytes. #1406 changed export after those timings; its source audit identifies the affected rows. [Structure][structure], [marks][marks], [lifetime][lifetime], [projection][proj], [performance][perf], [#1406][1406].
+The reader result does not prove agreement for arbitrary stored records, complete schema validation, arbitrary serializer cloning or production cost; three review rounds each found a further case. Movement works in the seeded layout, but `moveBeat` expects `seg-<beat>` while import creates `seg-b-<beat>`: imported movement throws `Expected a shared map` before writing. Identity normalization does not fix that naming assumption. [Reader bounds][reader-bounds], [imported-move history][imported-move].
 
-### Rejected alternatives
+PROJ retains stored U+200B, cue flags, historical capture metadata and unknown JSON. Only the two pinned device-local `location` values in `supplement.splitpage` are excluded; real-editor provenance must distinguish stored characters from presentation-only caret padding. Merged overflow/uniqueness, competing headings/posters and edits within opaque groups remain unresolved. [Lossless projection][lossless], [exclusion code][exclusions], [projection limits][proj].
 
-A is rejected for this selection because it refuses beat movement and its implemented identity pass repeatedly traverses preceding document-wide items. An identity index or batched traversal could reduce that cost; it is not a lower bound on A. One independent text per scene was not a tested third candidate: the plan requires an identity-preserving answer to header ownership changes first. [Structure][structure], [performance][perf], [candidate definitions][candidates].
+### 3. Explicit per-writer command undo
 
-### Supported APIs
+Select command records containing character identities and shared record ids, reversed as a new local transaction. This path calls no library undo/redo; the inherited M1 constructor still creates an unused manager that is destroyed, and deliberate library probes remain separate. The report records 53/53 retained families passing in 360/360 runs, 20/20 new case rows and 300 seeded histories. [Undo results][undo-results], [#1418][1418], [reader reconciliation][reader-results].
 
-The prototypes use public typed-root getters before hydration, Y.Text inserts/deletes/formatting/embeds and `toDelta`, maps/arrays, encoded updates, and relative-position capture/resolution. Live identity is verified rather than treating a deleted relative position as a live character. Stored anchors resolve with `followUndoneDeletions=false`; undo-restored characters get new raw identities. The top-item `undoStack` wrapper uses a public field in an undocumented way and is a remaining production API risk. Diagnostic private formatting flags and instrumented library loops explain failures/count visits; the selected projector does not require private item/store access. [Marks][marks], [structure][structure], [performance][perf], [API questions][api-questions].
+The bound experiment keeps 200 entries per writer and releases older local records; it does not authorize deleting shared restoration, retirement, removal or status information that retained histories may name. Command recording occurs after the transaction, leaving a crash/re-entry gap. Typing groups, redo parking and save holds are not implemented by this prototype. [Undo results][undo-results].
 
-### Growth behavior
+The report declares seven limits after #1421; the following list retains that scope rather than treating their reproductions as passes. [Undo limits][undo-limits], [reader reconciliation][reader-results].
 
-Both candidates exceed 2 MiB by the 25,050-operation checkpoint of the old synthetic history; its A/B terminal sizes remain 3,338,732/3,356,090 bytes. The new B scenario instead retains 67,095/67,096 bytes for one draft plus revision and 591,971/585,436 bytes at ten blocks with two/six writers. Its first crossing is block 36, at 358,435 final-script UTF-16 units; the sensitivity and exact checkpoints are below. These are fixture-derived scenarios, not human writing rates. [Performance history][perf], [lifetime][lifetime], [counts][lifetime-counts], [sensitivity][lifetime-sensitivity].
+| Declared limit | Report owner | Evidence |
+| --- | --- | --- |
+| Concurrent undos of one doubly deleted character restore it twice | Undo | [Undo limits][undo-limits] |
+| A format undo overwrites the other writer's later formatting of the same characters | Undo | [Undo limits][undo-limits] |
+| Recovery lists a character undone and redone inside a removed beat as edited after the removal | Reader | [Undo limits][undo-limits] |
+| A writer's second status undo changes nothing under the retained status rule | Status rule | [Undo limits][undo-limits] |
+| Redo of a status change that had not applied because of a conflict makes it apply | Status rule | [Undo limits][undo-limits] |
+| A redone tag or comment highlight is lost when the writer's undo and redo updates arrive in reverse | Library formatting | [Undo limits][undo-limits] |
+| A replica holding one writer's later update before the earlier one cannot be read until the earlier one arrives | Delivery | [Undo limits][undo-limits] |
 
-Section 5's growth-record requirement is answered for these stated workloads; the fixed byte cap remains a capacity limit even where the export ratio and sampled character time pass. Stages 2 and 3 inherit an enforceable retained-size budget and a decision on retention/compaction or a new-document rule, including which recovery, causal and join/retirement information remains recoverable and undoable; this record selects no such mechanism. The plan places garbage collection, recovery, log compaction and quotas together in section 6, the recovery model in Stage 2, and durable limits/compaction in Stage 3. [Lifetime retention question][lifetime], [schema gate][schema-gate], [recovery contract][recovery-contract], [stage definitions][exit].
+The generator accepts a violation only against literal declared-limit predicates; an unmatched violation fails. It does not act on a replica with a pending out-of-order update. Dedicated histories reproduce the limits even when the finite generator matrix does not reach them. The command layer still has direct shared-state accesses outside the malformed-record properties. [Undo results][undo-results], [reader shared-state audit][reader-results].
 
-### Remaining optional command restrictions
+## Decided and assumed product answers
 
-B admits whole-segment movement only. Moving part of a segment and cross-scene structural cut/paste remain refused before mutation and before consuming a cut. A refuses all moves. These optional restrictions cannot excuse failure of mandatory writing. [Structure][structure], [acceptance traces][acceptance].
+The Stage 0 product decisions remain the source for decided outcomes: prior status for conflicting concurrent changes, identical changes undoable by either writer, recovery for edits to removed beats, both concurrent breaks visible, author-owned comment text, pending images, M1, B and export-only script revision stamps. Deeper status branches and the recovery rules below remain assumptions, not additional product-owner decisions. [Product decisions][product-decisions], [status results][status-results], [reader assumptions][reader-assumptions].
 
-### Proof limits and Disagreement
+The undecided rows of the [Stage 0 product table][product-decisions] remain the assumed answers for split-side placement, inherited removal, crossing tags, orphan replies, status notices, empty scenes/scripts, long names, b-roll collisions, missing owners, comment undo steps/drafts, local-replica export, refusal wording and felt limits; its edit-stamp and pending-image rows were subsequently decided there. The additions and qualifications below are **assumed, for the product review**. [Stage 0 answers][product-decisions], [reader assumptions][reader-assumptions], [undo open questions][undo-questions], [partial-ancestry history][partial-ancestry].
 
-**Disagreement:** the earlier marks-lane T21 scalar pass is not sufficient to endorse the status design. The new four-event matrix has equal encoded state but unequal status readings in 80/96 cases. This is the single remaining exit blocker, not evidence requiring rejection of stable segments. Growth is now recorded with a stated capacity limit; Split T03 remains the coordinator's Stage 2 carry-over. The PROJ text/cue losses and absent B/M1 Writer/page/two-surface-T04 evidence are closed. Full production integration remains outside these fixture passes. [Marks][marks], [#1391][1391], [lifetime finding][lifetime], [status history][status-history], [schema gate][schema-gate], [Split stale base][split-stale], [lossless projection][lossless], [B surfaces][b-surfaces], [Split reconciliation][split-reconcile].
+| Question | Assumed answer and boundary | Evidence |
+| --- | --- | --- |
+| Recovery `edited` with several removals | List a character when at least one applicable active removal had not observed it; adding another removal never takes information away | [Reader assumptions][reader-assumptions], [recovery history][recovery-order] |
+| Recovery `splitBy` with direct and inherited removals | Keep `splitBy` when at least one applicable removal applies by inheritance; adding another removal never takes information away | [Reader assumptions][reader-assumptions], [recovery history][recovery-order] |
+| Recovery remover names | Show each distinct applicable remover, ordered by UTF-16 code units and joined with ", ", for example `Alice, Bob`; coordinator assumption | [Reader assumptions][reader-assumptions] |
+| What does "stays as it was" mean on deeper concurrent status branches? | The last status both writers had seen; this reading of common ancestry remains open for product review. Whether authoring/reading waits for complete ancestry also remains open | [Status results][status-results], [partial-ancestry history][partial-ancestry] |
+| Two people delete one beat and both undo | Accept a rare duplicate as the coordinator's assumption for product review, not a decided product answer. The cited limit demonstrates a doubly deleted character restored twice; it does not establish duplicate-beat acceptance | [Undo limits][undo-limits] |
+| May redo re-apply a status change that originally lost? | Built as yes: redo writes a fresh event and may apply it. This remains open with the product owner | [Undo open questions][undo-questions], [undo limits][undo-limits] |
 
-PROJ now matches 290/291 direct app saves exactly under each candidate and 291/291 outside one declared exclusion. Only `supplement.splitpage` excludes the complete values at `$.rows.0.imageLinks.0.location` (the fictional fixture path-location object for take.mp4) and `$.rows.0.imageLinks.1.location` (the bundled-location object for notes.pdf). Their exact literal values are pinned in the [exclusion code][exclusions]. Link locations are device-local and do not enter shared state. The gate removes only those two properties from the expected app-save bytes, checks their original values and formatting, and compares the actual output unchanged; no other fixture, field or byte is excluded. The unchanged 7/291 original-byte count reflects rewriting by the app's own save, not projection loss. [Lossless projection][lossless], [#1406][1406].
+Service, local-store and image selections have a separate [Stage 1b decision][1b-decision].
 
-Stored characters and `cue:true` already existed in Y.Text under both layouts. Export now renders stored runs without stripping U+200B or recalculating cue membership; no source-HTML shadow was added. Stored cue flags pass; line-only derivation remains refuted. Presentation-only caret sentinels require explicit provenance, distinct from stored U+200B. The mixed-beat control proves that adapter contract, not that the real Writer already supplies it. [Lossless projection][lossless].
+## Carry-overs and timing debt
 
-Historical capture stamps/colors and comment `updatedAt` must survive import/export even though Stage 0 proposed derivation or regeneration. The edit-stamp rule was decided on 2026-11-09: a beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export. It is no longer a missing schema-gate decision. [Product decisions][product-decisions]. Atomic picture/annotation groups, bodies, resolution groups, extras and other coupled values round-trip; that does not prove concurrent edits inside them. B is segment-local, not necessarily beat-local: splits retain inner beats in their source segment. [Schema requirements][schema-requirements], [projection departures and opaque values][proj], [incremental mechanism][perf].
+The following carry-overs are assigned to the coordinator for Stage 2 under [#1414][stage2], whose work packages cover projection, recovery, shared undo, adapter execution, Split binding and baseline/exit measurements; durable retention/compaction continues into Stage 3. The cited results retain the failures and proof limits. [Stage definitions][exit], [reader bounds][reader-bounds], [undo limits][undo-limits].
 
-## Decision 3: semantic command undo
-
-Select semantic command undo with the per-writer join records and durable retirement that the traces required. Plain Yjs UndoManager is not the shared undo policy, and browser-native undo is not the source of shared intent. Text inverse operations may still use library primitives; command identity, grouping, no-effect consumption, structural recovery and selection restoration belong to the shared command contract. [Structure][structure], [marks][marks], [native-undo history][native-undo].
-
-Plain per-writer undo fails **T06 under both client-id orders and both candidates**: deleting Alice's join leaves Bob's join live, so the required unjoin does not occur. Semantic undo retires every matching join known at undo time, consumes that command, and leaves Bob's later ineffective undo unable to reach an older step. Separately, a remotely overwritten map item causes plain undo to skip backward and remove earlier Z; top-item isolation preserves Z. Causal status events and frontier retirement pass the earlier T21 scalar fixture, where one LWW key yields shot instead of todo; the later order-dependent history remains a status-design failure. [Structure][structure], [T06 A][native-join-a], [T06 B][native-join-b], [U-H1 history][top-item], [marks][marks], [status history][status-history].
-
-The native browser `historyUndo` range reports the current caret, not the identities being reversed. The real app intercepts Ctrl+Z at keydown; the slice intercepts `historyUndo` in beforeinput. Both need selective command history rather than reconstructing undo from that range. [Slice][slice], [app][app], [native-undo history][native-undo].
-
-Proof limits: the prototype manager sets 1000 ms capture, but does not implement/test the standalone owner's complete typing groups, 200-entry bound, redo parking or save-hold semantics. Its stack has no imposed entry bound. #1409's separate one-block origin-filtered controls retain 61 entries per writer with two writers and 20–21 with six, below 200, but do not establish long-session grouping, parking, heap or persisted undo. Durable retirement/removal/status records accumulate without a compactor; the main growth rows have no active undo manager. Rejoin after retired identical joins and identical simultaneous removal/tag undo remain unproved; the new status graph is a known failure. [Structure][structure], [marks][marks], [app][app], [lifetime undo and growth][lifetime].
-
-The actual `Undo.hold()` blocks standalone undo in the positive control, while the selective callback still changes `the an` to `the then` with hold=1 under all mechanisms. Shared undo must deliberately honor or replace that gate; the bypass is an integration gap, not accepted behavior. Writer composition calls neither generic `compositionMark` nor `dropEmptySince` on this route. Split now exercises both lifecycle calls, final composition sync in capture before bubble `dropEmptySince`, and complete selective undo for the passing T04/T01/T02 cases; complete grouping/hold/redo policy is still unproved. [App undo observations][app], [hold history][undo-hold], [B surface seams][b-surfaces], [Split reconciliation][split-reconcile], [Split stale base][split-stale].
-
-## Predictions
-
-Each line reports only the named lane's proof scope; a hypothesis is not confirmed merely because its representation exists. [Hypothesis rows][hypotheses].
-
-- A-H1: confirmed for tested split/join/header identity preservation, including visual identity. [Structure][structure].
-- A-H2: soft-removal recovery/restore confirmed for T10; old synthetic cap failure remains; the stated B writing scenario reaches the cap in block 36, with parameter sensitivity. [Structure][structure], [performance][perf], [lifetime][lifetime].
-- A-H3: full T11 confirms split-descendant removal classification; T09/T10 alone had established only observed-edit attribution. [Marks][marks], [structure][structure].
-- A-H4: concurrent joins project one glue; semantic retirement is additionally needed for undo. [Structure][structure].
-- A-H5: remote edits to the second visual survive the join and undo. [Structure][structure].
-- A-H6: deterministic same-gap ordering confirmed; swapping client ids changes which split side receives X. [#1385][1385], [structure][structure].
-- A-H7: beat-local identity capture refuted for these calls; repeated document-wide scans and near-limit CPU cost measured. [Performance][perf].
-- A-H8: supplied nesting, crossing recovery and whole-tag projection confirmed in T20; independent necessity of either nesting sort was withdrawn after surviving mutations. [Marks][marks].
-- A-H9: local-origin isolation and explicit command boundaries confirmed; the claim of today's complete grouping is unproved. Plain-manager sufficiency fails T06. [Structure][structure], [app][app].
-- A-H10: initially failed; repaired projection passes this corpus under both candidates with the exact two-field device-local exclusion, not an unconditional all-data byte claim. [Lossless projection][lossless].
-- A-H11: duplicate row-boundary suppression confirmed in T08 race. [Structure][structure].
-- A-H12: earlier frontier/undo fixtures pass, but the new B four-event fallback is replica-dependent in 80/96 cases. The local index repair does not fix status convergence. [Marks][marks], [status history][status-history], [status observations][status-order].
-- A-H13: collision-safe projected duplicate b-roll ids remain unproved; no pass is claimed. [Projection][proj].
-- B-H1: segment head conversion plus inner embeds match the required structural traces. The predicted T08 create/race failure is refuted by a single transaction. [Structure][structure].
-- B-H2: whole-segment movement preserves identity and tested concurrent edits/undo. [Structure][structure].
-- B-H3: one order authority suffices for the tested MOVE/T08 cases. [Structure][structure].
-- B-H4: cross-segment observed deletions in one transaction pass T09. [Structure][structure].
-- B-H5: segment-local identity work is supported; the index removes repeated all-status-event scans from the sampled character path, not all global projection work. Its retained Node component rows meet 30/50 ms; app latency remains unproved. [Performance][perf], [lifetime][lifetime].
-- B-H6: shared trace successes carry over only within named tests; the new A-H12 status finding fails for B. Repaired A-H10 passes with the declared exclusion; A-H13 remains open. [Marks][marks], [status observations][status-order], [lossless projection][lossless], [structure][structure].
-- U-H1: top-item isolation stops the tested older-step skip; semantic join/status undo is separately required. General redo safety is not established. [Structure][structure], [marks][marks], [app][app].
-- PROJ-cue: repaired stored flags pass all six cue-bearing inputs under both candidates; deriving them still loses the mid-line cue and invents a flag on an intentionally unmarked SFX line. [Lossless projection][lossless].
-- PROJ-detached: specified delete-versus-explicit-mark-move passes both candidates, four orders and swapped ids; media null/load fields retained. Multiple movers remain open. [Projection][proj].
-- PROJ-unknown: encoded transfer and concurrent known-field edits preserve extras on all seven record kinds, including special keys; edits inside opaque extras unproved. [Projection][proj].
-- Y1: public relative-position identity capture works; document-wide versus segment traversal and cost measured for the implemented calls. [Buffer][buffer], [performance][perf].
-- Y2: fresh identity checks support tested live/deleted mapping; active-only removed-target mapping fails and requires recovery. No general null-reason discriminator is proved. [Buffer][buffer], [performance][perf].
-- Y3: relative positions with explicit affinity and `followUndoneDeletions=false` pass structural selection restoration; necessity of reanchoring unchanged identities for mark-only undo was withdrawn. [Structure][structure], [marks][marks].
-- Y4: client-id-dependent same-origin insertion order confirmed by swapped-id T05. [#1385][1385].
-- Y5: local origins and stop-capture boundaries confirmed; timeout/capacity and production grouping remain outside the proof. [Structure][structure], [marks][marks].
-- Y6: undo-deleted characters restore with new raw identities and need reanchoring; soft removal avoids copying retained characters. [Structure][structure].
-- Y7: ineffective/overwritten undo can reach older steps; top-item isolation stops the tested skip but uses an undocumented field pattern. [Structure][structure].
-- Y8: default-GC soft removal retains recovery content in the tested histories; tombstone retention is not the recovery design. [Structure][structure], [performance][perf].
-- Y9: tested recovery uses neither snapshots nor subdocuments; this does not measure alternative designs. [Structure][structure].
-- Y10: public embeds/deltas work for tested boundaries; undo/redo recreate boundary identity. Full content-atom coverage is separate PROJ evidence. [Structure][structure], [projection][proj].
-- Y11: per-comment/per-tag keys preserve overlapping marks; mutations detect their removal. Many-key performance is unproved. [Marks][marks].
-- Y12: explicit attributes prevent inheritance of observed comment/tag keys, but do not exclude a concurrent insertion from remote bold; M2's composed-text mismatch is not a new oracle. [Marks][marks], [follow-up][follow].
-- M1 / artifact 8 section 4: actual provider bypass confirmed as a deferral failure, not inevitable T04 content loss. [Buffer][buffer], [provider history][provider-bypass].
-- M1/M3 / section 4: tiny queue overflow confirmed without dropping the pending transport message; crash-safe continuation unproved. [Buffer][buffer], [overflow history][overflow].
-- M2 / section 4 T03: unconditional repeated-text failure refuted with retained targets; without targets all mechanisms remain ambiguous. [Buffer][buffer], [slice][slice], [#1390][1390].
-- M2 / section 4 T04 removed: recovery routing requirement confirmed. [Buffer][buffer], [app][app].
-- Buffer replacement ordering: insert-before-delete is required for the tested `aβXd` oracle; delete-first fails under the recorded orders. [History][insert-first].
-- Root initialization: early public typed-root declaration fixes lazy A formatting loss; the earlier undo-retention explanation is withdrawn, not an intrinsic A defect. [Marks][marks].
-- Split reconciliation: attributing #1407's throw to a required new app blur hook was too broad; browser stacks locate the recursive writer in the harness, and a harness-only guard passes the five original cases. [Split reconciliation][split-reconcile], [runtime localization][split-localization].
-- Split stale cell: #1410's T02 failure came from the adapter's forbidden repaint; withholding it preserves the actual stale condition and passes all four T02 cases. Other render/input paths remain unproved. [Split stale base][split-stale].
-
-Y13–Y15, H1–H14 and P1's service/storage predictions are not adjudicated by these editing results. The inbound receiver probe above does not establish the outbound H11 hold or any durable provider contract. Their selections and evidence, including the later picture work, belong to the [Stage 1b decision][1b-decision]. [Buffer scope][buffer], [experiment ownership][experiments].
-
-## Measured numbers
-
-### B writing-lifetime evidence from merged #1409
-
-The stated scenario uses the canonical 30-beat fixture: one correction/retype per 55 original units, half-narration revision of five beats, five split/join/retire/move interventions, two removals with one restore, two status changes per beat, four comment and 31 tag reviews per block, and ten reference-only pictures once. Two/six writers alternate whole beats with causal delivery; the experiment does not instantiate M1 or the app. These fixture-derived frequencies do not establish human writing rates. Main growth rows use default GC and no active undo manager. [Lifetime scenario][lifetime], [counts and parameters][lifetime-counts].
-
-Growth by completed-block checkpoint is below. A block is one canonical draft plus its partial revision. Final-script character counts are UTF-16 units, including displayed atom labels and both active text cells, excluding title/headings and removed content; they are not the typed-character count. [Lifetime growth][lifetime], [counts][lifetime-counts].
-
-| Completed blocks | Final-script characters | B bytes, 2 writers | B bytes, 6 writers |
-| ---: | ---: | ---: | ---: |
-| 1 | 10,241 | 67,095 | 67,096 |
-| 5 | 51,205 | 299,253 | 296,516 |
-| 10 | 102,410 | 591,971 | 585,436 |
-| 20 | 204,820 | 1,185,594 | 1,179,099 |
-| 36 | 368,676 | 2,145,131 | 2,138,699 |
-
-The first checkpoint at or above 2,097,152 bytes occurs while creating blank metadata for block 36, after 35 completed blocks: 2,110,845/2,104,409 bytes for two/six writers, at 358,435 final-script and 395,057 typed characters. Previous checkpoints are 2,085,144/2,078,708 bytes at the same typed count. These adjacent edit-group observations bracket the crossing; no keystroke is interpolated. One draft and ten blocks meet the byte cap; block 36 fails it. All reported active-export ratios remain below 10x, but that row-filtered export is not an integrated recovery export and omits blob payload. [Lifetime report][lifetime], [first-cap data][lifetime-counts], [#1409][1409].
-
-Sensitivity uses two writers and doubles one parameter at a time, leaving other interventions fixed. It changes the observed crossing, not a human-lifetime estimate. [Sensitivity table][lifetime], [raw sensitivity][lifetime-sensitivity].
-
-| Scenario | Parameter change | First block ≥2 MiB |
-| --- | --- | ---: |
-| Baseline | 1 correction/55 units, 2 status changes/beat, 2 removals/block, 5 revised beats/30 | 36 |
-| Double status changes | 2 → 4 per beat | 31 |
-| Double corrections | 1 → 2 per 55 original units, at alternating 28/27-unit intervals | 34 |
-| Double removals | 2 → 4 per block | 26 |
-| Double revised beats | 5 → 10 per 30 | 36 |
-
-The old synthetic state's removal records occupy 2,585,302 of 3,356,090 bytes (77.03%) because this prototype records and retains one identity object per removed character; that share is not shown inherent to stable segments or Yjs. Deleted-text tombstones occupy 4,493 bytes. In the completed writing-shaped block-36 states, status events are the largest named history category at 260,532 bytes; live container/registry overhead is separately substantial. The cap remains a real capacity limit, not permission to silently drop content or unresolved recovery. [Attribution and retention bounds][lifetime], [raw counts][lifetime-counts].
-
-The retained timing set used Node 24.22.1, Yjs 13.6.33, an AMD Ryzen 9 9950X3D2, Windows 10.0.26300 x64 and 30.91 GiB RAM. A game was running. Five whole-set runs alternated legacy/indexed order, with three warmups and eleven samples per case/run; p50/p95 are medians of the five corresponding per-run values. Free RAM before runs was 10.023–10.408 GiB; background CPU before/after was 4.25–9.99%. There were zero refusals and zero voids, with the existing 3 GiB/35% guards. These are existing samples, not new runs by this record. [Timing method and load][lifetime], [raw timings][lifetime-timings].
-
-| Sampled B state | Indexed component p50 [range] ms | Indexed component p95 [range] ms | ≤30 / ≤50 ms |
+| Carry-over | Required work | Owner and tracking | Evidence |
 | --- | --- | --- | --- |
-| 1 completed block, 2 writers | 0.547 [0.527–0.724] | 0.890 [0.603–0.964] | met / met |
-| 10 completed blocks, 2 writers | 2.526 [2.432–3.719] | 3.520 [2.700–4.258] | met / met |
-| 36 completed blocks, 2 writers | 9.989 [9.875–10.554] | 14.032 [10.561–15.153] | met / met |
-| 1 completed block, 6 writers | 0.466 [0.455–0.803] | 0.858 [0.814–0.908] | met / met |
-| 10 completed blocks, 6 writers | 2.677 [2.508–3.667] | 4.327 [3.802–4.380] | met / met |
-| 36 completed blocks, 6 writers | 9.883 [9.426–10.658] | 13.565 [10.459–15.185] | met / met |
-| Synthetic, 50,100 operations | 3.458 [3.364–3.929] | 5.267 [4.142–6.294] | met / met |
+| Split T03: FAIL 0/2 | Reconcile U+0020 becoming U+00A0 outside the captured Backspace range with intended deletion and retained identities; run replacement after repair | Coordinator, Stage 2 binding, [#1414][stage2] | [Split result][split-stale], [whitespace history][split-whitespace] |
+| Imported-layout move | Remove the segment-name assumption and prove movement, undo and reload in imported layouts | Coordinator, Stage 2 adapter, [#1414][stage2] | [Reader bounds][reader-bounds], [imported-move history][imported-move] |
+| Seven declared undo limits and open product answers | Resolve or explicitly refuse affected behavior in production; retain literal failures and generator predicates | Coordinator, Stage 2 undo/recovery/projection, [#1414][stage2] | [Undo limits][undo-limits], [reader assumptions][reader-assumptions], [partial-ancestry history][partial-ancestry] |
+| Stale timing rows | One rerun is owed on the merged code, carried as part of the Stage 2 standalone and shared baseline | Coordinator, Stage 2 baseline/exit gate, [#1414][stage2] | [Status timing bounds][status-timings], [reader evidence][reader-results], [performance][perf], [lifetime][lifetime] |
+| Complete app integration and format policy | Bind remaining commands/surfaces, honor holds/grouping, define overflow/uniqueness and capacity, and preserve standalone exports | Coordinator, Stage 2 integration, [#1414][stage2]; durable limits in Stage 3 | [App seams][app], [B surfaces][b-surfaces], [projection][proj], [lifetime][lifetime], [stage definitions][exit] |
 
-These are **retained pre-review remote-character rows**, not timings of the later status-notification repair. The archived nine-file implementation and audit retain the sampled character work and timing data unchanged; the changed handler scans the live status-event map once on a status-key change, and its cost is unmeasured. The index removes repeated status-history scans from the character path but follows each replica's local legacy status reading; timing passes do not fix the status-design failure. [Lifetime timing limits][lifetime], [timed implementation][timed-implementation], [source audit][lifetime-audit], [status history][status-history].
+The timing rows in the retained reports predate the status and reader fixes and are **stale as measurements of the merged code**. The status report lists affected intervals, and the reader report records 321 numeric work-counter deltas with unchanged measured rows and samples. Count regeneration does not measure elapsed cost. Earlier cap successes and failures describe their archived implementations; they cannot establish current runtime budgets. [Status timing bounds][status-timings], [reader evidence][reader-results], [performance][perf], [lifetime][lifetime].
 
-The component sums Yjs apply, synchronous incremental projection and structural view; identity capture/resolve are separate. Preparation, load, initial full projection and index construction are outside the samples. The 30/50 ms passes apply at those seven sampled states only: they establish no browser message-to-frame, M1 queue, paint, app derivation, network/blob, heap or complete join/load pass. They supersede the affected historical B remote-character component row with the stored-text/cue repair present; they are not a controlled comparison against the older timing session. [Lifetime timing definition and bounds][lifetime], [raw timings][lifetime-timings].
-
-### Earlier A/B measurements, retained as historical evidence
-
-#1400 used Node 24.22.1, Yjs 13.6.33, an AMD Ryzen 9 9950X3D2, Windows 10.0.26300 x64 and 30.91 GiB RAM. A game and other background work were running. Accepted CPU readings were 9.7–34.6%, with at least 8.71 GiB free RAM. Five alternating paired runs used three warmups and eleven samples per case; tables report the median of per-run p50s and the recorded ranges. The fixed noise rule does not excuse absolute cap failures. Thirty runs were accepted, one CPU attempt voided and two starts refused. The optional Edge attempt was voided, so **there is no accepted browser PERF timing**. [Method and load readings][perf], [#1400][1400].
-
-The following old rows describe their recorded implementation, not the repaired exporter. #1406 changed export without retiming: character, bursts, split/join, first projection and projection-bearing checkpoint/heap/history measurements use affected code. Identity capture/resolve, status/comment and applyUpdate-only load do not call export inside their timed intervals; structural counts and encoded sizes reproduce unchanged. The new B character assessment above uses the repaired exporter. #1407/#1410/#1412 report correctness counts only. [Performance source audit][perf], [#1406][1406], [lifetime][lifetime], [B surfaces][b-surfaces], [Split reconciliation][split-reconcile], [Split stale base][split-stale].
-
-Selected component rows below are milliseconds, exactly as reported. They exclude rendering, app publication/derivations, network, persistence, blobs and the real editor buffer. Most candidate editing comparisons remain within noise. [Full timing tables][perf].
-
-| Node case | A p50 [range] | B p50 [range] | A / B p95 |
-| --- | --- | --- | --- |
-| Largest canonical, local character | 1.030 [0.812–1.208] | 0.976 [0.759–1.105] | 1.486 / 1.218 |
-| Large, local character | 5.275 [4.255–6.593] | 4.811 [4.318–5.318] | 7.686 / 6.235 |
-| Large, remote character | 5.127 [4.139–5.294] | 4.536 [4.181–4.703] | 5.813 / 5.168 |
-| Near 2 MiB, capture identities | 18.908 [17.584–24.694] | 0.062 [0.052–0.112] | 21.125 / 0.148 |
-| Large after 50,100 operations, local character | 45.287 [38.789–50.306] | 42.949 [42.117–49.154] | 52.037 / 51.096 |
-| Large after 50,100 operations, remote character | 42.677 [36.841–45.227] | 40.819 [39.732–46.006] | 44.755 / 45.678 |
-
-**Both candidates exceed the 30 ms remote-character component cap after the old long history.** Both also exceed the 8 ms local-input component comparison and 40 ms local p95. Near-limit first full projection is A 3356.876 [3105.123–4497.318] ms and B 3347.141 [2958.892–3549.837] ms, exceeding the 1000 ms single-task comparison. These recorded failures remain failures; they do not measure the changed exporter, and Node is not a browser message-to-frame pass. [Performance][perf], [#1406][1406].
-
-Exact retained sizes on the 300-beat synthetic workload, with no active undo manager, are below. At 50,100 operations the active-file proxy is 401,522 bytes and state/proxy ratios are 8.315x/8.358x; the 10x proxy cap holds but the independent 2,097,152-byte cap fails. Fresh near-limit state is A/B 2,001,642/2,087,457 bytes over a 1,552,544-byte plain file; fresh ratios are 1.289x/1.345x. [Performance][perf].
-
-| Operations | A state bytes | B state bytes | Soft-removed beats | Removal records | Joins / retired ids | Status events |
-| ---: | ---: | ---: | ---: | ---: | --- | ---: |
-| 0 | 427695 | 445329 | 0 | 0 | 0 / 0 | 0 |
-| 10020 | 1220382 | 1237973 | 20 | 120 | 100 / 100 | 200 |
-| 25050 | 2398278 | 2415709 | 50 | 300 | 250 / 250 | 500 |
-| 50100 | 3338732 | 3356090 | 100 | 600 | 500 / 500 | 1000 |
-
-The earlier #1396 full-projection Node set used five measurements and one warmup per candidate/fixture while other lanes ran: CPU 14.4%, free RAM 5.15/5.06 GiB before/after. Large full projection medians were A 63.230 [59.666–66.018] ms and B 64.139 [61.233–65.460] ms; after one character, A 60.660 [59.553–63.193] and B 59.980 [59.565–65.721] ms. Both were full scans of the old renderer. These are a different method from #1400, not a controlled before/after comparison or timings of the lossless repair. [Projection cost][proj], [#1396][1396], [lossless limits][lossless].
-
-#1399 does retain browser-clock observations, distinct from PERF: A only, Edge 157.0.4341.42, pinned throwaway app, 240 remote updates (160 inserts, 80 deletes). Every long-composition run retains forty remote characters in each beat and one xy. Commit includes planning, mutation, held-update drain and projection; paint measures first DOM reconciliation, not raster/frame time. Each row is one instrumented sample, with zeros allowed by clock resolution, not a controlled performance comparison. [Measurements][measurements].
-
-| Mechanism / delivery | Peak bytes / messages | Commit + projection ms | First actual DOM paint ms |
-| --- | --- | ---: | ---: |
-| M1 / D3 | 2318 / 240 | 1.500 | 0.000 |
-| M1 / dup | 4636 / 480 | 2.100 | 0.100 |
-| M1 / late-C | 2318 / 240 | 1.000 | 0.100 |
-| M2 / D3 | 0 / 0 | 0.200 | 0.100 |
-| M2 / dup | 0 / 0 | 0.200 | 0.200 |
-| M2 / late-C | 0 / 0 | 0.200 | 0.100 |
-| M3 / D3 | 2318 / 240 | 1.200 | 0.000 |
-| M3 / dup | 2318 / 240 | 1.100 | 0.100 |
-| M3 / late-C | 2318 / 240 | 1.100 | 0.100 |
-
-## Merged states that break format limits, and findings with no policy yet
-
-The 520 seeded merged-limit runs converge and resave stably, but do not establish valid merged documents. Each writer was within its named limit before delivery. The unresolved results are: [Projection limits][proj], [#1396][1396].
-
-- Duplicate person names remain duplicated after projection and app load/save. [History][limit-people].
-- Distinct tag records concurrently renamed to one category/name retain duplicate keys. [History][limit-tags].
-- At 62 pictures the projection retains all 62, with no overflow recovery entry; plain export keeps 61 and drops the last. [History][limit-gallery].
-- At 41 shot props the projection retains all members; plain export keeps 40. [History][limit-props].
-- Two posters remain true in projection; app save clears the later flag. [History][limit-poster].
-- Two headings before one beat retain both objects/text in shared state, but projection omits the earlier heading without recovery. [History][limit-heading].
-- Content-key tag ids collapse deliberately separate same-kind/name tags even sequentially; a lone surrogate collides with U+FFFD. Renaming, migration and identical-tagging undo have no established general identity solution. [Marks][marks].
-- Join retirement is proved for concurrent identical joins and remote glue rewrites, not a later intentional rejoin. Identical simultaneous removal undo remains unproved. [Structure][structure].
-- Beat status frontiers now have a known replica-dependent four-event failure, not merely an untested general-graph claim. Tag/shot status remains unproved. Detached-comment fallback has only the specified explicit-move proof; multiple movers and different-field arbitration remain open. [Marks][marks], [status history][status-history], [projection][proj].
-- Historical capture metadata needs retention for round trips; overflow/recovery presentation and coupled-value concurrency remain unresolved. Missing-owner, deleted-registry, empty-scene/script, overlong-name and duplicate b-roll-key policies are proposed in Stage 0 but not comprehensively established here. [Projection][proj], [marks][marks], [structure][structure], [Stage 0 projection rules][hypotheses].
-
-## Not measured or not run, carried forward
-
-### Still owed for the Stage 1a exit
-
-- **One exit blocker: status resolution and its independent check.** A replica-independent rule must replace the order-dependent fallback, with independent expected outcomes covering the retained four-event history, delivery permutations, both author-id assignments, deletion/recreation and late join. The finding remains unfixed on main; no replacement status policy is selected in #1409. This serves the editing-trace clause and closes the checker's missing history shape before endorsement. The named deliberate-defect tests retain their narrower passes. [Lifetime finding][lifetime], [status history][status-history], [status observations][status-order], [marks][marks], [#1391][1391], [exit condition][exit].
-
-**Coordinator decision, 2026-11-10:** the Split prototype series stops at the retained T03 native-whitespace failure. Reconciling browser-generated whitespace with captured intent and identities is a Stage 2 requirement. This records the scope decision; it is not evidence that T03 passed. The observed failure and unrun replacement are retained in [the merged report][split-stale] and [history][split-whitespace].
-
-### What an eventual Stage 1a exit leaves to later stages
-
-These are limits of a feasibility exit, not production acceptance or a waiver of the owed evidence above. Production integration remains behind its own gates. [Stage definitions][exit], [schema gate][schema-gate].
-
-- Full shared command integration, visual/heading input and app-level comment/tag rendering. Enter, clipboard structure, Find replacement and local marks/status/media were isolated or unbound; the follow-up paste seam translates only one plain-text beat. Split T03 whitespace mapping and replacement remain outside a passing binding. [App][app], [B surfaces][b-surfaces], [Split stale base][split-stale].
-- Autocorrect, drag/drop, protected atoms and grapheme/surrogate editing in the binding. Composition used protocol-driven events, not an OS input method; the plan requires synthetic data-safety evidence, not human IME acceptance. [App][app], [follow-up][follow], [product contract][product-contract].
-- Production session publication, coalesced derivations, complete gallery/recovery/mark projection and the full production defect tests. The incremental projector equals its full prototype projector; that projector is not the complete structural/mark reader. [App][app], [projection][proj], [performance][perf].
-- Browser input/message-to-frame, structural UI latency, complete join/load, standalone A/B, real-app heap, network, reconnect and receipt budgets. Node load/heap components do not establish them. M3's additional document memory/persistence cost remains unmeasured. [Performance][perf], [follow-up][follow].
-- Status-map-change notification cost after the index review fix. Its character samples do not invoke that changed handler; retained pre-review character timings do not supply this measurement. [Lifetime timing limits][lifetime], [timed implementation][timed-implementation].
-- Crash-safe M1 editing queues, prolonged/cancelled buffers, overflow continuation, and durable recovery/compaction combined with the real editor and bounded undo. The full-document projection's available-blob resolution remains unproved here; service/storage/image selections and their separate evidence belong to the [Stage 1b decision][1b-decision]. [Buffer][buffer], [projection][proj], [performance][perf].
-- General semantic redo, standalone grouping/parking/hold parity, identical tag/removal undo, later rejoin, broader status graphs beyond the required fix/check above, multiple comment movers, duplicate b-roll-id assignment, gallery replacement/reorder concurrency and concurrent edits within opaque values. [Structure][structure], [marks][marks], [projection][proj], [app][app], [lifetime][lifetime].
-- Real-Writer provenance separating stored U+200B from presentation-only caret sentinels; merged overflow/uniqueness and the device-local-link experience. Passing canonical bytes does not settle these integration and product rules. [Lossless projection][lossless], [projection limits][proj].
+The rerun must cover affected lifetime structure/component/withIdentity, earlier editing/status/comment/burst/split/join rows, and reader/export/load/heap paths, then the real standalone/shared baseline. Browser message-to-frame, M1 queue/paint, complete join/load, network/blob and app heap costs remain outside the Node component proof. The conflict-notice pairwise scan and partial-ancestry policy also remain Stage 2 work. [Status timing bounds][status-timings], [reader bounds][reader-bounds], [performance][perf], [lifetime][lifetime], [#1414][stage2].
 
 ## Requirements this places on Stage 2
 
-These are the collected integration requirements, not permission to bypass the unresolved feasibility gate. Each source names the seam or missing contract. [Stage 2 definition][exit].
+These requirements carry the retained prototype contracts into the production stage, whose exit separately requires real-editor concurrency, named deliberate-defect tests and unchanged standalone behavior/exports. [Plan section 11][exit], [#1414][stage2].
 
-- Retain a paint snapshot with epoch, beat/segment version, runs, character identities and directed identity-relative selection. Capture native targets before mutation, retain initial composition selection separately from provisional ranges, and preserve identical/nonminimal replacement intent. [Buffer][buffer], [slice][slice], [#1390][1390].
-- Intercept before whole-field `cellTextCommand`/`syncBeat`; commit intent against the retained base, insert before deleting observed identities, and route blur/leave/transition sync through the same boundary. Bind Enter, paste/cut, cross-beat/header and mark commands as semantic operations. [App seam inventory][app], [buffer][buffer], [follow-up paste seam][follow].
-- On Split, intercept generic cell sync before whole-field replacement, retain the initial composition base, withhold provisional publication and commit the final buffer through `cellEditing.sync` in compositionend capture before the owner's bubble `dropEmptySince`. Retain the checked lifecycle/sync counts and real-cell selection mapping. The passing cases do not establish full shared undo grouping. [B surface seams][b-surfaces], [Split reconciliation][split-reconcile], [Split stale base][split-stale].
-- Use one bounded M1 gate for every remote apply path, including provider sync, hydration and recovery. Preserve the native buffer and pending message at overflow, and define safe cancellation/recovery. The actual provider bypass must be closed. [Buffer][buffer], [provider history][provider-bypass].
-- Preserve composing DOM nodes and its base across every repaint source. Outside composition, cancel known-stale native input, map intent, repaint synchronously and restore selection through the real DOM mapper, including sentinels. Composition-aware selection validation must use painted content when the live projection removes or joins its beat. [Slice][slice], [app][app], [follow-up][follow].
-- Preserve genuinely unpainted focused cells when the binding declares a stale base; do not discharge T02 by repainting/rebasing before native input. #1410's nested render was a harness listener defect, not evidence requiring a new app blur guard. Keep both repair-removal controls; investigate other production publication/render paths separately. [Split reconciliation][split-reconcile], [Split stale base][split-stale].
-- Reconcile browser-generated U+0020-to-U+00A0 changes outside the captured deletion range with target-evidenced intent and retained identities. Split T03 establishes the failure; a canonical whitespace rule and repair remain untested. Do not confuse it with remote formatting or a failed B/M1 schema. [Split stale base][split-stale], [native-whitespace history][split-whitespace].
-- Carry stored U+200B and cue flags losslessly, and supply explicit node provenance for presentation-only caret padding. Flattened character values alone cannot distinguish those origins. Preserve the declared two-location exclusion and every other export byte. [Lossless projection][lossless], [exclusion][exclusions].
-- Treat early-hold/native-paint-gate re-entry interventions as prototype evidence to evaluate against real call paths; they are not demonstrated extra production guards. [Follow-up][follow].
-- Translate CRDT comment/tag/link marks, occurrence ids and registries into app marks; project anchors/recovery and use validated explicit mark-move commands to maintain detached fallback. Declare all typed roots before any apply/hydration. [Marks][marks], [projection][proj], [follow-up][follow].
-- Publish local and remote changes through the session owner with precise affected-beat changes and pure derivations, preserving unchanged row objects. Replace the experiment's privileged stamp and bypassed generation/publication; remote projection must not stamp attribution, add undo or emit repairs. [App][app], [marks][marks], [performance][perf].
-- Keep the session as the only projection writer. Migrate or refuse mutable readers, `held()` access, adoption/replay/amend/stamp, capability-bypassing comment commands and whole-document replacements. Replace automatic file/draft/stash/merge/save writers for a live shared instance, with epochs/capability checks for asynchronous completions. [App isolation/seam inventory][app], [editing contract][editing-contract].
-- Implement semantic command history with per-writer joins/retirement, causal status undo, no-effect consumption and identity-based selection restoration. Resolve undo holds, typing groups, entry bounds, redo parking and composition ownership explicitly; do not copy the selective hold bypass. [Structure][structure], [marks][marks], [app][app].
-- Carry the independently checked status rule into production commands, reading and undo after the feasibility blocker is closed. Local equality between an index and its legacy reader cannot establish replica-independent status; retain the four-event order/recreation/late-join failure as a regression check. [Lifetime finding][lifetime], [status history][status-history], [status observations][status-order].
-- Integrate soft-removal observed identities, split-descendant classification, visual/gallery origin ownership and durable recovery into the full projection/export path. Resolve format overflow and uniqueness without silently discarding retained work; retain the lossless canonical text/cue and import-metadata controls. [Structure][structure], [marks][marks], [projection][proj], [lossless projection][lossless].
-- Add affected-beat incremental projection/identity capture and measure it with the real session and renderer. Ownership transfers must invalidate old and new beats; tag-registry/comment-anchor changes may invalidate broadly. Retention, queue and undo budgets need an enforceable solution and measured growth. [Performance][perf], [#1400][1400].
-- Set and enforce the retained-size budget with an explicit capacity/retention rule covering removed observations, recovery text, causal status history and join/retirement identities. The fixture-shaped growth and sensitivity locate limits, not disposable data; the plan puts the recovery model in Stage 2 and durable limits/compaction in Stage 3. Measure changed status notifications separately from the retained character path. [Lifetime bounds][lifetime], [recovery contract][recovery-contract], [stage definitions][exit].
+- Order string ids and tie-breaks by UTF-16 code units; do not use locale collation to resolve shared content. [Reader ordering audit][reader-results], [status other-reader audit][status-results].
+- Use one validator per record kind across readers, indexes, notices and undo; carry `readStatusEvent` into status authoring and redo too. Finite malformed-record coverage is not general command-layer validation. [Status results][status-results], [reader audit][reader-results], [undo results][undo-results].
+- Normalize ids the same way as values and as map keys, at the shared command entry and in stored/inverse records. Compare writer and encoded-reload output, including raw keys and values. [Reader identity audit][reader-results], [identity functions][reader-identity].
+- Build output field by field in a literal order; order carried-through unknown fields by UTF-16 code units, retaining separate file-order metadata for the byte contract. [Reader results][reader-results].
+- Build fresh and incremental results with one assembly function and compare them at checkpoints. Retain repeated/missing-head, suppressed-boundary and cache-invalidation literal cases. [Reader results][reader-results].
+- Use strict comparison of complete outputs, including key order, missing fields, holes, extra properties, accessor indices and unsupported kinds; retain deliberate-defect controls and independent literal product expectations. [Reader results][reader-results], [strict comparison][strict-comparison], [harness][harness].
+- Keep a seeded generator with a literal table of declared limits and matching predicates; unmatched violations fail, and dedicated histories reproduce limits not reached by sampled seeds. [Undo results][undo-results], [undo limits][undo-limits].
+- Keep the painted base, identities and directed selection through native editing and composition; capture targets before mutation, preserve replacement intent and insert before deleting observed identities. Bind Writer and Split at their commit boundary, including Split compositionend capture before `dropEmptySince`. [Buffer][buffer], [app][app], [B surfaces][b-surfaces], [Split reconciliation][split-reconcile].
+- Route provider, hydration and recovery ingress through the bounded M1 gate; preserve pending work on overflow and define cancellation/crash-safe recovery. Keep genuinely stale cells unpainted until mapped input; resolve the retained Split whitespace failure. [Buffer][buffer], [provider-bypass history][provider-bypass], [Split stale base][split-stale].
+- Publish through the shared session owner with precise affected-beat changes and pure derivations. Migrate or refuse mutable session callers, standalone save/draft/history writers and asynchronous completions that can replace shared state. [App seams][app], [editing contract][editing-contract], [#1414][stage2].
+- Integrate command-record undo, selection mapping through restorations, semantic removal cancellation and ineffective-step consumption. Resolve the after-transaction recording gap, typing groups, history bound, redo parking and save holds; retain restoration/retirement state a kept history can name. [Undo results][undo-results], [reader reconciliation][reader-results], [app hold history][undo-hold].
+- Initialize typed roots before applying state; integrate annotation marks, recovery and explicit anchor moves. Preserve stored U+200B, cue flags, loaded capture metadata and the exact device-local exclusion. Define merged overflow/uniqueness and the recovery assumptions with the product owner. [Marks][marks], [projection][proj], [lossless projection][lossless], [reader assumptions][reader-assumptions].
+- Carry the repaired causal status rule and its independent four-event regression into production; decide incomplete-ancestry authoring/reading and status redo, and measure the conflict-notice scan. [Status results][status-results], [undo open questions][undo-questions].
+- Remove the imported-segment move assumption, or refuse that command until proven. Set retained-size and recovery budgets, with durable limits/compaction in Stage 3, and rerun stale timings as part of the standalone/shared baseline. [Reader bounds][reader-bounds], [lifetime][lifetime], [stage definitions][exit], [#1414][stage2].
 
-## Open questions for the product owner
-
-- What should a writer see and be able to do when a held edit or retained recovery reaches its limit? [Overflow evidence][overflow], [performance][perf].
-- How should overflow pictures/props, competing posters/headings, duplicate people/tag names and retained but unexported work be shown and resolved? [Projection limits][proj].
-- Keep the assumed crossing-tag recovery display, removed-comment reply recovery and concurrent-status notices? [Marks][marks], [assumed product decisions][experiments].
-- How should a scene with no beats, an empty script, an overlong merged scene name, missing owner or duplicate b-roll key appear and export? [Assumed projection rules][hypotheses].
-- Which visible undo differences, if any, are acceptable for typing groups, the history limit, redo parking, composition and a stuck save? [App undo gaps][app], [undo contract][editing-contract].
-- Keep comments as two undo steps and let saving the same author's open draft replace its concurrently changed body? [Assumed decisions 11–12][experiments].
-- What does another person see for a link whose location exists only on the first person's device? Name/size/poster survive, but that experience is not established by byte exclusion. [Lossless projection][lossless].
-
-## Corrections owed to the Stage 0 files
-
-These are corrections/qualification owed to the audit, not edits made by this record. Proposed oracles stay fixed unless the product owner changes them. [Experiment rules][experiments].
-
-- [9-stage-1-experiments.md:66](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/9-stage-1-experiments.md#L66): the 93-to-96 correction is completed on main by [#1405][1405]. [Checked inventory][proj].
-- [2-fields.md:289](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L289): reconcile “60 pictures” with 60 additional/61 total at line 64; merged overflow is 62. [Projection limits][proj].
-- [2-fields.md:110](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L110) and [line 175](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L175): qualify comment `updatedAt` derivation; reply times alone cannot reproduce assignment/reopening history, so round trips retain the loaded value. [Projection departures][proj].
-- [8-schema-hypotheses.md:128](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L128) and [line 336](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L336): qualify absence/regeneration of `rev`/`lastEdited*` and derivation of colors; historical capture values must be retained for round trips. The shared edit-stamp rule is decided in [#1405][1405]. [Projection][proj].
-- [8-schema-hypotheses.md:140](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L140): mark A-H7 refuted for these public capture calls, with indexing/batching as an untested alternative. [Performance][perf].
-- [8-schema-hypotheses.md:142](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L142): qualify A-H9; local-origin isolation is established, complete standalone grouping is not, and native per-writer T06 undo fails. [Structure][structure], [app][app].
-- [8-schema-hypotheses.md:145](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L145) and [line 156](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L156): add the A-H12/B-H6 four-event status-order failure and required independent check; earlier T21 scalar fixtures did not cover this shape. The fixed status contract is not replaced by the index's replica-local equivalence. [Marks][marks], [#1391][1391], [status history][status-history], [status observations][status-order].
-- [8-schema-hypotheses.md:143](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L143), [line 148](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L148) and [2-fields.md:286](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L286): record that A-H10 now passes the corpus with the exact device-local exclusion and PROJ-cue requires stored flags; line-only derivation remains refuted. Retain the initial failed histories as superseded evidence. [Lossless projection][lossless], [#1406][1406].
-- [8-schema-hypotheses.md:243](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L243): qualify the expected B T08 failure: create/race pass with head conversion and embed insertion in one transaction. [Structure][structure].
-- [8-schema-hypotheses.md:253](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L253): repeated-text failure is conditional on missing target evidence and affects all mechanisms; retained targets disambiguate the tested M2 edits. [Buffer][buffer], [slice][slice], [#1390][1390].
-- [8-schema-hypotheses.md:249](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L249): distinguish the library's 500 ms default from the prototype's explicit 1000 ms setting; neither proves complete product grouping or a 200-entry bound. [App correction][app].
-- [8-schema-hypotheses.md:124](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L124): label overflow recovery as an unmet proposed policy; the full projector returns 62 pictures with no recovery entry and app export drops one. [Projection][proj].
-
-[issue]: https://github.com/RetroGorilla/splitpage/issues/1376
 [exit]: ../../COLLABORATION-PLAN.md#11-implementation-stages
-[schema-gate]: ../../COLLABORATION-PLAN.md#schema-decision-gate
-[schema-requirements]: ../../COLLABORATION-PLAN.md#schema-requirements
-[recovery-contract]: ../../COLLABORATION-PLAN.md#6-structural-conflicts-and-recovery
-[acceptance]: ../../COLLABORATION-PLAN.md#13-acceptance-evidence
-[candidates]: ../../COLLABORATION-PLAN.md#candidate-representations
-[product-contract]: ../../COLLABORATION-PLAN.md#2-product-contract
 [editing-contract]: ../../COLLABORATION-PLAN.md#4-editing-and-command-contract
 [hypotheses]: ../stage-0/8-schema-hypotheses.md
-[api-questions]: ../stage-0/8-schema-hypotheses.md#6-supported-api-questions
-[experiments]: ../stage-0/9-stage-1-experiments.md
 [product-decisions]: ../stage-0/9-stage-1-experiments.md#product-decisions
-[1b-decision]: 1b-decision.md
 [buffer]: ../../../prototypes/collab/buffer-results.md
 [slice]: ../../../prototypes/collab/slice-results.md
 [structure]: ../../../prototypes/collab/structure-results.md
@@ -377,7 +189,6 @@ These are corrections/qualification owed to the audit, not edits made by this re
 [proj]: ../../../prototypes/collab/projection-results.md
 [app]: ../../../prototypes/collab/app-binding-results.md
 [follow]: ../../../prototypes/collab/app-binding-2-results.md
-[measurements]: ../../../prototypes/collab/app-binding-2-measurements.md
 [perf]: ../../../prototypes/collab/perf-results.md
 [b-surfaces]: ../../../prototypes/collab/b-surfaces-results.md
 [b-counts]: ../../../prototypes/collab/b-surfaces-counts.md
@@ -387,13 +198,7 @@ These are corrections/qualification owed to the audit, not edits made by this re
 [exclusions]: ../../../prototypes/collab/src/proj/exclusions.ts
 [lifetime]: ../../../prototypes/collab/lifetime-results.md
 [lifetime-counts]: ../../../prototypes/collab/src/perf/lifetime/counts.json
-[lifetime-timings]: ../../../prototypes/collab/src/perf/lifetime/timings.json
 [lifetime-sensitivity]: ../../../prototypes/collab/src/perf/lifetime/sensitivity.json
-[timed-implementation]: ../../../prototypes/collab/src/perf/lifetime/timed-implementation.json
-[lifetime-audit]: ../../../prototypes/collab/src/perf/lifetime/audit.ts
-[status-history]: ../../../prototypes/collab/histories/T21-scalar-map-order.md
-[status-order]: ../../../prototypes/collab/src/perf/lifetime/status-order.json
-[status-generator]: ../../../prototypes/collab/src/perf/lifetime/status-order.ts
 [harness]: ../../../prototypes/collab/test/harness.test.ts
 [mark-tests]: ../../../prototypes/collab/test/marks/marks.test.ts
 [lost]: ../../../prototypes/collab/histories/T01-lost-remote.md
@@ -404,43 +209,35 @@ These are corrections/qualification owed to the audit, not edits made by this re
 [lost-comment]: ../../../prototypes/collab/histories/T11-single-comment-key.md
 [lost-tag-a]: ../../../prototypes/collab/histories/T20-nest-single-tag-A.md
 [lost-tag-b]: ../../../prototypes/collab/histories/T20-nest-single-tag-B.md
-[composition-structure]: ../../../prototypes/collab/histories/T04-app-structural-composition.md
-[composition-marks]: ../../../prototypes/collab/histories/T04-app-remote-marks.md
 [provider-bypass]: ../../../prototypes/collab/histories/T04-provider-bypass.md
 [overflow]: ../../../prototypes/collab/histories/T04-long-composition.md
-[reentry]: ../../../prototypes/collab/histories/T02-app-sync-reentry.md
-[roundtrip-b]: ../../../prototypes/collab/histories/PROJ-roundtrip-B.md
-[native-join-a]: ../../../prototypes/collab/histories/T06-native-undo-A.md
-[native-join-b]: ../../../prototypes/collab/histories/T06-native-undo-B.md
-[top-item]: ../../../prototypes/collab/histories/U-H1-top-item-B.md
-[native-undo]: ../../../prototypes/collab/histories/T03-browser-native-undo.md
 [undo-hold]: ../../../prototypes/collab/histories/T03-app-undo-hold.md
-[insert-first]: ../../../prototypes/collab/histories/T01-composition-delete-first.md
-[limit-people]: ../../../prototypes/collab/histories/PROJ-limit-people-B.md
-[limit-tags]: ../../../prototypes/collab/histories/PROJ-limit-tags-B.md
-[limit-gallery]: ../../../prototypes/collab/histories/PROJ-limit-gallery-B.md
-[limit-props]: ../../../prototypes/collab/histories/PROJ-limit-props-B.md
-[limit-poster]: ../../../prototypes/collab/histories/PROJ-limit-poster-B.md
-[limit-heading]: ../../../prototypes/collab/histories/PROJ-limit-heading-B.md
-[split-repaint]: ../../../prototypes/collab/histories/T04-B-split-repaint.md
-[split-localization]: ../../../prototypes/collab/histories/T04-Split-repaint-localization.md
-[split-stale-parent]: ../../../prototypes/collab/histories/T02-Split-stale-cell.md
-[split-stale-history]: ../../../prototypes/collab/histories/T02-Split-stale-contract.md
 [split-whitespace]: ../../../prototypes/collab/histories/T03-Split-native-whitespace.md
 [1385]: https://github.com/RetroGorilla/splitpage/pull/1385
 [1387]: https://github.com/RetroGorilla/splitpage/pull/1387
 [1388]: https://github.com/RetroGorilla/splitpage/pull/1388
-[1389]: https://github.com/RetroGorilla/splitpage/pull/1389
 [1390]: https://github.com/RetroGorilla/splitpage/pull/1390
 [1391]: https://github.com/RetroGorilla/splitpage/pull/1391
-[1392]: https://github.com/RetroGorilla/splitpage/pull/1392
-[1394]: https://github.com/RetroGorilla/splitpage/pull/1394
-[1396]: https://github.com/RetroGorilla/splitpage/pull/1396
 [1399]: https://github.com/RetroGorilla/splitpage/pull/1399
-[1400]: https://github.com/RetroGorilla/splitpage/pull/1400
-[1405]: https://github.com/RetroGorilla/splitpage/pull/1405
 [1406]: https://github.com/RetroGorilla/splitpage/pull/1406
 [1407]: https://github.com/RetroGorilla/splitpage/pull/1407
-[1409]: https://github.com/RetroGorilla/splitpage/pull/1409
 [1410]: https://github.com/RetroGorilla/splitpage/pull/1410
 [1412]: https://github.com/RetroGorilla/splitpage/pull/1412
+[status-results]: ../../../prototypes/collab/status-resolution-results.md
+[status-timings]: ../../../prototypes/collab/status-resolution-results.md#counts-and-retained-timings
+[reader-results]: ../../../prototypes/collab/reader-order-results.md
+[reader-bounds]: ../../../prototypes/collab/reader-order-results.md#not-shown
+[reader-assumptions]: ../../../prototypes/collab/reader-order-results.md#assumed-for-the-product-review
+[reader-identity]: ../../../prototypes/collab/src/readers/identity.ts
+[strict-comparison]: ../../../prototypes/collab/test/strict-comparison.ts
+[undo-results]: ../../../prototypes/collab/undo-records-results.md
+[undo-limits]: ../../../prototypes/collab/undo-records-results.md#declared-limits
+[undo-questions]: ../../../prototypes/collab/undo-records-results.md#open-questions
+[partial-ancestry]: ../../../prototypes/collab/histories/T21-partial-status-ancestry.md
+[recovery-order]: ../../../prototypes/collab/histories/T21-recovery-map-order.md
+[imported-move]: ../../../prototypes/collab/histories/UR-move-imported-segment.md
+[stage2]: https://github.com/RetroGorilla/splitpage/issues/1414
+[1413]: https://github.com/RetroGorilla/splitpage/pull/1413
+[1418]: https://github.com/RetroGorilla/splitpage/pull/1418
+[1421]: https://github.com/RetroGorilla/splitpage/pull/1421
+[1b-decision]: 1b-decision.md
