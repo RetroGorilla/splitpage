@@ -23,7 +23,7 @@ export type SharedMarkValue =
   | { readonly kind: "tag"; readonly id: SharedContentRef; readonly value: SharedContentRef | null }
   | { readonly kind: "link"; readonly id: SharedContentRef; readonly value: string | null };
 export type SharedInlineValue = string
-  | { readonly atom: "broll"; readonly id: SharedContentRef }
+  | { readonly atom: "broll"; readonly id: SharedContentRef; readonly text?: string }
   | { readonly atom: "who"; readonly name: string }
   | { readonly atom: "image"; readonly ref: StoredImageRef }
   | { readonly atom: "video"; readonly href: string; readonly host: string };
@@ -80,6 +80,7 @@ export interface SharedJoinGlue extends SharedOperationAuthor {
 export interface SharedSoftRemove extends SharedOperationAuthor {
   readonly kind: "remove";
   readonly removalKind: "beat" | "range" | "header" | "became-heading";
+  readonly comments?: readonly SharedContentRef[];
   readonly targets: readonly SharedContentRef[];
   readonly observed: readonly SharedContentRef[];
   readonly boundaries: readonly SharedContentRef[];

@@ -189,8 +189,9 @@ export const flowOperationCoverage = [
     ["orphan heading or empty script needs a blank beat", ["segment-create"]],
     ["empty endpoint excluded / heading length guard / derived scene anchors", []]
   ]],
-  ["setMarkAcross", "known", "mark", [
+  ["setMarkAcross", "known", "mark,scalar", [
     ["set mixed or clear all-on observed per-beat ranges", ["mark"]],
+    ["a no-effect identity-mark attempt can canonicalize the touched HTML", ["scalar"]],
     ["empty/heading-only range", []]
   ]],
   ["enterAt", "known", "text-delete,segment-create,remove,split,heading-remove,scalar", [
@@ -270,17 +271,15 @@ export const flowOperationCoverage = [
     ["surviving paragraph flags", ["scalar"]],
     ["empty paragraph or existing refusal", []]
   ]],
-  ["pasteFlowRange", "known", "text-insert,text-delete,segment-create,split,remove,restore,segment-move,heading-create,heading-remove,record-create,record-set,scalar | partial-segment-move,cross-scene-structural-paste", [
+  ["pasteFlowRange", "known", "text-insert,text-delete,segment-create,split,remove,heading-create,heading-remove,record-create,scalar", [
     ["plain text fallback / replace selected characters", ["text-insert", "text-delete"]],
     ["selected whole beats/headings or generated placeholder removed", ["remove", "heading-remove"]],
-    ["copied rows or header-only/trailing/colliding-anchor blanks", ["segment-create", "text-insert"]],
+    ["supplied row ids or header-only/trailing/colliding-anchor blanks", ["segment-create", "text-insert"]],
     ["insert into the middle of a beat or heading", ["split"]],
     ["carried headers", ["heading-create", "text-insert"]],
-    ["copy registries, comments and media", ["record-create"]],
-    ["restore cut ids and move their segments", ["restore", "segment-move"]],
-    ["existing cut comment fallback row repair", ["record-set"]],
+    ["initial visual/gallery components; comment/tag/link anchors ride inserted text", ["record-create"]],
     ["surviving paragraph flags and existing header anchor repair", ["scalar"]],
-    ["partial-source/cross-scene structural cut-paste", ["partial-segment-move", "cross-scene-structural-paste"]]
+    ["registry copying and structural cut restoration belong to the clipboard caller", []]
   ]],
   ["replaceFlowMatches", "known", "text-insert,text-delete,heading-remove,scalar", [
     ["replace visual or single/multiple-beat search matches, keeping rows", ["text-insert", "text-delete"]],
@@ -288,22 +287,24 @@ export const flowOperationCoverage = [
     ["empty heading protects its first surviving paragraph", ["scalar"]],
     ["reverse match order / missing visual/no matches/refusal", []]
   ]],
-  ["setVisualForRange", "known", "split,split-before,scalar,record-create | whole-field today, needs package 9", [
+  ["setVisualForRange", "known", "split,split-before,text-insert,scalar,record-create,record-set | whole-field today, needs package 9", [
     ["suffix/interior isolation", ["split"]],
     ["prefix isolation retains the original beat on the suffix", ["split-before"]],
     ["isolation changes retained paragraph flags", ["scalar"]],
+    ["independently clamped slices can duplicate a surrogate pair at an interior endpoint", ["text-insert"]],
     ["new visual component", ["record-create"]],
-    ["whole visual HTML on collapsed, whole-beat or isolated selection", ["whole-field today, needs package 9"]],
+    ["whole visual HTML on collapsed, whole-beat or isolated selection", ["record-set", "whole-field today, needs package 9"]],
     ["cross-beat/non-beat guards", []]
   ]],
   ["sentenceParagraphs", "known", "scalar", [
     ["sentence-ending predecessor starts a paragraph", ["scalar"]],
     ["already has flags / first beat / existing scene boundary", []]
   ]],
-  ["selectionToOwnBeat", "known", "split,split-before,scalar", [
+  ["selectionToOwnBeat", "known", "split,split-before,text-insert,scalar", [
     ["suffix or interior isolation", ["split"]],
     ["prefix gets a fresh beat while original id/visual keep the suffix", ["split-before"]],
     ["retained original suffix loses its paragraph flag", ["scalar"]],
+    ["independently clamped slices can duplicate a surrogate pair at an interior endpoint", ["text-insert"]],
     ["whole beat unchanged / derived scene anchor / collapsed/cross-beat/non-beat/missing guards", []]
   ]],
   ["insertBeats", "known", "text-insert,segment-create,split,record-create,scalar", [
@@ -318,10 +319,11 @@ export const flowOperationCoverage = [
     ["end creates a blank", ["segment-create"]],
     ["start/empty/non-beat/missing guards", []]
   ]],
-  ["moveBeats", "known-unused", "segment-move,split,scalar | partial-segment-move", [
+  ["moveBeats", "known-unused", "segment-move,split,scalar,heading-remove | partial-segment-move", [
     ["move whole source segments before/after destination", ["segment-move"]],
     ["middle of destination beat or heading", ["split"]],
-    ["retained source/follower/destination paragraph flags", ["scalar"]],
+    ["retained source/follower/destination flags and moved-row normalization", ["scalar"]],
+    ["source scene loses its last anchor", ["heading-remove"]],
     ["source occupies part of segment", ["partial-segment-move"]],
     ["empty-beat affinity / derived anchors / missing/self/nonconsecutive guards", []]
   ]],
