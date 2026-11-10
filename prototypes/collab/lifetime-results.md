@@ -184,7 +184,85 @@ Remaining scans include global order/spans and plain-record/visual/gallery/comme
 
 ## One guarded Node timing set
 
-No complete accepted timing set exists. Counts establish the work removed, not the 30 ms component cap. Any partial/void samples remain excluded from tables.
+Machine: AMD Ryzen 9 9950X3D2 16-Core Processor, win32 10.0.26300 x64, Node v24.22.1, 30.91 GiB RAM, Yjs 13.6.33. Machine/user identifiers and local paths are absent.
+
+Timed source head: 934e7675362f6ac286af5b546833141c0aef729a; source SHA-256: 4a1666e7e85146a8f1f7b657afa4a123278646d8e965d99c48ca5603d153efac. These rows use the merged stored U+200B/cue export repair, superseding the affected historical B remote-character component row. The original perf evidence is retained unchanged.
+
+Five whole-set runs, alternating legacy/indexed order each round, three warm-up edits per case and eleven recorded samples per case/run. Reported values are the median of five per-run p50s [min–max]; p95 uses the same per-run aggregation. No pooled samples, discarded outliers or timing assertions in npm test. Background load may have affected accepted runs. A game was running on this PC during the session; the unchanged guards require at least 3 GiB free before each run, CPU at most 35% before/after, no forbidden Edge/pc-hold/heavy-game process, and stop after three consecutive refusals. Locks: perf and smoke. RAM is checked again before each state. Raw samples and void/refusal evidence: src/perf/lifetime/timings.json.
+
+| Run | Free GiB before | Background CPU before / after % |
+| --- | ---: | ---: |
+| 1 | 10.408 | 6.37 / 5.04 |
+| 2 | 10.023 | 6.82 / 9.78 |
+| 3 | 10.242 | 9.69 / 9.99 |
+| 4 | 10.156 | 9.81 / 7.03 |
+| 5 | 10.218 | 4.25 / 6.22 |
+
+Refused starts: 0; void runs retained: 0.
+
+| State / phase | Legacy ms p50 [range] | Indexed ms p50 [range] | Legacy / indexed | Beyond fixed noise |
+| --- | ---: | ---: | ---: | --- |
+| realistic 2 writers / 1 blocks / applyExcludingIncremental | 0.021 [0.017–0.029] | 0.020 [0.016–0.024] | 1.054x | no difference beyond noise |
+| realistic 2 writers / 1 blocks / incremental | 0.479 [0.435–0.630] | 0.486 [0.450–0.638] | 0.985x | no difference beyond noise |
+| realistic 2 writers / 1 blocks / structure | 0.146 [0.142–0.190] | 0.047 [0.045–0.063] | 3.128x | no difference beyond noise |
+| realistic 2 writers / 1 blocks / component | 0.656 [0.607–0.840] | 0.547 [0.527–0.724] | 1.198x | no difference beyond noise |
+| realistic 2 writers / 1 blocks / capture | 0.018 [0.015–0.024] | 0.017 [0.016–0.031] | 1.089x | no difference beyond noise |
+| realistic 2 writers / 1 blocks / resolve | 0.004 [0.003–0.007] | 0.003 [0.003–0.004] | 1.250x | no difference beyond noise |
+| realistic 2 writers / 1 blocks / withIdentity | 0.693 [0.628–0.866] | 0.586 [0.546–0.749] | 1.183x | no difference beyond noise |
+| realistic 2 writers / 10 blocks / applyExcludingIncremental | 0.028 [0.019–0.033] | 0.020 [0.015–0.029] | 1.376x | no difference beyond noise |
+| realistic 2 writers / 10 blocks / incremental | 2.456 [2.316–2.786] | 2.163 [2.137–3.185] | 1.135x | no difference beyond noise |
+| realistic 2 writers / 10 blocks / structure | 6.663 [5.881–7.905] | 0.347 [0.280–0.575] | 19.173x | indexed cheaper |
+| realistic 2 writers / 10 blocks / component | 9.395 [8.234–10.337] | 2.526 [2.432–3.719] | 3.719x | indexed cheaper |
+| realistic 2 writers / 10 blocks / capture | 0.020 [0.019–0.023] | 0.018 [0.016–0.031] | 1.114x | no difference beyond noise |
+| realistic 2 writers / 10 blocks / resolve | 0.006 [0.005–0.007] | 0.004 [0.003–0.005] | 1.750x | no difference beyond noise |
+| realistic 2 writers / 10 blocks / withIdentity | 9.431 [8.255–10.363] | 2.547 [2.462–3.762] | 3.703x | indexed cheaper |
+| realistic 2 writers / 36 blocks / applyExcludingIncremental | 0.050 [0.048–0.057] | 0.026 [0.026–0.033] | 1.906x | no difference beyond noise |
+| realistic 2 writers / 36 blocks / incremental | 11.913 [11.638–12.420] | 8.712 [8.363–9.077] | 1.367x | indexed cheaper |
+| realistic 2 writers / 36 blocks / structure | 82.503 [78.038–87.885] | 1.237 [1.042–1.414] | 66.685x | indexed cheaper |
+| realistic 2 writers / 36 blocks / component | 94.706 [90.346–103.142] | 9.989 [9.875–10.554] | 9.481x | indexed cheaper |
+| realistic 2 writers / 36 blocks / capture | 0.044 [0.030–0.046] | 0.022 [0.016–0.023] | 1.995x | no difference beyond noise |
+| realistic 2 writers / 36 blocks / resolve | 0.016 [0.015–0.018] | 0.005 [0.005–0.006] | 3.037x | no difference beyond noise |
+| realistic 2 writers / 36 blocks / withIdentity | 94.753 [90.404–103.202] | 10.016 [9.903–10.583] | 9.460x | indexed cheaper |
+| realistic 6 writers / 1 blocks / applyExcludingIncremental | 0.017 [0.015–0.026] | 0.017 [0.014–0.024] | 1.018x | no difference beyond noise |
+| realistic 6 writers / 1 blocks / incremental | 0.421 [0.404–0.710] | 0.416 [0.404–0.705] | 1.011x | no difference beyond noise |
+| realistic 6 writers / 1 blocks / structure | 0.116 [0.110–0.193] | 0.036 [0.035–0.062] | 3.190x | no difference beyond noise |
+| realistic 6 writers / 1 blocks / component | 0.557 [0.527–0.917] | 0.466 [0.455–0.803] | 1.194x | no difference beyond noise |
+| realistic 6 writers / 1 blocks / capture | 0.017 [0.016–0.026] | 0.017 [0.016–0.026] | 1.024x | no difference beyond noise |
+| realistic 6 writers / 1 blocks / resolve | 0.003 [0.003–0.005] | 0.003 [0.002–0.004] | 1.129x | no difference beyond noise |
+| realistic 6 writers / 1 blocks / withIdentity | 0.595 [0.546–0.984] | 0.519 [0.498–0.838] | 1.146x | no difference beyond noise |
+| realistic 6 writers / 10 blocks / applyExcludingIncremental | 0.025 [0.023–0.031] | 0.022 [0.020–0.029] | 1.176x | no difference beyond noise |
+| realistic 6 writers / 10 blocks / incremental | 2.219 [2.121–2.426] | 2.314 [2.159–3.236] | 0.959x | no difference beyond noise |
+| realistic 6 writers / 10 blocks / structure | 5.924 [5.867–6.170] | 0.347 [0.310–0.390] | 17.049x | indexed cheaper |
+| realistic 6 writers / 10 blocks / component | 8.253 [8.046–8.581] | 2.677 [2.508–3.667] | 3.083x | indexed cheaper |
+| realistic 6 writers / 10 blocks / capture | 0.019 [0.016–0.020] | 0.017 [0.013–0.026] | 1.086x | no difference beyond noise |
+| realistic 6 writers / 10 blocks / resolve | 0.006 [0.006–0.006] | 0.005 [0.004–0.005] | 1.200x | no difference beyond noise |
+| realistic 6 writers / 10 blocks / withIdentity | 8.305 [8.069–8.654] | 2.700 [2.568–3.698] | 3.076x | indexed cheaper |
+| realistic 6 writers / 36 blocks / applyExcludingIncremental | 0.053 [0.050–0.060] | 0.026 [0.024–0.033] | 2.015x | no difference beyond noise |
+| realistic 6 writers / 36 blocks / incremental | 11.609 [11.350–13.721] | 8.600 [8.247–9.157] | 1.350x | indexed cheaper |
+| realistic 6 writers / 36 blocks / structure | 80.040 [78.675–92.389] | 1.164 [1.139–1.375] | 68.763x | indexed cheaper |
+| realistic 6 writers / 36 blocks / component | 92.683 [90.847–106.149] | 9.883 [9.426–10.658] | 9.378x | indexed cheaper |
+| realistic 6 writers / 36 blocks / capture | 0.046 [0.034–0.051] | 0.020 [0.016–0.022] | 2.328x | no difference beyond noise |
+| realistic 6 writers / 36 blocks / resolve | 0.017 [0.016–0.017] | 0.006 [0.005–0.006] | 2.946x | no difference beyond noise |
+| realistic 6 writers / 36 blocks / withIdentity | 92.748 [90.898–106.217] | 9.909 [9.501–10.681] | 9.360x | indexed cheaper |
+| synthetic / 50100 operations / applyExcludingIncremental | 0.050 [0.036–0.057] | 0.028 [0.022–0.034] | 1.806x | no difference beyond noise |
+| synthetic / 50100 operations / incremental | 3.584 [3.024–4.381] | 2.633 [2.548–3.062] | 1.361x | no difference beyond noise |
+| synthetic / 50100 operations / structure | 27.335 [24.549–28.960] | 0.792 [0.789–0.835] | 34.518x | indexed cheaper |
+| synthetic / 50100 operations / component | 30.547 [28.287–34.274] | 3.458 [3.364–3.929] | 8.834x | indexed cheaper |
+| synthetic / 50100 operations / capture | 0.052 [0.029–0.059] | 0.021 [0.019–0.028] | 2.439x | no difference beyond noise |
+| synthetic / 50100 operations / resolve | 0.015 [0.008–0.016] | 0.005 [0.004–0.005] | 3.106x | no difference beyond noise |
+| synthetic / 50100 operations / withIdentity | 30.579 [28.364–34.379] | 3.482 [3.397–3.969] | 8.783x | indexed cheaper |
+
+| State | Indexed component p50 [range] ms | Indexed component p95 [range] ms | Node component ≤30 / ≤50 ms |
+| --- | ---: | ---: | --- |
+| realistic 2 writers / 1 blocks | 0.547 [0.527–0.724] | 0.890 [0.603–0.964] | met / met |
+| realistic 2 writers / 10 blocks | 2.526 [2.432–3.719] | 3.520 [2.700–4.258] | met / met |
+| realistic 2 writers / 36 blocks | 9.989 [9.875–10.554] | 14.032 [10.561–15.153] | met / met |
+| realistic 6 writers / 1 blocks | 0.466 [0.455–0.803] | 0.858 [0.814–0.908] | met / met |
+| realistic 6 writers / 10 blocks | 2.677 [2.508–3.667] | 4.327 [3.802–4.380] | met / met |
+| realistic 6 writers / 36 blocks | 9.883 [9.426–10.658] | 13.565 [10.459–15.185] | met / met |
+| synthetic / 50100 operations | 3.458 [3.364–3.929] | 5.267 [4.142–6.294] | met / met |
+
+applyExcludingIncremental is the outer Yjs apply interval minus measured projector callbacks; it includes decoding, integration and transaction cleanup. incremental is those synchronous callbacks. structure is the old diagnostic reader or its indexed replacement. component sums apply, incremental and structure; capture/resolve are separate editing-buffer identity passes, withIdentity also includes them. The timer brackets identity verification. Preparation, state load, initial full projection and index construction are outside samples; every mode starts from the same hashed state, then accumulates the declared warm-up/sample x characters.
 
 ## Bounded conclusion and retention question
 

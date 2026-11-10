@@ -5,6 +5,16 @@ import { readLifetimeCounts, validateLifetimeCounts, validateLifetimeTimings, li
 import type { LifetimeTimingEvidence } from "../../src/perf/lifetime/record.ts";
 import { lifetimeGrowthSvg, lifetimeReport } from "../../src/perf/lifetime/report.ts";
 
+test("literal timing contract pins unchanged guards, five rounds, seven states, warm-up and alternating sample counts", () => {
+  const { rounds, warmup, samples, minFreeMemoryBytes, maxCpuBusyPercent, maxConsecutiveRefusals, retryDelayMs, locks } = lifetimeTimingMethod;
+  assert.deepEqual({ rounds, warmup, samples, minFreeMemoryBytes, maxCpuBusyPercent, maxConsecutiveRefusals, retryDelayMs, locks },
+    { rounds: 5, warmup: 3, samples: 11, minFreeMemoryBytes: 3221225472, maxCpuBusyPercent: 35, maxConsecutiveRefusals: 3, retryDelayMs: 30000, locks: ["perf", "smoke"] });
+  assert.deepEqual(lifetimeTimingPoints(readLifetimeCounts()).map(point => point.name), [
+    "realistic 2 writers / 1 blocks", "realistic 2 writers / 10 blocks", "realistic 2 writers / 36 blocks",
+    "realistic 6 writers / 1 blocks", "realistic 6 writers / 10 blocks", "realistic 6 writers / 36 blocks", "synthetic / 50100 operations"
+  ]);
+});
+
 test("lifetime evidence pins method, sources, wire totals, three history checkpoints and index scan reduction", () => {
   const counts = readLifetimeCounts(); validateLifetimeCounts(counts);
   const synthetic = counts.data.synthetic.checkpoints.at(-1); assert.ok(synthetic);
