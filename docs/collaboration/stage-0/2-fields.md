@@ -111,7 +111,7 @@ Audited against `0ca1929177ffc84bced412ad2be3aa99690761d0`.
 | `kind` | `anchor` or `conflict` | `anchor` | Composer; `conflictComment` | F | `comments.ts` | Newer copy | Write-once | PROJ |
 | `imageValue` | Image reference; only on `conflict` + `visualImage` | Rebuilt from the body's `data-blob`; deleted elsewhere | `conflictComment` | F (inlined into `body`); R | `src/core/merge/rows.ts` | Newer copy | Write-once (local merge is off in shared mode, so new ones only arrive in old files) | T16, PROJ |
 | `conflictField`, `emptyValue`, `titleValue` | Label; boolean; the losing title | not normalized | `conflictComment` | F | `merge/rows.ts` | Newer copy | Write-once | PROJ |
-| `replies[]` | Array of replies | `[]`; non-objects dropped | `addReplyCommand` | F; R | `comments.ts` | Union by id, sorted by `createdAt` | Set keyed by id; display order derived from `(createdAt, id)` | T11, PROJ |
+| `replies[]` | Array of replies | `[]`; non-objects dropped | `addReplyCommand` | F; R | `comments.ts` | Union by id, sorted by `createdAt` | Set keyed by id; display order derived from `(createdAt, id)`; the id comparison must be total, since `localeCompare` treats distinct canonically equivalent ids as equal and leaves their order to map iteration ([reply history](../../../prototypes/collab/histories/T21-reply-collation-order.md)) | T11, PROJ |
 | `replies[].id` | Clean id | Missing: `rp-load-…` | `ids.id("rp")` in the comments feature | F | `comments.ts` | Key | Set key | T11 |
 | `replies[].author`, `.body`, `.createdAt` | Name; sanitized HTML; ISO or `null` | `plainName`, `sanitize`, `stampOrNull` | `addReplyCommand` | F; R | `comments.ts` | Theirs copy for the same id | Write-once | T11, PROJ |
 
