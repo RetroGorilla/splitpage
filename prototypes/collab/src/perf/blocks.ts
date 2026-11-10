@@ -1,10 +1,8 @@
 import * as Y from "yjs";
-import { mapValue, textValue } from "../schema.ts";
 import type { SchemaCandidate } from "../schema.ts";
 import type { ProjectionBlock } from "../proj/document.ts";
-import { readDelta } from "../proj/richtext.ts";
 import type { ProjectionDelta } from "../proj/richtext.ts";
-import { bag } from "../proj/value.ts";
+import { readBoundaryRecord, readContentAtom, readMarkRecord, readSegmentRecord, readWireValue, rootMap, rootOrder, rootText } from "../readers/records.ts";
 import { deltaLength, patchDelta, sameDelta } from "./delta.ts";
 
 export interface PerfBlockSpan {
@@ -31,7 +29,7 @@ export class PerfBlockIndex {
 
   refresh(events: readonly Y.YEvent<Y.AbstractType<unknown>>[]): Set<string> {
     for (const event of events) if (event instanceof Y.YTextEvent && this.streams.has(event.target)) {
-      this.streams.set(event.target, patchDelta(this.streams.get(event.target) ?? [], event.delta));
+      try { this.streams.set(event.target, patchDelta(this.streams.get(event.target) ?? [], event.delta)); } catch { this.streams.delete(event.target); }
       this.parsed.delete(event.target);
     }
     const previous = new Map(this.spans.map(span => [`${span.block.kind}:${span.block.id}`, span.block]));
@@ -39,8 +37,10 @@ export class PerfBlockIndex {
     const seen = new Set<string>();
     let current: PerfBlockSpan | undefined;
     const scan = (text: Y.Text, head?: unknown): void => {
+      current = undefined;
+      const header = readBoundaryRecord(head), signature = header ? `${header.kind ?? "beat"}:${header.id}` : "";
       const cached = this.parsed.get(text);
-      if (cached && cached.head === head && cached.spans.every(span => !seen.has(`${span.block.kind}:${span.block.id}`))) {
+      if (cached && cached.head === signature && cached.spans.every(span => !seen.has(`${span.block.kind}:${span.block.id}`))) {
         for (const span of cached.spans) { seen.add(`${span.block.kind}:${span.block.id}`); spans.push(span); }
         current = cached.spans.at(-1);
         return;
@@ -48,9 +48,8 @@ export class PerfBlockIndex {
       const beginAt = spans.length;
       let index = 0;
       const boundary = (value: unknown, start: number): void => {
-        const atom = bag(value);
-        const kind = "b" in atom ? "b" : "h";
-        const id = String(atom[kind]);
+        const atom = readBoundaryRecord(value); if (!atom) return;
+        const kind = atom.kind ? "h" : "b", id = atom.id;
         const key = `${kind}:${id}`;
         if (seen.has(key)) return;
         seen.add(key);
@@ -60,21 +59,26 @@ export class PerfBlockIndex {
       };
       if (head) boundary(head, 0);
       let delta = this.streams.get(text);
-      if (!delta) { delta = readDelta(text); this.streams.set(text, delta); }
+      if (!delta) {
+        const raw = text.toDelta() as { insert: unknown; attributes?: unknown }[];
+        const loaded: ProjectionDelta[] = raw.map(item => ({ insert: typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert) ?? {}, attributes: { ...readMarkRecord(item.attributes) } }));
+        delta = loaded; this.streams.set(text, loaded);
+      }
       for (const item of delta) {
-        if (typeof item.insert === "object" && ("b" in item.insert || "h" in item.insert)) boundary(item.insert, index + 1);
+        const insert = typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert);
+        if (insert && typeof insert === "object" && ("b" in insert || "h" in insert)) boundary(insert, index + 1);
         else {
-          if (!current) throw new Error("Content before a boundary");
-          current.block.delta.push(item);
+          const destination = current as PerfBlockSpan | undefined;
+          if (destination && insert !== null) destination.block.delta.push({ insert, attributes: { ...readMarkRecord(item.attributes) } });
         }
         index += deltaLength(item);
       }
-      this.parsed.set(text, { head, spans: spans.slice(beginAt) });
+      this.parsed.set(text, { head: signature, spans: spans.slice(beginAt) });
     };
-    if (this.candidate === "A") scan(this.doc.getText("flow"));
-    else for (const id of new Set(this.doc.getArray<string>("order").toArray())) {
-      const segment = mapValue(this.doc.getMap("segments").get(id));
-      scan(textValue(segment.get("text")), segment.get("head"));
+    if (this.candidate === "A") { const text = rootText(this.doc, "flow"); if (text) scan(text); }
+    else for (const id of new Set(rootOrder(this.doc))) {
+      const segment = readSegmentRecord(rootMap(this.doc, "segments")?.get(id));
+      if (segment) scan(segment.text, segment.head ? { [segment.head.kind ? "h" : "b"]: segment.head.id } : undefined);
     }
     const changed = new Set<string>();
     for (const span of spans) {

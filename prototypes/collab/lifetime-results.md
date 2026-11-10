@@ -4,7 +4,7 @@
 
 This follow-up studies the selected stable-segment candidate B. It does not select a schema, design compaction or establish a production lifetime. One modeled canonical draft plus its stated revision is the small lifetime control; larger horizons append the same canonical structure as the existing SCALE fixture does. Two/six writers alternate whole beats with causal delivery between turns, not simultaneous conflicting keystrokes. The M1 queue and app binding are not instantiated here.
 
-Source SHA-256: b5406eae9c606956f41a35e37c6b0b517b34683674c74363eff5b29a6e4ccdda; dependency SHA-256: 3ef67a25a054d08783995254774aac057143b98805fa0bf9832f2019ba27659f; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
+Source SHA-256: 373667b070a9b96cedfc1b87c9d337563197692180438473649fda7367f29efa; dependency SHA-256: 437e030f88c4b4248aabf001597d93eafede464ee457bf310c5e872595d9d7d4; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
 
 ## Stated writing scenario
 
@@ -145,20 +145,20 @@ Counters wrap the actual Y.Map iterators/get/has, order toArray and text toDelta
 
 | State | Update bytes / delete ranges | Legacy status records scanned | Indexed status records scanned | Incremental order values / physical items | Incremental text reads / item visits | Join keys / retired-id probes | Removal-record scans |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 2 writers / 1 blocks | 12 / 0 | 2,040 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
-| 2 writers / 5 blocks | 13 / 0 | 51,000 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
-| 2 writers / 10 blocks | 13 / 0 | 204,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
-| 2 writers / 20 blocks | 13 / 0 | 816,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
-| 2 writers / 36 blocks | 13 / 0 | 2,643,840 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
-| 6 writers / 1 blocks | 12 / 0 | 2,040 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
-| 6 writers / 5 blocks | 12 / 0 | 51,000 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
-| 6 writers / 10 blocks | 12 / 0 | 204,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
-| 6 writers / 20 blocks | 13 / 0 | 816,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
-| 6 writers / 36 blocks | 13 / 0 | 2,643,840 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
+| 2 writers / 1 blocks | 12 / 0 | 2,100 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
+| 2 writers / 5 blocks | 13 / 0 | 52,500 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
+| 2 writers / 10 blocks | 13 / 0 | 210,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
+| 2 writers / 20 blocks | 13 / 0 | 840,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
+| 2 writers / 36 blocks | 13 / 0 | 2,721,600 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
+| 6 writers / 1 blocks | 12 / 0 | 2,100 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
+| 6 writers / 5 blocks | 12 / 0 | 52,500 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
+| 6 writers / 10 blocks | 12 / 0 | 210,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
+| 6 writers / 20 blocks | 13 / 0 | 840,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
+| 6 writers / 36 blocks | 13 / 0 | 2,721,600 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
 | synthetic / 0 operations | 13 / 0 | 0 | 0 | 300 / 300 | 2 / 14 | 0 / 0 | 0 |
-| synthetic / 10020 operations | 13 / 0 | 76,000 | 0 | 300 / 300 | 2 / 26 | 80 / 80 | 0 |
-| synthetic / 25050 operations | 13 / 0 | 250,000 | 0 | 300 / 300 | 2 / 14 | 200 / 200 | 0 |
-| synthetic / 50100 operations | 13 / 0 | 700,000 | 0 | 300 / 300 | 0 / 0 | 400 / 400 | 0 |
+| synthetic / 10020 operations | 13 / 0 | 80,000 | 0 | 300 / 300 | 2 / 26 | 100 / 100 | 0 |
+| synthetic / 25050 operations | 13 / 0 | 275,000 | 0 | 300 / 300 | 2 / 14 | 250 / 250 | 0 |
+| synthetic / 50100 operations | 13 / 0 | 800,000 | 0 | 300 / 300 | 0 / 0 | 500 / 500 | 0 |
 
 | State | Apply integrated items / store probes | Incremental records scanned: visuals / gallery / comments / replies / shots / tags |
 | --- | ---: | ---: |
@@ -204,7 +204,7 @@ Machine: AMD Ryzen 9 9950X3D2 16-Core Processor, win32 10.0.26300 x64, Node v24.
 
 Timed source head: 934e7675362f6ac286af5b546833141c0aef729a; source SHA-256: 4a1666e7e85146a8f1f7b657afa4a123278646d8e965d99c48ca5603d153efac. These rows use the merged stored U+200B/cue export repair, superseding the affected historical B remote-character component row. The original perf evidence is retained unchanged.
 
-These retained rows predate the status-resolution change and its malformed-graph review fix. timed-implementation.json retains the measured source and timing hashes; marks/status-timing-changes.json pins both source-change layers and their dependency/count digests. The iterative resolver validates the complete beat-local graph, rejects cycles to stored status, and changes status-retirement lookup work; the index replaces whole-map notification rescans with key updates. Retiming is needed for structure, component and withIdentity in both modes at all seven states; applyExcludingIncremental, incremental, capture and resolve keep their historical meaning. No timings were run. Count-only checkpoints do not validate elapsed cost.
+These retained rows predate status resolution and the reader-order/validation fixes. timed-implementation.json retains measured sources and timing hashes; marks/status-timing-changes.json and readers/source-changes.json declare each subsequent source/dependency/count layer. The current readers validate records, combine removals, traverse joins independently of beat position and order shared keys by UTF-16 code units. Retiming is needed for incremental, structure, component and withIdentity in both modes at all seven states. applyExcludingIncremental, capture and resolve do not execute the changed reader/export work inside their intervals. No timings were run. Count-only checkpoints do not validate elapsed cost.
 
 Five whole-set runs, alternating legacy/indexed order each round, three warm-up edits per case and eleven recorded samples per case/run. Reported values are the median of five per-run p50s [min–max]; p95 uses the same per-run aggregation. No pooled samples, discarded outliers or timing assertions in npm test. Background load may have affected accepted runs. A game was running on this PC during the session; the unchanged guards require at least 3 GiB free before each run, CPU at most 35% before/after, no forbidden Edge/pc-hold/heavy-game process, and stop after three consecutive refusals. Locks: perf and smoke. RAM is checked again before each state. Raw samples and void/refusal evidence: src/perf/lifetime/timings.json.
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { validateReaderBrowserBundle } from "../../src/marks/status-browser-audit.ts";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -67,7 +68,7 @@ test("one harness guard, unchanged B/M1 and literal coverage, stop after the T02
 
 test("repair evidence pins the exact injected prototype bundle", async () => {
   const built = await build({ absWorkingDir: fileURLToPath(new URL("../../../../", import.meta.url)), entryPoints: [fileURLToPath(new URL("../../src/split-reconcile/page.ts", import.meta.url))], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
-  assert.equal(createHash("sha256").update(present(built.outputFiles?.[0]?.text)).digest("hex"), evidence.bundleSha256);
+  await validateReaderBrowserBundle("src/split-reconcile/page.ts", evidence.bundleSha256, createHash("sha256").update(present(built.outputFiles?.[0]?.text)).digest("hex"));
 });
 
 for (const result of evidence.cases) test(`Split repaired B/M1 ${result.trace}/${result.order}`, () => {

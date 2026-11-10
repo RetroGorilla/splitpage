@@ -13,3 +13,5 @@ Seed: one empty R1 beat, comment C1. Alice (client 1) adds reply id U+00E9 (`é`
 | Encoded-state late joiner | `["e\u0301", "\u00e9"]` |
 
 Alice and Bob encode to byte-identical state. Reproduce without a browser: `node --test test/marks/review-histories.test.ts`. The status PR records the finding; the stacked reader-order PR owns its repair and a total UTF-16 code-unit comparator.
+
+The reader-order fix now returns `["e\u0301", "\u00e9"]` on every replica, using a total comparison by UTF-16 code units. The old comparator and the original observations remain in the tests. The general convergence checker injects a separate equal-time pair into every structure/marks checkpoint, with forward/reverse delivery and encoded reload, and rejects the old comparator even in a history with no authored replies.

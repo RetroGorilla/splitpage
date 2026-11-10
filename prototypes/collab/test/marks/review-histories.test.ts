@@ -3,11 +3,10 @@ import { test } from "node:test";
 import * as Y from "yjs";
 import { ReplicaHarness } from "../../src/delivery.ts";
 import { addComment, addReply, changeStatus, undoStatus } from "../../src/marks/commands.ts";
-import { projectComments } from "../../src/marks/projection.ts";
+import { legacyReplyReader } from "../reader-order/legacy.ts";
 import { fromDocument, createProjectionReplica } from "../../src/proj/document.ts";
 import { structureManager } from "../../src/structure.ts";
 import { statusReaders } from "./status-readers.ts";
-import type { CollabModel } from "../../src/model.ts";
 
 test("review finding: canonically equivalent reply ids retain replica-local order under localeCompare", () => {
   const h = new ReplicaHarness("B", [{ id: "R1", text: "" }]);
@@ -18,8 +17,7 @@ test("review finding: canonically equivalent reply ids retain replica-local orde
     assert.deepEqual(Y.encodeStateAsUpdate(h.alice.doc), Y.encodeStateAsUpdate(h.bob.doc));
     h.lateJoin(h.alice);
     const observations = h.replicas.map(replica => {
-      const model: CollabModel = { rows: [{ id: "R1", characters: [] }], carets: {}, recovery: [] };
-      projectComments(model, replica.doc);
+      const model = legacyReplyReader(replica.doc, "B", h.identities);
       const comments = model.records?.comments as Record<string, { replies: { id: string }[] }>;
       return comments.C1?.replies.map(reply => reply.id);
     });

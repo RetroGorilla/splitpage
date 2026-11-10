@@ -1,0 +1,1486 @@
+{
+  "baseHead": "8efcff798f7d92ab890207d414ec2f416b69f695",
+  "rows": [
+    {
+      "path": "src/perf/lifetime/counts.json",
+      "numericChanges": [
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.shots",
+          "before": 241,
+          "after": 234
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.comments",
+          "before": 126,
+          "after": 124
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.replies",
+          "before": 14,
+          "after": 18
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.visuals",
+          "before": 294,
+          "after": 180
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.gallery",
+          "before": 385,
+          "after": 126
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.records.statusEvents",
+          "before": 2040,
+          "after": 2100
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.records.joins",
+          "before": 5,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 2
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.beats",
+          "before": 172,
+          "after": 490
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.retiredStatus",
+          "before": 58,
+          "after": 60
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.shots",
+          "before": 241,
+          "after": 234
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.comments",
+          "before": 126,
+          "after": 124
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.replies",
+          "before": 14,
+          "after": 18
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.visuals",
+          "before": 294,
+          "after": 180
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.gallery",
+          "before": 385,
+          "after": 126
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.gets.beats",
+          "before": 138,
+          "after": 245
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.shots",
+          "before": 1477,
+          "after": 1170
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.comments",
+          "before": 724,
+          "after": 620
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.replies",
+          "before": 470,
+          "after": 250
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.visuals",
+          "before": 2148,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.gallery",
+          "before": 2069,
+          "after": 486
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.records.statusEvents",
+          "before": 51000,
+          "after": 52500
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.records.joins",
+          "before": 25,
+          "after": 50
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.beats",
+          "before": 860,
+          "after": 2450
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.retiredStatus",
+          "before": 290,
+          "after": 300
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.shots",
+          "before": 1477,
+          "after": 1170
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.comments",
+          "before": 724,
+          "after": 620
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.replies",
+          "before": 470,
+          "after": 250
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.visuals",
+          "before": 2148,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.gallery",
+          "before": 2069,
+          "after": 486
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.gets.beats",
+          "before": 690,
+          "after": 1225
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.shots",
+          "before": 3126,
+          "after": 2340
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.comments",
+          "before": 1516,
+          "after": 1240
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.gallery",
+          "before": 4663,
+          "after": 936
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.records.statusEvents",
+          "before": 204000,
+          "after": 210000
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.records.joins",
+          "before": 50,
+          "after": 100
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.beats",
+          "before": 1720,
+          "after": 4900
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.retiredStatus",
+          "before": 580,
+          "after": 600
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.shots",
+          "before": 3126,
+          "after": 2340
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.comments",
+          "before": 1516,
+          "after": 1240
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.gallery",
+          "before": 4663,
+          "after": 936
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.gets.beats",
+          "before": 1380,
+          "after": 2450
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.shots",
+          "before": 6536,
+          "after": 4680
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.comments",
+          "before": 3156,
+          "after": 2480
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.replies",
+          "before": 11880,
+          "after": 3400
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.visuals",
+          "before": 10612,
+          "after": 3600
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.gallery",
+          "before": 10021,
+          "after": 1836
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.records.statusEvents",
+          "before": 816000,
+          "after": 840000
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.records.joins",
+          "before": 100,
+          "after": 200
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 40
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.beats",
+          "before": 3440,
+          "after": 9800
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.retiredStatus",
+          "before": 1160,
+          "after": 1200
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.shots",
+          "before": 6536,
+          "after": 4680
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.comments",
+          "before": 3156,
+          "after": 2480
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.replies",
+          "before": 11880,
+          "after": 3400
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.visuals",
+          "before": 10612,
+          "after": 3600
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.gallery",
+          "before": 10021,
+          "after": 1836
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.gets.beats",
+          "before": 2760,
+          "after": 4900
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.shots",
+          "before": 12310,
+          "after": 8424
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.comments",
+          "before": 5900,
+          "after": 4464
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.replies",
+          "before": 46440,
+          "after": 10728
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.visuals",
+          "before": 20628,
+          "after": 6480
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.gallery",
+          "before": 19371,
+          "after": 3276
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.records.statusEvents",
+          "before": 2643840,
+          "after": 2721600
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.records.joins",
+          "before": 180,
+          "after": 360
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 72
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.beats",
+          "before": 6192,
+          "after": 17640
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.retiredStatus",
+          "before": 2088,
+          "after": 2160
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.shots",
+          "before": 12310,
+          "after": 8424
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.comments",
+          "before": 5900,
+          "after": 4464
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.replies",
+          "before": 46440,
+          "after": 10728
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.visuals",
+          "before": 20628,
+          "after": 6480
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.gallery",
+          "before": 19371,
+          "after": 3276
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.gets.beats",
+          "before": 4968,
+          "after": 8820
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.shots",
+          "before": 241,
+          "after": 234
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.comments",
+          "before": 126,
+          "after": 124
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.replies",
+          "before": 14,
+          "after": 18
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.visuals",
+          "before": 294,
+          "after": 180
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.gallery",
+          "before": 385,
+          "after": 126
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.records.statusEvents",
+          "before": 2040,
+          "after": 2100
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.records.joins",
+          "before": 5,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 2
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.beats",
+          "before": 172,
+          "after": 490
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.retiredStatus",
+          "before": 58,
+          "after": 60
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.shots",
+          "before": 241,
+          "after": 234
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.comments",
+          "before": 126,
+          "after": 124
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.replies",
+          "before": 14,
+          "after": 18
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.visuals",
+          "before": 294,
+          "after": 180
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.gallery",
+          "before": 385,
+          "after": 126
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.gets.beats",
+          "before": 138,
+          "after": 245
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.shots",
+          "before": 1477,
+          "after": 1170
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.comments",
+          "before": 724,
+          "after": 620
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.replies",
+          "before": 470,
+          "after": 250
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.visuals",
+          "before": 2148,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.gallery",
+          "before": 2069,
+          "after": 486
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.records.statusEvents",
+          "before": 51000,
+          "after": 52500
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.records.joins",
+          "before": 25,
+          "after": 50
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.beats",
+          "before": 860,
+          "after": 2450
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.retiredStatus",
+          "before": 290,
+          "after": 300
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.shots",
+          "before": 1477,
+          "after": 1170
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.comments",
+          "before": 724,
+          "after": 620
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.replies",
+          "before": 470,
+          "after": 250
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.visuals",
+          "before": 2148,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.gallery",
+          "before": 2069,
+          "after": 486
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.gets.beats",
+          "before": 690,
+          "after": 1225
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.shots",
+          "before": 3126,
+          "after": 2340
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.comments",
+          "before": 1516,
+          "after": 1240
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.gallery",
+          "before": 4665,
+          "after": 936
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.records.statusEvents",
+          "before": 204000,
+          "after": 210000
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.records.joins",
+          "before": 50,
+          "after": 100
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.beats",
+          "before": 1720,
+          "after": 4900
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.retiredStatus",
+          "before": 580,
+          "after": 600
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.shots",
+          "before": 3126,
+          "after": 2340
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.comments",
+          "before": 1516,
+          "after": 1240
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.gallery",
+          "before": 4665,
+          "after": 936
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.gets.beats",
+          "before": 1380,
+          "after": 2450
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.shots",
+          "before": 6536,
+          "after": 4680
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.comments",
+          "before": 3156,
+          "after": 2480
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.replies",
+          "before": 11880,
+          "after": 3400
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.visuals",
+          "before": 10612,
+          "after": 3600
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.gallery",
+          "before": 10039,
+          "after": 1836
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.records.statusEvents",
+          "before": 816000,
+          "after": 840000
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.records.joins",
+          "before": 100,
+          "after": 200
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 40
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.beats",
+          "before": 3440,
+          "after": 9800
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.retiredStatus",
+          "before": 1160,
+          "after": 1200
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.shots",
+          "before": 6536,
+          "after": 4680
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.comments",
+          "before": 3156,
+          "after": 2480
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.replies",
+          "before": 11880,
+          "after": 3400
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.visuals",
+          "before": 10612,
+          "after": 3600
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.gallery",
+          "before": 10039,
+          "after": 1836
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.gets.beats",
+          "before": 2760,
+          "after": 4900
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.shots",
+          "before": 12310,
+          "after": 8424
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.comments",
+          "before": 5900,
+          "after": 4464
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.replies",
+          "before": 46440,
+          "after": 10728
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.visuals",
+          "before": 20628,
+          "after": 6480
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.gallery",
+          "before": 19365,
+          "after": 3276
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.records.statusEvents",
+          "before": 2643840,
+          "after": 2721600
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.records.joins",
+          "before": 180,
+          "after": 360
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 72
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.beats",
+          "before": 6192,
+          "after": 17640
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.retiredStatus",
+          "before": 2088,
+          "after": 2160
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.shots",
+          "before": 12310,
+          "after": 8424
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.comments",
+          "before": 5900,
+          "after": 4464
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.replies",
+          "before": 46440,
+          "after": 10728
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.visuals",
+          "before": 20628,
+          "after": 6480
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.gallery",
+          "before": 19365,
+          "after": 3276
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.gets.beats",
+          "before": 4968,
+          "after": 8820
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.gallery",
+          "before": 4521,
+          "after": 906
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.legacy.work.structure.gets.beats",
+          "before": 1500,
+          "after": 4200
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.gallery",
+          "before": 4521,
+          "after": 906
+        },
+        {
+          "path": "data.synthetic.checkpoints.0.indexed.work.structure.gets.beats",
+          "before": 1200,
+          "after": 2100
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.gallery",
+          "before": 4521,
+          "after": 906
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.records.statusEvents",
+          "before": 76000,
+          "after": 80000
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.records.joins",
+          "before": 80,
+          "after": 200
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 40
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.beats",
+          "before": 1940,
+          "after": 5600
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.retiredJoins",
+          "before": 80,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.gallery",
+          "before": 4521,
+          "after": 906
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.records.joins",
+          "before": 80,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.beats",
+          "before": 1560,
+          "after": 2800
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.retiredJoins",
+          "before": 80,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.gallery",
+          "before": 4521,
+          "after": 906
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.records.statusEvents",
+          "before": 250000,
+          "after": 275000
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.records.joins",
+          "before": 200,
+          "after": 500
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.beats",
+          "before": 2600,
+          "after": 7700
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.retiredJoins",
+          "before": 200,
+          "after": 250
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 50
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.visuals",
+          "before": 4826,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.gallery",
+          "before": 4521,
+          "after": 906
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.records.joins",
+          "before": 200,
+          "after": 250
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 50
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.beats",
+          "before": 2100,
+          "after": 3850
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.retiredJoins",
+          "before": 200,
+          "after": 250
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 50
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.visuals",
+          "before": 4824,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.gallery",
+          "before": 4516,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.records.statusEvents",
+          "before": 700000,
+          "after": 800000
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.records.joins",
+          "before": 400,
+          "after": 1000
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 200
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.beats",
+          "before": 3700,
+          "after": 11200
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.retiredJoins",
+          "before": 400,
+          "after": 500
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.tags",
+          "before": 525,
+          "after": 496
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.shots",
+          "before": 2428,
+          "after": 2340
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.comments",
+          "before": 1278,
+          "after": 1240
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.replies",
+          "before": 2340,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.visuals",
+          "before": 4824,
+          "after": 1800
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.gallery",
+          "before": 4516,
+          "after": 900
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.structure.records.joins",
+          "before": 400,
+          "after": 500
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.structure.gets.beats",
+          "before": 3000,
+          "after": 5600
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.structure.gets.retiredJoins",
+          "before": 400,
+          "after": 500
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 100
+        }
+      ],
+      "otherChanges": []
+    },
+    {
+      "path": "src/perf/structural-results.json",
+      "numericChanges": [],
+      "otherChanges": []
+    },
+    {
+      "path": "src/perf/lifetime/sensitivity.json",
+      "numericChanges": [],
+      "otherChanges": []
+    }
+  ]
+}

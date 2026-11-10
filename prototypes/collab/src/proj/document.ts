@@ -3,11 +3,13 @@ import { videoLinkKey } from "../../../../src/core/document/gallery.ts";
 import type { VideoLink } from "../../../../src/core/document/gallery.ts";
 import { brollPropKey } from "../../../../src/core/document/broll.ts";
 import { IdentityBook } from "../model.ts";
-import { SchemaReplica, mapValue, textValue } from "../schema.ts";
+import { SchemaReplica } from "../schema.ts";
 import type { SchemaCandidate } from "../schema.ts";
 import { deltaToHtml, insertHtml, readDelta } from "./richtext.ts";
 import type { ProjectionDelta } from "./richtext.ts";
 import { bag, copy, ordered, rank, ranked, readRecord, records, writeRecord } from "./value.ts";
+import { readBoundaryRecord, readSegmentRecord, readVisualRecord, readWireValue, rootMap, rootOrder, rootText, sharedMapRecord, stringKeys } from "../readers/records.ts";
+import { compareCodeUnits } from "../readers/order.ts";
 import type { ProjectionBag } from "./value.ts";
 
 const META = ["titleOrigin", "titleVersion", "docId", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "schema"];
@@ -186,8 +188,8 @@ export function projectionBlocks(doc: Y.Doc, candidate: SchemaCandidate): Projec
   const seen = new Set<string>();
   let current: ProjectionBlock | null = null;
   function boundary(value: ProjectionBag): void {
-    const kind = "b" in value ? "b" : "h";
-    const id = String(value[kind]);
+    const parsed = readBoundaryRecord(value); if (!parsed) return;
+    const kind = parsed.kind ? "h" : "b", id = parsed.id;
     const key = `${kind}:${id}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -198,56 +200,56 @@ export function projectionBlocks(doc: Y.Doc, candidate: SchemaCandidate): Projec
     for (const delta of readDelta(text)) {
       if (typeof delta.insert !== "string" && ("b" in delta.insert || "h" in delta.insert)) boundary(delta.insert);
       else {
-        if (!current) throw new Error("Content outside a boundary");
-        current.delta.push(delta);
+        if (current) current.delta.push(delta);
       }
     }
   }
-  if (candidate === "A") consume(doc.getText("flow"));
-  else for (const id of new Set(doc.getArray<string>("order").toArray())) {
-    const segment = mapValue(doc.getMap("segments").get(id));
-    boundary(bag(segment.get("head")));
-    consume(textValue(segment.get("text")));
+  if (candidate === "A") { const text = rootText(doc, "flow"); if (text) consume(text); }
+  else for (const id of new Set(rootOrder(doc))) {
+    const segment = readSegmentRecord(rootMap(doc, "segments")?.get(id));
+    if (!segment) continue;
+    if (segment.head) boundary({ [segment.head.kind ? "h" : "b"]: segment.head.id });
+    consume(segment.text);
   }
   return result;
 }
 
 function registry(doc: Y.Doc, root: string, fields: readonly string[]): ProjectionBag[] {
-  return ranked(doc.getMap(root)).map(([, value]) => {
+  return ranked(rootMap(doc, root)).map(([, value]) => {
     const record = readRecord(value, fields);
     if (root === "shots") {
-      const props = ranked(mapValue(value.get("props"))).map(([, prop]) => copy(prop.get("value")));
-      if (props.length || (value.get("keys") as string[]).includes("props")) record.props = props;
+      const props = ranked(value.get("props")).map(([, prop]) => readWireValue(prop.get("value")));
+      if (props.length || stringKeys(value.get("keys")).includes("props")) record.props = props;
     }
     return ordered(record, value.get("keys"));
   });
 }
 
 function galleryFor(doc: Y.Doc, id: string): ProjectionBag[] {
-  return ranked(doc.getMap("gallery")).filter(([, value]) => value.get("beat") === id).map(([, value]) => {
-    const result = { ...JSON.parse(String(value.get("extra") ?? "{}")) as ProjectionBag, ...copy(bag(value.get("picture"))) };
-    const links = ranked(mapValue(value.get("links"))).map(([, link]) => readRecord(link, ["href", "name", "size", "duration", "poster"]));
-    if (links.length || (value.get("keys") as string[]).includes("links")) result.links = links;
+  return ranked(rootMap(doc, "gallery")).filter(([, value]) => readWireValue(value.get("beat")) === id).map(([, value]) => {
+    const result = { ...readRecord(value, []), ...bag(readWireValue(value.get("picture"))) };
+    const links = ranked(value.get("links")).map(([, link]) => readRecord(link, ["href", "name", "size", "duration", "poster"]));
+    if (links.length || stringKeys(value.get("keys")).includes("links")) result.links = links;
     return ordered(result, value.get("keys"));
   });
 }
 
 export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: ProjectionOptions = {}): ProjectionBag {
-  const meta = doc.getMap("meta");
+  const meta = rootMap(doc, "meta") ?? new Map<string, unknown>();
   const result = readRecord(meta, META);
-  Object.assign(result, copy(bag(meta.get("capture"))));
-  result.title = textValue(meta.get("title")).toString();
+  Object.assign(result, bag(readWireValue(meta.get("capture"))));
+  const title = meta.get("title"); result.title = title instanceof Y.Text ? readWireValue(title.toString()) : "";
   result.people = registry(doc, "people", PERSON);
   result.productionTags = registry(doc, "tags", TAG);
   result.brollShots = registry(doc, "shots", SHOT);
-  const comments = ranked(doc.getMap("comments")).map(([, value]) => {
+  const comments = ranked(rootMap(doc, "comments")).map(([, value]) => {
     const comment = readRecord(value, COMMENT);
-    Object.assign(comment, copy(bag(value.get("resolution"))));
-    if (value.has("text")) comment.body = value.get("text");
-    if (value.has("quote")) comment.quotedText = value.get("quote");
-    comment.replies = ranked(doc.getMap("replies")).filter(([, reply]) => reply.get("commentId") === comment.id).map(([, reply]) => {
+    Object.assign(comment, bag(readWireValue(value.get("resolution"))));
+    if (value.has("text")) comment.body = readWireValue(value.get("text"));
+    if (value.has("quote")) comment.quotedText = readWireValue(value.get("quote"));
+    comment.replies = ranked(rootMap(doc, "replies")).filter(([, reply]) => readWireValue(reply.get("commentId")) === comment.id).map(([, reply]) => {
       const record = readRecord(reply, REPLY);
-      record.body = reply.get("text");
+      record.body = readWireValue(reply.get("text"));
       return ordered(record, reply.get("keys"));
     });
     return ordered(comment, value.get("keys"));
@@ -264,15 +266,16 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
   let heading: ProjectionBlock | null = null;
   for (const block of options.blocks ?? projectionBlocks(doc, candidate)) {
     if (block.kind === "h") { heading = block; continue; }
-    const beat = mapValue(doc.getMap("beats").get(block.id));
+    const beat = sharedMapRecord(rootMap(doc, "beats")?.get(block.id)) ?? new Map<string, unknown>();
     const row = readRecord(beat, BEAT);
-    const stamp = bag(beat.get("stamp"));
+    row.id = block.id;
+    const stamp = bag(readWireValue(beat.get("stamp")));
     setIf(stamp, "by", row, "updatedBy");
     setIf(stamp, "at", row, "updatedAt");
     row.audioText = deltaToHtml(block.delta, result.productionTags, comments, options.deriveCue);
-    row.visualText = ranked(doc.getMap("visuals")).filter(([, value]) => value.get("beat") === block.id)
-      .map(([, value]) => {
-        const delta = readDelta(textValue(value.get("text")));
+    row.visualText = [...rootMap(doc, "visuals") ?? []].flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; })
+      .filter(value => value.beat === block.id).sort((a, b) => compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id)).map(value => {
+        const delta = readDelta(value.text);
         collectAnchors(delta, block.id, "visualText");
         return deltaToHtml(delta, result.productionTags, comments, options.deriveCue);
       }).filter(Boolean).join("<br>");
@@ -283,19 +286,19 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     setIf(first, "name", row, "imageName");
     setIf(first, "annotation", row, "imageAnnotation");
     setIf(first, "links", row, "imageLinks");
-    if (slots.length > 1 || (beat.get("keys") as string[]).includes("moreImages")) row.moreImages = slots.slice(1);
+    if (slots.length > 1 || stringKeys(beat.get("keys")).includes("moreImages")) row.moreImages = slots.slice(1);
     rows.push(ordered(row, beat.get("keys")));
     if (heading) {
       const name = heading.delta.map(item => typeof item.insert === "string" ? item.insert : "").join("");
-      if (name) sections.push(ordered({ id: heading.id, name, firstSceneId: block.id }, mapValue(doc.getMap("headings").get(heading.id)).get("keys")));
+      if (name) sections.push(ordered({ id: heading.id, name, firstSceneId: block.id }, sharedMapRecord(rootMap(doc, "headings")?.get(heading.id))?.get("keys")));
       heading = null;
     }
   }
   result.rows = rows;
   for (const comment of comments) {
-    const anchor = anchors.get(String(comment.id));
+    const anchor = typeof comment.id === "string" ? anchors.get(comment.id) : undefined;
     if (anchor) Object.assign(comment, anchor);
   }
-  if (sections.length || (meta.get("keys") as string[]).includes("sections")) result.sections = sections;
+  if (sections.length || stringKeys(meta.get("keys")).includes("sections")) result.sections = sections;
   return ordered(result, meta.get("keys"));
 }

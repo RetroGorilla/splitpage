@@ -9,6 +9,7 @@ import { mapValue } from "../../src/schema.ts";
 import { structureManager } from "../../src/structure.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { IdentityBook } from "../../src/model.ts";
+import { legacyRemovalReader, legacyVisualReader } from "../reader-order/legacy.ts";
 
 test("a new event records literal todo prior on all replicas of the branched history", () => {
   const events: unknown[] = [];
@@ -68,7 +69,7 @@ test("other-reader finding: concurrent removals choose replica-local recovery au
     for (const update of [bob, alice]) Y.applyUpdate(reverse.doc, update);
     assert.deepEqual(Y.encodeStateAsUpdate(first.doc), Y.encodeStateAsUpdate(reverse.doc));
     Y.applyUpdate(late.doc, Y.encodeStateAsUpdate(first.doc));
-    assert.deepEqual([first, reverse, late].map(replica => readStructure(replica.doc, "B", new IdentityBook()).recovery[0]?.by), ["Alice", "Bob", "Bob"]);
+    assert.deepEqual([first, reverse, late].map(replica => legacyRemovalReader(replica.doc, "B", new IdentityBook()).recovery[0]?.by), ["Alice", "Bob", "Bob"]);
   } finally { for (const replica of [seed, a, b, first, reverse, late]) replica.destroy(); }
 });
 
@@ -96,7 +97,7 @@ test("other-reader finding: concurrent visual components concatenate in replica-
         const identity = Y.createRelativePositionFromTypeIndex(text, 0).item; assert.ok(identity);
         book.bind(`visual-${identity.client}-${identity.clock}`, identity);
       }
-      return readStructure(replica.doc, "B", book).rows[0]?.visualText;
+      return legacyVisualReader(replica.doc, "B", book).rows[0]?.visualText;
     });
     assert.deepEqual(observations, ["X<br>Y", "Y<br>X", "Y<br>X"]);
   } finally { for (const replica of [seed, a, b, first, reverse, late]) replica.destroy(); }

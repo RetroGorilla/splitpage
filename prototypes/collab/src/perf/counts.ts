@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { compareCodeUnits } from "../readers/order.ts";
 import { execFileSync } from "node:child_process";
 import { build } from "esbuild";
 import { createHash } from "node:crypto";
@@ -50,7 +51,7 @@ export async function structuralCounts(): Promise<PerfStructuralEvidence> {
     await writeFile(fixtures, JSON.stringify(perfFixtures()));
     const data = JSON.parse(execFileSync(process.execPath, [path, fixtures], { encoding: "utf8", windowsHide: true, maxBuffer: 8 * 1024 ** 2 })) as ReturnType<typeof collectStructuralCounts>;
     assert.deepEqual(data.controls.map(control => [control.candidate, control.capture.relativeItems, control.lookup.absoluteItems, control.lookup.relativeItems, control.lookup.projectedSpans, control.lookup.storeProbes]), [["A", 8, 3, 4, 2, 6], ["B", 2, 0, 1, 1, 8]]);
-    return { version: 1, sourceDigest: perfSourceDigest(), timingStatus: "not measured; deterministic structural counts only", instrumentation: instrumentation.sort((a, b) => a.source.localeCompare(b.source)), data };
+    return { version: 1, sourceDigest: perfSourceDigest(), timingStatus: "not measured; deterministic structural counts only", instrumentation: instrumentation.sort((a, b) => compareCodeUnits(a.source, b.source)), data };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -1,9 +1,9 @@
 import * as Y from "yjs";
+import { perfReaderView } from "../readers/perf.ts";
 import { mapValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { statusFrontier, statusValue } from "../marks/commands.ts";
 import { readStatusEvent } from "../marks/status-resolution.ts";
-import { records } from "../proj/value.ts";
 import type { ProjectionBag } from "../proj/value.ts";
 import type { PerfBlockIndex } from "./blocks.ts";
 
@@ -47,28 +47,5 @@ export interface PerfStructureView {
 }
 
 export function perfStructureView(replica: SchemaReplica, document: ProjectionBag): PerfStructureView {
-  const result: PerfStructureView = { groups: [], recovery: [] };
-  const destinations = new Map<string, PerfStructureView["groups"][number]>();
-  for (const row of records(document.rows)) {
-    const id = String(row.id);
-    const beat = mapValue(replica.doc.getMap("beats").get(id));
-    if (mapValue(beat.get("removals")).size) { result.recovery.push(id); continue; }
-    const joins = mapValue(beat.get("joins"));
-    const key = [...joins.keys()].filter(key => !replica.doc.getMap("retiredJoins").has(key)).sort()[0];
-    const join = key ? joins.get(key) as { into: string; glue: string } : undefined;
-    const target = join ? destinations.get(join.into) : undefined;
-    const status = statusValue(replica, id);
-    if (target && join) {
-      target.members.push(id);
-      target.narration += join.glue + String(row.audioText ?? "");
-      target.visual = [target.visual, String(row.visualText ?? "")].filter(Boolean).join("<br>");
-      if (["todo", "ready", "shot"].indexOf(status) > ["todo", "ready", "shot"].indexOf(target.status)) target.status = status;
-      destinations.set(id, target);
-    } else {
-      const group = { id, members: [id], narration: String(row.audioText ?? ""), visual: String(row.visualText ?? ""), status };
-      result.groups.push(group);
-      destinations.set(id, group);
-    }
-  }
-  return result;
+  return perfReaderView(replica, document, id => statusValue(replica, id));
 }

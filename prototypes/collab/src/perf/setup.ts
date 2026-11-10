@@ -5,10 +5,15 @@ import { isProjectionEntry } from "../proj/entry.ts";
 import { perfCases } from "./measure.ts";
 import { historyMix } from "./history.ts";
 import { currentStatusHash, statusTimingChanges, validateStatusTimingChanges } from "../marks/status-source-audit.ts";
+import { readerOrderChanges } from "../readers/source-audit.ts";
 
 function perfSourceFiles(): string[] {
   const files = readdirSync(new URL("./", import.meta.url)).filter(file => file.endsWith(".ts")).sort();
   files.push(...["../schema.ts", "../model.ts", "../marks/commands.ts", "../marks/status-resolution.ts", "../structure.ts", "../../package-lock.json"]);
+  files.push("../readers/removals.ts");
+  files.push("../readers/order.ts");
+  files.push("../readers/records.ts");
+  files.push("../readers/joins.ts", "../readers/perf.ts");
   files.push(...readdirSync(new URL("../proj/", import.meta.url)).filter(file => file.endsWith(".ts")).sort().map(file => `../proj/${file}`));
   return files;
 }
@@ -49,11 +54,19 @@ export function validateTimedSource(sourceHead: string, sourceDigest: string, au
   }
   const added = [...changes.values()].filter(change => change.timedSha256 === null).map(change => change.path);
   for (const [file, change] of statusChanges) if (files.includes(file) && !Object.hasOwn(snapshot.files, file) && change.before === null) added.push(file);
+  const readerChanges = new Map(readerOrderChanges().files.map(change => [change.path.replace(/^src\/perf\//, "").replace(/^src\//, "../"), change]));
+  for (const [file, change] of readerChanges) if (files.includes(file) && !Object.hasOwn(snapshot.files, file) && change.before === null && !added.includes(file)) added.push(file);
   assert.deepEqual([...Object.keys(snapshot.files), ...added].sort(), [...files].sort());
   assert.ok(Object.keys(snapshot.metadataRedactions ?? {}).every(file => ["conditions.ts", "../proj/costs.ts"].includes(file)));
   for (const file of files) {
     let source = readFileSync(new URL(file, import.meta.url), "utf8");
     const statusChange = statusChanges.get(file);
+    const readerChange = readerChanges.get(file);
+    if (readerChange) {
+      assert.equal(readerChange.before, statusChange ? currentStatusHash(statusChange.path) : changes.get(file)?.currentSha256 ?? snapshot.files[file] ?? null);
+      assert.equal(createHash("sha256").update(source).digest("hex"), readerChange.after);
+      continue;
+    }
     if (statusChange) {
       assert.equal(statusChange.before, snapshot.files[file] ?? null);
       assert.equal(createHash("sha256").update(source).digest("hex"), currentStatusHash(statusChange.path));

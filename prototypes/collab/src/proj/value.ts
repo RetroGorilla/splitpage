@@ -1,15 +1,15 @@
-import type * as Y from "yjs";
-import { mapValue } from "../schema.ts";
+import * as Y from "yjs";
+import { compareCodeUnits } from "../readers/order.ts";
+import { readRankedRecord, readWireValue, stringKeys } from "../readers/records.ts";
 
 export type ProjectionBag = Record<string, unknown>;
 
 export function bag(value: unknown): ProjectionBag {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected a document record");
-  return value as ProjectionBag;
+  return value && typeof value === "object" && !Array.isArray(value) ? value as ProjectionBag : {};
 }
 
 export function records(value: unknown): ProjectionBag[] {
-  return Array.isArray(value) ? value.map(bag) : [];
+  return Array.isArray(value) ? value.filter((value: unknown): value is ProjectionBag => Boolean(value) && typeof value === "object" && !Array.isArray(value)) : [];
 }
 
 export function copy<T>(value: T): T {
@@ -22,7 +22,7 @@ export function rank(index: number): string {
 
 export function ordered(values: ProjectionBag, keys: unknown): ProjectionBag {
   const result: ProjectionBag = {};
-  for (const key of [...(Array.isArray(keys) ? keys as string[] : []), ...Object.keys(values)]) {
+  for (const key of [...stringKeys(keys), ...Object.keys(values)]) {
     if (Object.hasOwn(values, key)) Object.defineProperty(result, key, { value: values[key], enumerable: true, configurable: true, writable: true });
   }
   return result;
@@ -38,16 +38,17 @@ export function writeRecord(target: Y.Map<unknown>, source: ProjectionBag, field
   target.set("extra", JSON.stringify(extra));
 }
 
-export function readRecord(source: Y.Map<unknown>, fields: readonly string[]): ProjectionBag {
-  const result = JSON.parse(String(source.get("extra") ?? "{}")) as ProjectionBag;
-  for (const key of fields) if (source.has(key)) result[key] = copy(source.get(key));
+export function readRecord(source: unknown, fields: readonly string[]): ProjectionBag {
+  if (!(source instanceof Y.Map)) return {};
+  let result: ProjectionBag = {};
+  const extra = readWireValue(source.get("extra"));
+  if (typeof extra === "string") try { result = bag(JSON.parse(extra) as unknown); } catch { result = {}; }
+  for (const key of fields) if (source.has(key)) Object.defineProperty(result, key, { value: readWireValue(source.get(key)), enumerable: true, configurable: true, writable: true });
   return ordered(result, source.get("keys"));
 }
 
-export function ranked(source: Y.Map<unknown>): [string, Y.Map<unknown>][] {
-  return [...source.entries()].map(([id, value]): [string, Y.Map<unknown>] => [id, mapValue(value)])
-    .sort(([a, left], [b, right]) => {
-      const l = String(left.get("rank")), r = String(right.get("rank"));
-      return l < r ? -1 : l > r ? 1 : a < b ? -1 : a > b ? 1 : 0;
-    });
+export function ranked(source: unknown): [string, Y.Map<unknown>][] {
+  if (!(source instanceof Y.Map)) return [];
+  return [...source.entries()].flatMap(([id, raw]) => { const value = readRankedRecord(raw); return value ? [{ id, ...value }] : []; })
+    .sort((a, b) => compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id)).map(value => [value.id, value.source]);
 }

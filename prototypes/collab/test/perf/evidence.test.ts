@@ -132,9 +132,13 @@ test("redaction preserves all 76 comparison rows, 4510 samples, numeric values, 
   assert.equal(baseline.data.find(file => file.file.endsWith("/results.json"))?.sampleCount, 4510);
   let report = readFileSync(new URL("../../perf-results.md", import.meta.url), "utf8");
   for (const [current, previous] of [
-    ["| operations.ts (shared) | 74 | 74 |", "| operations.ts (shared) | 73 | 73 |"],
-    ["| Total physical lines, including blanks | 361 | 361 |", "| Total physical lines, including blanks | 360 | 360 |"],
-    ["| Shared operations.ts | 74 | 74 |", "| Shared operations.ts | 73 | 73 |"]
+    ["| blocks.ts (shared) | 115 | 115 |", "| blocks.ts (shared) | 111 | 111 |"],
+    ["| incremental.ts (shared) | 124 | 124 |", "| incremental.ts (shared) | 119 | 119 |"],
+    ["| operations.ts (shared) | 51 | 51 |", "| operations.ts (shared) | 73 | 73 |"],
+    ["| Total physical lines, including blanks | 347 | 347 |", "| Total physical lines, including blanks | 360 | 360 |"],
+    ["| Shared blocks.ts | 115 | 115 |", "| Shared blocks.ts | 111 | 111 |"],
+    ["| Shared incremental.ts | 124 | 124 |", "| Shared incremental.ts | 119 | 119 |"],
+    ["| Shared operations.ts | 51 | 51 |", "| Shared operations.ts | 73 | 73 |"]
   ]) {
     assert.ok(current && previous); assert.equal(report.split(current).length, 2);
     report = report.replace(current, previous);

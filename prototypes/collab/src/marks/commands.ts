@@ -8,6 +8,7 @@ import { restoreStructuralAnchor } from "../structure-selection.ts";
 import { undoOne } from "../structure.ts";
 import { readStatusEvent, resolveBeatStatus, statusHeads } from "./status-resolution.ts";
 import type { BeatStatusEvent } from "./status-resolution.ts";
+import { readBeatRecord, rootMap } from "../readers/records.ts";
 
 export function formatCapturedMarks(replica: SchemaReplica, selection: StructuralRangeCapture, marks: CollabMarks): void {
   const start = Y.createAbsolutePositionFromRelativePosition(selection.selection.position, replica.doc, false);
@@ -54,7 +55,7 @@ export function ensureTag(replica: SchemaReplica, kind: string, name: string): s
 
 function statusEvents(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {
   const result: [string, BeatStatusEvent][] = [];
-  for (const [id, raw] of replica.doc.getMap("statusEvents")) {
+  for (const [id, raw] of rootMap(replica.doc, "statusEvents") ?? []) {
     const event = readStatusEvent(raw); if (event?.target === target) result.push([id, event]);
   }
   return result;
@@ -67,8 +68,8 @@ export function statusFrontier(replica: SchemaReplica, target: string): [string,
 }
 
 export function statusValue(replica: SchemaReplica, target: string): string {
-  return resolveBeatStatus(new Map(statusEvents(replica, target)), replica.doc.getMap("retiredStatus"),
-    String(mapValue(replica.doc.getMap("beats").get(target)).get("status")));
+  return resolveBeatStatus(new Map(statusEvents(replica, target)), rootMap(replica.doc, "retiredStatus") ?? new Set<string>(),
+    readBeatRecord(rootMap(replica.doc, "beats")?.get(target)).status ?? "undefined");
 }
 
 export function changeStatus(replica: SchemaReplica, manager: Y.UndoManager, target: string, id: string, value: string, by: string): void {

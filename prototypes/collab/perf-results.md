@@ -2,11 +2,11 @@
 
 The initial PR contained deterministic structural evidence only; its earlier game-session timing attempts remain void. The guarded timed follow-up below was run only after the coordinator authorized it and after the initial PR opened. A game was running during the accepted set; each run's recorded RAM and background CPU is disclosed below. No schema is selected.
 
-Current reviewed source SHA-256: **3ef67a25a054d08783995254774aac057143b98805fa0bf9832f2019ba27659f**. The source-hash list covers every src/perf TypeScript module, every src/proj module, schema/model/structure/status helpers and the prototype lockfile. setup.json fixes Node v24.22.1, Yjs 13.6.33, five alternating paired runs, three warm-up operations per case and eleven samples per run. The recorded timed source is identified separately below; the source audit distinguishes that implementation from declared post-timing changes.
+Current reviewed source SHA-256: **437e030f88c4b4248aabf001597d93eafede464ee457bf310c5e872595d9d7d4**. The source-hash list covers every src/perf TypeScript module, every src/proj module, schema/model/structure/status helpers and the prototype lockfile. setup.json fixes Node v24.22.1, Yjs 13.6.33, five alternating paired runs, three warm-up operations per case and eleven samples per run. The recorded timed source is identified separately below; the source audit distinguishes that implementation from declared post-timing changes.
 
 ## What is implemented
 
-Both incremental projectors import the existing fromDocument/toDocument implementation. The timed incremental integration added two src/proj lines: ProjectionOptions.blocks accepts a subset of existing blocks, and toDocument uses it instead of scanning every block. Subsequent export changes are declared below. No app code, buffer, slice, structure, marks, service, local or app-binding file changes.
+Both incremental projectors import fromDocument/toDocument. The original timed integration added ProjectionOptions.blocks so toDocument can project a subset without scanning every block. Subsequent export and reader changes are declared below and in readers/source-changes.json. No app code changes. The four-file implementation-size table is a subtotal; current shared reader helpers are additional sources pinned by that audit.
 
 A caches the document-wide delta, applies Yjs retain/delete/insert/format events, and walks its boundary chunks to find changed beats. A change at a late offset still processes the preceding cached sequence; it does not run a fresh full Y.Text.toDelta. B caches each segment's delta and parsed boundary list. A changed segment invalidates that list, and the order array supplies global position. Splits remain inner embeds in their original segment under the merged B mechanism, so B's locality is by segment rather than necessarily by beat. Both reuse unchanged projected beat objects, including across no-op or duplicate updates. The common text-to-span index makes reverse lookup local to a B segment; A's flow contains all spans.
 
@@ -17,10 +17,10 @@ Metadata events invalidate affected beat records. Gallery/visual ownership chang
 | Source counted in each candidate | A lines | B lines |
 | --- | ---: | ---: |
 | delta.ts (shared) | 57 | 57 |
-| blocks.ts (shared) | 111 | 111 |
-| incremental.ts (shared) | 119 | 119 |
-| operations.ts (shared) | 74 | 74 |
-| Total physical lines, including blanks | 361 | 361 |
+| blocks.ts (shared) | 115 | 115 |
+| incremental.ts (shared) | 124 | 124 |
+| operations.ts (shared) | 51 | 51 |
+| Total physical lines, including blanks | 347 | 347 |
 
 The same implementation is instantiated for either candidate. The stream-selection branch in blocks.ts is one line for A and five for B; shared lines are counted for each, rather than inventing two independent implementations. The layout makes A's ordering simple but changed-range attribution global. B directly identifies the changed segment but must recover each beat's position within a split segment and the segment's position in global order.
 
@@ -218,7 +218,7 @@ Timed head: 74ed7af06e4859dec5cd3ad84c7195977ca3eac6; prepared SHA-256: 0798cf18
 
 Post-timing change (#1406): src/proj/richtext.ts and the new src/proj/stored-html.ts replace normalized export with stored-run export; src/proj/experiment.ts, exclusions.ts and lossless-report.ts add the strict gate/report. No case was retimed. Local/remote character, both remote-burst variants, remote split/join, first full projection and projection-bearing checkpoint/heap/history measurements exercise the changed exporter. Identity capture/resolve, remote status/comment and applyUpdate-only load do not call it inside their timed intervals; setup can. Structural counts and encoded sizes reproduce unchanged. The perf lane's next measurement PR supersedes the affected rows.
 
-These retained rows also predate the shared status-resolution fix (#1376). marks/status-timing-changes.json pins changed files separately from timed hashes. Local/remote character, remote status, remote comment, both remote bursts, remote split and remote join call the changed perfStructureView/statusValue inside their intervals and need retiming for both candidates. Capture/resolve identity do not call it inside their intervals. No timing was run for this fix; export caveats still apply.
+These retained rows also predate status resolution and reader-order/validation fixes (#1376). marks/status-timing-changes.json and readers/source-changes.json pin changed sources separately from timed hashes. Local/remote character, remote status, remote comment, both remote bursts, remote split and remote join execute changed projection/status/join work and need retiming for both candidates. The projection/export, load and heap rows also need rerunning because their document readers changed. Capture/resolve identity execute unchanged identity helpers inside their intervals. No timing was run for these fixes; export caveats still apply.
 
 Generated by `node src/perf/report.ts --write`. PERF evidence compares the two implementations; it selects no schema.
 
@@ -303,9 +303,9 @@ Timing starts immediately before local mutation or applyUpdate and ends after sy
 | Source | A physical lines | B physical lines |
 | --- | ---: | ---: |
 | Shared delta.ts | 57 | 57 |
-| Shared blocks.ts | 111 | 111 |
-| Shared incremental.ts | 119 | 119 |
-| Shared operations.ts | 74 | 74 |
+| Shared blocks.ts | 115 | 115 |
+| Shared incremental.ts | 124 | 124 |
+| Shared operations.ts | 51 | 51 |
 
 Both instantiate the same implementation: A selects flow; B selects segments/order. A's stream-selection branch is one line; B's is five. These are physical lines including blanks; shared code is counted for each implementation, not presented as separate implementations. The index's public text-to-span map makes B reverse lookup segment-local; A searches the flow's spans after resolving the Yjs position.
 

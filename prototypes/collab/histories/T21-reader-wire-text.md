@@ -1,0 +1,7 @@
+# T21: visual text must use the same string on the writer and encoded reload
+
+Seed one R1 beat, narration `a`, visual text empty, status `todo`, in either layout. Insert the lone UTF-16 surrogate `"\ud800"` into its visual component's Y.Text. Before encoding, the old structural reader and document exporter return that surrogate. A fresh replica loaded from the encoded state returns U+FFFD (`"\ufffd"`) instead: the wire represents malformed UTF-16 as the replacement character.
+
+This was found while extending the arbitrary-record reload property to actual shared text. The pinned literal expected value is **U+FFFD on both replicas**. Read-time wire normalization now applies to narration/visual delta strings and the exported title. It does not edit shared text: the writing Y.Text still contains the original surrogate, and readers emit no repair updates.
+
+`test/reader-order/wire.test.ts` retains this case in both layouts and asserts the original split through the archived structural reader. The same four seeds exercise shared-text fields, malformed atoms followed by another edit, invalid segment/head/order records, fresh readers, an observing status index, and fresh/observing incremental projections. The supported malformed records are absent or their invalid fields are absent; unknown atoms are ignored without losing their source offsets in the cache. Yjs rejects a null text embed before insertion; that refusal is asserted separately.
