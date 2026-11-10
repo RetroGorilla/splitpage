@@ -1,68 +1,69 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { markTraces, runDetachedComment, runMark, runMarkExperiments } from "../../test/marks/runner.ts";
+import { markTraces, rootProbeModes, runRootInitializationProbe, runMark, runMarkExperiments } from "../../test/marks/runner.ts";
 import type { StructureRunResult } from "../../test/structure-runner.ts";
+import { markMutationDefinitions } from "./mutation-audit.ts";
+import type { MarkMutationEvidence } from "./mutation-audit.ts";
 
 export function markReport(): { runs: StructureRunResult[]; files: Map<string, string>; markdown: string } {
-  const runs = [...runMarkExperiments(), ...(["A", "B"] as const).flatMap(candidate => [runDetachedComment(candidate), runDetachedComment(candidate, true)])];
+  const roots = (["A", "B"] as const).flatMap(candidate => rootProbeModes.map(mode => runRootInitializationProbe(candidate, mode)));
+  const runs = [...runMarkExperiments(), ...roots];
   const files = new Map<string, string>();
   const table = ["| Trace | Candidate A | Candidate B | Delivery orders |", "| --- | --- | --- | --- |"];
-  for (const [trace, orders] of Object.entries({ ...markTraces, "T11 fully deleted": ["late-C"], "T11 fully deleted with undo retention": ["late-C"] })) {
+  for (const [trace, orders] of Object.entries({ ...markTraces, ...Object.fromEntries(roots.map(run => [run.trace, ["late-C"]])) })) {
     const cells = (["A", "B"] as const).map(candidate => {
       const group = runs.filter(run => run.trace === trace && run.candidate === candidate);
       const failures = group.filter(run => run.failure);
       if (!failures.length) return `PASS (${group.length}/${group.length})`;
       const path = `histories/${trace.replaceAll(" ", "-")}-${candidate}.md`;
+      const rootFailure = roots.some(run => run.trace === trace);
       files.set(path, [
-        `${candidate} fails ${trace}: the surviving d acquires C1 after update delivery instead of leaving the fully deleted anchor in recovery. Expected data was not changed.`, "", "Replay: `node src/marks/report.ts` or `npm test`.", "",
+        rootFailure ? "A formatted root was hydrated before its Y.Text constructor was declared; later promotion resets _hasFormatting, leaving C1 on surviving d. This is a root-initialization defect, not undo retention or a layout property." : `${candidate} fails ${trace}: ${failures[0]?.failure ?? ""}.`,
+        "", "The literal expected result is unchanged. Replay: `node src/marks/report.ts` or `node --test test/marks/root-initialization.test.ts`.", "",
         ...failures.flatMap(run => [`## ${run.order}`, "", run.failure ?? "", "", "```text", ...run.history, "```", ""])
       ].join("\n"));
       return `FAIL (${group.length - failures.length}/${group.length} pass), [history](${path})`;
     });
     table.push(`| ${trace} | ${cells.join(" | ")} | ${orders.join(", ")} |`);
   }
-  for (const candidate of ["A", "B"] as const) {
-    for (const [trace, defect] of [["T20 nest", "single-tag"], ["T21 scalar", "lww-status"]] as const) {
-      const probe = runMark(trace, candidate, "D1", defect);
-      files.set(`histories/${trace.replaceAll(" ", "-")}-${defect}-${candidate}.md`, [
-        defect === "single-tag" ? "One tag attribute loses the outer/inner stack on the same characters." : "One LWW status key chooses shot instead of retaining the earlier todo status.", "",
-        "Replay: `node src/marks/report.ts` or `node --test test/marks/marks.test.ts`.", "", probe.failure ?? "Unexpected pass", "", "```text", ...probe.history, "```", ""
-      ].join("\n"));
-    }
+  for (const candidate of ["A", "B"] as const) for (const [trace, defect] of [["T20 nest", "single-tag"], ["T21 scalar", "lww-status"]] as const) {
+    const probe = runMark(trace, candidate, "D1", defect);
+    files.set(`histories/${trace.replaceAll(" ", "-")}-${defect}-${candidate}.md`, [
+      defect === "single-tag" ? "One tag attribute loses the outer/inner stack on the same characters." : "One LWW status key chooses shot instead of retaining the earlier todo status.", "",
+      "Replay: `node src/marks/report.ts` or `node --test test/marks/marks.test.ts`.", "", probe.failure ?? "Unexpected pass", "", "```text", ...probe.history, "```", ""
+    ].join("\n"));
   }
   table.push("| PROJ | Separate lane (0 runs) | Separate lane (0 runs) | Existing omitted-field probe retained |");
+  const audit = JSON.parse(readFileSync(new URL("../../mark-mutations.json", import.meta.url), "utf8")) as { baselinePasses: number; results: MarkMutationEvidence[] };
+  if (audit.results.length !== markMutationDefinitions.length || audit.results.some((result, index) => result.id !== markMutationDefinitions[index]?.id)) throw new Error("Mutation evidence does not match the audit definitions");
+  const detected = audit.results.filter(result => result.outcome === "DETECTED").length;
   const markdown = [
-    "# Marks and scalar experiment results", "", "Generated by `node src/marks/report.ts --write`. Literal expectations remain in `test/oracles.ts` and `test/marks/oracles.ts`.", "",
-    `${runs.filter(run => !run.failure).length}/${runs.length} candidate/order runs pass; ${runs.reduce((sum, run) => sum + run.checks, 0)} replica checkpoint comparisons completed. Each run stops at its first mismatch.`, "",
-    ...table, "", "## Mechanisms added", "",
-    "- Both candidates: status events retain the target, value, prior value, author and observed parent event ids. Readers reduce the causal frontier: identical values apply; different concurrent values retain the prior value and produce both notices. A semantic undo reads its event from the captured undo item's metadata, retires the observed frontier and consumes that item. Cost: one retained event per command, one flag per retired event, local undo metadata, causal-frontier reading and a separate handler. This implements the named single-target histories, not arbitrary status graphs or tag/shot status projection.",
-    "- Both candidates: deterministic tag registry ids encode kind and UTF-8 name; simultaneous creation of the same tag uses the same id. Cost: longer ids and an explicit creation rule; rename/registry migration and identical-tagging undo are not established.",
-    "- Both candidates: the reader applies the specified extent ordering, nested stacks, crossing-tag recovery, comment union and first-link rule without writing repairs into the replica. Cost: occurrence extent scans, per-character projected stacks and recovery records.",
-    "- Both candidates: comment records retain their initial row/field as fallback when no mark remains. Active or soft-removed anchors derive their first marked row; replies sort by createdAt then reply id. Cost: two retained fallback fields per record and an anchor scan. The fallback passes the fully-deleted probe under B; under A an unexpected surviving mark prevents it from running without scoped undo retention. PROJ-detached's concurrent move/deletion and media-comment round trip remain unproved.",
-    "- Candidate A's supplemental fully-deleted probe passes with scoped UndoManagers active and fails without them; B passes either way. This is a measured retention dependency, not a durable recovery mechanism. Cost if relied on: keeping deleted items alive beyond transient undo, which is not implemented or endorsed here.", "",
-    "## Predictions confirmed or refuted", "",
-    "Replay all rows with `node --test test/marks/marks.test.ts` or `node src/marks/report.ts`.",
-    "| Prediction/mechanism | Result and test that detects its removal |", "| --- | --- |",
-    "| A-H3; B-H6 removal classification | Confirmed for full T11: removing observed-identity descendant matching leaves Rb active and fails the removed/split oracle |",
-    "| A-H8; B-H6 nested/crossing marks | Confirmed for T20 nest/cross/mark: removing extent ordering, recovery, nesting or whole-tag union fails their literal marks or recovery list |",
-    "| Y11 per-id mark attributes | Confirmed for the overlapping comments/tags in T11/T20. The Lost mark and Lost mark (tag) defects fail. This does not assert general deletion fidelity: the supplemental A history is equally wrong on all replicas |",
-    "| Y12 explicit attributes inside a concurrent format | Confirmed by T21: explicit {} still gives bold bXc; Alice's undo removes bold from X and preserves its identity |",
-    "| Y5; A-H9 scoped mark/comment undo | Confirmed for T20/T21 marks and T21 comment undo/redo; losing local-origin capture or including remote work fails their undo outcomes. Scalar undo uses its explicit semantic handler |",
-    "| A-H12; B-H6 status mechanism | Confirmed for the named histories by T21 scalar and the A-H12 tests under both client-id orders and D1/late-C: different values remain todo, later ready applies and undoes to todo, identical shot applies and either writer can undo it |",
-    "| U-H1 status undo consumption | Confirmed by T21 scalar: first undo retains Z and notices; second removes Z. A-H12 tests also require the other identical command's undo to emit no update and consume no earlier step. The earlier top-item native probe stays in structure.test.ts |",
-    "| Map-conflict rule / one LWW key | Confirmed: the lww-status probe reads shot instead of required todo; [A](histories/T21-scalar-lww-status-A.md), [B](histories/T21-scalar-lww-status-B.md) |",
-    "| Tag-id creation mechanism | Confirmed by same-tag registry creation tests: both replicas and late-C contain only literal id tag-Prop-4d7567 |",
-    "| Reply order and author command guard | Confirmed by reply/author tests: reversing insertion order would reorder r1/r2/r3; removing the author guard mutates refused records |",
-    "| Initial detached-anchor fallback / undo retention | B's fully-deleted oracle detects a missing row/field fallback; A's without-retention failure is retained. The with/without scoped-undo pair detects the retention dependency. No PROJ-detached claim is made |", "",
-    "No named library fact is refuted here. The additional fully-deleted history shows a limitation beyond per-key conflict handling: without undo retention, A projects C1 on surviving d and cannot put it in recovery; B projects the required detached comment. No required expected result is disputed or changed.", "",
-    "## PROJ scope boundary", "",
-    "Full PROJ is a separate lane by the coordinator's instruction after #1388 merged. Artifact 2 has 93 field rows; its inventory scanned 146 JSON/.splitpage files containing 288 document objects. This prototype scans only the text/boundaries, marks and metadata these traces exercise. Full canonical projection is substantially larger than this PR and needs complete rich text/atoms, fields, sections, export identity/stamps, unknown keys and merged-state limits. No opaque saved-document passthrough or lengthSeconds-only probe is presented as a PROJ pass.",
-    "The separate PROJ lane must run every canonical fixture through each actual candidate to byte-identical .splitpage and show an omitted-field failure. It must settle A-H13, PROJ-cue, PROJ-detached and PROJ-unknown and the merged-state limits. Existing lengthSeconds omission probes remain a narrow checker test only.", "",
-    "## What remains unproved", "",
-    "A cannot reliably detach the fully-deleted comment in the retained history without scoped undo keeping deleted items. No durable replacement is built. Neither candidate has a complete document projection, authenticated author enforcement, arbitrary causal status histories, simultaneous identical tag/removal undo, performance evidence or an integrated real-editor structural binding. Author-only edits here are a local command guard with an explicit actor, not a server security result. Candidate A still refuses movement; B still refuses part-segment movement and cross-scene cut/paste. These results select no schema.", "",
-    "## Oracle and runner audit", "",
-    "T11 now states unchanged R2, overlapping marks, r1, both removed rows, split attribution, recovery anchors, both caret fallbacks and undo restoration. T21's original selection is captured before delivery and restored through the selection mechanism; no expected offsets are assigned after undo. Stored c:C1/L1 membership in T20 mark is checked separately against literal identity lists. Projection emits no repair updates in the reply/author probe. Expected data is never decoded or computed from the candidate. The PROJ omission defect, both duplicate-identity defects and both lost-mark defects remain live.", ""
+    "# Marks and scalar experiment results", "",
+    "Generated by `node src/marks/report.ts --write`. Required literal expectations in `test/oracles.ts` and `test/marks/oracles.ts` have not changed in the review fix.", "",
+    `${runs.filter(run => !run.failure).length}/${runs.length} candidate/order runs match; ${runs.reduce((sum, run) => sum + run.checks, 0)} replica checkpoint comparisons completed. All 36 required runs pass. The four failing root controls deliberately bypass initialization; they are not failures of the initialized layouts. A run stops at its first mismatch.`, "",
+    ...table, "", "## Corrected root-initialization result", "",
+    "Every replica now declares its root types before its first remote update, including initial hydration, late join and reload. A uses root flow: Y.Text; B uses segments: Y.Map and order: Y.Array. Both declare the shared map roots (the complete literal list is checked by `new replicas declare all root types before hydration`). Empty root declaration emits no document state.",
+    "A's deliberately lazy flow starts as AbstractType. Receiving formatting marks sets _hasFormatting on that object; later getText promotion constructs Y.Text with _hasFormatting=false. Doc.get copies content/map/length but not that flag. The bad deletion then leaves C1 on d. The private flag is observed only in diagnostic histories; initialization uses public getters.",
+    "`root-initialization.test.ts` reproduces all controls for both layouts: promoting before the comment passes without managers; constructing and destroying managers before editing also passes; gc=false alone still fails with lazy A; a lazy late joiner deleting the words fails even while A/B have managers. An eagerly initialized late joiner and reload both pass. B's nested Y.Text is constructed from its encoded ContentType and keeps its formatting flag when the root map is promoted; none of the equivalent B controls fail. Any future formatted root Y.Text would need the same early declaration. The prior undo-retention explanation is withdrawn; this is not an intrinsic Candidate A limitation.", "",
+    "## Mechanisms and limits", "",
+    "- Both: early typed-root declaration. Cost: one public getter per known root, no added stored content. Detected by mutation root-initialization and the hydration/late/reload controls.",
+    "- Both: status events store target, value, prior, author and observed parents; native undo items store the command id. Readers reduce the causal frontier, preserve the earlier value on differing concurrent writes, coalesce identical writes and show notices. Semantic undo retires the frontier, consumes its own item and emits no update when already retired. Cost: retained events/flags, local undo metadata and a frontier scan. Each part has a status-* audit below; ineffective-status-consumption specifically checks that the next undo removes Bob's earlier Z. Target isolation and a new status after retirement are separately tested. This is bounded evidence, not arbitrary graph or tag/shot status support.",
+    "- Both: per-id comments/tags, crossing rejection/recovery, whole-tag comment union, first-link precedence and nested stacks. Cost: per-character attributes, extent scans, projected stacks/recovery. Artifact 8 section 1 explicitly supplies smallest linkId per character and first found link across a tag stretch; these are tested as supplied projection rules, not new product decisions. The two sorts are individually redundant in these fixtures; removing both is detected by the same-start nested case. No independent necessity claim is made for either sort.",
+    "- Both: initial row/field fallback when comment marks are absent; first marked-row derivation when present; sorted replies and orphan-reply recovery; local explicit-author guards. Cost: two stored fallback fields and read scans. These are bounded by the detached visual-field, root-initialization, full T11, T21 comment and reply/author tests. Concurrent mark move plus complete deletion, media-comment round trip and authenticated author enforcement remain unproved.",
+    "- Tag ids are content keys encoding kind plus UTF-8 name. The same-tag creation test establishes the literal Mug id only. Deliberately separate tags with the same kind/name collapse even when created sequentially. A lone surrogate and U+FFFD both encode to tag-Prop-efbfbd. This is not a general unique tag-identity design; renaming, migrations and identical-tagging undo remain open.", "",
+    "## Checked predictions", "",
+    "A-H3/B-H6: full T11 detects removing split-descendant classification. A-H8/B-H6: the supplied T20 outcomes match, and the audit separately detects crossing rejection/recovery, comment union, link precedence and loss of both nesting sorts. Individual-sort necessity is withdrawn. Y11: per-comment and per-tag key mutations are detected; no general deletion claim is inferred from that fact.",
+    "Y12: T21 still shows explicit {} inside concurrent formatting becoming bold bXc and clearing on Alice's undo. The sequential observed-mark test additionally detects omitting explicit attributes by checking stored comment/tag identity lists. Y5/A-H9: the local-origin mutation is detected by retained remote work in undo tests. No timing/capacity/grouping behavior beyond the named command boundaries is claimed.",
+    "A-H12/U-H1: status mutations below are detected by T21 scalar, both client-id orders and undo authors in D1/late-C, the prior-after-retirement and target-isolation cases, and the ineffective-status test followed by undo of an earlier command. The one-LWW-key negative probes still read shot instead of required todo. No required outcome is disputed or changed; no schema is selected.", "",
+    "## Actual mutation audit", "",
+    `Reproduce with node src/marks/mutation-audit.ts --write. It copies source/tests to a temporary directory, mutates only that copy, runs one child at a time and removes the fixture in finally. Baseline: ${audit.baselinePasses} selected tests pass; ${detected}/${audit.results.length} mutations are detected. The ${audit.results.length - detected} survivors below are explicit withdrawals. Exact edits, counts and sample failing test names are retained in mark-mutations.json; full TAP logs stay in the lane TEMP directory.`, "",
+    "| Mutation removed/changed | Observed | Detecting test (first; full count in evidence) |", "| --- | --- | --- |",
+    ...audit.results.map(result => `| ${result.id} | ${result.outcome}${result.outcome === "DETECTED" ? ` (${result.failedTestCount})` : " — claim withdrawn"} | ${result.failedTests[0] ?? "No detecting test; not claimed necessary"} |`), "",
+    "Withdrawn claims: undo retention as the cause of deletion failure; independent necessity of the acceptance extent sort and of the outer/inner sort; necessity of reanchoring unchanged character identities for mark-only undo. T21's captured selection outcome remains checked, but returning its original anchor passes because no characters were deleted. The structural deletion reanchoring result belongs to the earlier beat report.", "",
+    "## Scope", "",
+    "Full PROJ stays in its separate lane; the existing omitted-field probe is retained and no PROJ pass is claimed. Also unproved: complete document projection, arbitrary causal status histories, simultaneous identical tag/removal undo, performance and integrated real-editor structure. Author checks use explicit local actors, not verified server identities. A still refuses movement; B refuses part-segment movement and cross-scene cut/paste.",
+    "Full T11 still checks unchanged R2, overlap, r1, both removed rows, split attribution, recovery anchors, both caret fallbacks and undo. Every required run now gates projection against repair updates. T20 mark separately checks stored C1/L1 identity membership. Existing duplicate-identity, lost-comment/tag-mark and omitted-field deliberate defects remain active.", ""
   ].join("\n");
   files.set("mark-results.md", markdown);
   return { runs, files, markdown };

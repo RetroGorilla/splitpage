@@ -5,12 +5,14 @@ import * as Y from "yjs";
 import { ReplicaHarness } from "../../src/delivery.ts";
 import { addComment, addReply, changeStatus, editAuthoredRecord, ensureTag, undoStatus } from "../../src/marks/commands.ts";
 import { markReport } from "../../src/marks/report.ts";
+import { markMutationDefinitions } from "../../src/marks/mutation-audit.ts";
+import type { MarkMutationEvidence } from "../../src/marks/mutation-audit.ts";
 import { checkModel } from "../../src/model.ts";
 import type { ScriptOracle } from "../../src/model.ts";
 import { mapValue } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
-import { structureManager } from "../../src/structure.ts";
-import { markTraces, runDetachedComment, runMark } from "./runner.ts";
+import { structureManager, undoOne } from "../../src/structure.ts";
+import { markTraces, runMark } from "./runner.ts";
 
 for (const [trace, orders] of Object.entries(markTraces)) {
   for (const candidate of ["A", "B"] as const) {
@@ -23,6 +25,49 @@ for (const [trace, orders] of Object.entries(markTraces)) {
 }
 
 for (const candidate of ["A", "B"] as const) {
+  test(`${candidate}: a later status command captures the actual prior value after identical undo`, () => {
+    const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }]);
+    const { alice: a, bob: b, queue } = harness;
+    const ua = structureManager(a);
+    const ub = structureManager(b);
+    try {
+      a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R1")).set("status", "todo"), "fixture");
+      queue.flush("D2");
+      changeStatus(a, ua, "R1", "sA", "shot", "Alice");
+      changeStatus(b, ub, "R1", "sB", "shot", "Bob");
+      queue.flush("D1");
+      undoStatus(a, ua);
+      queue.flush("D1");
+      changeStatus(b, ub, "R1", "sLater", "ready", "Bob");
+      queue.flush("D2");
+      undoStatus(b, ub);
+      queue.flush("dup");
+      harness.lateJoin(b);
+      const oracle: ScriptOracle = { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo" }], carets: {}, recovery: [] };
+      for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "prior after retirement");
+    } finally { ua.destroy(); ub.destroy(); harness.destroy(); }
+  });
+  test(`${candidate}: status event parents and prior values stay local to their target beat`, () => {
+    const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }]);
+    const { alice: a, bob: b, queue } = harness;
+    const ua = structureManager(a);
+    const ub = structureManager(b);
+    try {
+      a.doc.transact(() => { mapValue(a.doc.getMap("beats").get("R1")).set("status", "todo"); mapValue(a.doc.getMap("beats").get("R2")).set("status", "todo"); }, "fixture");
+      queue.flush("D2");
+      changeStatus(a, ua, "R1", "sA", "ready", "Alice");
+      queue.flush("D2");
+      changeStatus(b, ub, "R2", "sB", "shot", "Bob");
+      undoStatus(b, ub);
+      queue.flush("dup");
+      harness.lateJoin(b);
+      const oracle: ScriptOracle = { rows: [
+        { id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "ready" },
+        { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "todo" }
+      ], carets: {}, recovery: [] };
+      for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "target status");
+    } finally { ua.destroy(); ub.destroy(); harness.destroy(); }
+  });
   test(`${candidate}: Lost mark (tag) fails the literal nested stack checker`, () => {
     const result = runMark("T20 nest", candidate, "D1", "single-tag");
     assert.match(result.failure ?? "", /marks/);
@@ -43,14 +88,37 @@ for (const candidate of ["A", "B"] as const) {
       harness.destroy();
     }
   });
-  test(`${candidate}: fully deleted comment probe retains the failure without changing its literal oracle`, () => {
-    const result = runDetachedComment(candidate);
-    if (candidate === "A") assert.match(result.failure ?? "", /characters\[1\].marks.c:C1: expected <missing>, got true/);
-    else assert.equal(result.failure, null, result.history.join("\n"));
-  });
-  test(`${candidate}: the same fully deleted comment history passes while scoped undo retains deleted items`, () => {
-    const result = runDetachedComment(candidate, true);
-    assert.equal(result.failure, null, result.history.join("\n"));
+  test(`${candidate}: ineffective identical-status undo consumes its step before the writer's earlier insertion`, () => {
+    const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }]);
+    const { alice: a, bob: b, queue } = harness;
+    const ua = structureManager(a);
+    const ub = structureManager(b);
+    const retained: ScriptOracle = { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["b1", "Z", {}]], status: "todo" }], carets: {}, recovery: [] };
+    const earlierUndone: ScriptOracle = { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo" }], carets: {}, recovery: [] };
+    const check = (oracle: ScriptOracle): void => {
+      queue.flush("dup");
+      for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "consumed undo");
+    };
+    try {
+      a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R1")).set("status", "todo"), "fixture");
+      queue.flush("D2");
+      b.insert("R1", 2, "Z", ["b1"]);
+      queue.flush("D2");
+      changeStatus(a, ua, "R1", "sA", "shot", "Alice");
+      changeStatus(b, ub, "R1", "sB", "shot", "Bob");
+      queue.flush("D1");
+      harness.lateJoin(b);
+      undoStatus(a, ua);
+      check(retained);
+      undoStatus(b, ub);
+      check(retained);
+      undoOne(ub);
+      check(earlierUndone);
+    } finally {
+      ua.destroy();
+      ub.destroy();
+      harness.destroy();
+    }
   });
   test(`${candidate}: replies sort oldest first, tie by id; author guard refuses other writers without mutation`, () => {
     const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }]);
@@ -138,7 +206,14 @@ for (const candidate of ["A", "B"] as const) {
 }
 
 test("mark result table and deciding failure histories reproduce exactly", () => {
+  const evidence = JSON.parse(readFileSync(new URL("../../mark-mutations.json", import.meta.url), "utf8")) as { baselinePasses: number; results: MarkMutationEvidence[] };
+  assert.equal(evidence.baselinePasses, 116);
+  assert.deepEqual(evidence.results.map(result => ({ id: result.id, outcome: result.outcome, edits: result.edits })), markMutationDefinitions.map(definition => ({ id: definition.id, outcome: definition.outcome ?? "DETECTED", edits: definition.edits })));
+  for (const result of evidence.results) {
+    if (result.outcome === "DETECTED") assert.ok(result.failedTestCount > 0 && result.failedTests.length > 0);
+    else assert.equal(result.failedTestCount, 0);
+  }
   const report = markReport();
-  assert.equal(report.runs.length, 40);
+  assert.equal(report.runs.length, 54);
   for (const [path, content] of report.files) assert.equal(readFileSync(new URL(`../../${path}`, import.meta.url), "utf8"), content, path);
 });

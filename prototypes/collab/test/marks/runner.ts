@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as Y from "yjs";
 import { ReplicaHarness } from "../../src/delivery.ts";
 import type { DeliveryOrder } from "../../src/delivery.ts";
 import { addComment, addReply, changeStatus, formatCapturedMarks, undoCapturedMarks, undoStatus } from "../../src/marks/commands.ts";
@@ -6,7 +7,7 @@ import { storedMarkNames } from "../../src/marks/projection.ts";
 import { checkModel } from "../../src/model.ts";
 import type { ScriptOracle } from "../../src/model.ts";
 import type { ReplicaCaretAnchor } from "../../src/reader.ts";
-import { mapValue } from "../../src/schema.ts";
+import { initializeSchemaRoots, mapValue, SchemaReplica } from "../../src/schema.ts";
 import type { SchemaCandidate } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { captureStructuralRange, structuralCaret, splitWithCaret } from "../../src/structure-selection.ts";
@@ -35,7 +36,13 @@ export function runMark(trace: string, candidate: SchemaCandidate, order: Delive
     if (!oracle) throw new Error(`Missing literal mark oracle ${phase}`);
     queue.history.push(`check ${phase}`);
     for (const replica of harness.replicas) {
-      checkModel(readStructure(replica.doc, candidate, harness.identities, carets), oracle, harness.identities, `${phase}/client${replica.doc.clientID}`);
+      let updates = 0;
+      const countUpdate = (): void => { updates++; };
+      replica.doc.on("update", countUpdate);
+      try {
+        checkModel(readStructure(replica.doc, candidate, harness.identities, carets), oracle, harness.identities, `${phase}/client${replica.doc.clientID}`);
+        assert.equal(updates, 0, "projection emitted a repair update");
+      } finally { replica.doc.off("update", countUpdate); }
       checks++;
     }
   };
@@ -145,21 +152,47 @@ export function runMarkExperiments(): StructureRunResult[] {
   return Object.entries(markTraces).flatMap(([trace, orders]) => (["A", "B"] as const).flatMap(candidate => orders.map(order => runMark(trace, candidate, order))));
 }
 
-export function runDetachedComment(candidate: SchemaCandidate, retainUndo = false): StructureRunResult {
-  const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "abcd" }]);
+export const rootProbeModes = ["lazy", "eager", "promote-before-comment", "destroyed-managers", "gc-off", "late-delete-lazy", "late-delete-eager", "reload-delete-lazy", "reload-delete-eager"] as const;
+export type MarkRootProbeMode = typeof rootProbeModes[number];
+
+export function runRootInitializationProbe(candidate: SchemaCandidate, mode: MarkRootProbeMode): StructureRunResult {
+  const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "abcd" }], false, mode === "eager");
   const { alice: a, bob: b, queue } = harness;
-  const managers = retainUndo ? [structureManager(a), structureManager(b)] : [];
-  const trace = retainUndo ? "T11 fully deleted with undo retention" : "T11 fully deleted";
+  const managers = mode === "destroyed-managers" || mode.includes("delete-") ? [structureManager(a), structureManager(b)] : [];
+  const trace = mode === "lazy" ? "T11 fully deleted" : `T11 root ${mode}`;
   let checks = 0;
   try {
-    queue.history.push(`seed R1 abcd=s1..s4; ${retainUndo ? "scoped undo managers active" : "no undo managers"}; A comments C1 on original s2 s3`);
+    queue.history.push(`seed R1 abcd=s1..s4; root control ${mode}`);
+    if (mode === "promote-before-comment") initializeSchemaRoots(b.doc, candidate);
+    if (mode === "destroyed-managers") for (const manager of managers.splice(0)) manager.destroy();
+    if (mode === "gc-off") { a.doc.gc = false; b.doc.gc = false; }
+    queue.history.push("A comments C1 on original s2 s3");
     addComment(a, "C1", "R1", 1, 2, "Alice");
     queue.flush("D2");
-    queue.history.push("B replies r1 to C1, then deletes original s2 s3 in one transaction");
     addReply(b, "r1", "C1", "Bob");
-    b.deleteIdentities(["s2", "s3"]);
+    queue.flush("D2");
+    let deleter = b;
+    if (mode.startsWith("late-delete")) deleter = harness.lateJoin(b, mode.endsWith("eager"));
+    if (mode.startsWith("reload-delete")) {
+      deleter = new SchemaReplica(candidate, 3, harness.identities, mode.endsWith("eager"));
+      Y.applyUpdate(deleter.doc, Y.encodeStateAsUpdate(b.doc), "delivery");
+      harness.replicas.push(deleter);
+      queue.addReplica("C", deleter);
+      queue.history.push("reload C from complete encoded state before deletion");
+    }
+    queue.history.push(`client${deleter.doc.clientID} deletes original s2 s3 in one transaction`);
+    if (candidate === "A") {
+      const root = deleter.doc.share.get("flow");
+      const formatting = (root as { _hasFormatting?: boolean } | undefined)?._hasFormatting;
+      queue.history.push(`before promotion: ${root?.constructor.name}, _hasFormatting=${String(formatting)}`);
+    }
+    deleter.deleteIdentities(["s2", "s3"]);
+    if (candidate === "A") {
+      const root = deleter.doc.share.get("flow");
+      queue.history.push(`after promotion/deletion: ${root?.constructor.name}, _hasFormatting=${String((root as { _hasFormatting?: boolean } | undefined)?._hasFormatting)}`);
+    }
     queue.flush("D1");
-    harness.lateJoin(b);
+    if (harness.replicas.length === 2) harness.lateJoin(b);
     const oracle = markOracles["T11 fully deleted"];
     if (!oracle) throw new Error("Missing literal fully-deleted oracle");
     for (const replica of harness.replicas) {
