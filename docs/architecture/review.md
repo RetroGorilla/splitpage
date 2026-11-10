@@ -8,7 +8,7 @@ This applies to every PR into `main`, the only long-lived branch. Bug fixes go t
 | --- | --- | --- |
 | Quick | Docs-only PRs (CI's change classifier marks them as prose); dependency-baseline prunes whose diff only removes entries from `tools/dep-baseline.json`, with no source changes, no new exceptions and no gate configuration changes; test-only changes; dependency patch updates; copy and styling; small UI fixes | The automated checks and a quick read. No independent reviewer, and the author may merge |
 | Normal | New features; IPC and the desktop main process; the updater; the release pipeline; major dependency updates, which also need a run of the real app | One independent review (§4) and a re-check of its fixes. Only blockers hold the merge; other concerns are filed as issues (§6) |
-| Full | Save, drafts, history, recovery, merge | The whole process below, with every concern closed before merge |
+| Full | Save, drafts, history, recovery, merge; the shared replica, synchronization and server storage of [collaboration](../COLLABORATION-PLAN.md#13-acceptance-evidence) | The whole process below, with every concern closed before merge |
 
 The [old agent queue](../AGENT-QUEUE.md) is finished. Its former run rules do not authorize new work or merges.
 
