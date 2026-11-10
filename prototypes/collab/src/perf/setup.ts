@@ -22,6 +22,7 @@ export interface PerfTimedSourceAudit {
   reason: string;
   files: Record<string, string>;
   metadataRedactions?: Record<string, string>;
+  postTimingChanges?: { path: string; timedSha256: string | null; currentSha256: string; pullRequest: string; change: string }[];
 }
 
 export function validateTimedSource(sourceHead: string, sourceDigest: string, audit?: PerfTimedSourceAudit): void {
@@ -30,10 +31,27 @@ export function validateTimedSource(sourceHead: string, sourceDigest: string, au
   assert.equal(sourceHead, snapshot.sourceHead);
   assert.equal(sourceDigest, snapshot.sourceDigest);
   const files = perfSourceFiles().filter(file => !["setup.ts", "report.ts", "timing-report.ts", "privacy.ts"].includes(file));
-  assert.deepEqual(Object.keys(snapshot.files), files);
+  const changes = new Map((snapshot.postTimingChanges ?? []).map(change => [change.path, change]));
+  assert.equal(changes.size, snapshot.postTimingChanges?.length ?? 0, "Duplicate post-timing source declaration");
+  for (const change of changes.values()) {
+    assert.equal(change.timedSha256, snapshot.files[change.path] ?? null, `Wrong timed hash: ${change.path}`);
+    assert.notEqual(change.currentSha256, change.timedSha256);
+    assert.match(change.currentSha256, /^[0-9a-f]{64}$/);
+    assert.match(change.pullRequest, /^https:\/\/github\.com\/RetroGorilla\/splitpage\/pull\/[1-9]\d*$/);
+    assert.match(change.change, /^[^\r\n]+$/);
+    assert.ok(!snapshot.metadataRedactions?.[change.path], "Source change cannot also be a metadata redaction");
+    assert.ok(files.includes(change.path), `Unknown post-timing source: ${change.path}`);
+  }
+  const added = [...changes.values()].filter(change => change.timedSha256 === null).map(change => change.path);
+  assert.deepEqual([...Object.keys(snapshot.files), ...added].sort(), [...files].sort());
   assert.ok(Object.keys(snapshot.metadataRedactions ?? {}).every(file => ["conditions.ts", "../proj/costs.ts"].includes(file)));
   for (const file of files) {
     let source = readFileSync(new URL(file, import.meta.url), "utf8");
+    const change = changes.get(file);
+    if (change) {
+      assert.equal(createHash("sha256").update(source).digest("hex"), change.currentSha256, `Post-timing implementation changed: ${file}`);
+      continue;
+    }
     if (snapshot.metadataRedactions?.[file]) {
       assert.equal(createHash("sha256").update(source).digest("hex"), snapshot.metadataRedactions[file]);
       const substitutions = file === "conditions.ts"
