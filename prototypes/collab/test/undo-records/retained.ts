@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
+import * as Y from "yjs";
 import type { DeliveryOrder } from "../../src/delivery.ts";
+import { statusValue } from "../../src/marks/commands.ts";
+import { readStatusEvent } from "../../src/marks/status-resolution.ts";
 import type { ScriptOracle } from "../../src/model.ts";
+import { createProjectionReplica, fromDocument } from "../../src/proj/document.ts";
 import { mapValue } from "../../src/schema.ts";
+import type { SchemaReplica } from "../../src/schema.ts";
 import { structuralCaret } from "../../src/structure-selection.ts";
 import { captureRange, changeStatus, insertText, replaceRange, split } from "../../src/undo-records/commands.ts";
+import { CommandHistory } from "../../src/undo-records/history.ts";
 import { RecordBufferHarness } from "../../src/undo-records/buffer.ts";
+import { statusReaders } from "../marks/status-readers.ts";
 import { bufferOracles, bufferTraceOrder } from "../buffer-oracles.ts";
 import { replacementIntentFixtures } from "../buffer-replacements.ts";
 import { deletionOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "../oracles.ts";
@@ -203,6 +210,138 @@ export function runConcurrentStatus(order: "D1" | "late-C", swapped: boolean, sa
   });
 }
 
+const writerNotices = { notices: ["writer0: concurrent status change did not apply", "writer1: concurrent status change did not apply"] };
+
+export function runStatusEitherUndo(order: DeliveryOrder, swapped: boolean, same: boolean, first: Writer): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }], order, swapped);
+  const second: Writer = first === "Alice" ? "Bob" : "Alice";
+  const notices = same ? {} : writerNotices;
+  const oracle = (value: string): ScriptOracle => ({ ...status(value), ...notices });
+  return scenario.run(`${same ? "identical" : "different"} concurrent status roots; ${first} undoes, then ${second}`, () => {
+    todoFixture(scenario, ["R1"]);
+    changeStatus(scenario.histories.Alice, "R1", "s0", same ? "shot" : "ready", "writer0");
+    changeStatus(scenario.histories.Bob, "R1", "s1", "shot", "writer1");
+    scenario.check("concurrent", oracle(same ? "shot" : "todo"));
+    scenario.undo(first);
+    scenario.check(`${first}'s undo`, oracle("todo"));
+    scenario.undo(second);
+    scenario.check(`${second}'s undo`, oracle("todo"));
+    return undefined;
+  });
+}
+
+export function runSemanticUndo(order: DeliveryOrder, swapped: boolean, identical: boolean, undo: readonly Writer[]): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }], order, swapped);
+  const values = identical ? { a: "ready", c: "shot", b: "ready", d: "shot" } : { a: "ready", c: "shot", b: "shot", d: "ready" };
+  return scenario.run(`semantic undo ${undo.join(", ")} of ${identical ? "identical" : "different"} two-event branches`, () => {
+    todoFixture(scenario, ["R1"]);
+    changeStatus(scenario.histories.Alice, "R1", "a", values.a, "writer0");
+    changeStatus(scenario.histories.Alice, "R1", "c", values.c, "writer0");
+    changeStatus(scenario.histories.Bob, "R1", "b", values.b, "writer1");
+    changeStatus(scenario.histories.Bob, "R1", "d", values.d, "writer1");
+    const notices = identical ? {} : writerNotices;
+    scenario.check("branches", { ...status(identical ? "shot" : "todo"), ...notices });
+    for (const writer of undo) scenario.undo(writer);
+    scenario.check("undone", { ...status(identical ? "ready" : "todo"), ...notices });
+    return undefined;
+  });
+}
+
+function literal(name: string, body: (history: string[]) => number): CaseResult {
+  const history: string[] = [];
+  try {
+    return { name, failure: null, history, checks: body(history) };
+  } catch (error) {
+    const failure = error instanceof Error ? error.message : String(error);
+    history.push(`FAIL ${failure}`);
+    return { name, failure, history, checks: 0 };
+  }
+}
+
+function acceptedEvents(replica: SchemaReplica, phase: string): void {
+  for (const [id, raw] of replica.doc.getMap("statusEvents")) assert.ok(readStatusEvent(raw), `${phase}: status event ${id} rejected by readStatusEvent`);
+}
+
+export function runStatusAncestry(complete: boolean): CaseResult {
+  return literal(`authoring with ${complete ? "complete" : "partial"} status ancestry, then undo`, history => {
+    const seed = fromDocument({ title: "", rows: [{ id: "R1", audioText: "", visualText: "", status: "todo" }] }, "B", 100);
+    const replicas = [1, 2, 3, 4, 5].map(client => createProjectionReplica("B", client));
+    const [x, p, a, c, late] = replicas;
+    assert.ok(x && p && a && c && late);
+    const histories = [x, p, a, c].map(replica => new CommandHistory(replica));
+    const [hx, hp, ha, hc] = histories;
+    assert.ok(hx && hp && ha && hc);
+    const capture = (replica: SchemaReplica, edit: () => void): Uint8Array => {
+      const updates: Uint8Array[] = [];
+      const listener = (update: Uint8Array): void => { updates.push(update); };
+      replica.doc.on("update", listener);
+      try { edit(); } finally { replica.doc.off("update", listener); }
+      assert.equal(updates.length, 1);
+      const update = updates[0];
+      assert.ok(update);
+      return update;
+    };
+    try {
+      for (const replica of replicas) Y.applyUpdate(replica.doc, Y.encodeStateAsUpdate(seed.doc));
+      const ux = capture(x, () => changeStatus(hx, "R1", "x", "ready", "X"));
+      for (const replica of [p, a, c]) Y.applyUpdate(replica.doc, ux);
+      const up = capture(p, () => changeStatus(hp, "R1", "p", "todo", "P"));
+      Y.applyUpdate(a.doc, up);
+      const ua = capture(a, () => changeStatus(ha, "R1", "a", "shot", "A"));
+      Y.applyUpdate(c.doc, ua);
+      history.push(`X ready, P todo after X, A shot after P; C has ${complete ? "X, P and A" : "X and A"}`);
+      if (complete) Y.applyUpdate(c.doc, up);
+      changeStatus(hc, "R1", "c", "ready", "C");
+      const event = readStatusEvent(c.doc.getMap("statusEvents").get("c"));
+      assert.deepEqual(event?.parents, complete ? ["a"] : ["a", "x"]);
+      Y.applyUpdate(c.doc, up);
+      const undone = hc.undo();
+      history.push(`C ready, receives P, undoes: effective=${String(undone.effective)}`);
+      Y.applyUpdate(late.doc, Y.encodeStateAsUpdate(c.doc));
+      let checks = 0;
+      for (const replica of [c, late]) {
+        acceptedEvents(replica, `client${replica.doc.clientID}`);
+        for (const [reader, value] of Object.entries(statusReaders(replica))) {
+          assert.equal(value, complete ? "shot" : "todo", `client${replica.doc.clientID} ${reader}`);
+          checks++;
+        }
+      }
+      return checks;
+    } finally {
+      for (const replica of [...replicas, seed]) replica.destroy();
+    }
+  });
+}
+
+export function runStatusEmits(): CaseResult {
+  return literal("status command, undo and redo emit only accepted events and true retirement flags; invalid values write nothing", history => {
+    const source = fromDocument({ title: "", rows: [{ id: "R1", audioText: "", visualText: "", status: "todo" }] }, "B", 100);
+    const commands = new CommandHistory(source);
+    try {
+      changeStatus(commands, "R1", "a", "ready", "Alice");
+      acceptedEvents(source, "changed");
+      assert.equal(commands.undo().effective, true);
+      acceptedEvents(source, "undone");
+      assert.deepEqual([...source.doc.getMap("retiredStatus").values()], [true]);
+      assert.equal(commands.redo().effective, true);
+      acceptedEvents(source, "redone");
+      assert.equal(statusValue(source, "R1"), "ready");
+      history.push("change, undo and redo: every status event accepted");
+      for (const value of ["bogus", "", "READY", "done"]) {
+        const before = Y.encodeStateAsUpdate(source.doc);
+        const stack = commands.undoStack.length;
+        assert.throws(() => changeStatus(commands, "R1", "bad", value, "Alice"), /Invalid status command/);
+        assert.deepEqual(Y.encodeStateAsUpdate(source.doc), before);
+        assert.equal(commands.undoStack.length, stack);
+      }
+      history.push("invalid values throw and write nothing");
+      return 4;
+    } finally {
+      source.destroy();
+    }
+  });
+}
+
 function runIngress(path: string): string | null {
   return attempt(() => {
     const harness = new RecordBufferHarness(bufferOracles.T04.seed);
@@ -281,6 +420,26 @@ const concurrentStatus: RetainedFamily = {
     run: () => runConcurrentStatus(order, swapped, same, first)
   })))))
 };
+const statusOrders = ["D1", "rev", "dup", "late-C"] as const;
+const eitherUndo: RetainedFamily = {
+  name: "Status resolution: either undo of concurrent roots, late join",
+  runs: [false, true].flatMap(swapped => statusOrders.flatMap(order => [false, true].flatMap(same => (["Alice", "Bob"] as const).map(first => ({
+    label: `${order}${swapped ? " swapped" : ""} ${same ? "identical" : "different"} ${first} first`,
+    run: () => runStatusEitherUndo(order, swapped, same, first)
+  })))))
+};
+const semanticUndo: RetainedFamily = {
+  name: "Status resolution: semantic undo of two-event branches",
+  runs: [false, true].flatMap(swapped => statusOrders.flatMap(order => [false, true].flatMap(identical => ([["Alice"], ["Bob"], ["Alice", "Bob"], ["Bob", "Alice"]] as const).map(undo => ({
+    label: `${order}${swapped ? " swapped" : ""} ${identical ? "identical" : "different"} undo ${undo.join(", ")}`,
+    run: () => runSemanticUndo(order, swapped, identical, undo)
+  })))))
+};
+const ancestry: RetainedFamily = {
+  name: "Status authoring with complete or partial ancestry, then undo",
+  runs: [false, true].map(complete => ({ label: complete ? "complete" : "partial", run: () => runStatusAncestry(complete) }))
+};
+const emits: RetainedFamily = { name: "Status commands and their undo emit only accepted events", runs: [{ label: "single replica", run: runStatusEmits }] };
 const ingress: RetainedFamily = {
   name: "T04 ingress paths share the dirty gate, M1",
   runs: ["delivery", "hydration", "recovery-restore"].map(path => bufferRun(path, () => runIngress(path)))
@@ -289,7 +448,7 @@ const cleanRemote: RetainedFamily = { name: "T02 clean remote integration repain
 
 export const retainedFamilies: RetainedFamily[] = [
   ...structureFamilies, glue, topItem, ...markFamilies, splitInsert, honest, reanchor, statusTests, concurrentStatus,
-  ...bufferFamilies, ingress, cleanRemote, ...replacementFamilies
+  eitherUndo, semanticUndo, ancestry, emits, ...bufferFamilies, ingress, cleanRemote, ...replacementFamilies
 ];
 
 const names = (families: readonly RetainedFamily[]): string[] => families.map(family => family.name);
@@ -299,6 +458,9 @@ export const retainedUndoSources: Record<string, string[]> = {
   "test/structure.test.ts": [...names(structureFamilies), reanchor.name],
   "test/marks/runner.ts": names(markFamilies),
   "test/marks/marks.test.ts": [...names(markFamilies), statusTests.name, concurrentStatus.name],
+  "test/marks/review-histories.test.ts": [ancestry.name],
+  "test/marks/status-resolution.test.ts": [eitherUndo.name, semanticUndo.name],
+  "test/marks/status-roundtrip.test.ts": [emits.name],
   "test/harness.test.ts": [honest.name, splitInsert.name],
   "test/buffer-runner.ts": names(bufferFamilies),
   "test/buffers.test.ts": [...names(bufferFamilies), ingress.name, cleanRemote.name],

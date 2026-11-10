@@ -4,6 +4,7 @@ import type { QueuedDelivery } from "../../src/delivery.ts";
 import type { CollabIdentity, CollabMarks, CollabModel, IdentityBook } from "../../src/model.ts";
 import { mapValue, SchemaReplica, textValue } from "../../src/schema.ts";
 import type { SeedBeat } from "../../src/schema.ts";
+import { readStatusEvent } from "../../src/marks/status-resolution.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { addComment, addReply, captureRange, changeStatus, createHeadingRecord, deleteRange, formatRange, insertText, join, moveBeat, removeBeat, removeHeadingRecord, replaceRange, setScalar, split, tagRange } from "../../src/undo-records/commands.ts";
 import { CommandHistory } from "../../src/undo-records/history.ts";
@@ -29,7 +30,7 @@ export interface ExecuteOptions {
   actOnPending?: boolean;
 }
 
-export const violationChecks = ["replicas differ", "identity twice", "restored twice", "undo removed another writer's character", "undo then redo changed the model", "ineffective undo consumed other than one entry", "threw"] as const;
+export const violationChecks = ["replicas differ", "identity twice", "restored twice", "undo removed another writer's character", "undo then redo changed the model", "ineffective undo consumed other than one entry", "status event rejected by readStatusEvent", "threw"] as const;
 export type ViolationCheck = typeof violationChecks[number];
 
 export interface Violation {
@@ -334,6 +335,13 @@ export function execute(generated: GeneratedHistory, options: ExecuteOptions = {
       const detail = scope + models.map(entry => `client${entry.client}: ${summary(entry.model)}`).join(" | ");
       violations.push({ check: "replicas differ", detail });
       note(`VIOLATION replicas differ: ${detail}`);
+    }
+    for (const replica of [...harness.replicas, fresh]) {
+      for (const [id, raw] of replica.doc.getMap("statusEvents")) {
+        executed["status events validated"] = (executed["status events validated"] ?? 0) + 1;
+        if (id.endsWith("~")) executed["status events written by a redo validated"] = (executed["status events written by a redo validated"] ?? 0) + 1;
+        if (!readStatusEvent(raw)) violations.push({ check: "status event rejected by readStatusEvent", detail: `client${replica.doc.clientID}: ${id} ${JSON.stringify(raw)}` });
+      }
     }
     const back = originals(harness.alice);
     for (const { client, model } of models) {

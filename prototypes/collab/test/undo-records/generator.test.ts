@@ -10,11 +10,15 @@ function unmatched(violations: readonly Violation[]): Violation[] {
 
 for (const writers of [2, 3] as const) {
   test(`generator: ${generatorRuns} seeded ${writers}-writer histories; every violation matches a declared limit`, () => {
+    let validated = 0, redone = 0;
     for (let seed = 1; seed <= generatorRuns; seed++) {
       const run = execute(generate(seed, writers, generatorLength));
       const open = unmatched(run.violations);
       assert.deepEqual(open, [], `seed ${seed}, ${writers} writers\n${run.history.filter(line => !line.startsWith("enqueue")).join("\n")}`);
+      validated += run.executed["status events validated"] ?? 0;
+      redone += run.executed["status events written by a redo validated"] ?? 0;
     }
+    assert.ok(validated > 0 && redone > 0, `readStatusEvent saw ${validated} status events, ${redone} written by a redo`);
   });
 }
 

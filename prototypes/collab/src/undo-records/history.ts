@@ -4,6 +4,7 @@ import type { ReplicaCaretAnchor } from "../reader.ts";
 import { mapValue, textValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { statusFrontier, statusValue } from "../marks/commands.ts";
+import { readStatusEvent } from "../marks/status-resolution.ts";
 import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity, selectionOf } from "./identity.ts";
 import type { IdentityPoint, ResolvedIdentity, SelectionRecord, StoredContent } from "./identity.ts";
 
@@ -39,14 +40,6 @@ export interface UndoOutcome {
   consumed: number;
 }
 
-export interface StatusEvent {
-  target: string;
-  value: string;
-  prior: string;
-  parents: string[];
-  by: string;
-}
-
 export const restorationRoot = "restoredIdentities";
 
 interface Reversal {
@@ -60,8 +53,9 @@ function attributeValue(attributes: Record<string, unknown>, key: string): unkno
 
 export function writeStatusEvent(replica: SchemaReplica, target: string, id: string, value: string, by: string): void {
   const frontier = statusFrontier(replica, target);
-  const event: StatusEvent = { target, value, prior: statusValue(replica, target), parents: frontier.map(([key]) => key).sort(), by };
-  replica.doc.getMap<StatusEvent>("statusEvents").set(id, event);
+  const validated = readStatusEvent({ target, value, parents: frontier.map(([key]) => key).sort(), by });
+  if (!validated) throw new Error("Invalid status command");
+  replica.doc.getMap("statusEvents").set(id, { target: validated.target, value: validated.value, prior: statusValue(replica, target), parents: validated.parents, by: validated.by });
 }
 
 export class CommandHistory {

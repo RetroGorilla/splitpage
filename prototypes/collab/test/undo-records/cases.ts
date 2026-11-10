@@ -4,6 +4,7 @@ import type { DeliveryOrder } from "../../src/delivery.ts";
 import { checkModel } from "../../src/model.ts";
 import type { CollabModel, ScriptOracle } from "../../src/model.ts";
 import type { ReplicaCaretAnchor } from "../../src/reader.ts";
+import { readStatusEvent } from "../../src/marks/status-resolution.ts";
 import { mapValue } from "../../src/schema.ts";
 import type { SchemaReplica, SeedBeat } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
@@ -81,6 +82,9 @@ export class Scenario {
   check(phase: string, oracle: ScriptOracle, normalize?: (model: CollabModel, replica: number) => void): void {
     this.deliver();
     this.note(`check ${phase}`);
+    for (const replica of this.harness.replicas) {
+      for (const [id, raw] of replica.doc.getMap("statusEvents")) assert.ok(readStatusEvent(raw), `${phase}/client${replica.doc.clientID}: status event ${id} rejected by readStatusEvent`);
+    }
     this.models().forEach((model, index) => {
       normalize?.(model, this.harness.replicas[index]?.doc.clientID ?? -1);
       checkModel(model, oracle, this.harness.identities, `${phase}/client${this.harness.replicas[index]?.doc.clientID ?? -1}`);
