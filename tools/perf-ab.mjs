@@ -1,10 +1,9 @@
-import { execFile, spawnSync } from "node:child_process";
-import { cpSync, existsSync, readFileSync, mkdtempSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { buildArgs } from "./perf-record.mjs";
+import { withRefTrees } from "./ref-trees.mjs";
 
 export function parseArgs(argv) {
   const refs = [];
@@ -94,84 +93,31 @@ export function report(base, head, runs) {
 }
 
 export async function main(argv, repo = REPO) {
-  let scratch;
-  let active;
-  let interrupted;
-  let cleaning = false;
-  let status = 0;
-  const trees = [];
-  const stop = (signal) => {
-    interrupted = signal;
-    if (!active?.pid || cleaning) return;
-    if (process.platform === "win32") {
-      const result = spawnSync("taskkill.exe", ["/PID", String(active.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore", timeout: 10000 });
-      if (result.status !== 0) active.kill("SIGTERM");
-    } else {
-      try { process.kill(-active.pid, "SIGTERM"); } catch {}
-    }
-  };
-  const run = (command, args, cwd = repo) => new Promise((resolve, reject) => {
-    if (interrupted && !cleaning) return reject(new Error(`interrupted by ${interrupted}`));
-    active = execFile(command, args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true, detached: process.platform !== "win32" }, (error, stdout, stderr) => {
-      active = undefined;
-      if (interrupted && !cleaning) reject(new Error(`interrupted by ${interrupted}`));
-      else if (error) reject(new Error(`${command} ${args.join(" ")} failed: ${error.message}\n${stdout}${stderr}`));
-      else resolve(stdout);
-    });
-  });
-  const onInt = () => stop("SIGINT");
-  const onTerm = () => stop("SIGTERM");
-  process.on("SIGINT", onInt);
-  process.on("SIGTERM", onTerm);
+  let args;
   try {
-    const args = parseArgs(argv);
-    const commit = async (ref) => (await run("git", ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])).trim();
-    const base = await commit(args.base), head = await commit(args.head);
-    if (!existsSync(join(repo, "node_modules"))) throw new Error("node_modules is missing; install the repo dependencies first");
-    scratch = mkdtempSync(join(tmpdir(), "splitpage-perf-ab-"));
-    for (const [side, sha] of [["base", base], ["head", head]]) {
-      const dir = join(scratch, side);
-      trees.push(dir);
-      console.error(`perf-ab: preparing ${side} ${sha}`);
-      await run("git", ["worktree", "add", "--detach", dir, sha]);
-      symlinkSync(join(repo, "node_modules"), join(dir, "node_modules"), process.platform === "win32" ? "junction" : "dir");
-      const build = buildArgs(readFileSync(join(dir, "build.mjs"), "utf8"));
+    args = parseArgs(argv);
+  } catch (error) {
+    console.error(`perf-ab: ${error.message}`);
+    return 1;
+  }
+  return withRefTrees(repo, "perf-ab", [["base", args.base], ["head", args.head]], async ({ dirs, shas, run }) => {
+    for (const side of ["base", "head"]) {
+      const build = buildArgs(readFileSync(join(dirs[side], "build.mjs"), "utf8"));
       console.error(`perf-ab: ${side} building with node ${build.join(" ")}${build.length === 1 ? " (legacy build; --test unavailable)" : ""}`);
-      await run(process.execPath, build, dir);
+      await run(process.execPath, build, dirs[side]);
     }
-    const [baseTree, headTree] = trees;
     for (const path of ["tools", ".claude/skills/run-splitpage-app"]) {
-      cpSync(join(headTree, path), join(baseTree, path), { recursive: true });
+      cpSync(join(dirs.head, path), join(dirs.base, path), { recursive: true });
     }
     const runs = { base: [], head: [] };
     for (let round = 1; round <= args.rounds; round++) {
-      for (const [side, dir] of [["base", baseTree], ["head", headTree]]) {
+      for (const side of ["base", "head"]) {
         console.error(`perf-ab: round ${round}/${args.rounds} ${side}`);
-        runs[side].push(measurements(await run(process.execPath, ["tools/perf-record.mjs", "--built", "--only", args.only], dir)));
+        runs[side].push(measurements(await run(process.execPath, ["tools/perf-record.mjs", "--built", "--only", args.only], dirs[side])));
       }
     }
-    console.log(report(base, head, runs));
-  } catch (error) {
-    console.error(`perf-ab: ${error.message}`);
-    status = 1;
-  } finally {
-    cleaning = true;
-    let cleaned = true;
-    for (const dir of trees.reverse()) {
-      try {
-        if (existsSync(join(dir, "node_modules"))) unlinkSync(join(dir, "node_modules"));
-        if (existsSync(dir)) await run("git", ["worktree", "remove", "--force", dir]);
-      } catch (error) {
-        cleaned = false;
-        console.error(`perf-ab: cleanup failed: ${error.message}`);
-      }
-    }
-    process.removeListener("SIGINT", onInt);
-    process.removeListener("SIGTERM", onTerm);
-    if (scratch && cleaned) rmSync(scratch, { recursive: true, force: true });
-    if (!cleaned) status = 1;
-  }
-  return status;
+    console.log(report(shas.base, shas.head, runs));
+  });
 }
 
 if (isMain(import.meta.url)) process.exitCode = await main(process.argv.slice(2));
