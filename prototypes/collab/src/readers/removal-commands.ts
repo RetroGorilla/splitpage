@@ -1,9 +1,11 @@
+import { wireIdentity } from "./identity.ts";
 import type * as Y from "yjs";
 import type { SchemaReplica } from "../schema.ts";
 import { mapValue } from "../schema.ts";
 import { removalIds } from "./removals.ts";
 
 export function removeWithUndo(replica: SchemaReplica, manager: Y.UndoManager, beat: string, id: string, by: string): void {
+  beat = wireIdentity(beat); id = wireIdentity(id);
   manager.stopCapturing();
   replica.doc.transact(() => {
     mapValue(mapValue(replica.doc.getMap("beats").get(beat)).get("removals")).clear();

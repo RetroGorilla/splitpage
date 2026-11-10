@@ -5,6 +5,7 @@ import { records } from "./value.ts";
 import type { ProjectionBag } from "./value.ts";
 import { storedRunsToHtml } from "./stored-html.ts";
 import { readContentAtom, readMarkRecord, readWireValue } from "../readers/records.ts";
+import { compactDelta } from "../perf/delta.ts";
 
 export interface ProjectionDelta {
   insert: string | ProjectionBag;
@@ -167,8 +168,8 @@ export function insertHtml(text: Y.Text, html: string, tags: unknown, comments: 
 
 export function readDelta(text: Y.Text): ProjectionDelta[] {
   const delta = text.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[];
-  return delta.flatMap((item): ProjectionDelta[] => {
+  return compactDelta(delta.flatMap((item): ProjectionDelta[] => {
     const insert = typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert);
     return insert === null ? [] : [{ insert, attributes: { ...readMarkRecord(item.attributes) } }];
-  });
+  }));
 }

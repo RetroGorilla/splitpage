@@ -10,6 +10,8 @@ import { classifyLegacyFinding, classifyReaderFinding, knownReaderFailures } fro
 import { readerHistoryRows, runReaderHistory } from "./histories.ts";
 import { legacyStructureReader } from "./legacy-structure.ts";
 import { legacyReplyReader } from "./legacy.ts";
+import { IncrementalProjection } from "../../src/perf/incremental.ts";
+import { projectionDifference } from "../strict-comparison.ts";
 
 function literalFields(id: string, model: ReturnType<typeof readStructure>): unknown {
   if (id === "removal-attribution") return { by: model.recovery[0]?.by };
@@ -96,6 +98,7 @@ for (const seed of [1376, 1413, 0x5eed0001, 0x5eed0002]) for (const candidate of
     for (let history = 0; history < 12; history++) {
       const h = new ReplicaHarness(candidate, [{ id: "R1", text: "abcd" }, { id: "R2", text: "ef" }, { id: "R3", text: "gh" }], Boolean(next() & 1));
       const guard = new ReaderConvergence(h, deliveryOrders);
+      const caches = [new IncrementalProjection(h.alice), new IncrementalProjection(h.bob)];
       try {
         for (let step = 0; step < 12; step++) {
           const replica = next() & 1 ? h.alice : h.bob, beats = [...replica.doc.getMap("beats").keys()];
@@ -118,11 +121,37 @@ for (const seed of [1376, 1413, 0x5eed0001, 0x5eed0002]) for (const candidate of
           if (step % 3 === 2) {
             const order = deliveryOrders[next() % deliveryOrders.length]; assert.ok(order); h.queue.flush(order);
             for (const finding of guard.checkKnown(`seed ${seed}, history ${history}, step ${step}`)) for (const kind of classifyReaderFinding(finding)) failures.add(kind);
+            for (const cache of caches) {
+              const fresh = new IncrementalProjection(cache.replica);
+              try {
+                assert.equal(projectionDifference(cache.document, fresh.document, "generated document cache"), null);
+                assert.equal(projectionDifference(cache.index.spans.map(span => span.block), fresh.index.spans.map(span => span.block), "generated block cache"), null);
+              } finally { fresh.destroy(); }
+            }
             checkpoints++;
           }
         }
-      } finally { h.destroy(); }
+      } finally { for (const cache of caches) cache.destroy(); h.destroy(); }
     }
     assert.equal(checkpoints, 48); assert.equal(failures.size, 0); t.diagnostic(JSON.stringify({ seed, histories: 12, checkpoints, knownFailures: [...failures].sort() }));
   });
 }
+
+for (const [label, first, second] of [
+  ["missing property", {}, { absent: undefined }],
+  ["array length", [], new Array(1)],
+  ["array hole", [undefined], new Array(1)],
+  ["array property", [], Object.assign([], { absent: undefined })],
+  ["non-index numeric array property", [], Object.assign([], { "4294967295": undefined })],
+  ["object key order", { a: 1, b: 2 }, { b: 2, a: 1 }],
+  ["unsupported kind", {}, new Date(0)]
+] as const) test(`strict complete-output check rejects ${label} through check and checkKnown`, () => {
+  const h = new ReplicaHarness("B", [{ id: "R1", text: "a" }]), guard = new ReaderConvergence(h, deliveryOrders);
+  try {
+    const wrapped: typeof readStructure = (...args) => {
+      const model = readStructure(...args); (model.records ??= {}).probe = args[0].clientID === 101 ? second : first; return model;
+    };
+    assert.throws(() => guard.check(label, new Map(), wrapped));
+    assert.throws(() => guard.checkKnown(label, new Map(), wrapped));
+  } finally { h.destroy(); }
+});

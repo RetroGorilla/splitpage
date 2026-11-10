@@ -94,8 +94,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "crossing || !rootMap(doc, \"tags\")?.has(extent.tag)",
-          "after": "!rootMap(doc, \"tags\")?.has(extent.tag)"
+          "before": "crossing || !identityHas(rootMap(doc, \"tags\"), extent.tag)",
+          "after": "!identityHas(rootMap(doc, \"tags\"), extent.tag)"
         }
       ]
     },
@@ -426,7 +426,7 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": "resolveBeatStatus(new Map(statusEvents(replica, target)), rootMap(replica.doc, \"retiredStatus\") ?? new Set<string>(),",
+          "before": "resolveBeatStatus(new Map(statusEvents(replica, target)), { has: (id: string) => identityHas(rootMap(replica.doc, \"retiredStatus\"), id) },",
           "after": "resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),"
         }
       ]
@@ -562,7 +562,7 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": "if (!replica.doc.getMap(\"retiredStatus\").has(key)) ",
+          "before": "if (!identityHas(replica.doc.getMap(\"retiredStatus\"), key)) ",
           "after": ""
         }
       ]

@@ -1,3 +1,4 @@
+import { identityEntries, identityGet, normalizeIdentityTree, wireIdentity } from "../readers/identity.ts";
 import * as Y from "yjs";
 import { videoLinkKey } from "../../../../src/core/document/gallery.ts";
 import type { VideoLink } from "../../../../src/core/document/gallery.ts";
@@ -26,6 +27,7 @@ const COMMENT_SPECIAL = ["body", "quotedText", "resolved", "resolvedAt", "resolv
 export interface ProjectionOptions {
   deriveCue?: boolean;
   blocks?: readonly ProjectionBlock[];
+  sectionBlocks?: readonly ProjectionBlock[];
 }
 
 function without(source: ProjectionBag, keys: readonly string[]): ProjectionBag {
@@ -55,13 +57,14 @@ function putRegistry(doc: Y.Doc, root: string, source: unknown, fields: readonly
 
 export function addProjectionProp(props: Y.Map<unknown>, prop: ProjectionBag, index: number): void {
   const record = new Y.Map<unknown>();
-  props.set(brollPropKey(String(prop.id ?? ""), String(prop.name ?? "")), record);
+  props.set(wireIdentity(brollPropKey(String(prop.id ?? ""), String(prop.name ?? ""))), record);
   record.set("value", copy(prop));
   record.set("rank", rank(index));
 }
 
 export function addProjectionGallerySlot(doc: Y.Doc, row: string, slot: ProjectionBag, index: number, id = `${row}:slot:${index}`): void {
   const value = new Y.Map<unknown>();
+  row = wireIdentity(row); id = wireIdentity(id);
   doc.getMap("gallery").set(id, value);
   value.set("beat", row);
   value.set("rank", rank(index));
@@ -74,7 +77,7 @@ export function addProjectionGallerySlot(doc: Y.Doc, row: string, slot: Projecti
   value.set("links", links);
   records(slot.links).forEach((link, linkIndex) => {
     const record = new Y.Map<unknown>();
-    const key = videoLinkKey(link as VideoLink);
+    const key = wireIdentity(videoLinkKey(link as VideoLink));
     links.set(key, record);
     writeRecord(record, without(link, ["location"]), ["href", "name", "size", "duration", "poster"]);
     record.set("rank", rank(linkIndex));
@@ -82,6 +85,7 @@ export function addProjectionGallerySlot(doc: Y.Doc, row: string, slot: Projecti
 }
 
 function addText(replica: SchemaReplica, id: string, kind: "b" | "h", value: string, source: ProjectionBag): void {
+  id = wireIdentity(id);
   let text: Y.Text;
   if (replica.candidate === "A") {
     text = replica.doc.getText("flow");
@@ -105,6 +109,7 @@ export function createProjectionReplica(candidate: SchemaCandidate, client = 10)
 }
 
 export function fromDocument(source: ProjectionBag, candidate: SchemaCandidate, client = 10): SchemaReplica {
+  source = bag(normalizeIdentityTree(source));
   const replica = createProjectionReplica(candidate, client);
   replica.doc.transact(() => {
     const meta = replica.doc.getMap("meta");
@@ -206,7 +211,7 @@ export function projectionBlocks(doc: Y.Doc, candidate: SchemaCandidate): Projec
   }
   if (candidate === "A") { const text = rootText(doc, "flow"); if (text) consume(text); }
   else for (const id of new Set(rootOrder(doc))) {
-    const segment = readSegmentRecord(rootMap(doc, "segments")?.get(id));
+    const segment = readSegmentRecord(identityGet(rootMap(doc, "segments"), id));
     if (!segment) continue;
     if (segment.head) boundary({ [segment.head.kind ? "h" : "b"]: segment.head.id });
     consume(segment.text);
@@ -234,6 +239,20 @@ function galleryFor(doc: Y.Doc, id: string): ProjectionBag[] {
   });
 }
 
+function projectionSections(doc: Y.Doc, blocks: readonly ProjectionBlock[]): ProjectionBag[] {
+  const sections: ProjectionBag[] = [];
+  let heading: ProjectionBlock | undefined;
+  for (const block of blocks) {
+    if (block.kind === "h") heading = block;
+    else if (heading) {
+      const name = heading.delta.map(item => typeof item.insert === "string" ? item.insert : "").join("");
+      if (name) sections.push(ordered({ id: heading.id, name, firstSceneId: block.id }, sharedMapRecord(identityGet(rootMap(doc, "headings"), heading.id))?.get("keys")));
+      heading = undefined;
+    }
+  }
+  return sections;
+}
+
 export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: ProjectionOptions = {}): ProjectionBag {
   const meta = rootMap(doc, "meta") ?? new Map<string, unknown>();
   const result = readRecord(meta, META);
@@ -256,24 +275,23 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
   });
   result.comments = comments;
   const rows: ProjectionBag[] = [];
-  const sections: ProjectionBag[] = [];
+  const blocks = options.blocks ?? projectionBlocks(doc, candidate), sections = projectionSections(doc, options.sectionBlocks ?? blocks);
   const anchors = new Map<string, { rowId: string; field: string }>();
   function collectAnchors(delta: readonly ProjectionDelta[], rowId: string, field: string): void {
     for (const item of delta) for (const [key, value] of Object.entries(item.attributes ?? {})) {
       if (value && key.startsWith("c:") && !anchors.has(key.slice(2))) anchors.set(key.slice(2), { rowId, field });
     }
   }
-  let heading: ProjectionBlock | null = null;
-  for (const block of options.blocks ?? projectionBlocks(doc, candidate)) {
-    if (block.kind === "h") { heading = block; continue; }
-    const beat = sharedMapRecord(rootMap(doc, "beats")?.get(block.id)) ?? new Map<string, unknown>();
+  for (const block of blocks) {
+    if (block.kind === "h") continue;
+    const beat = sharedMapRecord(identityGet(rootMap(doc, "beats"), block.id)) ?? new Map<string, unknown>();
     const row = readRecord(beat, BEAT);
     row.id = block.id;
     const stamp = bag(readWireValue(beat.get("stamp")));
     setIf(stamp, "by", row, "updatedBy");
     setIf(stamp, "at", row, "updatedAt");
     row.audioText = deltaToHtml(block.delta, result.productionTags, comments, options.deriveCue);
-    row.visualText = [...rootMap(doc, "visuals") ?? []].flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; })
+    row.visualText = identityEntries(rootMap(doc, "visuals")).flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; })
       .filter(value => value.beat === block.id).sort((a, b) => compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id)).map(value => {
         const delta = readDelta(value.text);
         collectAnchors(delta, block.id, "visualText");
@@ -288,11 +306,7 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     setIf(first, "links", row, "imageLinks");
     if (slots.length > 1 || stringKeys(beat.get("keys")).includes("moreImages")) row.moreImages = slots.slice(1);
     rows.push(ordered(row, beat.get("keys")));
-    if (heading) {
-      const name = heading.delta.map(item => typeof item.insert === "string" ? item.insert : "").join("");
-      if (name) sections.push(ordered({ id: heading.id, name, firstSceneId: block.id }, sharedMapRecord(rootMap(doc, "headings")?.get(heading.id))?.get("keys")));
-      heading = null;
-    }
+
   }
   result.rows = rows;
   for (const comment of comments) {

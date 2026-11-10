@@ -1,3 +1,4 @@
+import { identityEntries, wireIdentity } from "./identity.ts";
 import * as Y from "yjs";
 import { createEncoder, toUint8Array, writeAny } from "lib0/encoding";
 import { createDecoder, readAny } from "lib0/decoding";
@@ -20,14 +21,19 @@ export function rootText(doc: Y.Doc, name: string): Y.Text | null {
 }
 
 export function rootOrder(doc: Y.Doc): string[] {
-  try { return doc.getArray<unknown>("order").toArray().filter((id): id is string => typeof id === "string"); } catch { return []; }
+  try { return doc.getArray<unknown>("order").toArray().filter((id): id is string => typeof id === "string").map(wireIdentity); } catch { return []; }
 }
 
 export function readWireValue(raw: unknown): unknown {
   try {
     const source: unknown = raw instanceof Y.AbstractType ? raw.toJSON() : raw;
     const encoded = createEncoder(); writeAny(encoded, source as Parameters<typeof writeAny>[1]);
-    return readAny(createDecoder(toUint8Array(encoded))) as unknown;
+    const decoded: unknown = readAny(createDecoder(toUint8Array(encoded))), pending = [decoded];
+    while (pending.length) {
+      const value = pending.pop(); if (value instanceof Uint8Array) return undefined;
+      if (value && typeof value === "object") for (const nested of Object.values(value as Record<string, unknown>)) pending.push(nested);
+    }
+    return decoded;
   } catch { return undefined; }
 }
 
@@ -58,9 +64,9 @@ export function sameProjectionValue(left: unknown, right: unknown): boolean {
     if (!a || !b || typeof a !== "object" || typeof b !== "object" || Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
     if (seen.get(a)?.has(b)) continue;
     const matches = seen.get(a) ?? new Set<object>(); matches.add(b); seen.set(a, matches);
-    const keys = Object.keys(a), left = a as Record<string, unknown>, right = b as Record<string, unknown>;
-    if (keys.length !== Object.keys(b).length) return false;
-    for (const key of keys) { if (!Object.hasOwn(b, key)) return false; stack.push([left[key], right[key]]); }
+    const keys = Object.getOwnPropertyNames(a), otherKeys = Object.getOwnPropertyNames(b), left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+    if (keys.length !== otherKeys.length) return false;
+    for (const [index, key] of keys.entries()) { if (key !== otherKeys[index]) return false; stack.push([left[key], right[key]]); }
   }
   return true;
 }
@@ -140,8 +146,8 @@ export function readBeatRecord(raw: unknown): ReaderBeatRecord {
   if (value?.paragraphStart === true) result.paragraphStart = true;
   if (typeof value?.lengthSeconds === "number" && Number.isFinite(value.lengthSeconds)) result.lengthSeconds = value.lengthSeconds;
   const removals: unknown = raw.get("removals"), joins: unknown = raw.get("joins");
-  if (removals instanceof Y.Map) for (const [id, flag] of removals) if (typeof id === "string" && typeof flag === "boolean") result.removals.push([id, flag]);
-  if (joins instanceof Y.Map) for (const [id, entry] of joins) {
+  if (removals instanceof Y.Map) for (const [id, flag] of identityEntries(removals)) if (typeof id === "string" && typeof flag === "boolean") result.removals.push([id, flag]);
+  if (joins instanceof Y.Map) for (const [id, entry] of identityEntries(joins)) {
     const join = readJoinRecord(entry); if (typeof id === "string" && join) result.joins.push([id, join]);
   }
   return result;

@@ -10,7 +10,7 @@ import { projectComments, projectStatus } from "../../src/marks/projection.ts";
 import { statusValue } from "../../src/marks/commands.ts";
 import type { CollabModel } from "../../src/model.ts";
 import type { SchemaReplica } from "../../src/schema.ts";
-import { projectedStatusData } from "../marks/status-readers.ts";
+import { projectionDifference } from "../strict-comparison.ts";
 import { readerJoinGroups } from "../../src/readers/joins.ts";
 import { IncrementalProjection } from "../../src/perf/incremental.ts";
 import { legacyStructureReader } from "./legacy-structure.ts";
@@ -56,13 +56,15 @@ function readAll(replica: SchemaReplica, observing: IndexedStructureProjection):
   projectComments(model, replica.doc); projectStatus(model, replica.doc);
   const document = toDocument(replica.doc, replica.candidate);
   const incremental = new IncrementalProjection(replica);
-  try { assert.deepEqual(incremental.document, document); } finally { incremental.destroy(); }
+  const blocks = incremental.index.spans.map(span => span.block);
+  try { assert.equal(projectionDifference(incremental.document, document, "fresh incremental document"), null); } finally { incremental.destroy(); }
   const perf = perfStructureView(replica, document), fresh = new IndexedStructureProjection(replica);
   try {
-    assert.deepEqual(observing.view(document), fresh.view(document)); assert.deepEqual(fresh.view(document), perf);
-    return projectedStatusData({ structure: readStructure(replica.doc, replica.candidate, replica.identities),
+    assert.equal(projectionDifference(observing.view(document), fresh.view(document), "observing status index"), null);
+    assert.equal(projectionDifference(fresh.view(document), perf, "fresh status index"), null);
+    return { structure: readStructure(replica.doc, replica.candidate, replica.identities),
       earlier: readReplica(replica.doc, replica.candidate, replica.identities), document, perf, indexed: fresh.view(document),
-      marks: model, command: statusValue(replica, "R1") });
+      marks: model, command: statusValue(replica, "R1"), blocks };
   } finally { fresh.destroy(); }
 }
 
@@ -80,11 +82,12 @@ for (const candidate of ["A", "B"] as const) for (const seed of [1376, 1413, 0x5
     };
     const check = (label: string): void => {
       const before = readAll(source, observer), encoded = Y.encodeStateAsUpdate(source.doc), late = createProjectionReplica(candidate, 201);
-      assert.deepEqual(cached.document, toDocument(source.doc, candidate), `${label}: persistent incremental projection`);
+      assert.equal(projectionDifference(cached.document, toDocument(source.doc, candidate), `${label}: persistent incremental projection`), null);
+      assert.equal(projectionDifference(cached.index.spans.map(span => span.block), (before as { blocks: unknown }).blocks, `${label}: persistent block index`), null);
       try {
         Y.applyUpdate(late.doc, encoded);
         const index = new IndexedStructureProjection(late);
-        try { assert.deepEqual(readAll(late, index), before, label); } finally { index.destroy(); }
+        try { assert.equal(projectionDifference(readAll(late, index), before, label), null); } finally { index.destroy(); }
         checkpoints++;
       } finally { late.destroy(); }
     };
@@ -197,4 +200,98 @@ test("an empty-string status target is invalidated on retirement, replacement an
     source.doc.getMap("statusEvents").set("a", { target: "R2", value: "shot", parents: [], by: "Alice" }); check("todo");
     source.doc.getMap("statusEvents").delete("a"); check("todo");
   } finally { index.destroy(); source.destroy(); }
+});
+
+const identityMaps = ["comments", "replies", "tags", "people", "shots", "beats", "segments", "visuals", "gallery", "gallery-links", "shot-props", "removalRecords", "joins", "retiredJoins", "statusEvents", "retiredStatus", "headings"] as const;
+
+function identityCollection(replica: SchemaReplica, root: typeof identityMaps[number]): Y.Map<unknown> {
+  if (root === "joins") return (replica.doc.getMap<Y.Map<unknown>>("beats").get("R1") as Y.Map<unknown>).get("joins") as Y.Map<unknown>;
+  if (root === "gallery-links") return (replica.doc.getMap<Y.Map<unknown>>("gallery").get("R1:slot:0") as Y.Map<unknown>).get("links") as Y.Map<unknown>;
+  if (root === "shot-props") {
+    let shot = replica.doc.getMap<Y.Map<unknown>>("shots").get("S1");
+    if (!shot) {
+      shot = new Y.Map(); replica.doc.getMap("shots").set("S1", shot);
+      for (const [key, value] of Object.entries({ id: "S1", rank: "0", name: "Shot", keys: ["id", "name", "props"] })) shot.set(key, value);
+      shot.set("props", new Y.Map());
+    }
+    return shot.get("props") as Y.Map<unknown>;
+  }
+  return replica.doc.getMap(root);
+}
+
+function putIdentity(replica: SchemaReplica, root: typeof identityMaps[number], id: string): void {
+  const beat = replica.doc.getMap<Y.Map<unknown>>("beats").get("R1"); assert.ok(beat);
+  if (root === "statusEvents" || root === "retiredStatus") {
+    replica.doc.getMap("statusEvents").set(root === "statusEvents" ? id : "\ufffd", { target: "R1", value: "ready", parents: [], by: "Alice" });
+    if (root === "retiredStatus") replica.doc.getMap(root).set(id, true);
+    return;
+  }
+  if (root === "joins" || root === "retiredJoins") {
+    (beat.get("joins") as Y.Map<unknown>).set(root === "joins" ? id : "\ufffd", { into: "R2", glue: " " });
+    if (root === "retiredJoins") replica.doc.getMap(root).set(id, true);
+    return;
+  }
+  const record = new Y.Map<unknown>(); identityCollection(replica, root).set(id, record);
+  for (const [key, value] of Object.entries({ id, rank: "0", keys: ["id", "name"], name: `Identity ${id.charCodeAt(0)}`, extra: "{}" })) record.set(key, value);
+  if (root === "beats") {
+    record.set("status", "shot"); record.set("joins", new Y.Map()); record.set("removals", new Y.Map());
+    if (replica.candidate === "A") { const flow = replica.doc.getText("flow"); flow.delete(0, 1); flow.insertEmbed(0, { b: id }); }
+    else (replica.doc.getMap("segments").get("seg-b-R1") as Y.Map<unknown>).set("head", { b: id });
+  }
+  if (root === "segments") {
+    record.set("head", { b: "R1" }); const text = new Y.Text(); record.set("text", text); text.insert(0, "a");
+    replica.doc.getMap("segments").delete("seg-b-R1");
+    const order = replica.doc.getArray<string>("order"); order.delete(0, order.length); order.push([id, "seg-b-R2"]);
+  }
+  if (root === "visuals") { record.set("beat", "R1"); const text = new Y.Text(); record.set("text", text); text.insert(0, "V"); }
+  if (root === "gallery") for (const [key, value] of Object.entries({ beat: "R1", ref: "P", name: "Photo", annotation: "", links: [] })) record.set(key, value);
+  if (root === "gallery-links") { record.set("href", id); record.set("keys", ["href", "name"]); }
+  if (root === "shot-props") record.set("value", { id, name: `Prop ${id.charCodeAt(0)}` });
+  if (root === "headings") {
+    record.set("keys", ["name", "firstSceneId", "id"]);
+    if (replica.candidate === "A") {
+      const flow = replica.doc.getText("flow"), first: unknown = flow.toDelta()[0]?.insert;
+      const exists = Boolean(first && typeof first === "object" && "h" in first);
+      if (exists) flow.delete(0, 1);
+      flow.insertEmbed(0, { h: id }); if (!exists) flow.insert(1, "Scene");
+    } else {
+      const segment = new Y.Map<unknown>(); replica.doc.getMap("segments").set("head-probe", segment);
+      segment.set("head", { h: id }); const text = new Y.Text(); segment.set("text", text); text.insert(0, "Scene");
+      const order = replica.doc.getArray<string>("order"); if (!order.toArray().includes("head-probe")) order.insert(0, ["head-probe"]);
+    }
+  }
+  if (root === "comments") {
+    record.set("author", "Alice"); record.set("rowId", "R1"); record.set("field", "audioText"); replica.format("R1", 0, 1, { [`c:${id}`]: true });
+  }
+  if (root === "replies") for (const [key, value] of Object.entries({ commentId: "C1", author: "Alice", createdAt: 0, text: "Reply" })) record.set(key, value);
+  if (root === "tags") replica.format("R1", 0, 1, { "t:probe": id });
+  if (root === "removalRecords") {
+    for (const [key, value] of Object.entries({ kind: "beat", beat: "R1", by: "Alice", observed: [] })) record.set(key, value);
+    (beat.get("removals") as Y.Map<unknown>).set(id, true);
+  }
+}
+
+for (const candidate of ["A", "B"] as const) test(`${candidate}: every identity map uses wire-normalized keys, including key collisions`, t => {
+  let checkpoints = 0;
+  for (const root of identityMaps) for (const keys of [["\ud800"], ["\udfff"], ["pre\ud800x"], ["\ufffd"], ["\ud834\udf06"], ["é"], ["é"], ["\ud800", "\ud801", "\ufffd"], ["\ufffd", "\ud801", "\ud800"]]) {
+    if (candidate === "A" && root === "segments") continue;
+    const source = fromDocument({ title: "", rows: [{ id: "R1", audioText: "a", visualText: "", status: "todo" }, { id: "R2", audioText: "b", visualText: "", status: "todo" }] }, candidate, 200);
+    const observer = new IndexedStructureProjection(source), cached = new IncrementalProjection(source);
+    try {
+      for (const id of keys) putIdentity(source, root, id);
+      const check = (phase: string): void => {
+        const label = `${candidate}/${root}/${JSON.stringify(keys)}/${phase}`, expected = readAll(source, observer), late = createProjectionReplica(candidate, 201);
+        assert.equal(projectionDifference(cached.document, toDocument(source.doc, candidate), `${label}/observing`), null);
+        try {
+          Y.applyUpdate(late.doc, Y.encodeStateAsUpdate(source.doc)); const other = new IndexedStructureProjection(late);
+          try { assert.equal(projectionDifference(readAll(late, other), expected, label), null); } finally { other.destroy(); }
+        } finally { late.destroy(); }
+        checkpoints++;
+      };
+      check("written");
+      const map = identityCollection(source, root);
+      const id = keys[0]; assert.ok(id); map.delete(id); check("deleted"); putIdentity(source, root, id); check("recreated");
+    } finally { cached.destroy(); observer.destroy(); source.destroy(); }
+  }
+  t.diagnostic(JSON.stringify({ candidate, identityMapCheckpoints: checkpoints }));
 });

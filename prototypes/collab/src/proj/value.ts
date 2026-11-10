@@ -1,3 +1,4 @@
+import { identityEntries } from "../readers/identity.ts";
 import * as Y from "yjs";
 import { compareCodeUnits } from "../readers/order.ts";
 import { readRankedRecord, readWireValue, stringKeys } from "../readers/records.ts";
@@ -49,6 +50,6 @@ export function readRecord(source: unknown, fields: readonly string[]): Projecti
 
 export function ranked(source: unknown): [string, Y.Map<unknown>][] {
   if (!(source instanceof Y.Map)) return [];
-  return [...source.entries()].flatMap(([id, raw]) => { const value = readRankedRecord(raw); return value ? [{ id, ...value }] : []; })
+  return identityEntries(source).flatMap(([id, raw]) => { const value = readRankedRecord(raw); return value ? [{ id, ...value }] : []; })
     .sort((a, b) => compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id)).map(value => [value.id, value.source]);
 }

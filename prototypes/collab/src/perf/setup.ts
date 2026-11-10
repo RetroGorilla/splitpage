@@ -13,6 +13,7 @@ function perfSourceFiles(): string[] {
   files.push("../readers/removals.ts");
   files.push("../readers/order.ts");
   files.push("../readers/records.ts");
+  files.push("../readers/identity.ts");
   files.push("../readers/joins.ts", "../readers/perf.ts");
   files.push(...readdirSync(new URL("../proj/", import.meta.url)).filter(file => file.endsWith(".ts")).sort().map(file => `../proj/${file}`));
   return files;

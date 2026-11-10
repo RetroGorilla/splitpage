@@ -1,3 +1,4 @@
+import { identityEntries } from "./readers/identity.ts";
 import type * as Y from "yjs";
 import type { CollabModel, CollabRow, IdentityBook } from "./model.ts";
 import type { ReplicaCarets } from "./reader.ts";
@@ -11,7 +12,7 @@ import { compareCodeUnits } from "./readers/order.ts";
 export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: IdentityBook, carets: ReplicaCarets = new Map()): CollabModel {
   const { model, spans, destinations } = readerStructure(doc, candidate, book, true);
   const order = new Map(spans.map((span, index) => [span.row.id, index]));
-  const visuals = [...rootMap(doc, "visuals") ?? []].flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; });
+  const visuals = identityEntries(rootMap(doc, "visuals")).flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; });
   visuals.sort((a, b) => (order.get(a.beat) ?? spans.length) - (order.get(b.beat) ?? spans.length)
     || compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id));
   for (const component of visuals) {
@@ -26,7 +27,7 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
     (target.visuals ??= []).push(visual);
     target.visualText = target.visuals.filter(row => row.characters.length).map(row => row.characters.map(character => character.value).join("")).join("<br>");
   }
-  const gallery = [...rootMap(doc, "gallery") ?? []].flatMap(([id, raw]) => { const value = readGalleryRecord(id, raw); return value ? [value] : []; });
+  const gallery = identityEntries(rootMap(doc, "gallery")).flatMap(([id, raw]) => { const value = readGalleryRecord(id, raw); return value ? [value] : []; });
   gallery.sort((a, b) => (order.get(a.beat) ?? spans.length) - (order.get(b.beat) ?? spans.length)
     || compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id));
   for (const item of gallery) {

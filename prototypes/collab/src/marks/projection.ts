@@ -1,3 +1,4 @@
+import { identityEntries, identityGet, identityHas } from "../readers/identity.ts";
 import type * as Y from "yjs";
 import type { CollabMarks, CollabModel, CollabRow } from "../model.ts";
 import { readStatusEvent, resolveBeatStatus } from "./status-resolution.ts";
@@ -30,7 +31,7 @@ export function projectStructuralMarks(model: CollabModel, doc: Y.Doc): void {
     for (const extent of [...extents.values()].sort((a, b) => a.start - b.start || b.end - a.end || compareCodeUnits(a.key, b.key))) {
       const crossing = accepted.some(other => extent.start < other.end && other.start < extent.end &&
         !(extent.start >= other.start && extent.end <= other.end) && !(other.start >= extent.start && other.end <= extent.end));
-      if (crossing || !rootMap(doc, "tags")?.has(extent.tag)) {
+      if (crossing || !identityHas(rootMap(doc, "tags"), extent.tag)) {
         rejected.push({ occurrence: extent.key.slice(2), tag: extent.tag, words: row.characters.slice(extent.start, extent.end).map(character => character.value).join(""), identities: row.characters.slice(extent.start, extent.end).map(character => character.notation) });
       } else accepted.push(extent);
     }
@@ -65,15 +66,15 @@ export function projectStructuralMarks(model: CollabModel, doc: Y.Doc): void {
 }
 
 export function projectComments(model: CollabModel, doc: Y.Doc): void {
-  const commentMap = rootMap(doc, "comments"), replyMap = rootMap(doc, "replies");
-  if (!commentMap?.size && !replyMap?.size) return;
+  const commentEntries = identityEntries(rootMap(doc, "comments")), replyEntries = identityEntries(rootMap(doc, "replies"));
+  if (!commentEntries.length && !replyEntries.length) return;
   const records = (model.records ??= {});
-  const validated = [...replyMap ?? []].flatMap(([id, raw]) => { const value = readReplyRecord(raw); return value ? [{ id, ...value }] : []; });
+  const validated = replyEntries.flatMap(([id, raw]) => { const value = readReplyRecord(raw); return value ? [{ id, ...value }] : []; });
   validated.sort((a, b) => a.createdAt - b.createdAt || compareCodeUnits(a.id, b.id));
   const replies = validated.map(reply => ({ id: reply.id, ...reply.data, commentId: reply.commentId }));
   const comments: Record<string, unknown> = {};
   const rows: { row: CollabRow; recovery: boolean }[] = [...model.rows.map(row => ({ row, recovery: false })), ...model.recovery.map(entry => ({ row: entry.row, recovery: true }))];
-  for (const [id, value] of [...commentMap ?? []].sort(([a], [b]) => compareCodeUnits(a, b))) {
+  for (const [id, value] of commentEntries.sort(([a], [b]) => compareCodeUnits(a, b))) {
     const original = readCommentRecord(value); if (!original) continue;
     const anchor = rows.find(({ row }) => !row.kind && row.characters.some(character => character.marks[`c:${id}`]));
     Object.defineProperty(comments, id, { enumerable: true, configurable: true, value: { ...original, rowId: anchor?.row.id ?? original.rowId, field: anchor ? "audioText" : original.field, recovery: anchor?.recovery ?? true, replies: replies.filter(reply => reply.commentId === id) } });
@@ -99,12 +100,12 @@ export function storedMarkNames(key: string, characters: readonly { text: Y.Text
 
 export function projectStatus(model: CollabModel, doc: Y.Doc): void {
   const events: [string, BeatStatusEvent][] = [];
-  for (const [id, raw] of rootMap(doc, "statusEvents") ?? []) { const event = readStatusEvent(raw); if (event) events.push([id, event]); }
+  for (const [id, raw] of identityEntries(rootMap(doc, "statusEvents"))) { const event = readStatusEvent(raw); if (event) events.push([id, event]); }
   if (!events.length) return;
   for (const row of [...model.rows, ...model.recovery.map(entry => entry.row)]) {
     const relevant = events.filter(([, event]) => event.target === row.id);
-    if (relevant.length) row.status = resolveBeatStatus(new Map(relevant), rootMap(doc, "retiredStatus") ?? new Set<string>(),
-      readBeatRecord(rootMap(doc, "beats")?.get(row.id)).status ?? "undefined");
+    if (relevant.length) row.status = resolveBeatStatus(new Map(relevant), { has: (id: string) => identityHas(rootMap(doc, "retiredStatus"), id) },
+      readBeatRecord(identityGet(rootMap(doc, "beats"), row.id)).status ?? "undefined");
     const conflict = relevant.filter(([, event]) => relevant.some(([, other]) => event.value !== other.value && JSON.stringify(event.parents) === JSON.stringify(other.parents)));
     if (conflict.length) model.notices = [...new Set(conflict.map(([, event]) => `${event.by}: concurrent status change did not apply`))].sort();
   }

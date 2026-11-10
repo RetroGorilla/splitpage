@@ -132,13 +132,15 @@ test("redaction preserves all 76 comparison rows, 4510 samples, numeric values, 
   assert.equal(baseline.data.find(file => file.file.endsWith("/results.json"))?.sampleCount, 4510);
   let report = readFileSync(new URL("../../perf-results.md", import.meta.url), "utf8");
   for (const [current, previous] of [
-    ["| blocks.ts (shared) | 115 | 115 |", "| blocks.ts (shared) | 111 | 111 |"],
-    ["| incremental.ts (shared) | 124 | 124 |", "| incremental.ts (shared) | 119 | 119 |"],
-    ["| operations.ts (shared) | 51 | 51 |", "| operations.ts (shared) | 73 | 73 |"],
-    ["| Total physical lines, including blanks | 347 | 347 |", "| Total physical lines, including blanks | 360 | 360 |"],
-    ["| Shared blocks.ts | 115 | 115 |", "| Shared blocks.ts | 111 | 111 |"],
-    ["| Shared incremental.ts | 124 | 124 |", "| Shared incremental.ts | 119 | 119 |"],
-    ["| Shared operations.ts | 51 | 51 |", "| Shared operations.ts | 73 | 73 |"]
+    ["| delta.ts (shared) | 62 | 62 |", "| delta.ts (shared) | 57 | 57 |"],
+    ["| blocks.ts (shared) | 117 | 117 |", "| blocks.ts (shared) | 111 | 111 |"],
+    ["| incremental.ts (shared) | 113 | 113 |", "| incremental.ts (shared) | 119 | 119 |"],
+    ["| operations.ts (shared) | 54 | 54 |", "| operations.ts (shared) | 73 | 73 |"],
+    ["| Total physical lines, including blanks | 346 | 346 |", "| Total physical lines, including blanks | 360 | 360 |"],
+    ["| Shared delta.ts | 62 | 62 |", "| Shared delta.ts | 57 | 57 |"],
+    ["| Shared blocks.ts | 117 | 117 |", "| Shared blocks.ts | 111 | 111 |"],
+    ["| Shared incremental.ts | 113 | 113 |", "| Shared incremental.ts | 119 | 119 |"],
+    ["| Shared operations.ts | 54 | 54 |", "| Shared operations.ts | 73 | 73 |"]
   ]) {
     assert.ok(current && previous); assert.equal(report.split(current).length, 2);
     report = report.replace(current, previous);

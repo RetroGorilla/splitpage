@@ -1,3 +1,4 @@
+import { identityGet, identityHas } from "./identity.ts";
 import type { SchemaReplica } from "../schema.ts";
 import type { PerfStructureView } from "../perf/operations.ts";
 import type { ProjectionBag } from "../proj/value.ts";
@@ -8,11 +9,11 @@ import type { ReaderJoinRecord } from "./records.ts";
 
 export function perfReaderView(replica: SchemaReplica, document: ProjectionBag, status: (id: string, stored: string) => string): PerfStructureView {
   const rows = new Map<string, { narration: string; visual: string; status: string }>(), joins = new Map<string, ReaderJoinRecord>(), removed = new Set<string>();
-  const retired = rootMap(replica.doc, "retiredJoins") ?? new Set<string>();
+  const retired = { has: (id: string) => identityHas(rootMap(replica.doc, "retiredJoins"), id) };
   for (const raw of Array.isArray(document.rows) ? document.rows as unknown[] : []) {
     const row = readWireRecord(raw); if (!row || typeof row.id !== "string" || rows.has(row.id)) continue;
-    const id = row.id, beat = readBeatRecord(rootMap(replica.doc, "beats")?.get(id));
-    if (removalIds(beat.removals).some(key => readRemovalRecord(rootMap(replica.doc, "removalRecords")?.get(key)))) removed.add(id);
+    const id = row.id, beat = readBeatRecord(identityGet(rootMap(replica.doc, "beats"), id));
+    if (removalIds(beat.removals).some(key => readRemovalRecord(identityGet(rootMap(replica.doc, "removalRecords"), key)))) removed.add(id);
     const join = firstLiveJoin(beat, retired); if (join) joins.set(id, join);
     rows.set(id, { narration: typeof row.audioText === "string" ? row.audioText : "", visual: typeof row.visualText === "string" ? row.visualText : "", status: status(id, beat.status ?? "undefined") });
   }

@@ -1,9 +1,10 @@
+import { identityGet } from "../readers/identity.ts";
 import * as Y from "yjs";
 import type { SchemaCandidate } from "../schema.ts";
 import type { ProjectionBlock } from "../proj/document.ts";
 import type { ProjectionDelta } from "../proj/richtext.ts";
 import { readBoundaryRecord, readContentAtom, readMarkRecord, readSegmentRecord, readWireValue, rootMap, rootOrder, rootText } from "../readers/records.ts";
-import { deltaLength, patchDelta, sameDelta } from "./delta.ts";
+import { compactDelta, deltaLength, patchDelta, sameDelta } from "./delta.ts";
 
 export interface PerfBlockSpan {
   block: ProjectionBlock;
@@ -62,7 +63,7 @@ export class PerfBlockIndex {
       if (!delta) {
         const raw = text.toDelta() as { insert: unknown; attributes?: unknown }[];
         const loaded: ProjectionDelta[] = raw.map(item => ({ insert: typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert) ?? {}, attributes: { ...readMarkRecord(item.attributes) } }));
-        delta = loaded; this.streams.set(text, loaded);
+        delta = compactDelta(loaded); this.streams.set(text, delta);
       }
       for (const item of delta) {
         const insert = typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert);
@@ -73,11 +74,12 @@ export class PerfBlockIndex {
         }
         index += deltaLength(item);
       }
+      for (const span of spans.slice(beginAt)) span.block.delta = compactDelta(span.block.delta);
       this.parsed.set(text, { head: signature, spans: spans.slice(beginAt) });
     };
     if (this.candidate === "A") { const text = rootText(this.doc, "flow"); if (text) scan(text); }
     else for (const id of new Set(rootOrder(this.doc))) {
-      const segment = readSegmentRecord(rootMap(this.doc, "segments")?.get(id));
+      const segment = readSegmentRecord(identityGet(rootMap(this.doc, "segments"), id));
       if (segment) scan(segment.text, segment.head ? { [segment.head.kind ? "h" : "b"]: segment.head.id } : undefined);
     }
     const changed = new Set<string>();

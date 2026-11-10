@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { isDeepStrictEqual } from "node:util";
+import { after } from "node:test";
+import { projectionDifference } from "./strict-comparison.ts";
 import * as Y from "yjs";
 import type { ReplicaHarness, DeliveryOrder } from "../src/delivery.ts";
 import type { CollabModel, IdentityBook } from "../src/model.ts";
@@ -14,18 +15,19 @@ import type { ReaderComparisonFinding } from "./reader-order/known-failures.ts";
 type ProjectionReader = (doc: Y.Doc, candidate: SchemaCandidate, book: IdentityBook, carets: ReplicaCarets) => CollabModel;
 type ConvergenceHarness = Pick<ReplicaHarness, "alice" | "bob" | "replicas" | "queue" | "identities">;
 
-function projectedData(value: unknown): unknown {
-  if (value instanceof Y.AbstractType) return projectedData(value.toJSON());
-  if (Array.isArray(value)) return value.map(projectedData);
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectedData(entry)]));
-  return value;
-}
+const strictCheckpoints = { inspections: 0, projections: 0, comparisons: 0 };
+after(() => { process.stdout.write(`Strict reader checkpoints: ${JSON.stringify(strictCheckpoints)}\n`); });
 
 function differences(left: unknown, right: unknown, path = ""): string[] {
-  if (isDeepStrictEqual(left, right)) return [];
-  if (left && right && typeof left === "object" && typeof right === "object") {
+  if (projectionDifference(left, right, path) === null) return [];
+  if (left && right && typeof left === "object" && typeof right === "object" && Object.getPrototypeOf(left) === Object.getPrototypeOf(right)) {
     const a = left as Record<string, unknown>, b = right as Record<string, unknown>;
-    return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap(key => differences(a[key], b[key], path ? `${path}.${key}` : key));
+    const keys = [...new Set([...Object.getOwnPropertyNames(a), ...Object.getOwnPropertyNames(b)])];
+    const paths = keys.flatMap(key => {
+      const next = path ? `${path}.${key}` : key;
+      return Object.hasOwn(a, key) !== Object.hasOwn(b, key) ? [next] : differences(a[key], b[key], next);
+    });
+    return paths.length ? paths : [path];
   }
   return [path];
 }
@@ -54,17 +56,20 @@ export class ReaderConvergence {
   }
 
   inspect(phase: string, carets: ReplicaCarets = new Map(), read: ProjectionReader = readStructure): ReaderComparisonFinding[] {
+    const counted = read === readStructure || read === readReplica;
+    if (counted) strictCheckpoints.inspections++;
     assert.equal(this.harness.queue.pending.length, 0, `${phase}: convergence checked with undelivered updates`);
     const source = this.harness.alice, book = this.harness.identities, findings: ReaderComparisonFinding[] = [];
     const project = (replica: SchemaReplica, label: string): { value: unknown } | null => {
       let changes = 0; const changed = (): void => { changes++; };
       replica.doc.on("update", changed);
-      try { return { value: projectedData(read(replica.doc, source.candidate, book, carets)) }; }
+      try { if (counted) strictCheckpoints.projections++; return { value: read(replica.doc, source.candidate, book, carets) }; }
       catch (error) { findings.push({ phase, replica: label, kind: "throw", paths: [], message: error instanceof Error ? error.message : String(error) }); return null; }
       finally { replica.doc.off("update", changed); assert.equal(changes, 0, `${phase}: reader wrote shared state`); }
     };
     const compare = (left: { value: unknown } | null, right: { value: unknown } | null, label: string): void => {
       if (!left || !right) return;
+      if (counted) strictCheckpoints.comparisons++;
       const paths = differences(left.value, right.value);
       if (paths.length) findings.push({ phase, replica: label, kind: "output", paths, message: "Full projected output differs" });
     };

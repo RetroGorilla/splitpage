@@ -1,3 +1,5 @@
+import { wireIdentity } from "./readers/identity.ts";
+import { readMarkRecord } from "./readers/records.ts";
 import * as Y from "yjs";
 import type { CollabIdentity, CollabMarks } from "./model.ts";
 import type { IdentityBook } from "./model.ts";
@@ -105,6 +107,7 @@ export class SchemaReplica {
   }
 
   locate(beatId: string): BeatLocation {
+    beatId = wireIdentity(beatId);
     for (const { text, head } of this.texts()) {
       let beat = head;
       let start = 0;
@@ -136,6 +139,7 @@ export class SchemaReplica {
   }
 
   seed(beats: readonly SeedBeat[]): void {
+    beats = beats.map(beat => ({ ...beat, id: wireIdentity(beat.id) }));
     let serial = 1;
     this.doc.transact(() => {
       for (const beat of beats) {
@@ -162,6 +166,7 @@ export class SchemaReplica {
   }
 
   insert(beat: string, offset: number, value: string, names: readonly string[], marks: CollabMarks = {}): void {
+    marks = readMarkRecord(marks);
     if (names.length !== value.length) throw new Error("One notation per UTF-16 character is required");
     this.doc.transact(() => {
       const { text, start, end } = this.locate(beat);
@@ -183,6 +188,7 @@ export class SchemaReplica {
   }
 
   format(beat: string, offset: number, length: number, marks: CollabMarks): void {
+    marks = readMarkRecord(marks);
     this.doc.transact(() => {
       const { text, start } = this.locate(beat);
       text.format(start + offset, length, marks);
@@ -190,6 +196,7 @@ export class SchemaReplica {
   }
 
   split(beat: string, offset: number, newBeat: string, name: string, by?: string): void {
+    beat = wireIdentity(beat); newBeat = wireIdentity(newBeat);
     this.doc.transact(() => {
       const { text, start } = this.locate(beat);
       text.insertEmbed(start + offset, { b: newBeat }, {});
@@ -200,6 +207,7 @@ export class SchemaReplica {
   }
 
   remove(beatId: string, removalId: string, by: string, observed?: readonly CollabIdentity[]): void {
+    beatId = wireIdentity(beatId); removalId = wireIdentity(removalId);
     this.doc.transact(() => {
       const beat = mapValue(this.doc.getMap("beats").get(beatId));
       mapValue(beat.get("removals")).set(removalId, true);
@@ -216,12 +224,14 @@ export class SchemaReplica {
   }
 
   restore(beatId: string, removalId: string): void {
+    beatId = wireIdentity(beatId); removalId = wireIdentity(removalId);
     this.doc.transact(() => {
       mapValue(mapValue(this.doc.getMap("beats").get(beatId)).get("removals")).delete(removalId);
     }, this.localOrigin);
   }
 
   join(from: string, into: string, id: string): void {
+    from = wireIdentity(from); into = wireIdentity(into); id = wireIdentity(id);
     this.doc.transact(() => {
       const left = this.locate(into);
       const right = this.locate(from);

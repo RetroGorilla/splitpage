@@ -1,3 +1,4 @@
+import { identityEntries, identityGet, identityHas } from "./identity.ts";
 import * as Y from "yjs";
 import type { CollabModel, CollabRow, IdentityBook } from "../model.ts";
 import type { ReplicaCarets } from "../reader.ts";
@@ -16,7 +17,7 @@ export interface ReaderDestination { row: CollabRow; prefix: number; recovery: b
 
 export function readerStructure(doc: Y.Doc, candidate: SchemaCandidate, book: IdentityBook, enhanced: boolean) {
   const spans = readerTextSpans(doc, candidate, book), beats = new Map<string, ReaderBeatRecord>();
-  for (const [id, raw] of rootMap(doc, "beats") ?? []) if (typeof id === "string") beats.set(id, readBeatRecord(raw));
+  for (const [id, raw] of identityEntries(rootMap(doc, "beats"))) if (typeof id === "string") beats.set(id, readBeatRecord(raw));
   const model: CollabModel = { rows: spans.map(span => span.row), carets: {}, recovery: [] };
   for (const row of model.rows) {
     const beat = beats.get(row.id);
@@ -32,12 +33,12 @@ export function readerStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Id
   model.rows = [];
   const active = new Map<string, RemovalViewRecord>();
   for (const beat of beats.values()) for (const id of removalIds(beat.removals)) {
-    const removal = readRemovalRecord(rootMap(doc, "removalRecords")?.get(id)); if (removal) active.set(id, removal);
+    const removal = readRemovalRecord(identityGet(rootMap(doc, "removalRecords"), id)); if (removal) active.set(id, removal);
   }
   const removals = new Map(spans.map(({ row }) => [row.id, row.kind ? [] : [...active.values()].filter(removal =>
     removal.beat === row.id || row.characters.some(character => removalObserved([removal], character.identity)))]));
   const joins = new Map<string, ReaderJoinRecord>(), removed = new Set<string>(), headings = new Set(spans.filter(span => span.row.kind).map(span => span.row.id));
-  const retired = rootMap(doc, "retiredJoins") ?? new Set<string>();
+  const retired = { has: (id: string) => identityHas(rootMap(doc, "retiredJoins"), id) };
   for (const { row } of spans) {
     if (removals.get(row.id)?.length) removed.add(row.id);
     const beat = beats.get(row.id), join = beat && firstLiveJoin(beat, retired);

@@ -1,3 +1,4 @@
+import { wireIdentity } from "../readers/identity.ts";
 import * as Y from "yjs";
 import { perfReaderView } from "../readers/perf.ts";
 import { mapValue } from "../schema.ts";
@@ -8,6 +9,7 @@ import type { ProjectionBag } from "../proj/value.ts";
 import type { PerfBlockIndex } from "./blocks.ts";
 
 export function splitPerfBeat(replica: SchemaReplica, beat: string, offset: number, id: string): void {
+  beat = wireIdentity(beat); id = wireIdentity(id);
   replica.doc.transact(() => {
     replica.split(beat, offset, id, `boundary-${id}`);
     const record = mapValue(replica.doc.getMap("beats").get(id));
@@ -19,6 +21,7 @@ export function splitPerfBeat(replica: SchemaReplica, beat: string, offset: numb
 }
 
 export function writePerfStatus(replica: SchemaReplica, beat: string, id: string, value: string): void {
+  beat = wireIdentity(beat); id = wireIdentity(id);
   const event = readStatusEvent({ target: beat, value, parents: statusFrontier(replica, beat).map(([key]) => key).sort(), by: "writer" });
   if (!event) throw new Error("Invalid performance status command");
   replica.doc.getMap("statusEvents").set(id, { target: event.target, value: event.value, prior: statusValue(replica, beat), parents: event.parents, by: event.by });

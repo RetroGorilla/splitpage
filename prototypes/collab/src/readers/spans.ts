@@ -1,3 +1,4 @@
+import { identityGet } from "./identity.ts";
 import * as Y from "yjs";
 import type { CollabCharacter, CollabRow, IdentityBook } from "../model.ts";
 import type { SchemaCandidate } from "../schema.ts";
@@ -37,7 +38,7 @@ export function readerTextSpans(doc: Y.Doc, candidate: SchemaCandidate, book: Id
   };
   if (candidate === "A") { const text = rootText(doc, "flow"); if (text) scan(text); }
   else for (const id of new Set(rootOrder(doc))) {
-    const segment = readSegmentRecord(rootMap(doc, "segments")?.get(id));
+    const segment = readSegmentRecord(identityGet(rootMap(doc, "segments"), id));
     if (segment) scan(segment.text, segment.head);
   }
   return spans;

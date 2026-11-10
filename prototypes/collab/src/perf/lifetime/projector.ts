@@ -1,3 +1,4 @@
+import { identityEntries, identityGet, identityHas, wireIdentity } from "../../readers/identity.ts";
 import type * as Y from "yjs";
 import type { SchemaReplica } from "../../schema.ts";
 import type { ProjectionBag } from "../../proj/value.ts";
@@ -22,16 +23,16 @@ export class IndexedStructureProjection {
     this.replica = replica;
     this.status = rootMap(replica.doc, "statusEvents");
     this.retired = rootMap(replica.doc, "retiredStatus") ?? new Set<string>();
-    for (const [id, raw] of this.status ?? []) { const event = readStatusEvent(raw); if (event) this.put(id, event); }
+    for (const [id, raw] of identityEntries(this.status)) { const event = readStatusEvent(raw); if (event) this.put(id, event); }
     this.changes = event => {
       for (const key of event.keysChanged) {
-        const id = String(key), old = this.targets.get(id), value = readStatusEvent(this.status?.get(id));
+        const id = wireIdentity(String(key)), old = this.targets.get(id), value = readStatusEvent(identityGet(this.status, id));
         if (old !== undefined) { this.events.get(old)?.delete(id); this.values.delete(old); }
         if (value) { this.statusRecordsRead++; this.put(id, value); }
         else this.targets.delete(id);
       }
     };
-    this.retirements = event => { for (const key of event.keysChanged) { const target = this.targets.get(String(key)); if (target !== undefined) this.values.delete(target); } };
+    this.retirements = event => { for (const key of event.keysChanged) { const target = this.targets.get(wireIdentity(String(key))); if (target !== undefined) this.values.delete(target); } };
     this.status?.observe(this.changes);
     if (!(this.retired instanceof Set)) this.retired.observe(this.retirements);
   }
@@ -46,7 +47,7 @@ export class IndexedStructureProjection {
     if (cached?.stored === stored) return cached.value;
     const events = this.events.get(id) ?? new Map<string, BeatStatusEvent>();
     this.statusRecordsRead += events.size;
-    const value = resolveBeatStatus(events, this.retired, stored);
+    const value = resolveBeatStatus(events, { has: id => this.retired instanceof Set ? this.retired.has(id) : identityHas(this.retired, id) }, stored);
     if (events.size) this.values.set(id, { stored, value });
     return value;
   }

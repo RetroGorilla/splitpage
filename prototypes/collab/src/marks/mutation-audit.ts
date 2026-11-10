@@ -22,7 +22,7 @@ export const markMutationDefinitions: readonly MarkMutationDefinition[] = [
     { file: projection, before: "[...extents.values()].sort((a, b) => a.start - b.start || b.end - a.end || compareCodeUnits(a.key, b.key))", after: "[...extents.values()]" },
     { file: projection, before: ".sort((a, b) => (b.end - b.start) - (a.end - a.start) || compareCodeUnits(a.key, b.key))", after: "" }
   ] },
-  { id: "crossing-rejection", edits: [{ file: projection, before: 'crossing || !rootMap(doc, "tags")?.has(extent.tag)', after: '!rootMap(doc, "tags")?.has(extent.tag)' }] },
+  { id: "crossing-rejection", edits: [{ file: projection, before: 'crossing || !identityHas(rootMap(doc, "tags"), extent.tag)', after: '!identityHas(rootMap(doc, "tags"), extent.tag)' }] },
   { id: "crossing-recovery", edits: [{ file: projection, before: "if (rejected.length) (model.records ??= {}).tagRecovery = rejected;", after: "if (rejected.length) (model.records ??= {}).tagRecovery = [];" }] },
   { id: "whole-tag-comment-union", edits: [{ file: projection, before: 'if (key.startsWith("c:")) marks[key] = value;', after: 'if (key.startsWith("c:")) void value;' }] },
   { id: "first-link-over-stretch", edits: [{ file: projection, before: "link ??= found?.[1];", after: "if (found) link = found[1];" }] },
@@ -42,7 +42,7 @@ export const markMutationDefinitions: readonly MarkMutationDefinition[] = [
   { id: "local-undo-origin", edits: [{ file: "src/structure.ts", before: "trackedOrigins: new Set([replica.localOrigin])", after: 'trackedOrigins: new Set([replica.localOrigin, "delivery"])' }] },
   { id: "status-target-filter", edits: [{ file: commands, before: 'event?.target === target', after: "event" }] },
   { id: "status-command-parents", edits: [{ file: commands, before: "parents: frontier.map(([key]) => key).sort()", after: "parents: []" }] },
-  { id: "status-prior-after-retirement", edits: [{ file: commands, before: 'resolveBeatStatus(new Map(statusEvents(replica, target)), rootMap(replica.doc, "retiredStatus") ?? new Set<string>(),', after: 'resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),' }] },
+  { id: "status-prior-after-retirement", edits: [{ file: commands, before: 'resolveBeatStatus(new Map(statusEvents(replica, target)), { has: (id: string) => identityHas(rootMap(replica.doc, "retiredStatus"), id) },', after: 'resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),' }] },
   { id: "status-reader-frontier", edits: [{ file: resolution, before: "return resolve(statusHeads(events));", after: "return resolve([...events.keys()]);" }] },
   { id: "status-reader-retirement", edits: [{ file: resolution, before: "retired.has(id) ? resolve(event.parents.filter(parent => events.has(parent))) : event.value", after: "event.value" }] },
   { id: "status-conflict-value", edits: [{ file: resolution, before: "heads = statusHeads(shared);", after: 'return values.at(-1) ?? stored;' }] },
@@ -50,7 +50,7 @@ export const markMutationDefinitions: readonly MarkMutationDefinition[] = [
   { id: "status-undo-metadata", edits: [{ file: commands, before: 'item.meta.set("statusEvent", id);', after: 'item.meta.delete("statusEvent");' }] },
   { id: "status-command-boundaries", edits: [{ file: commands, before: "manager.stopCapturing();", after: "", count: 2 }] },
   { id: "status-retire-whole-frontier", edits: [{ file: commands, before: "for (const [key] of frontier)", after: "for (const [key] of frontier.filter(([key]) => key === id))" }] },
-  { id: "status-noop-emits-no-update", edits: [{ file: commands, before: 'if (!replica.doc.getMap("retiredStatus").has(key)) ', after: "" }] },
+  { id: "status-noop-emits-no-update", edits: [{ file: commands, before: 'if (!identityHas(replica.doc.getMap("retiredStatus"), key)) ', after: "" }] },
   { id: "ineffective-status-consumption", edits: [
     { file: commands, before: "const frontier = statusFrontier(replica, event.target);", after: 'const alreadyRetired = replica.doc.getMap("retiredStatus").has(id);\n  const frontier = statusFrontier(replica, event.target);' },
     { file: commands, before: "manager.undoStack.pop();", after: "if (!alreadyRetired) manager.undoStack.pop();" }
