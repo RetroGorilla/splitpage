@@ -1,0 +1,1019 @@
+{
+  "source": {
+    "sha256": "0e17a94a5e8ad290566df43dd01c2ae5229681f451ee334b44762ee6cfed761e",
+    "files": {
+      "attribution.ts": "b0aaa80a2e3bc6e8030f53645b30a213312db44f47ae0103b6725f354bc10e35",
+      "audit.ts": "127437e9ce4cf06c127837ce6a62df694262a10a36b4e35483ac8c94a7dc46e9",
+      "count-worker.ts": "93f6975a2f23399ee80254c8a3cb439d308e907524ab89a21b4707b010699a70",
+      "counts.ts": "d5777cc6f69881a72ed352b19893bc53364d33963dcb3378fbfe779c4a164f76",
+      "probe.ts": "05d7d972c6d3e05daddc644acb5a0e53a78b9024b239485f4e802cb750e3dd85",
+      "projector.ts": "6fc7d965312989e86518dfe8ab5993166ec4e4f37d9e3ccd6b18d5cb144b0b93",
+      "record.ts": "4a2165b0306c78d926b83b136394df68ec3640a8da28b9a9ead189975e87bfdb",
+      "report.ts": "191c0b69fd1ad3db6017f3ebd314e8189febd7d6ce93d3985b93cf642f47e89d",
+      "sensitivity.ts": "c0053c444dc863032f7229df416428ba2696c001e8f9dbd4a9ad105054e365cd",
+      "source.ts": "d5b96f5340033c8bedb20b42e8ef10d6458047ac6bb119695a3b7db377955099",
+      "status-order.ts": "9672cf03c632a57ea5f08188da8118bd91b1e5cea9ff82dc69a6afbad19a086a",
+      "workload.ts": "328d4e1e415c9742c270b43ef5d26cbd8d430695abe78e27a6388ec38af99dcd"
+    },
+    "dependencies": "73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663",
+    "fixture": "6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34"
+  },
+  "method": "One parameter doubled at a time; two writers; same generator, fixture, delivery, GC, pictures and remaining interventions; bytes checked after each edit group; no clock.",
+  "rows": [
+    {
+      "name": "baseline",
+      "writers": 2,
+      "parameters": {
+        "correctionsPer55": 1,
+        "revisionBeats": 5,
+        "statusesPerBeat": 2,
+        "removals": 2
+      },
+      "firstCap": {
+        "block": 36,
+        "encodedBytes": 2110845,
+        "typedCharacters": 395057,
+        "finalCharacters": 358435
+      },
+      "operations": {
+        "typing": 374940,
+        "correctionDeletes": 6817,
+        "correctionRetypes": 6817,
+        "revisionDeletes": 180,
+        "revisionTyping": 24588,
+        "atoms": 324,
+        "splits": 180,
+        "joins": 180,
+        "joinRetirements": 180,
+        "moves": 180,
+        "removals": 72,
+        "restores": 36,
+        "statuses": 2160,
+        "comments": 144,
+        "tags": 1116,
+        "pictures": 10
+      },
+      "checkpoints": [
+        {
+          "blocks": 1,
+          "encodedBytes": 67095,
+          "typedCharacters": 11287
+        },
+        {
+          "blocks": 2,
+          "encodedBytes": 124520,
+          "typedCharacters": 22574
+        },
+        {
+          "blocks": 3,
+          "encodedBytes": 182185,
+          "typedCharacters": 33862
+        },
+        {
+          "blocks": 4,
+          "encodedBytes": 240725,
+          "typedCharacters": 45149
+        },
+        {
+          "blocks": 5,
+          "encodedBytes": 299253,
+          "typedCharacters": 56436
+        },
+        {
+          "blocks": 6,
+          "encodedBytes": 357811,
+          "typedCharacters": 67724
+        },
+        {
+          "blocks": 7,
+          "encodedBytes": 416361,
+          "typedCharacters": 79011
+        },
+        {
+          "blocks": 8,
+          "encodedBytes": 474881,
+          "typedCharacters": 90298
+        },
+        {
+          "blocks": 9,
+          "encodedBytes": 533455,
+          "typedCharacters": 101586
+        },
+        {
+          "blocks": 10,
+          "encodedBytes": 591971,
+          "typedCharacters": 112873
+        },
+        {
+          "blocks": 11,
+          "encodedBytes": 651172,
+          "typedCharacters": 124161
+        },
+        {
+          "blocks": 12,
+          "encodedBytes": 710338,
+          "typedCharacters": 135448
+        },
+        {
+          "blocks": 13,
+          "encodedBytes": 769452,
+          "typedCharacters": 146735
+        },
+        {
+          "blocks": 14,
+          "encodedBytes": 828620,
+          "typedCharacters": 158023
+        },
+        {
+          "blocks": 15,
+          "encodedBytes": 887812,
+          "typedCharacters": 169310
+        },
+        {
+          "blocks": 16,
+          "encodedBytes": 946947,
+          "typedCharacters": 180597
+        },
+        {
+          "blocks": 17,
+          "encodedBytes": 1006111,
+          "typedCharacters": 191885
+        },
+        {
+          "blocks": 18,
+          "encodedBytes": 1065649,
+          "typedCharacters": 203172
+        },
+        {
+          "blocks": 19,
+          "encodedBytes": 1125595,
+          "typedCharacters": 214459
+        },
+        {
+          "blocks": 20,
+          "encodedBytes": 1185594,
+          "typedCharacters": 225747
+        },
+        {
+          "blocks": 21,
+          "encodedBytes": 1245535,
+          "typedCharacters": 237034
+        },
+        {
+          "blocks": 22,
+          "encodedBytes": 1305524,
+          "typedCharacters": 248322
+        },
+        {
+          "blocks": 23,
+          "encodedBytes": 1365509,
+          "typedCharacters": 259609
+        },
+        {
+          "blocks": 24,
+          "encodedBytes": 1425442,
+          "typedCharacters": 270896
+        },
+        {
+          "blocks": 25,
+          "encodedBytes": 1485429,
+          "typedCharacters": 282184
+        },
+        {
+          "blocks": 26,
+          "encodedBytes": 1545440,
+          "typedCharacters": 293471
+        },
+        {
+          "blocks": 27,
+          "encodedBytes": 1605393,
+          "typedCharacters": 304758
+        },
+        {
+          "blocks": 28,
+          "encodedBytes": 1665376,
+          "typedCharacters": 316046
+        },
+        {
+          "blocks": 29,
+          "encodedBytes": 1725351,
+          "typedCharacters": 327333
+        },
+        {
+          "blocks": 30,
+          "encodedBytes": 1785296,
+          "typedCharacters": 338620
+        },
+        {
+          "blocks": 31,
+          "encodedBytes": 1845295,
+          "typedCharacters": 349908
+        },
+        {
+          "blocks": 32,
+          "encodedBytes": 1905236,
+          "typedCharacters": 361195
+        },
+        {
+          "blocks": 33,
+          "encodedBytes": 1965225,
+          "typedCharacters": 372483
+        },
+        {
+          "blocks": 34,
+          "encodedBytes": 2025211,
+          "typedCharacters": 383770
+        },
+        {
+          "blocks": 35,
+          "encodedBytes": 2085144,
+          "typedCharacters": 395057
+        },
+        {
+          "blocks": 36,
+          "encodedBytes": 2145131,
+          "typedCharacters": 406345
+        }
+      ]
+    },
+    {
+      "name": "double status changes",
+      "writers": 2,
+      "parameters": {
+        "correctionsPer55": 1,
+        "revisionBeats": 5,
+        "statusesPerBeat": 4,
+        "removals": 2
+      },
+      "firstCap": {
+        "block": 31,
+        "encodedBytes": 2097254,
+        "typedCharacters": 349908,
+        "finalCharacters": 317471
+      },
+      "operations": {
+        "typing": 322865,
+        "correctionDeletes": 5870,
+        "correctionRetypes": 5870,
+        "revisionDeletes": 155,
+        "revisionTyping": 21173,
+        "atoms": 279,
+        "splits": 155,
+        "joins": 155,
+        "joinRetirements": 155,
+        "moves": 155,
+        "removals": 62,
+        "restores": 31,
+        "statuses": 3720,
+        "comments": 124,
+        "tags": 961,
+        "pictures": 10
+      },
+      "checkpoints": [
+        {
+          "blocks": 1,
+          "encodedBytes": 74781,
+          "typedCharacters": 11287
+        },
+        {
+          "blocks": 2,
+          "encodedBytes": 140252,
+          "typedCharacters": 22574
+        },
+        {
+          "blocks": 3,
+          "encodedBytes": 205978,
+          "typedCharacters": 33862
+        },
+        {
+          "blocks": 4,
+          "encodedBytes": 272568,
+          "typedCharacters": 45149
+        },
+        {
+          "blocks": 5,
+          "encodedBytes": 339142,
+          "typedCharacters": 56436
+        },
+        {
+          "blocks": 6,
+          "encodedBytes": 405746,
+          "typedCharacters": 67724
+        },
+        {
+          "blocks": 7,
+          "encodedBytes": 472342,
+          "typedCharacters": 79011
+        },
+        {
+          "blocks": 8,
+          "encodedBytes": 538908,
+          "typedCharacters": 90298
+        },
+        {
+          "blocks": 9,
+          "encodedBytes": 605528,
+          "typedCharacters": 101586
+        },
+        {
+          "blocks": 10,
+          "encodedBytes": 672090,
+          "typedCharacters": 112873
+        },
+        {
+          "blocks": 11,
+          "encodedBytes": 739637,
+          "typedCharacters": 124161
+        },
+        {
+          "blocks": 12,
+          "encodedBytes": 807149,
+          "typedCharacters": 135448
+        },
+        {
+          "blocks": 13,
+          "encodedBytes": 874609,
+          "typedCharacters": 146735
+        },
+        {
+          "blocks": 14,
+          "encodedBytes": 942123,
+          "typedCharacters": 158023
+        },
+        {
+          "blocks": 15,
+          "encodedBytes": 1009661,
+          "typedCharacters": 169310
+        },
+        {
+          "blocks": 16,
+          "encodedBytes": 1077142,
+          "typedCharacters": 180597
+        },
+        {
+          "blocks": 17,
+          "encodedBytes": 1144652,
+          "typedCharacters": 191885
+        },
+        {
+          "blocks": 18,
+          "encodedBytes": 1212536,
+          "typedCharacters": 203172
+        },
+        {
+          "blocks": 19,
+          "encodedBytes": 1280828,
+          "typedCharacters": 214459
+        },
+        {
+          "blocks": 20,
+          "encodedBytes": 1349173,
+          "typedCharacters": 225747
+        },
+        {
+          "blocks": 21,
+          "encodedBytes": 1417460,
+          "typedCharacters": 237034
+        },
+        {
+          "blocks": 22,
+          "encodedBytes": 1485795,
+          "typedCharacters": 248322
+        },
+        {
+          "blocks": 23,
+          "encodedBytes": 1554126,
+          "typedCharacters": 259609
+        },
+        {
+          "blocks": 24,
+          "encodedBytes": 1622405,
+          "typedCharacters": 270896
+        },
+        {
+          "blocks": 25,
+          "encodedBytes": 1690738,
+          "typedCharacters": 282184
+        },
+        {
+          "blocks": 26,
+          "encodedBytes": 1759095,
+          "typedCharacters": 293471
+        },
+        {
+          "blocks": 27,
+          "encodedBytes": 1827394,
+          "typedCharacters": 304758
+        },
+        {
+          "blocks": 28,
+          "encodedBytes": 1895723,
+          "typedCharacters": 316046
+        },
+        {
+          "blocks": 29,
+          "encodedBytes": 1964044,
+          "typedCharacters": 327333
+        },
+        {
+          "blocks": 30,
+          "encodedBytes": 2032335,
+          "typedCharacters": 338620
+        },
+        {
+          "blocks": 31,
+          "encodedBytes": 2100680,
+          "typedCharacters": 349908
+        }
+      ]
+    },
+    {
+      "name": "double corrections",
+      "writers": 2,
+      "parameters": {
+        "correctionsPer55": 2,
+        "revisionBeats": 5,
+        "statusesPerBeat": 2,
+        "removals": 2
+      },
+      "firstCap": {
+        "block": 34,
+        "encodedBytes": 2097420,
+        "typedCharacters": 384616,
+        "finalCharacters": 343666
+      },
+      "operations": {
+        "typing": 354110,
+        "correctionDeletes": 12876,
+        "correctionRetypes": 12876,
+        "revisionDeletes": 170,
+        "revisionTyping": 23222,
+        "atoms": 306,
+        "splits": 170,
+        "joins": 170,
+        "joinRetirements": 170,
+        "moves": 170,
+        "removals": 68,
+        "restores": 34,
+        "statuses": 2040,
+        "comments": 136,
+        "tags": 1054,
+        "pictures": 10
+      },
+      "checkpoints": [
+        {
+          "blocks": 1,
+          "encodedBytes": 69410,
+          "typedCharacters": 11476
+        },
+        {
+          "blocks": 2,
+          "encodedBytes": 129174,
+          "typedCharacters": 22953
+        },
+        {
+          "blocks": 3,
+          "encodedBytes": 189338,
+          "typedCharacters": 34430
+        },
+        {
+          "blocks": 4,
+          "encodedBytes": 250768,
+          "typedCharacters": 45906
+        },
+        {
+          "blocks": 5,
+          "encodedBytes": 312248,
+          "typedCharacters": 57383
+        },
+        {
+          "blocks": 6,
+          "encodedBytes": 373668,
+          "typedCharacters": 68860
+        },
+        {
+          "blocks": 7,
+          "encodedBytes": 435128,
+          "typedCharacters": 80337
+        },
+        {
+          "blocks": 8,
+          "encodedBytes": 496576,
+          "typedCharacters": 91813
+        },
+        {
+          "blocks": 9,
+          "encodedBytes": 558004,
+          "typedCharacters": 103290
+        },
+        {
+          "blocks": 10,
+          "encodedBytes": 619438,
+          "typedCharacters": 114767
+        },
+        {
+          "blocks": 11,
+          "encodedBytes": 681541,
+          "typedCharacters": 126244
+        },
+        {
+          "blocks": 12,
+          "encodedBytes": 743567,
+          "typedCharacters": 137720
+        },
+        {
+          "blocks": 13,
+          "encodedBytes": 805571,
+          "typedCharacters": 149197
+        },
+        {
+          "blocks": 14,
+          "encodedBytes": 867639,
+          "typedCharacters": 160674
+        },
+        {
+          "blocks": 15,
+          "encodedBytes": 929719,
+          "typedCharacters": 172150
+        },
+        {
+          "blocks": 16,
+          "encodedBytes": 991806,
+          "typedCharacters": 183627
+        },
+        {
+          "blocks": 17,
+          "encodedBytes": 1053832,
+          "typedCharacters": 195104
+        },
+        {
+          "blocks": 18,
+          "encodedBytes": 1116280,
+          "typedCharacters": 206581
+        },
+        {
+          "blocks": 19,
+          "encodedBytes": 1179154,
+          "typedCharacters": 218057
+        },
+        {
+          "blocks": 20,
+          "encodedBytes": 1242007,
+          "typedCharacters": 229534
+        },
+        {
+          "blocks": 21,
+          "encodedBytes": 1304866,
+          "typedCharacters": 241011
+        },
+        {
+          "blocks": 22,
+          "encodedBytes": 1367757,
+          "typedCharacters": 252488
+        },
+        {
+          "blocks": 23,
+          "encodedBytes": 1430602,
+          "typedCharacters": 263964
+        },
+        {
+          "blocks": 24,
+          "encodedBytes": 1493425,
+          "typedCharacters": 275441
+        },
+        {
+          "blocks": 25,
+          "encodedBytes": 1556313,
+          "typedCharacters": 286918
+        },
+        {
+          "blocks": 26,
+          "encodedBytes": 1619212,
+          "typedCharacters": 298394
+        },
+        {
+          "blocks": 27,
+          "encodedBytes": 1682118,
+          "typedCharacters": 309871
+        },
+        {
+          "blocks": 28,
+          "encodedBytes": 1744963,
+          "typedCharacters": 321348
+        },
+        {
+          "blocks": 29,
+          "encodedBytes": 1807848,
+          "typedCharacters": 332825
+        },
+        {
+          "blocks": 30,
+          "encodedBytes": 1870721,
+          "typedCharacters": 344301
+        },
+        {
+          "blocks": 31,
+          "encodedBytes": 1933574,
+          "typedCharacters": 355778
+        },
+        {
+          "blocks": 32,
+          "encodedBytes": 1996433,
+          "typedCharacters": 367255
+        },
+        {
+          "blocks": 33,
+          "encodedBytes": 2059324,
+          "typedCharacters": 378732
+        },
+        {
+          "blocks": 34,
+          "encodedBytes": 2122169,
+          "typedCharacters": 390208
+        }
+      ]
+    },
+    {
+      "name": "double removals",
+      "writers": 2,
+      "parameters": {
+        "correctionsPer55": 1,
+        "revisionBeats": 5,
+        "statusesPerBeat": 2,
+        "removals": 4
+      },
+      "firstCap": {
+        "block": 26,
+        "encodedBytes": 2098439,
+        "typedCharacters": 293471,
+        "finalCharacters": 241151
+      },
+      "operations": {
+        "typing": 270790,
+        "correctionDeletes": 4923,
+        "correctionRetypes": 4923,
+        "revisionDeletes": 130,
+        "revisionTyping": 17758,
+        "atoms": 234,
+        "splits": 130,
+        "joins": 130,
+        "joinRetirements": 130,
+        "moves": 130,
+        "removals": 104,
+        "restores": 26,
+        "statuses": 1560,
+        "comments": 104,
+        "tags": 806,
+        "pictures": 10
+      },
+      "checkpoints": [
+        {
+          "blocks": 1,
+          "encodedBytes": 88401,
+          "typedCharacters": 11287
+        },
+        {
+          "blocks": 2,
+          "encodedBytes": 167942,
+          "typedCharacters": 22574
+        },
+        {
+          "blocks": 3,
+          "encodedBytes": 247730,
+          "typedCharacters": 33862
+        },
+        {
+          "blocks": 4,
+          "encodedBytes": 328404,
+          "typedCharacters": 45149
+        },
+        {
+          "blocks": 5,
+          "encodedBytes": 409062,
+          "typedCharacters": 56436
+        },
+        {
+          "blocks": 6,
+          "encodedBytes": 489750,
+          "typedCharacters": 67724
+        },
+        {
+          "blocks": 7,
+          "encodedBytes": 570430,
+          "typedCharacters": 79011
+        },
+        {
+          "blocks": 8,
+          "encodedBytes": 651080,
+          "typedCharacters": 90298
+        },
+        {
+          "blocks": 9,
+          "encodedBytes": 731784,
+          "typedCharacters": 101586
+        },
+        {
+          "blocks": 10,
+          "encodedBytes": 812430,
+          "typedCharacters": 112873
+        },
+        {
+          "blocks": 11,
+          "encodedBytes": 893767,
+          "typedCharacters": 124161
+        },
+        {
+          "blocks": 12,
+          "encodedBytes": 975069,
+          "typedCharacters": 135448
+        },
+        {
+          "blocks": 13,
+          "encodedBytes": 1056319,
+          "typedCharacters": 146735
+        },
+        {
+          "blocks": 14,
+          "encodedBytes": 1137623,
+          "typedCharacters": 158023
+        },
+        {
+          "blocks": 15,
+          "encodedBytes": 1218951,
+          "typedCharacters": 169310
+        },
+        {
+          "blocks": 16,
+          "encodedBytes": 1300222,
+          "typedCharacters": 180597
+        },
+        {
+          "blocks": 17,
+          "encodedBytes": 1381522,
+          "typedCharacters": 191885
+        },
+        {
+          "blocks": 18,
+          "encodedBytes": 1463196,
+          "typedCharacters": 203172
+        },
+        {
+          "blocks": 19,
+          "encodedBytes": 1545280,
+          "typedCharacters": 214459
+        },
+        {
+          "blocks": 20,
+          "encodedBytes": 1627417,
+          "typedCharacters": 225747
+        },
+        {
+          "blocks": 21,
+          "encodedBytes": 1709496,
+          "typedCharacters": 237034
+        },
+        {
+          "blocks": 22,
+          "encodedBytes": 1791623,
+          "typedCharacters": 248322
+        },
+        {
+          "blocks": 23,
+          "encodedBytes": 1873746,
+          "typedCharacters": 259609
+        },
+        {
+          "blocks": 24,
+          "encodedBytes": 1955817,
+          "typedCharacters": 270896
+        },
+        {
+          "blocks": 25,
+          "encodedBytes": 2037942,
+          "typedCharacters": 282184
+        },
+        {
+          "blocks": 26,
+          "encodedBytes": 2120091,
+          "typedCharacters": 293471
+        }
+      ]
+    },
+    {
+      "name": "double revised beats",
+      "writers": 2,
+      "parameters": {
+        "correctionsPer55": 1,
+        "revisionBeats": 10,
+        "statusesPerBeat": 2,
+        "removals": 2
+      },
+      "firstCap": {
+        "block": 36,
+        "encodedBytes": 2107212,
+        "typedCharacters": 417387,
+        "finalCharacters": 358435
+      },
+      "operations": {
+        "typing": 374940,
+        "correctionDeletes": 6817,
+        "correctionRetypes": 6817,
+        "revisionDeletes": 360,
+        "revisionTyping": 47556,
+        "atoms": 324,
+        "splits": 180,
+        "joins": 180,
+        "joinRetirements": 180,
+        "moves": 180,
+        "removals": 72,
+        "restores": 36,
+        "statuses": 2160,
+        "comments": 144,
+        "tags": 1116,
+        "pictures": 10
+      },
+      "checkpoints": [
+        {
+          "blocks": 1,
+          "encodedBytes": 66985,
+          "typedCharacters": 11925
+        },
+        {
+          "blocks": 2,
+          "encodedBytes": 124327,
+          "typedCharacters": 23850
+        },
+        {
+          "blocks": 3,
+          "encodedBytes": 182033,
+          "typedCharacters": 35776
+        },
+        {
+          "blocks": 4,
+          "encodedBytes": 240513,
+          "typedCharacters": 47701
+        },
+        {
+          "blocks": 5,
+          "encodedBytes": 298927,
+          "typedCharacters": 59626
+        },
+        {
+          "blocks": 6,
+          "encodedBytes": 357387,
+          "typedCharacters": 71552
+        },
+        {
+          "blocks": 7,
+          "encodedBytes": 415839,
+          "typedCharacters": 83477
+        },
+        {
+          "blocks": 8,
+          "encodedBytes": 474229,
+          "typedCharacters": 95402
+        },
+        {
+          "blocks": 9,
+          "encodedBytes": 532681,
+          "typedCharacters": 107328
+        },
+        {
+          "blocks": 10,
+          "encodedBytes": 591099,
+          "typedCharacters": 119253
+        },
+        {
+          "blocks": 11,
+          "encodedBytes": 650186,
+          "typedCharacters": 131179
+        },
+        {
+          "blocks": 12,
+          "encodedBytes": 709220,
+          "typedCharacters": 143104
+        },
+        {
+          "blocks": 13,
+          "encodedBytes": 768236,
+          "typedCharacters": 155029
+        },
+        {
+          "blocks": 14,
+          "encodedBytes": 827306,
+          "typedCharacters": 166955
+        },
+        {
+          "blocks": 15,
+          "encodedBytes": 886392,
+          "typedCharacters": 178880
+        },
+        {
+          "blocks": 16,
+          "encodedBytes": 945413,
+          "typedCharacters": 190805
+        },
+        {
+          "blocks": 17,
+          "encodedBytes": 1004479,
+          "typedCharacters": 202731
+        },
+        {
+          "blocks": 18,
+          "encodedBytes": 1063919,
+          "typedCharacters": 214656
+        },
+        {
+          "blocks": 19,
+          "encodedBytes": 1123735,
+          "typedCharacters": 226581
+        },
+        {
+          "blocks": 20,
+          "encodedBytes": 1183612,
+          "typedCharacters": 238507
+        },
+        {
+          "blocks": 21,
+          "encodedBytes": 1243455,
+          "typedCharacters": 250432
+        },
+        {
+          "blocks": 22,
+          "encodedBytes": 1303330,
+          "typedCharacters": 262358
+        },
+        {
+          "blocks": 23,
+          "encodedBytes": 1363183,
+          "typedCharacters": 274283
+        },
+        {
+          "blocks": 24,
+          "encodedBytes": 1423018,
+          "typedCharacters": 286208
+        },
+        {
+          "blocks": 25,
+          "encodedBytes": 1482907,
+          "typedCharacters": 298134
+        },
+        {
+          "blocks": 26,
+          "encodedBytes": 1542812,
+          "typedCharacters": 310059
+        },
+        {
+          "blocks": 27,
+          "encodedBytes": 1602651,
+          "typedCharacters": 321984
+        },
+        {
+          "blocks": 28,
+          "encodedBytes": 1662536,
+          "typedCharacters": 333910
+        },
+        {
+          "blocks": 29,
+          "encodedBytes": 1722413,
+          "typedCharacters": 345835
+        },
+        {
+          "blocks": 30,
+          "encodedBytes": 1782228,
+          "typedCharacters": 357760
+        },
+        {
+          "blocks": 31,
+          "encodedBytes": 1842105,
+          "typedCharacters": 369686
+        },
+        {
+          "blocks": 32,
+          "encodedBytes": 1901948,
+          "typedCharacters": 381611
+        },
+        {
+          "blocks": 33,
+          "encodedBytes": 1961823,
+          "typedCharacters": 393537
+        },
+        {
+          "blocks": 34,
+          "encodedBytes": 2021676,
+          "typedCharacters": 405462
+        },
+        {
+          "blocks": 35,
+          "encodedBytes": 2081511,
+          "typedCharacters": 417387
+        },
+        {
+          "blocks": 36,
+          "encodedBytes": 2141402,
+          "typedCharacters": 429313
+        }
+      ]
+    }
+  ]
+}

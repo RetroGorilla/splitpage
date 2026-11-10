@@ -1,0 +1,4287 @@
+{
+  "version": 1,
+  "source": {
+    "sha256": "0e17a94a5e8ad290566df43dd01c2ae5229681f451ee334b44762ee6cfed761e",
+    "files": {
+      "attribution.ts": "b0aaa80a2e3bc6e8030f53645b30a213312db44f47ae0103b6725f354bc10e35",
+      "audit.ts": "127437e9ce4cf06c127837ce6a62df694262a10a36b4e35483ac8c94a7dc46e9",
+      "count-worker.ts": "93f6975a2f23399ee80254c8a3cb439d308e907524ab89a21b4707b010699a70",
+      "counts.ts": "d5777cc6f69881a72ed352b19893bc53364d33963dcb3378fbfe779c4a164f76",
+      "probe.ts": "05d7d972c6d3e05daddc644acb5a0e53a78b9024b239485f4e802cb750e3dd85",
+      "projector.ts": "6fc7d965312989e86518dfe8ab5993166ec4e4f37d9e3ccd6b18d5cb144b0b93",
+      "record.ts": "4a2165b0306c78d926b83b136394df68ec3640a8da28b9a9ead189975e87bfdb",
+      "report.ts": "191c0b69fd1ad3db6017f3ebd314e8189febd7d6ce93d3985b93cf642f47e89d",
+      "sensitivity.ts": "c0053c444dc863032f7229df416428ba2696c001e8f9dbd4a9ad105054e365cd",
+      "source.ts": "d5b96f5340033c8bedb20b42e8ef10d6458047ac6bb119695a3b7db377955099",
+      "status-order.ts": "9672cf03c632a57ea5f08188da8118bd91b1e5cea9ff82dc69a6afbad19a086a",
+      "workload.ts": "328d4e1e415c9742c270b43ef5d26cbd8d430695abe78e27a6388ec38af99dcd"
+    },
+    "dependencies": "73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663",
+    "fixture": "6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34"
+  },
+  "node": "v24.22.1",
+  "instrumentation": [
+    {
+      "source": "yjs/src/utils/RelativePosition.js",
+      "sha256": "91991efa46cb5f52bbaa07f48cd1009826b2947e2d46be14311a3c52555a43b3"
+    },
+    {
+      "source": "yjs/src/utils/StructStore.js",
+      "sha256": "04f971f2b28dad60969b20797b56f3a10535ca295906b627e084a82a39b6414c"
+    }
+  ],
+  "data": {
+    "plan": {
+      "version": 1,
+      "candidate": "B",
+      "writers": [
+        2,
+        6
+      ],
+      "correctionEvery": 55,
+      "revisionBeats": 5,
+      "revisionDivisor": 2,
+      "splits": 5,
+      "joins": 5,
+      "joinRetirements": 5,
+      "moves": 5,
+      "removals": 2,
+      "restores": 1,
+      "statusesPerBeat": 2,
+      "commentsPerBlock": 4,
+      "tagsPerBlock": 31,
+      "picturesOnce": 10,
+      "maxBlocks": 80,
+      "capBytes": 2097152,
+      "sources": {
+        "correctionEvery": "artifact 7 section 4: 55-character typing case; one correction per case is a stated scenario, not telemetry",
+        "revisionBeats": "tools/perf-record.mjs SPLITS=5 out of the canonical 30 beats; reuse that intervention count",
+        "revisionDivisor": "artifact 8 T01 replaces original bc in abcd: half the original characters",
+        "structure": "five recorder splits, their five T06 joins/semantic retirements, five supported whole-segment MOVE interventions",
+        "removals": "T10 retained removal, plus one remove/restore control; one of each per canonical block",
+        "status": "todo/ready/shot workflow: two transitions on each canonical beat",
+        "commentsAndTags": "largest canonical fixture has four comments and 31 production tags; one review change each per block",
+        "pictures": "artifact 7 images fixture inserts ten pictures; once per script, references only",
+        "writers": "plan trusted group is two to six; writers take consecutive beats, with causal delivery at beat boundaries",
+        "horizon": "one block is one canonical draft plus its partial revision; append canonical blocks as SCALE.grow does until the cap"
+      }
+    },
+    "realistic": [
+      {
+        "writers": 2,
+        "firstCap": {
+          "encodedBytes": 2110845,
+          "typedCharacters": 395057,
+          "finalCharacters": 358435,
+          "operations": {
+            "typing": 364525,
+            "correctionDeletes": 6627,
+            "correctionRetypes": 6627,
+            "revisionDeletes": 175,
+            "revisionTyping": 23905,
+            "atoms": 315,
+            "splits": 175,
+            "joins": 175,
+            "joinRetirements": 175,
+            "moves": 175,
+            "removals": 70,
+            "restores": 35,
+            "statuses": 2100,
+            "comments": 140,
+            "tags": 1085,
+            "pictures": 10
+          },
+          "completedBlocks": 35,
+          "previousStep": {
+            "encodedBytes": 2085144,
+            "typedCharacters": 395057
+          }
+        },
+        "checkpoints": [
+          {
+            "blocks": 1,
+            "operations": {
+              "typing": 10415,
+              "correctionDeletes": 189,
+              "correctionRetypes": 189,
+              "revisionDeletes": 5,
+              "revisionTyping": 683,
+              "atoms": 9,
+              "splits": 5,
+              "joins": 5,
+              "joinRetirements": 5,
+              "moves": 5,
+              "removals": 2,
+              "restores": 1,
+              "statuses": 60,
+              "comments": 4,
+              "tags": 31,
+              "pictures": 10
+            },
+            "typedCharacters": 11287,
+            "snapshot": "realistic-2-block-1.bin",
+            "sha256": "c4d0c53a526423cf0f6988ecced1577734546eec52aa62b17b8de5e68c9a14d5",
+            "finalCharacters": 10241,
+            "activeBeats": 34,
+            "projectedFileBytes": 41523,
+            "exportedFileBytes": 40778,
+            "bytes": {
+              "encodedBytes": 67095,
+              "categories": {
+                "live text items": 13164,
+                "deleted text tombstones": 968,
+                "soft-removed beat content": 933,
+                "removal records": 5187,
+                "join records and retired ids": 390,
+                "status events": 6772,
+                "marks": 3603,
+                "order array": 410,
+                "other": 35668
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 7691,
+                "segments": 1572,
+                "beats": 6473,
+                "visuals": 2070,
+                "gallery": 6865,
+                "comments": 2458,
+                "replies": 256,
+                "shots": 6981
+              },
+              "items": 2261,
+              "framingDeleteSetAndGcBytes": 764
+            },
+            "counts": {
+              "beats": 35,
+              "removedBeats": 1,
+              "removalFlags": 1,
+              "removalRecords": 2,
+              "joinEntries": 5,
+              "retiredJoins": 5,
+              "statusEvents": 60,
+              "projectedFileBytes": 41523,
+              "activeFileBytes": 40778
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 1,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 90
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 281,
+                  "textReads": 25,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 12
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 9,
+                    "comments": 4,
+                    "replies": 4,
+                    "visuals": 60,
+                    "gallery": 80
+                  },
+                  "gets": {
+                    "segments": 90,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 241,
+                    "comments": 126,
+                    "replies": 14,
+                    "beats": 12,
+                    "visuals": 294,
+                    "gallery": 385
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 2040,
+                    "joins": 5
+                  },
+                  "gets": {
+                    "beats": 114,
+                    "retiredStatus": 29,
+                    "retiredJoins": 5
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7182,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 1,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 90
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 281,
+                  "textReads": 25,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 12
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 9,
+                    "comments": 4,
+                    "replies": 4,
+                    "visuals": 60,
+                    "gallery": 80
+                  },
+                  "gets": {
+                    "segments": 90,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 241,
+                    "comments": 126,
+                    "replies": 14,
+                    "beats": 12,
+                    "visuals": 294,
+                    "gallery": 385
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 5
+                  },
+                  "gets": {
+                    "beats": 109,
+                    "retiredJoins": 5
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7182,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 5,
+            "operations": {
+              "typing": 52075,
+              "correctionDeletes": 946,
+              "correctionRetypes": 946,
+              "revisionDeletes": 25,
+              "revisionTyping": 3415,
+              "atoms": 45,
+              "splits": 25,
+              "joins": 25,
+              "joinRetirements": 25,
+              "moves": 25,
+              "removals": 10,
+              "restores": 5,
+              "statuses": 300,
+              "comments": 20,
+              "tags": 155,
+              "pictures": 10
+            },
+            "typedCharacters": 56436,
+            "snapshot": "realistic-2-block-5.bin",
+            "sha256": "c436a51afd1e256873e57db8d00f52984d08696fe077e0d0859026a3ba92fee6",
+            "finalCharacters": 51205,
+            "activeBeats": 170,
+            "projectedFileBytes": 175211,
+            "exportedFileBytes": 171478,
+            "bytes": {
+              "encodedBytes": 299253,
+              "categories": {
+                "live text items": 66793,
+                "deleted text tombstones": 5205,
+                "soft-removed beat content": 4805,
+                "removal records": 26738,
+                "join records and retired ids": 2002,
+                "status events": 35060,
+                "marks": 18350,
+                "order array": 2326,
+                "other": 137974
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 8357,
+                "segments": 8340,
+                "beats": 32901,
+                "visuals": 10814,
+                "gallery": 24825,
+                "comments": 12418,
+                "replies": 1296,
+                "shots": 35049
+              },
+              "items": 9569,
+              "framingDeleteSetAndGcBytes": 3436
+            },
+            "counts": {
+              "beats": 175,
+              "removedBeats": 5,
+              "removalFlags": 5,
+              "removalRecords": 10,
+              "joinEntries": 25,
+              "retiredJoins": 25,
+              "statusEvents": 300,
+              "projectedFileBytes": 175211,
+              "activeFileBytes": 171478
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-3",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 5,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 450
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 1332,
+                  "textReads": 120,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 13
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 45,
+                    "comments": 20,
+                    "replies": 100,
+                    "visuals": 300,
+                    "gallery": 320
+                  },
+                  "gets": {
+                    "segments": 450,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 1477,
+                    "comments": 724,
+                    "replies": 470,
+                    "beats": 12,
+                    "visuals": 2148,
+                    "gallery": 2069
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 51000,
+                    "joins": 25
+                  },
+                  "gets": {
+                    "beats": 570,
+                    "retiredStatus": 145,
+                    "retiredJoins": 25
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-3",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 5,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 450
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 1332,
+                  "textReads": 120,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 13
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 45,
+                    "comments": 20,
+                    "replies": 100,
+                    "visuals": 300,
+                    "gallery": 320
+                  },
+                  "gets": {
+                    "segments": 450,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 1477,
+                    "comments": 724,
+                    "replies": 470,
+                    "beats": 12,
+                    "visuals": 2148,
+                    "gallery": 2069
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 25
+                  },
+                  "gets": {
+                    "beats": 545,
+                    "retiredJoins": 25
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 10,
+            "operations": {
+              "typing": 104150,
+              "correctionDeletes": 1893,
+              "correctionRetypes": 1893,
+              "revisionDeletes": 50,
+              "revisionTyping": 6830,
+              "atoms": 90,
+              "splits": 50,
+              "joins": 50,
+              "joinRetirements": 50,
+              "moves": 50,
+              "removals": 20,
+              "restores": 10,
+              "statuses": 600,
+              "comments": 40,
+              "tags": 310,
+              "pictures": 10
+            },
+            "typedCharacters": 112873,
+            "snapshot": "realistic-2-block-10.bin",
+            "sha256": "60732a0acdae46491eaec98bc36d0d8d6502619640fd0a989b99b695e1f180d3",
+            "finalCharacters": 102410,
+            "activeBeats": 340,
+            "projectedFileBytes": 342321,
+            "exportedFileBytes": 334853,
+            "bytes": {
+              "encodedBytes": 591971,
+              "categories": {
+                "live text items": 134952,
+                "deleted text tombstones": 10916,
+                "soft-removed beat content": 9706,
+                "removal records": 53703,
+                "join records and retired ids": 4027,
+                "status events": 70420,
+                "marks": 37080,
+                "order array": 4731,
+                "other": 266436
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 9287,
+                "segments": 16800,
+                "beats": 65996,
+                "visuals": 21744,
+                "gallery": 47275,
+                "comments": 24868,
+                "replies": 2596,
+                "shots": 70134
+              },
+              "items": 18706,
+              "framingDeleteSetAndGcBytes": 7198
+            },
+            "counts": {
+              "beats": 350,
+              "removedBeats": 10,
+              "removalFlags": 10,
+              "removalRecords": 20,
+              "joinEntries": 50,
+              "retiredJoins": 50,
+              "statusEvents": 600,
+              "projectedFileBytes": 342321,
+              "activeFileBytes": 334853
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-7",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 10,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 900
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 2715,
+                  "textReads": 245,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 14
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 90,
+                    "comments": 40,
+                    "replies": 400,
+                    "visuals": 600,
+                    "gallery": 620
+                  },
+                  "gets": {
+                    "segments": 900,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 3126,
+                    "comments": 1516,
+                    "replies": 2340,
+                    "beats": 12,
+                    "visuals": 4826,
+                    "gallery": 4663
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 28,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 204000,
+                    "joins": 50
+                  },
+                  "gets": {
+                    "beats": 1140,
+                    "retiredStatus": 290,
+                    "retiredJoins": 50
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 6634,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 22,
+                  "absoluteItems": 21,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-7",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 10,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 900
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 2715,
+                  "textReads": 245,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 14
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 90,
+                    "comments": 40,
+                    "replies": 400,
+                    "visuals": 600,
+                    "gallery": 620
+                  },
+                  "gets": {
+                    "segments": 900,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 3126,
+                    "comments": 1516,
+                    "replies": 2340,
+                    "beats": 12,
+                    "visuals": 4826,
+                    "gallery": 4663
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 28,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 50
+                  },
+                  "gets": {
+                    "beats": 1090,
+                    "retiredJoins": 50
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 6634,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 22,
+                  "absoluteItems": 21,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 20,
+            "operations": {
+              "typing": 208300,
+              "correctionDeletes": 3787,
+              "correctionRetypes": 3787,
+              "revisionDeletes": 100,
+              "revisionTyping": 13660,
+              "atoms": 180,
+              "splits": 100,
+              "joins": 100,
+              "joinRetirements": 100,
+              "moves": 100,
+              "removals": 40,
+              "restores": 20,
+              "statuses": 1200,
+              "comments": 80,
+              "tags": 620,
+              "pictures": 10
+            },
+            "typedCharacters": 225747,
+            "snapshot": "realistic-2-block-20.bin",
+            "sha256": "e33398c901e5de282b394efb70beb57d5bd587bf19e238878a4bdab907e55809",
+            "finalCharacters": 204820,
+            "activeBeats": 680,
+            "projectedFileBytes": 677292,
+            "exportedFileBytes": 662344,
+            "bytes": {
+              "encodedBytes": 1185594,
+              "categories": {
+                "live text items": 271534,
+                "deleted text tombstones": 22418,
+                "soft-removed beat content": 19574,
+                "removal records": 107673,
+                "join records and retired ids": 8227,
+                "status events": 143540,
+                "marks": 74622,
+                "order array": 9893,
+                "other": 528113
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 11178,
+                "segments": 34440,
+                "beats": 133288,
+                "visuals": 44358,
+                "gallery": 93301,
+                "comments": 50160,
+                "replies": 5240,
+                "shots": 140862
+              },
+              "items": 36981,
+              "framingDeleteSetAndGcBytes": 14748
+            },
+            "counts": {
+              "beats": 700,
+              "removedBeats": 20,
+              "removalFlags": 20,
+              "removalRecords": 40,
+              "joinEntries": 100,
+              "retiredJoins": 100,
+              "statusEvents": 1200,
+              "projectedFileBytes": 677292,
+              "activeFileBytes": 662344
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-14",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 20,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 1800
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 5205,
+                  "textReads": 470,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 15
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 180,
+                    "comments": 80,
+                    "replies": 1600,
+                    "visuals": 1200,
+                    "gallery": 1220
+                  },
+                  "gets": {
+                    "segments": 1800,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 6536,
+                    "comments": 3156,
+                    "replies": 11880,
+                    "beats": 12,
+                    "visuals": 10612,
+                    "gallery": 10021
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 816000,
+                    "joins": 100
+                  },
+                  "gets": {
+                    "beats": 2280,
+                    "retiredStatus": 580,
+                    "retiredJoins": 100
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-14",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 20,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 1800
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 5205,
+                  "textReads": 470,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 15
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 180,
+                    "comments": 80,
+                    "replies": 1600,
+                    "visuals": 1200,
+                    "gallery": 1220
+                  },
+                  "gets": {
+                    "segments": 1800,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 6536,
+                    "comments": 3156,
+                    "replies": 11880,
+                    "beats": 12,
+                    "visuals": 10612,
+                    "gallery": 10021
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 100
+                  },
+                  "gets": {
+                    "beats": 2180,
+                    "retiredJoins": 100
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 36,
+            "operations": {
+              "typing": 374940,
+              "correctionDeletes": 6817,
+              "correctionRetypes": 6817,
+              "revisionDeletes": 180,
+              "revisionTyping": 24588,
+              "atoms": 324,
+              "splits": 180,
+              "joins": 180,
+              "joinRetirements": 180,
+              "moves": 180,
+              "removals": 72,
+              "restores": 36,
+              "statuses": 2160,
+              "comments": 144,
+              "tags": 1116,
+              "pictures": 10
+            },
+            "typedCharacters": 406345,
+            "snapshot": "realistic-2-block-36.bin",
+            "sha256": "e22557552d295f99df594b5415b8bd929042450ae24116d57391dda86f4010a3",
+            "finalCharacters": 368676,
+            "activeBeats": 1224,
+            "projectedFileBytes": 1213196,
+            "exportedFileBytes": 1186280,
+            "bytes": {
+              "encodedBytes": 2145131,
+              "categories": {
+                "live text items": 490550,
+                "deleted text tombstones": 40872,
+                "soft-removed beat content": 35582,
+                "removal records": 194025,
+                "join records and retired ids": 14947,
+                "status events": 260532,
+                "marks": 134828,
+                "order array": 18165,
+                "other": 955630
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 14154,
+                "segments": 63432,
+                "beats": 243592,
+                "visuals": 81654,
+                "gallery": 169045,
+                "comments": 91344,
+                "replies": 9560,
+                "shots": 255438
+              },
+              "items": 66217,
+              "framingDeleteSetAndGcBytes": 26873
+            },
+            "counts": {
+              "beats": 1260,
+              "removedBeats": 36,
+              "removalFlags": 36,
+              "removalRecords": 72,
+              "joinEntries": 180,
+              "retiredJoins": 180,
+              "statusEvents": 2160,
+              "projectedFileBytes": 1213196,
+              "activeFileBytes": 1186280
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-25",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 36,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 3240
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 9126,
+                  "textReads": 825,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 17
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 324,
+                    "comments": 144,
+                    "replies": 5184,
+                    "visuals": 2160,
+                    "gallery": 2180
+                  },
+                  "gets": {
+                    "segments": 3240,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 12310,
+                    "comments": 5900,
+                    "replies": 46440,
+                    "beats": 12,
+                    "visuals": 20628,
+                    "gallery": 19371
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 2643840,
+                    "joins": 180
+                  },
+                  "gets": {
+                    "beats": 4104,
+                    "retiredStatus": 1044,
+                    "retiredJoins": 180
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-25",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 36,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 3240
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 9126,
+                  "textReads": 825,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 17
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 324,
+                    "comments": 144,
+                    "replies": 5184,
+                    "visuals": 2160,
+                    "gallery": 2180
+                  },
+                  "gets": {
+                    "segments": 3240,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 12310,
+                    "comments": 5900,
+                    "replies": 46440,
+                    "beats": 12,
+                    "visuals": 20628,
+                    "gallery": 19371
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 180
+                  },
+                  "gets": {
+                    "beats": 3924,
+                    "retiredJoins": 180
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "writers": 6,
+        "firstCap": {
+          "encodedBytes": 2104409,
+          "typedCharacters": 395057,
+          "finalCharacters": 358435,
+          "operations": {
+            "typing": 364525,
+            "correctionDeletes": 6627,
+            "correctionRetypes": 6627,
+            "revisionDeletes": 175,
+            "revisionTyping": 23905,
+            "atoms": 315,
+            "splits": 175,
+            "joins": 175,
+            "joinRetirements": 175,
+            "moves": 175,
+            "removals": 70,
+            "restores": 35,
+            "statuses": 2100,
+            "comments": 140,
+            "tags": 1085,
+            "pictures": 10
+          },
+          "completedBlocks": 35,
+          "previousStep": {
+            "encodedBytes": 2078708,
+            "typedCharacters": 395057
+          }
+        },
+        "checkpoints": [
+          {
+            "blocks": 1,
+            "operations": {
+              "typing": 10415,
+              "correctionDeletes": 189,
+              "correctionRetypes": 189,
+              "revisionDeletes": 5,
+              "revisionTyping": 683,
+              "atoms": 9,
+              "splits": 5,
+              "joins": 5,
+              "joinRetirements": 5,
+              "moves": 5,
+              "removals": 2,
+              "restores": 1,
+              "statuses": 60,
+              "comments": 4,
+              "tags": 31,
+              "pictures": 10
+            },
+            "typedCharacters": 11287,
+            "snapshot": "realistic-6-block-1.bin",
+            "sha256": "9c43c84901dcedca1dd4f5f04cd5df39349352075974fe9c24571b786a311c43",
+            "finalCharacters": 10241,
+            "activeBeats": 34,
+            "projectedFileBytes": 41523,
+            "exportedFileBytes": 40778,
+            "bytes": {
+              "encodedBytes": 67096,
+              "categories": {
+                "live text items": 13152,
+                "deleted text tombstones": 964,
+                "soft-removed beat content": 933,
+                "removal records": 5187,
+                "join records and retired ids": 390,
+                "status events": 6772,
+                "marks": 3602,
+                "order array": 410,
+                "other": 35686
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 7691,
+                "segments": 1572,
+                "beats": 6473,
+                "visuals": 2070,
+                "gallery": 6865,
+                "comments": 2458,
+                "replies": 256,
+                "shots": 6981
+              },
+              "items": 2261,
+              "framingDeleteSetAndGcBytes": 782
+            },
+            "counts": {
+              "beats": 35,
+              "removedBeats": 1,
+              "removalFlags": 1,
+              "removalRecords": 2,
+              "joinEntries": 5,
+              "retiredJoins": 5,
+              "statusEvents": 60,
+              "projectedFileBytes": 41523,
+              "activeFileBytes": 40778
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 1,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 90
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 281,
+                  "textReads": 25,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 9
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 9,
+                    "comments": 4,
+                    "replies": 4,
+                    "visuals": 60,
+                    "gallery": 80
+                  },
+                  "gets": {
+                    "segments": 90,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 241,
+                    "comments": 126,
+                    "replies": 14,
+                    "beats": 12,
+                    "visuals": 294,
+                    "gallery": 385
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 2040,
+                    "joins": 5
+                  },
+                  "gets": {
+                    "beats": 114,
+                    "retiredStatus": 29,
+                    "retiredJoins": 5
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7182,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 1,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 90
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 281,
+                  "textReads": 25,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 9
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 9,
+                    "comments": 4,
+                    "replies": 4,
+                    "visuals": 60,
+                    "gallery": 80
+                  },
+                  "gets": {
+                    "segments": 90,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 241,
+                    "comments": 126,
+                    "replies": 14,
+                    "beats": 12,
+                    "visuals": 294,
+                    "gallery": 385
+                  },
+                  "orderItems": 6,
+                  "orderValues": 35,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 5
+                  },
+                  "gets": {
+                    "beats": 109,
+                    "retiredJoins": 5
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7182,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 5,
+            "operations": {
+              "typing": 52075,
+              "correctionDeletes": 946,
+              "correctionRetypes": 946,
+              "revisionDeletes": 25,
+              "revisionTyping": 3415,
+              "atoms": 45,
+              "splits": 25,
+              "joins": 25,
+              "joinRetirements": 25,
+              "moves": 25,
+              "removals": 10,
+              "restores": 5,
+              "statuses": 300,
+              "comments": 20,
+              "tags": 155,
+              "pictures": 10
+            },
+            "typedCharacters": 56436,
+            "snapshot": "realistic-6-block-5.bin",
+            "sha256": "c7a352b5fafc80cd7c1bf211a091e5dbf1f295365bca0d5364850a3b9026bab9",
+            "finalCharacters": 51205,
+            "activeBeats": 170,
+            "projectedFileBytes": 175211,
+            "exportedFileBytes": 171478,
+            "bytes": {
+              "encodedBytes": 296516,
+              "categories": {
+                "live text items": 65750,
+                "deleted text tombstones": 4792,
+                "soft-removed beat content": 4729,
+                "removal records": 26293,
+                "join records and retired ids": 1990,
+                "status events": 35060,
+                "marks": 18086,
+                "order array": 2314,
+                "other": 137502
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 8311,
+                "segments": 8340,
+                "beats": 32829,
+                "visuals": 10814,
+                "gallery": 24825,
+                "comments": 12418,
+                "replies": 1296,
+                "shots": 35049
+              },
+              "items": 9569,
+              "framingDeleteSetAndGcBytes": 3082
+            },
+            "counts": {
+              "beats": 175,
+              "removedBeats": 5,
+              "removalFlags": 5,
+              "removalRecords": 10,
+              "joinEntries": 25,
+              "retiredJoins": 25,
+              "statusEvents": 300,
+              "projectedFileBytes": 175211,
+              "activeFileBytes": 171478
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-3",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 5,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 450
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 1332,
+                  "textReads": 120,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 11
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 45,
+                    "comments": 20,
+                    "replies": 100,
+                    "visuals": 300,
+                    "gallery": 320
+                  },
+                  "gets": {
+                    "segments": 450,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 1477,
+                    "comments": 724,
+                    "replies": 470,
+                    "beats": 12,
+                    "visuals": 2148,
+                    "gallery": 2069
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 51000,
+                    "joins": 25
+                  },
+                  "gets": {
+                    "beats": 570,
+                    "retiredStatus": 145,
+                    "retiredJoins": 25
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-3",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 5,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 450
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 1332,
+                  "textReads": 120,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 11
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 45,
+                    "comments": 20,
+                    "replies": 100,
+                    "visuals": 300,
+                    "gallery": 320
+                  },
+                  "gets": {
+                    "segments": 450,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 1477,
+                    "comments": 724,
+                    "replies": 470,
+                    "beats": 12,
+                    "visuals": 2148,
+                    "gallery": 2069
+                  },
+                  "orderItems": 30,
+                  "orderValues": 175,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 25
+                  },
+                  "gets": {
+                    "beats": 545,
+                    "retiredJoins": 25
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 10,
+            "operations": {
+              "typing": 104150,
+              "correctionDeletes": 1893,
+              "correctionRetypes": 1893,
+              "revisionDeletes": 50,
+              "revisionTyping": 6830,
+              "atoms": 90,
+              "splits": 50,
+              "joins": 50,
+              "joinRetirements": 50,
+              "moves": 50,
+              "removals": 20,
+              "restores": 10,
+              "statuses": 600,
+              "comments": 40,
+              "tags": 310,
+              "pictures": 10
+            },
+            "typedCharacters": 112873,
+            "snapshot": "realistic-6-block-10.bin",
+            "sha256": "0cbe2bc2b72582fc714551d0041c04c1503b1bf1458c05c7beb30c6b510ed8af",
+            "finalCharacters": 102410,
+            "activeBeats": 340,
+            "projectedFileBytes": 342321,
+            "exportedFileBytes": 334853,
+            "bytes": {
+              "encodedBytes": 585436,
+              "categories": {
+                "live text items": 132213,
+                "deleted text tombstones": 9831,
+                "soft-removed beat content": 9550,
+                "removal records": 53216,
+                "join records and retired ids": 4000,
+                "status events": 70420,
+                "marks": 36391,
+                "order array": 4703,
+                "other": 265112
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 9117,
+                "segments": 16800,
+                "beats": 65834,
+                "visuals": 21744,
+                "gallery": 47275,
+                "comments": 24868,
+                "replies": 2596,
+                "shots": 70134
+              },
+              "items": 18706,
+              "framingDeleteSetAndGcBytes": 6206
+            },
+            "counts": {
+              "beats": 350,
+              "removedBeats": 10,
+              "removalFlags": 10,
+              "removalRecords": 20,
+              "joinEntries": 50,
+              "retiredJoins": 50,
+              "statusEvents": 600,
+              "projectedFileBytes": 342321,
+              "activeFileBytes": 334853
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-7",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 10,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 900
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 2715,
+                  "textReads": 245,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 14
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 90,
+                    "comments": 40,
+                    "replies": 400,
+                    "visuals": 600,
+                    "gallery": 620
+                  },
+                  "gets": {
+                    "segments": 900,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 3126,
+                    "comments": 1516,
+                    "replies": 2340,
+                    "beats": 12,
+                    "visuals": 4826,
+                    "gallery": 4665
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 28,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 204000,
+                    "joins": 50
+                  },
+                  "gets": {
+                    "beats": 1140,
+                    "retiredStatus": 290,
+                    "retiredJoins": 50
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 6634,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 22,
+                  "absoluteItems": 21,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-7",
+                "characters": 603,
+                "updateBytes": 12,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 10,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 900
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 2715,
+                  "textReads": 245,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 14
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 90,
+                    "comments": 40,
+                    "replies": 400,
+                    "visuals": 600,
+                    "gallery": 620
+                  },
+                  "gets": {
+                    "segments": 900,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 3126,
+                    "comments": 1516,
+                    "replies": 2340,
+                    "beats": 12,
+                    "visuals": 4826,
+                    "gallery": 4665
+                  },
+                  "orderItems": 60,
+                  "orderValues": 350,
+                  "textItems": 28,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 50
+                  },
+                  "gets": {
+                    "beats": 1090,
+                    "retiredJoins": 50
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 6634,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 22,
+                  "absoluteItems": 21,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 20,
+            "operations": {
+              "typing": 208300,
+              "correctionDeletes": 3787,
+              "correctionRetypes": 3787,
+              "revisionDeletes": 100,
+              "revisionTyping": 13660,
+              "atoms": 180,
+              "splits": 100,
+              "joins": 100,
+              "joinRetirements": 100,
+              "moves": 100,
+              "removals": 40,
+              "restores": 20,
+              "statuses": 1200,
+              "comments": 80,
+              "tags": 620,
+              "pictures": 10
+            },
+            "typedCharacters": 225747,
+            "snapshot": "realistic-6-block-20.bin",
+            "sha256": "0d4e8fb0bffff4179dec0593b6426af574484784b2c36fbc8f1b88cde6474443",
+            "finalCharacters": 204820,
+            "activeBeats": 680,
+            "projectedFileBytes": 677292,
+            "exportedFileBytes": 662344,
+            "bytes": {
+              "encodedBytes": 1179099,
+              "categories": {
+                "live text items": 268795,
+                "deleted text tombstones": 21333,
+                "soft-removed beat content": 19418,
+                "removal records": 107186,
+                "join records and retired ids": 8200,
+                "status events": 143540,
+                "marks": 73933,
+                "order array": 9865,
+                "other": 526829
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 11008,
+                "segments": 34440,
+                "beats": 133126,
+                "visuals": 44358,
+                "gallery": 93301,
+                "comments": 50160,
+                "replies": 5240,
+                "shots": 140862
+              },
+              "items": 36981,
+              "framingDeleteSetAndGcBytes": 13796
+            },
+            "counts": {
+              "beats": 700,
+              "removedBeats": 20,
+              "removalFlags": 20,
+              "removalRecords": 40,
+              "joinEntries": 100,
+              "retiredJoins": 100,
+              "statusEvents": 1200,
+              "projectedFileBytes": 677292,
+              "activeFileBytes": 662344
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-14",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 20,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 1800
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 5205,
+                  "textReads": 470,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 15
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 180,
+                    "comments": 80,
+                    "replies": 1600,
+                    "visuals": 1200,
+                    "gallery": 1220
+                  },
+                  "gets": {
+                    "segments": 1800,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 6536,
+                    "comments": 3156,
+                    "replies": 11880,
+                    "beats": 12,
+                    "visuals": 10612,
+                    "gallery": 10039
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 816000,
+                    "joins": 100
+                  },
+                  "gets": {
+                    "beats": 2280,
+                    "retiredStatus": 580,
+                    "retiredJoins": 100
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-14",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 20,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 1800
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 5205,
+                  "textReads": 470,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 15
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 180,
+                    "comments": 80,
+                    "replies": 1600,
+                    "visuals": 1200,
+                    "gallery": 1220
+                  },
+                  "gets": {
+                    "segments": 1800,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 6536,
+                    "comments": 3156,
+                    "replies": 11880,
+                    "beats": 12,
+                    "visuals": 10612,
+                    "gallery": 10039
+                  },
+                  "orderItems": 120,
+                  "orderValues": 700,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 100
+                  },
+                  "gets": {
+                    "beats": 2180,
+                    "retiredJoins": 100
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          },
+          {
+            "blocks": 36,
+            "operations": {
+              "typing": 374940,
+              "correctionDeletes": 6817,
+              "correctionRetypes": 6817,
+              "revisionDeletes": 180,
+              "revisionTyping": 24588,
+              "atoms": 324,
+              "splits": 180,
+              "joins": 180,
+              "joinRetirements": 180,
+              "moves": 180,
+              "removals": 72,
+              "restores": 36,
+              "statuses": 2160,
+              "comments": 144,
+              "tags": 1116,
+              "pictures": 10
+            },
+            "typedCharacters": 406345,
+            "snapshot": "realistic-6-block-36.bin",
+            "sha256": "ba1bc0ed6cfbfc5d7bb1ff084dfed057044a2a4fe4abe7b3a8a79055b1fb68ba",
+            "finalCharacters": 368676,
+            "activeBeats": 1224,
+            "projectedFileBytes": 1213196,
+            "exportedFileBytes": 1186280,
+            "bytes": {
+              "encodedBytes": 2138699,
+              "categories": {
+                "live text items": 487811,
+                "deleted text tombstones": 39787,
+                "soft-removed beat content": 35426,
+                "removal records": 193538,
+                "join records and retired ids": 14920,
+                "status events": 260532,
+                "marks": 134139,
+                "order array": 18137,
+                "other": 954409
+              },
+              "otherRoots": {
+                "meta": 302,
+                "people": 236,
+                "tags": 13984,
+                "segments": 63432,
+                "beats": 243430,
+                "visuals": 81654,
+                "gallery": 169045,
+                "comments": 91344,
+                "replies": 9560,
+                "shots": 255438
+              },
+              "items": 66217,
+              "framingDeleteSetAndGcBytes": 25984
+            },
+            "counts": {
+              "beats": 1260,
+              "removedBeats": 36,
+              "removalFlags": 36,
+              "removalRecords": 72,
+              "joinEntries": 180,
+              "retiredJoins": 180,
+              "statusEvents": 2160,
+              "projectedFileBytes": 1213196,
+              "activeFileBytes": 1186280
+            },
+            "legacy": {
+              "value": {
+                "serial": 1,
+                "target": "r20-25",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 36,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 3240
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 9126,
+                  "textReads": 825,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 15
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 324,
+                    "comments": 144,
+                    "replies": 5184,
+                    "visuals": 2160,
+                    "gallery": 2180
+                  },
+                  "gets": {
+                    "segments": 3240,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 12310,
+                    "comments": 5900,
+                    "replies": 46440,
+                    "beats": 12,
+                    "visuals": 20628,
+                    "gallery": 19365
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "statusEvents": 2643840,
+                    "joins": 180
+                  },
+                  "gets": {
+                    "beats": 4104,
+                    "retiredStatus": 1044,
+                    "retiredJoins": 180
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            },
+            "indexed": {
+              "value": {
+                "serial": 1,
+                "target": "r20-25",
+                "characters": 603,
+                "updateBytes": 13,
+                "deleteSetRanges": 0,
+                "decodedStructs": 1,
+                "projectedBeats": 1,
+                "statusRecordsRead": 0,
+                "recovery": 36,
+                "milliseconds": null
+              },
+              "work": {
+                "prepare": {
+                  "records": {},
+                  "gets": {
+                    "segments": 3240
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 9126,
+                  "textReads": 825,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 2
+                },
+                "apply": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 1,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 15
+                },
+                "incremental": {
+                  "records": {
+                    "people": 2,
+                    "tags": 31,
+                    "shots": 324,
+                    "comments": 144,
+                    "replies": 5184,
+                    "visuals": 2160,
+                    "gallery": 2180
+                  },
+                  "gets": {
+                    "segments": 3240,
+                    "meta": 18,
+                    "people": 16,
+                    "tags": 525,
+                    "shots": 12310,
+                    "comments": 5900,
+                    "replies": 46440,
+                    "beats": 12,
+                    "visuals": 20628,
+                    "gallery": 19365
+                  },
+                  "orderItems": 216,
+                  "orderValues": 1260,
+                  "textItems": 24,
+                  "textReads": 2,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "structure": {
+                  "records": {
+                    "joins": 180
+                  },
+                  "gets": {
+                    "beats": 3924,
+                    "retiredJoins": 180
+                  },
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 0,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "capture": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 7292,
+                  "absoluteItems": 0,
+                  "storeProbes": 0
+                },
+                "resolve": {
+                  "records": {},
+                  "gets": {},
+                  "orderItems": 0,
+                  "orderValues": 0,
+                  "textItems": 0,
+                  "textReads": 0,
+                  "integratedItems": 0,
+                  "relativeItems": 24,
+                  "absoluteItems": 23,
+                  "storeProbes": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "synthetic": {
+      "cycles": 500,
+      "checkpoints": [
+        {
+          "operations": 0,
+          "snapshot": "synthetic-0.bin",
+          "sha256": "d9427943407ce7e9e8e386155919313279f677ce36118834c8620c8838fec12a",
+          "finalCharacters": 104780,
+          "activeBeats": 300,
+          "projectedFileBytes": 334208,
+          "exportedFileBytes": 334208,
+          "bytes": {
+            "encodedBytes": 445329,
+            "categories": {
+              "live text items": 120301,
+              "deleted text tombstones": 0,
+              "soft-removed beat content": 0,
+              "removal records": 0,
+              "join records and retired ids": 0,
+              "status events": 0,
+              "marks": 59590,
+              "order array": 5514,
+              "other": 259924
+            },
+            "otherRoots": {
+              "meta": 302,
+              "people": 236,
+              "tags": 7590,
+              "shots": 70584,
+              "segments": 17322,
+              "beats": 63155,
+              "visuals": 23283,
+              "gallery": 47874,
+              "comments": 25108,
+              "replies": 2736
+            },
+            "items": 13405,
+            "framingDeleteSetAndGcBytes": 1734
+          },
+          "counts": {
+            "beats": 300,
+            "removedBeats": 0,
+            "removalFlags": 0,
+            "removalRecords": 0,
+            "joinEntries": 0,
+            "retiredJoins": 0,
+            "statusEvents": 0,
+            "projectedFileBytes": 334208,
+            "activeFileBytes": 334208
+          },
+          "legacy": {
+            "value": {
+              "serial": 1,
+              "target": "r20-7",
+              "characters": 603,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 0,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 498,
+                "textReads": 230,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 15
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4826,
+                  "gallery": 4521
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 14,
+                "textReads": 2,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {},
+                "gets": {
+                  "beats": 1500
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 604,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 2,
+                "absoluteItems": 1,
+                "storeProbes": 1
+              }
+            }
+          },
+          "indexed": {
+            "value": {
+              "serial": 1,
+              "target": "r20-7",
+              "characters": 603,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 0,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 498,
+                "textReads": 230,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 15
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4826,
+                  "gallery": 4521
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 14,
+                "textReads": 2,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {},
+                "gets": {
+                  "beats": 1200
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 604,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 2,
+                "absoluteItems": 1,
+                "storeProbes": 1
+              }
+            }
+          }
+        },
+        {
+          "operations": 10020,
+          "snapshot": "synthetic-10020.bin",
+          "sha256": "1e9a45804279c7b63901d8edd5af541f9ecb29ef88c60acb5f625e439c4028ec",
+          "finalCharacters": 108270,
+          "activeBeats": 380,
+          "projectedFileBytes": 351321,
+          "exportedFileBytes": 346533,
+          "bytes": {
+            "encodedBytes": 1237973,
+            "categories": {
+              "live text items": 128618,
+              "deleted text tombstones": 937,
+              "soft-removed beat content": 7768,
+              "removal records": 729414,
+              "join records and retired ids": 7677,
+              "status events": 21500,
+              "marks": 59695,
+              "order array": 5514,
+              "other": 276850
+            },
+            "otherRoots": {
+              "meta": 302,
+              "people": 236,
+              "tags": 7590,
+              "shots": 70584,
+              "segments": 17322,
+              "beats": 78411,
+              "visuals": 23283,
+              "gallery": 47874,
+              "comments": 25418,
+              "replies": 2736
+            },
+            "items": 16224,
+            "framingDeleteSetAndGcBytes": 3094
+          },
+          "counts": {
+            "beats": 400,
+            "removedBeats": 20,
+            "removalFlags": 20,
+            "removalRecords": 120,
+            "joinEntries": 100,
+            "retiredJoins": 100,
+            "statusEvents": 200,
+            "projectedFileBytes": 351321,
+            "activeFileBytes": 346533
+          },
+          "legacy": {
+            "value": {
+              "serial": 1,
+              "target": "r3-7",
+              "characters": 603,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 20,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 963,
+                "textReads": 213,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 17
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4826,
+                  "gallery": 4521
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 26,
+                "textReads": 2,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {
+                  "statusEvents": 76000,
+                  "joins": 80
+                },
+                "gets": {
+                  "beats": 1740,
+                  "retiredStatus": 100,
+                  "retiredJoins": 80
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 2384,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 6,
+                "absoluteItems": 5,
+                "storeProbes": 1
+              }
+            }
+          },
+          "indexed": {
+            "value": {
+              "serial": 1,
+              "target": "r3-7",
+              "characters": 603,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 20,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 963,
+                "textReads": 213,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 17
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4826,
+                  "gallery": 4521
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 26,
+                "textReads": 2,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {
+                  "joins": 80
+                },
+                "gets": {
+                  "beats": 1460,
+                  "retiredJoins": 80
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 2384,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 6,
+                "absoluteItems": 5,
+                "storeProbes": 1
+              }
+            }
+          }
+        },
+        {
+          "operations": 25050,
+          "snapshot": "synthetic-25050.bin",
+          "sha256": "0f10b58678185b16f4ad31b00b8a8dddc37b0b5c4675324e027ce04ea64961d9",
+          "finalCharacters": 114025,
+          "activeBeats": 500,
+          "projectedFileBytes": 378006,
+          "exportedFileBytes": 366523,
+          "bytes": {
+            "encodedBytes": 2415709,
+            "categories": {
+              "live text items": 142003,
+              "deleted text tombstones": 2397,
+              "soft-removed beat content": 19088,
+              "removal records": 1809894,
+              "join records and retired ids": 19622,
+              "status events": 54445,
+              "marks": 59875,
+              "order array": 5514,
+              "other": 302871
+            },
+            "otherRoots": {
+              "meta": 302,
+              "people": 236,
+              "tags": 7590,
+              "shots": 70584,
+              "segments": 17322,
+              "beats": 101691,
+              "visuals": 23283,
+              "gallery": 47874,
+              "comments": 26358,
+              "replies": 2736
+            },
+            "items": 20394,
+            "framingDeleteSetAndGcBytes": 4895
+          },
+          "counts": {
+            "beats": 550,
+            "removedBeats": 50,
+            "removalFlags": 50,
+            "removalRecords": 300,
+            "joinEntries": 250,
+            "retiredJoins": 250,
+            "statusEvents": 500,
+            "projectedFileBytes": 378006,
+            "activeFileBytes": 366523
+          },
+          "legacy": {
+            "value": {
+              "serial": 1,
+              "target": "r20-8",
+              "characters": 603,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 50,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 1812,
+                "textReads": 260,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 17
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4826,
+                  "gallery": 4521
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 14,
+                "textReads": 2,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {
+                  "statusEvents": 250000,
+                  "joins": 200
+                },
+                "gets": {
+                  "beats": 2100,
+                  "retiredStatus": 250,
+                  "retiredJoins": 200
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 604,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 2,
+                "absoluteItems": 1,
+                "storeProbes": 1
+              }
+            }
+          },
+          "indexed": {
+            "value": {
+              "serial": 1,
+              "target": "r20-8",
+              "characters": 603,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 50,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 1812,
+                "textReads": 260,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 17
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4826,
+                  "gallery": 4521
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 14,
+                "textReads": 2,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {
+                  "joins": 200
+                },
+                "gets": {
+                  "beats": 1850,
+                  "retiredJoins": 200
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 604,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 2,
+                "absoluteItems": 1,
+                "storeProbes": 1
+              }
+            }
+          }
+        },
+        {
+          "operations": 50100,
+          "snapshot": "synthetic-50100.bin",
+          "sha256": "aaa1cdbb3d1cabdd4cc66adfe423db216d8e711e2208ad8deabbf9fec1e15166",
+          "finalCharacters": 125890,
+          "activeBeats": 700,
+          "projectedFileBytes": 421890,
+          "exportedFileBytes": 401522,
+          "bytes": {
+            "encodedBytes": 3356090,
+            "categories": {
+              "live text items": 165090,
+              "deleted text tombstones": 4493,
+              "soft-removed beat content": 36602,
+              "removal records": 2585302,
+              "join records and retired ids": 39487,
+              "status events": 113484,
+              "marks": 59947,
+              "order array": 5514,
+              "other": 346171
+            },
+            "otherRoots": {
+              "meta": 302,
+              "people": 236,
+              "tags": 7590,
+              "shots": 70584,
+              "segments": 17322,
+              "beats": 140491,
+              "visuals": 23283,
+              "gallery": 47874,
+              "comments": 27858,
+              "replies": 2736
+            },
+            "items": 27152,
+            "framingDeleteSetAndGcBytes": 7895
+          },
+          "counts": {
+            "beats": 800,
+            "removedBeats": 100,
+            "removalFlags": 100,
+            "removalRecords": 600,
+            "joinEntries": 500,
+            "retiredJoins": 500,
+            "statusEvents": 1000,
+            "projectedFileBytes": 421890,
+            "activeFileBytes": 401522
+          },
+          "legacy": {
+            "value": {
+              "serial": 1,
+              "target": "history-beat-212",
+              "characters": 593,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 100,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 2335,
+                "textReads": 213,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 17
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4824,
+                  "gallery": 4516
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {
+                  "statusEvents": 700000,
+                  "joins": 400
+                },
+                "gets": {
+                  "beats": 3100,
+                  "retiredStatus": 300,
+                  "retiredJoins": 400
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 5339,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 11,
+                "absoluteItems": 10,
+                "storeProbes": 1
+              }
+            }
+          },
+          "indexed": {
+            "value": {
+              "serial": 1,
+              "target": "history-beat-212",
+              "characters": 593,
+              "updateBytes": 13,
+              "deleteSetRanges": 0,
+              "decodedStructs": 1,
+              "projectedBeats": 1,
+              "statusRecordsRead": 0,
+              "recovery": 100,
+              "milliseconds": null
+            },
+            "work": {
+              "prepare": {
+                "records": {},
+                "gets": {
+                  "segments": 900
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 2335,
+                "textReads": 213,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 2
+              },
+              "apply": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 1,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 17
+              },
+              "incremental": {
+                "records": {
+                  "people": 2,
+                  "tags": 31,
+                  "shots": 90,
+                  "comments": 40,
+                  "replies": 400,
+                  "visuals": 600,
+                  "gallery": 600
+                },
+                "gets": {
+                  "segments": 900,
+                  "meta": 18,
+                  "people": 16,
+                  "tags": 525,
+                  "shots": 2428,
+                  "comments": 1278,
+                  "replies": 2340,
+                  "beats": 12,
+                  "visuals": 4824,
+                  "gallery": 4516
+                },
+                "orderItems": 300,
+                "orderValues": 300,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "structure": {
+                "records": {
+                  "joins": 400
+                },
+                "gets": {
+                  "beats": 2700,
+                  "retiredJoins": 400
+                },
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 0,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "capture": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 5339,
+                "absoluteItems": 0,
+                "storeProbes": 0
+              },
+              "resolve": {
+                "records": {},
+                "gets": {},
+                "orderItems": 0,
+                "orderValues": 0,
+                "textItems": 0,
+                "textReads": 0,
+                "integratedItems": 0,
+                "relativeItems": 11,
+                "absoluteItems": 10,
+                "storeProbes": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "undo": [
+      {
+        "writers": 2,
+        "masterBytes": 67095,
+        "localWriters": [
+          {
+            "writer": 1,
+            "stackEntries": 61,
+            "encodedBytesWhileUndoRetained": 68003,
+            "deletionRanges": 127,
+            "insertionRanges": 61
+          },
+          {
+            "writer": 2,
+            "stackEntries": 61,
+            "encodedBytesWhileUndoRetained": 67942,
+            "deletionRanges": 115,
+            "insertionRanges": 61
+          }
+        ]
+      },
+      {
+        "writers": 6,
+        "masterBytes": 67096,
+        "localWriters": [
+          {
+            "writer": 1,
+            "stackEntries": 21,
+            "encodedBytesWhileUndoRetained": 67352,
+            "deletionRanges": 33,
+            "insertionRanges": 21
+          },
+          {
+            "writer": 2,
+            "stackEntries": 21,
+            "encodedBytesWhileUndoRetained": 67368,
+            "deletionRanges": 28,
+            "insertionRanges": 21
+          },
+          {
+            "writer": 3,
+            "stackEntries": 20,
+            "encodedBytesWhileUndoRetained": 67634,
+            "deletionRanges": 55,
+            "insertionRanges": 20
+          },
+          {
+            "writer": 4,
+            "stackEntries": 20,
+            "encodedBytesWhileUndoRetained": 67512,
+            "deletionRanges": 55,
+            "insertionRanges": 20
+          },
+          {
+            "writer": 5,
+            "stackEntries": 20,
+            "encodedBytesWhileUndoRetained": 67210,
+            "deletionRanges": 39,
+            "insertionRanges": 20
+          },
+          {
+            "writer": 6,
+            "stackEntries": 20,
+            "encodedBytesWhileUndoRetained": 67255,
+            "deletionRanges": 32,
+            "insertionRanges": 20
+          }
+        ]
+      }
+    ]
+  }
+}

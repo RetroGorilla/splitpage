@@ -1,0 +1,9252 @@
+{
+  "events": {
+    "a": {
+      "target": "R1",
+      "value": "ready",
+      "prior": "todo",
+      "parents": []
+    },
+    "c": {
+      "target": "R1",
+      "value": "shot",
+      "prior": "ready",
+      "parents": [
+        "a"
+      ]
+    },
+    "b": {
+      "target": "R1",
+      "value": "shot",
+      "prior": "todo",
+      "parents": []
+    },
+    "d": {
+      "target": "R1",
+      "value": "ready",
+      "prior": "shot",
+      "parents": [
+        "b"
+      ]
+    }
+  },
+  "rows": [
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "aa51651c9ea439cc284811a1cede2e108ff0b9bc2b052840a4f0155bed9d2068",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        1,
+        2
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "50d67d8f19732f556972eb5c8168f9692d1d2cf55045a94dc2b9762ee5048e30",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "recreate": false,
+      "stateSha256": "fc4cc0a075eacbe42598414eb1eebeced0448bfbbe982cfd2318d0c606a05312",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "b",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "b",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "c",
+        "d",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "d",
+        "c"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "a",
+        "d",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "reverseDelivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "c",
+        "d",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "d",
+        "c",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "d",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "b",
+        "d",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "c",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "b",
+        "a",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "b",
+            "d",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "a",
+        "b"
+      ],
+      "reverseDelivery": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "b",
+            "a",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": true
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "a",
+        "c"
+      ],
+      "reverseDelivery": [
+        "c",
+        "a",
+        "b",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    },
+    {
+      "clients": [
+        2,
+        1
+      ],
+      "delivery": [
+        "d",
+        "b",
+        "c",
+        "a"
+      ],
+      "reverseDelivery": [
+        "a",
+        "c",
+        "b",
+        "d"
+      ],
+      "recreate": true,
+      "stateSha256": "b99bed0d1b7d63210614f5280e6bb835bc74cfdee6e47940d757fced59f22b21",
+      "identicalEncodedState": true,
+      "records": [
+        [
+          "a",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "b",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "todo",
+            "parents": []
+          }
+        ],
+        [
+          "c",
+          {
+            "target": "R1",
+            "value": "shot",
+            "prior": "ready",
+            "parents": [
+              "a"
+            ]
+          }
+        ],
+        [
+          "d",
+          {
+            "target": "R1",
+            "value": "ready",
+            "prior": "shot",
+            "parents": [
+              "b"
+            ]
+          }
+        ]
+      ],
+      "observations": [
+        {
+          "replica": "first",
+          "keys": [
+            "b",
+            "d",
+            "a",
+            "c"
+          ],
+          "status": "shot"
+        },
+        {
+          "replica": "reverse",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        },
+        {
+          "replica": "late",
+          "keys": [
+            "a",
+            "c",
+            "b",
+            "d"
+          ],
+          "status": "ready"
+        }
+      ],
+      "agrees": false
+    }
+  ],
+  "total": 96,
+  "disagreements": 80
+}
