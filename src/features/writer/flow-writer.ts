@@ -2,7 +2,7 @@ import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.
 import { flowCommand } from "../../application/commands/flow.ts";
 import type { Undo, UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
-import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
+import type { Command, CommandOutcome, CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
@@ -38,7 +38,7 @@ export interface FlowWriterPorts {
   readonly visualLeave?: (cell: HTMLElement) => void;
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
-  readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
@@ -46,7 +46,7 @@ export interface FlowWriterPorts {
   readonly decode: (html: string) => Run[];
   readonly storedHtml: (html: string) => string;
   readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
-  readonly run: (command: Command) => CommandOutcome;
+  readonly run: CommonDocumentSession["run"];
   readonly shown: <T>(edit: () => T) => T;
   readonly editingBlocked: () => boolean;
   readonly text: CellTextPorts;

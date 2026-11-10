@@ -1,3 +1,5 @@
+import type { CommonDocumentSession } from "./document-session.ts";
+
 export interface OperationContext {
   readonly epoch: number;
   readonly docId: string | null;
@@ -7,7 +9,7 @@ export interface OperationContext {
 }
 
 export interface OperationPorts {
-  readonly session: { readonly epoch: () => number; readonly generation: () => number };
+  readonly session: Pick<CommonDocumentSession, "epoch" | "generation">;
   readonly document: { readonly id: () => string | null };
   readonly destination: {
     readonly identity: () => unknown;

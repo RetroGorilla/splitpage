@@ -15,7 +15,7 @@ import type { AutoSavePolicy } from "../save/autosave.ts";
 import type { DestinationPort, DocumentDestination, HistoryPort } from "../transitions/ports.ts";
 import type { MergeUndo } from "./merge-undo.ts";
 import type { DocumentIdentityOwner, IdentityEntry } from "../identity/ports.ts";
-import type { DocumentSession } from "./document-session.ts";
+import type { StandaloneDocumentSession } from "./document-session.ts";
 
 export type SessionMergePorts = Omit<DocumentMergePorts<OperationContext>, "view">;
 
@@ -29,12 +29,12 @@ export interface SnapshotRestoreRequest {
 export type SnapshotRestoreResult = "busy" | "missing" | "changed" | "corrupt" | "no-backup" | "restored";
 
 export interface SessionMergeSession {
-  readonly held: () => ValidatedDocument | null;
+  readonly held: StandaloneDocumentSession["held"];
   readonly holdMergeBase: (next: ValidatedDocument | null) => void;
-  readonly noteMerged: DocumentSession["absorbMerged"];
-  readonly noteRecovery: DocumentSession["absorbRecovery"];
-  readonly noteDiskUpdate: DocumentSession["absorbDisk"];
-  readonly noteAbsorbedDirty: DocumentSession["settle"];
+  readonly noteMerged: StandaloneDocumentSession["absorbMerged"];
+  readonly noteRecovery: StandaloneDocumentSession["absorbRecovery"];
+  readonly noteDiskUpdate: StandaloneDocumentSession["absorbDisk"];
+  readonly noteAbsorbedDirty: StandaloneDocumentSession["settle"];
 }
 
 export interface SessionMergeOwnerPorts {

@@ -7,7 +7,7 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
-import type { DeepReadonly, DocumentSession } from "../../application/session/document-session.ts";
+import type { CommonDocumentSession, DeepReadonly } from "../../application/session/document-session.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
@@ -47,7 +47,7 @@ export interface BeatClipPorts {
 
 export interface BeatSelectPorts {
   readonly document: Pick<DocumentReader, "current">;
-  readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "run">;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush" | "last" | "undo">;
   readonly pictures: Pick<PictureStore, "ensureBytes">;

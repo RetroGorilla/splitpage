@@ -1,6 +1,7 @@
 import type { NoticePort } from "../effects/ports.ts";
 import type { DocumentPlace } from "../location/document-place.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { OperationContext } from "../session/operation.ts";
 import type { DocumentDestination } from "../transitions/ports.ts";
 import type { Transitions } from "../transitions/transitions.ts";
@@ -53,7 +54,7 @@ export interface DraftsPorts {
   readonly timers: CaptureTimers;
   readonly report: (error: unknown) => void;
   readonly document: Pick<DocumentReader, "current">;
-  readonly session: { readonly mergeBase: () => unknown; readonly noteAbsorbedDirty: (reason: string) => void };
+  readonly session: { readonly mergeBase: () => unknown; readonly noteAbsorbedDirty: StandaloneDocumentSession["settle"] };
   readonly place: Pick<DocumentPlace, "fileHome" | "importHome" | "writtenOut">;
   readonly markWrittenOut: (on: boolean) => void;
   readonly saves: { readonly unsaved: () => boolean; readonly editSeq: () => number };

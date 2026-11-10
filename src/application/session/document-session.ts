@@ -85,10 +85,18 @@ export interface ReloadedContent {
   readonly rows: unknown;
 }
 
-export interface DocumentSession {
+export interface CommonDocumentSession {
   epoch: () => number;
   generation: () => number;
   read: <T>(select: (doc: DocumentView | null) => T) => T;
+  run: (command: Command) => CommandOutcome;
+  refresh: (job: string) => void;
+  cancelRefresh: (jobs: readonly string[]) => void;
+  subscribe: (listener: SessionListener) => () => void;
+  dispose: () => void;
+}
+
+export interface StandaloneDocumentSession {
   held: () => ValidatedDocument | null;
   adopt: (raw: unknown) => ValidatedDocument | null;
   absorbDisk: (raw: unknown) => ValidatedDocument | null;
@@ -96,16 +104,13 @@ export interface DocumentSession {
   absorbMerged: (kind: "disk" | "recovery", merged: ValidatedDocument | null) => ValidatedDocument | null;
   absorbReload: (content: ReloadedContent) => ValidatedDocument | null;
   settle: (kind: AbsorbedKind) => void;
-  run: (command: Command) => CommandOutcome;
   replay: (replay: Replay) => CommandOutcome;
   amend: (amendment: Replay) => CommandOutcome;
   stamp: (stamp: Stamp) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
-  refresh: (job: string) => void;
-  cancelRefresh: (jobs: readonly string[]) => void;
-  subscribe: (listener: SessionListener) => () => void;
-  dispose: () => void;
 }
+
+export type DocumentSession = CommonDocumentSession & StandaloneDocumentSession;
 
 export const NO_DOCUMENT = "no document";
 
