@@ -1,0 +1,30 @@
+{
+  "schema": 2,
+  "title": "Projection inventory gaps",
+  "docId": "d77777777777777777777777777777777",
+  "paragraphsDecided": true,
+  "rows": [
+    {
+      "id": "gap-row",
+      "paragraphStart": true,
+      "audioText": "",
+      "visualText": "<span class=\"who-anchor\" data-who=\"Mira\" contenteditable=\"false\">@Mira</span>",
+      "imageLinks": [
+        { "name": "take.mp4", "size": 42, "poster": true, "location": { "kind": "path", "path": "C:\\shoot\\take.mp4" } },
+        { "name": "notes.pdf", "size": 123, "location": { "kind": "bundled", "name": "notes.pdf" } }
+      ],
+      "futureRow": { "kept": [false, null] }
+    }
+  ],
+  "comments": [
+    {
+      "id": "gap-comment", "rowId": "gap-row", "field": "visualText", "anchorId": null,
+      "body": "<img class=\"comment-img\" data-blob=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">",
+      "futureComment": [1, 2],
+      "replies": [{ "id": "gap-reply", "author": "Mira", "body": "ok", "createdAt": null, "futureReply": { "kept": true } }]
+    }
+  ],
+  "people": [{ "id": "gap-person", "name": "Mira", "futurePerson": "kept" }],
+  "productionTags": [{ "id": "gap-tag", "cat": "prop", "name": "Cup", "futureTag": [1] }],
+  "brollShots": [{ "id": "gap-shot", "name": "List shot", "origin": "list", "futureShot": { "kept": 3 } }]
+}

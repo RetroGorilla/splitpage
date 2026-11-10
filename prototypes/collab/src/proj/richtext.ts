@@ -1,0 +1,139 @@
+import type * as Y from "yjs";
+import { toHtml } from "../../../../src/core/text/html.ts";
+import { cleanMarks, defaultTagId, defaultTagOf, settleCues } from "../../../../src/core/text/runs.ts";
+import type { Marks, Run } from "../../../../src/core/text/runs.ts";
+import { bag, records } from "./value.ts";
+import type { ProjectionBag } from "./value.ts";
+
+export interface ProjectionDelta {
+  insert: string | ProjectionBag;
+  attributes?: Record<string, unknown>;
+}
+
+function unescape(value: string): string {
+  const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+  return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (whole, name: string) => {
+    if (name[0] !== "#") return entities[name.toLowerCase()] ?? whole;
+    const point = name[1]?.toLowerCase() === "x" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return point <= 0x10ffff ? String.fromCodePoint(point) : "\ufffd";
+  });
+}
+
+function attributes(token: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const match of token.matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
+    result[match[1] as string] = unescape(match[2] ?? match[3] ?? match[4] ?? "");
+  }
+  return result;
+}
+
+export function htmlToDelta(html: string, tags: unknown, comments: unknown): ProjectionDelta[] {
+  const registry = records(tags);
+  const anchors = records(comments);
+  const result: ProjectionDelta[] = [];
+  const stack: { name: string; attrs: Record<string, unknown> }[] = [];
+  let serial = 0;
+  let atom: { value: ProjectionBag; attrs: Record<string, unknown>; depth: number; label: string } | null = null;
+  function current(): Record<string, unknown> {
+    return Object.assign({}, ...stack.map(entry => entry.attrs)) as Record<string, unknown>;
+  }
+  for (const token of html.match(/<[^>]*>|[^<]+/g) ?? []) {
+    if (token[0] !== "<") {
+      if (atom) atom.label += unescape(token);
+      else result.push({ insert: unescape(token).replace(/[\n\r]/g, " "), attributes: current() });
+      continue;
+    }
+    const name = /^<\/?([\w-]+)/.exec(token)?.[1]?.toLowerCase();
+    if (!name) continue;
+    if (token.startsWith("</")) {
+      const index = stack.findLastIndex(entry => entry.name === name);
+      if (index >= 0) stack.length = index;
+      if (atom && stack.length < atom.depth) {
+        if ("k" in atom.value) atom.value.label = atom.label;
+        result.push({ insert: atom.value, attributes: atom.attrs });
+        atom = null;
+      }
+      continue;
+    }
+    if (name === "br") {
+      if (!atom) result.push({ insert: "\n", attributes: current() });
+      continue;
+    }
+    const source = attributes(token);
+    const attrs: Record<string, unknown> = {};
+    const format: Record<string, string> = { strong: "b", b: "b", em: "i", i: "i", u: "u", s: "s", strike: "s", mark: "hl" };
+    if (format[name]) attrs[format[name] as string] = true;
+    const classes = (source.class ?? "").split(/\s+/);
+    if (classes.includes("stage-dir")) attrs.dir = true;
+    if (classes.includes("audio-cue")) attrs.cue = true;
+    if (source.href) attrs[`l:${++serial}`] = source.href;
+    if (source["data-cmt"]) {
+      const anchor = source["data-cmt"];
+      const comment = anchors.find(value => value.anchorId === anchor);
+      attrs[`c:${String(comment?.id ?? anchor)}`] = true;
+    }
+    if (classes.includes("tag-anchor")) {
+      const tag = registry.find(value => value.cat === source["data-tag-cat"] && value.name === source["data-tag-name"]);
+      attrs[`t:${String(++serial).padStart(10, "0")}`] = tag?.id ?? defaultTagId(source["data-tag-cat"] ?? "", source["data-tag-name"] ?? "");
+    }
+    stack.push({ name, attrs });
+    if (classes.includes("broll-key") || classes.includes("who-anchor")) {
+      atom = {
+        value: classes.includes("broll-key") ? { k: source["data-broll-id"] } : { w: source["data-who"] },
+        attrs: current(), depth: stack.length, label: ""
+      };
+    }
+  }
+  return result;
+}
+
+export function deltaToRuns(delta: readonly ProjectionDelta[], tags: unknown, comments: unknown, deriveCue = false): Run[] {
+  const registry = records(tags);
+  const anchors = records(comments);
+  const result: Run[] = [];
+  for (const item of delta) {
+    const attrs = item.attributes ?? {};
+    const marks: Marks = cleanMarks(attrs, typeof item.insert !== "string");
+    const cmts = Object.keys(attrs).filter(key => key.startsWith("c:") && attrs[key])
+      .map(key => String(anchors.find(comment => comment.id === key.slice(2))?.anchorId ?? key.slice(2)));
+    if (cmts.length) marks.cmt = cmts.sort();
+    const links = Object.keys(attrs).filter(key => key.startsWith("l:") && attrs[key]).sort();
+    if (links.length) marks.href = String(attrs[links[0] as string]);
+    const tagged = Object.keys(attrs).filter(key => key.startsWith("t:") && attrs[key]).sort()
+      .map(key => String(attrs[key])).filter(id => registry.some(tag => tag.id === id) || defaultTagOf(id));
+    if (typeof item.insert === "string") {
+      if (tagged[0]) marks.tag = tagged[0];
+      if (tagged.length > 1) marks.innerTags = tagged.slice(1);
+      if (deriveCue) marks.cue = true;
+      result.push({ text: item.insert, marks });
+    } else if ("k" in item.insert) {
+      result.push({ atom: "broll", id: String(item.insert.k), text: String(item.insert.label ?? "B-roll:"), marks });
+    } else if ("w" in item.insert) {
+      const name = String(item.insert.w);
+      result.push({ atom: "who", name, text: "@" + name, marks });
+    } else throw new Error("Unsupported content atom");
+  }
+  return deriveCue ? settleCues(result) : result;
+}
+
+export function deltaToHtml(delta: readonly ProjectionDelta[], tags: unknown, comments: unknown, deriveCue = false): string {
+  const registry = records(tags);
+  return toHtml(deltaToRuns(delta, registry, comments, deriveCue), {
+    tagOf: id => {
+      const tag = registry.find(entry => entry.id === id);
+      return tag ? { cat: String(tag.cat), name: String(tag.name) } : defaultTagOf(id);
+    }
+  });
+}
+
+export function insertHtml(text: Y.Text, html: string, tags: unknown, comments: unknown): void {
+  const delta = htmlToDelta(html, tags, comments);
+  text.applyDelta([{ retain: text.length }, ...delta]);
+}
+
+export function readDelta(text: Y.Text): ProjectionDelta[] {
+  const delta = text.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[];
+  return delta.map((item): ProjectionDelta => ({
+    insert: typeof item.insert === "string" ? item.insert : bag(item.insert), attributes: item.attributes ?? {}
+  }));
+}
