@@ -73,6 +73,17 @@ export const adjacentRestoreOracles: Record<string, ScriptOracle> = {
   restored: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", { i: true }], ["s3*", "c", { b: true }], ["s4", "d", {}]] }], carets: {}, recovery: [] }
 };
 
+export const loserDescendantOracle: ScriptOracle = {
+  rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", {}], ["s3", "c", {}]] }], carets: {}, recovery: []
+};
+
+export const loserEditOracles: Record<string, ScriptOracle> = {
+  bold: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", { b: true }], ["s3", "c", {}]] }], carets: {}, recovery: [] },
+  comment: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", { "c:C1": true }], ["s3", "c", {}]] }], carets: {}, recovery: [], records: { comments: {
+    C1: { author: "Carol", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [] }
+  }, recoveryReplies: [] } }
+};
+
 export const redoOracles: Record<string, ScriptOracle> = {
   typed: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["a1", "x", {}], ["a2", "y", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]] }], carets: {}, recovery: [] },
   undone: { rows: [...separate], carets: {}, recovery: [] },

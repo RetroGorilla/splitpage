@@ -4,16 +4,17 @@ import type { DeliveryOrder } from "../../src/delivery.ts";
 import { checkModel } from "../../src/model.ts";
 import type { CollabIdentity, CollabModel, ScriptOracle } from "../../src/model.ts";
 import type { ReplicaCaretAnchor } from "../../src/reader.ts";
+import { addComment as addRawComment } from "../../src/marks/commands.ts";
 import { readStatusEvent } from "../../src/marks/status-resolution.ts";
-import { mapValue } from "../../src/schema.ts";
+import { identityAt, mapValue } from "../../src/schema.ts";
 import type { SchemaReplica, SeedBeat } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { structuralCaret } from "../../src/structure-selection.ts";
 import { addComment, changeStatus, deleteRange, formatRange, insertText, join, removeBeat, split, tagRange } from "../../src/undo-records/commands.ts";
 import { identityKey, resolveIdentity } from "../../src/undo-records/identity.ts";
 import { CommandHistory, settleRestorations } from "../../src/undo-records/history.ts";
-import type { UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
-import { adjacentRestoreOracles, chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, positionControlOracle, redoneAtGapOracle, redoneMarkOracles, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, restoreOnceOracles, restoreRunOracles, statusOracles, statusRedoObserved, throwingUndoOracles } from "./oracles.ts";
+import type { RestoreRoute, UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
+import { adjacentRestoreOracles, chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, loserDescendantOracle, loserEditOracles, positionControlOracle, redoneAtGapOracle, redoneMarkOracles, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, restoreOnceOracles, restoreRunOracles, statusOracles, statusRedoObserved, throwingUndoOracles } from "./oracles.ts";
 import { bindRestores, countUpdates } from "./runner.ts";
 
 export type Writer = "Alice" | "Bob";
@@ -34,13 +35,13 @@ export class Scenario {
   readonly order: DeliveryOrder;
   checks = 0;
 
-  constructor(seed: readonly SeedBeat[], order: DeliveryOrder, swapped: boolean, defect?: UndoDefect) {
+  constructor(seed: readonly SeedBeat[], order: DeliveryOrder, swapped: boolean, defect?: UndoDefect, route?: RestoreRoute) {
     this.harness = new ReplicaHarness("B", seed, swapped);
     this.order = order;
     this.replicas = { Alice: this.harness.alice, Bob: this.harness.bob };
-    const options = defect ? { defect } : {};
+    const options = { ...(defect ? { defect } : {}), ...(route ? { route } : {}) };
     this.histories = { Alice: new CommandHistory(this.harness.alice, options), Bob: new CommandHistory(this.harness.bob, options) };
-    this.harness.queue.history.push(`fixture B ${JSON.stringify(seed)}, order ${order}${swapped ? ", swapped client ids" : ""}${defect ? `, defect ${defect}` : ""}`);
+    this.harness.queue.history.push(`fixture B ${JSON.stringify(seed)}, order ${order}${swapped ? ", swapped client ids" : ""}${defect ? `, defect ${defect}` : ""}${route ? `, restore route ${route}` : ""}`);
   }
 
   note(line: string): void {
@@ -326,8 +327,8 @@ function marked(scenario: Scenario, text: string, marks: [number, Record<string,
   scenario.note(`fixture R1 "${text}" marks ${JSON.stringify(marks)}`);
 }
 
-export function runRestoreOnce(order: DeliveryOrder, swapped: boolean, first: Writer, defect?: UndoDefect): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped, defect);
+export function runRestoreOnce(order: DeliveryOrder, swapped: boolean, first: Writer, defect?: UndoDefect, route?: RestoreRoute): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped, defect, route);
   return scenario.run(`one character both writers deleted, concurrent undos, ${first} redoes first`, () => {
     marked(scenario, "abcd", [[2, { b: true }]]);
     deleteRange(scenario.histories.Alice, "R1", 2, 3);
@@ -347,8 +348,8 @@ export function runRestoreOnce(order: DeliveryOrder, swapped: boolean, first: Wr
   });
 }
 
-export function runRestoreOnceChain(order: DeliveryOrder, swapped: boolean, first: Writer, defect?: UndoDefect): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped, defect);
+export function runRestoreOnceChain(order: DeliveryOrder, swapped: boolean, first: Writer, defect?: UndoDefect, route?: RestoreRoute): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped, defect, route);
   return scenario.run(`one character restored twice, converged, deleted again by ${first} and undone`, () => {
     marked(scenario, "abcd", [[2, { b: true }]]);
     deleteRange(scenario.histories.Alice, "R1", 2, 3);
@@ -366,8 +367,8 @@ export function runRestoreOnceChain(order: DeliveryOrder, swapped: boolean, firs
   });
 }
 
-export function runRestoreRun(order: DeliveryOrder, swapped: boolean, first: Writer, defect?: UndoDefect): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "abcde" }], order, swapped, defect);
+export function runRestoreRun(order: DeliveryOrder, swapped: boolean, first: Writer, defect?: UndoDefect, route?: RestoreRoute): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcde" }], order, swapped, defect, route);
   return scenario.run(`three characters, the two deletes overlap in the middle one, concurrent undos, ${first} redoes first`, () => {
     marked(scenario, "abcde", [[1, { i: true }], [2, { b: true }]]);
     deleteRange(scenario.histories.Alice, "R1", 1, 3);
@@ -385,8 +386,8 @@ export function runRestoreRun(order: DeliveryOrder, swapped: boolean, first: Wri
   });
 }
 
-export function runAdjacentRestore(order: DeliveryOrder, swapped: boolean, defect?: UndoDefect): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped, defect);
+export function runAdjacentRestore(order: DeliveryOrder, swapped: boolean, defect?: UndoDefect, route?: RestoreRoute): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped, defect, route);
   return scenario.run("adjacent characters deleted by different writers, concurrent undos", () => {
     marked(scenario, "abcd", [[1, { i: true }], [2, { b: true }]]);
     deleteRange(scenario.histories.Alice, "R1", 1, 2);
@@ -394,6 +395,40 @@ export function runAdjacentRestore(order: DeliveryOrder, swapped: boolean, defec
     scenario.check("deleted", adjacentRestoreOracles.deleted ?? fail());
     scenario.undoBoth("Alice");
     scenario.check("restored", adjacentRestoreOracles.restored ?? fail());
+    return undefined;
+  });
+}
+
+export function runLoserDescendant(): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abc" }], "D1", false);
+  return scenario.run("Bob deletes and restores his own losing restoration before settling", () => {
+    deleteRange(scenario.histories.Alice, "R1", 1, 2);
+    deleteRange(scenario.histories.Bob, "R1", 1, 2);
+    scenario.deliver();
+    scenario.undo("Alice");
+    scenario.undo("Bob");
+    deleteRange(scenario.histories.Bob, "R1", 1, 2);
+    scenario.undo("Bob");
+    scenario.check("settled", loserDescendantOracle);
+    return undefined;
+  });
+}
+
+export function runLoserEdited(edit: "bold" | "comment"): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abc" }], "D1", false);
+  const carol = scenario.harness.lateJoin(scenario.harness.alice);
+  return scenario.run(`Carol sees only Bob's restoration and ${edit === "bold" ? "bolds it" : "anchors a comment on it"}`, () => {
+    deleteRange(scenario.histories.Alice, "R1", 1, 2);
+    deleteRange(scenario.histories.Bob, "R1", 1, 2);
+    scenario.deliver();
+    scenario.undo("Alice");
+    scenario.undo("Bob");
+    const queue = scenario.harness.queue;
+    for (const message of queue.pending.filter(entry => entry.from === "B" && entry.to === "C")) queue.deliver(message.id);
+    if (edit === "bold") carol.format("R1", 1, 1, { b: true });
+    else addRawComment(carol, "C1", "R1", 1, 1, "Carol");
+    scenario.note(`Carol ${edit === "bold" ? "bolds" : "comments on"} the b she sees: ${scenario.harness.identities.notation(identityAt(carol.locate("R1").text, carol.locate("R1").start + 1))}`);
+    scenario.check("settled", loserEditOracles[edit] ?? fail());
     return undefined;
   });
 }

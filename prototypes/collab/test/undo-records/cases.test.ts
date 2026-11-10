@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordTiming, runAdjacentRestore, runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalRemovalRedo, runIdenticalTag, runInsideRange, runJoinRedo, runJoinTargetRemoved, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneMarkReversed, runRedoneRecovery, runRejoin, runRemovedAfterInsert, runRemovedSplit, runReRemoval, runRestoredChain, runRestoreOnce, runRestoreOnceChain, runRestoreRun, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
+import { recordTiming, runAdjacentRestore, runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalRemovalRedo, runIdenticalTag, runInsideRange, runJoinRedo, runJoinTargetRemoved, runLaterFormat, runLongChain, runLoserDescendant, runLoserEdited, runPositionControl, runRedoAfterRemote, runRedoneMarkReversed, runRedoneRecovery, runRejoin, runRemovedAfterInsert, runRemovedSplit, runReRemoval, runRestoredChain, runRestoreOnce, runRestoreOnceChain, runRestoreRun, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
 import type { CaseResult } from "./cases.ts";
 
 const identicalOrders = ["D1", "dup", "rev", "late-C"] as const;
@@ -54,6 +54,38 @@ test("a command records after its transaction: an afterTransaction listener sees
   assert.ok(timing.listenerSaw.every(length => length === 0));
   assert.equal(timing.after, 1);
 });
+
+test("limit: settling keeps a losing restoration's own restoration, so the character shows twice", () => {
+  assert.match(runLoserDescendant().failure ?? "", /settled\/client\d+\.rows\[0\]\.characters\[2\]\.identity\.client: expected 10, got 2/);
+});
+
+test("limit: settling deletes the losing copy with the bold another writer gave it", () => {
+  assert.match(runLoserEdited("bold").failure ?? "", /settled\/client\d+\.rows\[0\]\.characters\[1\]\.marks\.b: expected true, got <missing>/);
+});
+
+test("limit: settling deletes the losing copy with the comment anchored on it", () => {
+  assert.match(runLoserEdited("comment").failure ?? "", /settled\/client\d+\.rows\[0\]\.characters\[1\]\.marks\.c:C1: expected true, got <missing>/);
+});
+
+for (const order of identicalOrders) {
+  for (const swapped of [false, true]) {
+    const ids = swapped ? "swapped client ids" : "normal client ids";
+    for (const first of ["Alice", "Bob"] as const) {
+      test(`capture route: restore once ${order}, ${ids}, ${first} first`, () => passes(runRestoreOnce(order, swapped, first, undefined, "capture")));
+      test(`capture route: restore once, chain ${order}, ${ids}, ${first} first`, () => passes(runRestoreOnceChain(order, swapped, first, undefined, "capture")));
+      if (swapped) {
+        test(`capture route needs tight format items: overlapping run ${order}, ${ids}, ${first} first`, () => {
+          assert.match(runRestoreRun(order, swapped, first, undefined, "capture").failure ?? "", /restored\/client\d+\.rows\[0\]\.characters\[2\]\.marks\.i: expected <missing>, got true/);
+        });
+      } else {
+        test(`capture route: overlapping run ${order}, ${ids}, ${first} first`, () => passes(runRestoreRun(order, swapped, first, undefined, "capture")));
+      }
+    }
+    test(`capture route needs tight format items: adjacent restores ${order}, ${ids}`, () => {
+      assert.match(runAdjacentRestore(order, swapped, undefined, "capture").failure ?? "", /restored\/client\d+\.rows\[0\]\.characters\[2\]\.marks\.i: expected <missing>, got true/);
+    });
+  }
+}
 
 for (const order of identicalOrders) {
   for (const swapped of [false, true]) {

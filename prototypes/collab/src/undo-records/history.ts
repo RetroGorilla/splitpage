@@ -6,7 +6,7 @@ import type { SchemaReplica } from "../schema.ts";
 import { statusFrontier, statusValue } from "../marks/commands.ts";
 import { readStatusEvent } from "../marks/status-resolution.ts";
 import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity, restoreBefore, sameIdentity, selectionOf } from "./identity.ts";
-import type { IdentityPoint, ResolvedIdentity, SelectionRecord, StoredContent } from "./identity.ts";
+import type { IdentityPoint, ResolvedIdentity, SelectionRecord, SequenceType, StoredContent } from "./identity.ts";
 
 export type CommandPart =
   | { kind: "sequence"; inserted: CollabIdentity[]; deleted: StoredContent[] }
@@ -47,6 +47,28 @@ export const settleOrigin = { settleRestorations: true };
 interface Reversal {
   effective: boolean;
   inverse: CommandPart;
+}
+
+interface Capture {
+  manager: Y.UndoManager;
+  open: boolean;
+  members: StoredContent[];
+  discarded: boolean;
+}
+
+export type RestoreRoute = "capture" | "items";
+
+function sequenceScope(doc: Y.Doc): SequenceType[] {
+  if (doc.share.has("flow")) return [doc.getText("flow")];
+  const types: SequenceType[] = [doc.getArray("order")];
+  for (const segment of doc.getMap("segments").values()) {
+    if (segment instanceof Y.Map && segment.get("text") instanceof Y.Text) types.push(segment.get("text") as Y.Text);
+  }
+  return types;
+}
+
+function ownClock(doc: Y.Doc): number {
+  return Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
 }
 
 function parseIdentityKey(key: string): CollabIdentity {
@@ -110,24 +132,64 @@ export class CommandHistory {
   readonly origin = { commandUndo: true };
   readonly bound: number;
   readonly defect: UndoDefect | null;
+  readonly route: RestoreRoute;
   dropped = 0;
   private restoredHere = new Map<string, CollabIdentity>();
+  private popped = new Map<string, CollabIdentity>();
+  private capture: Capture | null = null;
+  private readonly captures = new WeakMap<StoredContent, Capture>();
   private readonly onDrop: ((entry: CommandRecord) => void) | null;
+  private readonly openCapture = (transaction: Y.Transaction): void => {
+    if (!transaction.local || transaction.origin === settleOrigin) return;
+    const scope = sequenceScope(this.replica.doc);
+    if (this.capture?.open) {
+      this.capture.manager.addToScope(scope);
+      this.capture.manager.trackedOrigins.add(transaction.origin);
+      return;
+    }
+    const capture: Capture = { manager: new Y.UndoManager(scope, {
+      trackedOrigins: new Set([transaction.origin]), captureTimeout: Number.POSITIVE_INFINITY, deleteFilter: () => false,
+      captureTransaction: tr => capture.open && tr.local && tr.origin !== settleOrigin
+    }), open: true, members: [], discarded: false };
+    this.capture = capture;
+  };
 
-  constructor(replica: SchemaReplica, options: { bound?: number; defect?: UndoDefect; onDrop?: (entry: CommandRecord) => void } = {}) {
+  constructor(replica: SchemaReplica, options: { bound?: number; defect?: UndoDefect; onDrop?: (entry: CommandRecord) => void; route?: RestoreRoute } = {}) {
     this.replica = replica;
     this.bound = options.bound ?? 200;
     this.defect = options.defect ?? null;
     this.onDrop = options.onDrop ?? null;
+    this.route = options.route ?? "items";
+    if (this.route === "capture") replica.doc.on("beforeTransaction", this.openCapture);
+  }
+
+  destroy(): void {
+    this.replica.doc.off("beforeTransaction", this.openCapture);
+    this.closeCapture([]);
+  }
+
+  private closeCapture(parts: readonly CommandPart[]): void {
+    const capture = this.capture;
+    this.capture = null;
+    if (!capture) return;
+    capture.open = false;
+    for (const part of parts) if (part.kind === "sequence") capture.members.push(...part.deleted);
+    if (capture.manager.undoStack.length === 0 || capture.members.length === 0) {
+      capture.manager.destroy();
+      return;
+    }
+    for (const member of capture.members) this.captures.set(member, capture);
   }
 
   record(entry: CommandRecord): void {
+    this.closeCapture(entry.parts);
     this.undoStack.push(entry);
     this.redoStack.length = 0;
     while (this.undoStack.length > this.bound) {
       const oldest = this.undoStack.shift();
       if (!oldest) break;
       this.dropped++;
+      for (const part of oldest.parts) if (part.kind === "sequence") for (const content of part.deleted) this.captures.get(content)?.manager.destroy();
       this.onDrop?.(oldest);
     }
   }
@@ -151,8 +213,10 @@ export class CommandHistory {
       if (!entry) return { effective: false, label: null, restored: [], selection: null, consumed };
       consumed++;
       this.restoredHere = new Map();
+      this.popped = new Map();
       const inverses: CommandPart[] = [];
       let effective = false;
+      this.closeCapture([]);
       try {
         this.replica.doc.transact(() => {
           for (const part of [...entry.parts].reverse()) {
@@ -162,9 +226,11 @@ export class CommandHistory {
           }
         }, this.origin);
       } catch (error) {
+        this.closeCapture([]);
         from.push(entry);
         throw error;
       }
+      this.closeCapture(effective ? inverses : []);
       const restored = [...this.restoredHere].map(([key, id]): [CollabIdentity, CollabIdentity] => {
         const [client, clock] = key.split(":").map(Number);
         return [{ client: client ?? 0, clock: clock ?? 0 }, id];
@@ -339,7 +405,7 @@ export class CommandHistory {
       }
       const created = this.defect === "restore-twice" || this.defect === "index-placement"
         ? this.insertAtIndex(part.deleted, index, before, placed, tombstone)
-        : restoreBefore(tombstone.type, content.id, content);
+        : this.route === "capture" ? this.recreate(content) : restoreBefore(tombstone.type, content.id, content);
       placed.set(key, created);
       this.restoredHere.set(key, created);
       restoredIds.push(created);
@@ -347,6 +413,64 @@ export class CommandHistory {
       else if (this.defect !== "no-restoration-record") doc.getMap<CollabIdentity>(restorationRoot).set(identityKey(created), content.id);
     });
     return { effective: removed.length > 0 || restoredIds.length > 0, inverse: { kind: "sequence", inserted: restoredIds, deleted: removed } };
+  }
+
+  private recreate(content: StoredContent): CollabIdentity {
+    const key = identityKey(content.id);
+    const done = this.popped.get(key);
+    if (done) return done;
+    const capture = this.captures.get(content);
+    if (!capture || capture.manager.undoStack.length === 0) throw new Error(`No capture holds the deletion of ${key}; records reloaded from JSON have none`);
+    if (capture.discarded) throw new Error(`The capture holding ${key} also re-creates a copy its step discarded`);
+    const doc = this.replica.doc;
+    const wanted = new Set(capture.members
+      .filter(member => resolveIdentity(doc, member.id)?.live === false && !this.restoredHere.has(identityKey(member.id)) && !this.restored(member.id))
+      .map(member => identityKey(member.id)));
+    if (!wanted.has(key)) throw new Error(`Capture restore of ${key} is not wanted`);
+    const groups = new Map<SequenceType, { member: StoredContent; index: number }[]>();
+    for (const member of capture.members) {
+      const at = resolveIdentity(doc, member.id);
+      if (!at || at.live) throw new Error(`Captured identity ${identityKey(member.id)} is not a tombstone`);
+      groups.set(at.type, [...groups.get(at.type) ?? [], { member, index: at.index }]);
+    }
+    const before = ownClock(doc);
+    capture.manager.undo();
+    capture.manager.destroy();
+    const unwanted: CollabIdentity[] = [];
+    for (const [type, members] of groups) {
+      members.sort((left, right) => left.index - right.index);
+      const fresh: CollabIdentity[] = [];
+      for (let index = 0; index < type.length; index++) {
+        const id = itemAt(type, index);
+        if (id && id.client === doc.clientID && id.clock >= before) fresh.push(id);
+      }
+      if (fresh.length !== members.length) throw new Error(`Captured restore re-created ${fresh.length} items for ${members.length} deleted`);
+      members.forEach(({ member }, index) => {
+        const id = fresh[index];
+        if (!id) return;
+        if (wanted.has(identityKey(member.id))) this.popped.set(identityKey(member.id), id);
+        else unwanted.push(id);
+      });
+      if (!(type instanceof Y.Text)) continue;
+      for (const { member } of members) {
+        const id = this.popped.get(identityKey(member.id));
+        const at = id ? resolveIdentity(doc, id) : null;
+        if (!at?.live) continue;
+        const current = contentAt(type, at.index).attributes;
+        const marks = Object.fromEntries([...new Set([...Object.keys(current), ...Object.keys(member.attributes)])]
+          .filter(mark => JSON.stringify(current[mark] ?? null) !== JSON.stringify(member.attributes[mark] ?? null))
+          .map(mark => [mark, member.attributes[mark] ?? null]));
+        if (Object.keys(marks).length > 0) type.format(at.index, 1, marks);
+      }
+    }
+    for (const id of unwanted) {
+      const at = resolveIdentity(doc, id);
+      if (at?.live) at.type.delete(at.index, 1);
+    }
+    if (unwanted.length > 0 && this.capture) this.capture.discarded = true;
+    const created = this.popped.get(key);
+    if (!created) throw new Error(`Capture restore did not re-create ${key}`);
+    return created;
   }
 
   private insertAtIndex(deleted: StoredContent[], index: number, before: (ResolvedIdentity | null)[], placed: Map<string, CollabIdentity>, tombstone: ResolvedIdentity): CollabIdentity {

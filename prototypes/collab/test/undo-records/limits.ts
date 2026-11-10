@@ -1,4 +1,4 @@
-import { runJoinTargetRemoved, runLaterFormat, runRedoneMarkReversed, runRedoneRecovery, runRemovedAfterInsert, runRemovedSplit, runSequentialStatus } from "./cases.ts";
+import { runJoinTargetRemoved, runLaterFormat, runLoserDescendant, runLoserEdited, runRedoneMarkReversed, runRedoneRecovery, runRemovedAfterInsert, runRemovedSplit, runSequentialStatus } from "./cases.ts";
 import type { CaseResult } from "./cases.ts";
 import type { GeneratedHistory, Violation } from "./generator.ts";
 import { minimalHistories } from "./limit-histories.ts";
@@ -71,6 +71,22 @@ export const declaredLimits: DeclaredLimit[] = [
     id: "recovery-split-by", owner: "reader",
     title: "Only the replica that saw the split names its splitter in recovery",
     literal: { file: "UR-recovery-split-by.md", run: runRemovedSplit, failure: /replicas differ: .*splitBy=Alice/ }
+  },
+  {
+    id: "loser-descendant", owner: "undo",
+    title: "Settling keeps a restoration of a losing restoration, so the character shows twice",
+    matches: violation => violation.check === "restored twice",
+    literal: { file: "UR-loser-descendant.md", run: runLoserDescendant, failure: /settled\/client\d+\.rows\[0\]\.characters\[2\]\.identity\.client: expected 10, got 2/ }
+  },
+  {
+    id: "loser-bold", owner: "undo",
+    title: "Settling deletes the losing copy together with the bold another writer gave it",
+    literal: { file: "UR-loser-bold.md", run: () => runLoserEdited("bold"), failure: /settled\/client\d+\.rows\[0\]\.characters\[1\]\.marks\.b: expected true, got <missing>/ }
+  },
+  {
+    id: "loser-comment", owner: "undo",
+    title: "Settling deletes a comment anchor on the losing copy, sending the comment to recovery",
+    literal: { file: "UR-loser-comment.md", run: () => runLoserEdited("comment"), failure: /settled\/client\d+\.rows\[0\]\.characters\[1\]\.marks\.c:C1: expected true, got <missing>/ }
   },
   {
     id: "pending-update", owner: "delivery",
