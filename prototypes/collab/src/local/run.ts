@@ -6,8 +6,8 @@ import { test } from "node:test";
 import { withSliceBrowser } from "../slice/protocol.ts";
 import { localBrowserPage, localBrowserDocument, crashLocalRenderer, reloadLocalPage } from "./browser.ts";
 import type { LocalBrowserPage } from "./browser.ts";
-import { checkLocalBytes, checkLocalReceipts, localFixture } from "../../test/local/oracles.ts";
-import type { LocalBrowserSnapshot } from "../../test/local/oracles.ts";
+import { checkLocalBytes, checkLocalHydrationRefusal, checkLocalReceipts, localFixture } from "../../test/local/oracles.ts";
+import type { LocalBrowserSnapshot, LocalHydrationObservation } from "../../test/local/oracles.ts";
 import { localReplicaKey } from "./store.ts";
 import { serializeLocalEvidence, writeLocalHistories } from "./report.ts";
 
@@ -55,6 +55,33 @@ await withSliceBrowser(async (control, version) => {
   };
   const apply = async (page: LocalBrowserPage, sequence: number): Promise<void> => { await invoke(page, "apply", fixture.updates[sequence - 1], sequence); };
   const commit = async (page: LocalBrowserPage): Promise<LocalBrowserSnapshot> => { await invoke(page, "save"); return invoke(page, "settled"); };
+  const hydrationAttempt = async (instance: string, earlyEditing: boolean): Promise<{ attempt: LocalHydrationObservation; hydrated: LocalBrowserSnapshot; edited: LocalBrowserSnapshot }> => {
+    const a = await fresh(); const b = await fresh();
+    await invoke(a, "open", scope(instance), "minimal"); await apply(a, 1); await commit(a); await invoke(a, "close");
+    await invoke(b, "blockHydration", scope(instance));
+    await invoke(a, "expectHydrationEntry");
+    const opening = invoke(a, "open", scope(instance), "minimal", false, earlyEditing);
+    let attempt: LocalHydrationObservation;
+    try {
+      const entered = await invoke<string>(a, "hydrationEntered");
+      assert.equal(entered, localReplicaKey(scope(instance)));
+      const during = await invoke(a, "snapshot");
+      assert.equal(during.status, "Hydrating");
+      let editRefused = false;
+      try { await apply(a, 2); }
+      catch (error) { assert.match(String(error), /Read-only/); editRefused = true; }
+      attempt = { entered, during, editRefused };
+      if (earlyEditing) assert.throws(() => checkLocalHydrationRefusal(attempt), /Editing allowed before hydration completed/);
+      else checkLocalHydrationRefusal(attempt);
+    } finally { await invoke(b, "unblockHydration"); }
+    const hydrated = await opening;
+    assert.equal(hydrated.writable, true);
+    await apply(a, 2);
+    const edited = await invoke(a, "snapshot");
+    checkLocalBytes(edited.editor, 2); assert.equal(edited.sequence, 2);
+    await drop(a); await drop(b);
+    return { attempt, hydrated, edited };
+  };
   try {
     await run("defect: writer without the Web Lock is rejected by the checker", async () => {
       const a = await fresh(); const b = await fresh();
@@ -86,6 +113,12 @@ await withSliceBrowser(async (control, version) => {
       assert.throws(() => checkLocalReceipts(receipts, recovered), /Saved 2, recovered only 1/);
       await drop(a); await drop(b);
       return { receipts, recovered, rejection: "Saved 2, recovered only 1" };
+    });
+    await run("defect: editing on lock acquisition before hydration is rejected", async () => {
+      const result = await hydrationAttempt("defect-hydrate", true);
+      assert.equal(result.attempt.during.writable, true); assert.equal(result.attempt.editRefused, false);
+      assert.throws(() => checkLocalHydrationRefusal(result.attempt), /Editing allowed before hydration completed/);
+      return result;
     });
     await run("T24: two tabs, renderer crash, lock handoff and hydrated saved identities", async () => {
       const a = await fresh(); const b = await fresh();
@@ -121,17 +154,10 @@ await withSliceBrowser(async (control, version) => {
       return { held, completed, recovered };
     });
     await run("T24 hydration: holding a storage transaction prevents writable startup and editing", async () => {
-      const a = await fresh(); const b = await fresh();
-      await invoke(a, "open", scope("hydrate"), "minimal"); await apply(a, 1); await commit(a); await invoke(a, "close");
-      await invoke(b, "blockHydration", scope("hydrate"));
-      const opening = invoke(a, "open", scope("hydrate"), "minimal");
-      const during = await invoke(a, "snapshot");
-      assert.equal(during.status, "Hydrating"); assert.equal(during.writable, false);
-      await assert.rejects(() => apply(a, 2), /Read-only/);
-      await invoke(b, "unblockHydration");
-      const hydrated = await opening; assert.equal(hydrated.writable, true); checkLocalReceipts([1], hydrated);
-      await drop(a); await drop(b);
-      return { during, hydrated };
+      const result = await hydrationAttempt("hydrate", false);
+      checkLocalHydrationRefusal(result.attempt);
+      checkLocalReceipts([1], result.hydrated);
+      return result;
     });
     await run("minimal: real page reload releases its lock and hydrates confirmed binary state", async () => {
       const a = await fresh(); await invoke(a, "open", scope("reload"), "minimal"); await apply(a, 1); await commit(a);

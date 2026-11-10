@@ -19,6 +19,16 @@ export interface LocalBrowserSnapshot {
   largeSize: number;
 }
 
+export interface LocalHydrationObservation {
+  entered: string;
+  during: LocalBrowserSnapshot;
+  editRefused: boolean;
+}
+
+export function checkLocalHydrationRefusal(observation: LocalHydrationObservation): void {
+  if (observation.during.writable || !observation.editRefused) throw new Error("Editing allowed before hydration completed");
+}
+
 export const localLiteralOracles: ScriptOracle[] = [
   { rows: [{ id: "R1", characters: [["s1", "a", {}]] }], carets: {}, recovery: [] },
   { rows: [{ id: "R1", characters: [["s1", "a", {}], ["a1", "b", {}]] }], carets: {}, recovery: [] },

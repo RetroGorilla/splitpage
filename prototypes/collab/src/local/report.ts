@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { readReplica } from "../reader.ts";
 import { localFixture } from "../../test/local/oracles.ts";
-import type { LocalBrowserSnapshot } from "../../test/local/oracles.ts";
+import type { LocalBrowserSnapshot, LocalHydrationObservation } from "../../test/local/oracles.ts";
 import type { LocalExperimentEvidence } from "./run.ts";
 
 export function readLocalEvidence(): LocalExperimentEvidence {
@@ -53,6 +53,15 @@ export function localHistoryArtifacts(evidence: LocalExperimentEvidence): Map<st
     "The independent literal generation-1 identity oracle rejects the unauthorized a1, even though the storage write committed."
   ]);
   const split = take("M3 control:");
+  const earlyEdit = take("defect: editing on lock");
+  const attempt = earlyEdit.attempt as LocalHydrationObservation;
+  put("T24-local-early-edit.md", "Enabling editing on lock acquisition is rejected while a harness-held storage transaction blocks hydration.", [
+    "Generation 1 committed. Another tab starts and holds a readwrite transaction that blocks the hydration read.",
+    `The harness awaits hydration entry from inside the acquired lock callback for ${attempt.entered}.`,
+    `While the storage gate is held: ${summarize(attempt.during)}; editRefused=${String(attempt.editRefused)}.`,
+    "The generation-2 edit is accepted by the defective tab; the same hydration-refusal checker rejects it.",
+    `After the harness releases hydration, editing succeeds: ${summarize(earlyEdit.edited as LocalBrowserSnapshot)}.`
+  ]);
   put("STORE-M3-split.md", "Separate N and E transactions recover inconsistent generations after a renderer crash between commits.", [
     "Commit generation 1 for E, N and the manifest. Apply generation 2 in memory.",
     "Commit only N in a second transaction. Page.crash before E or metadata are written.",

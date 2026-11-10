@@ -4,8 +4,8 @@ import { test } from "node:test";
 import * as Y from "yjs";
 import { localHistoryArtifacts, readLocalEvidence } from "../../src/local/report.ts";
 import { localReplicaKey } from "../../src/local/store.ts";
-import { checkLocalBytes, checkLocalReceipts } from "./oracles.ts";
-import type { LocalBrowserSnapshot } from "./oracles.ts";
+import { checkLocalBytes, checkLocalHydrationRefusal, checkLocalReceipts } from "./oracles.ts";
+import type { LocalBrowserSnapshot, LocalHydrationObservation } from "./oracles.ts";
 
 const evidence = readLocalEvidence();
 
@@ -15,15 +15,16 @@ function observation(prefix: string): unknown {
   return result.observation;
 }
 
-test("local evidence records the browser version, 25 passing cases and the remaining STORE limits", () => {
+test("local evidence records the browser version, 26 passing cases and the remaining STORE limits", () => {
   assert.match(String(evidence.version.product), /^Edg\/\d/);
   assert.equal(evidence.node, "v24.22.1");
-  assert.equal(evidence.cases.length, 25);
-  assert.equal(new Set(evidence.cases.map(result => result.name)).size, 25);
+  assert.equal(evidence.cases.length, 26);
+  assert.equal(new Set(evidence.cases.map(result => result.name)).size, 26);
   for (const result of evidence.cases) assert.equal(result.status, "PASS", result.error);
   assert.deepEqual(evidence.unresolved.map(item => item.question), ["STORE 3", "STORE 4", "STORE 5", "STORE 7 integration"]);
   assert.ok(evidence.cases[0]?.name.startsWith("defect: writer without"));
   assert.ok(evidence.cases[1]?.name.startsWith("defect: saved before"));
+  assert.ok(evidence.cases[2]?.name.startsWith("defect: editing on lock"));
 });
 
 test("T24's harness-owned receipt ledger survives a renderer crash with a real identity oracle", () => {
@@ -64,9 +65,15 @@ test("synchronous capture includes bytes, sequence and the copied asset manifest
 });
 
 test("holding hydration prevents writable startup and a real reload preserves saved identities", () => {
-  const result = observation("T24 hydration:") as { during: LocalBrowserSnapshot; hydrated: LocalBrowserSnapshot };
-  assert.equal(result.during.status, "Hydrating"); assert.equal(result.during.writable, false);
+  const result = observation("T24 hydration:") as { attempt: LocalHydrationObservation; hydrated: LocalBrowserSnapshot; edited: LocalBrowserSnapshot };
+  assert.equal(result.attempt.entered, localReplicaKey({ deployment: "deployment-A", instance: "hydrate" }));
+  assert.equal(result.attempt.during.status, "Hydrating"); checkLocalHydrationRefusal(result.attempt);
   assert.equal(result.hydrated.writable, true); checkLocalReceipts([1], result.hydrated);
+  checkLocalBytes(result.edited.editor, 2);
+  const defective = observation("defect: editing on lock") as { attempt: LocalHydrationObservation };
+  assert.equal(defective.attempt.entered, localReplicaKey({ deployment: "deployment-A", instance: "defect-hydrate" }));
+  assert.equal(defective.attempt.editRefused, false); assert.equal(defective.attempt.during.writable, true);
+  assert.throws(() => checkLocalHydrationRefusal(defective.attempt), /Editing allowed before hydration completed/);
   const reload = observation("minimal: real page reload") as { receipts: number[]; recovered: LocalBrowserSnapshot };
   assert.deepEqual(reload.receipts, [1, 2]); checkLocalReceipts(reload.receipts, reload.recovered);
 });
@@ -152,6 +159,6 @@ test("deployment and instance keys remain distinct even when their delimiters co
 
 test("minimized local failure histories reproduce the retained browser evidence", () => {
   const artifacts = localHistoryArtifacts(evidence);
-  assert.equal(artifacts.size, 5);
+  assert.equal(artifacts.size, 6);
   for (const [name, body] of artifacts) assert.equal(readFileSync(new URL(`../../histories/${name}`, import.meta.url), "utf8"), body);
 });

@@ -28,6 +28,7 @@ let pending: Promise<unknown> = Promise.resolve();
 let manifest: string[] = [];
 let atomicGap: Promise<void> = Promise.resolve();
 let readBlock: LocalReplicaStore | null = null;
+let hydrationEntry: Promise<string> | null = null;
 const blobs = new Map<string, Uint8Array>();
 
 function setStatus(value: string): void { statusElement.textContent = value; }
@@ -57,7 +58,7 @@ async function close(): Promise<void> {
   network.destroy();
 }
 
-async function open(next: LocalReplicaScope, candidate: "minimal" | "library", wait = false): Promise<unknown> {
+async function open(next: LocalReplicaScope, candidate: "minimal" | "library", wait = false, earlyEditing = false): Promise<unknown> {
   await close();
   owner = new LocalWritableTab();
   editor = new Y.Doc();
@@ -71,6 +72,8 @@ async function open(next: LocalReplicaScope, candidate: "minimal" | "library", w
   setStatus("Hydrating");
   explanationElement.textContent = "";
   const writable = await owner.acquire(scope, async () => {
+    if (earlyEditing) owner.owns = () => true;
+    dispatchEvent(new CustomEvent("local-hydration-entry", { detail: localReplicaKey(scope) }));
     if (candidate === "minimal") {
       store = await LocalReplicaStore.open(scope, () => { setStatus("Could not save on this device"); void owner.dispose(); });
       const capture = await store.hydrate();
@@ -158,6 +161,12 @@ const api = {
   probeLocalStartup,
   open, close, snapshot, apply, save, gate, upgrade, libraryFence, librarySet, splitWrite, beginAtomicGap,
   metadata: () => snapshot(false),
+  expectHydrationEntry: () => {
+    hydrationEntry = new Promise<string>(resolve => {
+      addEventListener("local-hydration-entry", event => { resolve((event as CustomEvent<string>).detail); }, { once: true });
+    });
+  },
+  hydrationEntered: async () => { if (!hydrationEntry) throw new Error("Hydration entry was not armed"); return hydrationEntry; },
   libraryInitial: async (next: LocalReplicaScope, update: number[]) => {
     await close(); scope = next; editor = new Y.Doc(); network = new Y.Doc();
     Y.applyUpdate(editor, Uint8Array.from(update));

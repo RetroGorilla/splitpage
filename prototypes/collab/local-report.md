@@ -1,6 +1,6 @@
 # Local replica and tab ownership feasibility
 
-T24 passes in headless Edge with the completion-aware IndexedDB adapter. Both required defective implementations are rejected first. M3's two binary documents and image manifest can commit atomically in one database; separate transactions produce the predicted inconsistency. `y-indexeddb` 9.0.12 cannot supply a truthful per-write saved receipt through its existing completion interface.
+T24 passes in headless Edge with the completion-aware IndexedDB adapter. All three defective implementations are rejected first. M3's two binary documents and image manifest can commit atomically in one database; separate transactions produce the predicted inconsistency. `y-indexeddb` 9.0.12 cannot supply a truthful per-write saved receipt through its existing completion interface.
 
 This is browser feasibility evidence, not a complete STORE gate. Cross-browser eviction, actual service-worker cold start/takeover and target-platform `safeStorage` remain unrun. STORE 7 exercises the existing startup module with controlled ports; actual shared-session integration still needs checking.
 
@@ -17,7 +17,7 @@ $env:TMP=$env:TEMP
 npm test
 ```
 
-`npm run local` runs 25 browser experiments under `node --test`; it is outside `npm test`. It regenerates the evidence and five minimized histories. `npm test` checks the retained evidence without starting a browser. The slice's `SliceProtocol` and `withSliceBrowser` are imported unchanged. One Edge process uses a temporary profile, with separate page targets in that profile, and is closed in `finally`. CDP fulfills the fixture HTTPS documents, so there is no HTTP server or collaboration service. STORE 6 loads the unmodified built app and uses its existing test hooks; STORE 7 bundles the unmodified `src/bootstrap/startup.ts` entry separately and invokes its existing ports. Neither adds an app hook or changes app source.
+`npm run local` runs 26 browser experiments under `node --test`; it is outside `npm test`. It regenerates the evidence and six minimized histories. `npm test` checks the retained evidence without starting a browser. The slice's `SliceProtocol` and `withSliceBrowser` are imported unchanged. One Edge process uses a temporary profile, with separate page targets in that profile, and is closed in `finally`. CDP fulfills the fixture HTTPS documents, so there is no HTTP server or collaboration service. STORE 6 loads the unmodified built app and uses its existing test hooks; STORE 7 bundles the unmodified `src/bootstrap/startup.ts` entry separately and invokes its existing ports. Neither adds an app hook or changes app source.
 
 ## Oracle and ordering
 
@@ -29,7 +29,7 @@ The test fixture intercepts real IDB transaction creation and keeps selected tra
 
 ## T24 and candidate comparison
 
-T24's first tab acquires the lock named by the JSON tuple `(deployment, instance)`, hydrates, and saves all four generations. A second tab is read-only, explains why, and refuses editing. After the first renderer crashes, the second retries, acquires the released lock, hydrates, and becomes writable. The harness ledger `[1,2,3,4]` is covered by recovered identities, including the deletion. A separate held-hydration test refuses editing even while the lock is acquired but storage hydration is incomplete. Another test performs an actual `Page.reload`, then recovers both saved generations and reacquires ownership.
+T24's first tab acquires the lock named by the JSON tuple `(deployment, instance)`, hydrates, and saves all four generations. A second tab is read-only, explains why, and refuses editing. After the first renderer crashes, the second retries, acquires the released lock, hydrates, and becomes writable. The harness ledger `[1,2,3,4]` is covered by recovered identities, including the deletion. A separate held-hydration test awaits an entry event emitted inside the acquired lock callback before attempting an edit; a harness-held storage transaction keeps hydration incomplete. The edit is refused until that gate is released, then editing succeeds. A defect that enables editing on lock acquisition is rejected by the same checker ([history](histories/T24-local-early-edit.md)). Another test performs an actual `Page.reload`, then recovers both saved generations and reacquires ownership.
 
 | Situation | Completion-aware adapter | `y-indexeddb` 9.0.12 |
 | --- | --- | --- |
@@ -51,6 +51,8 @@ The guarantee tested is renderer-crash recovery after IDB completion, subject to
 The split-write control starts with E/N/metadata at generation 1, commits only N at generation 2, then crashes. Fresh hydration has N at 2 and E/metadata at 1; the checker rejects it. [Minimized history](histories/STORE-M3-split.md).
 
 The atomic control shares one strict transaction across both document records, metadata/image manifest and asset records. It waits for the new N `put` request to succeed, holds that transaction active before issuing the other records, and crashes. The fresh tab observes the complete old generation and old manifest; the new asset is absent. A subsequent completed adapter save recovers both new documents and the expanded manifest. This supplies the causal crash-between-writes control as well as the successful commit case.
+
+The successful atomic cases use one-byte assets. A successful large-asset transaction is unmeasured; the 16 MiB case establishes only quota failure.
 
 The prototype co-locates these records to test IDB atomicity. IndexedDB does not offer one transaction spanning the app's existing separate blob and replica databases. Production can keep its existing blob store and await blob durability before the replica transaction; E, N, sequence and the manifest must still share the replica transaction. This prototype does not replace or modify the app's blob store.
 
@@ -78,4 +80,4 @@ P1 is confirmed, with a stronger initial-sync counterexample: [whenSynced histor
 
 ## Validation
 
-The browser script passes 25/25 cases, including the deliberate defects, actual renderer crashes, real quota aborts, version upgrades, a reload, the M3 controls and the real-app export experiment. After rebasing onto current main, the prototype suite passes 895/895 tests, including 19 added identity, receipt and retained-history checks that do not open Edge. Lint, typecheck, dependency and comment gates pass. No app unit/browser/desktop suites or servers are part of this lane. The Edge instance and its temporary profile are disposed in `finally`.
+The browser script passes 26/26 cases, including the deliberate defects, actual renderer crashes, real quota aborts, version upgrades, a reload, the M3 controls and the real-app export experiment. The prototype suite passes 895/895 tests, including 19 added identity, receipt and retained-history checks that do not open Edge. Lint, typecheck, dependency and comment gates pass. No app unit/browser/desktop suites or servers are part of this lane. The Edge instance and its temporary profile are disposed in `finally`.
