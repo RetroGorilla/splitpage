@@ -14,6 +14,7 @@ import { bindingFollowupCases } from "../app-binding-2/cases.ts";
 import type { BindingFollowupResult, BindingFollowupStage } from "../app-binding-2/run.ts";
 import type { AppBindingSnapshot } from "../app-binding/run.ts";
 import type { SliceSnapshot } from "../slice/run.ts";
+import { publicBEvidence } from "./public.ts";
 
 export type BMatrixSnapshot = (AppBindingSnapshot | SliceSnapshot) & { candidate: "B"; segments: string[] };
 export interface BMatrixCase {
@@ -30,25 +31,16 @@ const folder = fileURLToPath(new URL("../../", import.meta.url));
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
 const surface = process.argv[2] ?? "writer";
 if (!["writer", "slice", "split"].includes(surface)) throw new Error("Choose writer, slice or split");
-const appCommit = "935e618949a2e964198847daa2115d35e1da58ef";
-const entry = surface === "slice" ? "slice-page.ts" : "followup-page.ts";
+const appCommit = surface === "split" ? "a9483468e01db63568b25bbe194eacf6f2d36246" : "935e618949a2e964198847daa2115d35e1da58ef";
+const entry = surface === "slice" ? "slice-page.ts" : surface === "split" ? "split-page.ts" : "followup-page.ts";
 const bundle = await build({ absWorkingDir: repo, entryPoints: [join(folder, "src/b-surfaces", entry)], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
 const script = bundle.outputFiles?.[0]?.text;
 if (!script) throw new Error("Missing B binding bundle");
 
-export function publicBEvidence(value: unknown): string {
-  const encoded = JSON.stringify(value, (key, item: unknown) => {
-    if (key === "timings") return undefined;
-    if (key === "paints" && Array.isArray(item)) return item.map((paint: { phase: string }) => ({ phase: paint.phase }));
-    return item;
-  });
-  return encoded.replace(/[A-Za-z]:[\\/][^"\n<>]*/g, "<local-path>");
-}
-
 async function matrix(protocol: SliceProtocol, api: string): Promise<BMatrixCase[]> {
   const traces: BMatrixCase[] = [];
   for (const trace of bufferTraceOrder) {
-    for (const mechanism of bufferMechanisms) for (const order of bufferOracles[trace].orders) {
+    for (const mechanism of surface === "split" ? ["M1"] : bufferMechanisms) for (const order of bufferOracles[trace].orders) {
       const stages: BMatrixSnapshot[] = []; let difference: string | null = null;
       const snap = (): Promise<BMatrixSnapshot> => protocol.evaluate(`${api}.snapshot()`);
       try {
