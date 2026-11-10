@@ -63,7 +63,7 @@ Stage 1a and 1b have separate exits and may run side by side (plan section 11).
 
 | Gate | Where the evidence is | What Stage 1 runs |
 | --- | --- | --- |
-| PROJ | [2-fields.md](2-fields.md), complete by rule (93 rows); 8: A-H10, PROJ-cue, PROJ-detached, PROJ-unknown | Round trip of every canonical fixture through each candidate, byte-identical `.splitpage`; the fuzz of merged-state limits (2 open question 5); the checker fails on an omitted field |
+| PROJ | [2-fields.md](2-fields.md), complete by rule (96 rows); 8: A-H10, PROJ-cue, PROJ-detached, PROJ-unknown | Round trip of every canonical fixture through each candidate, byte-identical `.splitpage`; the fuzz of merged-state limits (2 open question 5); the checker fails on an omitted field |
 | SLICE | [3-session-callers.md](3-session-callers.md) (120 rows), [4-writers-merge-drafts.md](4-writers-merge-drafts.md) (55), 1 (29) | What the throwaway slice hooks, bypasses or isolates. The stamps, the writable `documentReader.current`, `liveSession()` and three comment commands bypass tracked edits today |
 | STORE | [6-boundaries.md](6-boundaries.md) (60 rows), 4 (29), 3 (25) | 6 open questions 3 to 7; 8 open question on one storage transaction for M3 |
 | PERF | [7-performance-baseline.md](7-performance-baseline.md) | Standalone A/B under the tolerance rule fixed there; shared-mode numbers against its provisional limits; 8 open questions on identity passes and soft-removal growth |
@@ -99,6 +99,15 @@ Decided on 2026-11-09:
 - Cutting beats and pasting them elsewhere stays two commands; other people see the beats gone in between.
 - The collaboration code ships in every build and export (115,589 bytes minified, 33,176 gzip, about 6.2% of `index.html`).
 
+Decided on 2026-11-09, after the Stage 1 evidence:
+
+- A picture may reach other people after the text around it. The text synchronizes at once and other people see a placeholder until the picture arrives. If the device that added the picture never returns, the shared script keeps the placeholder and an export lists the picture as missing. This is the pending-image design, and it relaxes the server half of INV-52: the server may hold a shared script that names a picture it does not have yet, marked pending. A device still always holds the pictures of what it has saved locally.
+- While a person is typing or composing in a beat, changes from other people are held and applied when the edit is committed (buffer mechanism M1, deferral in one document).
+- A shared script is stored as stable segments (schema candidate B). Whole beats can be moved in a shared script. Moving part of a beat, and cutting and pasting structure across scenes, stay refused in shared mode.
+- Edit stamps: a beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export.
+
+The second and third stand unless the evidence still owed for Stage 1a contradicts them; the Stage 1a decision record (#1403) lists what is owed.
+
 Assumed until decided. Every trace above is written to the assumption, so a different answer changes one expected result, not the design.
 
 | # | Question | Assumed | Source |
@@ -108,7 +117,7 @@ Assumed until decided. Every trace above is written to the assumption, so a diff
 | 3 | Two tags cross after merging | The tag that starts later is shown untagged and listed in recovery | 8 |
 | 4 | A reply to a comment whose creation was undone | Kept in recovery | 8 |
 | 5 | A status change that did not apply because someone changed it to something else at the same time | Both people get a short notice | 8 |
-| 6 | Edit stamps | A beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export | 8 |
+| 6 | Edit stamps | Decided on 2026-11-09 as assumed; see above | 8 |
 | 7 | A scene left with no beats; a script left with none | The scene is listed in recovery; the empty script waits for the first keystroke | 8 |
 | 8 | A scene name longer than 200 characters after merging | Shown in full with a notice; it cannot grow further | 8 |
 | 9 | Two b-roll keys with one id after merging | The later key is unanchored in the shot list until reassigned | 8 |
@@ -118,7 +127,7 @@ Assumed until decided. Every trace above is written to the assumption, so a diff
 | 13 | Is the local replica part of app-data export? | No; people export a Standalone copy | 6 |
 | 14 | Wording shown when the server refuses an update | Written with the rest of the status wording | 8 |
 | 15 | The limits a person feels: time to join a large script and time until "saved to server" | The provisional limits in 7, section 7 | 7 |
-| 16 | The server half of INV-52, if the pending-image design is chosen | No decision until Stage 1 picks an image design | 5 |
+| 16 | The server half of INV-52, if the pending-image design is chosen | Decided on 2026-11-09: the pending-image design is chosen and the change is approved; see above | 5 |
 
 The defaults the third review added to plan section 14 stay open on the same terms.
 
