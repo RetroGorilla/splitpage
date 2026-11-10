@@ -8,6 +8,7 @@ export interface BindingFollowupFacts {
   updates: number;
   join: boolean;
   comment: boolean;
+  split: { source: string; id: string; offset: number } | null;
 }
 
 export interface BindingFollowupObservation {
@@ -58,6 +59,15 @@ export function checkBindingFollowup(input: BindingFollowupInput, facts: Binding
       const found = characters.filter(item => item.character.notation === name);
       if (found.length !== 1 || found[0]?.character.value !== value) fail(`${replica}: required identity/value ${name} ${JSON.stringify(value)} missing or changed`);
     }
+    if (facts.split) {
+      const split = facts.split;
+      if (rows.filter(item => item.row.id === split.id).length !== 1) fail(`${replica}: remote split boundary missing or duplicated`);
+      for (const [index, name] of (seedNames.get(split.source) ?? []).entries()) {
+        if (!values.has(name)) continue;
+        const item = characters.find(item => item.character.notation === name);
+        if (item && item.row.id !== (index < split.offset ? split.source : split.id)) fail(`${replica}: observed seed identity ${name} crossed remote split boundary`);
+      }
+    }
     const local = characters.filter(item => item.character.identity?.client === 1);
     if (local.length !== input.text.length || local.map(item => item.character.value).join("") !== input.text) fail(`${replica}: local text did not commit once with new identities`);
     for (const item of characters.filter(item => item.character.identity?.client !== 1)) {
@@ -68,7 +78,8 @@ export function checkBindingFollowup(input: BindingFollowupInput, facts: Binding
     const rightItem = characters.find(item => item.character.notation === right);
     if (first && leftItem && (first.row.id !== leftItem.row.id || first.recovery !== leftItem.recovery || flat.indexOf(first) <= flat.indexOf(leftItem))) fail(`${replica}: local text moved away from its painted left identity ${left}`);
     if (last && rightItem && flat.indexOf(last) >= flat.indexOf(rightItem)) fail(`${replica}: local text crossed its painted right identity ${right}`);
-    if (flat.filter(item => item.character.identity === null).length !== (facts.join ? 1 : 0)) fail(`${replica}: joining separator missing or duplicated`);
+    const glue = flat.filter(item => item.character.identity === null);
+    if (glue.length !== (facts.join ? 1 : 0) || glue.some(item => item.character.value !== " ")) fail(`${replica}: joining separator missing, changed or duplicated`);
     for (const mark of facts.marked) for (const name of mark.names.filter(name => values.has(name))) {
       const found = characters.find(item => item.character.notation === name);
       if (found?.character.marks[mark.key] !== mark.value) fail(`${replica}: remote mark ${mark.key} lost on ${name}`);
@@ -79,6 +90,7 @@ export function checkBindingFollowup(input: BindingFollowupInput, facts: Binding
   }
   const alice = observation.models["A.E"];
   if (alice) {
+    if (JSON.stringify(observation.dom.map(row => row.id)) !== JSON.stringify(alice.rows.map(row => row.id))) fail("DOM beat coverage differs from projection");
     for (const row of alice.rows) {
       const dom = observation.dom.find(item => item.id === row.id);
       if (!dom || dom.text !== row.characters.map(character => character.value).join("")) fail(`DOM differs from projection for ${row.id}`);

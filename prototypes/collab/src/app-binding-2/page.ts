@@ -24,10 +24,11 @@ let retained = false;
 let paintGate = false;
 let injected = false;
 let clipboard = "";
-let facts: BindingFollowupFacts = { inserted: [], deleted: [], marked: [], updates: 0, join: false, comment: false };
+let facts: BindingFollowupFacts = { inserted: [], deleted: [], marked: [], updates: 0, join: false, comment: false, split: null };
 let timings: { phase: string; ms: number; at: number }[] = [];
 let reentry: Record<string, unknown>[] = [];
 let peak = { bytes: 0, messages: 0, transportMessages: 0 };
+let remoteDOM: { sameNodes: boolean }[] = [];
 const originalRepaint = bridge.repaint;
 bridge.repaint = () => {
   const start = performance.now();
@@ -43,6 +44,13 @@ function notePeak(): void {
 
 function remote(): void {
   const h = context.session(); const bob = h.bob.editor;
+  const nodes = (): Node[] => {
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_ALL);
+    const found: Node[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) found.push(node);
+    return found;
+  };
+  const beforeNodes = nodes();
   const insert = (beat: string, offset: number, value: string, name: string): void => {
     facts.inserted.push({ name, value }); facts.updates++;
     bob.insert(beat, offset, value, [name]);
@@ -53,7 +61,8 @@ function remote(): void {
   };
   if (current.startsWith("split-")) {
     facts.updates++;
-    bob.split("R1", current === "split-before" ? 1 : current === "split-inside" ? 2 : 4, "Rb", "b1", "Bob");
+    facts.split = { source: "R1", offset: current === "split-before" ? 1 : current === "split-inside" ? 2 : 4, id: "Rb" };
+    bob.split(facts.split.source, facts.split.offset, facts.split.id, "b1", "Bob");
   } else if (current === "join-previous") {
     facts.join = true; facts.updates++; bob.join("R2", "R1", "jB");
   } else if (current === "removed") {
@@ -79,6 +88,8 @@ function remote(): void {
   context.project();
   if (!h.alice.dirty) context.paint();
   else if (h.alice.composing || !paintGate) bridge.repaint();
+  const afterNodes = nodes();
+  remoteDOM.push({ sameNodes: beforeNodes.length === afterNodes.length && beforeNodes.every((node, index) => node === afterNodes[index]) });
 }
 
 function inject(where: string): void {
@@ -139,8 +150,9 @@ const followup = {
     commandBridge.command(null);
     api.reset(name === "removed" ? "T04 removed" : "T04", mechanism, false);
     current = name; order = delivery; retained = retain; paintGate = gatePaint; injected = false; clipboard = "";
-    facts = { inserted: [], deleted: [], marked: [], updates: 0, join: false, comment: false };
+    facts = { inserted: [], deleted: [], marked: [], updates: 0, join: false, comment: false, split: null };
     timings = []; reentry = []; peak = { bytes: 0, messages: 0, transportMessages: 0 };
+    remoteDOM = [];
     context.profile((phase, ms) => { timings.push({ phase, ms, at: performance.now() }); });
     const input = bindingFollowupInput(current);
     const buffer = context.session().alice;
@@ -174,7 +186,7 @@ const followup = {
     const h = context.session();
     const base = context.api.snapshot();
     const rawModels = base.models as Record<string, CollabModel>;
-    return { ...observation(), facts, timings, reentry, peak, paints: commandBridge.paintEvents(), history: h.history(), events: base.events,
+    return { ...observation(), facts, timings, reentry, remoteDOM, peak, paints: commandBridge.paintEvents(), history: h.history(), events: base.events,
       rawLocalMarks: rawModels["A.E"]?.rows.flatMap(row => row.characters.filter(character => character.identity?.client === 1).map(character => ({ name: character.notation, marks: character.marks }))),
       app: base.app, heldBytes: h.alice.heldBytes, heldMessages: h.alice.held.length,
       native: h.alice.nativeValue, commits: [...context.state().commits], syncs: [...context.state().syncs], queuePending: h.queue.pending.length };

@@ -18,6 +18,7 @@ export interface BindingFollowupStage extends BindingFollowupObservation {
   timings: { phase: string; ms: number; at: number }[];
   paints: { phase: "start" | "end"; at: number }[];
   reentry: Record<string, unknown>[];
+  remoteDOM: { sameNodes: boolean }[];
   peak: { bytes: number; messages: number; transportMessages: number };
   history: string[];
   events: Record<string, unknown>[];

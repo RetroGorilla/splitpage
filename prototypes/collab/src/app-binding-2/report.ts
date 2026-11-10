@@ -43,7 +43,7 @@ export function bindingFollowupHistories(evidence: BindingFollowupEvidence): Map
       });
       const last = result.stages.at(-1);
       if (last) {
-        lines.push(`peak=${JSON.stringify(last.peak)} timings=${JSON.stringify(last.timings)} actualPaints=${JSON.stringify(last.paints)} rawLocalMarks=${JSON.stringify(last.rawLocalMarks)}`,
+        lines.push(`peak=${JSON.stringify(last.peak)} timings=${JSON.stringify(last.timings)} actualPaints=${JSON.stringify(last.paints)} rawLocalMarks=${JSON.stringify(last.rawLocalMarks)} remoteDOM=${JSON.stringify(last.remoteDOM)}`,
           ...last.reentry.map(event => `re-entry ${JSON.stringify(event)}`));
       }
       lines.push(...result.failures.map(failure => `FAIL: ${failure}`), "```", "");
@@ -53,15 +53,49 @@ export function bindingFollowupHistories(evidence: BindingFollowupEvidence): Map
   return files;
 }
 
+export function bindingFollowupMeasurements(evidence: BindingFollowupEvidence): string {
+  const lines = ["# Real Writer follow-up measurements", "", `App ${evidence.appCommit}; bundle ${evidence.bundleSha256}.`, "",
+    `Machine: ${evidence.machine.host}; ${evidence.machine.cpu.trim()}; ${evidence.machine.platform} ${evidence.machine.release}; ${evidence.machine.node}; ${String(evidence.version.product)}.`, "",
+    "PASS denotes the declared invariants, or the complete unchanged T04 removed literal oracle. New combined visible scripts and marks are observations, not product oracles. Comment/tag DOM projection is unbound.", "",
+    "| Case | M1 | M2 | M3 |", "| --- | --- | --- | --- |"];
+  const names = [...new Set(evidence.results.filter(result => !result.name.startsWith("reentry-")).map(result => result.name))];
+  for (const name of names) {
+    const cells = ["M1", "M2", "M3"].map(mechanism => {
+      const results = evidence.results.filter(result => result.name === name && result.mechanism === mechanism);
+      return `${results.filter(result => result.status === "PASS").length}/${results.length} PASS`;
+    });
+    lines.push(`| ${name} | ${cells.join(" | ")} |`);
+  }
+  lines.push("", "| Native gesture / intervention | M1 | M2 | M3 |", "| --- | --- | --- | --- |");
+  for (const name of ["reentry-type", "reentry-replace", "reentry-paste"]) for (const [retained, gate] of [[false, false], [true, false], [true, true]] as const) {
+    const cells = ["M1", "M2", "M3"].map(mechanism => evidence.results.find(result => result.name === name && result.mechanism === mechanism && result.retained === retained && result.paintGate === gate)?.status ?? "MISSING");
+    lines.push(`| ${name} / ${!retained ? "no early hold" : gate ? "early hold + native DOM gate" : "early hold only"} | ${cells.join(" | ")} |`);
+  }
+  lines.push("", "## Composition-end timings", "",
+    "Each run holds composition across 240 declared B updates: 160 inserts and 80 deletes across R1/R2. Commit includes buffer planning, Yjs transaction, held-update drain and session projection. Paint is the first actual flow-surface.paint DOM reconciliation after that commit, including internally owed paints. These are single samples with instrumentation, not a performance budget, raster timing or controlled A/B benchmark. Zeros are permitted at the browser clock's resolution.", "",
+    "| Mechanism | Delivery | Peak held bytes | Peak held messages | Commit + projection ms | First actual DOM paint ms |", "| --- | --- | ---: | ---: | ---: | ---: |");
+  for (const result of evidence.results.filter(result => result.name === "long")) {
+    const committed = result.stages[3];
+    const peak = result.stages[2]?.peak;
+    const timing = committed?.timings.find(timing => timing.phase === "commit-and-projection");
+    const paint = committed?.paints[0]; const end = committed?.paints[1];
+    lines.push(`| ${result.mechanism} | ${result.order} | ${peak?.bytes ?? "MISSING"} | ${peak?.messages ?? "MISSING"} | ${timing?.ms.toFixed(3) ?? "MISSING"} | ${paint && end ? (end.at - paint.at).toFixed(3) : "MISSING"} |`);
+  }
+  lines.push("", "All nine long-composition runs retain 40 live B characters in each beat and exactly one xy insertion. The source records two actual DOM reconciliations by return from compositionend and a third during the driver's explicit final verification paint. M1 queues duplicate bytes; M3's network document filters duplicates before forwarding to E. M2 retains no inbound editor queue.", "");
+  return lines.join("\n");
+}
+
 export function writeBindingFollowupArtifacts(evidence: BindingFollowupEvidence): void {
   const lines = ["{", `  "appCommit": ${JSON.stringify(evidence.appCommit)},`, `  "bundleSha256": ${JSON.stringify(evidence.bundleSha256)},`,
     `  "machine": ${JSON.stringify(evidence.machine)},`, `  "version": ${JSON.stringify(evidence.version)},`, `  "off": ${JSON.stringify(evidence.off)},`,
     '  "results": [', ...evidence.results.map((result: BindingFollowupResult, index) => `    ${JSON.stringify(result)}${index === evidence.results.length - 1 ? "" : ","}`), "  ]", "}", ""];
   writeFileSync(new URL("../../app-binding-2/evidence.json", import.meta.url), lines.join("\n"));
+  writeFileSync(new URL("../../app-binding-2-measurements.md", import.meta.url), bindingFollowupMeasurements(evidence));
   for (const [file, contents] of bindingFollowupHistories(evidence)) writeFileSync(new URL(`../../histories/${file}`, import.meta.url), contents);
 }
 
 export function checkBindingFollowupHistories(evidence: BindingFollowupEvidence): void {
+  if (readFileSync(new URL("../../app-binding-2-measurements.md", import.meta.url), "utf8") !== bindingFollowupMeasurements(evidence)) throw new Error("Stale follow-up measurements");
   for (const [file, contents] of bindingFollowupHistories(evidence)) {
     if (readFileSync(new URL(`../../histories/${file}`, import.meta.url), "utf8") !== contents) throw new Error(`Stale follow-up history ${file}`);
   }

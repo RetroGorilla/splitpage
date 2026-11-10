@@ -48,6 +48,7 @@ for (const result of evidence.results) {
     assert.deepEqual(result.failures, failures);
     assert.equal(result.status, failures.length ? "FAIL" : "PASS");
     assert.equal(result.status, observedFailure(result) ? "FAIL" : "PASS");
+    assert.equal(last.history.filter(line => line.startsWith("queue enqueue B")).length, last.facts.updates);
     assert.ok(last.events.some(event => event.type === "input" && event.trusted) || result.name === "reentry-paste" && last.events.some(event => event.type === "paste" && event.trusted));
     if (result.status === "PASS") {
       assert.equal(last.queuePending, 0);
@@ -59,7 +60,10 @@ for (const result of evidence.results) {
       const native = present(result.stages[1]); const remote = present(result.stages[2]);
       assert.equal(native.composing, true);
       assert.equal(remote.composing, true);
-      assert.deepEqual(remote.dom, native.dom, "remote updates must leave native composition DOM untouched");
+      const content = (row: typeof remote.dom[number]) => ({ id: row.id, text: row.text, html: row.html });
+      assert.deepEqual(remote.dom.map(content), native.dom.map(content), "remote updates must preserve composing DOM content");
+      assert.deepEqual(remote.remoteDOM, [{ sameNodes: true }]);
+      if (!(result.mechanism === "M2" && ["join-previous", "removed"].includes(result.name))) assert.deepEqual(remote.dom, native.dom);
       assert.deepEqual(remote.paints, [], "the app must defer actual DOM paint during composition");
       assert.equal(last.commits.filter(name => name === "syncComposition:syncBeatEl").length, 1);
     }
@@ -77,6 +81,16 @@ test("removed targets use the unchanged complete T04 removed forward and undo li
       const caret = present(oracle.carets.A);
       assert.deepEqual(snapshot.dom.find(row => row.id === caret.beat)?.selection, [caret.offset, caret.offset]);
     }
+  }
+});
+
+test("recorded M2 selection validation clears the composing selection after join/removal without replacing DOM nodes", () => {
+  for (const result of evidence.results.filter(result => result.mechanism === "M2" && ["join-previous", "removed"].includes(result.name))) {
+    const native = present(result.stages[1]); const remote = present(result.stages[2]);
+    assert.ok(native.dom.some(row => row.selection !== null));
+    assert.ok(remote.dom.every(row => row.selection === null));
+    assert.deepEqual(remote.remoteDOM, [{ sameNodes: true }]);
+    assert.equal(result.status, "PASS");
   }
 });
 
@@ -102,7 +116,11 @@ test("comment and tag records survive with native DOM untouched; their app proje
     const last = final(result);
     assert.deepEqual(last.rawLocalMarks.map(item => Object.keys(item.marks).sort()), result.mechanism === "M2" ? [[], []] : [["c:C1", "t:oB"], ["c:C1", "t:oB"]]);
     for (const model of Object.values(last.models)) {
-      assert.ok((model.records?.comments as Record<string, unknown>).C1);
+      const comment = (model.records?.comments as Record<string, { rowId: string; field: string; recovery: boolean }>).C1;
+      assert.ok(comment);
+      assert.equal(comment.rowId, "R1");
+      assert.equal(comment.field, "audioText");
+      assert.equal(comment.recovery, false);
       for (const local of model.rows.flatMap(row => row.characters).filter(character => character.identity?.client === 1)) {
         assert.equal(local.marks.tag, "P");
         assert.equal(local.marks["c:C1"], true);
@@ -201,3 +219,10 @@ test("the invariant checker rejects a lost remote mark or comment record even wh
 });
 
 test("every failure and mechanism difference has a retained generated history", () => { checkBindingFollowupHistories(evidence); });
+
+test("duplicate visible beat copies fail the identity projection boundary", () => {
+  const good = present(evidence.results.find(result => result.name === "bold" && result.mechanism === "M1" && result.order === "D3"));
+  const copy = structuredClone(final(good));
+  copy.dom.push(structuredClone(present(copy.dom[0])));
+  assert.ok(checkBindingFollowup(bindingFollowupInput(good.name), copy.facts, copy, good.mechanism, false).includes("DOM beat coverage differs from projection"));
+});
