@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\"",
     "experiments": "node src/buffer-report.ts",
-    "slice": "node src/slice/run.ts"
+    "slice": "node src/slice/run.ts",
+    "local": "node --test src/local/run.ts"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
@@ -21,6 +22,7 @@
     "@types/ws": "8.18.2",
     "esbuild": "0.28.2",
     "typescript": "6.0.3",
-    "ws": "8.22.2"
+    "ws": "8.22.2",
+    "y-indexeddb": "9.0.12"
   }
 }
