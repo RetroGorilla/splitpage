@@ -67,6 +67,8 @@ export class ImageClient {
   readonly frames: { lifetime: number; kind: number; subtype: number; bytes: string }[] = [];
   readonly notices: string[] = [];
   readonly observed: { status: string; refs: string[]; membership: string[] }[] = [];
+  holdSyncReplies = false;
+  private readonly replyReleases: (() => void)[] = [];
   private readonly expectations: ("accepted" | "missing-blob")[];
   private lifetime = 0;
 
@@ -83,6 +85,11 @@ export class ImageClient {
         super(url, protocols); this.generation = owner.receipts.open(); owner.lifetime = this.generation;
         this.addEventListener("message", (event: MessageEvent<ArrayBuffer>) => {
           const bytes = new Uint8Array(event.data); const frame = readFrame(bytes);
+          if (frame.kind === 0 && frame.subtype === 0 && owner.holdSyncReplies) {
+            event.stopImmediatePropagation();
+            owner.replyReleases.push(() => this.dispatchEvent(new MessageEvent("message", { data: Uint8Array.from(bytes).buffer })));
+            return;
+          }
           if (frame.kind === 8) {
             const sent = owner.sent.find(item => item.lifetime === this.generation && item.applied === null);
             assert.ok(sent, "Receipt must match an actual harness-observed transmission");
@@ -128,7 +135,18 @@ export class ImageClient {
     this.provider.drop();
     await until(() => this.provider.closed(), "image client closed");
   }
+  get heldSyncReplies(): number { return this.replyReleases.length; }
+  releaseSyncReplies(): void {
+    this.holdSyncReplies = false;
+    for (const release of this.replyReleases.splice(0)) release();
+  }
   async fence(): Promise<void> {
+    const lifetime = this.lifetime;
+    await until(() => {
+      const requests = this.frames.filter(frame => frame.lifetime === lifetime && frame.kind === 0 && frame.subtype === 0).length;
+      const replies = this.attempts.filter(frame => frame.lifetime === lifetime && frame.kind === 0 && frame.subtype === 1).length;
+      return requests > 0 && replies >= requests;
+    }, "provider generates replies for the harness-observed sync requests");
     const label = this.provider.fence();
     await until(() => this.notices.includes(label), "ordered socket image fence");
   }

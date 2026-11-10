@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import type { TestContext } from "node:test";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import { Awareness, encodeAwarenessUpdate } from "y-protocols/awareness";
@@ -6,7 +7,7 @@ import * as Y from "yjs";
 import { ImagePublication } from "../../../src/service/images/publication.ts";
 import { ConnectionReceipts } from "../../../src/service/receipts.ts";
 import { syncFrame } from "../../../src/service/wire.ts";
-import { workspace } from "../harness.ts";
+import { until, workspace } from "../harness.ts";
 import { ImageClient, checkHeld, checkText, imageIdentities, initial, journalDocument, membership, png, saved, sha, upload, waiting } from "./harness.ts";
 
 function opaqueFrame(kind: number, payload: Uint8Array): Uint8Array {
@@ -73,6 +74,8 @@ export async function observeImageReview(t: TestContext): Promise<void> {
   }
   }
 
+  await observeReplyFence(t);
+
   await t.test("review: persisted positive receipts refuse another instance before a negative SyncStep2", () => {
     const document = initial();
     try {
@@ -118,4 +121,29 @@ export async function observeImageReview(t: TestContext): Promise<void> {
       } finally { for (const document of documents) document.destroy(); client?.destroy(); await work.clean(); }
     });
   }
+}
+
+export async function observeReplyFence(t: TestContext): Promise<void> {
+  await t.test("review: fence waits for a SyncStep2 generated after an inbound reply gate", async () => {
+    const work = await workspace(); let client: ImageClient | undefined; let fenced: Promise<void> | undefined;
+    try {
+      const server = await work.start({ IMAGE_POLICY: "1" });
+      const image = new ImagePublication(initial(), "pending-image");
+      client = new ImageClient(server.port, work.path, image); client.holdSyncReplies = true;
+      await client.connect(); await until(() => Boolean(client?.heldSyncReplies), "harness holds server Step1 before provider can answer");
+      const before = client.frames.filter(frame => frame.kind === 5).length;
+      fenced = client.fence();
+      const checkpoint = client.provider.fence();
+      await until(() => Boolean(client?.notices.includes(checkpoint)), "independent same-socket checkpoint while provider reply is held");
+      assert.equal(client.frames.filter(frame => frame.kind === 5).length, before + 1, "Fence overtook the provider-generated SyncStep2");
+      await writeFile(new URL("../../../histories/T16-fence-before-generated-reply.json", import.meta.url), `${JSON.stringify({
+        shows: "A stateless fence covers preceding sends, not a SyncStep2 the provider has yet to generate. Holding inbound Step1 reproduced the CI race; reply-generation gating fixes it without a delay.",
+        held: "server SyncStep1 before provider dispatch", beforeFixControlFrames: 2,
+        expectedControlFramesWhileHeld: 1, observedControlFramesWhileHeld: client.frames.filter(frame => frame.kind === 5).length - before,
+        afterRelease: "provider generates SyncStep2, then the harness emits its ordered fence and observes the covering receipt",
+        replay: "node --test --test-concurrency=1 test/service/images/images.test.ts",
+      }, null, 2)}\n`);
+      client.releaseSyncReplies(); await fenced; await client.saved(); client.check(work.path, "ab");
+    } finally { client?.releaseSyncReplies(); await fenced?.catch(() => {}); client?.destroy(); await work.clean(); }
+  });
 }
