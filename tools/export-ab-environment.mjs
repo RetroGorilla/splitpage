@@ -2,8 +2,11 @@ export const CAPTURED_ISO = "2026-10-13T17:30:00.000Z";
 
 export function pinnedDateTimeFormat(Real) {
   function PinnedDateTimeFormat(locale, opts) {
-    const options = Object.assign({}, opts);
-    if (options.timeZone === undefined) options.timeZone = "UTC";
+    let options = opts;
+    if (opts === undefined) options = { timeZone: "UTC" };
+    else if (opts !== null && (typeof opts === "object" || typeof opts === "function") && opts.timeZone === undefined) {
+      options = Object.create(opts, { timeZone: { value: "UTC", enumerable: true } });
+    }
     return new Real(locale === undefined ? "en-US" : locale, options);
   }
   PinnedDateTimeFormat.supportedLocalesOf = Real.supportedLocalesOf;

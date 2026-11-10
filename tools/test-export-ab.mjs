@@ -119,6 +119,18 @@ test("the date format pin only fills in the default locale and time zone", () =>
   assert.equal(new Pinned("de-DE", long).format(day), "2. Januar 2030");
   assert.equal(new Pinned(undefined, { hour: "numeric", hourCycle: "h23" }).format(day), "03");
   assert.equal(new Pinned(undefined, { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Tokyo" }).format(day), "12");
+  const inherited = Object.assign(Object.create({ timeZone: "Asia/Tokyo" }), { hour: "numeric", hourCycle: "h23" });
+  assert.equal(new Pinned(undefined, inherited).format(day), "12", "an inherited zone is the caller's");
+  const hidden = Object.defineProperty({ hour: "numeric", hourCycle: "h23" }, "timeZone", { value: "Asia/Tokyo", enumerable: false });
+  assert.equal(new Pinned(undefined, hidden).format(day), "12", "a non-enumerable zone is the caller's");
+  const Recorded = pinnedDateTimeFormat(function Recorded(locale, options) { this.locale = locale; this.options = options; });
+  assert.equal(new Recorded("de-DE", hidden).options, hidden, "options that name a zone pass through untouched");
+  assert.equal(new Recorded(undefined, inherited).options, inherited, "an inherited zone passes through untouched");
+  const zoneless = Object.defineProperty({ hour: "numeric" }, "hourCycle", { value: "h23", enumerable: false });
+  const filled = new Recorded(undefined, zoneless).options;
+  assert.equal(Object.getPrototypeOf(filled), zoneless, "the filled zone sits on an object that inherits every caller option");
+  assert.deepEqual(Object.getOwnPropertyNames(filled), ["timeZone"]);
+  assert.equal(new Pinned(undefined, zoneless).format(day), "03", "a non-enumerable option is still read when the zone is filled in");
 });
 
 test("a fixture captured on the wall clock's day is refused, since a stray clock read would not show", () => {

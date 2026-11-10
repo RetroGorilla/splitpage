@@ -46,10 +46,15 @@ export const NOT_COMPARED = [
     covered: "desktop/test/bundle-export.test.mjs, tests/features/gallery/video-bundles.test.ts"
   },
   {
-    what: "Standalone HTML outside its state, title and description",
+    what: "Standalone HTML outside the state-data script, title and description elements of the document itself, including such elements inside <template>",
     why: "it embeds the whole app, so its bytes follow every app change; here the shell is src/page.html as loaded in Node, not the built app, and its size is reported, not compared",
     covered: "src/test/exports-golden.test.mjs (state, title, description); browser suite 284-exports-from-a-fixture"
   }
+];
+
+export const UNSEEN = [
+  "a change visible only under another default locale or time zone: Intl.DateTimeFormat defaults to en-US and UTC, and other default-locale methods (toLocaleString and the like) use this machine's default on both sides",
+  "a change that depends on the difference between two clock reads: every wall-clock read returns the same frozen instant"
 ];
 
 export const EXCLUSIONS = [];
@@ -241,7 +246,7 @@ export function report(base, head, result, formats = FORMATS) {
   const cell = (format, fixture) => result.cells.find((c) => c.format === format && c.fixture === fixture);
   const lines = [
     `Exports of ${result.fixtures.length} fixtures in ${result.formats.length} formats, base ${base.slice(0, 8)} against head ${head.slice(0, 8)}: ${result.same ? "every cell has identical compared bytes" : "DIFFERENCES"}.`,
-    "Compared bytes: the whole output, except Standalone HTML, where only the state-data script, title and description meta elements are compared (found by an HTML parse, as raw bytes).",
+    "Compared bytes: the whole output, except Standalone HTML, where only the state-data script, title and description meta elements of the document itself are compared (found by an HTML parse, as raw bytes); element content inside <template> and the rest of the shell are not compared.",
     `Capture clock ${result.clocks[0]?.capturedAt ?? "unknown"}; wall clock ${result.clocks[0]?.now ?? "unknown"}, so an export that reads the wall clock instead of the capture time differs.`,
     "",
     `| Format | ${result.fixtures.join(" | ")} |`,
@@ -267,6 +272,7 @@ export function report(base, head, result, formats = FORMATS) {
   const info = result.cells.filter((c) => c.info);
   if (info.length) lines.push("", "Information, not compared:", "", ...info.map((c) => `- ${c.format} / ${c.fixture}: ${c.info}`));
   lines.push("", "Not compared here:", "", ...NOT_COMPARED.map((n) => `- ${n.what}: ${n.why}. Covered by ${n.covered}.`));
+  lines.push("", "Change kinds this tool cannot see:", "", ...UNSEEN.map((u) => `- ${u}`));
   return lines.join("\n");
 }
 
