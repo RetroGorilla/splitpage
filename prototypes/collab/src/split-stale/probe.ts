@@ -32,7 +32,12 @@ export function startStaleProbe(context: StaleObservedContext): void {
     const input = event as InputEvent;
     if (!(event.target instanceof Element) || !context.host.contains(event.target)) return;
     realm.__splitCall?.("native.begin");
-    states.push({ site: "native.begin", state: snapshot(), input: { trusted: event.isTrusted, type: input.inputType, data: input.data, defaultPrevented: event.defaultPrevented } });
+    const ranges = [...input.getTargetRanges()].map(range => {
+      const element = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+      const cell = element?.closest<HTMLElement>(".wr-beat, .cell-editable");
+      return cell ? [context.bridge.offset(cell, range.startContainer, range.startOffset), context.bridge.offset(cell, range.endContainer, range.endOffset)] : null;
+    });
+    states.push({ site: "native.begin", state: snapshot(), input: { trusted: event.isTrusted, type: input.inputType, data: input.data, defaultPrevented: event.defaultPrevented, ranges } });
   }, true);
   realm.staleProbe = { mark: (site: string) => { states.push({ site, state: snapshot() }); }, clear: () => { states.length = 0; }, snapshot: () => ({ state: snapshot(), states: structuredClone(states) }) };
 }

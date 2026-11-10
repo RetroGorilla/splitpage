@@ -36,10 +36,11 @@ try {
     await protocol.call("Page.enable");
     await protocol.call("Page.addScriptToEvaluateOnNewDocument", { source: "window.__splitpageNoNewTab=true;window.__splitpageNoOnboarding=true;" + traceBundle });
     const cases: unknown[] = [];
-    for (const surface of ["split", "writer"]) {
+    for (const surface of ["split", "writer", "repaired"]) {
       await protocol.call("Page.navigate", { url: pathToFileURL(path).href + "?app-binding=1" });
       await protocol.evaluate("new Promise((resolve,reject)=>{const end=Date.now()+10000;const check=()=>{if(window.__writerFlowTest&&window.__splitBindingTest)resolve(true);else if(Date.now()>end)reject(new Error('App did not start'));else setTimeout(check,20)};check()})");
-      const bundle = (await build({ absWorkingDir: repo, entryPoints: [join(folder, `src/split-stale/${surface}-probe.ts`)], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" })).outputFiles?.[0]?.text;
+      const entry = surface === "repaired" ? "page-probe.ts" : `${surface}-probe.ts`;
+      const bundle = (await build({ absWorkingDir: repo, entryPoints: [join(folder, `src/split-stale/${entry}`)], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" })).outputFiles?.[0]?.text;
       if (!bundle) throw new Error("Surface probe missing");
       await protocol.evaluate(bundle + `\n//# sourceURL=${surface}-stale-binding.js`);
       await protocol.evaluate("appBinding.reset('T02','M1',true);appBinding.select(2);appBinding.clear();staleProbe.clear();splitTrace.clear();staleProbe.mark('before-remote')");
