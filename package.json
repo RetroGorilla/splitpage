@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "version": "0.0.0",
-  "description": "Build, lint and test tooling for Splitpage. The app itself has no runtime dependencies; esbuild builds the bundle, eslint checks every source tree in it (see eslint.config.mjs), TypeScript type-checks the new source folders and parses source for the dependency and comment gates, and jsdom lends the unit tests a DOM (see build.mjs and src/test/_dom.mjs).",
+  "description": "Build, lint and test tooling for Splitpage. Yjs supplies the collaboration runtime; esbuild builds the bundle, eslint checks every source tree in it (see eslint.config.mjs), TypeScript type-checks the new source folders and parses source for the dependency and comment gates, and jsdom lends the unit tests a DOM (see build.mjs and src/test/_dom.mjs).",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
@@ -36,5 +36,8 @@
   },
   "overrides": {
     "minimatch": "^11.0.5"
+  },
+  "dependencies": {
+    "yjs": "13.6.33"
   }
 }
