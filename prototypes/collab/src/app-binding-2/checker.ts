@@ -19,7 +19,7 @@ export interface BindingFollowupObservation {
   composing: boolean;
 }
 
-export function checkBindingFollowup(input: BindingFollowupInput, facts: BindingFollowupFacts, observation: BindingFollowupObservation): string[] {
+export function checkBindingFollowup(input: BindingFollowupInput, facts: BindingFollowupFacts, observation: BindingFollowupObservation, mechanism: string, lateJoin: boolean): string[] {
   const failures: string[] = [];
   const fail = (message: string): void => { if (!failures.includes(message)) failures.push(message); };
   const values = new Map<string, string>();
@@ -39,6 +39,8 @@ export function checkBindingFollowup(input: BindingFollowupInput, facts: Binding
   if (observation.errors.length) fail(`binding errors: ${observation.errors.join("; ")}`);
   if (observation.dirty || observation.composing) fail("native buffer is not committed");
   if (!observation.models["A.E"] || !observation.models["B.E"]) fail("required replicas missing");
+  const expectedReplicas = ["A.E", "B.E", ...(mechanism === "M3" ? ["A.N", "B.N"] : []), ...(lateJoin ? ["C.E", ...(mechanism === "M3" ? ["C.N"] : [])] : [])];
+  if (JSON.stringify(Object.keys(observation.models).sort()) !== JSON.stringify(expectedReplicas.sort())) fail("required E/N/late-join replica coverage missing");
   const identityKey = (identity: CollabIdentity | null): string => identity ? `${identity.client}:${identity.clock}` : "glue";
   for (const [replica, model] of Object.entries(observation.models)) {
     const rows = [...model.rows.map(row => ({ row, recovery: false })), ...model.recovery.map(entry => ({ row: entry.row, recovery: true }))];

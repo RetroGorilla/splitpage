@@ -15,7 +15,8 @@ import { writeBindingFollowupArtifacts } from "./report.ts";
 
 export interface BindingFollowupStage extends BindingFollowupObservation {
   facts: BindingFollowupFacts;
-  timings: { phase: string; ms: number }[];
+  timings: { phase: string; ms: number; at: number }[];
+  paints: { phase: "start" | "end"; at: number }[];
   reentry: Record<string, unknown>[];
   peak: { bytes: number; messages: number; transportMessages: number };
   history: string[];
@@ -39,6 +40,7 @@ export interface BindingFollowupResult {
   failures: string[];
   literal: string | null;
   literalUndo: string | null;
+  undo: BindingFollowupStage | null;
   stages: BindingFollowupStage[];
 }
 
@@ -93,7 +95,7 @@ try {
         const retained = mode !== "baseline"; const paintGate = mode === "paint-gate";
         const stages: BindingFollowupStage[] = [];
         const failures: string[] = [];
-        let literal: string | null = null; let literalUndo: string | null = null;
+        let literal: string | null = null; let literalUndo: string | null = null; let undo: BindingFollowupStage | null = null;
         const snap = (): Promise<BindingFollowupStage> => protocol.evaluate("appBindingFollowup.snapshot()");
         try {
           await protocol.evaluate(`appBindingFollowup.reset(${JSON.stringify(name)},${JSON.stringify(mechanism)},${JSON.stringify(order)},${retained},${paintGate})`);
@@ -113,9 +115,10 @@ try {
           if (name === "removed" && failures.length === 0) {
             await protocol.key("z", 2);
             await protocol.evaluate("appBindingFollowup.removedUndo()"); literalUndo = "PASS";
+            undo = await snap();
           }
         } catch (error) { failures.push(error instanceof Error ? error.message : String(error)); try { stages.push(await snap()); } catch {} }
-        results.push({ name, mechanism, order, retained, paintGate, status: failures.length ? "FAIL" : "PASS", failures, literal, literalUndo, stages });
+        results.push({ name, mechanism, order, retained, paintGate, status: failures.length ? "FAIL" : "PASS", failures, literal, literalUndo, undo, stages });
       }
       process.stdout.write(`${name}: ${results.filter(result => result.name === name && result.status === "PASS").length}/${results.filter(result => result.name === name).length}\n`);
     }

@@ -1,5 +1,7 @@
 # Real Writer binding experiment
 
+The [follow-up experiment](app-binding-2-results.md) found additional structural mapping, native re-entry and mark differences. The M2 recommendation below applies to this first matrix and is provisional in light of that evidence.
+
 **M1, M2 and M3 each pass the 24 prescribed real-app cases, including selective undo: 72/72. Recommend M2 for the narration binding.** The app does not force deferral: its existing composition repaint guard preserves the native DOM while M2's session projection advances. M1 and M3 also bind, but add an editor-update hold; M3 additionally owns a second document. This is a buffer recommendation for the tested narration seam, not a schema decision or a production integration endorsement.
 
 Every measurement in this report, the evidence and the histories uses throwaway app commit **[`f807ca39dcc5feb03f5746209cb806ee66dab3f8`](https://github.com/RetroGorilla/splitpage/commit/f807ca39dcc5feb03f5746209cb806ee66dab3f8)**, pushed on `proto/collab-1a-app-binding-throwaway`. Never merge that branch. Its base is `035b053d`; its app patch is seven files, 115 insertions and 16 deletions. This deliverable changes only `prototypes/collab/`. The app patch remains separate.

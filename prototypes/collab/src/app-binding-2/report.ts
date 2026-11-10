@@ -43,7 +43,7 @@ export function bindingFollowupHistories(evidence: BindingFollowupEvidence): Map
       });
       const last = result.stages.at(-1);
       if (last) {
-        lines.push(`peak=${JSON.stringify(last.peak)} timings=${JSON.stringify(last.timings)} rawLocalMarks=${JSON.stringify(last.rawLocalMarks)}`,
+        lines.push(`peak=${JSON.stringify(last.peak)} timings=${JSON.stringify(last.timings)} actualPaints=${JSON.stringify(last.paints)} rawLocalMarks=${JSON.stringify(last.rawLocalMarks)}`,
           ...last.reentry.map(event => `re-entry ${JSON.stringify(event)}`));
       }
       lines.push(...result.failures.map(failure => `FAIL: ${failure}`), "```", "");

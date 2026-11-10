@@ -13,7 +13,11 @@ import type { FlowOutcome, FlowRange } from "../../../../src/core/flow/flow.ts";
 
 const context = appBindingExperimentContext();
 const { host, bridge, api } = context;
-const commandBridge = bridge as typeof bridge & { command: (handler: ((name: string, before: FlowRange | null) => FlowOutcome | undefined) | null) => void };
+const commandBridge = bridge as typeof bridge & {
+  command: (handler: ((name: string, before: FlowRange | null) => FlowOutcome | undefined) | null) => void;
+  paintEvents: () => { phase: "start" | "end"; at: number }[];
+  clearPaintEvents: () => void;
+};
 let current: BindingFollowupCase = "split-inside";
 let order: DeliveryOrder = "D3";
 let retained = false;
@@ -21,13 +25,13 @@ let paintGate = false;
 let injected = false;
 let clipboard = "";
 let facts: BindingFollowupFacts = { inserted: [], deleted: [], marked: [], updates: 0, join: false, comment: false };
-let timings: { phase: string; ms: number }[] = [];
+let timings: { phase: string; ms: number; at: number }[] = [];
 let reentry: Record<string, unknown>[] = [];
 let peak = { bytes: 0, messages: 0, transportMessages: 0 };
 const originalRepaint = bridge.repaint;
 bridge.repaint = () => {
   const start = performance.now();
-  try { originalRepaint(); } finally { timings.push({ phase: "app-repaint", ms: performance.now() - start }); }
+  try { originalRepaint(); } finally { timings.push({ phase: "app-repaint-request", ms: performance.now() - start, at: performance.now() }); }
 };
 
 function notePeak(): void {
@@ -137,15 +141,16 @@ const followup = {
     current = name; order = delivery; retained = retain; paintGate = gatePaint; injected = false; clipboard = "";
     facts = { inserted: [], deleted: [], marked: [], updates: 0, join: false, comment: false };
     timings = []; reentry = []; peak = { bytes: 0, messages: 0, transportMessages: 0 };
-    context.profile((phase, ms) => { timings.push({ phase, ms }); });
+    context.profile((phase, ms) => { timings.push({ phase, ms, at: performance.now() }); });
     const input = bindingFollowupInput(current);
     const buffer = context.session().alice;
     buffer.paint(input.beat, input.from, input.to);
     context.paint(); api.clear();
+    commandBridge.clearPaintEvents();
     const original = buffer.commit.bind(buffer);
     buffer.commit = (...args) => {
       const start = performance.now();
-      try { original(...args); } finally { timings.push({ phase: "buffer-commit", ms: performance.now() - start }); }
+      try { original(...args); } finally { timings.push({ phase: "buffer-commit", ms: performance.now() - start, at: performance.now() }); }
     };
     commandBridge.command(command);
   },
@@ -160,16 +165,18 @@ const followup = {
       try { h.check(bufferOracles["T04 removed"].expected); api.check(false); literal = "PASS"; }
       catch (error) { literal = error instanceof Error ? error.message : String(error); }
     }
-    const failures = checkBindingFollowup(bindingFollowupInput(current), facts, observation());
+    const failures = checkBindingFollowup(bindingFollowupInput(current), facts, observation(), h.alice.mechanism, order === "late-C");
     if (literal && literal !== "PASS") failures.push(literal);
     return { failures, literal };
   },
   removedUndo(): void { context.session().queue.flush(order); context.paint(); context.session().check(bufferOracles["T04 removed"].undo); api.check(true); },
   snapshot() {
     const h = context.session();
-    return { ...observation(), facts, timings, reentry, peak, history: h.history(), events: context.api.snapshot().events,
-      rawLocalMarks: context.api.snapshot().models["A.E"]?.rows.flatMap(row => row.characters.filter(character => character.identity?.client === 1).map(character => ({ name: character.notation, marks: character.marks }))),
-      app: context.api.snapshot().app, heldBytes: h.alice.heldBytes, heldMessages: h.alice.held.length,
+    const base = context.api.snapshot();
+    const rawModels = base.models as Record<string, CollabModel>;
+    return { ...observation(), facts, timings, reentry, peak, paints: commandBridge.paintEvents(), history: h.history(), events: base.events,
+      rawLocalMarks: rawModels["A.E"]?.rows.flatMap(row => row.characters.filter(character => character.identity?.client === 1).map(character => ({ name: character.notation, marks: character.marks }))),
+      app: base.app, heldBytes: h.alice.heldBytes, heldMessages: h.alice.held.length,
       native: h.alice.nativeValue, commits: [...context.state().commits], syncs: [...context.state().syncs], queuePending: h.queue.pending.length };
   }
 };
