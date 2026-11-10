@@ -198,12 +198,12 @@ export const flowOperationCoverage = [
     ["selection drops whole beats or headings", ["remove", "heading-remove"]],
     ["clearing repairs an orphan/empty script or caret inserts a blank", ["segment-create"]],
     ["caret in the middle of a beat", ["split"]],
-    ["paragraph flag changes", ["scalar"]],
+    ["paragraph flag changes and surviving heading anchor repairs", ["scalar"]],
     ["second Enter removes an empty separator", ["remove"]],
     ["non-beat/missing/no-op", []]
   ]],
   ["startParagraph", "known", "split,segment-create,scalar", [
-    ["end flags an existing successor; start flags current beat", ["scalar"]],
+    ["end flags an existing successor; start flags current beat; blank-before reanchors a heading", ["scalar"]],
     ["new blank before or after", ["segment-create"]],
     ["middle split", ["split"]],
     ["derived scene anchor / empty/non-beat/missing guards", []]
@@ -213,20 +213,20 @@ export const flowOperationCoverage = [
     ["selection replaces observed characters", ["text-delete", "text-insert"]],
     ["selection drops whole beats/headings", ["remove", "heading-remove"]],
     ["selection repairs an orphan heading/empty script", ["segment-create"]],
-    ["selection changes surviving paragraph flags", ["scalar"]],
+    ["selection changes surviving paragraph flags and heading anchors", ["scalar"]],
     ["non-beat/missing row", []]
   ]],
   ["backspaceAt", "known", "text-delete,join,heading-remove,remove,scalar", [
     ["heading start demotes its name or drops an empty header", ["heading-remove"]],
     ["blank current/previous beat removal", ["remove"]],
-    ["paragraph flag clear or repair after removal", ["scalar"]],
+    ["paragraph flag clear or repair after removal and surviving heading anchor repairs", ["scalar"]],
     ["tick join option", ["join"]],
     ["tick delete option removes previous last character", ["text-delete"]],
     ["scene boundary / previous visual / offset/first/missing guards", []]
   ]],
   ["deleteForwardAt", "known", "text-delete,remove,scalar", [
     ["blank current/next beat removal", ["remove"]],
-    ["next paragraph flag clear or repair after removal", ["scalar"]],
+    ["next paragraph flag clear or repair after removal and surviving heading anchor repairs", ["scalar"]],
     ["delete next first character", ["text-delete"]],
     ["heading/scene/visual-only successor caret-only; not at end/last/missing guards", []]
   ]],
@@ -241,7 +241,7 @@ export const flowOperationCoverage = [
   ["enterInHeading", "known", "split,segment-create,scalar", [
     ["offset zero creates a blank before", ["segment-create"]],
     ["middle heading tail becomes a beat", ["split"]],
-    ["existing first beat gains a paragraph flag", ["scalar"]],
+    ["existing first beat gains a paragraph flag and heading tail split reanchors the header", ["scalar"]],
     ["derived first-beat anchor / end caret-only / non-heading/missing scene", []]
   ]],
   ["finalizeHeading", "known", "text-delete,heading-finalize,remove,segment-create,scalar", [
@@ -249,7 +249,7 @@ export const flowOperationCoverage = [
     ["convert name and retain narration tail or visual", ["heading-finalize"]],
     ["name-only source beat is softly removed", ["remove"]],
     ["no reusable follower or existing header needs a separate blank anchor", ["segment-create"]],
-    ["existing retained beat/follower paragraph flag changes", ["scalar"]],
+    ["existing retained beat/follower paragraph flag changes and pre-existing heading anchor repairs", ["scalar"]],
     ["missing/not-pending guard", []]
   ]],
   ["inlineMarkdown", "surface", "text-delete,mark", [

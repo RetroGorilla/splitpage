@@ -1,0 +1,31 @@
+# Structural flow operation descriptions
+
+Stage 2 package 4a describes structural edits beside the existing `FlowEdit.rows` result. No session caller requests operations yet. Standalone continues committing rows.
+
+## Request and lifetime
+
+Pass `operations: { id, by }` in `FlowPorts`. The caller supplies one command id and author. Each covered entry creates one local trace, calls the existing implementation with recording enabled, and returns `ops` on an edit. Refusals, moves and null outcomes retain their original shape. Operation ids are the command id plus a colon and the operation's zero-based index. Nested calls share the trace; they do not allocate another command.
+
+With the option absent, no trace, operation array, base-reference map or operation payload is constructed. Optional-call guards skip argument evaluation. The ten entry points gain a request branch. Emission guards also occur in `replaceRange` (only recorded when used by a covered structural command), `splitBeat`, `blankAfter`, `blankBefore`, `enterAtCaret`, `removeHeader`, `removeRow` and `withoutMarker`. `removeRow` gains a ports argument. `removeEmptyHeading` moves its pure edit and landing policy from the Writer surface into its own core module, adding that call on its existing surface path. These are typing-path changes; no timing measurement is claimed here.
+
+## Base references
+
+`flowBaseReference(owner, field, from, to = from)` encodes the tuple `["flow-base", owner, field, from, to]` as JSON inside `SharedContentRef`. Offsets are UTF-16 code units in the input text projection, with atoms occupying one unit. A position has equal endpoints; an observed range is half-open. `field` distinguishes narration, visuals and heading names. JSON encoding separates arbitrary ids and delimiters without ambiguity. `readFlowBaseReference` rejects malformed tuples.
+
+Beat, heading and segment identities in these standalone descriptions use their document ids. New beats and headings retain exactly the ids returned by the flow id port; recording consumes no additional ids. Text addresses use that owner id as the initial segment id. Removal component and gallery references identify the removed beat's visual and gallery origins with `:visual` and `:gallery` suffixes. A shared adapter must map these descriptions against the captured base before applying them; these references are not CRDT identities or a wire protocol for arbitrary replicas.
+
+Text gaps put the base position in `right`, with `left: null` and `affinity: "before"`. Deletions and heading name/prefix/separator observations contain base ranges. The trace maps offsets through earlier selection deletions, so a subsequent Enter split still refers to the original base. Insertion precedes deletion of observed content. Paragraph flag changes and surviving heading anchor repairs are scalar operations after the intent operations. Row/heading creation carries initial fields; heading finalization references the retained or reusable first beat, and separately describes any new blank or soft removal.
+
+## Coverage and proof
+
+The covered fixture rows are `enterAt`, `startParagraph`, `startBeat`, `lineBreakAt`, `backspaceAt`, `deleteForwardAt`, `joinWithPrevious`, `enterInHeading`, `finalizeHeading` and `removeEmptyHeading`. Their operation-kind lists are unchanged. The scalar branch descriptions now explicitly include surviving heading anchor repairs where applicable.
+
+`tests/core/flow/operation-applier.ts` interprets these descriptions without calling flow functions. It retains base provenance while inserting/deleting characters, splits text, folds join visuals/gallery/status independently, and derives removed comments from range-removal observations and surviving anchors. It uses shared low-level text serialization and gallery normalization policy. The differential test compares complete rows, sections and removed comments, checks wire validation and distinct operation ids, and requires exact agreement with each fixture row's kind set.
+
+Generators are evaluated directly from the unchanged fuzz/reference suite source blocks: fuzz seeds 1–240, reference seeds 1–300 and all six selected ranges, typing's 160-step seed-371 stream, and round-four's 120 gallery cases. Additional heading cases exercise fallback, retained visuals/tails, reused followers, existing headers, UTF-16 edges and explicit finalization offsets. Failures report the seed, function and a reduced input preserving referenced targets.
+
+Run `node tests/core/flow/standalone-proof.mjs 0c2f43a4` to run the same generated inputs against the pre-change flow implementation and the original surface's empty-heading callback, with recording off. The script creates two temporary modules, removes them in `finally`, and must run separately from inventory checks. It edits no existing suite and stores no golden or source snapshot.
+
+## Shared-mode questions retained
+
+These descriptions preserve standalone behavior without deciding its concurrent interpretation: synthetic blank beats for orphan headings/empty scripts; demotion of a heading into a new narration beat; paragraph/header anchor repairs; join gallery deduplication and saved-limit normalization; comment records reported by whole-range removal versus retained records on boundary removals; and formatting loss when narration becomes a plain heading name. An artificial finalization offset inside a surrogate pair can put a lone surrogate in a heading name while retaining the complete pair in narration. The description preserves both observations; choosing a different shared-mode result requires a product decision.
