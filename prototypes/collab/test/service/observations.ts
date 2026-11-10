@@ -131,8 +131,11 @@ export async function observeHooks(t: TestContext): Promise<void> {
       await until(() => server.events.slice(start).some(e => e.event === "immediate-return"));
       assert.match(server.stderr, /Document stays in memory to avoid data loss/);
       assert.equal(client.receipts.status, "Your changes saved to server");
-      const inspection = await server.command("inspect", {}, "inspection");
-      assert.equal(typeof inspection.state, "string");
+      const late = new FixtureClient(server.port, new Y.Doc());
+      try {
+        await late.connect(); await late.saved();
+        assert.equal(late.document.getText("R1").toString(), "abcd");
+      } finally { late.destroy(); }
     } finally { client?.destroy(); await work.clean(); }
   });
 }

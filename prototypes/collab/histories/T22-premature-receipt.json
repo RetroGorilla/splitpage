@@ -16,12 +16,16 @@
     {
       "lifetime": 1,
       "bytes": "AQEHAAQBAlIxBGFiY2QA",
-      "applied": true
+      "applied": true,
+      "disposition": "accepted",
+      "committedThrough": 1
     },
     {
       "lifetime": 1,
       "bytes": "AQELAIQHAwFlAA==",
-      "applied": true
+      "applied": true,
+      "disposition": "accepted",
+      "committedThrough": 1
     }
   ],
   "told": [

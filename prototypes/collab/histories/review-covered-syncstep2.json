@@ -1,0 +1,48 @@
+{
+  "shows": "The original checker rejects a truthful positive receipt for a refused oversized snapshot already covered by three journal rows.",
+  "replay": "node --test test/service/review.test.ts",
+  "fixture": {
+    "initial": "abcd",
+    "appended": [
+      {
+        "character": "a",
+        "count": 1100000
+      },
+      {
+        "character": "b",
+        "count": 1100000
+      }
+    ]
+  },
+  "expected": {
+    "snapshotBytes": 2200025,
+    "journalRows": 3,
+    "applied": true,
+    "status": "Your changes saved to server",
+    "checkerAccepts": true
+  },
+  "observed": {
+    "applied": true,
+    "statusAtReceipt": "Your changes saved to server",
+    "statusAfterKill": "Offline, saved on this device",
+    "checkerError": "Acknowledged update missing from recovered journal"
+  },
+  "snapshotSha256": "7664bb19f7424e28f2aeaddcecf37185b3305aefea92058aef98164cc020dd02",
+  "recovered": [
+    {
+      "sequence": 1,
+      "bytes": 15,
+      "sha256": "e764e92bf0d4935f3e81b8616ff0dda914f50e8b4cc56123000b8e605bbc55bd"
+    },
+    {
+      "sequence": 2,
+      "bytes": 1100011,
+      "sha256": "90b96ba3ecf9075d7f3662c349294caf48e0083e78edd4d2d440c87a85c55bd4"
+    },
+    {
+      "sequence": 3,
+      "bytes": 1100015,
+      "sha256": "f8201965c5b9ecf6dfbadd1f5403a5481c90f151acb9d44f774d0f26d896d2ff"
+    }
+  ]
+}

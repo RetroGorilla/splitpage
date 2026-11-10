@@ -12,6 +12,8 @@ import * as Y from "yjs";
 import { ConnectionReceipts } from "../../src/service/receipts.ts";
 import { readFrame } from "../../src/service/wire.ts";
 
+const journalPaths = new Map<number, string>();
+
 export async function until(check: () => boolean, label = "condition", timeout = 8000): Promise<void> {
   const end = Date.now() + timeout;
   while (!check()) {
@@ -22,11 +24,13 @@ export async function until(check: () => boolean, label = "condition", timeout =
 
 export class JournalChild {
   readonly child: ChildProcess;
+  readonly path: string;
   readonly events: Record<string, unknown>[] = [];
   stderr = "";
   port = 0;
 
   constructor(path: string, environment: Record<string, string> = {}) {
+    this.path = path;
     this.child = fork(new URL("../../src/service/server-process.ts", import.meta.url), [path], {
       stdio: ["ignore", "ignore", "pipe", "ipc"], env: { ...process.env, ...environment },
     });
@@ -43,6 +47,7 @@ export class JournalChild {
     assert.deepEqual(ready.configuration, { journalMode: "wal", synchronous: 2 });
     this.port = Number(ready.port);
     assert.ok(this.port > 0);
+    journalPaths.set(this.port, this.path);
   }
 
   async command(command: string, data: Record<string, unknown> = {}, response = "configured"): Promise<Record<string, unknown>> {
@@ -62,25 +67,28 @@ export class JournalChild {
   }
 }
 
-export async function workspace(): Promise<{ path: string; start: () => Promise<JournalChild>; clean: () => Promise<void> }> {
+export async function workspace(): Promise<{ path: string; start: (environment?: Record<string, string>) => Promise<JournalChild>; clean: () => Promise<void> }> {
   const folder = await mkdtemp(join(tmpdir(), "journal-"));
   const children: JournalChild[] = [];
   return {
     path: join(folder, "updates.sqlite"),
-    async start() {
-      const server = new JournalChild(join(folder, "updates.sqlite"));
+    async start(environment = {}) {
+      const server = new JournalChild(join(folder, "updates.sqlite"), environment);
       children.push(server);
       await server.ready();
       return server;
     },
     async clean() {
-      for (const server of children) await server.kill();
+      for (const server of children) { await server.kill(); journalPaths.delete(server.port); }
       await rm(folder, { recursive: true, force: true });
     },
   };
 }
 
-export type HarnessTransmission = { lifetime: number; bytes: string; applied: boolean | null };
+export type HarnessTransmission = {
+  lifetime: number; bytes: string; applied: boolean | null;
+  disposition: "accepted" | "refused"; committedThrough: number | null;
+};
 export type HarnessSavedPromise = { status: string; local: string[]; acknowledged: string[] };
 
 export class FixtureClient {
@@ -95,13 +103,17 @@ export class FixtureClient {
   readonly syncStartCounts: number[] = [];
   readonly frames: { direction: string; lifetime: number; kind: number; subtype: number; payload: string }[] = [];
   readonly sockets: WebSocket[] = [];
+  readonly closes: { lifetime: number; code: number; reason: string; status: string }[] = [];
   onOpen: (() => void) | null = null;
   private lifetime = 0;
 
   constructor(port: number, document = fixture()) {
     this.document = document;
+    const journalPath = journalPaths.get(port);
+    assert.ok(journalPath, "Socket must belong to a harness-owned journal");
+    const refusedLifetimes = new Set<number>();
     this.localUpdates.push(Buffer.from(Y.encodeStateAsUpdate(document)).toString("base64"));
-    function observedSocket(owner: FixtureClient): typeof WebSocket {
+    function observedSocket(owner: FixtureClient, journalPath: string): typeof WebSocket {
       return class extends WebSocket {
         readonly lifetime: number;
         constructor(url: string | URL, protocols?: string | string[]) {
@@ -117,6 +129,10 @@ export class FixtureClient {
               const sent = owner.history.find(item => item.lifetime === this.lifetime && item.applied === null);
               assert.ok(sent, "harness acknowledgement must match a send");
               sent.applied = frame.subtype === 1;
+              const reader = new DatabaseSync(journalPath, { readOnly: true });
+              try {
+                sent.committedThrough = Number(reader.prepare("SELECT COALESCE(MAX(sequence), 0) AS sequence FROM updates").get()?.sequence);
+              } finally { reader.close(); }
               owner.receipts.received(this.lifetime, bytes);
               queueMicrotask(() => {
                 owner.observations.push({ count: owner.provider.unsyncedChanges, outstanding: owner.receipts.outstanding, status: owner.receipts.status });
@@ -124,7 +140,10 @@ export class FixtureClient {
               });
             }
           });
-          this.addEventListener("close", () => owner.receipts.close(this.lifetime));
+          this.addEventListener("close", (event: CloseEvent) => {
+            owner.receipts.close(this.lifetime);
+            owner.closes.push({ lifetime: this.lifetime, code: event.code, reason: event.reason, status: owner.receipts.status });
+          });
         }
         override send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
           assert.ok(data instanceof Uint8Array);
@@ -132,14 +151,17 @@ export class FixtureClient {
           if (frame.kind === 0 && frame.subtype === 0) owner.syncStartCounts.push(owner.provider.unsyncedChanges);
           owner.frames.push({ direction: "out", lifetime: this.lifetime, kind: frame.kind, subtype: frame.subtype, payload: Buffer.from(frame.payload).toString("base64") });
           if (frame.kind === 0 && (frame.subtype === 1 || frame.subtype === 2)) {
-            owner.history.push({ lifetime: this.lifetime, bytes: Buffer.from(frame.payload).toString("base64"), applied: null });
+            owner.history.push({
+              lifetime: this.lifetime, bytes: Buffer.from(frame.payload).toString("base64"), applied: null,
+              disposition: refusedLifetimes.has(this.lifetime) ? "refused" : "accepted", committedThrough: null,
+            });
           }
           owner.receipts.sent(this.lifetime, data);
           super.send(Uint8Array.from(data));
         }
       };
     }
-    const ObservedSocket = observedSocket(this);
+    const ObservedSocket = observedSocket(this, journalPath);
     this.document.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin !== this.provider) {
         this.localUpdates.push(Buffer.from(update).toString("base64"));
@@ -154,6 +176,11 @@ export class FixtureClient {
     this.provider = new HocuspocusProvider({
       name: "fixture", document, awareness: null, websocketProvider: this.socket,
       onOpen: () => { queueMicrotask(() => this.onOpen?.()); },
+      onStateless: ({ payload }) => {
+        if (!payload.includes('"rejected":')) return;
+        refusedLifetimes.add(this.lifetime);
+        for (const sent of this.history.filter(item => item.lifetime === this.lifetime && item.applied === null)) sent.disposition = "refused";
+      },
     });
     this.provider.attach();
   }
@@ -222,19 +249,52 @@ export function checkHistory(history: readonly HarnessTransmission[], rows: read
     previous = row.sequence;
   }
   for (const sent of history.filter(item => item.applied)) {
-    assert.ok(rows.some(row => row.payload === sent.bytes), `Acknowledged update missing from recovered journal: ${sent.bytes}`);
+    assert.notEqual(sent.committedThrough, null, "Acknowledgement requires a harness-observed commit boundary");
+    const available = rows.filter(row => row.sequence <= Number(sent.committedThrough));
+    if (sent.disposition === "accepted") {
+      assert.ok(available.some(row => row.payload === sent.bytes), "Acknowledged update missing exact bytes from recovered journal before receipt");
+    }
+    assertCoverage([sent.bytes], available.map(row => row.payload), "Acknowledged update lacks insertion or deletion coverage before receipt");
   }
   for (const promise of promises) {
-    const covered = new Y.Doc();
-    try {
-      for (const payload of promise.acknowledged) {
-        assert.ok(rows.some(row => row.payload === payload), "Saved promise requires a committed message");
-        Y.applyUpdate(covered, Buffer.from(payload, "base64"));
+    for (const payload of promise.acknowledged) assert.ok(history.some(sent => sent.applied && sent.bytes === payload), "Saved promise requires an observed acknowledgement");
+    assertCoverage(promise.local, promise.acknowledged, "Saved promise does not cover a local edit");
+  }
+}
+
+function assertCoverage(required: readonly string[], available: readonly string[], message: string): void {
+  function decode(payloads: readonly string[]): { insertions: Map<number, [number, number][]>; deletions: Map<number, [number, number][]> } {
+    const insertions = new Map<number, [number, number][]>();
+    const deletions = new Map<number, [number, number][]>();
+    function add(target: Map<number, [number, number][]>, client: number, start: number, length: number): void {
+      const intervals = target.get(client) ?? [];
+      intervals.push([start, start + length]);
+      target.set(client, intervals);
+    }
+    for (const payload of payloads) {
+      const update = Y.decodeUpdate(Buffer.from(payload, "base64"));
+      for (const struct of update.structs) {
+        if (!(struct instanceof Y.Skip)) add(insertions, struct.id.client, struct.id.clock, struct.length);
       }
-      for (const payload of promise.local) {
-        assert.ok(Y.snapshotContainsUpdate(Y.snapshot(covered), Buffer.from(payload, "base64")), "Saved promise does not cover a local edit");
+      for (const [client, items] of update.ds.clients) for (const item of items) add(deletions, client, item.clock, item.len);
+    }
+    for (const target of [insertions, deletions]) for (const intervals of target.values()) intervals.sort((a, b) => a[0] - b[0]);
+    return { insertions, deletions };
+  }
+  const expected = decode(required);
+  const covered = decode(available);
+  for (const kind of ["insertions", "deletions"] as const) {
+    for (const [client, intervals] of expected[kind]) {
+      for (const [start, end] of intervals) {
+        let cursor = start;
+        for (const [from, to] of covered[kind].get(client) ?? []) {
+          if (from > cursor) break;
+          cursor = Math.max(cursor, to);
+          if (cursor >= end) break;
+        }
+        assert.ok(cursor >= end, `${message}: ${kind}, client ${client}, clocks ${start}..${end}`);
       }
-    } finally { covered.destroy(); }
+    }
   }
 }
 

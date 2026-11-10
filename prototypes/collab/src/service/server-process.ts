@@ -27,6 +27,7 @@ const gate = (name: string): Promise<void> => new Promise(resolve => {
 });
 const server = new Server({
   port: 0, address: "127.0.0.1", quiet: true, stopOnSignals: false,
+  ...(process.env.MAX_PAYLOAD ? { websocketOptions: { maxPayload: Number(process.env.MAX_PAYLOAD) } } : {}),
   debounce: 2000, maxDebounce: 10000,
   async onLoadDocument({ documentName, document }) {
     for (const row of journal.read(documentName)) Y.applyUpdate(document, row.payload);
