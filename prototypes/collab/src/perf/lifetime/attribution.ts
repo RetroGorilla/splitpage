@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { removalIds } from "../../readers/removals.ts";
 import * as Y from "yjs";
 import { length } from "lib0/encoding";
 import { mapValue, textValue } from "../../schema.ts";
@@ -20,7 +21,7 @@ export function lifetimeRoot(type: Pick<Y.AbstractType<unknown>, "_item" | "doc"
 
 export function attributeLifetimeBytes(replica: SchemaReplica) {
   const categories = Object.fromEntries(lifetimeCategories.map(key => [key, 0])) as Record<LifetimeByteCategory, number>;
-  const removed = new Set([...replica.doc.getMap("beats")].filter(([, value]) => mapValue(mapValue(value).get("removals")).size).map(([id]) => id));
+  const removed = new Set([...replica.doc.getMap("beats")].filter(([, value]) => removalIds(mapValue(mapValue(value).get("removals"))).length).map(([id]) => id));
   const soft = new Set<Y.Item>();
   const softParents = new WeakSet<object>();
   const retain = (type: Y.Map<unknown>): void => {

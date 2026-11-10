@@ -29,9 +29,9 @@
       "failedTestCount": 6,
       "edits": [
         {
-          "file": "src/structure-reader.ts",
-          "before": "item.get(\"beat\") === row.id || row.characters.some(character => hasIdentity(character, item))",
-          "after": "item.get(\"beat\") === row.id"
+          "file": "src/readers/structure.ts",
+          "before": "removal.beat === row.id || row.characters.some(character => removalObserved([removal], character.identity))",
+          "after": "removal.beat === row.id"
         }
       ]
     },
@@ -43,7 +43,7 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "[...extents.values()].sort((a, b) => a.start - b.start || b.end - a.end || a.key.localeCompare(b.key))",
+          "before": "[...extents.values()].sort((a, b) => a.start - b.start || b.end - a.end || compareCodeUnits(a.key, b.key))",
           "after": "[...extents.values()]"
         }
       ]
@@ -56,7 +56,7 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": ".sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.key.localeCompare(b.key))",
+          "before": ".sort((a, b) => (b.end - b.start) - (a.end - a.start) || compareCodeUnits(a.key, b.key))",
           "after": ""
         }
       ]
@@ -66,18 +66,19 @@
       "outcome": "DETECTED",
       "failedTests": [
         "A: same-start nested occurrences project longest outermost",
+        "A: same-start nested occurrences project longest outermost swapped ids",
         "B: same-start nested occurrences project longest outermost"
       ],
-      "failedTestCount": 2,
+      "failedTestCount": 4,
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "[...extents.values()].sort((a, b) => a.start - b.start || b.end - a.end || a.key.localeCompare(b.key))",
+          "before": "[...extents.values()].sort((a, b) => a.start - b.start || b.end - a.end || compareCodeUnits(a.key, b.key))",
           "after": "[...extents.values()]"
         },
         {
           "file": "src/marks/projection.ts",
-          "before": ".sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.key.localeCompare(b.key))",
+          "before": ".sort((a, b) => (b.end - b.start) - (a.end - a.start) || compareCodeUnits(a.key, b.key))",
           "after": ""
         }
       ]
@@ -94,8 +95,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "crossing || !doc.getMap(\"tags\").has(extent.tag)",
-          "after": "!doc.getMap(\"tags\").has(extent.tag)"
+          "before": "crossing || !identityHas(rootMap(doc, \"tags\"), extent.tag)",
+          "after": "!identityHas(rootMap(doc, \"tags\"), extent.tag)"
         }
       ]
     },
@@ -176,8 +177,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "const found = Object.entries(original).filter(([key]) => key.startsWith(\"l:\")).sort(([a], [b]) => a.localeCompare(b))[0];",
-          "after": "const found = Object.entries(original).filter(([key]) => key.startsWith(\"l:\")).sort(([a], [b]) => a.localeCompare(b)).at(-1);"
+          "before": "const found = Object.entries(original).filter(([key]) => key.startsWith(\"l:\")).sort(([a], [b]) => compareCodeUnits(a, b))[0];",
+          "after": "const found = Object.entries(original).filter(([key]) => key.startsWith(\"l:\")).sort(([a], [b]) => compareCodeUnits(a, b)).at(-1);"
         }
       ]
     },
@@ -243,8 +244,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "rowId: anchor?.row.id ?? original.rowId",
-          "after": "rowId: anchor?.row.id"
+          "before": "output.rowId = anchor?.row.id ?? original.rowId",
+          "after": "output.rowId = anchor?.row.id"
         }
       ]
     },
@@ -259,8 +260,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "field: anchor ? \"audioText\" : original.field",
-          "after": "field: \"audioText\""
+          "before": "output.field = anchor ? \"audioText\" : original.field",
+          "after": "output.field = \"audioText\""
         }
       ]
     },
@@ -276,8 +277,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "rowId: anchor?.row.id ?? original.rowId",
-          "after": "rowId: original.rowId"
+          "before": "output.rowId = anchor?.row.id ?? original.rowId",
+          "after": "output.rowId = original.rowId"
         }
       ]
     },
@@ -293,8 +294,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "recovery: anchor?.recovery ?? true",
-          "after": "recovery: false"
+          "before": "output.recovery = anchor?.recovery ?? true",
+          "after": "output.recovery = false"
         }
       ]
     },
@@ -302,15 +303,16 @@
       "id": "reply-order",
       "outcome": "DETECTED",
       "failedTests": [
-        "A: replies sort oldest first, tie by id; author guard refuses other writers without mutation",
-        "B: replies sort oldest first, tie by id; author guard refuses other writers without mutation"
+        "A: full T11 D1, including specified recovery and undo",
+        "A: full T11 dup, including specified recovery and undo",
+        "A: full T11 late-C, including specified recovery and undo"
       ],
-      "failedTestCount": 2,
+      "failedTestCount": 60,
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "replies.sort((a, b) =>\n    Number(a.createdAt) - Number(b.createdAt) || a.id.localeCompare(b.id));",
-          "after": "void replies;"
+          "before": "validated.sort((a, b) => a.createdAt - b.createdAt || compareCodeUnits(a.id, b.id));",
+          "after": "void validated;"
         }
       ]
     },
@@ -326,7 +328,7 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "records.recoveryReplies = replies.filter(reply => !doc.getMap(\"comments\").has(String(reply.commentId)));",
+          "before": "records.recoveryReplies = replies.filter(reply => typeof reply.commentId === \"string\" && !Object.hasOwn(comments, reply.commentId));",
           "after": "records.recoveryReplies = [];"
         }
       ]
@@ -391,8 +393,8 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": ".filter(([, event]) => event.target === target)",
-          "after": ""
+          "before": "event?.target === target",
+          "after": "event"
         }
       ]
     },
@@ -417,15 +419,16 @@
       "id": "status-prior-after-retirement",
       "outcome": "DETECTED",
       "failedTests": [
-        "A: a later status command captures the actual prior value after identical undo",
-        "B: a later status command captures the actual prior value after identical undo"
+        "A: status event parents and prior values stay local to their target beat",
+        "A: A-H12 different status values D1, normal ids, Alice undoes",
+        "A: A-H12 different status values D1, normal ids, Bob undoes"
       ],
-      "failedTestCount": 2,
+      "failedTestCount": 34,
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": "replica.doc.getMap(\"retiredStatus\").has(id) ? event.prior : event.value",
-          "after": "event.value"
+          "before": "resolveBeatStatus(new Map(statusEvents(replica, target)), { has: (id: string) => identityHas(rootMap(replica.doc, \"retiredStatus\"), id) },",
+          "after": "resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),"
         }
       ]
     },
@@ -440,9 +443,9 @@
       "failedTestCount": 16,
       "edits": [
         {
-          "file": "src/marks/projection.ts",
-          "before": "relevant.filter(([id]) => !parents.has(id))",
-          "after": "relevant"
+          "file": "src/marks/status-resolution.ts",
+          "before": "return resolve(statusHeads(events));",
+          "after": "return resolve([...events.keys()]);"
         }
       ]
     },
@@ -457,8 +460,8 @@
       "failedTestCount": 38,
       "edits": [
         {
-          "file": "src/marks/projection.ts",
-          "before": "doc.getMap(\"retiredStatus\").has(id) ? event.prior : event.value",
+          "file": "src/marks/status-resolution.ts",
+          "before": "retired.has(id) ? resolve(event.parents.filter(parent => events.has(parent))) : event.value",
           "after": "event.value"
         }
       ]
@@ -474,9 +477,9 @@
       "failedTestCount": 18,
       "edits": [
         {
-          "file": "src/marks/projection.ts",
-          "before": "frontier[0]?.[1].prior ?? \"todo\"",
-          "after": "values.at(-1) ?? \"todo\""
+          "file": "src/marks/status-resolution.ts",
+          "before": "heads = statusHeads(shared);",
+          "after": "return values.at(-1) ?? stored;"
         }
       ]
     },
@@ -560,7 +563,7 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": "if (!replica.doc.getMap(\"retiredStatus\").has(key)) ",
+          "before": "if (!identityHas(replica.doc.getMap(\"retiredStatus\"), key)) ",
           "after": ""
         }
       ]
@@ -594,7 +597,7 @@
         "A: full T11 dup, including specified recovery and undo",
         "A: full T11 late-C, including specified recovery and undo"
       ],
-      "failedTestCount": 38,
+      "failedTestCount": 60,
       "edits": [
         {
           "file": "src/marks/projection.ts",

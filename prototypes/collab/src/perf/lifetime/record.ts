@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { compareCodeUnits } from "../../readers/order.ts";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -56,7 +57,7 @@ export async function recordLifetimeCounts(directory = lifetimeSnapshotDirectory
   const input = join(directory, "fixture.json"); writeFileSync(input, JSON.stringify(canonicalLifetimeSource()));
   const data = JSON.parse(execFileSync(process.execPath, [worker, directory, input], { encoding: "utf8", windowsHide: true, maxBuffer: 32 * 1024 ** 2 })) as ReturnType<typeof collectLifetimeCounts>;
   assert.deepEqual(lifetimeSources(), source, "Sources changed during count collection");
-  return { version: 1, source, node: process.version, instrumentation: instrumentation.sort((a, b) => a.source.localeCompare(b.source)), data };
+  return { version: 1, source, node: process.version, instrumentation: instrumentation.sort((a, b) => compareCodeUnits(a.source, b.source)), data };
 }
 
 export function validateLifetimeCounts(value: LifetimeCountEvidence): void {

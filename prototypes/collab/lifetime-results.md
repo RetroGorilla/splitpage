@@ -1,10 +1,10 @@
 # Candidate B: writing lifetime, retained bytes and remote-character work
 
-**Blocking T21 scalar finding:** the unchanged legacy status fallback depends on replica-local map iteration order. Two replicas with byte-identical encoded state read ready and shot; a late joiner reads shot in the minimized author-1/author-2 example. Across 24 delivery permutations, two author-id assignments, and with/without deleting and recreating c, 80 of 96 cases disagree (40/48 in each recreation condition). This is a status-design finding, not an index resolution policy. The index now matches each replica's local legacy result; the legacy reader remains unchanged. Minimized history: [T21-scalar-map-order.md](histories/T21-scalar-map-order.md); every observation: src/perf/lifetime/status-order.json. Byte-identical state and identical event records do not imply identical order for this fallback.
+**Historical T21 scalar finding, now repaired:** before the status-resolution change, 80/96 delivery/client/recreation cases disagreed despite byte-identical encoded state. The original observations and minimized history remain intact in src/perf/lifetime/status-order.json and [T21-scalar-map-order.md](histories/T21-scalar-map-order.md). The shared causal-ancestor resolver now returns literal todo in 96/96 cases through every status reader. See [status-resolution-results.md](status-resolution-results.md) for retirement, checker controls and other-reader findings. Timings below predate this fix.
 
 This follow-up studies the selected stable-segment candidate B. It does not select a schema, design compaction or establish a production lifetime. One modeled canonical draft plus its stated revision is the small lifetime control; larger horizons append the same canonical structure as the existing SCALE fixture does. Two/six writers alternate whole beats with causal delivery between turns, not simultaneous conflicting keystrokes. The M1 queue and app binding are not instantiated here.
 
-Source SHA-256: 0e17a94a5e8ad290566df43dd01c2ae5229681f451ee334b44762ee6cfed761e; dependency SHA-256: 73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
+Source SHA-256: b76dba11111183f7919eebc35c3aeef517b93aeddbaa4cb4c9e5e1361f0cd0e6; dependency SHA-256: 22cf6e1e7f1a69e00a5ce7edbff43bfca4f170bea933dc20e7a6b0de67413e5a; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
 
 ## Stated writing scenario
 
@@ -145,20 +145,20 @@ Counters wrap the actual Y.Map iterators/get/has, order toArray and text toDelta
 
 | State | Update bytes / delete ranges | Legacy status records scanned | Indexed status records scanned | Incremental order values / physical items | Incremental text reads / item visits | Join keys / retired-id probes | Removal-record scans |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 2 writers / 1 blocks | 12 / 0 | 2,040 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
-| 2 writers / 5 blocks | 13 / 0 | 51,000 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
-| 2 writers / 10 blocks | 13 / 0 | 204,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
-| 2 writers / 20 blocks | 13 / 0 | 816,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
-| 2 writers / 36 blocks | 13 / 0 | 2,643,840 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
-| 6 writers / 1 blocks | 12 / 0 | 2,040 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
-| 6 writers / 5 blocks | 12 / 0 | 51,000 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
-| 6 writers / 10 blocks | 12 / 0 | 204,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
-| 6 writers / 20 blocks | 13 / 0 | 816,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
-| 6 writers / 36 blocks | 13 / 0 | 2,643,840 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
+| 2 writers / 1 blocks | 12 / 0 | 2,100 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
+| 2 writers / 5 blocks | 13 / 0 | 52,500 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
+| 2 writers / 10 blocks | 13 / 0 | 210,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
+| 2 writers / 20 blocks | 13 / 0 | 840,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
+| 2 writers / 36 blocks | 13 / 0 | 2,721,600 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
+| 6 writers / 1 blocks | 12 / 0 | 2,100 | 0 | 35 / 6 | 2 / 24 | 5 / 5 | 0 |
+| 6 writers / 5 blocks | 12 / 0 | 52,500 | 0 | 175 / 30 | 2 / 24 | 25 / 25 | 0 |
+| 6 writers / 10 blocks | 12 / 0 | 210,000 | 0 | 350 / 60 | 2 / 28 | 50 / 50 | 0 |
+| 6 writers / 20 blocks | 13 / 0 | 840,000 | 0 | 700 / 120 | 2 / 24 | 100 / 100 | 0 |
+| 6 writers / 36 blocks | 13 / 0 | 2,721,600 | 0 | 1260 / 216 | 2 / 24 | 180 / 180 | 0 |
 | synthetic / 0 operations | 13 / 0 | 0 | 0 | 300 / 300 | 2 / 14 | 0 / 0 | 0 |
-| synthetic / 10020 operations | 13 / 0 | 76,000 | 0 | 300 / 300 | 2 / 26 | 80 / 80 | 0 |
-| synthetic / 25050 operations | 13 / 0 | 250,000 | 0 | 300 / 300 | 2 / 14 | 200 / 200 | 0 |
-| synthetic / 50100 operations | 13 / 0 | 700,000 | 0 | 300 / 300 | 0 / 0 | 400 / 400 | 0 |
+| synthetic / 10020 operations | 13 / 0 | 80,000 | 0 | 300 / 300 | 2 / 26 | 100 / 100 | 0 |
+| synthetic / 25050 operations | 13 / 0 | 275,000 | 0 | 300 / 300 | 2 / 14 | 250 / 250 | 0 |
+| synthetic / 50100 operations | 13 / 0 | 800,000 | 0 | 300 / 300 | 0 / 0 | 500 / 500 | 0 |
 
 | State | Apply integrated items / store probes | Incremental records scanned: visuals / gallery / comments / replies / shots / tags |
 | --- | ---: | ---: |
@@ -204,7 +204,7 @@ Machine: AMD Ryzen 9 9950X3D2 16-Core Processor, win32 10.0.26300 x64, Node v24.
 
 Timed source head: 934e7675362f6ac286af5b546833141c0aef729a; source SHA-256: 4a1666e7e85146a8f1f7b657afa4a123278646d8e965d99c48ca5603d153efac. These rows use the merged stored U+200B/cue export repair, superseding the affected historical B remote-character component row. The original perf evidence is retained unchanged.
 
-These are the retained pre-review remote-character rows. The index repair changes only the status-map-change notification handler, which no sampled character transaction invokes. timed-implementation.json archives all nine measured source files; audit.ts verifies their hashes, unchanged sampled projector/driver code and dependencies, and the untouched timing file. All fourteen default attribution/counter checkpoints regenerate identically. No sampled code path's work changed and no rows require retiming. Changed status-notification work is not measured: a status-map change now scans the live event map once to rebuild affected targets in local legacy order.
+These retained rows predate status resolution and the reader-order/validation fixes. timed-implementation.json retains measured sources and timing hashes; marks/status-timing-changes.json and readers/source-changes.json declare each subsequent source/dependency/count layer. The current readers validate records, combine removals, traverse joins independently of beat position and order shared keys by UTF-16 code units. Retiming is needed for incremental, structure, component and withIdentity in both modes at all seven states. applyExcludingIncremental, capture and resolve do not execute the changed reader/export work inside their intervals. No timings were run. Count-only checkpoints do not validate elapsed cost.
 
 Five whole-set runs, alternating legacy/indexed order each round, three warm-up edits per case and eleven recorded samples per case/run. Reported values are the median of five per-run p50s [min–max]; p95 uses the same per-run aggregation. No pooled samples, discarded outliers or timing assertions in npm test. Background load may have affected accepted runs. A game was running on this PC during the session; the unchanged guards require at least 3 GiB free before each run, CPU at most 35% before/after, no forbidden Edge/pc-hold/heavy-game process, and stop after three consecutive refusals. Locks: perf and smoke. RAM is checked again before each state. Raw samples and void/refusal evidence: src/perf/lifetime/timings.json.
 

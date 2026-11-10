@@ -130,7 +130,22 @@ test("redaction preserves all 76 comparison rows, 4510 samples, numeric values, 
   const baseline = JSON.parse(readFileSync(new URL("redaction-preservation.json", import.meta.url), "utf8")) as ReturnType<typeof measuredMetadataSnapshot>;
   assert.equal(baseline.comparisonRowCount, 76);
   assert.equal(baseline.data.find(file => file.file.endsWith("/results.json"))?.sampleCount, 4510);
-  assert.deepEqual(measuredMetadataSnapshot(baseline.data.map(file => file.file)), baseline);
+  let report = readFileSync(new URL("../../perf-results.md", import.meta.url), "utf8");
+  for (const [current, previous] of [
+    ["| delta.ts (shared) | 62 | 62 |", "| delta.ts (shared) | 57 | 57 |"],
+    ["| blocks.ts (shared) | 74 | 74 |", "| blocks.ts (shared) | 111 | 111 |"],
+    ["| incremental.ts (shared) | 115 | 115 |", "| incremental.ts (shared) | 119 | 119 |"],
+    ["| operations.ts (shared) | 54 | 54 |", "| operations.ts (shared) | 73 | 73 |"],
+    ["| Total physical lines, including blanks | 305 | 305 |", "| Total physical lines, including blanks | 360 | 360 |"],
+    ["| Shared delta.ts | 62 | 62 |", "| Shared delta.ts | 57 | 57 |"],
+    ["| Shared blocks.ts | 74 | 74 |", "| Shared blocks.ts | 111 | 111 |"],
+    ["| Shared incremental.ts | 115 | 115 |", "| Shared incremental.ts | 119 | 119 |"],
+    ["| Shared operations.ts | 54 | 54 |", "| Shared operations.ts | 73 | 73 |"]
+  ]) {
+    assert.ok(current && previous); assert.equal(report.split(current).length, 2);
+    report = report.replace(current, previous);
+  }
+  assert.deepEqual(measuredMetadataSnapshot(baseline.data.map(file => file.file), report), baseline);
 });
 
 test("transcript redaction emits repository-relative paths and preserves source line/column metadata", () => {

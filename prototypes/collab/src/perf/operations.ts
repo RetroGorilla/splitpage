@@ -1,12 +1,15 @@
+import { wireIdentity } from "../readers/identity.ts";
 import * as Y from "yjs";
+import { perfReaderView } from "../readers/perf.ts";
 import { mapValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
-import { statusValue } from "../marks/commands.ts";
-import { records } from "../proj/value.ts";
+import { statusFrontier, statusValue } from "../marks/commands.ts";
+import { readStatusEvent } from "../marks/status-resolution.ts";
 import type { ProjectionBag } from "../proj/value.ts";
 import type { PerfBlockIndex } from "./blocks.ts";
 
 export function splitPerfBeat(replica: SchemaReplica, beat: string, offset: number, id: string): void {
+  beat = wireIdentity(beat); id = wireIdentity(id);
   replica.doc.transact(() => {
     replica.split(beat, offset, id, `boundary-${id}`);
     const record = mapValue(replica.doc.getMap("beats").get(id));
@@ -18,9 +21,10 @@ export function splitPerfBeat(replica: SchemaReplica, beat: string, offset: numb
 }
 
 export function writePerfStatus(replica: SchemaReplica, beat: string, id: string, value: string): void {
-  const events = [...replica.doc.getMap<{ target: string; parents: string[] }>("statusEvents")].filter(([, event]) => event.target === beat);
-  const parents = new Set(events.flatMap(([, event]) => event.parents));
-  replica.doc.getMap("statusEvents").set(id, { target: beat, value, prior: statusValue(replica, beat), parents: events.filter(([key]) => !parents.has(key)).map(([key]) => key).sort(), by: "writer" });
+  beat = wireIdentity(beat); id = wireIdentity(id);
+  const event = readStatusEvent({ target: beat, value, parents: statusFrontier(replica, beat).map(([key]) => key).sort(), by: "writer" });
+  if (!event) throw new Error("Invalid performance status command");
+  replica.doc.getMap("statusEvents").set(id, { target: event.target, value: event.value, prior: statusValue(replica, beat), parents: event.parents, by: event.by });
 }
 
 export function capturePerfBeat(index: PerfBlockIndex, beat: string): Y.RelativePosition[] {
@@ -46,28 +50,5 @@ export interface PerfStructureView {
 }
 
 export function perfStructureView(replica: SchemaReplica, document: ProjectionBag): PerfStructureView {
-  const result: PerfStructureView = { groups: [], recovery: [] };
-  const destinations = new Map<string, PerfStructureView["groups"][number]>();
-  for (const row of records(document.rows)) {
-    const id = String(row.id);
-    const beat = mapValue(replica.doc.getMap("beats").get(id));
-    if (mapValue(beat.get("removals")).size) { result.recovery.push(id); continue; }
-    const joins = mapValue(beat.get("joins"));
-    const key = [...joins.keys()].filter(key => !replica.doc.getMap("retiredJoins").has(key)).sort()[0];
-    const join = key ? joins.get(key) as { into: string; glue: string } : undefined;
-    const target = join ? destinations.get(join.into) : undefined;
-    const status = statusValue(replica, id);
-    if (target && join) {
-      target.members.push(id);
-      target.narration += join.glue + String(row.audioText ?? "");
-      target.visual = [target.visual, String(row.visualText ?? "")].filter(Boolean).join("<br>");
-      if (["todo", "ready", "shot"].indexOf(status) > ["todo", "ready", "shot"].indexOf(target.status)) target.status = status;
-      destinations.set(id, target);
-    } else {
-      const group = { id, members: [id], narration: String(row.audioText ?? ""), visual: String(row.visualText ?? ""), status };
-      result.groups.push(group);
-      destinations.set(id, group);
-    }
-  }
-  return result;
+  return perfReaderView(replica, document, id => statusValue(replica, id));
 }

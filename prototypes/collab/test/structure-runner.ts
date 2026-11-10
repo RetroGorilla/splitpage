@@ -11,6 +11,7 @@ import { readStructure } from "../src/structure-reader.ts";
 import { clearGlue, createHeading, cutPaste, moveBeat, removeHeading, seedJoinMetadata, structureManager, undoJoin, undoOne, visualInsert } from "../src/structure.ts";
 import { joinBoldUndoOracle, joinOracle, joinUndoOracle, removedOracle, restorationOracle } from "./oracles.ts";
 import { beatOracles } from "./structure-oracles.ts";
+import { ReaderConvergence } from "./reader-convergence.ts";
 import { captureStructuralRange, insertWithCaret, planHeadingWithCaret, replaceStructuralRange, restoreStructuralAnchor, splitWithCaret, structuralCaret as structureCaret, undoStructuralRange } from "../src/structure-selection.ts";
 
 export const structureTraces: Record<string, readonly DeliveryOrder[]> = {
@@ -47,6 +48,7 @@ function fixture(trace: string): SeedBeat[] {
 export function runStructure(trace: string, candidate: SchemaCandidate, order: DeliveryOrder, nativeJoinUndo = false, swapped = false): StructureRunResult {
   const harness = new ReplicaHarness(candidate, fixture(trace), swapped);
   const { alice: a, bob: b, queue } = harness;
+  const convergence = new ReaderConvergence(harness, structureTraces[trace] ?? [order]);
   const ua = structureManager(a);
   const ub = structureManager(b);
   const carets = new Map<string, ReplicaCaretAnchor>();
@@ -57,6 +59,7 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
     const oracle = explicit ?? beatOracles[phase];
     if (!oracle) throw new Error(`Missing literal oracle ${phase}`);
     queue.history.push(`check ${phase}`);
+    convergence.checkKnown(phase, carets);
     for (const replica of harness.replicas) {
       checkModel(readStructure(replica.doc, candidate, harness.identities, carets), oracle, harness.identities, `${phase}/client${replica.doc.clientID}`);
       checks++;
@@ -286,6 +289,7 @@ export function runBeatExperiments(): StructureRunResult[] {
 
 export function runGlueRewrite(candidate: SchemaCandidate): StructureRunResult {
   const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }]);
+  const convergence = new ReaderConvergence(harness, ["D2"]);
   const manager = structureManager(harness.alice);
   try {
     harness.alice.format("R1", 0, 1, { i: true });
@@ -300,6 +304,7 @@ export function runGlueRewrite(candidate: SchemaCandidate): StructureRunResult {
     const oracle: ScriptOracle = {
       rows: [{ id: "R1", characters: [["s1", "a", { i: true }], ["s2", "b", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["b1", "Z", {}], ["s4", "d", {}]] }], carets: {}, recovery: []
     };
+    convergence.checkKnown("U-H1 glue rewrite");
     for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "U-H1 glue rewrite");
     return { trace: "U-H1 glue rewrite", candidate, order: "D2", checks: 2, failure: null, history: [...harness.queue.history] };
   } finally {
@@ -311,6 +316,7 @@ export function runGlueRewrite(candidate: SchemaCandidate): StructureRunResult {
 export function runIneffectiveUndo(candidate: SchemaCandidate, isolated: boolean): StructureRunResult {
   const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }]);
   const { alice: a, bob: b, queue } = harness;
+  const convergence = new ReaderConvergence(harness, ["D1"]);
   const manager = structureManager(a);
   let checks = 0;
   try {
@@ -328,6 +334,7 @@ export function runIneffectiveUndo(candidate: SchemaCandidate, isolated: boolean
     const oracle: ScriptOracle = {
       rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["a1", "Z", {}]], status: "shot" }], carets: {}, recovery: []
     };
+    convergence.checkKnown("U-H1 top item");
     for (const replica of harness.replicas) {
       checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "U-H1 top item");
       checks++;

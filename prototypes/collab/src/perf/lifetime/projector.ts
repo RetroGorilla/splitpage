@@ -1,90 +1,60 @@
+import { identityEntries, identityGet, identityHas, wireIdentity } from "../../readers/identity.ts";
 import type * as Y from "yjs";
-import { mapValue } from "../../schema.ts";
 import type { SchemaReplica } from "../../schema.ts";
-import { records } from "../../proj/value.ts";
 import type { ProjectionBag } from "../../proj/value.ts";
 import type { PerfStructureView } from "../operations.ts";
-
-interface LifetimeStatusEvent { target: string; value: string; prior: string; parents: string[] }
+import { readStatusEvent, resolveBeatStatus } from "../../marks/status-resolution.ts";
+import type { BeatStatusEvent } from "../../marks/status-resolution.ts";
+import { perfReaderView } from "../../readers/perf.ts";
+import { rootMap } from "../../readers/records.ts";
 
 export class IndexedStructureProjection {
-  private readonly events = new Map<string, Map<string, LifetimeStatusEvent>>();
+  private readonly events = new Map<string, Map<string, BeatStatusEvent>>();
   private readonly targets = new Map<string, string>();
-  private readonly values = new Map<string, string>();
-  private readonly status: Y.Map<LifetimeStatusEvent>;
-  private readonly retired: Y.Map<unknown>;
-  private readonly changes: (event: Y.YMapEvent<LifetimeStatusEvent>) => void;
+  private readonly values = new Map<string, { stored: string; value: string }>();
+  private readonly status: Y.Map<unknown> | null;
+  private readonly retired: Y.Map<unknown> | Set<string>;
+  private readonly changes: (event: Y.YMapEvent<unknown>) => void;
   private readonly retirements: (event: Y.YMapEvent<unknown>) => void;
   statusRecordsRead = 0;
   readonly replica: SchemaReplica;
 
   constructor(replica: SchemaReplica) {
     this.replica = replica;
-    this.status = replica.doc.getMap<LifetimeStatusEvent>("statusEvents");
-    this.retired = replica.doc.getMap("retiredStatus");
-    for (const [id, event] of this.status) this.put(id, event);
+    this.status = rootMap(replica.doc, "statusEvents");
+    this.retired = rootMap(replica.doc, "retiredStatus") ?? new Set<string>();
+    for (const [id, raw] of identityEntries(this.status)) { const event = readStatusEvent(raw); if (event) this.put(id, event); }
     this.changes = event => {
-      const affected = new Set<string>();
       for (const key of event.keysChanged) {
-        const id = String(key);
-        const old = this.targets.get(id);
-        const value = this.status.get(id);
-        if (old) affected.add(old);
-        if (value) { affected.add(value.target); this.targets.set(id, value.target); }
+        const id = wireIdentity(String(key)), old = this.targets.get(id), value = readStatusEvent(identityGet(this.status, id));
+        if (old !== undefined) { this.events.get(old)?.delete(id); this.values.delete(old); }
+        if (value) { this.statusRecordsRead++; this.put(id, value); }
         else this.targets.delete(id);
       }
-      for (const target of affected) { this.events.set(target, new Map()); this.values.delete(target); }
-      // why: Yjs retains a recreated key's position; rebuild changed targets in that replica's map order.
-      for (const [id, value] of this.status) {
-        this.statusRecordsRead++;
-        if (affected.has(value.target)) this.events.get(value.target)?.set(id, value);
-      }
     };
-    this.retirements = event => { for (const key of event.keysChanged) { const target = this.targets.get(String(key)); if (target) this.values.delete(target); } };
-    this.status.observe(this.changes);
-    this.retired.observe(this.retirements);
+    this.retirements = event => { for (const key of event.keysChanged) { const target = this.targets.get(wireIdentity(String(key))); if (target !== undefined) this.values.delete(target); } };
+    this.status?.observe(this.changes);
+    if (!(this.retired instanceof Set)) this.retired.observe(this.retirements);
   }
 
-  private put(id: string, event: LifetimeStatusEvent): void {
-    const entries = this.events.get(event.target) ?? new Map<string, LifetimeStatusEvent>();
+  private put(id: string, event: BeatStatusEvent): void {
+    const entries = this.events.get(event.target) ?? new Map<string, BeatStatusEvent>();
     entries.set(id, event); this.events.set(event.target, entries); this.targets.set(id, event.target); this.values.delete(event.target);
   }
 
-  private value(id: string, beat: Y.Map<unknown>): string {
+  private value(id: string, stored: string): string {
     const cached = this.values.get(id);
-    if (cached !== undefined) return cached;
-    const events = [...(this.events.get(id) ?? [])];
-    this.statusRecordsRead += events.length;
-    const parents = new Set(events.flatMap(([, event]) => event.parents));
-    const frontier = events.filter(([key]) => !parents.has(key));
-    const choices = frontier.map(([key, event]) => this.retired.has(key) ? event.prior : event.value);
-    const value = frontier.length ? new Set(choices).size === 1 ? choices[0] ?? "todo" : frontier[0]?.[1].prior ?? "todo" : String(beat.get("status"));
-    if (frontier.length) this.values.set(id, value);
+    if (cached?.stored === stored) return cached.value;
+    const events = this.events.get(id) ?? new Map<string, BeatStatusEvent>();
+    this.statusRecordsRead += events.size;
+    const value = resolveBeatStatus(events, { has: id => this.retired instanceof Set ? this.retired.has(id) : identityHas(this.retired, id) }, stored);
+    if (events.size) this.values.set(id, { stored, value });
     return value;
   }
 
   view(document: ProjectionBag): PerfStructureView {
-    const result: PerfStructureView = { groups: [], recovery: [] }, destinations = new Map<string, PerfStructureView["groups"][number]>();
-    for (const row of records(document.rows)) {
-      const id = String(row.id), beat = mapValue(this.replica.doc.getMap("beats").get(id));
-      if (mapValue(beat.get("removals")).size) { result.recovery.push(id); continue; }
-      const joins = mapValue(beat.get("joins"));
-      const key = [...joins.keys()].filter(key => !this.replica.doc.getMap("retiredJoins").has(key)).sort()[0];
-      const join = key ? joins.get(key) as { into: string; glue: string } : undefined;
-      const target = join ? destinations.get(join.into) : undefined;
-      const status = this.value(id, beat);
-      if (target && join) {
-        target.members.push(id); target.narration += join.glue + String(row.audioText ?? "");
-        target.visual = [target.visual, String(row.visualText ?? "")].filter(Boolean).join("<br>");
-        if (["todo", "ready", "shot"].indexOf(status) > ["todo", "ready", "shot"].indexOf(target.status)) target.status = status;
-        destinations.set(id, target);
-      } else {
-        const group = { id, members: [id], narration: String(row.audioText ?? ""), visual: String(row.visualText ?? ""), status };
-        result.groups.push(group); destinations.set(id, group);
-      }
-    }
-    return result;
+    return perfReaderView(this.replica, document, (id, stored) => this.value(id, stored));
   }
 
-  destroy(): void { this.status.unobserve(this.changes); this.retired.unobserve(this.retirements); }
+  destroy(): void { this.status?.unobserve(this.changes); if (!(this.retired instanceof Set)) this.retired.unobserve(this.retirements); }
 }
