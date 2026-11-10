@@ -5,6 +5,7 @@ export type ReplicaName = "A" | "B" | "C";
 export interface DeliveryReplica<Update> {
   onLocalUpdate: (listener: (update: Update) => void) => () => void;
   apply: (update: Update) => void;
+  afterDelivery?: () => void;
 }
 
 export interface QueuedDelivery<Update> {
@@ -70,10 +71,13 @@ export class DeliveryQueue<Update> {
   }
 
   flush(order: DeliveryOrder): void {
-    const messages = [...this.pending];
-    if (order === "rev") messages.reverse();
-    for (const message of messages) this.deliver(message.id, order === "dup" ? 2 : 1);
-    if (this.pending.length > 0) throw new Error("Delivery echoed a remote update");
+    for (let round = 0; round < 100; round++) {
+      const messages = [...this.pending];
+      if (order === "rev") messages.reverse();
+      for (const message of messages) this.deliver(message.id, order === "dup" ? 2 : 1);
+      if (this.pending.length === 0) return;
+    }
+    throw new Error("Generated updates did not settle");
   }
 
   destroy(): void {
@@ -88,5 +92,6 @@ export class DeliveryQueue<Update> {
     } finally {
       this.delivering = null;
     }
+    replica.afterDelivery?.();
   }
 }

@@ -10,8 +10,8 @@ export class CollabDocumentState {
 
   constructor() {
     this.doc.on("beforeTransaction", transaction => {
-      // why: Yjs formatting cleanup starts nested transactions without inheriting the triggering origin.
-      if (transaction.origin === null && this.activeOrigin !== null) transaction.origin = this.activeOrigin;
+      // why: Native cleanup creates local deletes that must be delivered even when a received update triggered them.
+      if (transaction.origin === null && this.activeOrigin !== null) transaction.origin = "cleanup";
     });
   }
 }

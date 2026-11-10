@@ -157,6 +157,21 @@ test("a replica that reports a delivered update as its own is refused", () => {
   assert.throws(() => queue.flush("D1"), /Replica B reported a delivered update as local/);
 });
 
+test("a follow-up local update is exchanged after delivery without accepting a received echo", () => {
+  const { queue, a, b } = setup();
+  let generated = false;
+  const replica = b as LogReplica & { afterDelivery?: () => void };
+  replica.afterDelivery = () => {
+    if (!generated) { generated = true; b.write("cleanup"); }
+  };
+  a.write("a1");
+  queue.flush("D1");
+  assert.deepEqual(a.sorted(), ["a1", "cleanup"]);
+  assert.deepEqual(a.sorted(), b.sorted());
+  assert.equal(queue.pending.length, 0);
+  queue.destroy();
+});
+
 test("delivery fails loudly on an unknown message and stops after destroy", () => {
   const { queue, a } = setup();
   assert.throws(() => queue.deliver("A9"), /No queued delivery A9/);
