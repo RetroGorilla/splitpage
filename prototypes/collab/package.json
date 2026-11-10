@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test \"test/**/*.test.ts\"",
+    "experiments": "node src/buffer-report.ts"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
