@@ -61,7 +61,7 @@ The errors are already present in the after-input observation, before B's format
 
 Every normal replay case and every recorded stage has a literal expectation for compositionMark, dropEmptySince, hold, sync-call count, all commits, composition-end commits, suppressed nested paints and generation. Nine explicit case keys cover **40 stages / eight counters**, including the three removal controls, passing ordinary input and failed T03. Phase names/order are literal too. The tests reuse the strict #1410 stage-counter assertion; new cases, missing/extra stages or missing counter fields fail coverage. Changing sync or lifecycle counts is rejected.
 
-The native-state checker also rejects an alleged pass that repaints/rebases away the stale condition, or omits the remote X. Tests independently reapply the complete unchanged `test/buffer-oracles.ts` oracle and identity checker to forward and undo observations, with required A/B/late-C coverage and actual DOM selections. No model decoder produces an expected result.
+The native-state checker also rejects an alleged pass that repaints/rebases away the stale condition, or omits the remote X. Completed forward/undo paints must leave the buffer's painted text and identity list aligned with the DOM and current replica, with no version gap. Tests independently reapply the complete unchanged `test/buffer-oracles.ts` oracle and identity checker to forward and undo observations, with required A/B/late-C coverage and actual DOM selections. No model decoder produces an expected result.
 
 Reproduce with Node 24.22.1 and installed root/prototype dependencies. `SPLITPAGE_WORKSPACE` points to the workspace containing the lock wrapper:
 
@@ -75,4 +75,4 @@ node prototypes/collab/src/split-stale/report.ts --write
 node --test prototypes/collab/test/split-stale/evidence.test.ts
 ```
 
-Retained counts: **three diagnostic comparisons and nine normal replay cases**—four complete passes, two T03 failures, three repair-removal controls. Browser tests remain outside `npm test`; one headless Edge runs through the smoke lock and is closed with its temporary profile/build in `finally`. No timing claims or identifying metadata are retained. The focused suite has **16 passing tests**; root/prototype totals and gates are recorded in the PR. No full app suites, changed oracle or merge by this lane.
+Retained counts: **three diagnostic comparisons and nine normal replay cases**—four complete passes, two T03 failures, three repair-removal controls. Browser tests remain outside `npm test`; one headless Edge runs through the smoke lock and is closed with its temporary profile/build in `finally`. No timing claims or identifying metadata are retained. The focused suite has **16 passing tests**, and all **1577 prototype tests** pass. Root lint/typecheck/dependency/comment gates, code-map generation, histories, whitespace and the public-evidence scan pass. No full app suites, changed oracle or merge by this lane.
