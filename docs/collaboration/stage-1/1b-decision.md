@@ -83,11 +83,11 @@ Restored receipts are bound to a server instance. Restoring an older server back
 
 ### 3. Image design
 
-**Selected by the coordinator; the product owner confirms what a waiting picture looks like to other people.** Use the pending-image contract: reference and later text may synchronize while bytes are absent; the pending flag clears only after durable membership, and saved status still waits for required bytes and the covering receipt. Reconnect, duplicates, late peers, reload/retry and uploader-never-returns cases pass. In the last case, text and placeholder survive server restart and export lists the missing image. ([Images][images], [plan §7][plan])
+**Confirmed by the product owner on 2026-11-09.** Use the pending-image contract: reference and later text may synchronize while bytes are absent; the pending flag clears only after durable membership, and saved status still waits for required bytes and the covering receipt. Reconnect, duplicates, late peers, reload/retry and uploader-never-returns cases pass. In the last case, text and placeholder survive server restart and export lists the missing image. ([#1405, Product decisions][pr1405], [Images][images], [plan §7][plan])
 
 **Rejected:** upload-before-sync passes the complete literal T16 row with two documents and a private bridge/read-only N. With one document it passes the wire/server condition but **fails separate-N isolation**. Thus evidence does not say two documents are unavoidable solely for server image durability. Both upload-first variants hold text after the picture; one document also holds previously queued text. The editing lane is expected to select a one-document buffer; its selection belongs in the separate 1a record. This record selects no editing mechanism. ([Image comparison and retained N failure][images], [T16-one-document-N.json][one-n], [stage separation in §11][plan])
 
-**Proof limits:** selection requires approval of the server-side INV-52 change before implementation. Placeholder appearance, never-returning-uploader handling and incomplete-export presentation remain product questions. The blob fixture uses fixed-instance loopback access, PNG header checks and modeled local completion. It does not prove production authorization, full decoding, complete manifests or local crash durability. T13/T17 image P remains open; a lane is connecting it now. ([Images][images], [instance image seam][instance], [plan §7][plan])
+**Proof limits:** the product owner approved the change to the server half of INV-52 on 2026-11-09. The wording in `docs/architecture/invariants.md` changes with the implementation. ([#1405, Product decisions][pr1405]) Placeholder appearance, never-returning-uploader handling and incomplete-export presentation remain product questions. The blob fixture uses fixed-instance loopback access, PNG header checks and modeled local completion. It does not prove production authorization, full decoding, complete manifests or local crash durability. T13/T17 image P remains open; a lane is connecting it now. ([Images][images], [instance image seam][instance], [plan §7][plan])
 
 ### 4. Local storage
 
@@ -150,7 +150,7 @@ Other recorded bounds: Edge **157.0.4341.42** passed **26/26** browser storage c
 | Hocuspocus 4.8.0 container | Feasibility server ran as a Node child process, **not a container**. The separate disk benchmark used a container; it is not the service container deliverable | [journal][journal], [service harness][service-harness], [#1401][pr1401] |
 | Journal and receipts | Worker journal, WAL/FULL readback, replay, FIFO insertion/deletion receipts, scoped checkpoint/prune recovery; accepted ordering limit and same-identifier rollback gap remain | [journal][journal], [instance][instance], [images][images] |
 | Local storage | Browser completion-aware adapter and comparison exist; desktop store and atomic handoff catalogue extension do not | [local][local], [instance][instance] |
-| Image ordering | Both candidates tested; pending selected here. T13/T17 image connection, production assets and INV-52 approval remain | [images][images], [instance][instance], [plan §7][plan] |
+| Image ordering | Both candidates tested; pending selected here. T13/T17 image connection and production assets remain | [images][images], [instance][instance], [plan §7][plan] |
 | One-tab lock | Browser Web Lock crash/handoff and hydration gate exist; desktop source/key registry and its lifecycle tests remain | [local][local] |
 | Harness support for two clients | Node service harnesses run multiple real providers/sockets with a late third client, independent journal reads and kill gates. Browser local harness creates separate page targets in one Edge profile for same-origin second-tab tests. No browser/editor-to-service or packaged-desktop two-client workflow is established | [service harness][service-harness], [image harness][image-harness], [instance tests][instance-tests], [browser helper][browser-helper], [local scope][local] |
 
@@ -193,6 +193,7 @@ Other recorded bounds: Edge **157.0.4341.42** passed **26/26** browser storage c
 [pr1397]: https://github.com/RetroGorilla/splitpage/pull/1397
 [pr1398]: https://github.com/RetroGorilla/splitpage/pull/1398
 [pr1401]: https://github.com/RetroGorilla/splitpage/pull/1401
+[pr1405]: https://github.com/RetroGorilla/splitpage/pull/1405
 [journal]: ../../../prototypes/collab/src/service/README.md
 [refusal]: ../../../prototypes/collab/src/service/refusal/README.md
 [instance]: ../../../prototypes/collab/src/service/instance/README.md
