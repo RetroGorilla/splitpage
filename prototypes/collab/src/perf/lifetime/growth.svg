@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" role="img" aria-labelledby="title desc">
+<title id="title">Candidate B retained state under script-shaped writing</title>
+<desc id="desc">Deterministic encoded byte counts against cumulative typed characters for two and six writers; dashed line is the fixed 2 MiB cap.</desc>
+<rect width="760" height="300" fill="white"/>
+<g font-family="sans-serif" font-size="12" fill="#172033">
+<path d="M70 34V250H720" fill="none" stroke="#64748b"/>
+<path d="M70 54.47H720" stroke="#b91c1c" stroke-dasharray="5 4"/>
+<text x="75" y="48.47">2 MiB</text>
+<text x="270" y="289">Cumulative typed UTF-16 characters</text>
+<text x="12" y="20">Encoded bytes</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="88.05,243.74 160.28,222.10 250.55,194.81 431.11,139.46 720.00,50.00"/>
+<text x="90" y="20" fill="#2563eb">2 writers</text>
+<circle cx="88.05" cy="243.74" r="3" fill="#2563eb"/>
+<circle cx="160.28" cy="222.10" r="3" fill="#2563eb"/>
+<circle cx="250.55" cy="194.81" r="3" fill="#2563eb"/>
+<circle cx="431.11" cy="139.46" r="3" fill="#2563eb"/>
+<circle cx="720.00" cy="50.00" r="3" fill="#2563eb"/>
+<polyline fill="none" stroke="#b45309" stroke-width="2" points="88.05,243.74 160.28,222.35 250.55,195.42 431.11,140.07 720.00,50.60"/>
+<text x="230" y="20" fill="#b45309">6 writers</text>
+<circle cx="88.05" cy="243.74" r="3" fill="#b45309"/>
+<circle cx="160.28" cy="222.35" r="3" fill="#b45309"/>
+<circle cx="250.55" cy="195.42" r="3" fill="#b45309"/>
+<circle cx="431.11" cy="140.07" r="3" fill="#b45309"/>
+<circle cx="720.00" cy="50.60" r="3" fill="#b45309"/>
+<text x="70.00" y="270" text-anchor="middle">0</text>
+<text x="395.00" y="270" text-anchor="middle">203,173</text>
+<text x="720.00" y="270" text-anchor="middle">406,345</text>
+</g>
+</svg>
