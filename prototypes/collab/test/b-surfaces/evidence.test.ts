@@ -17,6 +17,20 @@ import { checkBSurfaceArtifacts } from "../../src/b-surfaces/report.ts";
 function present<T>(value: T | null | undefined): T { assert.ok(value !== null && value !== undefined); return value; }
 const evidence = ["writer", "slice", "split"].map(surface => JSON.parse(readFileSync(new URL(`../../b-surfaces/${surface}.json`, import.meta.url), "utf8")) as BSurfaceEvidence);
 
+function checkSplitLifecycle(stages: BMatrixSnapshot[]): void {
+  assert.equal(stages.length, 5);
+  for (const [index, stage] of stages.entries()) {
+    const observed = stage as BMatrixSnapshot & { app: { counts: { compositionMark: number; dropEmptySince: number } }; syncs: { id: string; text: string; composing: boolean }[] };
+    assert.equal(observed.app.counts.compositionMark, index === 0 ? 0 : 1, `stage ${index}: compositionMark`);
+    assert.equal(observed.app.counts.dropEmptySince, index < 3 ? 0 : 1, `stage ${index}: dropEmptySince`);
+    assert.equal(observed.syncs.length, index === 0 ? 0 : index < 3 ? 1 : 4, `stage ${index}: sync call count`);
+    if (index >= 3) {
+      assert.deepEqual(observed.syncs.map(sync => sync.text), ["abxcd", "abxycd", "abxycd", "abxycd"]);
+      assert.deepEqual(observed.commits, ["compositionend:cellEditing.sync"]);
+    }
+  }
+}
+
 function checkLiteral(snapshot: BMatrixSnapshot, trace: keyof typeof bufferOracles, undo: boolean): void {
   const expected = undo ? bufferOracles[trace].undo : bufferOracles[trace].expected;
   const book = new IdentityBook();
@@ -50,6 +64,7 @@ for (const data of evidence) {
       assert.ok(stage.segments.every(id => id.startsWith("seg-")));
     }
     if (data.surface === "split") {
+      checkSplitLifecycle(result.stages);
       assert.equal(result.status, "FAIL");
       assert.match(present(result.difference), result.trace === "T04" ? /replaceChild/ : /removeChild/);
       const native = present(result.stages[1]); const remote = present(result.stages[2]); const after = present(result.stages[3]);
@@ -83,6 +98,30 @@ test("B Writer follow-up retains all 96 combinations, including deliberate re-en
   assert.deepEqual(writer.followup.map(result => `${result.name}/${result.mechanism}/${result.order}/${result.retained}/${result.paintGate}`), wanted);
   assert.equal(writer.followup.filter(result => result.mechanism === "M1" && result.status === "PASS").length, 29);
   assert.equal(writer.followup.filter(result => result.mechanism === "M1" && result.status === "FAIL").length, 3);
+});
+
+test("zeroing either Split composition lifecycle counter is rejected for every retained run", () => {
+  for (const result of present(evidence.find(data => data.surface === "split")).traces) {
+    for (const counter of ["compositionMark", "dropEmptySince"] as const) {
+      const stages = structuredClone(result.stages);
+      for (const stage of stages) {
+        const counts = (stage as BMatrixSnapshot & { app: { counts: { compositionMark: number; dropEmptySince: number } } }).app.counts;
+        counts[counter] = 0;
+      }
+      assert.throws(() => checkSplitLifecycle(stages), new RegExp(counter));
+    }
+  }
+});
+
+test("doubling the Split sync-call count is rejected for every retained run", () => {
+  for (const result of present(evidence.find(data => data.surface === "split")).traces) {
+    const stages = structuredClone(result.stages);
+    for (const stage of stages) {
+      const syncs = (stage as BMatrixSnapshot & { syncs: unknown[] }).syncs;
+      syncs.push(...structuredClone(syncs));
+    }
+    assert.throws(() => checkSplitLifecycle(stages), /sync call count/);
+  }
 });
 
 for (const result of writer.followup) test(`B follow-up ${result.name}/${result.mechanism}/${result.order}/${result.retained}/${result.paintGate}`, () => {
