@@ -1,0 +1,13 @@
+{
+  "shows": "Removing the per-document admission await lets a second individually small update journal against stale state while the first candidate is held before commit.",
+  "replay": "Replace await previous with void previous in src/service/refusal/boundary.ts, then node --test --test-concurrency=1 test/service/refusal/refusal.test.ts; restore the await afterward.",
+  "fixture": {
+    "initial": "abcd",
+    "first": { "client": 11, "clock": 0, "character": "a", "count": 1100000 },
+    "second": { "client": 22, "clock": 0, "character": "b", "count": 1100000 },
+    "stateLimitBytes": 2097152
+  },
+  "gate": "First candidate is validated but the harness holds its journal hook. Matching second-socket pong and an event-loop checkpoint precede release.",
+  "observedMutation": { "expectedRowsWhileHeld": 2, "actualRowsWhileHeld": 3 },
+  "honest": "Second candidate waits for the first apply, is refused before journaling, and a late join contains only abcd plus the first insertion."
+}

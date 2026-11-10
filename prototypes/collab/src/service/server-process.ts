@@ -2,6 +2,7 @@ import { Server, OutgoingMessage } from "@hocuspocus/server";
 import { setTimeout as delay } from "node:timers/promises";
 import * as Y from "yjs";
 import { JournalWorkerClient } from "./journal-client.ts";
+import { refusalBoundary } from "./refusal/boundary.ts";
 
 const path = process.argv[2];
 if (!path) throw new Error("Database path required");
@@ -31,6 +32,10 @@ const gate = (name: string): Promise<void> => new Promise(resolve => {
 });
 const server = new Server({
   port: 0, address: "127.0.0.1", quiet: true, stopOnSignals: false,
+  ...(process.env.REFUSAL_POLICY ? {
+    extensions: [refusalBoundary(process.env.REFUSAL_FROZEN_CLOCK ? () => 0 : Date.now)],
+    websocketOptions: { maxPayload: 4194304 },
+  } : {}),
   ...(process.env.MAX_PAYLOAD ? { websocketOptions: { maxPayload: Number(process.env.MAX_PAYLOAD) } } : {}),
   debounce: 2000, maxDebounce: 10000,
   async onLoadDocument({ documentName, document }) {
