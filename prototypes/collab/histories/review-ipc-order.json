@@ -1,0 +1,14 @@
+{
+  "shows": "The WebSocket acknowledgement can be observed before the separate IPC refusal event; an immediate IPC assertion races.",
+  "replay": "node --test --test-name-pattern=ack-before-ipc test/service/review.test.ts",
+  "originalFailure": {
+    "head": "4795effc70d3c2745486d21315f51d455311cf59",
+    "ciJob": "https://github.com/RetroGorilla/splitpage/actions/runs/42730575166/job/129547319640"
+  },
+  "observedBeforeIpcRelease": {
+    "applied": true,
+    "disposition": "refused",
+    "ipcRefusalVisible": false
+  },
+  "required": "Await the IPC event independently; keep the refusal assertion and all literal outcomes unchanged."
+}

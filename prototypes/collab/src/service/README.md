@@ -39,8 +39,11 @@ To rerun the disk measurement on the deployment server, run the same Node versio
 | Review: uncovered oversized SyncStep2 | PASS for insertion and pure deletion: no positive receipt or new row; checker rejects forged positive receipts even if a later row would supply coverage | — |
 | Review: socket size limit, covered state | PASS: close 1009 before `beforeSync`; automatic reconnect sends a small difference and returns to saved status | — |
 | Review: socket size limit, uncovered state | Reconnect loop observed: three automatic closes with code 1009, no new row or receipt; offline local status after each close; read-only default retained | `histories/review-socket-limit-loop.json` |
+| Review: acknowledgement before IPC refusal | PASS: hold IPC refusal delivery until after the WebSocket acknowledgement; await both channels explicitly while preserving all assertions and literal outcomes | `histories/review-ipc-order.json` retains the reproduced race |
 
 T23's final literal is `abcdefgh`, identities `7:0..3`, `11:0..3`. Tests retain the prescribed offline, sending and saved wording. Every recovery has an empty late-joining client. There is no invented reordering of statuses: Hocuspocus's per-connection ordered message path supplies their order. T22 adds duplicate delivery explicitly. All expected fixture text and identities remain the hand-written artifact 8 values.
+
+Ubuntu CI at `4795eff` exposed a test synchronization race: the covered-snapshot test immediately asserted the child-process IPC refusal event after receiving the WebSocket acknowledgement. The two channels have no shared delivery order, so the acknowledgement could be observed first. The test now awaits the IPC event separately, with the original refusal assertion unchanged. The same fixture runs under normal delivery and a controlled acknowledgement-before-IPC delivery; the latter reproduced the original assertion failure on Windows before the wait was added. This is a cross-channel timing assumption, not different receipt semantics on Linux. The CI gate failure was downstream of this single test failure.
 
 ## Library observations
 

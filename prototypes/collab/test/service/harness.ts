@@ -26,6 +26,7 @@ export class JournalChild {
   readonly child: ChildProcess;
   readonly path: string;
   readonly events: Record<string, unknown>[] = [];
+  private readonly heldEvents = new Map<string, Record<string, unknown>[]>();
   stderr = "";
   port = 0;
 
@@ -35,9 +36,20 @@ export class JournalChild {
       stdio: ["ignore", "ignore", "pipe", "ipc"], env: { ...process.env, ...environment },
     });
     this.child.on("message", (value: unknown) => {
-      if (typeof value === "object" && value !== null) this.events.push(value as Record<string, unknown>);
+      if (typeof value !== "object" || value === null) return;
+      const event = value as Record<string, unknown>;
+      const held = this.heldEvents.get(String(event.event));
+      if (held) held.push(event);
+      else this.events.push(event);
     });
     this.child.stderr?.on("data", (data: Buffer) => { this.stderr += data.toString(); });
+  }
+
+  holdEvent(name: string): () => void {
+    assert.equal(this.heldEvents.has(name), false);
+    const held: Record<string, unknown>[] = [];
+    this.heldEvents.set(name, held);
+    return () => { this.heldEvents.delete(name); this.events.push(...held); };
   }
 
   async ready(): Promise<void> {

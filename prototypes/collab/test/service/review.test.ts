@@ -10,7 +10,7 @@ const coveredExpected = {
   snapshotBytes: 2200025, journalRows: 3, applied: true, status: "Your changes saved to server", checkerAccepts: true,
 };
 
-test("review: refused oversized SyncStep2 containing only committed content has a truthful positive receipt", async () => {
+async function coveredSnapshot(delivery: "normal" | "ack-before-ipc"): Promise<void> {
   const work = await workspace();
   let client: FixtureClient | undefined;
   try {
@@ -23,10 +23,23 @@ test("review: refused oversized SyncStep2 containing only committed content has 
     assert.equal(snapshot.length, coveredExpected.snapshotBytes);
     const before = readRecoveredRows(work.path);
     assert.equal(before.length, coveredExpected.journalRows);
+    const release = delivery === "ack-before-ipc" ? server.holdEvent("refused") : null;
     const index = client.history.length;
     client.socket.send(syncFrame("fixture", 1, snapshot));
     await until(() => client?.history[index]?.applied !== null);
     assert.equal(client.history[index]?.applied, coveredExpected.applied);
+    if (release) {
+      assert.equal(server.events.some(event => event.event === "refused"), false);
+      await writeFile(new URL("../../histories/review-ipc-order.json", import.meta.url), `${JSON.stringify({
+        shows: "The WebSocket acknowledgement can be observed before the separate IPC refusal event; an immediate IPC assertion races.",
+        replay: "node --test --test-name-pattern=ack-before-ipc test/service/review.test.ts",
+        originalFailure: { head: "4795effc70d3c2745486d21315f51d455311cf59", ciJob: "https://github.com/RetroGorilla/splitpage/actions/runs/42730575166/job/129547319640" },
+        observedBeforeIpcRelease: { applied: true, disposition: client.history[index]?.disposition, ipcRefusalVisible: false },
+        required: "Await the IPC event independently; keep the refusal assertion and all literal outcomes unchanged.",
+      }, null, 2)}\n`);
+      setImmediate(release);
+    }
+    await until(() => server.events.some(event => event.event === "refused"), "IPC refusal event independent of WebSocket acknowledgement");
     assert.ok(server.events.some(event => event.event === "refused"));
     const statusAtReceipt = client.receipts.status;
     assert.equal(statusAtReceipt, coveredExpected.status);
@@ -53,7 +66,10 @@ test("review: refused oversized SyncStep2 containing only committed content has 
     assert.equal(acknowledged.disposition, "refused");
     assert.throws(() => checkHistory([{ ...acknowledged, disposition: "accepted" }], rows), /missing exact bytes/);
   } finally { client?.destroy(); await work.clean(); }
-});
+}
+for (const delivery of ["normal", "ack-before-ipc"] as const) {
+  test(`review: refused oversized SyncStep2 containing only committed content has a truthful positive receipt (${delivery})`, () => coveredSnapshot(delivery));
+}
 
 for (const change of ["insertion", "deletion"] as const) {
   test(`review: refused oversized SyncStep2 with an uncovered ${change} cannot receive a truthful positive receipt`, async () => {
