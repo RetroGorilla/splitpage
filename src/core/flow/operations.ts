@@ -46,10 +46,11 @@ export class FlowOperationTrace {
     return { left: null, right: flowBaseReference(owner, field, at), affinity: "before" as const };
   }
   delete(owner: string, cell: readonly Run[], from: number, to: number, field: SharedTextAddress["field"] = "audioText"): void {
-    const range = clampRange(cell, from, to);
+    const range = field === "heading" ? { from, to } : clampRange(cell, from, to);
     if (range.from === range.to) return;
     this.emit({ kind: "text-delete", target: this.target(owner, field), observed: this.span(owner, range.from, range.to, field) });
-    const offsets = this.offsets.get(JSON.stringify([owner, field])) ?? Array.from({ length: cellLength(cell) }, (_, i) => i);
+    const length = field === "heading" ? cell.reduce((sum, run) => sum + run.text.length, 0) : cellLength(cell);
+    const offsets = this.offsets.get(JSON.stringify([owner, field])) ?? Array.from({ length }, (_, i) => i);
     offsets.splice(range.from, range.to - range.from);
     this.offsets.set(JSON.stringify([owner, field]), offsets);
   }
@@ -60,7 +61,7 @@ export class FlowOperationTrace {
       if (run.marks.href) marks.push({ kind: "link", id: flowIdentity(run.marks.href), value: run.marks.href });
       return { value: run.text, marks };
     });
-    this.emit({ kind: "text-insert", target: this.target(owner, field), at: this.gap(owner, clamp(cell, offset), field), content });
+    this.emit({ kind: "text-insert", target: this.target(owner, field), at: this.gap(owner, field === "heading" ? offset : clamp(cell, offset), field), content });
   }
   create(row: TraceRow, rows: readonly TraceRow[], index: number): void {
     this.emit({ kind: "segment-create", segment: flowIdentity(row.id), beat: flowIdentity(row.id),

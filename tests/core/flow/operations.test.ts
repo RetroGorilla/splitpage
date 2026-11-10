@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
 import * as flow from "../../../src/core/flow/flow.ts";
 import { removeEmptyHeading } from "../../../src/core/flow/remove-empty-heading.ts";
@@ -58,11 +59,11 @@ function ports(record: boolean): FlowPorts {
   return { cells, hasVisual: rt.ports.hasVisual, newId: () => "minted" + ++next,
     ...(record ? { operations: { id: "command", by: "Writer" } } : {}) };
 }
-function check(input: StructuralCase): readonly string[] {
+function check(input: StructuralCase): { kinds: readonly string[]; changed: boolean } {
   const base = structuredClone(input.doc), before = structuredClone(base);
   const plain = run({ ...input, doc: base }, ports(false)), described = run({ ...input, doc: base }, ports(true));
   assert.deepEqual(base, before, "input mutation");
-  if (!described || !("rows" in described)) { assert.deepEqual(described, plain); return []; }
+  if (!described || !("rows" in described)) { assert.deepEqual(described, plain); return { kinds: [], changed: false }; }
   const { ops, ...withoutOps } = described;
   assert.ok(ops);
   assert.ok(!plain || !("ops" in plain), "off path has no operations field");
@@ -72,7 +73,8 @@ function check(input: StructuralCase): readonly string[] {
   const applied = applyFlowOperations(base, ops, cells);
   assert.deepEqual(base, before, "reference applier mutates the base");
   assert.deepEqual(applied, { rows: described.rows, sections: described.sections, removedComments: described.removedComments });
-  return ops.map(op => op.kind);
+  return { kinds: ops.map(op => op.kind), changed: !isDeepStrictEqual(described.rows, base.rows)
+    || !isDeepStrictEqual(described.sections, base.sections) || described.removedComments.length > 0 };
 }
 function minimized(input: StructuralCase): StructuralCase {
   let current = structuredClone(input);
@@ -97,13 +99,20 @@ function minimized(input: StructuralCase): StructuralCase {
 
 test("structural flow operations reproduce exact rows, sections and comment removals over the retained generators", t => {
   const kinds = new Map(names.map(name => [name, new Set<string>()])), counts = new Map(names.map(name => [name, 0]));
+  const edits = new Map(names.map(name => [name, 0]));
+  function counted(input: StructuralCase): void {
+    const name = input.name as typeof names[number];
+    try {
+      const result = check(input);
+      for (const kind of result.kinds) kinds.get(name)?.add(kind);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+      if (result.changed) edits.set(name, (edits.get(name) ?? 0) + 1);
+    } catch (cause) { throw new Error("seed=" + input.seed + " row=" + name + " minimized=" + JSON.stringify(minimized(input)), { cause }); }
+  }
   function exercise(doc: FlowDoc, positions: FlowPos[], range: FlowRange, seed: string): void {
     for (const name of names) for (const pos of positions) for (const tick of name === "backspaceAt" ? ["delete", "join"] as const : ["delete"] as const) {
       const input = { name, doc, pos, range: name === "enterAt" || name === "lineBreakAt" ? range : flow.caretAt(pos), seed, tick };
-      try {
-        for (const kind of check(input)) kinds.get(name)?.add(kind);
-        counts.set(name, (counts.get(name) ?? 0) + 1);
-      } catch (cause) { throw new Error("seed=" + seed + " row=" + name + " minimized=" + JSON.stringify(minimized(input)), { cause }); }
+      counted(input);
     }
   }
   for (let seed = 1; seed <= 240; seed++) {
@@ -128,9 +137,7 @@ test("structural flow operations reproduce exact rows, sections and comment remo
     exercise(doc, [flow.beatPos("a", 0), flow.headingPos("s", 0)], { anchor: flow.beatPos("a", 1), head: flow.beatPos("a", 4) }, "heading:" + seed);
     for (const end of [2, 4, 5, 8]) {
       const input = { name: "finalizeHeading", doc, pos: flow.beatPos("a", 0), range: flow.caretAt(flow.beatPos("a", end)), seed: "heading:" + seed, end };
-      try { for (const kind of check(input)) kinds.get("finalizeHeading")?.add(kind); }
-      catch (cause) { throw new Error("seed=" + seed + " row=finalizeHeading minimized=" + JSON.stringify(minimized(input)), { cause }); }
-      counts.set("finalizeHeading", (counts.get("finalizeHeading") ?? 0) + 1);
+      counted(input);
     }
   }
   let typingSeed = 371;
@@ -145,14 +152,38 @@ test("structural flow operations reproduce exact rows, sections and comment remo
     const image = { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" };
     const doc = generator("round-four-fuzz.test.ts", "    const mode = (seed - 1) % 6", "    const out = edited(joinWithPrevious", "doc", { seed, image, rt, covered: new Set<string>() }) as FlowDoc;
     const input = { name: "joinWithPrevious", doc, pos: flow.beatPos("b", 0), range: flow.caretAt(flow.beatPos("b", 0)), seed: "gallery:" + seed };
-    try { check(input); } catch (cause) { throw new Error("seed=" + seed + " row=joinWithPrevious minimized=" + JSON.stringify(minimized(input)), { cause }); }
-    counts.set("joinWithPrevious", (counts.get("joinWithPrevious") ?? 0) + 1);
+    counted(input);
   }
+  const reviewDoc: FlowDoc = { rows: [{ id: "a", audioText: "Body" }], sections: [{ id: "s", name: "A😀B", firstSceneId: "a" }], comments: [] };
+  counted({ name: "lineBreakAt", doc: reviewDoc, range: { anchor: flow.headingPos("s", 2), head: flow.headingPos("s", 3) }, pos: flow.headingPos("s", 2), seed: "review-insert-delete" });
+  counted({ name: "enterInHeading", doc: reviewDoc, range: flow.caretAt(flow.headingPos("s", 2)), pos: flow.headingPos("s", 2), seed: "review-split" });
+  for (const prefix of ["", "A", "AB", "word "]) {
+    const name = prefix + "😀B", inside = prefix.length + 1;
+    const doc: FlowDoc = { rows: [{ id: "a", audioText: "# " + name + "\nTail" }, { id: "b", audioText: "Body", paragraphStart: true }],
+      sections: [{ id: "s", name, firstSceneId: "a" }], comments: [] };
+    const ranges = [flow.caretAt(flow.headingPos("s", inside)),
+      { anchor: flow.headingPos("s", inside), head: flow.headingPos("s", inside + 1) },
+      { anchor: flow.headingPos("s", inside - 1), head: flow.headingPos("s", inside) }];
+    for (const range of [...ranges, ...ranges.slice(1).map(range => ({ anchor: range.head, head: range.anchor }))]) {
+      for (const operation of names) {
+        const pos = operation === "finalizeHeading" ? flow.beatPos("a", inside + 2)
+          : operation === "joinWithPrevious" ? flow.beatPos("b", 0) : range.head;
+        counted({ name: operation, doc, range, pos, seed: "heading-surrogate:" + prefix.length, end: inside + 2 });
+      }
+    }
+    for (const offset of [0, name.length]) for (const operation of ["backspaceAt", "deleteForwardAt", "enterInHeading"] as const) {
+      const pos = flow.headingPos("s", offset);
+      counted({ name: operation, doc, range: flow.caretAt(pos), pos, seed: "heading-edge:" + prefix.length });
+    }
+  }
+  const changingFloors = { enterAt: 11000, startParagraph: 9000, startBeat: 5300, lineBreakAt: 11100, backspaceAt: 5100,
+    deleteForwardAt: 2100, joinWithPrevious: 5100, enterInHeading: 950, finalizeHeading: 800, removeEmptyHeading: 1400 };
   for (const name of names) {
     const row = flowOperationCoverage.find(item => item[0] === name);
     assert.ok(row, name);
     assert.deepEqual([...kinds.get(name) ?? []].sort(), row[2].split(",").sort(), "coverage row " + name);
-    t.diagnostic(name + ": " + counts.get(name) + " inputs, 0 mismatches; " + [...kinds.get(name) ?? []].sort().join(","));
+    assert.ok((edits.get(name) ?? 0) >= changingFloors[name], "changing edit floor: " + name);
+    t.diagnostic(name + ": " + counts.get(name) + " calls, " + edits.get(name) + " changing edits, 0 mismatches; " + [...kinds.get(name) ?? []].sort().join(","));
   }
 });
 

@@ -7,6 +7,7 @@ import type { Marks, Run } from "../../../src/core/text/runs.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import { migrateGallery, rowSlots, setRowSlots, videoLinkKey } from "../../../src/core/document/gallery.ts";
 import { scenesInOrder } from "../../../src/core/document/scenes.ts";
+import { cappedText } from "../../../src/core/document/text-policy.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 import type { FlowDoc, FlowRow } from "../../../src/core/flow/flow.ts";
 
@@ -21,9 +22,9 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
   const text = (owner: string, field: SharedTextAddress["field"]): ObservedUnit[] => {
     const address = key(owner, field);
     if (!units.has(address)) {
-      const source = field === "heading" ? [{ text: sections.find(scene => scene.id === owner)?.name ?? "", marks: {} }]
-        : cells(rows.find(row => row.id === owner)?.[field] as string | undefined);
-      units.set(address, explode(source).map((char, offset) => ({ char, owner, offset })));
+      const chars: Char[] = field === "heading" ? (sections.find(scene => scene.id === owner)?.name ?? "").split("").map(ch => ({ ch, marks: {} }))
+        : explode(cells(rows.find(row => row.id === owner)?.[field] as string | undefined));
+      units.set(address, chars.map((char, offset) => ({ char, owner, offset })));
     }
     return units.get(address) as ObservedUnit[];
   };
@@ -40,7 +41,8 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
   };
   const write = (owner: string, field: SharedTextAddress["field"], chars: ObservedUnit[]) => {
     units.set(key(owner, field), chars);
-    if (field === "heading") sections = sections.map(scene => scene.id === owner ? { ...scene, name: projection(implode(chars.map(unit => unit.char))) } : scene);
+    if (field === "heading") sections = sections.map(scene => scene.id === owner ? { ...scene,
+      name: chars.map(unit => unit.char.atom ? projection([unit.char.atom]) : unit.char.ch).join("") } : scene);
     else { const row = rows.find(item => item.id === owner); if (row) row[field] = toHtml(implode(chars.map(unit => unit.char))); }
   };
   const blank = (id: string) => ({ id, visualText: "", imageRef: null, audioText: "", status: "todo" });
@@ -61,7 +63,8 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
           else if (mark.kind === "link") { if (mark.value) marks.href = mark.value; }
           else if (mark.kind !== "tag") marks[mark.kind] = true;
         }
-        return explode([{ text: chunk.value, marks }]).map((char, offset) => ({ char, owner: op.id, offset }));
+        const chars: Char[] = op.target.field === "heading" ? chunk.value.split("").map(ch => ({ ch, marks })) : explode([{ text: chunk.value, marks }]);
+        return chars.map((char, offset) => ({ char, owner: op.id, offset }));
       });
       chars.splice(at, 0, ...inserted);
       write(op.target.owner, op.target.field, chars);
@@ -87,7 +90,7 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
       const chars = text(op.target.owner, op.target.field);
       const name = chars.filter(unit => selected(unit, op.name)).map(unit => unit.char.atom ? projection([unit.char.atom]) : unit.char.ch).join("");
       if (op.retainedBeat === op.target.owner) write(op.target.owner, "audioText", chars.slice(position(chars, op.tail)));
-      sections.push({ id: op.heading, name, firstSceneId: (op.retainedBeat ?? op.emptyBeat) as string });
+      if (cappedText(name, 200)) sections.push({ id: op.heading, name, firstSceneId: (op.retainedBeat ?? op.emptyBeat) as string });
     } else if (op.kind === "scalar") {
       const target = op.target.scope === "beat" ? rows.find(row => row.id === op.target.record)
         : sections.find(scene => scene.id === op.target.record) as unknown as Record<string, unknown> | undefined;
