@@ -5,6 +5,7 @@ import { readStatusEvent, resolveBeatStatus } from "./status-resolution.ts";
 import type { BeatStatusEvent } from "./status-resolution.ts";
 import { readBeatRecord, readCommentRecord, readReplyRecord, rootMap } from "../readers/records.ts";
 import { compareCodeUnits } from "../readers/order.ts";
+import { commentOutputFields, literalRecord, replyOutputFields } from "../readers/output.ts";
 
 interface TagExtent {
   key: string;
@@ -59,7 +60,7 @@ export function projectStructuralMarks(model: CollabModel, doc: Y.Doc): void {
           if (link !== undefined) marks.href = link;
         }
       }
-      character.marks = marks;
+      character.marks = literalRecord(marks, ["bold", "italic", "underline", "strike", "href", "tag", "innerTags"]) as CollabMarks;
     });
   }
   if (rejected.length) (model.records ??= {}).tagRecovery = rejected;
@@ -69,18 +70,24 @@ export function projectComments(model: CollabModel, doc: Y.Doc): void {
   const commentEntries = identityEntries(rootMap(doc, "comments")), replyEntries = identityEntries(rootMap(doc, "replies"));
   if (!commentEntries.length && !replyEntries.length) return;
   const records = (model.records ??= {});
-  const validated = replyEntries.flatMap(([id, raw]) => { const value = readReplyRecord(raw); return value ? [{ id, ...value }] : []; });
+  const validated = replyEntries.flatMap(([id, raw]) => { const value = readReplyRecord(raw); return value ? [{ id, data: value.data, commentId: value.commentId, createdAt: value.createdAt }] : []; });
   validated.sort((a, b) => a.createdAt - b.createdAt || compareCodeUnits(a.id, b.id));
-  const replies = validated.map(reply => ({ id: reply.id, ...reply.data, commentId: reply.commentId }));
+  const replies = validated.map(reply => {
+    const output = literalRecord(reply.data, replyOutputFields); output.id = reply.data.id ?? reply.id; output.commentId = reply.commentId;
+    return literalRecord(output, replyOutputFields);
+  });
   const comments: Record<string, unknown> = {};
   const rows: { row: CollabRow; recovery: boolean }[] = [...model.rows.map(row => ({ row, recovery: false })), ...model.recovery.map(entry => ({ row: entry.row, recovery: true }))];
   for (const [id, value] of commentEntries.sort(([a], [b]) => compareCodeUnits(a, b))) {
     const original = readCommentRecord(value); if (!original) continue;
     const anchor = rows.find(({ row }) => !row.kind && row.characters.some(character => character.marks[`c:${id}`]));
-    Object.defineProperty(comments, id, { enumerable: true, configurable: true, value: { ...original, rowId: anchor?.row.id ?? original.rowId, field: anchor ? "audioText" : original.field, recovery: anchor?.recovery ?? true, replies: replies.filter(reply => reply.commentId === id) } });
+    const output = literalRecord(original, commentOutputFields);
+    output.rowId = anchor?.row.id ?? original.rowId; output.field = anchor ? "audioText" : original.field;
+    output.recovery = anchor?.recovery ?? true; output.replies = replies.filter(reply => reply.commentId === id);
+    Object.defineProperty(comments, id, { enumerable: true, configurable: true, value: literalRecord(output, commentOutputFields) });
   }
   records.comments = comments;
-  records.recoveryReplies = replies.filter(reply => !Object.hasOwn(comments, reply.commentId));
+  records.recoveryReplies = replies.filter(reply => typeof reply.commentId === "string" && !Object.hasOwn(comments, reply.commentId));
 }
 
 export function storedMarkNames(key: string, characters: readonly { text: Y.Text; index: number; notation: string }[]): string[] {

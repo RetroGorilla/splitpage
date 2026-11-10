@@ -50,11 +50,6 @@
           "after": 10
         },
         {
-          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 2
-        },
-        {
           "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.beats",
           "before": 172,
           "after": 490
@@ -63,11 +58,6 @@
           "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.retiredStatus",
           "before": 58,
           "after": 60
-        },
-        {
-          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 1
         },
         {
           "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.meta",
@@ -105,19 +95,9 @@
           "after": 126
         },
         {
-          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 1
-        },
-        {
           "path": "data.realistic.0.checkpoints.0.indexed.work.structure.gets.beats",
           "before": 138,
           "after": 245
-        },
-        {
-          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 1
         },
         {
           "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.meta",
@@ -165,11 +145,6 @@
           "after": 50
         },
         {
-          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 10
-        },
-        {
           "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.beats",
           "before": 860,
           "after": 2450
@@ -178,11 +153,6 @@
           "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.retiredStatus",
           "before": 290,
           "after": 300
-        },
-        {
-          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 5
         },
         {
           "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.meta",
@@ -220,19 +190,9 @@
           "after": 486
         },
         {
-          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 5
-        },
-        {
           "path": "data.realistic.0.checkpoints.1.indexed.work.structure.gets.beats",
           "before": 690,
           "after": 1225
-        },
-        {
-          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 5
         },
         {
           "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.meta",
@@ -280,11 +240,6 @@
           "after": 100
         },
         {
-          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 20
-        },
-        {
           "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.beats",
           "before": 1720,
           "after": 4900
@@ -293,11 +248,6 @@
           "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.retiredStatus",
           "before": 580,
           "after": 600
-        },
-        {
-          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 10
         },
         {
           "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.meta",
@@ -335,19 +285,9 @@
           "after": 936
         },
         {
-          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 10
-        },
-        {
           "path": "data.realistic.0.checkpoints.2.indexed.work.structure.gets.beats",
           "before": 1380,
           "after": 2450
-        },
-        {
-          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 10
         },
         {
           "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.meta",
@@ -395,11 +335,6 @@
           "after": 200
         },
         {
-          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 40
-        },
-        {
           "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.beats",
           "before": 3440,
           "after": 9800
@@ -408,11 +343,6 @@
           "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.retiredStatus",
           "before": 1160,
           "after": 1200
-        },
-        {
-          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 20
         },
         {
           "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.meta",
@@ -450,19 +380,9 @@
           "after": 1836
         },
         {
-          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 20
-        },
-        {
           "path": "data.realistic.0.checkpoints.3.indexed.work.structure.gets.beats",
           "before": 2760,
           "after": 4900
-        },
-        {
-          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 20
         },
         {
           "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.meta",
@@ -510,11 +430,6 @@
           "after": 360
         },
         {
-          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 72
-        },
-        {
           "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.beats",
           "before": 6192,
           "after": 17640
@@ -523,11 +438,6 @@
           "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.retiredStatus",
           "before": 2088,
           "after": 2160
-        },
-        {
-          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 36
         },
         {
           "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.meta",
@@ -565,19 +475,9 @@
           "after": 3276
         },
         {
-          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 36
-        },
-        {
           "path": "data.realistic.0.checkpoints.4.indexed.work.structure.gets.beats",
           "before": 4968,
           "after": 8820
-        },
-        {
-          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 36
         },
         {
           "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.meta",
@@ -625,11 +525,6 @@
           "after": 10
         },
         {
-          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 2
-        },
-        {
           "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.beats",
           "before": 172,
           "after": 490
@@ -638,11 +533,6 @@
           "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.retiredStatus",
           "before": 58,
           "after": 60
-        },
-        {
-          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 1
         },
         {
           "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.meta",
@@ -680,19 +570,9 @@
           "after": 126
         },
         {
-          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 1
-        },
-        {
           "path": "data.realistic.1.checkpoints.0.indexed.work.structure.gets.beats",
           "before": 138,
           "after": 245
-        },
-        {
-          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 1
         },
         {
           "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.meta",
@@ -740,11 +620,6 @@
           "after": 50
         },
         {
-          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 10
-        },
-        {
           "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.beats",
           "before": 860,
           "after": 2450
@@ -753,11 +628,6 @@
           "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.retiredStatus",
           "before": 290,
           "after": 300
-        },
-        {
-          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 5
         },
         {
           "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.meta",
@@ -795,19 +665,9 @@
           "after": 486
         },
         {
-          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 5
-        },
-        {
           "path": "data.realistic.1.checkpoints.1.indexed.work.structure.gets.beats",
           "before": 690,
           "after": 1225
-        },
-        {
-          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 5
         },
         {
           "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.meta",
@@ -855,11 +715,6 @@
           "after": 100
         },
         {
-          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 20
-        },
-        {
           "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.beats",
           "before": 1720,
           "after": 4900
@@ -868,11 +723,6 @@
           "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.retiredStatus",
           "before": 580,
           "after": 600
-        },
-        {
-          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 10
         },
         {
           "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.meta",
@@ -910,19 +760,9 @@
           "after": 936
         },
         {
-          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 10
-        },
-        {
           "path": "data.realistic.1.checkpoints.2.indexed.work.structure.gets.beats",
           "before": 1380,
           "after": 2450
-        },
-        {
-          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 10
         },
         {
           "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.meta",
@@ -970,11 +810,6 @@
           "after": 200
         },
         {
-          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 40
-        },
-        {
           "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.beats",
           "before": 3440,
           "after": 9800
@@ -983,11 +818,6 @@
           "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.retiredStatus",
           "before": 1160,
           "after": 1200
-        },
-        {
-          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 20
         },
         {
           "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.meta",
@@ -1025,19 +855,9 @@
           "after": 1836
         },
         {
-          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 20
-        },
-        {
           "path": "data.realistic.1.checkpoints.3.indexed.work.structure.gets.beats",
           "before": 2760,
           "after": 4900
-        },
-        {
-          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 20
         },
         {
           "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.meta",
@@ -1085,11 +905,6 @@
           "after": 360
         },
         {
-          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 72
-        },
-        {
           "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.beats",
           "before": 6192,
           "after": 17640
@@ -1098,11 +913,6 @@
           "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.retiredStatus",
           "before": 2088,
           "after": 2160
-        },
-        {
-          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 36
         },
         {
           "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.meta",
@@ -1140,19 +950,9 @@
           "after": 3276
         },
         {
-          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 36
-        },
-        {
           "path": "data.realistic.1.checkpoints.4.indexed.work.structure.gets.beats",
           "before": 4968,
           "after": 8820
-        },
-        {
-          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 36
         },
         {
           "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.meta",
@@ -1280,11 +1080,6 @@
           "after": 200
         },
         {
-          "path": "data.synthetic.checkpoints.1.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 40
-        },
-        {
           "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.beats",
           "before": 1940,
           "after": 5600
@@ -1293,11 +1088,6 @@
           "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.retiredJoins",
           "before": 80,
           "after": 100
-        },
-        {
-          "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 20
         },
         {
           "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.meta",
@@ -1340,11 +1130,6 @@
           "after": 100
         },
         {
-          "path": "data.synthetic.checkpoints.1.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 20
-        },
-        {
           "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.beats",
           "before": 1560,
           "after": 2800
@@ -1353,11 +1138,6 @@
           "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.retiredJoins",
           "before": 80,
           "after": 100
-        },
-        {
-          "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 20
         },
         {
           "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.meta",
@@ -1405,11 +1185,6 @@
           "after": 500
         },
         {
-          "path": "data.synthetic.checkpoints.2.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 100
-        },
-        {
           "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.beats",
           "before": 2600,
           "after": 7700
@@ -1418,11 +1193,6 @@
           "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.retiredJoins",
           "before": 200,
           "after": 250
-        },
-        {
-          "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 50
         },
         {
           "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.meta",
@@ -1465,11 +1235,6 @@
           "after": 250
         },
         {
-          "path": "data.synthetic.checkpoints.2.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 50
-        },
-        {
           "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.beats",
           "before": 2100,
           "after": 3850
@@ -1478,11 +1243,6 @@
           "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.retiredJoins",
           "before": 200,
           "after": 250
-        },
-        {
-          "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 50
         },
         {
           "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.meta",
@@ -1530,11 +1290,6 @@
           "after": 1000
         },
         {
-          "path": "data.synthetic.checkpoints.3.legacy.work.structure.records.beats",
-          "before": 0,
-          "after": 200
-        },
-        {
           "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.beats",
           "before": 3700,
           "after": 11200
@@ -1543,11 +1298,6 @@
           "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.retiredJoins",
           "before": 400,
           "after": 500
-        },
-        {
-          "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.removalRecords",
-          "before": 0,
-          "after": 100
         },
         {
           "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.meta",
@@ -1590,11 +1340,6 @@
           "after": 500
         },
         {
-          "path": "data.synthetic.checkpoints.3.indexed.work.structure.records.beats",
-          "before": 0,
-          "after": 100
-        },
-        {
           "path": "data.synthetic.checkpoints.3.indexed.work.structure.gets.beats",
           "before": 3000,
           "after": 5600
@@ -1605,6 +1350,261 @@
           "after": 500
         },
         {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 2
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.0.checkpoints.0.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.0.checkpoints.1.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.2.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 40
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.3.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 72
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.0.checkpoints.4.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 2
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.1.checkpoints.0.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 1
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.1.checkpoints.1.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 5
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.2.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 40
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.3.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 72
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.realistic.1.checkpoints.4.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 36
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 40
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.synthetic.checkpoints.1.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 50
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 50
+        },
+        {
+          "path": "data.synthetic.checkpoints.2.indexed.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 50
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.records.beats",
+          "before": 0,
+          "after": 200
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.legacy.work.structure.gets.removalRecords",
+          "before": 0,
+          "after": 100
+        },
+        {
+          "path": "data.synthetic.checkpoints.3.indexed.work.structure.records.beats",
+          "before": 0,
+          "after": 100
+        },
+        {
           "path": "data.synthetic.checkpoints.3.indexed.work.structure.gets.removalRecords",
           "before": 0,
           "after": 100
@@ -1613,153 +1613,6 @@
       "otherChanges": []
     }
   ],
-  "reviewBaseHead": "2085cfc47557bd8c7bda5ebeb388ee5a7afa7419",
-  "reviewRows": [
-    {
-      "path": "src/perf/lifetime/counts.json",
-      "numericChanges": [
-        {
-          "path": "data.realistic.0.checkpoints.0.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.0.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.1.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.1.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.2.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.2.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.3.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.3.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.4.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.0.checkpoints.4.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.0.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.0.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.1.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.1.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.2.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.2.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.3.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.3.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.4.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.realistic.1.checkpoints.4.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.0.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.0.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.1.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.1.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.2.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.2.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.3.legacy.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        },
-        {
-          "path": "data.synthetic.checkpoints.3.indexed.work.incremental.gets.meta",
-          "before": 18,
-          "after": 17
-        }
-      ],
-      "otherChanges": []
-    }
-  ]
+  "reviewBaseHead": "82e15f191d4b737e24312c0027604221c05fba9a",
+  "reviewRows": []
 }

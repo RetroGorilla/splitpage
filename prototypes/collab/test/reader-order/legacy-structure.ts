@@ -200,4 +200,3 @@ export function legacyStructureReader(doc: Y.Doc, candidate: SchemaCandidate, bo
   projectComments(model, doc);
   return model;
 }
-

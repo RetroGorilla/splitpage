@@ -54,7 +54,7 @@ Reproduce with node src/marks/mutation-audit.ts --write. It copies source/tests 
 | split-descendant-classification | DETECTED (6) | A: full T11 D1, including specified recovery and undo |
 | acceptance-extent-sort | SURVIVED — claim withdrawn | No detecting test; not claimed necessary |
 | outer-inner-stack-sort | SURVIVED — claim withdrawn | No detecting test; not claimed necessary |
-| both-nesting-sorts | DETECTED (2) | A: same-start nested occurrences project longest outermost |
+| both-nesting-sorts | DETECTED (4) | A: same-start nested occurrences project longest outermost |
 | crossing-rejection | DETECTED (8) | A: full T20 cross D1, including specified recovery and undo |
 | crossing-recovery | DETECTED (8) | A: full T20 cross D1, including specified recovery and undo |
 | whole-tag-comment-union | DETECTED (4) | A: full T20 mark D1, including specified recovery and undo |

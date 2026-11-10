@@ -1,3 +1,5 @@
+import { assembleReaderBlocks, readerBlockDelta, readerBlockStreams } from "../readers/blocks.ts";
+import { literalRecord, mergeLiteralFields } from "../readers/output.ts";
 import { identityEntries, identityGet, normalizeIdentityTree, wireIdentity } from "../readers/identity.ts";
 import * as Y from "yjs";
 import { videoLinkKey } from "../../../../src/core/document/gallery.ts";
@@ -8,8 +10,8 @@ import { SchemaReplica } from "../schema.ts";
 import type { SchemaCandidate } from "../schema.ts";
 import { deltaToHtml, insertHtml, readDelta } from "./richtext.ts";
 import type { ProjectionDelta } from "./richtext.ts";
-import { bag, copy, ordered, rank, ranked, readRecord, records, writeRecord } from "./value.ts";
-import { readBoundaryRecord, readSegmentRecord, readVisualRecord, readWireValue, rootMap, rootOrder, rootText, sharedMapRecord, stringKeys } from "../readers/records.ts";
+import { bag, copy, rank, ranked, readRecord, records, writeRecord } from "./value.ts";
+import { readVisualRecord, readWireRecord, readWireValue, rootMap, sharedMapRecord, stringKeys } from "../readers/records.ts";
 import { compareCodeUnits } from "../readers/order.ts";
 import type { ProjectionBag } from "./value.ts";
 
@@ -189,53 +191,27 @@ export interface ProjectionBlock {
 }
 
 export function projectionBlocks(doc: Y.Doc, candidate: SchemaCandidate): ProjectionBlock[] {
-  const result: ProjectionBlock[] = [];
-  const seen = new Set<string>();
-  let current: ProjectionBlock | null = null;
-  function boundary(value: ProjectionBag): void {
-    const parsed = readBoundaryRecord(value); if (!parsed) return;
-    const kind = parsed.kind ? "h" : "b", id = parsed.id;
-    const key = `${kind}:${id}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    current = { id, kind, delta: [] };
-    result.push(current);
-  }
-  function consume(text: Y.Text): void {
-    for (const delta of readDelta(text)) {
-      if (typeof delta.insert !== "string" && ("b" in delta.insert || "h" in delta.insert)) boundary(delta.insert);
-      else {
-        if (current) current.delta.push(delta);
-      }
-    }
-  }
-  if (candidate === "A") { const text = rootText(doc, "flow"); if (text) consume(text); }
-  else for (const id of new Set(rootOrder(doc))) {
-    const segment = readSegmentRecord(identityGet(rootMap(doc, "segments"), id));
-    if (!segment) continue;
-    if (segment.head) boundary({ [segment.head.kind ? "h" : "b"]: segment.head.id });
-    consume(segment.text);
-  }
-  return result;
+  return assembleReaderBlocks(readerBlockStreams(doc, candidate, readerBlockDelta)).map(span => span.block);
 }
 
 function registry(doc: Y.Doc, root: string, fields: readonly string[]): ProjectionBag[] {
   return ranked(rootMap(doc, root)).map(([, value]) => {
     const record = readRecord(value, fields);
     if (root === "shots") {
-      const props = ranked(value.get("props")).map(([, prop]) => readWireValue(prop.get("value")));
+      const props = ranked(value.get("props")).flatMap(([, prop]) => { const data = readWireRecord(prop.get("value")); return data ? [literalRecord(data, ["id", "name"])] : []; });
       if (props.length || stringKeys(value.get("keys")).includes("props")) record.props = props;
     }
-    return ordered(record, value.get("keys"));
+    return literalRecord(record, root === "people" ? PERSON : root === "tags" ? TAG : [...SHOT, "props"], stringKeys(value.get("keys")));
   });
 }
 
 function galleryFor(doc: Y.Doc, id: string): ProjectionBag[] {
   return ranked(rootMap(doc, "gallery")).filter(([, value]) => readWireValue(value.get("beat")) === id).map(([, value]) => {
-    const result = { ...readRecord(value, []), ...bag(readWireValue(value.get("picture"))) };
+    const result = readRecord(value, []), picture = bag(readWireValue(value.get("picture")));
+    mergeLiteralFields(result, picture, ["imageRef", "name", "annotation"]);
     const links = ranked(value.get("links")).map(([, link]) => readRecord(link, ["href", "name", "size", "duration", "poster"]));
     if (links.length || stringKeys(value.get("keys")).includes("links")) result.links = links;
-    return ordered(result, value.get("keys"));
+    return literalRecord(result, ["imageRef", "name", "annotation", "links"], stringKeys(value.get("keys")));
   });
 }
 
@@ -246,7 +222,7 @@ function projectionSections(doc: Y.Doc, blocks: readonly ProjectionBlock[]): Pro
     if (block.kind === "h") heading = block;
     else if (heading) {
       const name = heading.delta.map(item => typeof item.insert === "string" ? item.insert : "").join("");
-      if (name) sections.push(ordered({ id: heading.id, name, firstSceneId: block.id }, sharedMapRecord(identityGet(rootMap(doc, "headings"), heading.id))?.get("keys")));
+      if (name) sections.push(literalRecord({ id: heading.id, name, firstSceneId: block.id }, ["id", "name", "firstSceneId"], stringKeys(sharedMapRecord(identityGet(rootMap(doc, "headings"), heading.id))?.get("keys"))));
       heading = undefined;
     }
   }
@@ -256,22 +232,24 @@ function projectionSections(doc: Y.Doc, blocks: readonly ProjectionBlock[]): Pro
 export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: ProjectionOptions = {}): ProjectionBag {
   const meta = rootMap(doc, "meta") ?? new Map<string, unknown>();
   const result = readRecord(meta, META);
-  Object.assign(result, bag(readWireValue(meta.get("capture"))));
+  const capture = bag(readWireValue(meta.get("capture")));
+  mergeLiteralFields(result, capture, CAPTURE);
   const title = meta.get("title"); result.title = title instanceof Y.Text ? readWireValue(title.toString()) : "";
   result.people = registry(doc, "people", PERSON);
   result.productionTags = registry(doc, "tags", TAG);
   result.brollShots = registry(doc, "shots", SHOT);
   const comments = ranked(rootMap(doc, "comments")).map(([, value]) => {
     const comment = readRecord(value, COMMENT);
-    Object.assign(comment, bag(readWireValue(value.get("resolution"))));
+    const resolution = bag(readWireValue(value.get("resolution")));
+    mergeLiteralFields(comment, resolution, ["resolved", "resolvedAt", "resolvedBy"]);
     if (value.has("text")) comment.body = readWireValue(value.get("text"));
     if (value.has("quote")) comment.quotedText = readWireValue(value.get("quote"));
     comment.replies = ranked(rootMap(doc, "replies")).filter(([, reply]) => readWireValue(reply.get("commentId")) === comment.id).map(([, reply]) => {
       const record = readRecord(reply, REPLY);
       record.body = readWireValue(reply.get("text"));
-      return ordered(record, reply.get("keys"));
+      return literalRecord(record, [...REPLY, "body"], stringKeys(reply.get("keys")));
     });
-    return ordered(comment, value.get("keys"));
+    return literalRecord(comment, [...COMMENT, ...COMMENT_SPECIAL], stringKeys(value.get("keys")));
   });
   result.comments = comments;
   const rows: ProjectionBag[] = [];
@@ -291,7 +269,7 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     setIf(stamp, "by", row, "updatedBy");
     setIf(stamp, "at", row, "updatedAt");
     row.audioText = deltaToHtml(block.delta, result.productionTags, comments, options.deriveCue);
-    row.visualText = identityEntries(rootMap(doc, "visuals")).flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; })
+    row.visualText = identityEntries(rootMap(doc, "visuals")).flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, beat: value.beat, rank: value.rank, text: value.text }] : []; })
       .filter(value => value.beat === block.id).sort((a, b) => compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id)).map(value => {
         const delta = readDelta(value.text);
         collectAnchors(delta, block.id, "visualText");
@@ -305,14 +283,14 @@ export function toDocument(doc: Y.Doc, candidate: SchemaCandidate, options: Proj
     setIf(first, "annotation", row, "imageAnnotation");
     setIf(first, "links", row, "imageLinks");
     if (slots.length > 1 || stringKeys(beat.get("keys")).includes("moreImages")) row.moreImages = slots.slice(1);
-    rows.push(ordered(row, beat.get("keys")));
+    rows.push(literalRecord(row, ["id", "audioText", "visualText", "status", "lengthSeconds", "paragraphStart", ...ROW_SPECIAL], stringKeys(beat.get("keys"))));
 
   }
   result.rows = rows;
   for (const comment of comments) {
     const anchor = typeof comment.id === "string" ? anchors.get(comment.id) : undefined;
-    if (anchor) Object.assign(comment, anchor);
+    if (anchor) { comment.rowId = anchor.rowId; comment.field = anchor.field; }
   }
   if (sections.length || stringKeys(meta.get("keys")).includes("sections")) result.sections = sections;
-  return ordered(result, meta.get("keys"));
+  return literalRecord(result, ["schema", "title", ...META, ...CAPTURE, "rows", "sections", "comments", "people", "productionTags", "brollShots"], stringKeys(meta.get("keys")));
 }

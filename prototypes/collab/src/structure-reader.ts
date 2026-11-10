@@ -12,7 +12,7 @@ import { compareCodeUnits } from "./readers/order.ts";
 export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: IdentityBook, carets: ReplicaCarets = new Map()): CollabModel {
   const { model, spans, destinations } = readerStructure(doc, candidate, book, true);
   const order = new Map(spans.map((span, index) => [span.row.id, index]));
-  const visuals = identityEntries(rootMap(doc, "visuals")).flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, ...value }] : []; });
+  const visuals = identityEntries(rootMap(doc, "visuals")).flatMap(([id, raw]) => { const value = readVisualRecord(raw); return value ? [{ id, beat: value.beat, rank: value.rank, text: value.text }] : []; });
   visuals.sort((a, b) => (order.get(a.beat) ?? spans.length) - (order.get(b.beat) ?? spans.length)
     || compareCodeUnits(a.rank, b.rank) || compareCodeUnits(a.id, b.id));
   for (const component of visuals) {
@@ -34,12 +34,12 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
     const target = destinations.get(item.beat)?.row; if (!target) continue;
     const items = (target.gallery ??= []) as { ref: string; name: string; annotation: string; links: { href: string; poster?: string }[] }[];
     const existing = item.ref ? items.find(entry => entry.ref === item.ref) : undefined;
-    if (!existing) items.push({ ref: item.ref, name: item.name, annotation: item.annotation, links: item.links.map(link => ({ ...link })) });
+    if (!existing) items.push({ ref: item.ref, name: item.name, annotation: item.annotation, links: item.links.map(link => link.poster === undefined ? { href: link.href } : { href: link.href, poster: link.poster }) });
     else {
       existing.name ||= item.name; existing.annotation ||= item.annotation;
       for (const link of item.links) {
         const old = existing.links.find(entry => entry.href === link.href);
-        if (!old) existing.links.push({ ...link });
+        if (!old) existing.links.push(link.poster === undefined ? { href: link.href } : { href: link.href, poster: link.poster });
         else if (!old.poster && link.poster) old.poster = link.poster;
       }
     }

@@ -8,6 +8,7 @@ import { readDelta } from "../proj/richtext.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { PerfBlockIndex } from "./blocks.ts";
 import { readGallerySlotRecord, readVisualRecord, rootMap, sameProjectionValue } from "../readers/records.ts";
+import { copyFileOrders } from "../readers/output.ts";
 
 export class IncrementalProjection {
   readonly replica: SchemaReplica;
@@ -92,7 +93,8 @@ export class IncrementalProjection {
       const row = replacements.get(block.id) ?? old.get(block.id);
       if (!row) return [];
       const previous = old.get(block.id);
-      return [previous && row !== previous && sameProjectionValue(row, previous) ? previous : row];
+      if (previous && row !== previous && sameProjectionValue(row, previous)) { copyFileOrders(row, previous); return [previous]; }
+      return [row];
     });
     for (const id of dirty) this.updateAnchors(id);
     const first = new Map<string, { rowId: string; field: string }>();
@@ -101,7 +103,7 @@ export class IncrementalProjection {
     }
     for (const comment of records(partial.comments)) {
       const anchor = typeof comment.id === "string" ? first.get(comment.id) : undefined;
-      if (anchor) Object.assign(comment, anchor);
+      if (anchor) { comment.rowId = anchor.rowId; comment.field = anchor.field; }
     }
     partial.rows = rows;
     this.document = partial;

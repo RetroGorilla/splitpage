@@ -1,8 +1,8 @@
-import { identityGet } from "./identity.ts";
+import { assembleReaderBlocks, readerBlockDelta, readerBlockStreams } from "./blocks.ts";
 import * as Y from "yjs";
 import type { CollabCharacter, CollabRow, IdentityBook } from "../model.ts";
 import type { SchemaCandidate } from "../schema.ts";
-import { readBoundaryRecord, readMarkRecord, readSegmentRecord, readWireValue, rootMap, rootOrder, rootText } from "./records.ts";
+import { readMarkRecord, readWireValue } from "./records.ts";
 
 export interface ReaderTextSpan { row: CollabRow; text: Y.Text; start: number; end: number }
 
@@ -17,29 +17,10 @@ export function readerCharacters(text: Y.Text, index: number, value: string, mar
 }
 
 export function readerTextSpans(doc: Y.Doc, candidate: SchemaCandidate, book: IdentityBook): ReaderTextSpan[] {
-  const spans: ReaderTextSpan[] = [], seen = new Set<string>();
-  const scan = (text: Y.Text, head?: { id: string; kind?: "heading" } | null): void => {
-    let current: ReaderTextSpan | undefined, index = 0;
-    const begin = (boundary: { id: string; kind?: "heading" } | null, start: number): void => {
-      if (!boundary || seen.has(boundary.id)) return;
-      if (current) current.end = index;
-      seen.add(boundary.id);
-      current = { row: { id: boundary.id, characters: [], ...(boundary.kind ? { kind: boundary.kind } : {}) }, text, start, end: text.length };
-      spans.push(current);
-    };
-    if (head) begin(head, 0);
-    for (const delta of text.toDelta()) {
-      const insert: unknown = delta.insert;
-      if (typeof insert === "string") {
-        if (current) current.row.characters.push(...readerCharacters(text, index, insert, current.row.kind ? {} : delta.attributes, current.row.id, book));
-        index += insert.length;
-      } else { begin(readBoundaryRecord(insert), index + 1); index++; }
-    }
-  };
-  if (candidate === "A") { const text = rootText(doc, "flow"); if (text) scan(text); }
-  else for (const id of new Set(rootOrder(doc))) {
-    const segment = readSegmentRecord(identityGet(rootMap(doc, "segments"), id));
-    if (segment) scan(segment.text, segment.head);
-  }
-  return spans;
+  return assembleReaderBlocks(readerBlockStreams(doc, candidate, readerBlockDelta)).map(span => {
+    const row: CollabRow = { id: span.block.id, characters: [] };
+    if (span.block.kind === "h") row.kind = "heading";
+    for (const part of span.parts) if (typeof part.delta.insert === "string") row.characters.push(...readerCharacters(span.text, part.index, part.delta.insert, row.kind ? {} : part.delta.attributes, row.id, book));
+    return { row, text: span.text, start: span.start, end: span.end };
+  });
 }

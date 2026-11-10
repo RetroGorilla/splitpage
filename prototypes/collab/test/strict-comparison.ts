@@ -85,6 +85,8 @@ export function projectionDifference(expected: unknown, actual: unknown, path: s
     return compareEntries([...(wanted as Set<unknown>)].map((item, index) => [index, item] as const), [...(got as Set<unknown>)].map((item, index) => [index, item] as const), path);
   }
   if (wantedKind === "array") {
+    ownProperties(wanted, path, () => false);
+    ownProperties(got, path, () => false);
     const wantedItems = wanted as unknown[];
     const gotItems = got as unknown[];
     if (wantedItems.length !== gotItems.length) return `${path}: length ${wantedItems.length} against ${gotItems.length}`;

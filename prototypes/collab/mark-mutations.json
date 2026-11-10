@@ -66,9 +66,10 @@
       "outcome": "DETECTED",
       "failedTests": [
         "A: same-start nested occurrences project longest outermost",
+        "A: same-start nested occurrences project longest outermost swapped ids",
         "B: same-start nested occurrences project longest outermost"
       ],
-      "failedTestCount": 2,
+      "failedTestCount": 4,
       "edits": [
         {
           "file": "src/marks/projection.ts",
@@ -243,8 +244,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "rowId: anchor?.row.id ?? original.rowId",
-          "after": "rowId: anchor?.row.id"
+          "before": "output.rowId = anchor?.row.id ?? original.rowId",
+          "after": "output.rowId = anchor?.row.id"
         }
       ]
     },
@@ -259,8 +260,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "field: anchor ? \"audioText\" : original.field",
-          "after": "field: \"audioText\""
+          "before": "output.field = anchor ? \"audioText\" : original.field",
+          "after": "output.field = \"audioText\""
         }
       ]
     },
@@ -276,8 +277,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "rowId: anchor?.row.id ?? original.rowId",
-          "after": "rowId: original.rowId"
+          "before": "output.rowId = anchor?.row.id ?? original.rowId",
+          "after": "output.rowId = original.rowId"
         }
       ]
     },
@@ -293,8 +294,8 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "recovery: anchor?.recovery ?? true",
-          "after": "recovery: false"
+          "before": "output.recovery = anchor?.recovery ?? true",
+          "after": "output.recovery = false"
         }
       ]
     },
@@ -327,7 +328,7 @@
       "edits": [
         {
           "file": "src/marks/projection.ts",
-          "before": "records.recoveryReplies = replies.filter(reply => !Object.hasOwn(comments, reply.commentId));",
+          "before": "records.recoveryReplies = replies.filter(reply => typeof reply.commentId === \"string\" && !Object.hasOwn(comments, reply.commentId));",
           "after": "records.recoveryReplies = [];"
         }
       ]

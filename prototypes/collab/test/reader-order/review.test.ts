@@ -30,6 +30,36 @@ for (const candidate of ["A", "B"] as const) test(`${candidate}: comment command
   } finally { h.destroy(); }
 });
 
+for (const candidate of ["A", "B"] as const) test(`${candidate}: late comment/reply fields have literal known order and sorted future fields`, () => {
+  const h = new ReplicaHarness(candidate, [{ id: "R1", text: "a" }]), guard = new ReaderConvergence(h, deliveryOrders);
+  try {
+    addComment(h.alice, "C1", "R1", 0, 1, "Alice"); addReply(h.alice, "P1", "C1", "Alice"); h.queue.flush("D1");
+    const comment = h.bob.doc.getMap<Y.Map<unknown>>("comments").get("C1"), reply = h.bob.doc.getMap<Y.Map<unknown>>("replies").get("P1"); assert.ok(comment && reply);
+    comment.set("resolution", { resolved: true }); comment.set("zFuture", 1); comment.set("aFuture", 2); reply.set("updatedAt", 1);
+    h.queue.flush("rev"); h.lateJoin(h.alice);
+    for (const replica of h.replicas) {
+      const comments = readStructure(replica.doc, candidate, h.identities).records?.comments as Record<string, { replies: object[] }>;
+      assert.deepEqual(Object.keys(comments.C1 ?? {}), ["author", "createdAt", "text", "rowId", "field", "resolution", "recovery", "replies", "aFuture", "zFuture"]);
+      assert.deepEqual(Object.keys(comments.C1?.replies[0] ?? {}), ["id", "commentId", "author", "createdAt", "updatedAt", "text"]);
+    }
+    guard.check("late fields");
+  } finally { h.destroy(); }
+});
+
+test("repeated and dangling segment heads use the literal isolated-stream rule in fresh and observing builds", () => {
+  for (const head of [{ b: "R1" }, null, { b: 2 }, { b: "missing" }]) {
+    const source = fromDocument({ title: "", rows: [{ id: "R1", audioText: "a", visualText: "" }, { id: "R2", audioText: "b", visualText: "" }] }, "B", 200), cache = new IncrementalProjection(source), late = createProjectionReplica("B", 201);
+    try {
+      (source.doc.getMap("segments").get("seg-b-R2") as Y.Map<unknown>).set("head", head);
+      const expected = [{ id: "R1", audioText: "a", visualText: "" }];
+      if (head?.b === "missing") expected.push({ id: "missing", audioText: "b", visualText: "" });
+      assert.deepEqual(cache.document.rows, expected); assert.deepEqual(toDocument(source.doc, "B").rows, expected);
+      Y.applyUpdate(late.doc, Y.encodeStateAsUpdate(source.doc)); assert.deepEqual(toDocument(late.doc, "B").rows, expected);
+      assert.equal(projectionDifference(cache.document, toDocument(late.doc, "B"), "head assembly"), null);
+    } finally { cache.destroy(); source.destroy(); late.destroy(); }
+  }
+});
+
 for (const candidate of ["A", "B"] as const) test(`${candidate}: identity-writing commands store normalized keys and references`, () => {
   const source = fromDocument({ title: "", rows: [{ id: "\ud800", audioText: "ab", visualText: "v", status: "todo" }],
     people: [{ id: "\ud800", name: "Alice" }], productionTags: [{ id: "\ud800", name: "Tag" }], brollShots: [{ id: "\ud800", name: "Shot" }],
@@ -64,7 +94,7 @@ for (const candidate of ["A", "B"] as const) test(`${candidate}: patched section
   try {
     source.insert("R2", 1, "x", ["x1"]);
     assert.deepEqual(cache.document.sections, [{ name: "Scene", firstSceneId: "R1", id: "H1" }]);
-    assert.deepEqual(Object.keys((cache.document.sections as object[])[0] ?? {}), ["name", "firstSceneId", "id"]);
+    assert.deepEqual(Object.keys((cache.document.sections as object[])[0] ?? {}), ["id", "name", "firstSceneId"]);
     assert.equal(projectionDifference(cache.document, toDocument(source.doc, candidate), "section cache"), null);
   } finally { cache.destroy(); source.destroy(); }
 });

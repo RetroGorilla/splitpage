@@ -1,6 +1,6 @@
 import { identityEntries, identityGet, identityHas } from "./identity.ts";
 import * as Y from "yjs";
-import type { CollabModel, CollabRow, IdentityBook } from "../model.ts";
+import type { CollabModel, CollabRecovery, CollabRow, IdentityBook } from "../model.ts";
 import type { ReplicaCarets } from "../reader.ts";
 import type { SchemaCandidate } from "../schema.ts";
 import { projectStatus } from "../marks/projection.ts";
@@ -12,6 +12,7 @@ import { readerTextSpans } from "./spans.ts";
 import type { ReaderTextSpan } from "./spans.ts";
 import { readerJoinGroups } from "./joins.ts";
 import { compareCodeUnits } from "./order.ts";
+import { literalRecord } from "./output.ts";
 
 export interface ReaderDestination { row: CollabRow; prefix: number; recovery: boolean }
 
@@ -26,7 +27,10 @@ export function readerStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Id
       if (beat?.paragraphStart) row.paragraphStart = true;
     } else if (!enhanced && beat?.lengthSeconds !== undefined) row.lengthSeconds = beat.lengthSeconds;
     if (!enhanced) for (const character of row.characters) if (typeof character.marks.cmt === "string") {
-      const { cmt, ...marks } = character.marks; character.marks = { ...marks, [`c:${String(cmt)}`]: true };
+      const marks: Record<string, string | boolean | readonly string[]> = {};
+      for (const key of Object.keys(character.marks).filter(key => key !== "cmt").sort(compareCodeUnits)) marks[key] = character.marks[key] as string | boolean | readonly string[];
+      marks[`c:${String(character.marks.cmt)}`] = true;
+      character.marks = literalRecord(marks, ["bold", "italic", "underline", "strike", "href", "tag", "innerTags"]) as typeof character.marks;
     }
   }
   if (enhanced) projectStatus(model, doc);
@@ -47,14 +51,19 @@ export function readerStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Id
   const rows = new Map(spans.map(span => [span.row.id, span.row])), destinations = new Map<string, ReaderDestination>();
   for (const group of readerJoinGroups(spans.map(span => span.row.id), joins, removed)) {
     const original = rows.get(group.root); if (!original) continue;
-    const row = { ...original, characters: [...original.characters] }, recovery = removed.has(group.root);
+    const row: CollabRow = { id: original.id, characters: [...original.characters] };
+    if (original.kind !== undefined) row.kind = original.kind;
+    if (original.status !== undefined) row.status = original.status;
+    if (original.paragraphStart !== undefined) row.paragraphStart = original.paragraphStart;
+    if (original.lengthSeconds !== undefined) row.lengthSeconds = original.lengthSeconds;
+    const recovery = removed.has(group.root);
     destinations.set(group.root, { row, prefix: 0, recovery });
     for (const id of group.members.slice(1)) {
       const source = rows.get(id); if (!source) continue;
       const glue = joins.get(id)?.glue;
       if (glue) row.characters.push({ identity: null, notation: "[glue]", value: glue, marks: {}, beat: row.id });
       destinations.set(id, { row, prefix: row.characters.length, recovery });
-      row.characters.push(...source.characters.map(character => ({ ...character, beat: row.id })));
+      row.characters.push(...source.characters.map(character => ({ identity: character.identity, notation: character.notation, value: character.value, marks: character.marks, beat: row.id })));
       const ranks = ["todo", "ready", "shot"];
       if (source.status && ranks.indexOf(source.status) > ranks.indexOf(row.status ?? "todo")) row.status = source.status;
     }
@@ -66,7 +75,8 @@ export function readerStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Id
         return by !== undefined && removals.get(id)?.some(removal => removal.beat !== id) ? [by] : [];
       });
       const splitBy = [...new Set(splitters)].sort(compareCodeUnits).join(", ");
-      model.recovery.push({ row, by: removalAttribution(applicable), edited, ...(splitBy ? { splitBy } : {}) });
+      const entry: CollabRecovery = { row, by: removalAttribution(applicable), edited }; if (splitBy) entry.splitBy = splitBy;
+      model.recovery.push(entry);
     } else if (!row.kind || row.characters.length) model.rows.push(row);
   }
   return { model, spans, destinations };
@@ -96,11 +106,11 @@ export function readerCarets(model: CollabModel, spans: readonly ReaderTextSpan[
     const prefix = target.row.visuals?.slice(0, target.row.visuals.findIndex(row => row.id === visual.id)).reduce((sum, row) => sum + row.characters.length + 1, 0) ?? 0;
     return { beat: `${target.row.id}:visual`, offset: prefix + absolute.index };
   };
-  for (const [writer, raw] of carets) {
+  for (const [writer, raw] of [...carets].sort(([a], [b]) => compareCodeUnits(a, b))) {
     const caret = readCaretRecord(raw), start = caret && locate(caret.position);
     if (!start) continue;
     model.carets[writer] = start;
     const end = caret.selectionEnd && locate(caret.selectionEnd);
-    if (end) model.carets[writer] = { ...start, selection: { beat: end.beat, from: start.offset, to: end.offset } };
+    if (end) model.carets[writer] = { beat: start.beat, offset: start.offset, selection: { beat: end.beat, from: start.offset, to: end.offset } };
   }
 }

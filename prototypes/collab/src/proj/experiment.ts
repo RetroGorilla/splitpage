@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileOrderedCopy } from "../readers/output.ts";
 import { createHash } from "node:crypto";
 import * as Y from "yjs";
 import { canonicalFixtures } from "./fixtures.ts";
@@ -15,6 +16,8 @@ export interface ProjectionDifference {
 }
 
 export function differences(before: unknown, after: unknown, path = "$"): ProjectionDifference[] {
+  // why: This is the file-evidence comparison; reader objects have a separate literal field-order contract.
+  if (path === "$") { before = fileOrderedCopy(before); after = fileOrderedCopy(after); }
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
   if (before && after && typeof before === "object" && typeof after === "object" && Array.isArray(before) === Array.isArray(after)) {
     const a = before as ProjectionBag, b = after as ProjectionBag;

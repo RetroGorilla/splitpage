@@ -14,6 +14,7 @@ import { projectionDifference } from "../strict-comparison.ts";
 import { readerJoinGroups } from "../../src/readers/joins.ts";
 import { IncrementalProjection } from "../../src/perf/incremental.ts";
 import { legacyStructureReader } from "./legacy-structure.ts";
+import { serializeProjection } from "../../src/proj/reference.ts";
 
 type WireFactory = { kind: string; make: () => unknown };
 
@@ -38,6 +39,7 @@ function values(): WireFactory[] {
     { kind: "valid-observed", make: () => [{ client: 200, clock: 0, len: 1 }] },
     { kind: "sparse-observed", make: () => { const result = new Array<unknown>(2); result[1] = { client: 200, clock: 0, len: 1 }; return result; } },
     { kind: "valid-reply", make: () => ({ commentId: "C1", author: "Alice", createdAt: 0, text: "reply" }) }
+    , { kind: "repeated-head", make: () => ({ b: "R1" }) }, { kind: "missing-metadata-head", make: () => ({ b: "missing" }) }
   ];
 }
 
@@ -49,6 +51,7 @@ const fields = [
   ["gallery", "rank"], ["gallery", "links"], ["gallery", "picture"], ["gallery", "extra"],
   ["beats", "status"], ["beats", "splitBy"], ["beats", "joins"], ["beats", "removals"], ["beats", "stamp"],
   ["meta", "capture"], ["meta", "keys"], ["meta", "title"], ["join-record", "into"], ["join-record", "glue"]
+  , ["segments", "head"], ["segments", "text"], ["order", "items"]
 ] as const;
 
 function readAll(replica: SchemaReplica, observing: IndexedStructureProjection): unknown {
@@ -80,10 +83,15 @@ for (const candidate of ["A", "B"] as const) for (const seed of [1376, 1413, 0x5
       for (const [key, value] of Object.entries({ id: "R1", status: "todo", keys: ["id", "audioText", "visualText", "status"], extra: "{}", stamp: {} })) beat.set(key, value);
       beat.set("joins", new Y.Map()); beat.set("removals", new Y.Map());
     };
+    const resetSegment = (): void => {
+      const record = new Y.Map<unknown>(); source.doc.getMap("segments").set("seg-b-R2", record);
+      record.set("head", { b: "R2" }); const text = new Y.Text(); record.set("text", text); text.insert(0, "b");
+    };
     const check = (label: string): void => {
       const before = readAll(source, observer), encoded = Y.encodeStateAsUpdate(source.doc), late = createProjectionReplica(candidate, 201);
       assert.equal(projectionDifference(cached.document, toDocument(source.doc, candidate), `${label}: persistent incremental projection`), null);
       assert.equal(projectionDifference(cached.index.spans.map(span => span.block), (before as { blocks: unknown }).blocks, `${label}: persistent block index`), null);
+      assert.equal(serializeProjection(cached.document), serializeProjection(toDocument(source.doc, candidate)), `${label}: serialized cache`);
       try {
         Y.applyUpdate(late.doc, encoded);
         const index = new IndexedStructureProjection(late);
@@ -92,13 +100,23 @@ for (const candidate of ["A", "B"] as const) for (const seed of [1376, 1413, 0x5
       } finally { late.destroy(); }
     };
     try {
-      const exhaustive = fields.length * pool.length;
+      const targets = candidate === "A" ? fields.filter(([root]) => root !== "segments" && root !== "order") : fields;
+      const exhaustive = targets.length * pool.length;
       for (let step = 0; step < exhaustive + 96; step++) {
         random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
-        const entry = fields[step < exhaustive ? Math.floor(step / pool.length) : (random >>> 8) % fields.length];
+        const entry = targets[step < exhaustive ? Math.floor(step / pool.length) : (random >>> 8) % targets.length];
         const factory = pool[step < exhaustive ? step % pool.length : (random >>> 16) % pool.length]; assert.ok(entry && factory);
         const [root, field] = entry;
-        const id = root === "beats" ? "R1" : root === "meta" ? undefined : "probe";
+        if (root === "order") {
+          const order = source.doc.getArray<unknown>("order"), original = order.toArray(); order.delete(0, order.length);
+          const raw = factory.make();
+          try { order.push(Array.isArray(raw) ? raw : [raw]); } catch (error) {
+            if (!["undefined", "null", "array", "sparse", "bigint", "null-prototype", "uint16", "array-buffer", "symbol", "function"].includes(factory.kind)) throw error;
+            refused[factory.kind] = (refused[factory.kind] ?? 0) + 1;
+          }
+          check(`seed ${seed}, order, ${factory.kind}, written`); order.delete(0, order.length); check(`seed ${seed}, order, ${factory.kind}, deleted`); order.push(original); continue;
+        }
+        const id = root === "beats" ? "R1" : root === "segments" ? "seg-b-R2" : root === "meta" ? undefined : "probe";
         const map = root === "join-record" ? source.doc.getMap<Y.Map<unknown>>("beats").get("R1")?.get("joins") as Y.Map<unknown> : source.doc.getMap(root);
         const old = id === undefined ? map.get(field) : map.get(id);
         const record = id === undefined ? map : new Y.Map<unknown>();
@@ -115,6 +133,7 @@ for (const candidate of ["A", "B"] as const) for (const seed of [1376, 1413, 0x5
           if (root === "comments") for (const [key, value] of Object.entries({ author: "Alice", createdAt: 0, rowId: "R1", field: "audioText" })) record.set(key, value);
           if (root === "gallery") { record.set("beat", "R1"); record.set("rank", "0"); record.set("picture", {}); record.set("links", new Y.Map()); }
           if (root === "join-record") { record.set("into", "R2"); record.set("glue", " "); }
+          if (root === "segments") { record.set("head", { b: "R2" }); const text = new Y.Text(); record.set("text", text); text.insert(0, "b"); }
         }
         const label = `seed ${seed}, ${root}.${field}, ${factory.kind}, step ${step}`;
         try { record.set(field, factory.make()); } catch (error) {
@@ -127,6 +146,7 @@ for (const candidate of ["A", "B"] as const) for (const seed of [1376, 1413, 0x5
         else if (root === "meta" && field === "title") map.set(field, new Y.Text());
         else if (old !== undefined) map.set(field, old);
         if (root === "beats") resetBeat();
+        if (root === "segments") resetSegment();
         if (root === "removalRecords") (source.doc.getMap<Y.Map<unknown>>("beats").get("R1")?.get("removals") as Y.Map<unknown>).delete("probe");
       }
       assert.ok(checkpoints >= 1000); assert.deepEqual(reported, []); t.diagnostic(JSON.stringify({ seed, candidate, checkpoints, refused }));
@@ -294,4 +314,32 @@ for (const candidate of ["A", "B"] as const) test(`${candidate}: every identity 
     } finally { cached.destroy(); observer.destroy(); source.destroy(); }
   }
   t.diagnostic(JSON.stringify({ candidate, identityMapCheckpoints: checkpoints }));
+});
+
+for (const candidate of ["A", "B"] as const) test(`${candidate}: later fields from a second writer have stable projected order for the covered record kinds`, t => {
+  let checkpoints = 0;
+  for (const root of identityMaps) {
+    if (candidate === "A" && root === "segments") continue;
+    const source = fromDocument({ title: "", rows: [{ id: "R1", audioText: "a", visualText: "", status: "todo" }, { id: "R2", audioText: "b", visualText: "", status: "todo" }] }, candidate, 200);
+    const remote = createProjectionReplica(candidate, 201), cached = new IncrementalProjection(source), observer = new IndexedStructureProjection(source);
+    try {
+      putIdentity(source, root, "probe"); Y.applyUpdate(remote.doc, Y.encodeStateAsUpdate(source.doc));
+      const collection = identityCollection(remote, root), key = "probe";
+      const raw = collection.get(key);
+      if (raw instanceof Y.Map) { raw.set("updatedAt", 1); raw.set("zFuture", { z: 1, a: 2 }); raw.set("aFuture", 1); }
+      else {
+        const record = raw && typeof raw === "object" ? Object.fromEntries(Object.entries(raw)) : { flag: raw };
+        record.updatedAt = 1; record.zFuture = { z: 1, a: 2 }; record.aFuture = 1; collection.set(key, record);
+      }
+      Y.applyUpdate(source.doc, Y.encodeStateAsUpdate(remote.doc), "delivery");
+      const before = readAll(source, observer), late = createProjectionReplica(candidate, 202);
+      try {
+        Y.applyUpdate(late.doc, Y.encodeStateAsUpdate(source.doc)); const other = new IndexedStructureProjection(late);
+        try { assert.equal(projectionDifference(readAll(late, other), before, `${candidate}/${root}/later fields`), null); } finally { other.destroy(); }
+        assert.equal(projectionDifference(cached.document, toDocument(source.doc, candidate), `${candidate}/${root}/later cache`), null);
+        checkpoints++;
+      } finally { late.destroy(); }
+    } finally { observer.destroy(); cached.destroy(); source.destroy(); remote.destroy(); }
+  }
+  t.diagnostic(JSON.stringify({ candidate, laterFieldCheckpoints: checkpoints }));
 });

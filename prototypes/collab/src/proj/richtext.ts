@@ -170,6 +170,6 @@ export function readDelta(text: Y.Text): ProjectionDelta[] {
   const delta = text.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[];
   return compactDelta(delta.flatMap((item): ProjectionDelta[] => {
     const insert = typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert);
-    return insert === null ? [] : [{ insert, attributes: { ...readMarkRecord(item.attributes) } }];
+    return insert === null ? [] : [{ insert, attributes: readMarkRecord(item.attributes) }];
   }));
 }

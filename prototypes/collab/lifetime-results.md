@@ -4,7 +4,7 @@
 
 This follow-up studies the selected stable-segment candidate B. It does not select a schema, design compaction or establish a production lifetime. One modeled canonical draft plus its stated revision is the small lifetime control; larger horizons append the same canonical structure as the existing SCALE fixture does. Two/six writers alternate whole beats with causal delivery between turns, not simultaneous conflicting keystrokes. The M1 queue and app binding are not instantiated here.
 
-Source SHA-256: 057de85c231c18aaf65986f87fa79539213d964d5e38fc0788d9c11c06a5c7c8; dependency SHA-256: 8128b0562dce4ee6ffa13461e27d13dc8e7994b5411a1b2efa5c1da3eb78abf2; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
+Source SHA-256: b76dba11111183f7919eebc35c3aeef517b93aeddbaa4cb4c9e5e1361f0cd0e6; dependency SHA-256: 22cf6e1e7f1a69e00a5ce7edbff43bfca4f170bea933dc20e7a6b0de67413e5a; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
 
 ## Stated writing scenario
 

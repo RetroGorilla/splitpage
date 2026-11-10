@@ -4,6 +4,7 @@ import { createEncoder, toUint8Array, writeAny } from "lib0/encoding";
 import { createDecoder, readAny } from "lib0/decoding";
 import type { CollabMarks } from "../model.ts";
 import { compareCodeUnits } from "./order.ts";
+import { canonicalUnknown, commentOutputFields, literalRecord, rememberTreeOrder, replyOutputFields } from "./output.ts";
 
 export function rootMap(doc: Y.Doc, name: string): Y.Map<unknown> | null {
   try { return doc.getMap(name); } catch { return null; }
@@ -30,17 +31,18 @@ export function readWireValue(raw: unknown): unknown {
     const encoded = createEncoder(); writeAny(encoded, source as Parameters<typeof writeAny>[1]);
     const decoded: unknown = readAny(createDecoder(toUint8Array(encoded))), pending = [decoded];
     while (pending.length) {
-      const value = pending.pop(); if (value instanceof Uint8Array) return undefined;
+      const value = pending.pop(); if (value instanceof Uint8Array || typeof value === "bigint") return undefined;
       if (value && typeof value === "object") for (const nested of Object.values(value as Record<string, unknown>)) pending.push(nested);
     }
-    return decoded;
+    if (!(raw instanceof Y.AbstractType)) rememberTreeOrder(decoded);
+    return canonicalUnknown(decoded);
   } catch { return undefined; }
 }
 
 export function readWireRecord(raw: unknown): Record<string, unknown> | null {
   const decoded = readWireValue(raw);
   return decoded && typeof decoded === "object" && !Array.isArray(decoded) && !(decoded instanceof Uint8Array)
-    ? Object.fromEntries(Object.entries(decoded)) : null;
+    ? decoded as Record<string, unknown> : null;
 }
 
 export function readRankedRecord(raw: unknown): { source: Y.Map<unknown>; rank: string } | null {
@@ -75,7 +77,7 @@ export function readCommentRecord(raw: unknown): Record<string, unknown> | null 
   const data = readWireRecord(raw);
   if (!data) return null;
   for (const key of ["author", "rowId", "field"]) if (data[key] != null && typeof data[key] !== "string") return null;
-  return data;
+  return literalRecord(data, commentOutputFields);
 }
 
 export function readVisualRecord(raw: unknown): { beat: string; rank: string; text: Y.Text } | null {
@@ -91,7 +93,7 @@ export function readReplyRecord(raw: unknown): { data: Record<string, unknown>; 
   const value = data.createdAt;
   if (value !== undefined && value !== null && !["number", "string", "boolean"].includes(typeof value)) return null;
   const number = typeof value === "string" && /^\d{4}-\d{2}-\d{2}T.*Z$/.test(value) ? Date.parse(value) : value === undefined ? 0 : Number(value);
-  return { data, commentId: data.commentId, createdAt: Number.isFinite(number) ? number : 0 };
+  return { data: literalRecord(data, replyOutputFields), commentId: data.commentId, createdAt: Number.isFinite(number) ? number : 0 };
 }
 
 export function readBoundaryRecord(raw: unknown): { id: string; kind?: "heading" } | null {
@@ -104,12 +106,16 @@ export function readBoundaryRecord(raw: unknown): { id: string; kind?: "heading"
 export function readMarkRecord(raw: unknown): CollabMarks {
   const value = readWireRecord(raw);
   if (!value) return {};
-  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string | boolean] => typeof entry[1] === "string" || typeof entry[1] === "boolean"));
+  const marks: CollabMarks = {};
+  for (const key of Object.keys(value).sort(compareCodeUnits)) {
+    const field = value[key]; if (typeof field === "string" || typeof field === "boolean") Object.defineProperty(marks, key, { value: field, enumerable: true, configurable: true, writable: true });
+  }
+  return marks;
 }
 
 export function readContentAtom(raw: unknown): Record<string, string> | null {
   const value = readWireRecord(raw); if (!value) return null;
-  if (typeof value.k === "string") return { k: value.k, ...(typeof value.label === "string" ? { label: value.label } : {}) };
+  if (typeof value.k === "string") { const atom: Record<string, string> = { k: value.k }; if (typeof value.label === "string") atom.label = value.label; return atom; }
   if (typeof value.w === "string") return { w: value.w };
   const boundary = readBoundaryRecord(value);
   return boundary ? { [boundary.kind ? "h" : "b"]: boundary.id } : null;
@@ -157,13 +163,17 @@ export function readGalleryRecord(id: string, raw: unknown): { id: string; beat:
   const value = readWireRecord(raw);
   if (!value || typeof value.beat !== "string" || typeof value.rank !== "string" || typeof value.ref !== "string") return null;
   if (value.name !== undefined && typeof value.name !== "string" || value.annotation !== undefined && typeof value.annotation !== "string" || !Array.isArray(value.links)) return null;
-  const links: { href: string; poster?: string }[] = [];
+  const links: { href: string; poster?: string }[] = [], forwardLinks: Record<string, unknown>[] = [];
   for (let index = 0; index < value.links.length; index++) {
     const link = readWireRecord(value.links[index]);
     if (!link || typeof link.href !== "string" || link.poster !== undefined && typeof link.poster !== "string") return null;
-    links.push({ href: link.href, ...(typeof link.poster === "string" ? { poster: link.poster } : {}) });
+    if (typeof link.poster === "string") links.push({ href: link.href, poster: link.poster });
+    else links.push({ href: link.href });
+    forwardLinks.push(literalRecord(link, ["href", "poster"]));
   }
-  return { id, beat: value.beat, rank: value.rank, ref: value.ref, name: value.name ?? "", annotation: value.annotation ?? "", links, data: value };
+  value.links = forwardLinks;
+  return { id, beat: value.beat, rank: value.rank, ref: value.ref, name: value.name ?? "", annotation: value.annotation ?? "", links,
+    data: literalRecord(value, ["id", "beat", "rank", "ref", "name", "annotation", "links"]) };
 }
 
 export function readCaretRecord(raw: unknown): { position: Y.RelativePosition; selectionEnd?: Y.RelativePosition } | null {
@@ -180,7 +190,7 @@ export function readCaretRecord(raw: unknown): { position: Y.RelativePosition; s
     return new Y.RelativePosition(identifier(data.type), typeof data.tname === "string" ? data.tname : null, identifier(data.item), data.assoc);
   };
   const start = position(value?.position), end = position(value?.selectionEnd);
-  return start ? { position: start, ...(end ? { selectionEnd: end } : {}) } : null;
+  return start ? end ? { position: start, selectionEnd: end } : { position: start } : null;
 }
 
 export function firstLiveJoin(beat: ReaderBeatRecord, retired: { has: (id: string) => boolean }): ReaderJoinRecord | null {

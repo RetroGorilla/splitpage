@@ -35,4 +35,3 @@ export function removalObserved(removals: readonly RemovalViewRecord[], identity
   return identity !== null && removals.some(removal => removal.observed.some(range =>
     range.client === identity.client && identity.clock >= range.clock && identity.clock < range.clock + range.len));
 }
-

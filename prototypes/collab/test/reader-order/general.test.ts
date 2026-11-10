@@ -143,6 +143,7 @@ for (const [label, first, second] of [
   ["array hole", [undefined], new Array(1)],
   ["array property", [], Object.assign([], { absent: undefined })],
   ["non-index numeric array property", [], Object.assign([], { "4294967295": undefined })],
+  ["array index accessor", [1], Object.defineProperty([0], "0", { get: () => 1, enumerable: true, configurable: true })],
   ["object key order", { a: 1, b: 2 }, { b: 2, a: 1 }],
   ["unsupported kind", {}, new Date(0)]
 ] as const) test(`strict complete-output check rejects ${label} through check and checkKnown`, () => {
