@@ -1,0 +1,339 @@
+export const builderOperationCoverage = [
+  ["beatStatusCommand", "field-record", "status"],
+  ["setBeatFilmedCommand", "field-record", "status"],
+  ["beatLengthCommand", "field-record", "scalar"],
+  ["addCommentCommand", "field-record", "record-create"],
+  ["addReplyCommand", "field-record", "record-create,record-set"],
+  ["setCommentAssigneeCommand", "field-record", "record-set"],
+  ["toggleResolveCommand", "field-record", "record-set"],
+  ["galleryCommand", "field-record", "record-create,record-set,record-delete"],
+  ["registerTagCommand", "field-record", "record-create"],
+  ["addPersonCommand", "field-record", "record-create"],
+  ["deletePersonCommand", "field-record", "record-delete,record-set"],
+  ["updateTagsCommand", "field-record", "record-create,record-set,status"],
+  ["gearQuickAddCommand", "field-record", "record-create,record-delete"],
+  ["addShotCommand", "field-record", "record-create"],
+  ["setShotsCommand", "field-record", "record-create,record-set,status"],
+  ["deleteShotCommand", "field-record", "record-delete"],
+  ["addShotPropCommand", "field-record", "record-create,record-set"],
+  ["removeShotPropCommand", "field-record", "record-set"],
+  ["targetLengthCommand", "field-record", "scalar"],
+  ["wordsPerMinuteCommand", "field-record", "scalar"],
+  ["editStamp", "field-record", "scalar"],
+  ["documentIdStamp", "field-record", "scalar"],
+  ["initializeFlowParagraphs", "field-record", "scalar"],
+  ["titleCommand", "field-record", "whole-field today, needs package 9"],
+  ["fileTitleCommand", "field-record", "text-insert,text-delete,scalar"],
+  ["renameSceneCommand", "field-record", "whole-field today, needs package 9"],
+  ["cellTextCommand", "text-mark", "record-create | whole-field today, needs package 9", [
+    ["whole-field native runs / comment-anchor-only capability exception", ["whole-field today, needs package 9"]],
+    ["new tag/shot records", ["record-create"]],
+    ["missing row/unchanged/capability refusal", []]
+  ]],
+  ["pasteCommand", "text-mark", "text-insert,text-delete,record-create,record-set", [
+    ["text/runs appended with insertion attributes, visual cue/direction flattening", ["text-insert"]],
+    ["replace selected observed content", ["text-delete", "text-insert"]],
+    ["fresh b-roll records / new gallery picture, video or file", ["record-create"]],
+    ["fill an existing gallery slot or update its links", ["record-set"]],
+    ["cut comment anchors already carried by inserted runs", []],
+    ["missing row/no-op", []]
+  ]],
+  ["cutCommand", "text-mark", "text-delete", [
+    ["clamped observed range", ["text-delete"]],
+    ["surviving mark normalization is a projection rule", []],
+    ["empty range/missing row/no-op", []]
+  ]],
+  ["rewriteCellsCommand", "text-mark", "text-insert,text-delete,mark", [
+    ["planner replaces cell text", ["text-insert", "text-delete"]],
+    ["planner changes marks on observed content", ["mark"]],
+    ["stamped/unstamped and capability options do not add text intent", []],
+    ["unchanged/missing-row filtering", []]
+  ]],
+  ["tagCellsCommand", "text-mark", "text-insert,text-delete,mark,record-create", [
+    ["planner replaces cell text", ["text-insert", "text-delete"]],
+    ["planner changes observed tags/marks, including null-tag unlabel", ["mark"]],
+    ["register alongside rewrites or register alone", ["record-create"]],
+    ["no-op trial", []]
+  ]],
+  ["retagCommand", "text-mark", "text-insert,text-delete,mark,record-set,record-delete,status", [
+    ["planner replaces cell text", ["text-insert", "text-delete"]],
+    ["planner renames marks or null name unlabels them", ["mark"]],
+    ["rename registry fields / merge owner and notes / repoint shot props", ["record-set"]],
+    ["collision removes the old registry record", ["record-delete"]],
+    ["collision raises the surviving tag status", ["status"]],
+    ["no-op trial", []]
+  ]],
+  ["deleteTagsCommand", "text-mark", "text-insert,text-delete,mark,record-delete", [
+    ["planner replaces cell text", ["text-insert", "text-delete"]],
+    ["planner unlabels observed content", ["mark"]],
+    ["registry removal with or without rewrites", ["record-delete"]],
+    ["missing tags/no-op trial", []]
+  ]],
+  ["deleteCommentCommand", "text-mark", "text-insert,text-delete,mark,record-delete", [
+    ["planner replaces cell text", ["text-insert", "text-delete"]],
+    ["planner unwraps observed comment marks", ["mark"]],
+    ["comment/reply record deletion", ["record-delete"]],
+    ["missing comment/no rewrites", []]
+  ]],
+  ["unwrapCommentAnchorCommand", "text-mark", "text-insert,text-delete,mark", [
+    ["planner replaces cell text", ["text-insert", "text-delete"]],
+    ["planner unwraps observed comment marks", ["mark"]],
+    ["record retained / unstamped capability exception / no rewrites", []]
+  ]],
+  ["restoreConflictCommand", "text-mark", "text-insert,text-delete,mark,scalar,record-create,record-set,record-delete", [
+    ["title or cell text replacement", ["text-insert", "text-delete"]],
+    ["cell value restores different marks on observed words", ["mark"]],
+    ["image replacement creates or changes a gallery record", ["record-create", "record-set"]],
+    ["image replacement clears the legacy visualImage field", ["scalar"]],
+    ["conflict comment deletion", ["record-delete"]],
+    ["missing comment/row", []]
+  ]],
+  ["addBeatCommand", "structure", "segment-create", [
+    ["append or insert after existing beat, with initial defaults", ["segment-create"]],
+    ["missing predecessor", []]
+  ]],
+  ["deleteBeatCommand", "structure", "remove,scalar", [
+    ["observed beat removal", ["remove"]],
+    ["surviving paragraph flags", ["scalar"]],
+    ["scene first-beat derivation / empty-scene recovery / missing beat", []]
+  ]],
+  ["moveBeatCommand", "structure", "segment-move,scalar | partial-segment-move", [
+    ["before versus after", ["segment-move"]],
+    ["destination membership and source paragraph repair", ["scalar"]],
+    ["source occupies part of segment", ["partial-segment-move"]],
+    ["unchanged order with changed scene", ["scalar"]],
+    ["missing/self/no-op", []]
+  ]],
+  ["swapBeatsCommand", "structure", "segment-move,scalar | partial-segment-move", [
+    ["previous/next delegates whole-beat movement", ["segment-move"]],
+    ["delegated paragraph repair", ["scalar"]],
+    ["source occupies part of segment", ["partial-segment-move"]],
+    ["edge/missing beat", []]
+  ]],
+  ["splitBeatCommand", "structure", "text-delete,split,segment-create,record-create", [
+    ["narration split", ["split"]],
+    ["visual component split with a new empty narration segment", ["split", "segment-create", "record-create"]],
+    ["delete selected observed span before splitting", ["text-delete"]],
+    ["initial beat defaults belong to creation / unsupported field/missing row", []]
+  ]],
+  ["joinBeatsCommand", "structure", "join", [
+    ["join narration with glue and retained visual/gallery origins", ["join"]],
+    ["status rank derives from the join group", []],
+    ["missing next/header/gallery-limit guards", []]
+  ]],
+  ["pasteBeatsCommand", "structure", "segment-create,text-insert,text-delete,remove,restore,segment-move,heading-create,record-create,record-set,scalar | partial-segment-move,cross-scene-structural-paste", [
+    ["append/insert copied beats, including prefix/trailing blanks", ["segment-create", "text-insert"]],
+    ["replace blank beat", ["remove"]],
+    ["carries scene header", ["heading-create", "text-insert"]],
+    ["repair surviving paragraph flags and existing header anchors", ["scalar"]],
+    ["adopt a title", ["text-delete", "text-insert"]],
+    ["copy comments, replies, registries and media", ["record-create"]],
+    ["restore cut ids and place their segments", ["restore", "segment-move"]],
+    ["restore an existing cut comment's fallback row", ["record-set"]],
+    ["partial-source/cross-scene structural cut-paste", ["partial-segment-move", "cross-scene-structural-paste"]],
+    ["null/empty plan or incomplete apply", []]
+  ]],
+  ["removeBeatsCommand", "structure", "remove,scalar | cross-scene-structural-paste", [
+    ["observed distinct existing beats", ["remove"]],
+    ["surviving paragraph repair", ["scalar"]],
+    ["cross-scene structural cut", ["cross-scene-structural-paste"]],
+    ["scene-anchor derivation / empty-scene recovery / missing/duplicate/no-op ids", []]
+  ]],
+  ["addSceneCommand", "structure", "heading-create,text-insert", [
+    ["new header with first-beat membership carried by creation", ["heading-create"]],
+    ["initial heading name", ["text-insert"]],
+    ["empty/overlong name and invalid/duplicate id guards", []]
+  ]],
+  ["removeSceneCommand", "structure", "heading-remove,scalar", [
+    ["discard observed header without demotion", ["heading-remove"]],
+    ["first beat paragraph flag", ["scalar"]],
+    ["missing header", []]
+  ]],
+  ["moveSceneCommand", "structure", "segment-move | partial-segment-move", [
+    ["before/after whole scene, moving its header with beat segments", ["segment-move"]],
+    ["scene cuts through a segment", ["partial-segment-move"]],
+    ["derived scene order / missing/self/unchanged guards", []]
+  ]],
+  ["importRowsCommand", "structure", "segment-create,text-insert,remove,heading-remove,record-create", [
+    ["append imported narration with initial defaults", ["segment-create", "text-insert"]],
+    ["import nonempty visual/gallery components", ["record-create", "text-insert"]],
+    ["replace all observed rows", ["remove"]],
+    ["replace clears scene headers", ["heading-remove"]],
+    ["initial fields omit paragraph flags; scanner anchors new b-roll atoms before insertion", []],
+    ["empty import", []]
+  ]],
+  ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | partial-segment-move,cross-scene-structural-paste", [
+    ["typing and arbitrary range-replacement outcomes", ["text-insert", "text-delete", "segment-create", "remove", "heading-remove"]],
+    ["observed mark and inline-markdown outcomes", ["mark"]],
+    ["ordinary and prefix-isolation split outcomes", ["split", "split-before"]],
+    ["joinWithPrevious outcomes", ["join"]],
+    ["structural clipboard restore/move/header and record outcomes", ["restore", "segment-move", "heading-create", "record-create", "record-set"]],
+    ["heading finalization outcomes", ["heading-finalize"]],
+    ["paragraph/retained-record field edits", ["scalar"]],
+    ["partial-source/cross-scene structural clipboard guards", ["partial-segment-move", "cross-scene-structural-paste"]],
+    ["removed comment words stay in recovery / optional selection / null/caret-only/refused/no-change", []]
+  ]]
+] as const;
+
+export const flowOperationCoverage = [
+  ["typeWithMarks", "known", "text-insert", [
+    ["insert text with explicit attributes", ["text-insert"]],
+    ["zero-width-space stripping / non-beat/missing row", []]
+  ]],
+  ["replaceRange", "known", "text-insert,text-delete,segment-create,remove,heading-remove,scalar", [
+    ["partial beat or heading edits", ["text-insert", "text-delete"]],
+    ["whole observed beats", ["remove"]],
+    ["removeWholeStart creates a fresh replacement id", ["segment-create", "text-insert"]],
+    ["heading becomes empty", ["heading-remove"]],
+    ["surviving paragraph flags", ["scalar"]],
+    ["orphan heading or empty script needs a blank beat", ["segment-create"]],
+    ["empty endpoint excluded / heading length guard / derived scene anchors", []]
+  ]],
+  ["setMarkAcross", "known", "mark", [
+    ["set mixed or clear all-on observed per-beat ranges", ["mark"]],
+    ["empty/heading-only range", []]
+  ]],
+  ["enterAt", "known", "text-delete,segment-create,remove,split,heading-remove,scalar", [
+    ["selection clears observed characters", ["text-delete"]],
+    ["selection drops whole beats or headings", ["remove", "heading-remove"]],
+    ["clearing repairs an orphan/empty script or caret inserts a blank", ["segment-create"]],
+    ["caret in the middle of a beat", ["split"]],
+    ["paragraph flag changes", ["scalar"]],
+    ["second Enter removes an empty separator", ["remove"]],
+    ["non-beat/missing/no-op", []]
+  ]],
+  ["startParagraph", "known", "split,segment-create,scalar", [
+    ["end flags an existing successor; start flags current beat", ["scalar"]],
+    ["new blank before or after", ["segment-create"]],
+    ["middle split", ["split"]],
+    ["derived scene anchor / empty/non-beat/missing guards", []]
+  ]],
+  ["lineBreakAt", "known", "text-insert,text-delete,segment-create,remove,heading-remove,scalar", [
+    ["collapsed inserts a line break with insertion attributes", ["text-insert"]],
+    ["selection replaces observed characters", ["text-delete", "text-insert"]],
+    ["selection drops whole beats/headings", ["remove", "heading-remove"]],
+    ["selection repairs an orphan heading/empty script", ["segment-create"]],
+    ["selection changes surviving paragraph flags", ["scalar"]],
+    ["non-beat/missing row", []]
+  ]],
+  ["backspaceAt", "known", "text-delete,join,heading-remove,remove,scalar", [
+    ["heading start demotes its name or drops an empty header", ["heading-remove"]],
+    ["blank current/previous beat removal", ["remove"]],
+    ["paragraph flag clear or repair after removal", ["scalar"]],
+    ["tick join option", ["join"]],
+    ["tick delete option removes previous last character", ["text-delete"]],
+    ["scene boundary / previous visual / offset/first/missing guards", []]
+  ]],
+  ["deleteForwardAt", "known", "text-delete,remove,scalar", [
+    ["blank current/next beat removal", ["remove"]],
+    ["next paragraph flag clear or repair after removal", ["scalar"]],
+    ["delete next first character", ["text-delete"]],
+    ["heading/scene/visual-only successor caret-only; not at end/last/missing guards", []]
+  ]],
+  ["joinWithPrevious", "known", "join", [
+    ["join narration/glue and retain visual/gallery origins", ["join"]],
+    ["derived gallery folding/status rank; first/missing/header/gallery-limit guards", []]
+  ]],
+  ["renameHeading", "lost", "whole-field today, needs package 9", [
+    ["whole native heading name", ["whole-field today, needs package 9"]],
+    ["empty/length guards or selection only", []]
+  ]],
+  ["enterInHeading", "known", "split,segment-create,scalar", [
+    ["offset zero creates a blank before", ["segment-create"]],
+    ["middle heading tail becomes a beat", ["split"]],
+    ["existing first beat gains a paragraph flag", ["scalar"]],
+    ["derived first-beat anchor / end caret-only / non-heading/missing scene", []]
+  ]],
+  ["finalizeHeading", "known", "text-delete,heading-finalize,remove,segment-create,scalar", [
+    ["empty/tagged/commented/run-on/overlong name removes marker only", ["text-delete"]],
+    ["convert name and retain narration tail or visual", ["heading-finalize"]],
+    ["name-only source beat is softly removed", ["remove"]],
+    ["no reusable follower or existing header needs a separate blank anchor", ["segment-create"]],
+    ["existing retained beat/follower paragraph flag changes", ["scalar"]],
+    ["missing/not-pending guard", []]
+  ]],
+  ["inlineMarkdown", "surface", "text-delete,mark", [
+    ["delete observed bold/strike/italic delimiters", ["text-delete"]],
+    ["format the observed words between them", ["mark"]],
+    ["protected tags/atoms, line boundaries, invalid markers, live-cell recheck and pending mark", []]
+  ]],
+  ["removeEmptyHeading", "known", "heading-remove,scalar", [
+    ["delete the full heading range", ["heading-remove"]],
+    ["protect the first surviving paragraph", ["scalar"]],
+    ["above/below/kept selection or missing heading", []]
+  ]],
+  ["pasteText", "known", "text-insert,text-delete,segment-create,split,remove,heading-remove,scalar", [
+    ["first paragraph replaces arbitrary selected characters", ["text-insert", "text-delete"]],
+    ["selection drops whole beats/headings", ["remove", "heading-remove"]],
+    ["selection repairs orphan/empty script; later heading paragraph inserts a blank", ["segment-create"]],
+    ["later beat paragraphs split, including at edges", ["split"]],
+    ["surviving paragraph flags", ["scalar"]],
+    ["empty paragraph or existing refusal", []]
+  ]],
+  ["pasteFlowRange", "known", "text-insert,text-delete,segment-create,split,remove,restore,segment-move,heading-create,heading-remove,record-create,record-set,scalar | partial-segment-move,cross-scene-structural-paste", [
+    ["plain text fallback / replace selected characters", ["text-insert", "text-delete"]],
+    ["selected whole beats/headings or generated placeholder removed", ["remove", "heading-remove"]],
+    ["copied rows or header-only/trailing/colliding-anchor blanks", ["segment-create", "text-insert"]],
+    ["insert into the middle of a beat or heading", ["split"]],
+    ["carried headers", ["heading-create", "text-insert"]],
+    ["copy registries, comments and media", ["record-create"]],
+    ["restore cut ids and move their segments", ["restore", "segment-move"]],
+    ["existing cut comment fallback row repair", ["record-set"]],
+    ["surviving paragraph flags and existing header anchor repair", ["scalar"]],
+    ["partial-source/cross-scene structural cut-paste", ["partial-segment-move", "cross-scene-structural-paste"]]
+  ]],
+  ["replaceFlowMatches", "known", "text-insert,text-delete,heading-remove,scalar", [
+    ["replace visual or single/multiple-beat search matches, keeping rows", ["text-insert", "text-delete"]],
+    ["replace a search match inside one heading with an empty name", ["heading-remove"]],
+    ["empty heading protects its first surviving paragraph", ["scalar"]],
+    ["reverse match order / missing visual/no matches/refusal", []]
+  ]],
+  ["setVisualForRange", "known", "split,split-before,scalar,record-create | whole-field today, needs package 9", [
+    ["suffix/interior isolation", ["split"]],
+    ["prefix isolation retains the original beat on the suffix", ["split-before"]],
+    ["isolation changes retained paragraph flags", ["scalar"]],
+    ["new visual component", ["record-create"]],
+    ["whole visual HTML on collapsed, whole-beat or isolated selection", ["whole-field today, needs package 9"]],
+    ["cross-beat/non-beat guards", []]
+  ]],
+  ["sentenceParagraphs", "known", "scalar", [
+    ["sentence-ending predecessor starts a paragraph", ["scalar"]],
+    ["already has flags / first beat / existing scene boundary", []]
+  ]],
+  ["selectionToOwnBeat", "known", "split,split-before,scalar", [
+    ["suffix or interior isolation", ["split"]],
+    ["prefix gets a fresh beat while original id/visual keep the suffix", ["split-before"]],
+    ["retained original suffix loses its paragraph flag", ["scalar"]],
+    ["whole beat unchanged / derived scene anchor / collapsed/cross-beat/non-beat/missing guards", []]
+  ]],
+  ["insertBeats", "known", "text-insert,segment-create,split,record-create,scalar", [
+    ["inserted fresh rows and their narration", ["segment-create", "text-insert"]],
+    ["inserted nonempty visual/gallery components", ["record-create", "text-insert"]],
+    ["middle of destination beat or heading", ["split"]],
+    ["retained row paragraph flags at insertion boundaries", ["scalar"]],
+    ["before/after/empty affinity and derived anchors; empty/duplicate/missing guards", []]
+  ]],
+  ["startBeat", "known-unused", "split,segment-create", [
+    ["middle split", ["split"]],
+    ["end creates a blank", ["segment-create"]],
+    ["start/empty/non-beat/missing guards", []]
+  ]],
+  ["moveBeats", "known-unused", "segment-move,split,scalar | partial-segment-move", [
+    ["move whole source segments before/after destination", ["segment-move"]],
+    ["middle of destination beat or heading", ["split"]],
+    ["retained source/follower/destination paragraph flags", ["scalar"]],
+    ["source occupies part of segment", ["partial-segment-move"]],
+    ["empty-beat affinity / derived anchors / missing/self/nonconsecutive guards", []]
+  ]],
+  ["replaceAll", "known-unused", "text-insert,text-delete,heading-remove,scalar", [
+    ["replace narration matches, keeping all rows including emptied ones", ["text-insert", "text-delete"]],
+    ["replace a match inside one heading with an empty name", ["heading-remove"]],
+    ["empty heading protects its first surviving paragraph", ["scalar"]],
+    ["reverse matches / no matches/refusal", []]
+  ]]
+] as const;
+
+export const sharedRefusalCoverage = [
+  { refusal: "partial-segment-move", source: "8-schema-hypotheses.md §1 Candidate B: Move part of a segment; structure-results.md MOVE concurrent" },
+  { refusal: "cross-scene-structural-paste", source: "8-schema-hypotheses.md §3 MOVE cut-paste; structure-results.md MOVE cut-paste" }
+] as const;
