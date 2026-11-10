@@ -50,6 +50,7 @@ let releaseUndo: (() => void) | null = null;
 let syncs: { id: string; text: string; composing: boolean }[] = [];
 let generationAtReset = 0;
 let breakSync = false;
+let phaseObserver: ((phase: string, ms: number) => void) | null = null;
 
 function appSnapshot(): unknown {
   const app = JSON.parse(JSON.stringify(bridge.model())) as { document: Record<string, unknown> & { rows: { id: string; audioText: string; updatedAt?: string; updatedBy?: string }[] } };
@@ -91,12 +92,15 @@ function paint(): void {
 function commit(source: string): void {
   const buffer = session().alice;
   if (!buffer.dirty) return;
+  const started = performance.now();
+  try {
   const edit = buffer.plan();
   if (buffer.composing) buffer.dispatch({ type: "compositionend", names: names(edit.insert.length) });
   else buffer.commit(names(edit.insert.length));
   commits.push(source);
   project();
   repaintOwed = true;
+  } finally { phaseObserver?.("commit-and-projection", performance.now() - started); }
 }
 function capture(event: Event): Record<string, unknown> {
   const input = event as InputEvent;
@@ -145,7 +149,7 @@ for (const type of ["keydown", "keyup", "beforeinput", "input", "compositionstar
       inputKind = (event as InputEvent).inputType;
       if (buffer.composing) buffer.dispatch({ type: "compositionupdate", data: (event as InputEvent).data ?? "" });
       else native();
-      if (buffer.nativeValue !== value()) throw new Error(`Buffer/DOM mismatch ${buffer.nativeValue} / ${value()}`);
+      if (buffer.dirty && buffer.nativeValue !== value()) throw new Error(`Buffer/DOM mismatch ${buffer.nativeValue} / ${value()}`);
     }
   }), true);
   host.addEventListener(type, event => guarded(() => {
@@ -164,7 +168,10 @@ function native(): void {
   const inserted = after.length - before.length + to - from;
   if (inserted < 0 || before.slice(0, from) + after.slice(from, from + inserted) + before.slice(to) !== after) throw new Error("App changed DOM outside observed native target");
   const data = after.slice(from, from + inserted);
-  session().alice.dispatch({ type: "beforeinput", from, to, data, selection, names: [] });
+  const buffer = session().alice;
+  const stale = buffer.nativeBaseChanged();
+  buffer.dispatch({ type: "beforeinput", from, to, data, selection, names: stale ? names(data.length) : [] });
+  if (stale && !buffer.dirty) { commits.push("input:stale-reentry"); project(); repaintOwed = true; }
   pending = null;
 }
 
@@ -285,3 +292,9 @@ const api = {
 };
 
 Object.assign(window, { appBinding: api });
+
+export function appBindingExperimentContext() {
+  return { session, bridge, writer, host, model, project, paint, commit, value, selected, names, api,
+    profile: (observer: typeof phaseObserver) => { phaseObserver = observer; },
+    state: () => ({ pending, targetId, errors, commits, syncs }) };
+}

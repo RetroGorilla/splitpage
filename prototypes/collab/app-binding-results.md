@@ -1,5 +1,7 @@
 # Real Writer binding experiment
 
+The [follow-up experiment](app-binding-2-results.md) found additional structural mapping, native re-entry and mark differences. The M2 recommendation below applies to this first matrix and is provisional in light of that evidence.
+
 **M1, M2 and M3 each pass the 24 prescribed real-app cases, including selective undo: 72/72. Recommend M2 for the narration binding.** The app does not force deferral: its existing composition repaint guard preserves the native DOM while M2's session projection advances. M1 and M3 also bind, but add an editor-update hold; M3 additionally owns a second document. This is a buffer recommendation for the tested narration seam, not a schema decision or a production integration endorsement.
 
 Every measurement in this report, the evidence and the histories uses throwaway app commit **[`f807ca39dcc5feb03f5746209cb806ee66dab3f8`](https://github.com/RetroGorilla/splitpage/commit/f807ca39dcc5feb03f5746209cb806ee66dab3f8)**, pushed on `proto/collab-1a-app-binding-throwaway`. Never merge that branch. Its base is `035b053d`; its app patch is seven files, 115 insertions and 16 deletions. This deliverable changes only `prototypes/collab/`. The app patch remains separate.
@@ -74,6 +76,7 @@ These are the throwaway commit's changes or deliberately retained paths. A hook 
 | File and function | Treatment | Evidence or remaining change |
 | --- | --- | --- |
 | `src/features/writer/flow-surface.ts`: `onBeforeInput`, `range0`, `onInput`, `syncBeatEl`, `syncComposition`, `syncSpots` | Retained, observed by capture listeners; no edits in this file | Real default input, target ranges, sentinel, decoding and composition sync. Prototype adds painted identity state beside the existing HTML cache |
+| `prototypes/collab/src/app-binding/page.ts`: capture `beforeinput` listener, `buffer.paintHeld` branch | Hooked and bypassed | Cancels a stale native input, dispatches identity-mapped intent through the prototype and repaints. The app's `flow-surface.onBeforeInput` then returns on `defaultPrevented`; T02 therefore bypasses that app handler as well as hooking `syncBeat` |
 | `src/features/writer/flow-writer.ts`: `FlowWriterPorts`, `syncBeat` | Hooked with optional override, two added lines | `sync hook removed` probe fails when source command bypasses the replica. Composition must commit here before driver finish |
 | `src/bootstrap/wiring/writer.ts`: `mountWriterRuntimeFeature` | Hooked | Switch-gated sync, selective undo and bridge exposing mapper, actual session, repaint, place and diagnostics |
 | Same wiring: `leaveBeat` | Bypassed while bound | Its independent `cells().sync` must not write whole DOM into the projection. `transitionBeat` still reaches the hooked `syncBeatEl` |
@@ -104,7 +107,7 @@ All observations below use app `f807ca39dcc5feb03f5746209cb806ee66dab3f8`.
 | Writer host blur | Moving focus to the actual writer-title input causes protocol compositionend before focusout. The surface commits x, drains B, leaves session/DOM `Zabxc`, no DOM selection, held caret 4 | No lost provisional x under any mechanism. Blur sync must route through the same hook; heading finalization/removal is outside this beat-only experiment |
 | Stamps and bypass writes | Normal command stamps/save stamps/identity stamps are blocked while bound; projection emits no source generation or undo entry. Direct reader writes and the three comment paths are refused | All mechanisms need this boundary. This experiment intentionally omits attribution/record/anchor derivation, rather than claiming such writes are shared-safe |
 
-The standalone owner's one-second typing groups, 200-entry limit, redo parking and save-hold semantics are not implemented by the prototype's Yjs UndoManager. Its default capture interval is 500 ms; no 200-entry bound is added; only prescribed undo is bound, not redo. These are recorded shared-mode gaps, not a proposal to change the product rules. Saving is disabled here, so the hold probe is an explicit adversarial control. No native operating-system input method was used.
+The standalone owner's typing-group rules, 200-entry limit, redo parking and save-hold semantics are not implemented by the prototype's Yjs UndoManager. `SchemaReplica.undoManager` explicitly sets a 1000 ms capture interval; the earlier report's 500 ms statement was incorrect. No 200-entry bound is added; only prescribed undo is bound, not redo. These are recorded shared-mode gaps, not a proposal to change the product rules. Saving is disabled here, so the hold probe is an explicit adversarial control. No native operating-system input method was used.
 
 Autocorrect, drag/drop input, protected atoms, surrogate pairs/graphemes, editable headings and the Split/Visual surfaces were not exercised. The text fixtures use plain/bold text and beta. The binding does not translate Find replacement, structural commands, clipboard commands or formatting into shared operations.
 
