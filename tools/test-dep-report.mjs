@@ -75,6 +75,16 @@ for (const source of ["core/document", "core/text", "core", "application", "adap
 }
 check("prototypes can import their own code", layerAllows("prototypes", "prototypes"));
 
+for (const source of ["src/adapters/collab/roots.ts", "src/adapters/collab/nested/probe.ts", "tests/adapters/collab/roots.test.ts", "src/core/probe.test.ts", "prototypes/collab/src/probe.ts"]) {
+  eq(`${source} can import Yjs`, findViolations(graph({ [source]: 'import * as Y from "yjs";\n' })), []);
+}
+for (const source of ["src/core/probe.ts", "src/application/probe.ts", "src/features/writer/probe.ts", "shared/probe.ts", "src/bootstrap/probe.ts", "src/adapters/files/probe.ts", "src/adapters/collab-other/probe.ts", "tools/probe.mjs", "server/probe.mjs", "desktop/probe.ts"]) {
+  for (const statement of ['import * as Y from "yjs";', 'import type { Doc } from "yjs";', 'export { Doc } from "yjs";', 'const y = import("yjs");', 'const y = require("yjs");', 'type Doc = import("yjs").Doc;', 'import "yjs/src/index.js";']) {
+    const violations = findViolations(graph({ [source]: statement }));
+    eq(`${source} rejects ${statement}`, violations.filter(({ rule }) => rule === "collab-import").map(({ target }) => target), ["package:yjs"]);
+  }
+}
+
 for (const source of ["src/bootstrap/probe.ts", "desktop/probe.ts", "server/probe.ts", "shared/probe.ts", "src/test/probe.test.mjs", "desktop/test/probe.test.mjs"]) {
   for (const target of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts"]) {
     const prefix = "../".repeat(source.split("/").length - 1);
