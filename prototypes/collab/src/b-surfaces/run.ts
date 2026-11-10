@@ -14,7 +14,7 @@ import { bindingFollowupCases } from "../app-binding-2/cases.ts";
 import type { BindingFollowupResult, BindingFollowupStage } from "../app-binding-2/run.ts";
 import type { AppBindingSnapshot } from "../app-binding/run.ts";
 import type { SliceSnapshot } from "../slice/run.ts";
-import { publicBEvidence } from "./public.ts";
+import { serializeBSurfaceEvidence } from "./public.ts";
 
 export type BMatrixSnapshot = (AppBindingSnapshot | SliceSnapshot) & { candidate: "B"; segments: string[] };
 export interface BMatrixCase {
@@ -142,6 +142,6 @@ try {
     return { surface, candidate: "B", appCommit: surface === "slice" ? null : appCommit, bundleSha256: createHash("sha256").update(script).digest("hex"), environment: { cpu: cpus()[0]?.model.trim() ?? "unknown", os: `${platform()} ${release()}`, node: process.version, memoryGiB: Math.round(totalmem() / 1024 ** 3), browser: String(version.product) }, off, traces, followup: results };
   });
   await mkdir(join(folder, "b-surfaces"), { recursive: true });
-  await writeFile(join(folder, "b-surfaces", `${surface}.json`), publicBEvidence(evidence) + "\n");
+  await writeFile(join(folder, "b-surfaces", `${surface}.json`), serializeBSurfaceEvidence(evidence));
   process.stdout.write(`${surface}: ${evidence.traces.length} matrix cases, ${evidence.followup.length} follow-up cases retained\n`);
 } finally { await rm(buildDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }

@@ -12,6 +12,7 @@ import { checkBindingFollowup } from "../../src/app-binding-2/checker.ts";
 import { publicBEvidence } from "../../src/b-surfaces/public.ts";
 import type { BSurfaceEvidence, BMatrixSnapshot } from "../../src/b-surfaces/run.ts";
 import type { observeBSchema } from "../../src/b-surfaces/schema-observation.ts";
+import { checkBSurfaceArtifacts } from "../../src/b-surfaces/report.ts";
 
 function present<T>(value: T | null | undefined): T { assert.ok(value !== null && value !== undefined); return value; }
 const evidence = ["writer", "slice", "split"].map(surface => JSON.parse(readFileSync(new URL(`../../b-surfaces/${surface}.json`, import.meta.url), "utf8")) as BSurfaceEvidence);
@@ -92,6 +93,20 @@ for (const result of writer.followup) test(`B follow-up ${result.name}/${result.
   assert.equal(result.status, deliberateReentry || result.name === "split-before" && result.mechanism === "M2" ? "FAIL" : "PASS");
   const schema = (last as typeof last & { schema: ReturnType<typeof observeBSchema> }).schema;
   assert.equal(schema.candidate, "B"); assert.equal(schema.hasFlow, false);
+  if (!result.name.startsWith("reentry-")) {
+    const native = present(result.stages[1]); const remote = present(result.stages[2]);
+    assert.equal(remote.composing, true); assert.equal(remote.dirty, true);
+    assert.deepEqual(remote.remoteDOM, [{ sameNodes: true }]);
+    const content = (row: typeof remote.dom[number]) => ({ id: row.id, text: row.text, html: row.html });
+    assert.deepEqual(remote.dom.map(content), native.dom.map(content));
+    assert.deepEqual(remote.paints, []);
+    if (result.mechanism === "M1") assert.deepEqual(remote.dom, native.dom);
+    assert.equal(last.commits.filter(name => name === "syncComposition:syncBeatEl").length, 1);
+  }
+  if (result.status === "PASS") {
+    assert.equal(last.queuePending, 0); assert.equal(last.heldBytes, 0); assert.equal(last.heldMessages, 0);
+    assert.equal(last.history.filter(line => line.startsWith("queue enqueue A")).length, 1);
+  }
   if (result.name.startsWith("split-")) {
     const source = present(schema.segments.find(segment => segment.id === "seg-R1"));
     assert.deepEqual(source.inner, [{ b: "Rb" }]);
@@ -134,5 +149,20 @@ test("retained artifacts contain no machine name, account name, absolute drive p
     assert.doesNotMatch(encoded, /\b[A-Za-z]:[\\/]/);
     assert.doesNotMatch(encoded, /"(?:hostname|host|timings)":/);
     assert.doesNotMatch(encoded, /"paints":\[[^\]]*"at":/);
+  }
+});
+
+test("B counts and every retained failure/difference history reproduce exactly", checkBSurfaceArtifacts);
+
+test("the unchanged literal identity checker rejects equally wrong B replicas", () => {
+  const source = present(writer.traces.find(item => item.trace === "T01" && item.mechanism === "M1" && item.order === "D3"));
+  for (const defect of ["lost-remote", "duplicate"]) {
+    const copy = structuredClone(present(source.stages[4]));
+    for (const model of Object.values(copy.models)) {
+      const row = present(model.rows[0]);
+      if (defect === "lost-remote") row.characters.splice(row.characters.findIndex(character => character.notation === "b1"), 1);
+      else row.characters.push(structuredClone(present(row.characters[0])));
+    }
+    assert.throws(() => checkLiteral(copy, "T01", false));
   }
 });

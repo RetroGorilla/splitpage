@@ -6,3 +6,12 @@ export function publicBEvidence(value: unknown): string {
     return item;
   });
 }
+import type { BSurfaceEvidence } from "./run.ts";
+
+
+export function serializeBSurfaceEvidence(evidence: BSurfaceEvidence): string {
+  const { traces, followup, ...metadata } = JSON.parse(publicBEvidence(evidence)) as BSurfaceEvidence;
+  const cases = (values: unknown[]): string[] => values.map((value, index) => `    ${JSON.stringify(value)}${index === values.length - 1 ? "" : ","}`);
+  return ["{", ...Object.entries(metadata).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)},`),
+    '  "traces": [', ...cases(traces), "  ],", '  "followup": [', ...cases(followup), "  ]", "}", ""].join("\n");
+}
