@@ -285,3 +285,8 @@ const api = {
 };
 
 Object.assign(window, { appBinding: api });
+
+export function appBindingExperimentContext() {
+  return { session, bridge, writer, host, model, project, paint, commit, value, selected, api,
+    state: () => ({ pending, targetId, errors, commits, syncs }) };
+}

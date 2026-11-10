@@ -74,6 +74,7 @@ These are the throwaway commit's changes or deliberately retained paths. A hook 
 | File and function | Treatment | Evidence or remaining change |
 | --- | --- | --- |
 | `src/features/writer/flow-surface.ts`: `onBeforeInput`, `range0`, `onInput`, `syncBeatEl`, `syncComposition`, `syncSpots` | Retained, observed by capture listeners; no edits in this file | Real default input, target ranges, sentinel, decoding and composition sync. Prototype adds painted identity state beside the existing HTML cache |
+| `prototypes/collab/src/app-binding/page.ts`: capture `beforeinput` listener, `buffer.paintHeld` branch | Hooked and bypassed | Cancels a stale native input, dispatches identity-mapped intent through the prototype and repaints. The app's `flow-surface.onBeforeInput` then returns on `defaultPrevented`; T02 therefore bypasses that app handler as well as hooking `syncBeat` |
 | `src/features/writer/flow-writer.ts`: `FlowWriterPorts`, `syncBeat` | Hooked with optional override, two added lines | `sync hook removed` probe fails when source command bypasses the replica. Composition must commit here before driver finish |
 | `src/bootstrap/wiring/writer.ts`: `mountWriterRuntimeFeature` | Hooked | Switch-gated sync, selective undo and bridge exposing mapper, actual session, repaint, place and diagnostics |
 | Same wiring: `leaveBeat` | Bypassed while bound | Its independent `cells().sync` must not write whole DOM into the projection. `transitionBeat` still reaches the hooked `syncBeatEl` |
