@@ -43,6 +43,7 @@ export interface CellUndoPorts {
 export type ShownRow = DocumentView["rows"][number];
 
 export interface CellEditingPorts<E, Html = never> {
+  readonly syncOverride?: (cell: E, runs: readonly Run[]) => boolean;
   readonly page: CellPage<E, Html>;
   readonly document: () => DocumentView | null;
   readonly run: (command: Command) => CommandOutcome;
@@ -106,7 +107,9 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     if (idx === -1) return;
     const rowId = at.rowId as string;
     const field = at.field as string;
-    took(ports.run(cellTextCommand(rowId, field, cellRuns(ports.decode.withMedia(page.html(cell))), ports.text)));
+    const runs = cellRuns(ports.decode.withMedia(page.html(cell)));
+    if (ports.syncOverride?.(cell, runs)) return;
+    took(ports.run(cellTextCommand(rowId, field, runs, ports.text)));
     const doc = ports.document();
     if (doc) ports.painted(cell, field, doc.rows[idx] as ShownRow);
   }

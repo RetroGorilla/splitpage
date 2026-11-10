@@ -129,6 +129,13 @@ import { configureUndo, undoOwner } from "./undo.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
+import { appBindingAsked, setAppBindingActive } from "./app-binding-mode.ts";
+import { exposeTestHook } from "../../features/common/test-hooks.ts";
+import { render } from "../../features/rows/render.ts";
+import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
+
+const splitBindingSwitch = appBindingAsked();
+let splitExperiment: { sync: (cell: Element, runs: readonly Run[]) => void; undo: () => void } | null = null;
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -294,6 +301,11 @@ const MEDIA_CELL = Object.freeze({ media: true });
 export function mountCellEditingFeature(): { readonly dispose: () => void } {
   return cellEditingMount.replace(function () {
     const editing = createCellEditing<Element, unknown>({
+      syncOverride: (cell, runs) => {
+        if (!splitBindingSwitch || !splitExperiment) return false;
+        splitExperiment.sync(cell, runs);
+        return true;
+      },
       page: createCellPage({ storedHtml: function (html) { return storedHtmlFromDom(html); }, caretSpot: ensureTrailingCaretSpot,
         beforeWrite: cell => currentPlainTags()?.beforeWrite(cell) ?? null }),
       document: liveDocument.current,
@@ -314,10 +326,22 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       shown: function <T>(edit: () => T): T { return paintGuard().whileShown(edit); },
       announce: announceGalleryEdit
     });
-    return { dispose: installCellEditing(editing) };
+    let withdraw: (() => void) | null = null;
+    exposeTestHook("__splitBindingTest", () => splitBindingSwitch ? {
+      install: (binding: typeof splitExperiment) => { splitExperiment = binding; setAppBindingActive(binding !== null); },
+      sync: (cell: Element) => editing.sync(cell),
+      render: () => render(),
+      selection: (cell: Element) => cellSelection(cell),
+      select: (cell: Element, from: number, to: number) => { (cell as HTMLElement).focus(); setCellSelection(cell, from, to); }
+    } : null, done => { withdraw = done; });
+    const dispose = installCellEditing(editing);
+    return { dispose: () => { withdraw?.(); dispose(); } };
   }, () => [() => connectWriter((control) => {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
-    undoRoutePorts.writerStep = control?.writerUndoStep ?? skipWriterUndo;
+    undoRoutePorts.writerStep = dir => {
+      if (splitBindingSwitch && splitExperiment && document.activeElement?.closest("#rows")) { splitExperiment.undo(); return true; }
+      return control?.writerUndoStep(dir) ?? false;
+    };
     writerReplayed = control?.writerReplayed ?? noWriterReplay;
     control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
@@ -334,7 +358,10 @@ const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
   replay: function (dir) { if (dir === "redo") undoOwner().redo(); else undoOwner().undo(); },
-  writerStep: skipWriterUndo,
+  writerStep: dir => {
+    if (splitBindingSwitch && splitExperiment && document.activeElement?.closest("#rows")) { splitExperiment.undo(); return true; }
+    return skipWriterUndo();
+  },
   stale: screenIsStale,
   scriptCell: isScriptCell,
   latest: () => undoOwner().last(),
