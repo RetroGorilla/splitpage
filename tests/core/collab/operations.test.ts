@@ -7,7 +7,7 @@ import { operationExamples } from "./operation-examples.ts";
 const validators = [readers.readTextInsert, readers.readTextDelete, readers.readMarkChange, readers.readSegmentCreate,
   readers.readBeatSplit, readers.readBeatJoin, readers.readJoinGlue, readers.readSoftRemove, readers.readRestore,
   readers.readSegmentMove, readers.readHeadingCreate, readers.readHeadingFinalize, readers.readHeadingRemove,
-  readers.readRecordCreate, readers.readRecordSet, readers.readRecordDelete, readers.readScalarSet, readers.readSharedStatusEvent];
+  readers.readRecordCreate, readers.readRecordSet, readers.readRecordDelete, readers.readScalarSet, readers.readSharedStatusEvent, readers.readBeatSplitBefore];
 
 for (const { fixture, operation } of operationExamples) {
   test(`${fixture}: accepts literal ${operation.kind} intent without positional indices`, () => {
@@ -82,6 +82,58 @@ test("T11 / PROJ registries: all seven collections retain record data and unknow
     const input = { ...base, target: { collection, record: "r1" }, fields: { extra: { kept: [1, null, true] }, name: "Mug", rank: "0" } };
     assert.deepEqual(readers.readRecordCreate(input), input);
   }
+});
+
+test("undeclared ids cannot disguise duplicate attributes for any unkeyed mark kind", () => {
+  for (const kind of ["b", "i", "u", "s", "hl", "dir", "cue"]) {
+    assert.equal(readers.readTextInsert({ ...operationExamples[0].operation, content: [{ value: "X", marks: [{ kind, value: true, id: "a" }] }] }), null);
+    const content = [{ value: "X", marks: [{ kind, value: true, id: "a" }, { kind, value: null, id: "b" }] }];
+    assert.equal(readers.readTextInsert({ ...operationExamples[0].operation, content }), null);
+  }
+  for (const kind of ["comment", "tag", "link"]) {
+    const value = kind === "comment" ? true : "P";
+    const content = [{ value: "X", marks: [{ kind, value, id: "\uD800" }, { kind, value: null, id: "�" }] }];
+    assert.equal(readers.readTextInsert({ ...operationExamples[0].operation, content }), null);
+  }
+});
+
+test("seeded undeclared JSON fields always invalidate typed operation objects", context => {
+  const variants: unknown[] = operationExamples.map(example => example.operation);
+  for (const mark of [{ kind: "b", value: true }, { kind: "comment", id: "C1", value: true }, { kind: "tag", id: "T1", value: "P" },
+    { kind: "link", id: "L1", value: "https://v/1" }]) variants.push({ ...operationExamples[0].operation, content: [{ value: "X", marks: [mark] }] });
+  for (const value of [{ atom: "broll", id: "bs1" }, { atom: "who", name: "Alice" }, { atom: "video", href: "https://v/1", host: "v" },
+    { atom: "image", ref: { sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]) {
+    variants.push({ ...operationExamples[0].operation, content: [{ value, marks: [] }] });
+  }
+  variants.push({ kind: "scalar", id: "a", by: "A", target: { scope: "beat", record: "R1" }, field: "notes", clear: true });
+  const locations = (value: unknown, path: (string | number)[] = []): (string | number)[][] => {
+    if (Array.isArray(value)) return value.flatMap((item: unknown, index: number) => locations(item, [...path, index]));
+    if (!value || typeof value !== "object") return [];
+    return [path, ...Object.entries(value).flatMap(([key, item]) => key === "fields" || key === "prior" ||
+      key === "value" && !(item && typeof item === "object" && "atom" in item) ? [] : locations(item, [...path, key]))];
+  };
+  let attempts = 0;
+  for (const seed of [1376, 1413, 1592590337, 1592590338]) {
+    let state = seed;
+    for (const variant of variants) {
+      assert.ok(readers.readOperation(variant));
+      for (const path of locations(variant)) {
+        for (let count = 0; count < 16; count++) {
+          state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+          const input = structuredClone(variant) as Record<string, unknown>;
+          let target: unknown = input;
+          for (const key of path) target = (target as Record<string | number, unknown>)[key];
+          const extras = [null, state, "\uD800", { id: "b", kind: "b", clear: true }, [false, "x"], { "\uD800": 1, "�": 2 }];
+          Object.defineProperty(target, `undeclared-${state}`, { value: extras[state % extras.length], enumerable: true });
+          for (const read of [...validators, readers.readOperation]) {
+            assert.equal(read(input), null, `${seed}: ${read.name} at ${path.join(".")}`);
+            attempts++;
+          }
+        }
+      }
+    }
+  }
+  context.diagnostic(`${attempts} seeded undeclared-field rejections across 20 readers`);
 });
 
 test("field clearing remains distinct from null; heading removal can retain or discard the name", () => {
@@ -161,5 +213,5 @@ test("seeded arbitrary values: every validator is total and agrees after a JSON 
     }
   }
   assert.ok(attempts > 30000);
-  context.diagnostic(`${attempts} JSON round-trip comparisons across 19 readers and four seeds`);
+  context.diagnostic(`${attempts} JSON round-trip comparisons across 20 readers and four seeds`);
 });

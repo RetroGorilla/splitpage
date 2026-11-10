@@ -30,5 +30,7 @@ export const operationExamples = [
     field: "text", value: "Look here" } },
   { fixture: "T21 comment undo creation", operation: { kind: "record-delete", id: "delete-C1", by: "Alice", target: { collection: "comments", record: "C1" } } },
   { fixture: "T21 scalar", operation: { kind: "scalar", id: "length-A", by: "Alice", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 12 } },
-  { fixture: "T21 status / causal branch", operation: { kind: "status", id: "c", by: "Alice", target: { scope: "beat", record: "R1" }, value: "ready", parents: ["a", "x"] } }
+  { fixture: "T21 status / causal branch", operation: { kind: "status", id: "c", by: "Alice", target: { scope: "beat", record: "R1" }, value: "ready", parents: ["a", "x"] } },
+  { fixture: "selectionToOwnBeat prefix: original beat keeps its tail and visual", operation: { kind: "split-before", id: "prefix-A", by: "Alice", target,
+    at: { left: "s2", right: "s3", affinity: "after" }, observed: ["s1", "s2", "s3", "s4"], boundary: "a1", beat: "new1", fields: {} } }
 ] as const;

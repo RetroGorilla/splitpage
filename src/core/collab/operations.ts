@@ -65,6 +65,7 @@ export interface SharedBeatSplit extends SharedOperationAuthor {
   readonly beat: SharedContentRef;
   readonly fields: SharedJsonFields;
 }
+export type SharedBeatSplitBefore = Omit<SharedBeatSplit, "kind"> & { readonly kind: "split-before" };
 export interface SharedBeatJoin extends SharedOperationAuthor {
   readonly kind: "join";
   readonly from: SharedContentRef;
@@ -156,7 +157,7 @@ export type SharedStatusEvent = SharedOperationAuthor & {
   | { readonly target: { readonly scope: "tag"; readonly record: SharedContentRef }; readonly value: TagStatusId }
   | { readonly target: { readonly scope: "shot"; readonly record: SharedContentRef }; readonly value: BrollStatusId }
 );
-export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate
+export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedBeatSplitBefore
   | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
   | SharedRecordDelete | SharedScalarSet | SharedStatusEvent;
