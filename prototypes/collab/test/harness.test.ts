@@ -9,7 +9,7 @@ import { readReplica } from "../src/reader.ts";
 import type { ReplicaCaretAnchor, ReplicaCarets } from "../src/reader.ts";
 import type { SchemaCandidate } from "../src/schema.ts";
 import { copyOnJoin, copyOnRestore, deleteStaleOffsets, omitLength, replaceWithStaleBeat, singleCommentMark } from "../src/defects.ts";
-import { commentsOracle, deletionOracle, joinOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
+import { commentsOracle, deletionOracle, joinNarrationOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
 
 function checkEvery(harness: ReplicaHarness, oracle: ScriptOracle, carets: ReplicaCarets): void {
   for (const replica of harness.replicas) {
@@ -80,7 +80,7 @@ for (const candidate of ["A", "B"] as const) {
       for (const replica of harness.replicas) {
         const actual = readReplica(replica.doc, candidate, harness.identities, carets);
         assert.equal(actual.rows[0]?.characters.map(character => character.value).join(""), "abcd cd");
-        assert.throws(() => checkModel(actual, joinOracle, harness.identities, "T06"), /T06.rows\[0\].characters\[2\].identity/);
+        assert.throws(() => checkModel(actual, joinNarrationOracle, harness.identities, "T06"), /T06.rows\[0\].characters\[2\].identity/);
       }
     } finally {
       harness.destroy();

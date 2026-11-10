@@ -25,10 +25,40 @@ export const removedOracle: ScriptOracle = {
   recovery: [{ row: { id: "R2", characters: [["s3", "c", {}], ["b1", "X", {}], ["s4", "d", {}]] }, by: "Alice", edited: ["b1"] }]
 };
 
-export const joinOracle: ScriptOracle = {
+export const joinNarrationOracle: ScriptOracle = {
   rows: [{ id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }], ["[glue]", " ", {}], ["s3", "c", {}], ["s4", "d", {}]] }],
   carets: { A: { beat: "R1", offset: 3 }, B: { beat: "R1", offset: 3 } },
   recovery: []
+};
+
+export const joinOracle: ScriptOracle = {
+  rows: [{ id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }], ["[glue]", " ", {}], ["s3", "c", {}], ["s4", "d", {}]],
+    status: "ready", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }, { id: "V2", characters: [["w1", "w", {}]] }],
+    gallery: [{ ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] }, { ref: "Q", name: "", annotation: "", links: [] }] }],
+  carets: { A: { beat: "R1", offset: 3 }, B: { beat: "R1", offset: 3 } }, recovery: [],
+  records: { gallery: {
+    gP1: { id: "gP1", beat: "R1", rank: "0", ref: "P", name: "", annotation: "", links: [{ href: "https://v/1" }] },
+    gP2: { id: "gP2", beat: "R2", rank: "0", ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] },
+    gQ: { id: "gQ", beat: "R2", rank: "1", ref: "Q", name: "", annotation: "", links: [] }
+  } }
+};
+
+export const joinUndoOracle: ScriptOracle = {
+  rows: [
+    { id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }]], status: "todo", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }],
+      gallery: [{ ref: "P", name: "", annotation: "", links: [{ href: "https://v/1" }] }] },
+    { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "ready", visuals: [{ id: "V2", characters: [["w1", "w", {}]] }],
+      gallery: [{ ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] }, { ref: "Q", name: "", annotation: "", links: [] }] }
+  ], carets: { A: { beat: "R2", offset: 0 }, B: { beat: "R2", offset: 0 } }, recovery: [], records: { ...joinOracle.records }
+};
+
+export const joinBoldUndoOracle: ScriptOracle = {
+  rows: [
+    { id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }],
+      gallery: [{ ref: "P", name: "", annotation: "", links: [{ href: "https://v/1" }] }] },
+    { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "ready", visuals: [{ id: "V2", characters: [["w1", "w", {}]] }],
+      gallery: [{ ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] }, { ref: "Q", name: "", annotation: "", links: [] }] }
+  ], carets: { A: { beat: "R2", offset: 0 }, B: { beat: "R2", offset: 0 } }, recovery: [], records: { ...joinOracle.records }
 };
 
 export const commentsOracle: ScriptOracle = {
