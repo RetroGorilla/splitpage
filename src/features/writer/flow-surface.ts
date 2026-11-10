@@ -3,6 +3,7 @@ import {
   isCollapsed, isPendingHeading, joinWithPrevious, lineBreakAt, logicalText, orderedRange, pasteText, renameHeading, replaceRange,
   setMarkAcross, selectionToOwnBeat, startParagraph, stepFrom, typeWithMarks, withinOneBeat
 } from "../../core/flow/flow.ts";
+import { removeEmptyHeading as emptyHeadingEdit } from "../../core/flow/remove-empty-heading.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts, FlowPos, FlowRange, FlowRow } from "../../core/flow/flow.ts";
 import { typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -1079,19 +1080,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   function removeEmptyHeading(id: string, range: FlowRange | null, landing: "above" | "below" | "keep"): void {
     emptyHeadings.delete(id);
     const before = caretAt(headingPos(id, 0));
-    apply("remove-empty-heading", doc => {
-      const scene = flowOf(doc).find(block => block.kind === "heading" && block.scene.id === id);
-      if (!scene || scene.kind !== "heading") return null;
-      const result = replaceRange(doc, { anchor: headingPos(id, 0), head: headingPos(id, scene.scene.name.length) }, [], ports.flow);
-      if (!result || !("selection" in result)) return result;
-      if (landing === "above") {
-        const index = doc.rows.findIndex(row => row.id === scene.scene.firstSceneId);
-        const previous = doc.rows[index - 1];
-        if (previous) return { ...result, selection: caretAt(beatPos(previous.id, cellLength(cellOf(previous)))) };
-      }
-      const keep = landing === "keep" && range && [range.anchor, range.head].every(pos => pos.kind !== "heading" || pos.sceneId !== id);
-      return keep ? { ...result, selection: range } : result;
-    }, before, document.activeElement === root);
+    apply("remove-empty-heading", doc => emptyHeadingEdit(doc, id, range, landing, ports.flow), before, document.activeElement === root);
   }
 
   function leaveEmptyHeadings(force = false): void {
