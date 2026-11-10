@@ -23,8 +23,6 @@ jobs:
       SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: main
 
       - uses: actions/setup-node@v7
         with:
@@ -60,15 +58,42 @@ jobs:
       - name: All browser suites
         run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" --lanes 4 --port-base "$PORT_BASE"
 
-      - name: Keep the failure summary
+      - name: Run the failing suites again one at a time
         if: failure()
-        run: grep -v '^PASS' "$RUNNER_TEMP/suites/summary.txt" > "$RUNNER_TEMP/failures.txt" || true
+        run: |
+          summary="$RUNNER_TEMP/suites/summary.txt"
+          test -f "$summary" || exit 0
+          names=$(grep -v '^PASS ' "$summary" | awk '{ sub(/\.txt$/, "", $2); print $2 }' | paste -sd '|' -)
+          test -n "$names" || exit 0
+          node tools/run-suites.mjs "$RUNNER_TEMP/suites-alone" "^($names)\.txt\$" --lanes 1 --port-base "$PORT_BASE" || true
 
-      - name: Upload the failure summary
+      - name: Keep the failing suites' output
+        if: failure()
+        run: |
+          out="$RUNNER_TEMP/nightly-failures"
+          mkdir -p "$out"
+          summary="$RUNNER_TEMP/suites/summary.txt"
+          test -f "$summary" || exit 0
+          grep -v '^PASS' "$summary" > "$out/failures.txt" || true
+          for run in suites suites-alone; do
+            src="$RUNNER_TEMP/$run"
+            test -f "$src/summary.txt" || continue
+            mkdir -p "$out/$run/shots"
+            cp "$src/summary.txt" "$out/$run/"
+            awk '{ print $2 }' "$out/failures.txt" | while read -r suite; do
+              test -f "$src/$suite.log" || continue
+              cp "$src/$suite.log" "$out/$run/"
+              sed -n 's/^shot //p' "$src/$suite.log" | while read -r png; do
+                if [ -f "$png" ]; then cp "$png" "$out/$run/shots/"; fi
+              done
+            done
+          done
+
+      - name: Upload the failing suites' output
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: nightly-failures
-          path: ${{ runner.temp }}/failures.txt
+          path: ${{ runner.temp }}/nightly-failures
           if-no-files-found: ignore
           retention-days: 3

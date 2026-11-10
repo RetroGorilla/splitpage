@@ -48,6 +48,16 @@ cache layout. No new schedule or runner routing is introduced.
 | `desktop-smoke` job, step `Fetch the dev Electron binary` | Runs `npm run fetch-electron`. `desktop/electron-arch.mjs` selects the machine architecture, detecting native Windows ARM64 even under x64 Node emulation, then sets `npm_config_arch` for Electron's installer. Explicit `npm_config_arch` or `ELECTRON_ARCH` wins, in that order; unknown values fail. Electron 45 has no postinstall. |
 | `desktop-smoke` job, step `Desktop smoke (dev target)` | Xvfb is started by hand because `xvfb-run` intermittently returns its own cleanup failure as the exit status. The `grep` on Xvfb's stderr drops xkbcomp's harmless unknown-keysym warnings, about 1,700 lines a run. |
 
+## `.github/workflows/nightly.yml`
+
+Every browser suite, four lanes, on `CI_RUNNER`, once a day and on demand.
+
+| Where | Why |
+| --- | --- |
+| `actions/checkout` with no `ref` | A scheduled run checks out the default branch, `main`. A run started by hand (`gh workflow run nightly.yml --ref <branch>`) tests that branch, so a pull request that changes a suite can be checked with the full nightly before it merges. |
+| step `Run the failing suites again one at a time` | Runs only after a failure, on one lane, into `suites-alone`. It never changes the run's result: a suite that failed stays failed. It tells a suite that fails on its own from one that fails only beside three others on the runner's CPUs. |
+| steps `Keep the failing suites' output` and `Upload the failing suites' output` | The step log keeps only each suite's RESULT line. The `nightly-failures` artifact holds `failures.txt` and, for each run (`suites`, `suites-alone`), `summary.txt`, the failing suites' logs with each FAIL line and the screenshots those logs name. It is limited to the failing suites to stay small; the repository's artifact retention (3 days) applies. |
+
 ## `.github/workflows/release.yml`
 
 The workflow builds what docs/RELEASING.md §3 publishes, from a `v*` tag, on a
