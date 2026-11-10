@@ -391,7 +391,7 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": ".filter(([, event]) => event.target === target)",
+          "before": ".filter(([, event]) => isBeatStatusEvent(event) && event.target === target)",
           "after": ""
         }
       ]
@@ -459,8 +459,8 @@
       "edits": [
         {
           "file": "src/marks/status-resolution.ts",
-          "before": "if (!retired.has(id)) return event.value;",
-          "after": "if (true) return event.value;"
+          "before": "retired.has(id) ? resolve(event.parents.filter(parent => events.has(parent))) : event.value",
+          "after": "event.value"
         }
       ]
     },
@@ -476,7 +476,7 @@
       "edits": [
         {
           "file": "src/marks/status-resolution.ts",
-          "before": "return resolve(statusHeads(shared));",
+          "before": "heads = statusHeads(shared);",
           "after": "return values.at(-1) ?? stored;"
         }
       ]

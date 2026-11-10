@@ -61,7 +61,7 @@ test("post-status source audit pins declared changed work and rejects unlisted c
     assert.throws(() => validateLifetimeCharacterSource(archive.files, changed));
   }
   assert.equal(statusTimingChanges().counts.before, archive.defaultDataSha256);
-  assert.equal(lifetimeDataHash(readLifetimeCounts().data), statusTimingChanges().counts.after);
+  assert.equal(lifetimeDataHash(readLifetimeCounts().data), statusTimingChanges().reviewCounts?.after ?? statusTimingChanges().counts.after);
   assert.equal(createHash("sha256").update(readFileSync(new URL("../../src/perf/lifetime/timings.json", import.meta.url))).digest("hex"), archive.timingsSha256);
 });
 
@@ -73,6 +73,18 @@ test("status timing audit rejects changed hashes, missing declarations and dupli
     if (defect === "hash") file.after = "0".repeat(64);
     if (defect === "missing") changed.files.pop();
     if (defect === "duplicate") changed.files.push(file);
+    assert.throws(() => validateStatusTimingChanges(changed));
+  }
+});
+
+test("status review audit rejects broken before/after chains and duplicate declarations", () => {
+  for (const defect of ["before", "after", "duplicate", "dependencies", "counts"] as const) {
+    const changed = structuredClone(statusTimingChanges()), file = changed.reviewChanges?.[0]; assert.ok(file);
+    if (defect === "before") file.before = "0".repeat(64);
+    if (defect === "after") file.after = "0".repeat(64);
+    if (defect === "duplicate") changed.reviewChanges?.push(file);
+    if (defect === "dependencies") { assert.ok(changed.reviewDependencies); changed.reviewDependencies.before = "0".repeat(64); }
+    if (defect === "counts") { assert.ok(changed.reviewCounts); changed.reviewCounts.before = "0".repeat(64); }
     assert.throws(() => validateStatusTimingChanges(changed));
   }
 });

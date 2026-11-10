@@ -8,6 +8,7 @@ import { changeStatus, statusValue, undoStatus } from "../../marks/commands.ts";
 import { structureManager } from "../../structure.ts";
 import type { SchemaReplica } from "../../schema.ts";
 import type { BeatStatusEvent } from "../../marks/status-resolution.ts";
+import { isBeatStatusEvent } from "../../marks/status-resolution.ts";
 
 export const reviewerStatusEvents = {
   a: { target: "R1", value: "ready", prior: "todo", parents: [] as string[] },
@@ -21,7 +22,7 @@ function permutations(values: string[]): string[][] {
 }
 
 export function observeStatusOrder(order: readonly string[], recreate: boolean, clients: readonly [number, number] = [1, 2], read = statusValue,
-  retired: readonly string[] = [], events: Readonly<Record<string, BeatStatusEvent>> = reviewerStatusEvents,
+  retired: readonly string[] = [], events: Readonly<Record<string, unknown>> = reviewerStatusEvents,
   shared: Readonly<Record<string, BeatStatusEvent>> = {}, undo: readonly number[] = []) {
   const seed = fromDocument({ title: "Status order", rows: [{ id: "R1", audioText: "abcd", visualText: "", status: "todo" }] }, "B", 100);
   const writers = clients.map(client => createProjectionReplica("B", client));
@@ -41,7 +42,7 @@ export function observeStatusOrder(order: readonly string[], recreate: boolean, 
     for (const [index, keys] of [[0, ["a", "c"]], [1, ["b", "d"]]] as const) {
       const writer = writers[index]; assert.ok(writer);
       for (const key of keys) capture(writer, key, () => {
-        if (undo.length) { const event = events[key], manager = managers[index]; assert.ok(event && manager); changeStatus(writer, manager, "R1", key, event.value, `writer${index}`); }
+        if (undo.length) { const event = events[key], manager = managers[index]; assert.ok(isBeatStatusEvent(event) && manager); changeStatus(writer, manager, "R1", key, event.value, `writer${index}`); }
         else writer.doc.transact(() => {
           writer.doc.getMap("statusEvents").set(key, structuredClone(events[key]));
           if (retired.includes(key)) writer.doc.getMap("retiredStatus").set(key, true);

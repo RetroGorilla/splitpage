@@ -76,5 +76,60 @@
   "counts": {
     "before": "2943866c556dda17609fc1ca9a9bd0c670bc76e0cf703dbcdfdbde884b3e7674",
     "after": "3066eb7755b85eba1a54210a28c08c480a21b2230b18fa2cd5d5e110313e2166"
+  },
+  "reviewChanges": [
+    {
+      "path": "src/marks/commands.ts",
+      "before": "4cb5cc5027f2f643c2c7fea15b30f9f43ce37c6d12ab05bfade5882904ac3c0b",
+      "after": "fae60b27d869d653bd0b362b509259f9b5d1d81d53056a031061b9e692450116"
+    },
+    {
+      "path": "src/marks/status-resolution.ts",
+      "before": "227642c1e6629d875e37d52b7107419063a36168cfbcd4f9022ffc0c854d6bba",
+      "after": "edbca284e8238291b8cd1a86133bd77b9eb9f4387a7c5253b88520859702cc84"
+    },
+    {
+      "path": "src/marks/status-source-audit.ts",
+      "before": "e92e47230267846a468a31c093cc87c673a3686c4b0a7bd1de5453f529f5f99d",
+      "after": "2e5212448b00713a98e908dc1168ef06a42776e489278fae95a2046860d6b6f1"
+    },
+    {
+      "path": "src/marks/projection.ts",
+      "before": "aabb8e7f2d5f1a06f5796e7812af890dc7bdf930d44b41860617c9a1aaa1cfab",
+      "after": "d775fb0cc4c1ef98378c92eededc9dfa742331dfe9af2a02814dcc50e48017f5"
+    },
+    {
+      "path": "src/perf/setup.ts",
+      "before": "06ba3c03d23346d6ba9d4eec2d6711b67e9f697f96773a10e31b0960d9d5b8ea",
+      "after": "e9c9fd479560cace7ea89ad8f7e525e2ed74bc1c39f62250d6fd1fe51aa34c97"
+    },
+    {
+      "path": "src/perf/lifetime/projector.ts",
+      "before": "bda850500e9e4dec66f08dc30ad25ccb5ae558ed2ecebfcaca425d4013e11841",
+      "after": "97c650a34570517508f1ce852f5b07d42f564558f0f1d939ccc7bba3084a0d3d"
+    },
+    {
+      "path": "src/perf/lifetime/audit.ts",
+      "before": "491e857397c360ff7813de37e1a84a7c3a10889b15c640dc5d28115fa865ef3a",
+      "after": "cddce20c2da4d4fd769cf487db59911b267674f2c78c7ffdf636d48a5ef59b1f"
+    },
+    {
+      "path": "src/perf/lifetime/report.ts",
+      "before": "de1947b13189bf206753083fa60e5e55d60de33dc991c3be0e860071ccbfb892",
+      "after": "1ef557fd788fb4705b292a80fe21179a37003841a95b4d014399b5c585c3fa0e"
+    },
+    {
+      "path": "src/perf/lifetime/status-order.ts",
+      "before": "c3aaa2b32823b42f1f524829c293c2dcd36ea9cd0643af91cdf5eb485b4b1802",
+      "after": "bd9f30706b54523acbd31a913410f673c0a37215c7cfdb546980b9ad90a7ca8a"
+    }
+  ],
+  "reviewDependencies": {
+    "before": "6f2ac34929f49560737ba125ce845ffd8cbebac254bf172d2d1d8cc16235d89e",
+    "after": "cc88dfeb2d10d283648d5bf3845884b6de8a06c6f8557db35692ddf0f3ad9f0a"
+  },
+  "reviewCounts": {
+    "before": "3066eb7755b85eba1a54210a28c08c480a21b2230b18fa2cd5d5e110313e2166",
+    "after": "c23d8b8d53f2a26c23fd7c709c53d45614c31390b89fed0829983e11d9ed31e2"
   }
 }

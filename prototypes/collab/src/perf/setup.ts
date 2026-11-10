@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { isProjectionEntry } from "../proj/entry.ts";
 import { perfCases } from "./measure.ts";
 import { historyMix } from "./history.ts";
-import { statusTimingChanges, validateStatusTimingChanges } from "../marks/status-source-audit.ts";
+import { currentStatusHash, statusTimingChanges, validateStatusTimingChanges } from "../marks/status-source-audit.ts";
 
 function perfSourceFiles(): string[] {
   const files = readdirSync(new URL("./", import.meta.url)).filter(file => file.endsWith(".ts")).sort();
@@ -54,7 +54,7 @@ export function validateTimedSource(sourceHead: string, sourceDigest: string, au
     const statusChange = statusChanges.get(file);
     if (statusChange) {
       assert.equal(statusChange.before, snapshot.files[file] ?? null);
-      assert.equal(createHash("sha256").update(source).digest("hex"), statusChange.after);
+      assert.equal(createHash("sha256").update(source).digest("hex"), currentStatusHash(statusChange.path));
       continue;
     }
     const change = changes.get(file);

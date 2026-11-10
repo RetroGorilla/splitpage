@@ -6,7 +6,7 @@ import type { ReplicaCaretAnchor } from "../reader.ts";
 import type { StructuralRangeCapture } from "../structure-selection.ts";
 import { restoreStructuralAnchor } from "../structure-selection.ts";
 import { undoOne } from "../structure.ts";
-import { resolveBeatStatus, statusHeads } from "./status-resolution.ts";
+import { isBeatStatusEvent, resolveBeatStatus, statusHeads } from "./status-resolution.ts";
 import type { BeatStatusEvent } from "./status-resolution.ts";
 
 export function formatCapturedMarks(replica: SchemaReplica, selection: StructuralRangeCapture, marks: CollabMarks): void {
@@ -53,7 +53,7 @@ export function ensureTag(replica: SchemaReplica, kind: string, name: string): s
 }
 
 function statusEvents(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {
-  return [...replica.doc.getMap<BeatStatusEvent>("statusEvents")].filter(([, event]) => event.target === target);
+  return [...replica.doc.getMap<BeatStatusEvent>("statusEvents")].filter(([, event]) => isBeatStatusEvent(event) && event.target === target);
 }
 
 export function statusFrontier(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {

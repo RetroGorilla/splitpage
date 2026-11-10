@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { lifetimeSources } from "./source.ts";
-import { statusTimingChanges, validateStatusTimingChanges } from "../../marks/status-source-audit.ts";
+import { currentStatusHash, statusTimingChanges, validateStatusTimingChanges } from "../../marks/status-source-audit.ts";
 
 interface LifetimeTimedArchive {
   timedHead: string;
@@ -31,7 +31,7 @@ export function validateLifetimeCharacterSource(original: Record<string, string>
     if (file === "projector.ts") {
       const declared = statusTimingChanges().files.find(change => change.path === "src/perf/lifetime/projector.ts"); assert.ok(declared);
       assert.equal(createHash("sha256").update(text).digest("hex"), declared.before);
-      assert.equal(createHash("sha256").update(now).digest("hex"), declared.after, "Changed sampled projector work");
+      assert.equal(createHash("sha256").update(now).digest("hex"), currentStatusHash(declared.path), "Changed sampled projector work");
     } else if (file === "record.ts") {
       assert.equal(now.replace('import { validateLifetimeTimingSource } from "./audit.ts";\n', "")
         .replace("validateLifetimeTimingSource(value.source, counts.source);", "assert.deepEqual(value.source, counts.source);"), text, "Changed timing driver or guards");
@@ -49,7 +49,8 @@ export function validateLifetimeTimingSource(recorded: ReturnType<typeof lifetim
   for (const [file, text] of Object.entries(archive.files)) assert.equal(createHash("sha256").update(text).digest("hex"), recorded.files[file]);
   validateStatusTimingChanges();
   assert.equal(recorded.dependencies, statusTimingChanges().dependencies.before);
-  assert.equal(current.dependencies, statusTimingChanges().dependencies.after); assert.equal(current.fixture, recorded.fixture);
+  const changes = statusTimingChanges();
+  assert.equal(current.dependencies, changes.reviewDependencies?.after ?? changes.dependencies.after); assert.equal(current.fixture, recorded.fixture);
   assert.deepEqual(current, lifetimeSources());
   const files = Object.fromEntries(Object.keys(current.files).map(file => [file, readFileSync(new URL(file, import.meta.url), "utf8")]));
   validateLifetimeCharacterSource(archive.files, files);
