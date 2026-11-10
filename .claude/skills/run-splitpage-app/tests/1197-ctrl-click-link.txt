@@ -55,6 +55,7 @@ mouse ctrl up __p
 expect opens.length === 5 && opens[4][0] === 'https://example.com/five'
 expect panelsShut()
 eval here('r6', 'a')
+wait (function(e){ return !!e && !e.closest('#toast-host'); })(document.elementFromPoint(__p.x, __p.y))
 mouse ctrl down __p
 sleep 150
 mouse ctrl up __p
@@ -70,6 +71,7 @@ sleep 300
 eval out()
 
 mouse ctrl click audio('r1', 0.9)
+wait (function(p){ var e = document.elementFromPoint(p.x, p.y); return !!e && !e.closest('#toast-host'); })(audio('r6', 0.05))
 mouse ctrl click audio('r6', 0.05)
 expect T.ids().join() === 'r1,r6'
 eval here('r2', 'a')
