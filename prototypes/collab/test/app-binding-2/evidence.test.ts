@@ -11,6 +11,7 @@ import type { BindingFollowupResult, BindingFollowupStage } from "../../src/app-
 import { bufferMechanisms } from "../../src/editing-buffer.ts";
 import { bufferOracles } from "../buffer-oracles.ts";
 import { checkModel, IdentityBook } from "../../src/model.ts";
+import { validateStatusBrowserBundle } from "../../src/marks/status-browser-audit.ts";
 
 const evidence = readBindingFollowupEvidence();
 function present<T>(value: T | null | undefined): T { assert.ok(value !== null && value !== undefined); return value; }
@@ -36,9 +37,13 @@ test("follow-up evidence pins the extended throwaway app and covers all 96 mecha
   assert.equal(evidence.results.filter(result => result.status === "PASS").length, 82);
 });
 
-test("follow-up evidence names the exact current injected bundle", async () => {
+test("follow-up browser evidence reproduces its exact archived bundle and pins the status-only source change", async () => {
   const bundle = await build({ absWorkingDir: fileURLToPath(new URL("../../../../", import.meta.url)), entryPoints: [fileURLToPath(new URL("../../src/app-binding-2/page.ts", import.meta.url))], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
-  assert.equal(createHash("sha256").update(present(bundle.outputFiles?.[0]?.text)).digest("hex"), evidence.bundleSha256);
+  await validateStatusBrowserBundle("src/app-binding-2/page.ts", evidence.bundleSha256,
+    createHash("sha256").update(present(bundle.outputFiles?.[0]?.text)).digest("hex"));
+  const current = createHash("sha256").update(present(bundle.outputFiles?.[0]?.text)).digest("hex");
+  await assert.rejects(validateStatusBrowserBundle("src/app-binding-2/page.ts", "0".repeat(64), current));
+  await assert.rejects(validateStatusBrowserBundle("src/app-binding-2/page.ts", evidence.bundleSha256, "0".repeat(64)));
 });
 
 for (const result of evidence.results) {

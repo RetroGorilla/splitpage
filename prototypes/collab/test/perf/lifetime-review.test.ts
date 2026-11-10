@@ -7,10 +7,12 @@ import { readLifetimeCounts } from "../../src/perf/lifetime/record.ts";
 import { readLifetimeSensitivity } from "../../src/perf/lifetime/sensitivity.ts";
 import { observeStatusOrder, statusOrderEvidence, statusOrderHistory } from "../../src/perf/lifetime/status-order.ts";
 import { LifetimeHistory } from "../../src/perf/lifetime/workload.ts";
+import { legacyStatusValue } from "../marks/status-readers.ts";
+import { statusTimingChanges, validateStatusTimingChanges } from "../../src/marks/status-source-audit.ts";
 
 for (const recreate of [false, true]) for (const clients of [[1, 2], [2, 1]] as const) {
   test(`T21 scalar literal delivery-order disagreement, authors ${clients.join("/")}, recreation ${recreate}`, () => {
-    const value = observeStatusOrder(["a", "c", "b", "d"], recreate, clients);
+    const value = observeStatusOrder(["a", "c", "b", "d"], recreate, clients, legacyStatusValue);
     assert.deepEqual(value.observations.map(row => row.status), clients[0] === 1 ? ["ready", "shot", "shot"] : ["ready", "shot", "ready"]);
     assert.deepEqual(value.observations.slice(0, 2).map(row => row.keys), [["a", "c", "b", "d"], ["b", "d", "a", "c"]]);
     assert.equal(value.identicalEncodedState, true); assert.equal(value.agrees, false);
@@ -18,11 +20,11 @@ for (const recreate of [false, true]) for (const clients of [[1, 2], [2, 1]] as 
 }
 
 test("all 96 scalar delivery observations and the minimized failing history reproduce without repairing the legacy reader", () => {
-  const value = statusOrderEvidence(); assert.equal(value.total, 96); assert.equal(value.disagreements, 80);
+  const value = statusOrderEvidence(legacyStatusValue); assert.equal(value.total, 96); assert.equal(value.disagreements, 80);
   assert.equal(value.rows.filter(row => row.recreate && !row.agrees).length, 40);
   assert.equal(value.rows.filter(row => !row.recreate && !row.agrees).length, 40);
   assert.deepEqual(JSON.parse(readFileSync(new URL("../../src/perf/lifetime/status-order.json", import.meta.url), "utf8")) as unknown, value);
-  assert.equal(readFileSync(new URL("../../histories/T21-scalar-map-order.md", import.meta.url), "utf8"), statusOrderHistory(value));
+  assert.ok(readFileSync(new URL("../../histories/T21-scalar-map-order.md", import.meta.url), "utf8").startsWith(statusOrderHistory(value)));
 });
 
 test("sensitivity intervention overrides change actual correction, revision, removal and status record counts", () => {
@@ -48,7 +50,7 @@ test("committed sensitivity results retain literal parameter changes and the rev
   ]);
 });
 
-test("post-review source audit permits only the unsampled status handler repair and rejects changed character work", () => {
+test("post-status source audit pins declared changed work and rejects unlisted character changes", () => {
   const archive = readLifetimeTimedArchive(), current = Object.fromEntries(Object.keys(archive.files).map(file => [file,
     readFileSync(new URL(`../../src/perf/lifetime/${file}`, import.meta.url), "utf8")]));
   validateLifetimeCharacterSource(archive.files, current);
@@ -58,6 +60,19 @@ test("post-review source audit permits only the unsampled status handler repair 
     changed[file] = file === "projector.ts" ? value.replace("const cached = this.values.get(id);", 'const cached = this.values.get("wrong");') : value + "\n";
     assert.throws(() => validateLifetimeCharacterSource(archive.files, changed));
   }
-  assert.equal(lifetimeDataHash(readLifetimeCounts().data), archive.defaultDataSha256);
+  assert.equal(statusTimingChanges().counts.before, archive.defaultDataSha256);
+  assert.equal(lifetimeDataHash(readLifetimeCounts().data), statusTimingChanges().counts.after);
   assert.equal(createHash("sha256").update(readFileSync(new URL("../../src/perf/lifetime/timings.json", import.meta.url))).digest("hex"), archive.timingsSha256);
+});
+
+test("status timing audit rejects changed hashes, missing declarations and duplicate declarations", () => {
+  validateStatusTimingChanges();
+  for (const defect of ["hash", "missing", "duplicate"] as const) {
+    const changed = structuredClone(statusTimingChanges());
+    const file = changed.files[0]; assert.ok(file);
+    if (defect === "hash") file.after = "0".repeat(64);
+    if (defect === "missing") changed.files.pop();
+    if (defect === "duplicate") changed.files.push(file);
+    assert.throws(() => validateStatusTimingChanges(changed));
+  }
 });

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { ReplicaHarness } from "../../src/delivery.ts";
-import { addComment, addReply, changeStatus, editAuthoredRecord, ensureTag, undoStatus } from "../../src/marks/commands.ts";
+import { addComment, addReply, changeStatus, editAuthoredRecord, ensureTag, statusValue, undoStatus } from "../../src/marks/commands.ts";
 import { markReport } from "../../src/marks/report.ts";
 import { markMutationDefinitions } from "../../src/marks/mutation-audit.ts";
 import type { MarkMutationEvidence } from "../../src/marks/mutation-audit.ts";
@@ -13,6 +13,7 @@ import { mapValue } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { structureManager, undoOne } from "../../src/structure.ts";
 import { markTraces, runMark } from "./runner.ts";
+import { statusReaders } from "./status-readers.ts";
 
 for (const [trace, orders] of Object.entries(markTraces)) {
   for (const candidate of ["A", "B"] as const) {
@@ -65,7 +66,11 @@ for (const candidate of ["A", "B"] as const) {
         { id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "ready" },
         { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "todo" }
       ], carets: {}, recovery: [] };
-      for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "target status");
+      for (const replica of harness.replicas) {
+        checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "target status");
+        assert.equal(statusValue(replica, "R1"), "ready");
+        assert.equal(statusValue(replica, "R2"), "todo");
+      }
     } finally { ua.destroy(); ub.destroy(); harness.destroy(); }
   });
   test(`${candidate}: Lost mark (tag) fails the literal nested stack checker`, () => {
@@ -168,7 +173,10 @@ for (const candidate of ["A", "B"] as const) {
           rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status }], carets: {}, recovery: [],
           ...(same ? {} : { notices: ["Alice: concurrent status change did not apply", "Bob: concurrent status change did not apply"] })
         };
-        for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "A-H12");
+        for (const replica of harness.replicas) {
+          checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "A-H12");
+          for (const [reader, value] of Object.entries(statusReaders(replica))) assert.equal(value, status, `A-H12/${reader}`);
+        }
       };
       try {
         a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R1")).set("status", "todo"), "fixture");
@@ -176,7 +184,7 @@ for (const candidate of ["A", "B"] as const) {
         changeStatus(a, ua, "R1", "sA", same ? "shot" : "ready", "Alice");
         changeStatus(b, ub, "R1", "sB", "shot", "Bob");
         queue.flush(order);
-        if (order === "late-C") harness.lateJoin(b);
+        harness.lateJoin(b);
         check(same ? "shot" : "todo");
         const first = bobFirst ? b : a;
         const manager = bobFirst ? ub : ua;

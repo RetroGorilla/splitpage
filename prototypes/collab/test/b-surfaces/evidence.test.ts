@@ -13,6 +13,7 @@ import { publicBEvidence } from "../../src/b-surfaces/public.ts";
 import type { BSurfaceEvidence, BMatrixSnapshot } from "../../src/b-surfaces/run.ts";
 import type { observeBSchema } from "../../src/b-surfaces/schema-observation.ts";
 import { checkBSurfaceArtifacts } from "../../src/b-surfaces/report.ts";
+import { validateStatusBrowserBundle } from "../../src/marks/status-browser-audit.ts";
 
 function present<T>(value: T | null | undefined): T { assert.ok(value !== null && value !== undefined); return value; }
 const evidence = ["writer", "slice", "split"].map(surface => JSON.parse(readFileSync(new URL(`../../b-surfaces/${surface}.json`, import.meta.url), "utf8")) as BSurfaceEvidence);
@@ -52,10 +53,12 @@ for (const data of evidence) {
     if (data.surface !== "slice") assert.deepEqual(data.off, { rows: 2, experiment: null });
     assert.equal(data.traces.length, data.surface === "split" ? 5 : 72);
   });
-  test(`${data.surface}: evidence corresponds to the current B bundle`, async () => {
+  test(`${data.surface}: exact browser bundle provenance, with declared status changes where applicable`, async () => {
     const entry = data.surface === "writer" ? "followup-page.ts" : data.surface === "slice" ? "slice-page.ts" : "split-page.ts";
     const built = await build({ absWorkingDir: fileURLToPath(new URL("../../../../", import.meta.url)), entryPoints: [fileURLToPath(new URL(`../../src/b-surfaces/${entry}`, import.meta.url))], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
-    assert.equal(createHash("sha256").update(present(built.outputFiles?.[0]?.text)).digest("hex"), data.bundleSha256);
+    const current = createHash("sha256").update(present(built.outputFiles?.[0]?.text)).digest("hex");
+    if (data.surface === "writer") await validateStatusBrowserBundle("src/b-surfaces/followup-page.ts", data.bundleSha256, current);
+    else assert.equal(current, data.bundleSha256);
   });
   for (const result of data.traces) test(`${data.surface} B ${result.mechanism} ${result.trace} ${result.order}`, () => {
     assert.ok(result.stages.length >= 4);

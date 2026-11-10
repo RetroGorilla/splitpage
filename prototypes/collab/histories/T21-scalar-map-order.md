@@ -208,3 +208,11 @@ Matrix: 96 runs (24 delivery permutations × two author-id assignments × with/w
 Yjs map key/value convergence does not make this observed iteration-based fallback replica-independent. This is a T21 scalar/status-design finding, not a performance-index repair. No replacement resolution policy is chosen here.
 
 Reproduce: node src/perf/lifetime/status-order.ts --write, from prototypes/collab. The generated JSON retains every order and observed key sequence.
+
+## Status-resolution fix
+
+The preceding history and `status-order.json` are retained unchanged as the defect record. The defect reproduced before editing: 80/96 disagreements, including `ready`, `shot`, `shot` in the example above.
+
+The shared resolver now returns literal `todo` for all 96 cases through command, marks projection, structural, performance and indexed readers. The frontier branches share no status ancestor; neither branch's `prior` chooses the answer. Retirement and deeper shared-ancestor matrices also pass; see [status-resolution-results.md](../status-resolution-results.md).
+
+The original map-order reader remains a deliberate failing control in `test/marks/status-readers.ts`; the checker rejects it. `node src/perf/lifetime/status-order.ts --write` now checks the repaired 96-case matrix without overwriting this history or its original JSON. `node --test test/marks/status-resolution.test.ts` checks every reader, semantic undo, reverse/duplicate retirement delivery and encoded-state late joiners.

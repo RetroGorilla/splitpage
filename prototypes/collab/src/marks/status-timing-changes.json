@@ -1,0 +1,80 @@
+{
+  "trackingIssue": "https://github.com/RetroGorilla/splitpage/issues/1376",
+  "retainedRows": "All retained timing rows predate status resolution; no timings run.",
+  "dependencies": {
+    "before": "73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663",
+    "after": "6f2ac34929f49560737ba125ce845ffd8cbebac254bf172d2d1d8cc16235d89e"
+  },
+  "files": [
+    {
+      "path": "src/marks/commands.ts",
+      "before": "f22be3c2332b59cf55303361d9f7f9ea13ed13c5b4fc00e0ffb796d09812edad",
+      "after": "4cb5cc5027f2f643c2c7fea15b30f9f43ce37c6d12ab05bfade5882904ac3c0b",
+      "change": "Delegate command reads to causal resolution; prior is diagnostic metadata."
+    },
+    {
+      "path": "src/marks/status-resolution.ts",
+      "before": null,
+      "after": "227642c1e6629d875e37d52b7107419063a36168cfbcd4f9022ffc0c854d6bba",
+      "change": "Add the common-ancestor resolution and retired-parent rule."
+    },
+    {
+      "path": "src/marks/status-source-audit.ts",
+      "before": null,
+      "after": "e92e47230267846a468a31c093cc87c673a3686c4b0a7bd1de5453f529f5f99d",
+      "change": "Validate the explicit post-timing source declarations."
+    },
+    {
+      "path": "src/marks/projection.ts",
+      "before": "45b7062c652dd0ce01c5f96651617808bb058421b9fda95330dd495880eca785",
+      "after": "aabb8e7f2d5f1a06f5796e7812af890dc7bdf930d44b41860617c9a1aaa1cfab",
+      "change": "Use the shared resolver in the model reader."
+    },
+    {
+      "path": "src/structure-reader.ts",
+      "before": "b5c86b9f5eea668c82b6fc621ca56aae46ceb1d6554912bbe9f1c079304e5167",
+      "after": "551b7ad61881848d488bd2ce0085b72a50be54574af756c4cb0cb718970565d1",
+      "change": "Resolve each beat before join aggregation and recovery."
+    },
+    {
+      "path": "src/perf/setup.ts",
+      "before": "d7f4c90d829a042a2f786bb4fdf40acc8a560a63e5ccbbf77c01cc148bf41dec",
+      "after": "06ba3c03d23346d6ba9d4eec2d6711b67e9f697f96773a10e31b0960d9d5b8ea",
+      "change": "Include the resolver in source digests and audit declared status changes."
+    },
+    {
+      "path": "src/perf/report.ts",
+      "before": "f223c2bf13248cb9f8e9dbd3cbd8f46dc8875313486df7d088c4450a5634776f",
+      "after": "af4263f7a37c5602020a5b6a92153ea238f2953a474c6fd294fc3c5eb633dc71",
+      "change": "Label retained remote status/comment rows as predating this fix."
+    },
+    {
+      "path": "src/perf/lifetime/projector.ts",
+      "before": "d095807f2c081e4dc268de8e79f90d930d1c83baf30aff3dae15c622dc01b03c",
+      "after": "bda850500e9e4dec66f08dc30ad25ccb5ae558ed2ecebfcaca425d4013e11841",
+      "change": "Use causal resolution, validate stored-status cache keys, update only changed event keys."
+    },
+    {
+      "path": "src/perf/lifetime/audit.ts",
+      "before": "127437e9ce4cf06c127837ce6a62df694262a10a36b4e35483ac8c94a7dc46e9",
+      "after": "491e857397c360ff7813de37e1a84a7c3a10889b15c640dc5d28115fa865ef3a",
+      "change": "Pin changed sampled work and dependency digest without replacing the timed archive."
+    },
+    {
+      "path": "src/perf/lifetime/report.ts",
+      "before": "191c0b69fd1ad3db6017f3ebd314e8189febd7d6ce93d3985b93cf642f47e89d",
+      "after": "de1947b13189bf206753083fa60e5e55d60de33dc991c3be0e860071ccbfb892",
+      "change": "Label all retained structure/component/withIdentity rows as predating this fix."
+    },
+    {
+      "path": "src/perf/lifetime/status-order.ts",
+      "before": "9672cf03c632a57ea5f08188da8118bd91b1e5cea9ff82dc69a6afbad19a086a",
+      "after": "c3aaa2b32823b42f1f524829c293c2dcd36ea9cd0643af91cdf5eb485b4b1802",
+      "change": "Retain original evidence and allow all-reader and retirement checks."
+    }
+  ],
+  "counts": {
+    "before": "2943866c556dda17609fc1ca9a9bd0c670bc76e0cf703dbcdfdbde884b3e7674",
+    "after": "3066eb7755b85eba1a54210a28c08c480a21b2230b18fa2cd5d5e110313e2166"
+  }
+}

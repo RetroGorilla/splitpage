@@ -15,6 +15,7 @@ import { structureManager, undoOne } from "../../src/structure.ts";
 import type { StructureRunResult } from "../structure-runner.ts";
 import { commentsOracle, commentsRemovedOracle, commentsReplyOracle, commentsRestoredOracle } from "../oracles.ts";
 import { markOracles } from "./oracles.ts";
+import { statusReaders } from "./status-readers.ts";
 
 export const markTraces: Record<string, readonly DeliveryOrder[]> = {
   T11: ["D1", "dup", "late-C"], "T20 nest": ["D1", "dup", "late-C"], "T20 cross": ["D1", "dup", "rev", "late-C"],
@@ -31,7 +32,7 @@ export function runMark(trace: string, candidate: SchemaCandidate, order: Delive
   let checks = 0;
   const check = (phase: string, explicit?: ScriptOracle, join = true): void => {
     queue.flush(order);
-    if (join && order === "late-C" && harness.replicas.length === 2) harness.lateJoin(b);
+    if (join && (order === "late-C" || trace === "T21 scalar") && harness.replicas.length === 2) harness.lateJoin(b);
     const oracle = explicit ?? markOracles[phase];
     if (!oracle) throw new Error(`Missing literal mark oracle ${phase}`);
     queue.history.push(`check ${phase}`);
@@ -41,6 +42,9 @@ export function runMark(trace: string, candidate: SchemaCandidate, order: Delive
       replica.doc.on("update", countUpdate);
       try {
         checkModel(readStructure(replica.doc, candidate, harness.identities, carets), oracle, harness.identities, `${phase}/client${replica.doc.clientID}`);
+        if (trace === "T21 scalar" && defect !== "lww-status") {
+          for (const [reader, status] of Object.entries(statusReaders(replica))) assert.equal(status, oracle.rows[0]?.status, `${phase}/${reader}`);
+        }
         assert.equal(updates, 0, "projection emitted a repair update");
       } finally { replica.doc.off("update", countUpdate); }
       checks++;

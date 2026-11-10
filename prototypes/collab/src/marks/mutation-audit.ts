@@ -11,6 +11,7 @@ export interface MarkMutationEvidence { id: string; outcome: "DETECTED" | "SURVI
 const projection = "src/marks/projection.ts";
 const commands = "src/marks/commands.ts";
 const schema = "src/schema.ts";
+const resolution = "src/marks/status-resolution.ts";
 
 export const markMutationDefinitions: readonly MarkMutationDefinition[] = [
   { id: "root-initialization", edits: [{ file: schema, before: "if (initializeRoots) initializeSchemaRoots(this.doc, candidate);", after: "if (false) initializeSchemaRoots(this.doc, candidate);" }] },
@@ -41,10 +42,10 @@ export const markMutationDefinitions: readonly MarkMutationDefinition[] = [
   { id: "local-undo-origin", edits: [{ file: "src/structure.ts", before: "trackedOrigins: new Set([replica.localOrigin])", after: 'trackedOrigins: new Set([replica.localOrigin, "delivery"])' }] },
   { id: "status-target-filter", edits: [{ file: commands, before: '.filter(([, event]) => event.target === target)', after: "" }] },
   { id: "status-command-parents", edits: [{ file: commands, before: "parents: frontier.map(([key]) => key).sort()", after: "parents: []" }] },
-  { id: "status-prior-after-retirement", edits: [{ file: commands, before: 'replica.doc.getMap("retiredStatus").has(id) ? event.prior : event.value', after: "event.value" }] },
-  { id: "status-reader-frontier", edits: [{ file: projection, before: "relevant.filter(([id]) => !parents.has(id))", after: "relevant" }] },
-  { id: "status-reader-retirement", edits: [{ file: projection, before: 'doc.getMap("retiredStatus").has(id) ? event.prior : event.value', after: "event.value" }] },
-  { id: "status-conflict-value", edits: [{ file: projection, before: 'frontier[0]?.[1].prior ?? "todo"', after: 'values.at(-1) ?? "todo"' }] },
+  { id: "status-prior-after-retirement", edits: [{ file: commands, before: 'resolveBeatStatus(new Map(statusEvents(replica, target)), replica.doc.getMap("retiredStatus"),', after: 'resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),' }] },
+  { id: "status-reader-frontier", edits: [{ file: resolution, before: "return resolve(statusHeads(events));", after: "return resolve([...events.keys()]);" }] },
+  { id: "status-reader-retirement", edits: [{ file: resolution, before: "if (!retired.has(id)) return event.value;", after: "if (true) return event.value;" }] },
+  { id: "status-conflict-value", edits: [{ file: resolution, before: "return resolve(statusHeads(shared));", after: 'return values.at(-1) ?? stored;' }] },
   { id: "status-notices", edits: [{ file: projection, before: 'model.notices = [...new Set(conflict.map(([, event]) => `${event.by}: concurrent status change did not apply`))].sort();', after: "model.notices = [];" }] },
   { id: "status-undo-metadata", edits: [{ file: commands, before: 'item.meta.set("statusEvent", id);', after: 'item.meta.delete("statusEvent");' }] },
   { id: "status-command-boundaries", edits: [{ file: commands, before: "manager.stopCapturing();", after: "", count: 2 }] },

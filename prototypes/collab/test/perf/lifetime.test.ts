@@ -49,12 +49,12 @@ test("status index preserves literal conflict, retirement, overwrite, deletion a
   } finally { indexed.destroy(); projection.destroy(); replica.destroy(); }
 });
 
-test("literal two-branch status fallback remains ready after c is deleted and recreated", () => {
+test("literal two-branch status fallback remains todo after c is deleted and recreated", () => {
   const replica = fromDocument({ title: "", rows: [{ id: "R1", audioText: "abcd", visualText: "", status: "todo" }] }, "B");
   const projection = new IncrementalProjection(replica), indexed = new IndexedStructureProjection(replica);
   const check = (): void => {
-    assert.equal(perfStructureView(replica, projection.document).groups[0]?.status, "ready");
-    assert.equal(indexed.view(projection.document).groups[0]?.status, "ready");
+    assert.equal(perfStructureView(replica, projection.document).groups[0]?.status, "todo");
+    assert.equal(indexed.view(projection.document).groups[0]?.status, "todo");
   };
   try {
     for (const [id, event] of Object.entries(reviewerStatusEvents)) replica.doc.getMap("statusEvents").set(id, structuredClone(event));
