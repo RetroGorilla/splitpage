@@ -163,6 +163,26 @@ test("seeded truncated and random updates are refused without changing state or 
   destroySharedDocument(writer);
 });
 
+test("remote formatting cleanup retains the remote origin and releases the origin scope afterward", () => {
+  const a = createSharedDocument(), b = createSharedDocument();
+  hydrateSharedDocument(a, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
+  assert.deepEqual(applySharedUpdate(b, encodeSharedState(a)), { ok: true });
+  for (const handle of [a, b]) {
+    const segment = collabState(handle).roots.segments.get("b:R1") as Y.Map<unknown>;
+    const text = segment.get("text") as Y.Text;
+    transactSharedDocument(handle, "local-command", () => text.format(0, 4, { b: true }));
+  }
+  const origins: unknown[] = [];
+  const detach = observeSharedTransactions(a, origin => origins.push(origin));
+  assert.deepEqual(applySharedUpdate(a, encodeSharedState(b)), { ok: true });
+  assert.deepEqual(origins, ["remote", "remote"]);
+  collabState(a).doc.transact(() => collabState(a).roots.meta.set("raw", true));
+  assert.deepEqual(origins, ["remote", "remote", null]);
+  detach();
+  destroySharedDocument(a);
+  destroySharedDocument(b);
+});
+
 test("vectors, reverse and duplicated deliveries and a late joiner agree root by root", () => {
   const readings: ReplicaReading<unknown>[] = [];
   for (const order of ["D1", "rev", "dup"] as const) {

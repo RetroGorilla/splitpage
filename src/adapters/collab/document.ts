@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { CollabDocumentState, collabState } from "./state.ts";
+import { CollabDocumentState, collabState, withSharedOrigin } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
@@ -9,7 +9,7 @@ export function createSharedDocument(): SharedDocumentHandle {
 export function transactSharedDocument(handle: SharedDocumentHandle, origin: SharedTransactionOrigin, change: () => void): void {
   const state = collabState(handle);
   state.fresh = false;
-  state.doc.transact(change, origin);
+  withSharedOrigin(state, origin, () => state.doc.transact(change, origin));
 }
 
 export function observeSharedTransactions(handle: SharedDocumentHandle, listener: (origin: SharedTransactionOrigin | null) => void): () => void {
@@ -47,7 +47,7 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
     trial.doc.destroy();
   }
   state.fresh = false;
-  Y.applyUpdate(state.doc, update, "remote");
+  withSharedOrigin(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
   return { ok: true };
 }
 
