@@ -125,6 +125,23 @@ test("stored anchors refuse wrong shapes, wrong versions, invalid bytes and nonc
   destroySharedDocument(handle);
 });
 
+test("stored anchors refuse the negative-zero association encoding", () => {
+  const literal = '{"v":1,"segment":"b:R1","relative":[0,1,1,64]}';
+  assert.ok(Object.is(Y.decodeRelativePosition(new Uint8Array([0, 1, 1, 64])).assoc, -0));
+  assert.equal(readSharedAnchor(literal), null);
+  const handle = seeded();
+  const reference = createSharedAnchor(handle, "b:R1", 1, "after");
+  assert.ok(reference);
+  const value = JSON.parse(reference) as { v: number; segment: string; relative: number[] };
+  assert.equal(value.relative.at(-1), 0);
+  const negativeZero = JSON.stringify({ v: 1, segment: "b:R1", relative: [...value.relative.slice(0, -1), 64] });
+  assert.equal(readSharedAnchor(negativeZero), null);
+  assert.equal(resolveSharedAnchor(handle, negativeZero), "gone");
+  assert.equal(readSharedAnchor(reference), reference);
+  assert.deepEqual(resolveSharedAnchor(handle, reference), { segment: "b:R1", offset: 1 });
+  destroySharedDocument(handle);
+});
+
 test("seeded arbitrary relative-position bytes cannot throw or declare roots while resolving", () => {
   const a = seeded(), c = createSharedDocument();
   assert.deepEqual(applySharedUpdate(c, encodeSharedState(a)), { ok: true });

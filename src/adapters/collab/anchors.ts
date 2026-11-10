@@ -25,6 +25,7 @@ function readAnchorValue(raw: unknown): AnchorValue | null {
     const relative = Uint8Array.from(bytes as number[]);
     const position = Y.decodeRelativePosition(relative);
     if (position.assoc !== -1 && position.assoc !== 0) return null;
+    if (Object.is(position.assoc, -0)) return null;
     if (position.tname !== null || (position.item === null && position.type === null)) return null;
     const canonical = Y.encodeRelativePosition(position);
     if (canonical.length !== relative.length || canonical.some((byte, index) => byte !== relative[index])) return null;
