@@ -6,8 +6,9 @@ export type SequenceType = Y.Text | Y.Array<unknown>;
 export type StoredAttributes = Record<string, unknown>;
 
 export interface IdentityPoint {
-  id: CollabIdentity;
+  id: CollabIdentity | null;
   assoc: number;
+  container?: unknown;
 }
 
 export interface SelectionRecord {
@@ -46,10 +47,15 @@ export function itemAt(type: SequenceType, index: number): CollabIdentity | null
   return item ? { client: item.client, clock: item.clock } : null;
 }
 
+function pointOf(position: Y.RelativePosition): IdentityPoint {
+  if (position.item) return { id: { client: position.item.client, clock: position.item.clock }, assoc: position.assoc };
+  return { id: null, assoc: position.assoc, container: Y.relativePositionToJSON(position) };
+}
+
 export function pointAt(type: SequenceType, index: number, assoc: number): IdentityPoint {
-  const item = Y.createRelativePositionFromTypeIndex(type, index, assoc).item;
-  if (!item) throw new Error(`No identity next to index ${index}`);
-  return { id: { client: item.client, clock: item.clock }, assoc };
+  const position = Y.createRelativePositionFromTypeIndex(type, index, assoc);
+  if (position.item || index === 0) return pointOf(position);
+  return pointOf(Y.createRelativePositionFromTypeIndex(type, index, -1));
 }
 
 export function resolveIdentity(doc: Y.Doc, id: CollabIdentity): ResolvedIdentity | null {
@@ -89,13 +95,9 @@ export function insertContent(type: SequenceType, index: number, content: Stored
 }
 
 export function anchorOf(point: IdentityPoint): Y.RelativePosition {
-  return Y.createRelativePositionFromJSON({ item: point.id, assoc: point.assoc });
+  return Y.createRelativePositionFromJSON(point.id ? { item: point.id, assoc: point.assoc } : point.container);
 }
 
 export function selectionOf(anchor: ReplicaCaretAnchor): SelectionRecord {
-  const point = (position: Y.RelativePosition): IdentityPoint => {
-    if (!position.item) throw new Error("Selection endpoint has no identity");
-    return { id: { client: position.item.client, clock: position.item.clock }, assoc: position.assoc };
-  };
-  return { start: point(anchor.position), ...(anchor.selectionEnd ? { end: point(anchor.selectionEnd) } : {}) };
+  return { start: pointOf(anchor.position), ...(anchor.selectionEnd ? { end: pointOf(anchor.selectionEnd) } : {}) };
 }

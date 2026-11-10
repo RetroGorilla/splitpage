@@ -3,7 +3,13 @@ import { test } from "node:test";
 import { bufferOracles, bufferTraceOrder } from "../buffer-oracles.ts";
 import { replacementIntentFixtures } from "../buffer-replacements.ts";
 import { attempt, bufferOrders, runBufferTrace, runReplacement } from "./buffer-runner.ts";
-import { recordTraces, runRecord } from "./runner.ts";
+import { recordTraces, retainedTraceNames, runRecord } from "./runner.ts";
+
+test("command records run every retained structural, mark and U-H1 trace for candidate B", () => {
+  assert.deepEqual(Object.keys(recordTraces), retainedTraceNames);
+  assert.equal(retainedTraceNames.length, 24);
+  assert.equal(Object.entries(recordTraces).reduce((runs, [trace, orders]) => runs + orders.length * (trace === "T06" ? 2 : 1), 0), 78);
+});
 
 for (const [trace, orders] of Object.entries(recordTraces)) {
   for (const swapped of trace === "T06" ? [false, true] : [false]) {

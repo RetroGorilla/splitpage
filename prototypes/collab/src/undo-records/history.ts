@@ -4,15 +4,17 @@ import type { ReplicaCaretAnchor } from "../reader.ts";
 import { mapValue, textValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { statusFrontier, statusValue } from "../marks/commands.ts";
-import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity } from "./identity.ts";
-import type { ResolvedIdentity, SelectionRecord, StoredContent } from "./identity.ts";
+import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity, selectionOf } from "./identity.ts";
+import type { IdentityPoint, ResolvedIdentity, SelectionRecord, StoredContent } from "./identity.ts";
 
 export type CommandPart =
   | { kind: "sequence"; inserted: CollabIdentity[]; deleted: StoredContent[] }
   | { kind: "positional"; beat: string; offset: number; length: number }
   | { kind: "format"; key: string; first: CollabIdentity; last: CollabIdentity; prior: { id: CollabIdentity; value: unknown }[] }
   | { kind: "join"; from: string; into: string; entry: string }
-  | { kind: "unjoined"; from: string; into: string; entry: string }
+  | { kind: "unjoined"; from: string; into: string; entry: string; retired: string[] }
+  | { kind: "key"; path: string[]; key: string; prior: unknown; value: unknown }
+  | { kind: "beat-record"; id: string; present: boolean }
   | { kind: "removal"; beat: string; entry: string }
   | { kind: "restored"; beat: string; entry: string }
   | { kind: "status"; target: string; event: string; value: string; by: string }
@@ -69,13 +71,15 @@ export class CommandHistory {
   readonly origin = { commandUndo: true };
   readonly bound: number;
   readonly defect: UndoDefect | null;
-  dropped: CommandRecord[] = [];
+  dropped = 0;
   private restoredHere = new Map<string, CollabIdentity>();
+  private readonly onDrop: ((entry: CommandRecord) => void) | null;
 
-  constructor(replica: SchemaReplica, options: { bound?: number; defect?: UndoDefect } = {}) {
+  constructor(replica: SchemaReplica, options: { bound?: number; defect?: UndoDefect; onDrop?: (entry: CommandRecord) => void } = {}) {
     this.replica = replica;
     this.bound = options.bound ?? 200;
     this.defect = options.defect ?? null;
+    this.onDrop = options.onDrop ?? null;
   }
 
   record(entry: CommandRecord): void {
@@ -83,8 +87,14 @@ export class CommandHistory {
     this.redoStack.length = 0;
     while (this.undoStack.length > this.bound) {
       const oldest = this.undoStack.shift();
-      if (oldest) this.dropped.push(oldest);
+      if (!oldest) break;
+      this.dropped++;
+      this.onDrop?.(oldest);
     }
+  }
+
+  mapAnchor(anchor: ReplicaCaretAnchor): ReplicaCaretAnchor {
+    return this.restoreSelection(selectionOf(anchor));
   }
 
   undo(): UndoOutcome {
@@ -104,13 +114,18 @@ export class CommandHistory {
       this.restoredHere = new Map();
       const inverses: CommandPart[] = [];
       let effective = false;
-      this.replica.doc.transact(() => {
-        for (const part of [...entry.parts].reverse()) {
-          const reversal = this.reverse(part);
-          effective ||= reversal.effective;
-          inverses.unshift(reversal.inverse);
-        }
-      }, this.origin);
+      try {
+        this.replica.doc.transact(() => {
+          for (const part of [...entry.parts].reverse()) {
+            const reversal = this.reverse(part);
+            effective ||= reversal.effective;
+            inverses.unshift(reversal.inverse);
+          }
+        }, this.origin);
+      } catch (error) {
+        from.push(entry);
+        throw error;
+      }
       const restored = [...this.restoredHere].map(([key, id]): [CollabIdentity, CollabIdentity] => {
         const [client, clock] = key.split(":").map(Number);
         return [{ client: client ?? 0, clock: clock ?? 0 }, id];
@@ -134,14 +149,16 @@ export class CommandHistory {
   }
 
   private follow(id: CollabIdentity): CollabIdentity {
+    const seen = new Set<string>();
     let current = id;
-    for (let step = 0; step < 64; step++) {
+    while (!seen.has(identityKey(current))) {
+      seen.add(identityKey(current));
       if (resolveIdentity(this.replica.doc, current)?.live) return current;
       const next = this.restored(current);
       if (!next) return current;
       current = next;
     }
-    throw new Error(`Restoration chain from ${identityKey(id)} does not end`);
+    throw new Error(`Restoration chain from ${identityKey(id)} loops`);
   }
 
   private locate(id: CollabIdentity): ResolvedIdentity | null {
@@ -149,7 +166,7 @@ export class CommandHistory {
   }
 
   private restoreSelection(selection: SelectionRecord): ReplicaCaretAnchor {
-    const map = (point: SelectionRecord["start"]): Y.RelativePosition => anchorOf({ id: this.follow(point.id), assoc: point.assoc });
+    const map = (point: IdentityPoint): Y.RelativePosition => anchorOf(point.id ? { ...point, id: this.follow(point.id) } : point);
     return { position: map(selection.start), ...(selection.end ? { selectionEnd: map(selection.end) } : {}) };
   }
 
@@ -160,9 +177,27 @@ export class CommandHistory {
       case "format": return this.reverseFormat(part);
       case "join": return this.reverseJoin(part);
       case "unjoined": {
-        const entry = `${part.entry}~`;
-        this.replica.join(part.from, part.into, entry);
-        return { effective: true, inverse: { kind: "join", from: part.from, into: part.into, entry } };
+        const retired = this.replica.doc.getMap("retiredJoins");
+        const inverse: CommandPart = { kind: "join", from: part.from, into: part.into, entry: part.entry };
+        const back = part.retired.filter(id => retired.has(id));
+        for (const id of back) retired.delete(id);
+        return { effective: back.length > 0, inverse };
+      }
+      case "key": return this.reverseKey(part);
+      case "beat-record": {
+        const beats = this.replica.doc.getMap("beats");
+        const inverse: CommandPart = { ...part, present: !part.present };
+        if (part.present) {
+          if (!beats.has(part.id)) return { effective: false, inverse };
+          beats.delete(part.id);
+          return { effective: true, inverse };
+        }
+        if (beats.has(part.id)) return { effective: false, inverse };
+        const record = new Y.Map<unknown>();
+        beats.set(part.id, record);
+        record.set("joins", new Y.Map<unknown>());
+        record.set("removals", new Y.Map<unknown>());
+        return { effective: true, inverse };
       }
       case "removal": return this.reverseRemoval(part);
       case "restored": {
@@ -287,19 +322,30 @@ export class CommandHistory {
   }
 
   private reverseJoin(part: Extract<CommandPart, { kind: "join" }>): Reversal {
-    const inverse: CommandPart = { kind: "unjoined", from: part.from, into: part.into, entry: part.entry };
+    const now: string[] = [];
+    const inverse: CommandPart = { kind: "unjoined", from: part.from, into: part.into, entry: part.entry, retired: now };
     const retired = this.replica.doc.getMap("retiredJoins");
     const joins = mapValue(mapValue(this.replica.doc.getMap("beats").get(part.from)).get("joins"));
     const ownLive = joins.has(part.entry) && !retired.has(part.entry);
     if (!ownLive && this.defect !== "retire-without-own-entry") return { effective: false, inverse };
-    let effective = false;
     for (const [id, value] of joins) {
       if ((value as { into: string }).into === part.into && !retired.has(id)) {
         retired.set(id, true);
-        effective = true;
+        now.push(id);
       }
     }
-    return { effective, inverse };
+    return { effective: now.length > 0, inverse };
+  }
+
+  private reverseKey(part: Extract<CommandPart, { kind: "key" }>): Reversal {
+    const inverse: CommandPart = { ...part, prior: part.value, value: part.prior };
+    let target = this.replica.doc.getMap<unknown>(part.path[0] ?? "");
+    for (const step of part.path.slice(1)) target = mapValue(target.get(step));
+    const current: unknown = target.get(part.key);
+    if (JSON.stringify(current) !== JSON.stringify(part.value)) return { effective: false, inverse };
+    if (part.prior === undefined) target.delete(part.key);
+    else target.set(part.key, part.prior);
+    return { effective: true, inverse };
   }
 
   private reverseRemoval(part: Extract<CommandPart, { kind: "removal" }>): Reversal {

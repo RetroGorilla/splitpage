@@ -37,10 +37,11 @@ function undoAll(harness: ReplicaHarness, history: CommandHistory, deliver: () =
 test("a 200-entry bound drops only local records: every kept entry, the oldest included, still undoes", () => {
   const run = runBoundHistory();
   try {
-    const counts = boundCounts(run.history);
+    const counts = boundCounts(run);
     assert.equal(counts.kept, 200);
     assert.equal(counts.dropped, 50);
-    assert.deepEqual(run.history.dropped.map(record => record.label), Array<string>(50).fill("insert"));
+    assert.equal(run.bobInserts.length, 12);
+    assert.deepEqual(run.droppedLabels, Array<string>(50).fill("insert"));
     assert.equal(run.history.undoStack[0]?.label, "status");
     undoAll(run.harness, run.history, () => run.harness.queue.flush("D2"));
     run.harness.lateJoin(run.harness.bob);
@@ -65,7 +66,7 @@ test("kept records are self-contained data: after a reload from encoded state th
   }
 });
 
-test("the command-record undo path reaches no library undo manager", () => {
+test("the command-record undo path calls no library undo or redo; only the inherited buffer constructor builds a manager", () => {
   const forbidden = /new Y\.UndoManager|\.undoManager\.(undo|redo)\(|\b(stopCapturing|structureManager|undoOne|undoJoin|undoStatus|undoCapturedMarks|undoStructuralRange|bindUndoRestores|captureUndoIdentities|undoManager)\(/;
   const folders = [new URL("../../src/undo-records/", import.meta.url), new URL("./", import.meta.url)];
   let scanned = 0;

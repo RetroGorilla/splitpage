@@ -99,6 +99,8 @@ export interface BoundRun {
   history: CommandHistory;
   bobInserts: string[];
   dropInserts: string[];
+  droppedLabels: string[];
+  droppedBytes: number;
 }
 
 export function runBoundHistory(): BoundRun {
@@ -106,7 +108,9 @@ export function runBoundHistory(): BoundRun {
   const { alice: a, queue } = harness;
   a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R2")).set("status", "todo"), "fixture");
   queue.flush("D2");
-  const history = new CommandHistory(a, { bound: 200 });
+  const droppedLabels: string[] = [];
+  let droppedBytes = 0;
+  const history = new CommandHistory(a, { bound: 200, onDrop: record => { droppedLabels.push(record.label); droppedBytes += recordBytes(record); } });
   const bob = new CommandHistory(harness.bob);
   const bobInserts: string[] = [];
   const dropInserts: string[] = [];
@@ -132,7 +136,7 @@ export function runBoundHistory(): BoundRun {
     }
     queue.flush("D2");
   }
-  return { harness, history, bobInserts, dropInserts };
+  return { harness, history, bobInserts, dropInserts, droppedLabels, droppedBytes };
 }
 
 export interface BoundCounts {
@@ -145,7 +149,8 @@ export interface BoundCounts {
   referencedStatusEvents: number;
 }
 
-export function boundCounts(history: CommandHistory): BoundCounts {
+export function boundCounts(run: BoundRun): BoundCounts {
+  const history = run.history;
   const keptByKind: Record<string, number> = {};
   const identities = new Set<string>();
   const events = new Set<string>();
@@ -158,9 +163,9 @@ export function boundCounts(history: CommandHistory): BoundCounts {
     }
   }
   return {
-    kept: history.undoStack.length, dropped: history.dropped.length,
+    kept: history.undoStack.length, dropped: history.dropped,
     keptBytes: history.undoStack.reduce((sum, record) => sum + recordBytes(record), 0),
-    droppedBytes: history.dropped.reduce((sum, record) => sum + recordBytes(record), 0),
+    droppedBytes: run.droppedBytes,
     keptByKind, referencedIdentities: identities.size, referencedStatusEvents: events.size
   };
 }

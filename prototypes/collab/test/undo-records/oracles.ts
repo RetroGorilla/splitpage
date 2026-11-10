@@ -56,7 +56,46 @@ export const redoOracles: Record<string, ScriptOracle> = {
   redone: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["a1*", "x", {}], ["a2*", "y", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["b1", "Z", {}], ["s4", "d", {}]] }], carets: {}, recovery: [] }
 };
 
-const chainBase = [["b1", "Q", {}], ["s1", "a", {}], ["s2", "b", {}]] as const;
+export const redoneAtGapOracle: ScriptOracle = {
+  rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["a1*", "x", {}], ["a2*", "y", {}], ["b1", "Z", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]] }], carets: {}, recovery: []
+};
+
+const abcd = [["s1", "a", {}], ["s2", "b", {}], ["s3", "c", {}], ["s4", "d", {}]] as const;
+
+export const endpointOracles: Record<string, ScriptOracle> = {
+  "split at end": { rows: [{ id: "R1", characters: abcd }, { id: "Ra", characters: [] }], carets: {}, recovery: [] },
+  "split at end undone": { rows: [{ id: "R1", characters: abcd }], carets: { A: { beat: "R1", offset: 4 } }, recovery: [] },
+  "empty beat typed": { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]] }, { id: "R2", characters: [["a1", "x", {}]] }], carets: {}, recovery: [] },
+  "empty beat undone": { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]] }, { id: "R2", characters: [] }], carets: { A: { beat: "R2", offset: 0 } }, recovery: [] }
+};
+
+export const longChainOracle: ScriptOracle = {
+  rows: [{ id: "R1", characters: [["s1", "a", {}], [`s2${"*".repeat(64)}`, "b", {}]] }], carets: {}, recovery: []
+};
+
+export const heldSelectionOracle: ScriptOracle = {
+  rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", {}], ["s3*", "c", {}], ["s4", "d", {}]] }],
+  carets: { A: { beat: "R1", offset: 1, selection: { beat: "R1", from: 1, to: 3 } } }, recovery: []
+};
+
+export const redoneRecoveryOracle: ScriptOracle = {
+  rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]] }], carets: {},
+  recovery: [{ row: { id: "R2", characters: [["s3", "c", {}], ["a1*", "x", {}], ["s4", "d", {}]] }, by: "Bob", edited: [] }]
+};
+
+const joinR3 = [["[glue]", " ", {}], ["s5", "e", {}], ["s6", "f", {}]] as const;
+
+export const joinRedoOracles: Record<string, ScriptOracle> = {
+  "into R1": { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ...joinR3] }, { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]] }], carets: {}, recovery: [] },
+  "into R2": { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}], ...joinR3] }], carets: {}, recovery: [] }
+};
+
+export const laterFormatOracles: Record<string, ScriptOracle> = {
+  "Bob bolded": { rows: [{ id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }], ["s3", "c", { b: true }], ["s4", "d", {}]] }], carets: {}, recovery: [] },
+  "Alice undone": { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", { b: true }], ["s3", "c", { b: true }], ["s4", "d", {}]] }], carets: {}, recovery: [] }
+};
+
+const chainBase =[["b1", "Q", {}], ["s1", "a", {}], ["s2", "b", {}]] as const;
 
 export const chainOracles: Record<string, ScriptOracle> = {
   commands: { rows: [{ id: "R1", characters: chainBase }], carets: {}, recovery: [] },
@@ -72,6 +111,13 @@ export const statusOracles: Record<string, ScriptOracle> = {
   shot: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "shot" }], carets: {}, recovery: [] },
   ready: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "ready" }], carets: {}, recovery: [] },
   todo: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo" }], carets: {}, recovery: [] }
+};
+
+const statusNotices = ["Alice: concurrent status change did not apply", "Bob: concurrent status change did not apply"];
+
+export const statusRedoObserved: Record<string, ScriptOracle> = {
+  todo: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo" }], carets: {}, recovery: [], notices: statusNotices },
+  ready: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "ready" }], carets: {}, recovery: [], notices: statusNotices }
 };
 
 export const positionControlOracle: ScriptOracle = {

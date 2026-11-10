@@ -18,7 +18,7 @@ export class RecordingBeatBuffer extends EditableBeatBuffer {
 
   constructor(editor: SchemaReplica, record?: (line: string) => void) {
     super(editor, "M1", editor, record);
-    // why: the inherited buffer builds a library undo manager; destroy it so only command records can undo.
+    // why: the inherited constructor still builds a library undo manager; it is destroyed unused, so only records undo.
     this.undoManager.destroy();
     this.commands = new CommandHistory(editor);
   }

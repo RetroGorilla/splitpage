@@ -1,15 +1,33 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { runDoubleDelete, runIdenticalRemoval, runIdenticalTag, runInsideRange, runPositionControl, runRedoAfterRemote, runRejoin, runReRemoval, runRestoredChain, runSequentialStatus } from "./cases.ts";
+import { runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalTag, runInsideRange, runJoinRedo, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneRecovery, runRejoin, runReRemoval, runRestoredChain, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
 import type { CaseResult } from "./cases.ts";
 
 const identicalOrders = ["D1", "dup", "rev", "late-C"] as const;
 const followOrders = ["D2", "dup", "late-C"] as const;
+const everyOrder = ["D1", "D2", "dup", "rev", "late-C"] as const;
 
 function passes(result: CaseResult): void {
   assert.equal(result.failure, null, result.history.join("\n"));
   assert.ok(result.checks >= 2);
 }
+
+for (const order of everyOrder) {
+  test(`split at the end of a beat and its undo ${order}`, () => passes(runSplitAtEnd(order)));
+  test(`insert into an empty beat and its undo ${order}`, () => passes(runEmptyBeatInsert(order)));
+  test(`a 64-step restoration chain still resolves for an older format record ${order}`, () => passes(runLongChain(order)));
+  test(`a held selection mapped through the history follows restorations ${order}`, () => passes(runHeldSelection(order)));
+  test(`join redo returns the join that won before the undo ${order}`, () => passes(runJoinRedo(order)));
+  test(`open question: status redo reasserts a status that had not applied ${order}`, () => passes(runStatusRedo(order)));
+  test(`limit: recovery lists a redone character as edited after the removal ${order}`, () => {
+    assert.match(runRedoneRecovery(order).failure ?? "", /recovery\[0\]\.edited\[0\]: expected <missing>, got "a1\*"/);
+  });
+  test(`limit: format undo overwrites the other writer's later bold ${order}`, () => {
+    assert.match(runLaterFormat(order).failure ?? "", /Alice undone\/client\d+\.rows\[0\]\.characters\[1\]\.marks\.b: expected true, got <missing>/);
+  });
+}
+
+test("an undo that throws keeps its entry", () => passes({ ...runThrowingUndo(), checks: 2 }));
 
 for (const order of identicalOrders) {
   for (const swapped of [false, true]) {

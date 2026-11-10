@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as Y from "yjs";
 import { ReplicaHarness } from "../../src/delivery.ts";
 import type { DeliveryOrder } from "../../src/delivery.ts";
 import { checkModel } from "../../src/model.ts";
@@ -8,13 +9,14 @@ import { identityAt, mapValue } from "../../src/schema.ts";
 import type { SchemaReplica, SeedBeat } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { structuralCaret } from "../../src/structure-selection.ts";
-import { clearGlue, seedJoinMetadata } from "../../src/structure.ts";
-import { addComment, addReply, changeStatus, formatRange, formatSelection, insertText, join, moveBeat, removeBeat, setScalar, split } from "../../src/undo-records/commands.ts";
+import { storedMarkNames } from "../../src/marks/projection.ts";
+import { clearGlue, cutPaste, seedJoinMetadata, visualInsert } from "../../src/structure.ts";
+import { addComment, addReply, captureRange, changeStatus, createHeadingRecord, formatRange, formatSelection, insertText, join, moveBeat, removeBeat, removeHeadingRecord, replaceRange, setScalar, split } from "../../src/undo-records/commands.ts";
 import { CommandHistory } from "../../src/undo-records/history.ts";
 import type { UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
 import { markTraces } from "../marks/runner.ts";
 import { markOracles } from "../marks/oracles.ts";
-import { joinBoldUndoOracle, joinOracle, joinUndoOracle, removedOracle, restorationOracle } from "../oracles.ts";
+import { commentsOracle, commentsRemovedOracle, commentsReplyOracle, commentsRestoredOracle, joinBoldUndoOracle, joinOracle, joinUndoOracle, removedOracle, restorationOracle } from "../oracles.ts";
 import { beatOracles } from "../structure-oracles.ts";
 import { structureTraces } from "../structure-runner.ts";
 
@@ -32,14 +34,11 @@ function withLateJoiner(orders: readonly DeliveryOrder[] | undefined): DeliveryO
   return orders.includes("late-C") ? [...orders] : [...orders, "late-C"];
 }
 
-export const recordTraces: Record<string, DeliveryOrder[]> = {
-  T06: withLateJoiner(structureTraces.T06), T10: withLateJoiner(structureTraces.T10), T12: withLateJoiner(structureTraces.T12),
-  "T12 join": withLateJoiner(structureTraces["T12 join"]), T21: withLateJoiner(markTraces.T21),
-  "T21 comment": withLateJoiner(markTraces["T21 comment"]), "T21 scalar": withLateJoiner(markTraces["T21 scalar"]),
-  "U-H1 glue rewrite": withLateJoiner(["D2"]), "U-H1 top item": withLateJoiner(["D1"]),
-  "MOVE concurrent": withLateJoiner(structureTraces["MOVE concurrent"]), "MOVE destination": withLateJoiner(structureTraces["MOVE destination"]),
-  "MOVE delete": withLateJoiner(structureTraces["MOVE delete"])
-};
+export const retainedTraceNames = [...Object.keys(structureTraces), ...Object.keys(markTraces), "U-H1 glue rewrite", "U-H1 top item"];
+
+export const recordTraces: Record<string, DeliveryOrder[]> = Object.fromEntries([
+  ...Object.entries(structureTraces), ...Object.entries(markTraces), ["U-H1 glue rewrite", ["D2"]], ["U-H1 top item", ["D1"]]
+].map(([trace, orders]) => [trace, withLateJoiner(orders as readonly DeliveryOrder[])]));
 
 const glueRewriteOracle: ScriptOracle = {
   rows: [{ id: "R1", characters: [["s1", "a", { i: true }], ["s2", "b", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["b1", "Z", {}], ["s4", "d", {}]] }], carets: {}, recovery: []
@@ -49,7 +48,16 @@ const topItemOracle: ScriptOracle = {
 };
 
 function fixture(trace: string): SeedBeat[] {
-  if (trace === "T12") return [{ id: "R1", text: "abcd" }];
+  if (trace === "T05 two splits" || trace === "T12") return [{ id: "R1", text: "abcd" }];
+  if (trace === "T07") return [{ id: "R1", text: "" }, { id: "R2", text: "" }];
+  if (trace === "T08 remove") return [{ id: "R0", text: "x" }, { id: "H1", kind: "heading", text: "In" }, { id: "R1", text: "ab" }];
+  if (trace === "T08 create") return [{ id: "R1", text: "x" }, { id: "R2", text: "# Ab" }, { id: "R3", text: "cd" }];
+  if (trace === "T08 race") return [{ id: "R1", text: "x" }, { id: "R2", text: "# Ab\nrest" }];
+  if (trace === "T09") return [{ id: "R1", text: "abc" }, { id: "R2", text: "de" }, { id: "R3", text: "fgh" }];
+  if (trace === "T09 header") return [{ id: "R1", text: "ab" }, { id: "H1", kind: "heading", text: "Cd" }, { id: "R2", text: "ef" }];
+  if (trace === "MOVE cut-paste") return [{ id: "H1", kind: "heading", text: "A" }, { id: "R1", text: "ab" }, { id: "H2", kind: "heading", text: "B" }, { id: "R2", text: "cd" }];
+  if (trace === "T11") return [{ id: "R1", text: "abcd" }, { id: "R2", text: "ef" }];
+  if (trace.startsWith("T20")) return [{ id: "R1", text: "the red mug" }];
   if (trace.startsWith("T21")) return [{ id: "R1", text: trace === "T21 scalar" ? "ab" : "abcd" }];
   if (trace === "U-H1 top item") return [{ id: "R1", text: "ab" }];
   return [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }, ...(trace === "T10" || trace.startsWith("MOVE") ? [{ id: "R3", text: "ef" }] : [])];
@@ -92,9 +100,9 @@ export function runRecord(trace: string, order: DeliveryOrder, swapped = false, 
   const hb = new CommandHistory(b, defect ? { defect } : {});
   const carets = new Map<string, ReplicaCaretAnchor>();
   let checks = 0;
-  const check = (phase: string, oracle: ScriptOracle | undefined): void => {
+  const check = (phase: string, oracle: ScriptOracle | undefined, joinLate = true): void => {
     queue.flush(order);
-    if (order === "late-C" && harness.replicas.length === 2) harness.lateJoin(b);
+    if (joinLate && order === "late-C" && harness.replicas.length === 2) harness.lateJoin(b);
     if (!oracle) throw new Error(`Missing literal oracle ${phase}`);
     queue.history.push(`check ${phase}`);
     for (const replica of harness.replicas) {
@@ -120,7 +128,142 @@ export function runRecord(trace: string, order: DeliveryOrder, swapped = false, 
   };
   try {
     queue.history.push(`fixture B ${JSON.stringify(fixture(trace))}${swapped ? ", swapped client ids" : ""}${defect ? `, defect ${defect}` : ""}`);
+    if (trace.startsWith("T20")) {
+      a.doc.transact(() => { a.doc.getMap("tags").set("P", { kind: "Prop" }); a.doc.getMap("tags").set("S", { kind: "Sound" }); }, "fixture");
+      queue.flush("D2");
+    }
     switch (trace) {
+      case "T05 two splits": {
+        const original = { position: structuralCaret(a, "R1", 2, -1) };
+        carets.set("A", split(ha, "R1", 2, "Ra", "a1", undefined, original));
+        carets.set("B", split(hb, "R1", 2, "Rb", "b1"));
+        check(trace, beatOracles[trace]);
+        const undone = undo(ha, "Alice");
+        if (!undone.selection) throw new Error("Split undo restored no caret");
+        carets.set("A", undone.selection);
+        check(`${trace} undo`, beatOracles[`${trace} undo`]);
+        break;
+      }
+      case "T07": {
+        a.doc.transact(() => {
+          for (const [id, beat, value, names] of [["V1", "R1", "v", ["v1"]], ["V2", "R2", "wz", ["w1", "w2"]]] as const) {
+            const component = new Y.Map<unknown>();
+            a.doc.getMap("visuals").set(id, component);
+            component.set("beat", beat);
+            component.set("rank", "0");
+            const text = new Y.Text();
+            component.set("text", text);
+            text.insert(0, value, {});
+            names.forEach((name, index) => harness.identities.bind(name, identityAt(text, index)));
+          }
+        }, "fixture");
+        queue.flush("D2");
+        remote(() => carets.set("B", { position: visualInsert(b, "V2", 1, "Q", "b1") }));
+        join(ha, "R2", "R1", "jA");
+        check(trace, beatOracles[trace]);
+        undo(ha, "Alice");
+        check(`${trace} undo`, beatOracles[`${trace} undo`]);
+        break;
+      }
+      case "T08 remove": {
+        const original = structuralCaret(a, "H1", 0);
+        remote(() => { insertText(hb, "H1", 2, "Z", ["b1"]); insertText(hb, "R1", 2, "Y", ["b2"]); });
+        removeHeadingRecord(ha, "H1", "Rn", "R1");
+        carets.set("A", { position: original });
+        check(trace, beatOracles[trace]);
+        undo(ha, "Alice");
+        check(`${trace} undo`, beatOracles[`${trace} undo`]);
+        break;
+      }
+      case "T08 create": {
+        a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R2")).set("paragraphStart", true), "fixture");
+        queue.flush("D2");
+        const caret = { position: structuralCaret(a, "R3", 0) };
+        remote(() => { insertText(hb, "R2", 4, "e", ["b1"]); insertText(hb, "R3", 0, "Q", ["b2"]); });
+        createHeadingRecord(ha, "R2", "H2", 2, false, ["a1"]);
+        carets.set("A", caret);
+        check(trace, beatOracles[trace]);
+        undo(ha, "Alice");
+        carets.clear();
+        check(`${trace} undo`, beatOracles[`${trace} undo`]);
+        break;
+      }
+      case "T08 race": {
+        createHeadingRecord(ha, "R2", "Ha", 2, true, ["a1", "a2"]);
+        createHeadingRecord(hb, "R2", "Hb", 2, true, ["b1", "b2"]);
+        check(trace, beatOracles[trace]);
+        break;
+      }
+      case "T09": {
+        const capture = captureRange(ha, "R1", 1, "R3", 2);
+        remote(() => { insertText(hb, "R1", 2, "W", ["b1"]); insertText(hb, "R2", 1, "X", ["b2"]); insertText(hb, "R3", 2, "Y", ["b3"]); });
+        carets.set("A", replaceRange(ha, capture, "Z", ["a1"], "Alice"));
+        check(trace, beatOracles[trace]);
+        const undone = undo(ha, "Alice");
+        if (!undone.selection) throw new Error("Range undo restored no selection");
+        carets.set("A", undone.selection);
+        check(`${trace} undo`, beatOracles[`${trace} undo`]);
+        break;
+      }
+      case "T09 header": {
+        const capture = captureRange(ha, "R1", 1, "H1", 1);
+        remote(() => insertText(hb, "H1", 2, "Q", ["b1"]));
+        carets.set("A", replaceRange(ha, capture, "", [], "Alice"));
+        check(trace, beatOracles[trace]);
+        undo(ha, "Alice");
+        carets.clear();
+        check(`${trace} undo`, beatOracles[`${trace} undo`]);
+        break;
+      }
+      case "MOVE cut-paste": {
+        carets.set("A", { position: structuralCaret(a, "R1", 0), selectionEnd: structuralCaret(a, "R1", 2, -1) });
+        const before = Y.encodeStateVector(a.doc);
+        assert.equal(cutPaste(), false);
+        assert.deepEqual(Y.encodeStateVector(a.doc), before);
+        assert.equal(ha.undoStack.length, 0);
+        check(trace, beatOracles[trace]);
+        assert.equal(ha.undo().label, null);
+        break;
+      }
+      case "T11": {
+        addComment(ha, "C1", "R1", 1, 2, "Alice");
+        addComment(hb, "C2", "R1", 2, 2, "Bob");
+        check("T11 overlap", commentsOracle, false);
+        addReply(hb, "r1", "C1", "Bob");
+        check("T11 reply", commentsReplyOracle, false);
+        carets.set("A", { position: structuralCaret(a, "R1", 0) });
+        removeBeat(ha, "R1", "rA", "Alice");
+        carets.set("B", split(hb, "R1", 2, "Rb", "b1", "Bob"));
+        check("T11 removed/split", commentsRemovedOracle);
+        undo(ha, "Alice");
+        check("T11 restored", commentsRestoredOracle);
+        break;
+      }
+      case "T20 nest":
+      case "T20 cross": {
+        formatRange(ha, "R1", 4, 11, { "t:oA": "P" });
+        const [from, to] = trace === "T20 nest" ? [8, 11] : [0, 7];
+        formatRange(hb, "R1", from, to, { "t:oB": "S" });
+        check(trace, markOracles[trace]);
+        undo(trace === "T20 nest" ? ha : hb, trace === "T20 nest" ? "Alice" : "Bob");
+        check(`${trace} undo`, markOracles[`${trace} undo`]);
+        break;
+      }
+      case "T20 mark": {
+        formatRange(hb, "R1", 8, 11, { "c:C1": true });
+        formatRange(hb, "R1", 4, 7, { "l:L1": "http://x" });
+        if (order === "D3") queue.deliverFrom("B", order);
+        formatRange(ha, "R1", 4, 11, { "t:oA": "P" });
+        check(trace, markOracles[trace]);
+        for (const replica of harness.replicas) {
+          const raw = replica.characters().map(character => ({ ...character, notation: harness.identities.notation(character.identity) }));
+          assert.deepEqual(storedMarkNames("c:C1", raw), ["s9", "s10", "s11"]);
+          assert.deepEqual(storedMarkNames("l:L1", raw), ["s5", "s6", "s7"]);
+        }
+        undo(hb, "Bob");
+        check(`${trace} undo`, markOracles[`${trace} undo`]);
+        break;
+      }
       case "T06": {
         seedJoinMetadata(a);
         queue.flush("D2");

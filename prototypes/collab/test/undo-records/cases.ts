@@ -7,10 +7,11 @@ import type { ReplicaCaretAnchor } from "../../src/reader.ts";
 import { mapValue } from "../../src/schema.ts";
 import type { SchemaReplica, SeedBeat } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
-import { changeStatus, deleteRange, formatRange, insertText, join, removeBeat, tagRange } from "../../src/undo-records/commands.ts";
+import { structuralCaret } from "../../src/structure-selection.ts";
+import { changeStatus, deleteRange, formatRange, insertText, join, removeBeat, split, tagRange } from "../../src/undo-records/commands.ts";
 import { CommandHistory } from "../../src/undo-records/history.ts";
 import type { UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
-import { chainOracles, doubleDeleteOracles, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, positionControlOracle, redoOracles, rejoinOracles, reRemovalOracles, statusOracles } from "./oracles.ts";
+import { chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, positionControlOracle, redoneAtGapOracle, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, statusOracles, statusRedoObserved } from "./oracles.ts";
 import { bindRestores, countUpdates } from "./runner.ts";
 
 export type Writer = "Alice" | "Bob";
@@ -235,12 +236,145 @@ export function runRedoAfterRemote(order: DeliveryOrder, sameGap: boolean): Case
       scenario.check("redone", redoOracles.redone ?? fail());
       return undefined;
     }
+    scenario.check("redone at the gap", redoneAtGapOracle);
+    return `R1 = ${scenario.row("R1")}`;
+  });
+}
+
+export function runSplitAtEnd(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, false);
+  return scenario.run("split at the end of a beat, then undo", () => {
+    split(scenario.histories.Alice, "R1", 4, "Ra", "a1");
+    scenario.check("split at end", endpointOracles["split at end"] ?? fail());
+    const undone = scenario.undo("Alice");
+    if (!undone.selection) throw new Error("Split undo restored no caret");
+    scenario.carets.set("A", undone.selection);
+    scenario.check("split at end undone", endpointOracles["split at end undone"] ?? fail());
+    return undefined;
+  });
+}
+
+export function runEmptyBeatInsert(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "" }], order, false);
+  return scenario.run("insert into an empty beat, then undo", () => {
+    insertText(scenario.histories.Alice, "R2", 0, "x", ["a1"]);
+    scenario.check("empty beat typed", endpointOracles["empty beat typed"] ?? fail());
+    const undone = scenario.undo("Alice");
+    if (!undone.selection) throw new Error("Insert undo restored no caret");
+    scenario.carets.set("A", undone.selection);
+    scenario.check("empty beat undone", endpointOracles["empty beat undone"] ?? fail());
+    return undefined;
+  });
+}
+
+export function runLongChain(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }], order, false);
+  return scenario.run("bold one character, delete and undo it 64 times, then undo the bold", () => {
+    const alice = scenario.histories.Alice;
+    formatRange(alice, "R1", 1, 2, { b: true });
+    for (let round = 0; round < 64; round++) {
+      deleteRange(alice, "R1", 1, 2);
+      assert.equal(scenario.undo("Alice").effective, true, `delete undo ${round + 1} changed nothing`);
+    }
     scenario.deliver();
-    const rows = scenario.models().map(model => JSON.stringify(model.rows.map(row => [row.id, row.characters.map(character => character.notation)])));
-    assert.equal(new Set(rows).size, 1, "replicas disagree after redo");
-    const r1 = scenario.row("R1");
-    assert.deepEqual(r1.split(" ").sort(), ["a1*", "a2*", "b1", "s1", "s2"]);
-    return `R1 = ${r1}`;
+    assert.equal(alice.undoStack.length, 1);
+    assert.equal(scenario.undo("Alice").effective, true, "bold undo changed nothing");
+    scenario.check("bold undone", longChainOracle);
+    return undefined;
+  });
+}
+
+export function runThrowingUndo(): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }], "D1", false);
+  return scenario.run("an undo whose record cannot be resolved throws and keeps its entry", () => {
+    const alice = scenario.histories.Alice;
+    insertText(alice, "R1", 2, "x", ["a1"]);
+    const missing = { client: 99, clock: 0 };
+    alice.undoStack.push({ label: "broken", parts: [{ kind: "format", key: "b", first: missing, last: missing, prior: [] }] });
+    assert.throws(() => alice.undo(), /Format span is not in one text/);
+    assert.equal(alice.undoStack.length, 2);
+    assert.equal(alice.undoStack.at(-1)?.label, "broken");
+    return undefined;
+  });
+}
+
+export function runHeldSelection(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, false);
+  return scenario.run("a selection held outside the history over bc, after delete and undo of bc", () => {
+    const alice = scenario.replicas.Alice;
+    const held = { position: structuralCaret(alice, "R1", 1), selectionEnd: structuralCaret(alice, "R1", 3, -1) };
+    deleteRange(scenario.histories.Alice, "R1", 1, 3);
+    scenario.undo("Alice");
+    scenario.deliver();
+    scenario.carets.set("held", held);
+    const unmapped = scenario.models().map(model => JSON.stringify(model.carets.held ?? null));
+    scenario.carets.delete("held");
+    scenario.note(`held selection without mapping: ${[...new Set(unmapped)].join(" | ")}`);
+    scenario.carets.set("A", scenario.histories.Alice.mapAnchor(held));
+    scenario.check("held selection mapped", heldSelectionOracle);
+    return [...new Set(unmapped)].join(" | ");
+  });
+}
+
+export function runRedoneRecovery(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order, false);
+  return scenario.run("Alice's undone and redone insert inside a beat Bob removed", () => {
+    insertText(scenario.histories.Alice, "R2", 1, "x", ["a1"]);
+    scenario.deliver();
+    removeBeat(scenario.histories.Bob, "R2", "rB", "Bob");
+    scenario.deliver();
+    scenario.undo("Alice");
+    scenario.redo("Alice");
+    scenario.check("recovery after undo and redo", redoneRecoveryOracle);
+    return undefined;
+  });
+}
+
+export function runJoinRedo(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }, { id: "R3", text: "ef" }], order, false);
+  return scenario.run("join redo after a concurrent join of the same beat elsewhere", () => {
+    join(scenario.histories.Alice, "R3", "R1", "j");
+    join(scenario.histories.Bob, "R3", "R2", "jB");
+    scenario.check("joined", joinRedoOracles["into R1"] ?? fail());
+    assert.equal(scenario.undo("Alice").effective, true);
+    scenario.check("Alice's join undone", joinRedoOracles["into R2"] ?? fail());
+    assert.equal(scenario.redo("Alice").effective, true);
+    scenario.check("Alice's join redone", joinRedoOracles["into R1"] ?? fail());
+    return undefined;
+  });
+}
+
+export function runLaterFormat(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, false);
+  return scenario.run("Alice bolds ab; Bob unbolds then bolds bc; Alice undoes", () => {
+    formatRange(scenario.histories.Alice, "R1", 0, 2, { b: true });
+    scenario.deliver();
+    const bob = scenario.replicas.Bob;
+    bob.doc.transact(() => {
+      const { text, start } = bob.locate("R1");
+      text.format(start + 1, 2, { b: null });
+    }, bob.localOrigin);
+    formatRange(scenario.histories.Bob, "R1", 1, 3, { b: true });
+    scenario.check("Bob bolded", laterFormatOracles["Bob bolded"] ?? fail());
+    assert.equal(scenario.undo("Alice").effective, true);
+    scenario.check("Alice undone", laterFormatOracles["Alice undone"] ?? fail());
+    return undefined;
+  });
+}
+
+export function runStatusRedo(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }], order, false);
+  return scenario.run("concurrent statuses converge; Alice undoes and redoes hers", () => {
+    scenario.replicas.Alice.doc.transact(() => mapValue(scenario.replicas.Alice.doc.getMap("beats").get("R1")).set("status", "todo"), "fixture");
+    scenario.harness.queue.flush("D2");
+    changeStatus(scenario.histories.Alice, "R1", "sA", "ready", "Alice");
+    changeStatus(scenario.histories.Bob, "R1", "sB", "shot", "Bob");
+    scenario.check("concurrent", statusRedoObserved.todo ?? fail());
+    const undone = scenario.undo("Alice");
+    scenario.check("Alice undone", statusRedoObserved.todo ?? fail());
+    const redone = scenario.redo("Alice");
+    scenario.check("Alice redone", statusRedoObserved.ready ?? fail());
+    return `undo effective=${String(undone.effective)}, redo effective=${String(redone.effective)}`;
   });
 }
 
