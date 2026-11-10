@@ -65,7 +65,7 @@ Never run specifically as B with M1: the page/Writer matrices, the structural/ma
 
 ## Decision 1: M1 buffer mechanism
 
-**Selected by the coordinator; the product owner confirms.** M1 holds remote updates outside one Yjs document while a buffered edit or composition is open, commits the local intent, drains the hold, then reconciles the editor. All three mechanisms pass T01–T04 in simulation on A/B, and in the A page and real Writer matrices. [Buffer][buffer], [slice][slice], [app][app].
+**Confirmed by the product owner on 2026-11-09, standing unless the evidence still owed contradicts them.** [#1405][1405]. M1 holds remote updates outside one Yjs document while a buffered edit or composition is open, commits the local intent, drains the hold, then reconciles the editor. All three mechanisms pass T01–T04 in simulation on A/B, and in the A page and real Writer matrices. [Buffer][buffer], [slice][slice], [app][app].
 
 M1 and M3 satisfy every new composition case's scoped checks in #1399. M2 puts composed text in old R1 after a preceding split instead of following the painted neighbor into Rb. This is a limit of its mapper's `painted.id` filter; a cross-beat search/destination/caret fix is proposed but untested. M2 also leaves new xy plain under remote bold, contrary to T21. Those three cases pass the narrower checker because it checks bold only on the original characters. M1/M3 make xy bold. The comment/tag replica checks pass, but their app rendering remains unbound under all three. [Follow-up][follow], [structural history][composition-structure], [mark history][composition-marks].
 
@@ -77,7 +77,7 @@ Proof limits: the bounded queue needs overflow, cancellation and recovery handli
 
 ## Decision 2: candidate B schema
 
-**Selected by the coordinator; the product owner confirms.** Stable segments retain text identity while heads and inner boundary embeds describe structure; one order array orders segments. Both candidates pass every required structural and mark trace and map all 96 fields. B supports tested whole-segment beat moves. Most measured editing comparisons are within the fixed noise tolerance; B's near-limit identity capture is 0.062 ms against A's 18.908 ms with these public lookup calls. A retains slightly fewer encoded bytes. [Structure][structure], [marks][marks], [projection][proj], [performance][perf].
+**Confirmed by the product owner on 2026-11-09, standing unless the evidence still owed contradicts them.** [#1405][1405]. Stable segments retain text identity while heads and inner boundary embeds describe structure; one order array orders segments. Both candidates pass every required structural and mark trace and map all 96 fields. B supports tested whole-segment beat moves. Most measured editing comparisons are within the fixed noise tolerance; B's near-limit identity capture is 0.062 ms against A's 18.908 ms with these public lookup calls. A retains slightly fewer encoded bytes. [Structure][structure], [marks][marks], [projection][proj], [performance][perf].
 
 ### Rejected alternatives
 
@@ -99,7 +99,7 @@ B admits whole-segment movement only. Moving part of a segment and cross-scene s
 
 **Disagreement:** selecting B does not satisfy the plan's production schema gate on current evidence. PROJ retains only 7/291 original files byte-identically and differs from direct app save on five fixtures for both candidates. Three lose U+200B in visual text, one loses a stored mid-line cue, and one loses two deliberately device-local link locations. Those are explicit differences, not waived byte requirements. The full-document layout does not integrate all structural/mark/status trace readers, B with M1 lacks real-editor coverage, and PERF has absolute budget failures. The selection can be recorded; an unconditional Stage 1a exit or production-schema endorsement is not supported. [Schema gate][schema-gate], [projection differences][proj], [B history][roundtrip-b], [app][app], [performance][perf].
 
-Historical capture stamps/colors and comment `updatedAt` must survive import/export even though Stage 0 proposed derivation or regeneration. Their shared editing policy is still open, although section 5 requires an edit-stamp decision before schema selection. Atomic picture/annotation groups, bodies, resolution groups, extras and other coupled values round-trip; that does not prove concurrent edits inside them. B is segment-local, not necessarily beat-local: splits retain inner beats in their source segment. [Schema requirements][schema-requirements], [projection departures and opaque values][proj], [incremental mechanism][perf].
+Historical capture stamps/colors and comment `updatedAt` must survive import/export even though Stage 0 proposed derivation or regeneration. The edit-stamp rule was decided on 2026-11-09: a beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export. It is no longer a missing schema-gate decision. [#1405][1405]. Atomic picture/annotation groups, bodies, resolution groups, extras and other coupled values round-trip; that does not prove concurrent edits inside them. B is segment-local, not necessarily beat-local: splits retain inner beats in their source segment. [Schema requirements][schema-requirements], [projection departures and opaque values][proj], [incremental mechanism][perf].
 
 ## Decision 3: semantic command undo
 
@@ -216,7 +216,7 @@ The 520 seeded merged-limit runs converge and resave stably, but do not establis
 - Content-key tag ids collapse deliberately separate same-kind/name tags even sequentially; a lone surrogate collides with U+FFFD. Renaming, migration and identical-tagging undo have no established general identity solution. [Marks][marks].
 - Join retirement is proved for concurrent identical joins and remote glue rewrites, not a later intentional rejoin. Identical simultaneous removal undo remains unproved. [Structure][structure].
 - Beat status frontiers do not establish arbitrary graph or tag/shot status handling. Detached-comment fallback has only the specified explicit-move proof; multiple movers and different-field arbitration remain open. [Marks][marks], [projection][proj].
-- Historical capture metadata needs retention for round trips; edit-stamp policy, overflow/recovery presentation and coupled-value concurrency remain unresolved. Missing-owner, deleted-registry, empty-scene/script, overlong-name and duplicate b-roll-key policies are proposed in Stage 0 but not comprehensively established here. [Projection][proj], [marks][marks], [structure][structure], [Stage 0 projection rules][hypotheses].
+- Historical capture metadata needs retention for round trips; overflow/recovery presentation and coupled-value concurrency remain unresolved. Missing-owner, deleted-registry, empty-scene/script, overlong-name and duplicate b-roll-key policies are proposed in Stage 0 but not comprehensively established here. [Projection][proj], [marks][marks], [structure][structure], [Stage 0 projection rules][hypotheses].
 
 ## Not measured or not run, carried forward
 
@@ -245,12 +245,10 @@ These are the collected integration requirements, not permission to bypass the u
 
 ## Open questions for the product owner
 
-- Confirm M1 and B, including delayed remote visibility while an edit is held and refusal of part-segment moves/cross-scene structural cut/paste? [Buffer][buffer], [structure][structure].
 - What should a writer see and be able to do when a held edit or retained recovery reaches its limit? [Overflow evidence][overflow], [performance][perf].
 - How should overflow pictures/props, competing posters/headings, duplicate people/tag names and retained but unexported work be shown and resolved? [Projection limits][proj].
 - Keep the assumed crossing-tag recovery display, removed-comment reply recovery and concurrent-status notices? [Marks][marks], [assumed product decisions][experiments].
 - How should a scene with no beats, an empty script, an overlong merged scene name, missing owner or duplicate b-roll key appear and export? [Assumed projection rules][hypotheses].
-- What should “last edited” and revision mean in a shared script, while preserving historical imported capture values? [Projection departures][proj], [assumed stamp policy][experiments].
 - Which visible undo differences, if any, are acceptable for typing groups, the history limit, redo parking, composition and a stuck save? [App undo gaps][app], [undo contract][editing-contract].
 - Keep comments as two undo steps and let saving the same author's open draft replace its concurrently changed body? [Assumed decisions 11–12][experiments].
 
@@ -258,10 +256,10 @@ These are the collected integration requirements, not permission to bypass the u
 
 These are corrections/qualification owed to the audit, not edits made by this record. Proposed oracles stay fixed unless the product owner changes them. [Experiment rules][experiments].
 
-- [9-stage-1-experiments.md:66](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/9-stage-1-experiments.md#L66): replace “93 rows” with 96. [Checked inventory][proj].
+- [9-stage-1-experiments.md:66](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/9-stage-1-experiments.md#L66): the 93-to-96 correction is made by [#1405][1405]. [Checked inventory][proj].
 - [2-fields.md:289](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L289): reconcile “60 pictures” with 60 additional/61 total at line 64; merged overflow is 62. [Projection limits][proj].
 - [2-fields.md:110](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L110) and [line 175](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L175): qualify comment `updatedAt` derivation; reply times alone cannot reproduce assignment/reopening history, so round trips retain the loaded value. [Projection departures][proj].
-- [8-schema-hypotheses.md:128](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L128) and [line 336](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L336): qualify absence/regeneration of `rev`/`lastEdited*` and derivation of colors; historical capture values must be retained for round trips. A shared update policy remains open. [Projection][proj].
+- [8-schema-hypotheses.md:128](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L128) and [line 336](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L336): qualify absence/regeneration of `rev`/`lastEdited*` and derivation of colors; historical capture values must be retained for round trips. The shared edit-stamp rule is decided in [#1405][1405]. [Projection][proj].
 - [8-schema-hypotheses.md:140](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L140): mark A-H7 refuted for these public capture calls, with indexing/batching as an untested alternative. [Performance][perf].
 - [8-schema-hypotheses.md:142](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L142): qualify A-H9; local-origin isolation is established, complete standalone grouping is not, and native per-writer T06 undo fails. [Structure][structure], [app][app].
 - [8-schema-hypotheses.md:143](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L143), [line 148](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/8-schema-hypotheses.md#L148) and [2-fields.md:286](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/stage-0/2-fields.md#L286): record A-H10/PROJ-cue failures and the control refuting line-only cue derivation; preserve the original oracle. [Projection][proj].
@@ -329,3 +327,4 @@ These are corrections/qualification owed to the audit, not edits made by this re
 [1396]: https://github.com/RetroGorilla/splitpage/pull/1396
 [1399]: https://github.com/RetroGorilla/splitpage/pull/1399
 [1400]: https://github.com/RetroGorilla/splitpage/pull/1400
+[1405]: https://github.com/RetroGorilla/splitpage/pull/1405
