@@ -14,6 +14,7 @@ import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
@@ -45,7 +46,7 @@ export interface BrollRecordsPorts {
   readonly position: (cell: Node, node: Node, offset: number) => number | null;
   readonly anchors: BrollAnchors;
   readonly anchoring: Pick<BrollAnchorDeclines, "reset">;
-  readonly refresh: (job: string) => void;
+  readonly refresh: CommonDocumentSession["refresh"];
 }
 
 interface BrollRecords {

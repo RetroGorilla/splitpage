@@ -1,12 +1,12 @@
 import { buildExportDocument } from "../../core/document/export-document.ts";
 import type { ExportCaptureOptions, ExportDocument, ExportReadModels } from "../../core/document/export-document.ts";
 import type { Clock } from "../../core/document/ports.ts";
-import type { DocumentView } from "../session/document-session.ts";
+import type { CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 
 export type { ExportCaptureOptions, ExportDocument, ExportReadModels };
 
 export interface CapturePorts {
-  readonly read: <T>(select: (doc: DocumentView | null) => T) => T;
+  readonly read: CommonDocumentSession["read"];
   readonly readModels: (doc: DocumentView) => ExportReadModels;
   readonly clock: Clock;
 }

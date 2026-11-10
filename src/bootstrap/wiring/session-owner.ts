@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp } from "../../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, CommonDocumentSession, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp, StandaloneDocumentSession } from "../../application/session/document-session.ts";
 import type { ChangeSet } from "../../application/session/change-set.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
 import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, ReportPort, StampPorts, TimerPort, UndoPort } from "../../application/session/ports.ts";
@@ -12,11 +12,11 @@ import { documentGuardOn, documentView, unwrapped } from "../../application/iden
 import { createNumberingReader } from "../../application/session/numbering.ts";
 import type { DocumentNumberingReader } from "../../application/session/numbering.ts";
 
-export type SessionReplayRunner = (replay: Replay) => CommandOutcome;
+export type SessionReplayRunner = StandaloneDocumentSession["replay"];
 
 export interface SessionUndoPorts {
   readonly adapter: UndoPort;
-  readonly route: (run: SessionReplayRunner, stamps: StampPorts, amend: SessionReplayRunner) => () => void;
+  readonly route: (run: SessionReplayRunner, stamps: StampPorts, amend: StandaloneDocumentSession["amend"]) => () => void;
 }
 
 export interface SessionBridgePorts {
@@ -321,6 +321,6 @@ export function cancelRefresh(jobs: readonly string[]): void {
   if (started && !started.ended) started.current.cancelRefresh(jobs);
 }
 
-export function liveSession(): DocumentSession {
+export function liveSession(): CommonDocumentSession & StandaloneDocumentSession {
   return session;
 }

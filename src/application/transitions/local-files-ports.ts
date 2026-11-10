@@ -5,6 +5,7 @@ import type { DocumentLocation } from "../location/document-location.ts";
 import type { FileConflicts } from "../save/file-conflict.ts";
 import type { SaveConfirmation, SaveState } from "../save/save-state.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { SessionMergeOwner } from "../session/session-merge-ports.ts";
 import type { SidePanels } from "../side-panels.ts";
 import type { TextServices } from "../text/services.ts";
@@ -36,8 +37,8 @@ export interface LocalFileImports {
 export interface LocalFilesOwnerPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly session: {
-    readonly noteAbsorbedDirty: (kind: "reload" | "adopt") => void;
-    readonly noteReload: (content: unknown) => void;
+    readonly noteAbsorbedDirty: (kind: Extract<Parameters<StandaloneDocumentSession["settle"]>[0], "reload" | "adopt">) => void;
+    readonly noteReload: (...args: Parameters<StandaloneDocumentSession["absorbReload"]>) => void;
   };
   readonly transitions: Pick<Transitions<DocumentDestination>, "open">;
   readonly history: HistoryPort;

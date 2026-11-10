@@ -1,5 +1,6 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { StandaloneDocumentSession } from "../../application/session/document-session.ts";
 import type { Operations } from "../../application/session/operation.ts";
 import type { HistoryPort } from "../../application/transitions/ports.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -20,7 +21,7 @@ export interface ImportDialogPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly formats: ImportFormats;
   readonly desktop: { readonly running: () => boolean; readonly openExternal: (url: string) => unknown };
-  readonly noteEdit: () => void;
+  readonly noteEdit: StandaloneDocumentSession["noteEdit"];
   readonly stampRow: (row: DocumentRow) => void;
   readonly mode: Pick<ImportMode, "touched" | "reset">;
 }

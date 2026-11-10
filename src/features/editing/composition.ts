@@ -1,3 +1,5 @@
+import type { CommonDocumentSession } from "../../application/session/document-session.ts";
+
 export interface CompositionCell {
   readonly rowId: string;
   readonly field: string;
@@ -5,7 +7,7 @@ export interface CompositionCell {
 
 export interface CompositionPorts<M> {
   readonly cellOf: (target: EventTarget | null) => CompositionCell | null;
-  readonly epoch: () => number;
+  readonly epoch: CommonDocumentSession["epoch"];
   readonly mark: (cell: CompositionCell) => M;
   readonly dropEmptySince: (mark: M, cancelled: boolean) => boolean;
 }

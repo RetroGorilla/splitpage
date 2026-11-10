@@ -5,6 +5,7 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { ProjectFileServices, MarkdownRowChoice } from "../formats/project-file-services.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { DocumentLocation, Home } from "../location/document-location.ts";
 import type { ExportKit } from "./export-kit.ts";
 import type { AutoSavePolicy } from "./autosave.ts";
@@ -36,7 +37,7 @@ export interface ProjectFileOpeningPort {
 export interface ProjectFilesPorts {
   readonly deferred: ProjectFileDeferredPorts;
   readonly document: Pick<DocumentReader, "current">;
-  readonly heldDocument: () => ValidatedDocument | null;
+  readonly heldDocument: StandaloneDocumentSession["held"];
   readonly location: Pick<DocumentLocation, "writtenOut" | "fileHome" | "amendHome">;
   readonly entry: ProjectFileServices["migrateRows"];
   readonly text: Pick<ProjectFileServices, "sanitizeHtml" | "inertBody">;

@@ -6,7 +6,7 @@ import type { CellRecords } from "../commands/cell-text.ts";
 import { galleryCommand } from "../commands/gallery.ts";
 import type { GalleryEdit } from "../commands/gallery.ts";
 import { moveBeatCommand } from "../commands/rows.ts";
-import type { Command, CommandOutcome, DocumentView } from "../session/document-session.ts";
+import type { CommandOutcome, CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
 export interface CellRange {
@@ -45,7 +45,7 @@ export type ShownRow = DocumentView["rows"][number];
 export interface CellEditingPorts<E, Html = never> {
   readonly page: CellPage<E, Html>;
   readonly document: () => DocumentView | null;
-  readonly run: (command: Command) => CommandOutcome;
+  readonly run: CommonDocumentSession["run"];
   readonly text: CellTextPorts;
   readonly decode: CellDecoders;
   readonly undo: CellUndoPorts;
