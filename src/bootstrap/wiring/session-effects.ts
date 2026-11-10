@@ -4,9 +4,10 @@ import { homes } from "./ports/location.ts";
 import { attributionPreferences } from "./ports/preferences.ts";
 import { saveChangeNotes, saves } from "./ports/saving.ts";
 import { draftChanges } from "./ports/startup.ts";
+import { appBindingAsked } from "./app-binding-mode.ts";
 
 export function sessionEffects(): SessionEffects {
-  if (new URLSearchParams(location.search).get("app-binding") === "1") return {
+  if (appBindingAsked()) return {
     dirty: () => {}, draft: () => {}, save: () => {}, edit: () => ({ allowed: true }), attribute: () => null
   };
   return createSessionEffects({

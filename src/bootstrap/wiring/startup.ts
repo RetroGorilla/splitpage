@@ -26,6 +26,7 @@ import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { applyTakenDraft, draftTaker } from "./drafts.ts";
+import { appBindingAsked } from "./app-binding-mode.ts";
 
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument | null, MergedStates> {
   return {
@@ -39,7 +40,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       load: loadInitialState,
       clone: cloneState,
       applyStash: function (loaded, options) {
-        if (new URLSearchParams(location.search).get("app-binding") === "1") return { state: loaded };
+        if (appBindingAsked()) return { state: loaded };
         const applied = applyStashedWork(loaded, null, { ...options });
         if (applied instanceof Promise) throw new Error("The stashed work opened at startup must merge without waiting for an undo point");
         const result: StashResult<ValidatedDocument | null, MergedStates> = applied;
@@ -59,7 +60,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
       resumeLastProject: (...args: Parameters<ReturnType<typeof localFilesOwner>["tryResumeLastProject"]>) => {
-        if (new URLSearchParams(location.search).get("app-binding") !== "1") return localFilesOwner().tryResumeLastProject(...args);
+        if (!appBindingAsked()) return localFilesOwner().tryResumeLastProject(...args);
       },
       syncIdentity: documentIdentity.syncDocIdentity,
       openIdentityChannel: function () { documentIdentityOwner().initDocIdentityChannel(); },

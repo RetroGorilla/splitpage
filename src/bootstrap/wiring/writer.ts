@@ -41,9 +41,12 @@ import { randomHexBytes } from "../../adapters/identity/ids.ts";
 import { migrateRows } from "../document-ports.ts";
 import { WHOLE_DOCUMENT } from "../../application/session/change-set.ts";
 import { domToPos, posToDom } from "../../features/common/cell-dom.ts";
+import { appBindingAsked, setAppBindingActive } from "./app-binding-mode.ts";
+import { addCommentCommand, addReplyCommand, unwrapCommentAnchorCommand } from "../../application/commands/comments.ts";
 
-const bindingSwitch = new URLSearchParams(location.search).get("app-binding") === "1";
+const bindingSwitch = appBindingAsked();
 let experimentBinding: { sync: (id: string, runs: readonly Run[]) => void; undo: () => void } | null = null;
+const experimentCounts = { compositionMark: 0, dropEmptySince: 0, hold: 0 };
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
@@ -236,11 +239,24 @@ export function mountWriterRuntimeFeature() {
     let withdrawHook: (() => void) | null = null;
     exposeTestHook("__writerFlowTest", () => ({
       experiment: bindingSwitch ? {
-        install: (binding: typeof experimentBinding) => { experimentBinding = binding; },
-        model: () => ({ document: documentReader.current(), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes() }),
+        install: (binding: typeof experimentBinding) => { experimentBinding = binding; setAppBindingActive(binding !== null); },
+        model: () => ({ document: documentReader.current(), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes(), heldSelection: writerEditing.selection().resolveFlow(), counts: { ...experimentCounts } }),
         offset: (el: HTMLElement, node: Node, offset: number) => domToPos(el, node, offset),
         point: (el: HTMLElement, offset: number) => posToDom(el, offset),
-        hold: () => undoOwner().hold(),
+        hold: () => {
+          experimentCounts.hold++;
+          const release = undoOwner().hold();
+          return () => { experimentCounts.hold--; release(); };
+        },
+        instrument: () => {
+          const owner = undoOwner();
+          const mark = owner.compositionMark;
+          const drop = owner.dropEmptySince;
+          Object.assign(owner, {
+            compositionMark: (...args: Parameters<typeof mark>) => { experimentCounts.compositionMark++; return mark(...args); },
+            dropEmptySince: (...args: Parameters<typeof drop>) => { experimentCounts.dropEmptySince++; return drop(...args); }
+          });
+        },
         open: () => mounted.openWriter(),
         project: (rows: readonly { id: string; audioText: string }[]) => {
           const outcome = liveSession().stamp({ name: "app-binding-projection", plan: doc => ({
@@ -253,7 +269,23 @@ export function mountWriterRuntimeFeature() {
           }) });
           if (outcome.kind === "failed") throw outcome.error;
         },
-        repaint: () => mounted.writerFlowControl()?.repaint()
+        repaint: () => mounted.writerFlowControl()?.repaint(),
+        isolation: () => {
+          const attempts: Record<string, unknown> = {};
+          for (const [name, get] of [["documentReader", () => documentReader.current()], ["liveSession.held", () => liveSession().held()]] as const) {
+            try { const doc = get(); if (doc?.rows[0]) doc.rows[0].audioText = "forbidden"; attempts[name] = "wrote"; }
+            catch (error) { attempts[name] = error instanceof Error ? error.name : String(error); }
+          }
+          attempts.stamp = liveSession().stamp({ name: "forbidden-stamp", plan: () => ({ changes: WHOLE_DOCUMENT, apply: doc => { doc.title = "forbidden"; } }) });
+          attempts.addComment = edits.run(addCommentCommand({ id: "probe-comment", rowId: "R1", field: "audioText" }));
+          attempts.addReply = edits.run(addReplyCommand("probe-comment", { id: "probe-reply" }, { nowIso: () => "2026-11-09T00:00:00.000Z" }));
+          attempts.unwrap = edits.run(unwrapCommentAnchorCommand(() => [{ rowId: "R1", field: "audioText", html: "forbidden" }]));
+          attempts.replay = liveSession().replay({ name: "forbidden-replay", plan: () => null });
+          attempts.amend = liveSession().amend({ name: "forbidden-amend", plan: () => null });
+          try { liveSession().adopt({}); attempts.adopt = "adopted"; }
+          catch (error) { attempts.adopt = error instanceof Error ? error.message : String(error); }
+          return attempts;
+        }
       } : null,
       on: () => !!mounted.writerFlowControl(),
       selection: () => mounted.writerFlowControl()?.selection() ?? null,

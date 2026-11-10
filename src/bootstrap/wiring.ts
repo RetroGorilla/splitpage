@@ -52,6 +52,7 @@ import { captureOperation, documentSources, startTransitions, stillOwns } from "
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "./wiring/transition-owners.ts";
 import { routeUndoReplays, startUndo, undoOwner, undoPorts, undoSessionPort } from "./wiring/undo.ts";
 import { exposeTestHook } from "../features/common/test-hooks.ts";
+import { appBindingAsked } from "./wiring/app-binding-mode.ts";
 
 export interface WiringDeps {
   readonly entry: DocumentEntry;
@@ -398,7 +399,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   }, (stop) => stop);
   build("session", () => {
     const stopIndex = wireProductionIndex(deps.bulkTags);
-    const stopGuard = startDocumentGuard(documentGuardAsked(window.location.search), console.error);
+    const stopGuard = startDocumentGuard(appBindingAsked() || documentGuardAsked(window.location.search), console.error);
     try {
       const stopSession = startSessionBridge(legacySessionPorts(deps));
       return () => {
@@ -411,7 +412,7 @@ export function wireApp(deps: WiringDeps): Wiring {
     }
   }, (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
-  build("save destinations", () => registerDestinations(checkedDestinations(deps.destinations())), (drop) => drop);
+  build("save destinations", () => registerDestinations(checkedDestinations(appBindingAsked() ? [] : deps.destinations())), (drop) => drop);
   build("transitions", () => startTransitions({ ...deps.transitions, live: liveDocumentPort }), (stop) => stop);
   build("document sources", () => registerSources(checkedSources(deps.sources())), (drop) => drop);
   build("merge", () => startMerge(checkedMerge(deps.merge())), (stop) => stop);

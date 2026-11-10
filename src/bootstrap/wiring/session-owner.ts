@@ -11,6 +11,7 @@ import { cellOf, scriptCellOf } from "../richtext.ts";
 import { documentGuardOn, documentView, unwrapped } from "../../application/identity/document-guard.ts";
 import { createNumberingReader } from "../../application/session/numbering.ts";
 import type { DocumentNumberingReader } from "../../application/session/numbering.ts";
+import { appBindingActive, refuseAppBindingReplacement } from "./app-binding-mode.ts";
 
 export type SessionReplayRunner = (replay: Replay) => CommandOutcome;
 
@@ -155,18 +156,18 @@ const session: DocumentSession = {
   epoch: function () { return running().current.epoch(); },
   generation: function () { return running().current.generation(); },
   read: function <T>(select: (doc: DocumentView | null) => T): T { return running().current.read(select); },
-  held: function () { return running().current.held(); },
-  adopt: function (raw: unknown) { return running().current.adopt(unwrapped(raw)); },
-  absorbDisk: function (raw: unknown) { return running().current.absorbDisk(unwrapped(raw)); },
-  absorbRecovery: function (raw: unknown) { return running().current.absorbRecovery(unwrapped(raw)); },
-  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return running().current.absorbMerged(kind, unwrapped(merged)); },
-  absorbReload: function (content: ReloadedContent) { return running().current.absorbReload(unwrapped(content)); },
-  settle: function (kind: AbsorbedKind) { running().current.settle(kind); },
-  run: function (command: Command) { return swept(running().current.run(command)); },
-  replay: function (task: Replay) { return swept(running().current.replay(task)); },
-  amend: function (task: Replay) { return swept(running().current.amend(task)); },
-  stamp: function (task: Stamp) { return swept(running().current.stamp(task)); },
-  noteEdit: function (changes?: ChangeSet) { running().current.noteEdit(changes); swept(null); },
+  held: function () { const doc = running().current.held(); return appBindingActive() ? documentView(doc) : doc; },
+  adopt: function (raw: unknown) { refuseAppBindingReplacement(); return running().current.adopt(unwrapped(raw)); },
+  absorbDisk: function (raw: unknown) { refuseAppBindingReplacement(); return running().current.absorbDisk(unwrapped(raw)); },
+  absorbRecovery: function (raw: unknown) { refuseAppBindingReplacement(); return running().current.absorbRecovery(unwrapped(raw)); },
+  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { refuseAppBindingReplacement(); return running().current.absorbMerged(kind, unwrapped(merged)); },
+  absorbReload: function (content: ReloadedContent) { refuseAppBindingReplacement(); return running().current.absorbReload(unwrapped(content)); },
+  settle: function (kind: AbsorbedKind) { refuseAppBindingReplacement(); running().current.settle(kind); },
+  run: function (command: Command) { return appBindingActive() ? { kind: "rejected", reason: "Only narration buffer operations are bound" } : swept(running().current.run(command)); },
+  replay: function (task: Replay) { return appBindingActive() ? { kind: "rejected", reason: "Snapshot replay is isolated" } : swept(running().current.replay(task)); },
+  amend: function (task: Replay) { return appBindingActive() ? { kind: "rejected", reason: "Snapshot amendment is isolated" } : swept(running().current.amend(task)); },
+  stamp: function (task: Stamp) { return appBindingActive() && task.name !== "app-binding-projection" ? { kind: "rejected", reason: "Standalone stamps are isolated" } : swept(running().current.stamp(task)); },
+  noteEdit: function (changes?: ChangeSet) { refuseAppBindingReplacement(); running().current.noteEdit(changes); swept(null); },
   refresh: function (job: string) { running().current.refresh(job); },
   cancelRefresh: function (jobs: readonly string[]) { running().current.cancelRefresh(jobs); },
   subscribe: function (listener: SessionListener) { return running().current.subscribe(listener); },
@@ -218,6 +219,7 @@ export function sessionStarted(): boolean {
 }
 
 export function adoptReplacement(doc: ValidatedDocument): void {
+  refuseAppBindingReplacement();
   const now = running();
   if (now.ended) return;
   const old = now.current;
