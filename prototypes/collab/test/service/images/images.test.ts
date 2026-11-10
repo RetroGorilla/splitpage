@@ -10,6 +10,7 @@ import { ImageClient, checkHeld, checkImagePromises, checkText, checkUploadRecei
   membership, offline, png, recoveredStore, saved, sha, upload, waiting, imageIdentities as characterIdentities } from "./harness.ts";
 import type { ImageAcknowledgedCapture } from "./harness.ts";
 import { observeImageReview } from "./review.ts";
+import { observeNetworkWrites, observeCapabilityInventory } from "./capabilities.ts";
 
 function publication(design: ImageDesign): ImagePublication { return new ImagePublication(initial(), design); }
 
@@ -61,6 +62,8 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
 
   assert.equal(defectsRejected, 3, "All deliberate image defects must be rejected before any passing trace counts");
   await observeImageReview(t);
+  await observeNetworkWrites(t);
+  await observeCapabilityInventory(t);
 
   await t.test("blob upload: hash/size/header refusal before storage, duplicate and 2 MiB upload survive immediate hard kill", async () => {
     const work = await workspace();
@@ -130,7 +133,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           if (mechanism === "two-documents") {
             checkText(image.network, false); assert.deepEqual([...image.network.getMap("gallery").values()], []);
           } else {
-            assert.equal(image.network, image.editing);
+            assert.deepEqual(image.network.snapshot(), image.editing.snapshot());
             assert.throws(() => checkHeld([Buffer.from(image.network.snapshot()).toString("base64")]), /Held image or subsequent text/);
             const attempted = client.attempts.filter(frame => frame.kind === 0 && frame.subtype === 1).at(-1);
             assert.ok(attempted); assert.throws(() => checkHeld([attempted.payload]), /Held image or subsequent text/);

@@ -16,6 +16,11 @@ export type ImageDocumentPort = {
   snapshot: () => Uint8Array;
   on: () => never;
 };
+export type ImageNetworkPort = Pick<ImageDocumentPort, "snapshot" | "on"> & {
+  readonly clientID: number;
+  getText: (name: "R1") => { readonly length: number; toString: () => string };
+  getMap: (name: "gallery") => Pick<ReturnType<ImageDocumentPort["getMap"]>, "values">;
+};
 export type ImageTransport = {
   connect: () => Promise<void>;
   drop: () => void;
@@ -50,9 +55,25 @@ function documentPort(document: Y.Doc): ImageDocumentPort {
   });
 }
 
+function networkPort(document: Y.Doc): ImageNetworkPort {
+  return Object.freeze({
+    get clientID() { return document.clientID; },
+    getText(name: "R1") {
+      const text = document.getText(name);
+      return Object.freeze({ get length() { return text.length; }, toString: (): string => text.toString() });
+    },
+    getMap(name: "gallery") {
+      return Object.freeze({ values: (): IterableIterator<ImageGalleryItem> =>
+        structuredClone([...document.getMap<ImageGalleryItem>(name).values()]).values() });
+    },
+    snapshot: (): Uint8Array => Y.encodeStateAsUpdate(document),
+    on(): never { throw new Error("Image document publication is exclusively owned"); },
+  });
+}
+
 export class ImagePublication {
   readonly editing: ImageDocumentPort;
-  readonly network: ImageDocumentPort;
+  readonly network: ImageNetworkPort;
   readonly design: ImageDesign;
   readonly blobs = new Map<string, Uint8Array>();
   readonly #editing: Y.Doc;
@@ -71,19 +92,19 @@ export class ImagePublication {
     if (capture) for (const [sha, bytes] of capture.blobs) this.blobs.set(sha, Buffer.from(bytes, "base64"));
     this.#network = mechanism === "one-document" ? this.#editing : new Y.Doc();
     this.editing = documentPort(this.#editing);
-    this.network = this.#network === this.#editing ? this.editing : documentPort(this.#network);
+    this.network = networkPort(this.#network);
     if (this.#network !== this.#editing) {
       Y.applyUpdate(this.#network, capture?.network ? Buffer.from(capture.network, "base64") : Y.encodeStateAsUpdate(this.#editing));
-      this.#network.on("update", this.inbound);
-      this.#editing.on("update", this.outbound);
+      this.#network.on("update", this.#inbound);
+      this.#editing.on("update", this.#outbound);
     }
   }
 
-  private readonly inbound = (update: Uint8Array, origin: unknown): void => {
+  readonly #inbound = (update: Uint8Array, origin: unknown): void => {
     if (origin !== this.#netOrigin) Y.applyUpdate(this.#editing, update, this.#netOrigin);
   };
 
-  private readonly outbound = (update: Uint8Array, origin: unknown): void => {
+  readonly #outbound = (update: Uint8Array, origin: unknown): void => {
     if (origin !== this.#netOrigin && (this.design === "pending-image" || !this.waiting)) Y.applyUpdate(this.#network, update, this.#netOrigin);
   };
 
@@ -167,6 +188,7 @@ export class ImagePublication {
       destroy: (): void => { this.#editing.off("update", update); policy.destroy(); provider.destroy(); socket.destroy(); },
     });
     provider.attach();
+    Object.freeze(this);
     return this.#transport;
   }
 

@@ -10,6 +10,39 @@ The one-document result matters to M2: a second document is not necessary solely
 
 The module clones the seed into private live documents and constructs/owns the dedicated provider and socket. Neither the live Y.Doc/Y.Text/Y.Map nor provider/socket objects escape. Editing ports expose bounded operations and copied snapshots/items, not observable live types. A second `attach()` throws before socket construction; feeding an editing/network port to another provider, or registering an extra document subscriber, throws. The three review probes test these failures and actual absence of outgoing content. Snapshot/export bytes intentionally remain readable for persistence and standalone export: a caller copying those into a separately created HTTP/WebSocket publisher is outside this client's contract. This is an ownership boundary for cooperating application code, not a JavaScript sandbox. The injected WebSocket implementation and receipt/local-storage owners must be trusted; callers must use the module's publication paths rather than republishing exported copies.
 
+N now has a separate **read-only** external view under both mechanisms: no text `insert`, gallery `set`, or client-id setter. In M3, only the module's private bridge performs local E-to-N writes; the provider still integrates inbound remote updates into N. With one document, E remains writable and is the same underlying document as N, so the separate-N clause still fails. The bridge callbacks are actual private fields, and the publication object is frozen after attach. This is option (a), a read-view restriction within the existing module, not a new document/transport mechanism. Both previously writable-N probes first failed locally on the old code, then passed after the restriction. `M3 read-only N rejects text PRIVATE without journal or socket publication` and `M3 read-only N rejects held gallery item without journal or socket publication` require a thrown absent-operation call, an unchanged actual socket prefix, and an ordered fence followed by independently read `ab`/empty-gallery journal state. They do not rely on the server refusing the reference.
+
+### Closed caller capability list
+
+Content can leave the owned client during a hold only through the members below. Read/export members intentionally return copied content to the caller; network publication remains through the owned transport methods and their frame policy. No external N write member exists. This statement assumes the cooperating-client/trusted-runtime conditions above; it does not prevent a caller from separately republishing exported copies.
+
+```text
+publication own fields (frozen): design, blobs, editing, network
+publication prototype: constructor, items, waiting, insert, durable, allow,
+  attach, status, picture, export, capture, destroy
+editing: clientID get/set, getText, getMap, snapshot, on (throws)
+  getText("R1"): insert, length get, toString
+  getMap("gallery"): set (void), values
+network: clientID get, getText, getMap, snapshot, on (throws)
+  getText("R1"): length get, toString
+  getMap("gallery"): values
+attach -> transport (frozen): connect, drop, status, shouldConnect, closed,
+  forceSync, sendStateless, send, outgoing, fence, view, destroy
+connect -> native Promise<void>; outgoing callback -> no arguments
+attach stateless callback -> payload string
+items / gallery iterator values -> copied { id, beat, ref, pending }
+iterator next -> { value, done }
+snapshot -> copied Uint8Array and its ArrayBuffer
+blobs -> native Map<sha string, Uint8Array>; entries/keys/values -> native iterators
+export -> { text, images: string[], missingImages: string[] }
+capture -> { editing: string, network: null|string, blobs: [string,string][] }
+view -> { status, explanation, reason, publication, export }
+other normal method returns -> void, boolean, number or string
+function metadata -> name, length; constructor also has its listed prototype
+```
+
+`closed caller capability inventory after attach: one-document` and `...: two-documents` in [capabilities.ts](../../../test/service/images/capabilities.ts) compare this complete custom surface, including nonenumerable/symbol members, against literal data. They also pin the exact Node 24 member lists for Map, arrays, array/map iterators, Iterator, Uint8Array/TypedArray, ArrayBuffer, Object, Function/AsyncFunction and Promise; promise test-hook metadata is numeric. They recursively inspect returned containers/getters/function metadata, reject live Y.Doc/shared types/provider/socket instances, invoke every public operation in held/released or refusal/lifecycle states, check callback arguments and resolved connection values, and verify snapshots/gallery values are copies. New members, new inheritance, function-property escape routes, a writable N member, or an exposed live object fail the inventory. The test attaches the unmodified module; its native-socket/receipt observers are caller-owned inputs, not new module-returned capabilities. The list is the same under both mechanisms; capture's network bytes are null with one document and a string with M3, and both views read the same underlying document only in the one-document case. That separate-N failure remains recorded unchanged.
+
 While upload-before-sync waits, the frame allowlist is exact: kind 0 subtype 0 must equal the module's canonical current state-vector request; kind 2 must equal the pinned empty-token authentication/version frame; kind 7 must equal the empty close request; kinds 9/10 must be single-byte heartbeat frames. These carry protocol metadata, not gallery/text state. One-document subtype 1/2 frames are discarded and regenerated later. M3 permits its private provider's subtype 1/2 frames from N, which excludes held E edits. Caller-provided raw sync frames are refused. Awareness (1), awareness query (3), stateless (5), status (8), unknown kinds and noncanonical controls are refused while waiting: their payloads cannot be trusted as content-free. The sole stateless exception is a one-use, byte-exact fence created by a private counter in the module, not a caller-supplied payload. No refused awareness/stateless payload is replayed after release. Inbound integration continues.
 
 `service.ts` is an opt-in Hocuspocus extension plus a second HTTP listener on a free loopback port. `PUT /api/images/fixture/<sha>` accepts PNG bytes; `GET` requires a membership row. The fixed `fixture` instance and unauthenticated loopback endpoint are experiment scope. Invitation admission, HTTP revocation and arbitrary-instance authorization are not implemented.
@@ -32,6 +65,8 @@ The image extension evaluates a candidate document before the existing journal h
 | If uploader never returns before upload | Held work stays only on that device; peers retain old script | Same; E and N differ on that device | Peers retain Z and the placeholder, even after server restart. Export explicitly lists the missing image |
 | Reload during upload | Restore E, local bytes and prior receipt coverage; install gate before provider attach | Restore E and N, local bytes and prior receipt coverage, then rebuild bridge before attach | Restore pending item, text, bytes, prior receipt coverage and retry obligation before attach |
 | Extra mechanism code | `allow`, `imageSocket`, resync trigger | Second Y.Doc, `inbound`/`outbound`, origin classification, dual capture, release difference | Pending-flag transition, placeholder and missing-image export projection |
+| Still required in the real editor, all designs | Local blob/replica completion, complete asset accounting, verified downloads and lifecycle ownership | Local blob/replica completion, complete asset accounting, verified downloads and lifecycle ownership | Local blob/replica completion, complete asset accounting, verified downloads and lifecycle ownership |
+| Additional real-editor work | Complete publication ownership across every editor path | Complete publication ownership plus atomic E/N persistence | Durable retry/flag transitions plus placeholder and export disclosure |
 
 All three paths use the same blob service, HTTP upload and `ConnectionReceipts`. The provider counter still counts attempted updates that the socket gate suppresses; it cannot determine saved status. Receipt tracking observes **actual** WebSocket sends, registers local E edits, and leaves held/refused ranges uncovered until a real covering receipt. M3 excludes N-to-E bridge updates from those local obligations. A reload must restore previously acknowledged coverage as well: the server's new SyncStep2 response contains only the missing difference and does not reacknowledge all older local clocks. Removing `restoreAcknowledged` makes both upload-first reload tests and the pending reload test fail.
 
@@ -96,13 +131,13 @@ Shared-file changes, listed in full:
 
 `test/service/harness.ts`, journal files and refusal files are unchanged. New histories are the four original T16 files plus the generated-reply fence regression linked above.
 
-Rebased onto `origin/main` at `d4eb17bd` (#1398). The `server-process.ts` conflict keeps instance probe/admission extensions and commands, refusal, and the opt-in image extension/lifecycle. The merged journal client/worker and all instance files are unchanged by this lane. T13 and T17 in #1398 explicitly leave image P as a seam depending on this blob store; this round adds no connection of that seam and claims no completed image-bearing T13/T17 trace.
+Rebased onto `origin/main` at `cbda7904` (#1399/#1401). Earlier instance/image integration in `server-process.ts` is preserved. This round changes no journal, instance or refusal file, nor the main service README/commit measurement code updated on main. T13 and T17 in #1398 explicitly leave image P as a seam depending on this blob store; this round adds no connection of that seam and claims no completed image-bearing T13/T17 trace.
 
 Real-editor wiring would need a completion-aware local blob/replica transaction before gallery insertion, enumeration of every required asset (including recovery and supported undo), the gate installed before provider attachment/reconnect if using one document, or E/N bridge ownership plus atomic captures for M3, same-instance receipt restoration, upload retry and durable-membership notification, verified downloads before local saved status, pending placeholder/export disclosure, and stale-callback ownership checks for delayed picture add, thumbnail replacement and annotation. Bundle copy remains outside shared mode as the plan requires. No editor hook was added. This experiment does not validate a complete production manifest or automatic writers.
 
 ## Reproduce and validation
 
-Node 24.22.1, pinned package versions, combined base `d4eb17bd` (#1398), Windows on this PC:
+Node 24.22.1, pinned package versions, combined base `cbda7904` (#1399/#1401), Windows on this PC:
 
 ```powershell
 $env:TEMP='C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1b-images'
@@ -118,4 +153,4 @@ Run these from `prototypes/collab/`. Root validation uses `npm run lint`, `npm r
 
 The fix-round validation counts below are measured on the combined tree. Root dependencies and desktop type dependencies were installed for the gates; desktop install used `--ignore-scripts`, and no app or desktop executable was started.
 
-After the CI reply-order regression: **102/102** combined service records, including **26** image records, all instance tests, and the unchanged #1386 journal/ordering/review/worker-exit and #1393 refusal tests. The full serial prototype package run passed **1,065/1,065** records. Root lint/typecheck, comment gate (**1,856** files), dependency gate (**1,551** modules, zero runtime cycles/new exceptions), code-map and diff-check passed; the prototype typecheck covers **124** TypeScript files. Gates and service processes run one command at a time; no browser/app/desktop suite is started.
+On combined `cbda7904`, after the final hold restriction: **106/106** service records, including **30** image records, all instance tests, and unchanged #1386/#1393 service suites. The full serial prototype package passed **1,179/1,179** records. Root lint/typecheck, comment gate (**1,869** files), dependency gate (**1,558** modules, zero runtime cycles/new exceptions), code-map and diff-check passed; the prototype typecheck covers **131** TypeScript files. Gates and service processes run one command at a time; no browser/app/desktop suite is started. `T16-one-document-N.json` is unchanged.

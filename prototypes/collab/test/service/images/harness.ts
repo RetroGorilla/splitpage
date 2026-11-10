@@ -7,7 +7,7 @@ import * as Y from "yjs";
 import { checkModel, IdentityBook } from "../../../src/model.ts";
 import type { CollabCharacter } from "../../../src/model.ts";
 import { ConnectionReceipts } from "../../../src/service/receipts.ts";
-import type { ImagePublication, ImageDocumentPort, ImageTransport } from "../../../src/service/images/publication.ts";
+import type { ImagePublication, ImageNetworkPort, ImageTransport } from "../../../src/service/images/publication.ts";
 import { readFrame } from "../../../src/service/wire.ts";
 import { readRecoveredRows, until } from "../harness.ts";
 import type { JournalChild } from "../harness.ts";
@@ -183,7 +183,7 @@ export function checkUploadReceipt(ref: string, status: number, recovered: { ref
   assert.ok(recovered.refs.includes(ref), "Acknowledged upload lacks recovered membership");
 }
 
-export function checkText(input: Y.Doc | ImageDocumentPort, z: boolean): void {
+export function checkText(input: Y.Doc | ImageNetworkPort, z: boolean): void {
   const document = input instanceof Y.Doc ? input : snapshotDocument(input);
   const identities = new IdentityBook();
   identities.bind("s1", { client: 7, clock: 0 }); identities.bind("s2", { client: 7, clock: 1 });
@@ -207,11 +207,11 @@ export function checkText(input: Y.Doc | ImageDocumentPort, z: boolean): void {
   if (!(input instanceof Y.Doc)) document.destroy();
 }
 
-export function snapshotDocument(port: ImageDocumentPort): Y.Doc {
+export function snapshotDocument(port: ImageNetworkPort): Y.Doc {
   const document = new Y.Doc(); Y.applyUpdate(document, port.snapshot()); return document;
 }
 
-export function imageIdentities(port: ImageDocumentPort | Y.Doc): string[] {
+export function imageIdentities(port: ImageNetworkPort | Y.Doc): string[] {
   const document = port instanceof Y.Doc ? port : snapshotDocument(port);
   try {
     const text = document.getText("R1");
