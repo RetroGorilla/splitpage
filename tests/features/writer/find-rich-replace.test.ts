@@ -2,7 +2,8 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
-import { searchFlow, replaceFlowMatches, visualMatchHighlight } from "../../../src/features/writer/flow-find.ts";
+import { searchFlow, visualMatchHighlight } from "../../../src/features/writer/flow-find.ts";
+import { replaceFlowMatches } from "../../../src/core/flow/find-replace.ts";
 import type { FlowDoc, FlowPorts } from "../../../src/core/flow/flow.ts";
 
 const ports: FlowPorts = { cells: html => fromHtml(html ?? ""), newId: () => "unused", hasVisual: () => false };

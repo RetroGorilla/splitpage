@@ -12,7 +12,8 @@ import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
-import { flowMatchStart, replaceFlowMatches, searchFlow, visualMatchHighlight } from "./flow-find.ts";
+import { flowMatchStart, searchFlow, visualMatchHighlight } from "./flow-find.ts";
+import { replaceFlowMatches } from "../../core/flow/find-replace.ts";
 import type { WriterFindAccess } from "../common/writer-find.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import { rowSlots } from "../../core/document/gallery.ts";

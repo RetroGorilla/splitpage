@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchFlow, replaceFlowMatches } from "../../../src/features/writer/flow-find.ts";
+import { searchFlow } from "../../../src/features/writer/flow-find.ts";
+import { replaceFlowMatches } from "../../../src/core/flow/find-replace.ts";
 import { beatPos } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowPorts } from "../../../src/core/flow/flow.ts";
 
