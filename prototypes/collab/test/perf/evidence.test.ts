@@ -67,12 +67,31 @@ test("ownership invalidation mutation fails four literal controls and restoratio
   assert.deepEqual(result.restored, { tests: 4, pass: 4, fail: 0 });
 });
 
-test("post-run wording changes preserve the prepared timed implementation and a changed implementation hash is refused", () => {
+test("timed audit retains original implementation hashes and refuses an unlisted implementation change", () => {
   const audit = JSON.parse(readFileSync(new URL("../../src/perf/timed-source.json", import.meta.url), "utf8")) as PerfTimedSourceAudit;
   validateTimedSource(audit.sourceHead, audit.sourceDigest, audit);
   const wrong = structuredClone(audit);
   wrong.files["incremental.ts"] = "0".repeat(64);
   assert.throws(() => validateTimedSource(audit.sourceHead, audit.sourceDigest, wrong));
+});
+
+test("timed audit rejects missing, duplicate, stale and wrongly attributed post-timing declarations", () => {
+  const audit = JSON.parse(readFileSync(new URL("../../src/perf/timed-source.json", import.meta.url), "utf8")) as PerfTimedSourceAudit;
+  assert.equal(audit.postTimingChanges?.length, 5);
+  for (const defect of ["missing", "duplicate", "current hash", "timed hash", "unlisted", "PR", "reason"] as const) {
+    const wrong = structuredClone(audit);
+    const changes = wrong.postTimingChanges;
+    const changed = changes?.find(change => change.path === "../proj/richtext.ts");
+    assert.ok(changes && changed);
+    if (defect === "missing") wrong.postTimingChanges = changes.filter(change => change !== changed);
+    if (defect === "duplicate") changes.push({ ...changed });
+    if (defect === "current hash") changed.currentSha256 = "0".repeat(64);
+    if (defect === "timed hash") changed.timedSha256 = "0".repeat(64);
+    if (defect === "unlisted") changes.push({ ...changed, path: "not-a-timed-file.ts", timedSha256: null });
+    if (defect === "PR") changed.pullRequest = "";
+    if (defect === "reason") changed.change = "";
+    assert.throws(() => validateTimedSource(audit.sourceHead, audit.sourceDigest, wrong), defect);
+  }
 });
 
 test("every tracked prototype text file omits private machine/user tokens and drive-letter absolute paths", () => {

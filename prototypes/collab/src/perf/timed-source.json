@@ -1,7 +1,7 @@
 {
   "sourceHead": "74ed7af06e4859dec5cd3ad84c7195977ca3eac6",
   "sourceDigest": "0798cf18c5c228d4995c738ed3cae70de23fbebad052a601592e5e21caf09b60",
-  "reason": "Original timed implementation hashes are retained. Post-run privacy edits change only hostname metadata in the perf and projection cost recorders, verified by reversing those exact substitutions; editing case/projection logic is unchanged.",
+  "reason": "Original timed implementation hashes and measured source head/digest are retained. Metadata redactions are verified by exact reversible substitutions. Post-timing source changes are declared separately with original/current hashes and PR attribution; no case was retimed.",
   "files": {
     "blocks.ts": "6329bf87c534624a037ce4a7258627554e374481af0e5e50f194efd131d6a880",
     "browser.ts": "155eeb467232dd215d49ae199e58e513adc34582e3303416949280f5737999b5",
@@ -42,5 +42,42 @@
   "metadataRedactions": {
     "conditions.ts": "27afd60a2a3593a2b685a681668072cb35bdbae7a18cedbbb8218ec3b6be438c",
     "../proj/costs.ts": "497c86633de59b272318e3bef4342efcfe60e06be75aca5d08b92e25166d228c"
-  }
+  },
+  "postTimingChanges": [
+    {
+      "path": "../proj/experiment.ts",
+      "timedSha256": "54613947f2fdd12b964751b6c2ce525258d7375418aeed9ce3a2942710f9a9d6",
+      "currentSha256": "314c4b0c0235911aa17d79677b3eb3806516130bd6b7bdf78e43ac149884d20c",
+      "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1406",
+      "change": "Require exact app-save bytes outside the literal local-location exclusion."
+    },
+    {
+      "path": "../proj/richtext.ts",
+      "timedSha256": "eff5f1cccbecaebab91277dc83c73e6a9478e407323ac9d391c3ba0a2845117a",
+      "currentSha256": "ef5e4c443fef4d5da4f1a3b35e156314c05b53ce2c4615c66f4d710d0a7c53fb",
+      "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1406",
+      "change": "Export stored text and cue attributes without core normalization; distinguish presentation sentinel tokens."
+    },
+    {
+      "path": "../proj/exclusions.ts",
+      "timedSha256": null,
+      "currentSha256": "4db796bb80b4decce41c663ba72a0f56668be9b9fd5f9bd4af8de67231a11cff",
+      "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1406",
+      "change": "Add the exact fixture and value checks for the two device-local locations."
+    },
+    {
+      "path": "../proj/lossless-report.ts",
+      "timedSha256": null,
+      "currentSha256": "3fe5e2b9dcd71cc19c7d9da28e1ad57d445e7ab196403fd029d8d1d4fea0e85b",
+      "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1406",
+      "change": "Add the generated projection loss-repair report and result writer."
+    },
+    {
+      "path": "../proj/stored-html.ts",
+      "timedSha256": null,
+      "currentSha256": "041a045414afc7d44ad744517af0604f4986a67cbc791a5f72d2f5777a151d46",
+      "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1406",
+      "change": "Add stored-run HTML export preserving literal U+200B and stored cue spans."
+    }
+  ]
 }

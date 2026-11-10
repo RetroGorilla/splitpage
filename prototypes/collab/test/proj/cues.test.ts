@@ -8,9 +8,11 @@ test("PROJ-cue stored versus derived over every canonical document holding cue s
   const results = runCueProjections();
   assert.equal(results.length, 12);
   for (const result of results) {
-    if (result.fixture === "migrate-golden.json/scenarios/media in cells/output" || /^merge-text-unicode-and-atoms.json\/inputs\//.test(result.fixture ?? "")) assert.equal(result.stored.length, 1);
-    else assert.deepEqual(result.stored, [], `${result.candidate} ${result.fixture}`);
-    assert.deepEqual(result.derived, result.stored, `${result.candidate} ${result.fixture}: derivation changes nothing else in this corpus`);
+    assert.deepEqual(result.stored, [], `${result.candidate} ${result.fixture}`);
+    if (result.fixture === "migrate-golden.json/scenarios/media in cells/output") {
+      assert.equal(result.derived.length, 1);
+      assert.equal(result.derived[0]?.path, "$.rows.1.audioText");
+    } else assert.deepEqual(result.derived, [], `${result.candidate} ${result.fixture}`);
   }
 });
 
