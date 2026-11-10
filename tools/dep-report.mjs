@@ -649,8 +649,8 @@ export function findViolations(modules) {
         if (!layerAllows(m.layer, targetLayer)) add("layer", m.path, e.target, e.line, `${m.layer} may not import ${targetLayer}`);
       } else if (e.kind === "builtin" || e.kind === "package") {
         if (!platformImportAllowed(m.layer)) add("platform-import", m.path, e.target, e.line, `${m.layer} may not import ${e.target}`);
-        if (e.target === "package:yjs" && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/")) {
-          add("collab-import", m.path, e.target, e.line, "Yjs belongs in src/adapters/collab/ or tests");
+        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/")) {
+          add("collab-import", m.path, e.target, e.line, "Collaboration runtime packages belong in src/adapters/collab/ or tests");
         }
       } else if (e.kind === "missing") {
         add("missing-module", m.path, e.target, e.line, `${e.spec} does not resolve to a file`);

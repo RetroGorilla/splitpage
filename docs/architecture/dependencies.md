@@ -49,10 +49,11 @@ Prototype isolation overrides the unrestricted rows: no other layer may import
 `prototypes/`, including prototype test files. Prototypes may read core and
 shared code, but may not import application owners, features, adapters or tooling.
 
-Yjs imports, including its types and subpaths, are restricted to
+Imports of `yjs`, `lib0` and `isomorphic.js`, including types and subpaths, are restricted to
 `src/adapters/collab/` and tests (`collab-import`). The isolated prototypes
 retain their own Yjs dependency. This restriction also applies to bootstrap,
-other adapters, tools, desktop and server code.
+other adapters, tools, desktop and server code. Bootstrap may import the
+collaboration adapter, which owns the runtime package imports.
 
 A script under `src/` outside the folders above is an `unknown-layer`
 violation keyed by its top-level folder (`src/util/`, or `src/` for a file
