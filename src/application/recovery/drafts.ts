@@ -41,7 +41,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   function runningOnDesktop(): boolean { return live().running(); }
   function currentDocument(): DocumentView | null { return live().document.current(); }
   function mergeBase(): unknown { return live().session.mergeBase(); }
-  function noteAbsorbedDirty(reason: string): void { live().session.noteAbsorbedDirty(reason); }
+  function noteAbsorbedDirty(reason: Parameters<DraftsPorts["session"]["noteAbsorbedDirty"]>[0]): void { live().session.noteAbsorbedDirty(reason); }
   function fileHome(): ReturnType<DraftsPorts["place"]["fileHome"]> { return live().place.fileHome(); }
   function importHome(): ReturnType<DraftsPorts["place"]["importHome"]> { return live().place.importHome(); }
   function documentLocation(): { readonly writtenOut: () => boolean; readonly markWrittenOut: (on: boolean) => void } { return { writtenOut: live().place.writtenOut, markWrittenOut: live().markWrittenOut }; }

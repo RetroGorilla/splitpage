@@ -8,6 +8,10 @@ const CORE = fileURLToPath(new URL("../../src/core/", import.meta.url));
 const globalsBefore = new Set(Reflect.ownKeys(globalThis));
 
 const modules: Record<string, Record<string, unknown>> = {
+  "collab/base-reference.ts": await import("../../src/core/collab/base-reference.ts"),
+  "collab/operations.ts": await import("../../src/core/collab/operations.ts"),
+  "collab/read-operation.ts": await import("../../src/core/collab/read-operation.ts"),
+  "collab/refusals.ts": await import("../../src/core/collab/refusals.ts"),
   "document/broll.ts": await import("../../src/core/document/broll.ts"),
   "document/clone.ts": await import("../../src/core/document/clone.ts"),
   "document/comments.ts": await import("../../src/core/document/comments.ts"),
@@ -33,6 +37,8 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
   "document/validated.ts": await import("../../src/core/document/validated.ts"),
   "flow/flow.ts": await import("../../src/core/flow/flow.ts"),
+  "flow/operations.ts": await import("../../src/core/flow/operations.ts"),
+  "flow/remove-empty-heading.ts": await import("../../src/core/flow/remove-empty-heading.ts"),
   "flow/visual.ts": await import("../../src/core/flow/visual.ts"),
   "merge-states.ts": await import("../../src/core/merge-states.ts"),
   "merge/cells.ts": await import("../../src/core/merge/cells.ts"),

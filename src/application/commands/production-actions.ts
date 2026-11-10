@@ -7,7 +7,7 @@ import { retagCommand } from "./production-records.ts";
 import type { TagRef } from "./production-records.ts";
 import type { ShotFields } from "./broll-records.ts";
 import type { RewritePlanner } from "./document-edit.ts";
-import type { Command, DocumentView } from "../session/document-session.ts";
+import type { Command, CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 
 export interface ProductionActionPorts {
@@ -20,7 +20,7 @@ export interface RenameTagPorts extends ProductionActionPorts {
 }
 
 export interface RemoveTagPorts extends RenameTagPorts {
-  readonly read: <T>(select: (doc: DocumentView | null) => T) => T;
+  readonly read: CommonDocumentSession["read"];
   readonly mentions: (doc: DocumentView | null, tags: readonly TagRef[]) => number;
 }
 

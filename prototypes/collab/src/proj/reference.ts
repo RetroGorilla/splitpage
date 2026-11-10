@@ -1,7 +1,8 @@
+import { fileOrderedCopy } from "../readers/output.ts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { bag, copy, records } from "./value.ts";
+import { bag, records } from "./value.ts";
 import type { ProjectionBag } from "./value.ts";
 
 export const projectionRepo = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -25,14 +26,14 @@ export function projectionReferences(file = "app-reference.json"): ProjectionRef
 
 export function assertProjectionInput(reference: ProjectionReference | undefined, document: ProjectionBag): asserts reference is ProjectionReference {
   if (!reference) throw new Error("Missing projection experiment reference");
-  const text = JSON.stringify(document, null, 2);
+  const text = JSON.stringify(fileOrderedCopy(document), null, 2);
   if (reference.original.bytes !== Buffer.byteLength(text) || reference.original.sha256 !== createHash("sha256").update(text).digest("hex")) {
     throw new Error(`Stale experiment input: ${reference.name}`);
   }
 }
 
 export function serializeProjection(document: ProjectionBag): string {
-  const result = copy(document);
+  const result = bag(fileOrderedCopy(document));
   for (const row of records(result.rows)) {
     if (Object.hasOwn(row, "imageRef") && row.imageRef === null) {
       delete row.imageRef;

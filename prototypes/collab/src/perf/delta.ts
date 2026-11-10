@@ -35,8 +35,13 @@ export function patchDelta(source: readonly ProjectionDelta[], changes: readonly
     if (change.insert !== undefined) result.push({ insert: change.insert as string | ProjectionBag, attributes: change.attributes ?? {} });
   }
   while (index < source.length) take(deltaLength(source[index] as ProjectionDelta) - offset, true);
+  return compactDelta(result);
+}
+
+export function compactDelta(source: readonly ProjectionDelta[]): ProjectionDelta[] {
   const compact: ProjectionDelta[] = [];
-  for (const item of result) {
+  for (const value of source) {
+    const item = { insert: value.insert, attributes: Object.fromEntries(Object.entries(value.attributes ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) };
     const previous = compact.at(-1);
     if (previous && typeof previous.insert === "string" && typeof item.insert === "string" && sameAttributes(previous.attributes, item.attributes)) previous.insert += item.insert;
     else compact.push(item);
@@ -46,7 +51,7 @@ export function patchDelta(source: readonly ProjectionDelta[], changes: readonly
 
 function sameAttributes(a: Record<string, unknown> = {}, b: Record<string, unknown> = {}): boolean {
   const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every(key => a[key] === b[key]);
+  return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && Object.is(a[key], b[key]));
 }
 
 export function sameDelta(a: readonly ProjectionDelta[], b: readonly ProjectionDelta[]): boolean {

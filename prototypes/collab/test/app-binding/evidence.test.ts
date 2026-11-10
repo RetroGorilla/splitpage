@@ -9,6 +9,7 @@ import type { BufferTrace } from "../buffer-oracles.ts";
 import { bufferMechanisms } from "../../src/editing-buffer.ts";
 import { checkAppBindingHistories, checkAppBindingSnapshot, readAppBindingEvidence } from "../../src/app-binding/report.ts";
 import type { AppBindingSnapshot } from "../../src/app-binding/run.ts";
+import { validateReaderBrowserBundle } from "../../src/marks/status-browser-audit.ts";
 
 interface ObservedApp {
   generation: number;
@@ -40,7 +41,7 @@ test("real-app evidence pins the pushed app patch and covers exactly all 72 pres
 test("the retained browser evidence names the exact current injected prototype bundle", async () => {
   const bundle = await build({ absWorkingDir: fileURLToPath(new URL("../../../../", import.meta.url)), entryPoints: [fileURLToPath(new URL("../../src/app-binding/page.ts", import.meta.url))], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
   const script = present(bundle.outputFiles?.[0]?.text);
-  assert.equal(createHash("sha256").update(script).digest("hex"), evidence.harnessSha256);
+  await validateReaderBrowserBundle("src/app-binding/page.ts", evidence.harnessSha256, createHash("sha256").update(script).digest("hex"));
 });
 
 for (const result of evidence.traces) {

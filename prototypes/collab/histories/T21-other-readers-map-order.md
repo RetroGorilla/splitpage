@@ -14,3 +14,7 @@ Removal: `structure-reader.ts` enumerates the beat's removal map into `activeRem
 Visuals: start with an empty visuals map. Each writer adds a fresh Y.Map with `beat: R1` and a Y.Text containing its one character. `structure-reader.ts` appends components in the map's enumeration order; there is no rank or sort on this path. The full-document layout has a separate ranked visual reader; this finding concerns the structural reader.
 
 Reproduce: `node --test test/marks/status-index.test.ts` from `prototypes/collab`. The two `other-reader finding` tests assert these exact observations and encoded-state equality. No server or browser is involved.
+
+## What the reader-order fix shows
+
+The original observations above remain executable through the archived structural reader. The repaired reader returns removal attribution `Alice, Bob` on every replica and orders visuals by converged beat position, rank and component identity. `test/reader-order/readers.test.ts` checks the literal values through both layouts, swapped clients, renamed ids, all 24 visual delivery permutations, both undo writers, early/late cancellation and encoded-state late joins. The old algorithms remain controls that the complete-output checker rejects.

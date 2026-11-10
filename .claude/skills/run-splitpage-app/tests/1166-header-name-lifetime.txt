@@ -12,6 +12,7 @@ expect document.activeElement === document.querySelector('#rows [data-section-id
 key none Escape
 expect !document.querySelector('#rows [data-section-id="s1"] .section-more').open
 click #rows .row[data-id="r2"] .row-more
+wait document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').getBoundingClientRect().width > 0
 click #rows .row[data-id="r2"] [data-action="add-section"]
 press Middle
 click #rows [data-section-id="s2"] .section-name
@@ -26,6 +27,7 @@ key ctrl KeyZ
 wait F.state().sections.length === 2
 eval U.flush();window.before=JSON.stringify(F.state());window.steps=U.sizes().undo;true
 click #rows .row[data-id="r2"] .row-more
+wait document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').getBoundingClientRect().width > 0
 click #rows .row[data-id="r2"] [data-action="add-section"]
 press Invisible creation
 eval window.detached=document.querySelector('.section-rename');window.__renderTest.render();true

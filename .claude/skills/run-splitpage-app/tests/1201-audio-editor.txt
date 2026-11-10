@@ -7,12 +7,14 @@ click #rows .row:nth-of-type(1) .audio-cell [data-tag-cat="sound"]
 click #tag-edit-action
 eval a(0).focus();var r=document.createRange();var t=a(0).querySelector('[data-tag-cat="sound"]').firstChild;r.setStart(t,8);r.setEnd(t,16);getSelection().removeAllRanges();getSelection().addRange(r);true
 click #rows .row:nth-of-type(1) .audio-cell .tb-tag
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
 click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="gear"]
 expect a(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="gear"]').textContent === 'umbrella'
 expect F.state().productionTags.find(function(t){return t.id==='t_weather';}).notes === 'Keep' && F.state().productionTags.find(function(t){return t.id==='t_weather';}).status === 'have'
 click #tag-edit-action
 eval a(0).focus();var r=document.createRange();r.selectNodeContents(a(0));getSelection().removeAllRanges();getSelection().addRange(r);true
 click #rows .row:nth-of-type(1) .audio-cell .tb-tag
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
 click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="cast"]
 expect a(0).querySelector('[data-tag-cat="cast"] [data-tag-cat="sound"] [data-tag-cat="gear"]') !== null
 key ctrl KeyZ

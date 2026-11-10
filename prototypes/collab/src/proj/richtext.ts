@@ -1,9 +1,11 @@
 import type * as Y from "yjs";
 import { cleanMarks, defaultTagId, defaultTagOf, settleCues } from "../../../../src/core/text/runs.ts";
 import type { Marks, Run } from "../../../../src/core/text/runs.ts";
-import { bag, records } from "./value.ts";
+import { records } from "./value.ts";
 import type { ProjectionBag } from "./value.ts";
 import { storedRunsToHtml } from "./stored-html.ts";
+import { readContentAtom, readMarkRecord, readWireValue } from "../readers/records.ts";
+import { compactDelta } from "../perf/delta.ts";
 
 export interface ProjectionDelta {
   insert: string | ProjectionBag;
@@ -127,7 +129,7 @@ export function deltaToRuns(delta: readonly ProjectionDelta[], tags: unknown, co
     const attrs = item.attributes ?? {};
     const marks: Marks = cleanMarks(attrs, typeof item.insert !== "string");
     const cmts = Object.keys(attrs).filter(key => key.startsWith("c:") && attrs[key])
-      .map(key => String(anchors.find(comment => comment.id === key.slice(2))?.anchorId ?? key.slice(2)));
+      .map(key => { const anchor = anchors.find(comment => comment.id === key.slice(2))?.anchorId; return typeof anchor === "string" ? anchor : key.slice(2); });
     if (cmts.length) marks.cmt = cmts.sort();
     const links = Object.keys(attrs).filter(key => key.startsWith("l:") && attrs[key]).sort();
     if (links.length) marks.href = String(attrs[links[0] as string]);
@@ -152,7 +154,7 @@ export function deltaToHtml(delta: readonly ProjectionDelta[], tags: unknown, co
   const registry = records(tags);
   return storedRunsToHtml(deltaToRuns(delta, registry, comments, deriveCue), id => {
     const tag = registry.find(entry => entry.id === id);
-    return tag ? { cat: String(tag.cat), name: String(tag.name) } : defaultTagOf(id);
+    return tag && typeof tag.cat === "string" && typeof tag.name === "string" ? { cat: tag.cat, name: tag.name } : defaultTagOf(id);
   });
 }
 
@@ -166,7 +168,8 @@ export function insertHtml(text: Y.Text, html: string, tags: unknown, comments: 
 
 export function readDelta(text: Y.Text): ProjectionDelta[] {
   const delta = text.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[];
-  return delta.map((item): ProjectionDelta => ({
-    insert: typeof item.insert === "string" ? item.insert : bag(item.insert), attributes: item.attributes ?? {}
+  return compactDelta(delta.flatMap((item): ProjectionDelta[] => {
+    const insert = typeof item.insert === "string" ? readWireValue(item.insert) as string : readContentAtom(item.insert);
+    return insert === null ? [] : [{ insert, attributes: readMarkRecord(item.attributes) }];
   }));
 }

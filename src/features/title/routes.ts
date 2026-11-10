@@ -1,8 +1,8 @@
 import { titleCommand } from "../../application/commands/title.ts";
-import type { Command, CommandOutcome } from "../../application/session/document-session.ts";
+import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 
 interface TitleRoutePorts {
-  readonly run: (command: Command) => CommandOutcome;
+  readonly run: CommonDocumentSession["run"];
   readonly current: () => string | null;
   readonly pageTitle: () => void;
 }

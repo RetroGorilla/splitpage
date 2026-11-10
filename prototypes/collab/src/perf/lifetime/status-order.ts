@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { compareCodeUnits } from "../../readers/order.ts";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as Y from "yjs";
@@ -85,7 +86,7 @@ export function observeStatusOrder(order: readonly string[], recreate: boolean, 
     const observations = readers.map((reader, index) => ({ replica: ["first", "reverse", "late"][index],
       keys: [...reader.doc.getMap("statusEvents").keys()], status: read(reader, "R1") }));
     return { clients: [...clients], delivery: [...order], reverseDelivery: [...order].reverse(), recreate, stateSha256: createHash("sha256").update(state).digest("hex"),
-      identicalEncodedState: true, records: [...first.doc.getMap("statusEvents")].sort(([a], [b]) => a.localeCompare(b)), observations,
+      identicalEncodedState: true, records: [...first.doc.getMap("statusEvents")].sort(([a], [b]) => compareCodeUnits(a, b)), observations,
       agrees: new Set(observations.map(row => row.status)).size === 1 };
   } finally { for (const manager of managers) manager.destroy(); for (const replica of [...writers, ...readers]) replica.destroy(); seed.destroy(); }
 }

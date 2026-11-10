@@ -13,6 +13,7 @@ import type { Run } from "../../core/text/runs.ts";
 import type { BrollSeedPlace } from "../commands/clipboard.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { RecordsPlan } from "../session/ports.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { TextServices } from "../text/services.ts";
 
 export type BrollText = Pick<TextServices, "htmlToPlainText" | "productionReaders">;
@@ -34,7 +35,7 @@ export function recordPastedBroll(doc: ValidatedDocument | null, rowId: string, 
 }
 
 export interface RecordsReconcilerPorts {
-  readonly held: () => ValidatedDocument | null;
+  readonly held: StandaloneDocumentSession["held"];
   readonly viewed: () => ValidatedDocument | null;
   readonly production: Pick<ProductionIndexOwner, "recordsPlan">;
   readonly text: BrollText;

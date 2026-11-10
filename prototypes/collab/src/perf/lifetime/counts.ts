@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { removalIds } from "../../readers/removals.ts";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ export function lifetimeSize(replica: SchemaReplica) {
   const index = new PerfBlockIndex(replica.doc, "B"), active = new Set<string>();
   let finalCharacters = 0;
   for (const span of index.spans) {
-    if (span.block.kind !== "b" || mapValue(mapValue(replica.doc.getMap("beats").get(span.block.id)).get("removals")).size) continue;
+    if (span.block.kind !== "b" || removalIds(mapValue(mapValue(replica.doc.getMap("beats").get(span.block.id)).get("removals"))).length) continue;
     active.add(span.block.id); finalCharacters += lifetimeCharacters(span.block.delta);
   }
   for (const value of replica.doc.getMap("visuals").values()) {

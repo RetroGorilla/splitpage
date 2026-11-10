@@ -1,3 +1,4 @@
+import { wireIdentity } from "../readers/identity.ts";
 import { AbstractType, Doc } from "yjs";
 import { createEncoder, toUint8Array, writeAny } from "lib0/encoding";
 import { createDecoder, readAny } from "lib0/decoding";
@@ -39,7 +40,7 @@ export function statusHeads(events: ReadonlyMap<string, BeatStatusEvent>): strin
 export function resolveBeatStatus(input: ReadonlyMap<string, unknown>, retired: { has: (id: string) => boolean }, stored: string): string {
   const events = new Map<string, BeatStatusEvent>();
   for (const [id, raw] of input) {
-    const event = readStatusEvent(raw); if (typeof id === "string" && event) events.set(id, event);
+    const event = readStatusEvent(raw); if (typeof id === "string" && event) events.set(wireIdentity(id), event);
   }
   if (new Set([...events.values()].map(event => event.target)).size > 1) return stored;
   const pending = new Map<string, number>(), children = new Map<string, string[]>(), ordered: string[] = [];

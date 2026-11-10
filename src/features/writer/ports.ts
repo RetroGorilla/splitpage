@@ -13,7 +13,7 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { WholeFieldTextCommit } from "../../application/editing/ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
-import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
+import type { Command, CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
 import type { FlowDoc, FlowPorts, FlowRange, FlowRow } from "../../core/flow/flow.ts";
 import type { Run } from "../../core/text/runs.ts";
@@ -53,7 +53,7 @@ export interface FlowWriterPorts {
   readonly visualLeave?: (cell: HTMLElement) => void;
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
-  readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
@@ -61,7 +61,7 @@ export interface FlowWriterPorts {
   readonly decode: (html: string) => Run[];
   readonly storedHtml: (html: string) => string;
   readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
-  readonly run: (command: Command) => CommandOutcome;
+  readonly run: CommonDocumentSession["run"];
   readonly shown: <T>(edit: () => T) => T;
   readonly editingBlocked: () => boolean;
   readonly text: CellTextPorts;
