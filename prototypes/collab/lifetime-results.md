@@ -1,8 +1,10 @@
 # Candidate B: writing lifetime, retained bytes and remote-character work
 
+**Blocking T21 scalar finding:** the unchanged legacy status fallback depends on replica-local map iteration order. Two replicas with byte-identical encoded state read ready and shot; a late joiner reads shot in the minimized author-1/author-2 example. Across 24 delivery permutations, two author-id assignments, and with/without deleting and recreating c, 80 of 96 cases disagree (40/48 in each recreation condition). This is a status-design finding, not an index resolution policy. The index now matches each replica's local legacy result; the legacy reader remains unchanged. Minimized history: [T21-scalar-map-order.md](histories/T21-scalar-map-order.md); every observation: src/perf/lifetime/status-order.json. Byte-identical state and identical event records do not imply identical order for this fallback.
+
 This follow-up studies the selected stable-segment candidate B. It does not select a schema, design compaction or establish a production lifetime. One modeled canonical draft plus its stated revision is the small lifetime control; larger horizons append the same canonical structure as the existing SCALE fixture does. Two/six writers alternate whole beats with causal delivery between turns, not simultaneous conflicting keystrokes. The M1 queue and app binding are not instantiated here.
 
-Source SHA-256: 4a1666e7e85146a8f1f7b657afa4a123278646d8e965d99c48ca5603d153efac; dependency SHA-256: 73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
+Source SHA-256: 0e17a94a5e8ad290566df43dd01c2ae5229681f451ee334b44762ee6cfed761e; dependency SHA-256: 73a068a97ea23949fb3cc75189013a28231eb0238475f50601fa2bee6aa9f663; canonical input SHA-256: 6f8d5731552da0152bf220596cc4b70cc58820895c5035d05a95af130ca23b34. Counts have no clock. Node v24.22.1; pinned Yjs 13.6.33. All limits remain those of artifact 7: 2,097,152 encoded bytes, fresh ≤3x/export and heavily edited ≤10x/export, remote visible-character p50 ≤30 ms / p95 ≤50 ms. A Node component can fail these latency ceilings; passing it does not prove message-to-frame.
 
 ## Stated writing scenario
 
@@ -64,11 +66,25 @@ Active export is the prototype's .splitpage serialization with removed rows omit
 | 2 | 2,110,845 | 358,435 | 395,057 | 2,085,144 / 395,057 |
 | 6 | 2,104,409 | 358,435 | 395,057 | 2,078,708 / 395,057 |
 
+### Sensitivity to stated intervention frequencies
+
+These reproduce the reviewer's sensitivity results with the committed generator: two writers, one parameter changed at a time, identical canonical fixture and all remaining interventions unchanged. Doubling corrections means two per 55 original text units, spaced at alternating 28/27-unit intervals. Borrowing intervention frequencies from fixtures does not establish human writing rates; the block-36 baseline is scenario-dependent, not a human-lifetime guarantee.
+
+| Scenario | Corrections / 55 original units | Status changes / beat | Removals / block | Partly revised beats / 30 | First ≥2 MiB block |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 1 | 2 | 2 | 5 | 36 |
+| double status changes | 1 | 4 | 2 | 5 | 31 |
+| double corrections | 2 | 2 | 2 | 5 | 34 |
+| double removals | 1 | 2 | 4 | 5 | 26 |
+| double revised beats | 1 | 2 | 2 | 10 | 36 |
+
 Encoded size is checked after every causal edit group (one beat's typing, one revision, one structural/review command group), including creation of blank block metadata. The crossing is bracketed by adjacent group checkpoints, not interpolated to an unmeasured keystroke. Writing stops after finishing the first crossing block; maxBlocks=80 is a fail-fast harness horizon, not a product limit.
 
 ## What occupies the encoded state
 
 The diagnostic wraps pinned Yjs Item.write while encodeStateAsUpdate emits V1 bytes. Encoder length before/after each actual write measures that item's wire bytes, including identity/origin/parent and content encoding. No root is destructively edited and no estimate or counterfactual is used. Attribution is exclusive: removal records; join entry bodies/retired ids; status events/retired status; soft-removed beat metadata, text, visuals/gallery; remaining deleted text; live formatting items; live text/atoms; order; other. Boundaries and shared container metadata can be in other. Other also includes the residual client/struct framing, delete sets and GC structs. The nine categories sum exactly to the encoded byte length; root-removal marginal differences would overlap through shared framing, so they are not presented as additive categories.
+
+The synthetic history's 77.03% removal-record share reflects this prototype recording and retaining one identity object per removed character. That representation/retention cost has not been shown inherent to stable segments or to Yjs.
 
 | State | live text items | deleted text tombstones | soft-removed beat content | removal records | join records and retired ids | status events | marks | order array | other | Total bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -178,7 +194,7 @@ Counters wrap the actual Y.Map iterators/get/has, order toArray and text toDelta
 | synthetic / 25050 operations | 603 | 604 | 1 / 2 / 1 | 0 / 0 |
 | synthetic / 50100 operations | 593 | 5,339 | 10 / 11 / 1 | 0 / 0 |
 
-The repeated all-events scan belongs to perfStructureView/statusValue in this prototype, not the segment schema or a Yjs requirement. IndexedStructureProjection keeps events by target and a cached resolved frontier value, invalidating only targets changed by status/retirement events. Initial construction scans all current events once outside edits. A status edit still examines that target's causal history; no causal event is reclaimed. Per-character status-history scans fall to zero after construction. The wrapper leaves the old measured implementation intact for a matched legacy comparison. Full-document and structural-reader agreement are checked after every step of literal seeds 17, 1376 and 50100.
+The repeated all-events scan belongs to perfStructureView/statusValue in this prototype, not the segment schema or a Yjs requirement. IndexedStructureProjection keeps events by target and a cached resolved frontier value, invalidating only targets changed by status/retirement events. Initial construction scans all current events once outside edits. A status-map change now rebuilds affected target lists with one traversal of the live event map, preserving that replica's key order even after deletion/recreation; its changed cost is unmeasured. Resolution then examines that target's causal history; no causal event is reclaimed. Per-character status-history scans remain zero. The view, resolution, character probe and sampled driver methods remain unchanged, as the source audit verifies. Full-document and structural-reader agreement are checked after every step of literal seeds 17, 1376 and 50100, including deletion and recreation of status events and a separate check between those two transactions. Local equivalence does not repair the cross-replica T21 finding at the top.
 
 Remaining scans include global order/spans and plain-record/visual/gallery/comment projection, plus current-beat join entries and retirement membership probes. They grow with script/retained structure in this projector; indexes and affected-beat publication could reduce them. RemovalRecords are not scanned on this remote-character path, so a large byte cost is not evidence of a time cost here. Yjs still integrates the update and its delete set and performs identity-store searches; those library costs are distinguished from the prototype's avoidable repeated status scan. No claim is made that every internal Yjs traversal is counted.
 
@@ -187,6 +203,8 @@ Remaining scans include global order/spans and plain-record/visual/gallery/comme
 Machine: AMD Ryzen 9 9950X3D2 16-Core Processor, win32 10.0.26300 x64, Node v24.22.1, 30.91 GiB RAM, Yjs 13.6.33. Machine/user identifiers and local paths are absent.
 
 Timed source head: 934e7675362f6ac286af5b546833141c0aef729a; source SHA-256: 4a1666e7e85146a8f1f7b657afa4a123278646d8e965d99c48ca5603d153efac. These rows use the merged stored U+200B/cue export repair, superseding the affected historical B remote-character component row. The original perf evidence is retained unchanged.
+
+These are the retained pre-review remote-character rows. The index repair changes only the status-map-change notification handler, which no sampled character transaction invokes. timed-implementation.json archives all nine measured source files; audit.ts verifies their hashes, unchanged sampled projector/driver code and dependencies, and the untouched timing file. All fourteen default attribution/counter checkpoints regenerate identically. No sampled code path's work changed and no rows require retiming. Changed status-notification work is not measured: a status-map change now scans the live event map once to rebuild affected targets in local legacy order.
 
 Five whole-set runs, alternating legacy/indexed order each round, three warm-up edits per case and eleven recorded samples per case/run. Reported values are the median of five per-run p50s [min–max]; p95 uses the same per-run aggregation. No pooled samples, discarded outliers or timing assertions in npm test. Background load may have affected accepted runs. A game was running on this PC during the session; the unchanged guards require at least 3 GiB free before each run, CPU at most 35% before/after, no forbidden Edge/pc-hold/heavy-game process, and stop after three consecutive refusals. Locks: perf and smoke. RAM is checked again before each state. Raw samples and void/refusal evidence: src/perf/lifetime/timings.json.
 
@@ -252,7 +270,7 @@ Refused starts: 0; void runs retained: 0.
 | synthetic / 50100 operations / resolve | 0.015 [0.008–0.016] | 0.005 [0.004–0.005] | 3.106x | no difference beyond noise |
 | synthetic / 50100 operations / withIdentity | 30.579 [28.364–34.379] | 3.482 [3.397–3.969] | 8.783x | indexed cheaper |
 
-| State | Indexed component p50 [range] ms | Indexed component p95 [range] ms | Node component ≤30 / ≤50 ms |
+| State | Indexed component p50 [range] ms | Indexed component p95 [range] ms | p50 ≤30 ms / p95 ≤50 ms (Node component) |
 | --- | ---: | ---: | --- |
 | realistic 2 writers / 1 blocks | 0.547 [0.527–0.724] | 0.890 [0.603–0.964] | met / met |
 | realistic 2 writers / 10 blocks | 2.526 [2.432–3.719] | 3.520 [2.700–4.258] | met / met |
@@ -277,6 +295,8 @@ The first policy question concerns the measured growing history categories: remo
 ## Reproduction
 
 ```text
+node src/perf/lifetime/status-order.ts --write
+node src/perf/lifetime/sensitivity.ts --write
 node src/perf/lifetime/record.ts --counts
 node src/perf/lifetime/record.ts --check
 node src/perf/lifetime/report.ts --write

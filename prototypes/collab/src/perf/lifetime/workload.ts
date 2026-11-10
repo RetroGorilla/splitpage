@@ -33,6 +33,11 @@ export interface LifetimeOperations {
   statuses: number; comments: number; tags: number; pictures: number;
 }
 
+export interface LifetimeInterventions { correctionsPer55: number; revisionBeats: number; statusesPerBeat: number; removals: number }
+
+export const defaultLifetimeInterventions: LifetimeInterventions = { correctionsPer55: 1, revisionBeats: lifetimePlan.revisionBeats,
+  statusesPerBeat: lifetimePlan.statusesPerBeat, removals: lifetimePlan.removals };
+
 export function emptyLifetimeOperations(): LifetimeOperations {
   return { typing: 0, correctionDeletes: 0, correctionRetypes: 0, revisionDeletes: 0, revisionTyping: 0, atoms: 0,
     splits: 0, joins: 0, joinRetirements: 0, moves: 0, removals: 0, restores: 0, statuses: 0, comments: 0, tags: 0, pictures: 0 };
@@ -56,12 +61,14 @@ export class LifetimeHistory {
   readonly operations = emptyLifetimeOperations();
   readonly base: ProjectionBag;
   readonly undo: Y.UndoManager[];
+  readonly interventions: LifetimeInterventions;
   blocks = 0;
   onStep: (() => void) | undefined;
   private turn = 0;
 
-  constructor(writers: number, base = canonicalLifetimeSource(), retainUndo = false) {
+  constructor(writers: number, base = canonicalLifetimeSource(), retainUndo = false, interventions: Partial<LifetimeInterventions> = {}) {
     this.base = base;
+    this.interventions = { ...defaultLifetimeInterventions, ...interventions };
     this.master = fromDocument({ ...copy(base), rows: [], comments: [], brollShots: [] }, "B", 100);
     this.writers = Array.from({ length: writers }, (_, index) => createProjectionReplica("B", index + 1));
     this.undo = retainUndo ? this.writers.map(writer => new Y.UndoManager([
@@ -105,7 +112,8 @@ export class LifetimeHistory {
           for (const character of delta.insert.split("")) {
             location.text.insert(index++, character, delta.attributes ?? {});
             this.operations.typing++;
-            if (this.operations.typing % lifetimePlan.correctionEvery === 0) {
+            if (Math.floor(this.operations.typing * this.interventions.correctionsPer55 / lifetimePlan.correctionEvery)
+              > Math.floor((this.operations.typing - 1) * this.interventions.correctionsPer55 / lifetimePlan.correctionEvery)) {
               location.text.delete(--index, 1); this.operations.correctionDeletes++;
               location.text.insert(index++, character, delta.attributes ?? {}); this.operations.correctionRetypes++;
             }
@@ -113,7 +121,7 @@ export class LifetimeHistory {
         }
       }
     });
-    for (let index = 0; index < lifetimePlan.revisionBeats; index++) this.edit(writer => {
+    for (let index = 0; index < this.interventions.revisionBeats; index++) this.edit(writer => {
       const row = rows[index], next = rows[index + 1];
       if (!row || !next) throw new Error("Missing revision beat");
       const location = writer.locate(String(row.id));
@@ -134,7 +142,7 @@ export class LifetimeHistory {
     for (let index = 0; index < lifetimePlan.moves; index++) this.edit(writer => {
       writer.doc.getArray<string>("order").insert(0, [`seg-b-${String(rows[29 - index]?.id)}`]); this.operations.moves++;
     });
-    for (let index = 0; index < lifetimePlan.removals; index++) this.edit(writer => {
+    for (let index = 0; index < this.interventions.removals; index++) this.edit(writer => {
       const id = String(rows[29 - index]?.id), removal = `draft-${block}-removal-${index}`;
       const location = writer.locate(id), observed = [];
       for (let at = location.start; at < location.end; at++) {
@@ -145,7 +153,10 @@ export class LifetimeHistory {
       if (index === 0) { writer.restore(id, removal); this.operations.restores++; }
     });
     for (const row of rows) this.edit(writer => {
-      for (const value of ["ready", "shot"]) { writePerfStatus(writer, String(row.id), `draft-${block}-status-${row.id}-${value}`, value); this.operations.statuses++; }
+      for (let index = 0; index < this.interventions.statusesPerBeat; index++) {
+        const value = index % 2 ? "shot" : "ready", suffix = index < 2 ? value : `${value}-${index}`;
+        writePerfStatus(writer, String(row.id), `draft-${block}-status-${row.id}-${suffix}`, value); this.operations.statuses++;
+      }
     });
     for (const comment of records(source.comments)) this.edit(writer => {
       mapValue(writer.doc.getMap("comments").get(String(comment.id))).set("text", String(comment.body) + ` Review ${block}.`); this.operations.comments++;

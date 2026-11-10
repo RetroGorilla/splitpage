@@ -9,6 +9,7 @@ import { IndexedStructureProjection } from "../../src/perf/lifetime/projector.ts
 import { attributeLifetimeBytes } from "../../src/perf/lifetime/attribution.ts";
 import { countLifetimeRemote } from "../../src/perf/lifetime/probe.ts";
 import { LifetimeHistory } from "../../src/perf/lifetime/workload.ts";
+import { reviewerStatusEvents } from "../../src/perf/lifetime/status-order.ts";
 
 const source = () => ({ title: "Literal", rows: Array.from({ length: 30 }, (_, index) => ({ id: `R${index}`, audioText: "abcd", visualText: "", status: "todo" })),
   comments: Array.from({ length: 4 }, (_, index) => ({ id: `C${index}`, rowId: "R0", body: "note", replies: [] })),
@@ -48,15 +49,32 @@ test("status index preserves literal conflict, retirement, overwrite, deletion a
   } finally { indexed.destroy(); projection.destroy(); replica.destroy(); }
 });
 
+test("literal two-branch status fallback remains ready after c is deleted and recreated", () => {
+  const replica = fromDocument({ title: "", rows: [{ id: "R1", audioText: "abcd", visualText: "", status: "todo" }] }, "B");
+  const projection = new IncrementalProjection(replica), indexed = new IndexedStructureProjection(replica);
+  const check = (): void => {
+    assert.equal(perfStructureView(replica, projection.document).groups[0]?.status, "ready");
+    assert.equal(indexed.view(projection.document).groups[0]?.status, "ready");
+  };
+  try {
+    for (const [id, event] of Object.entries(reviewerStatusEvents)) replica.doc.getMap("statusEvents").set(id, structuredClone(event));
+    check();
+    replica.doc.getMap("statusEvents").delete("c");
+    replica.doc.getMap("statusEvents").set("c", structuredClone(reviewerStatusEvents.c));
+    check();
+  } finally { indexed.destroy(); projection.destroy(); replica.destroy(); }
+});
+
 for (const seed of [17, 1376, 50100]) test(`B indexed structure and incremental document agree with independent full reads after every seeded edit ${seed}`, () => {
   const replica = fromDocument({ title: "", rows: [{ id: "R1", audioText: "abcd", visualText: "", status: "todo" }, { id: "R2", audioText: "efgh", visualText: "", status: "todo" }] }, "B");
   const projection = new IncrementalProjection(replica), indexed = new IndexedStructureProjection(replica);
   let random = seed;
+  let recreations = 0;
   try {
     for (let step = 0; step < 100; step++) {
       random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
-      const id = random % 2 ? "R1" : "R2", location = replica.locate(id);
-      switch (random % 7) {
+      const id = (random >>> 16) % 2 ? "R1" : "R2", location = replica.locate(id);
+      switch (random % 8) {
         case 0: location.text.insert(location.end, "x", {}); break;
         case 1: if (location.end > location.start) location.text.delete(location.start, 1); break;
         case 2: writePerfStatus(replica, id, `status-${step}`, step % 2 ? "ready" : "shot"); break;
@@ -64,12 +82,23 @@ for (const seed of [17, 1376, 50100]) test(`B indexed structure and incremental 
         case 4: replica.join("R2", "R1", `join-${step}`); break;
         case 5: replica.doc.getMap("retiredJoins").set(`join-${step - 1}`, true); break;
         case 6: mapValue(mapValue(replica.doc.getMap("beats").get(id)).get("removals")).set("removed", true); break;
+        case 7: {
+          const events = replica.doc.getMap("statusEvents"), keys = [...events.keys()], key = keys[(random >>> 8) % keys.length];
+          if (!key) break;
+          const event = structuredClone(events.get(key));
+          events.delete(key);
+          const deleted = toDocument(replica.doc, "B");
+          assert.deepEqual(projection.document, deleted, `delete step ${step}`);
+          assert.deepEqual(indexed.view(projection.document), perfStructureView(replica, deleted), `delete step ${step}`);
+          events.set(key, event); recreations++; break;
+        }
       }
       if (step % 11 === 0) mapValue(mapValue(replica.doc.getMap("beats").get(id)).get("removals")).delete("removed");
       const full = toDocument(replica.doc, "B");
       assert.deepEqual(projection.document, full, `step ${step}`);
       assert.deepEqual(indexed.view(projection.document), perfStructureView(replica, full), `step ${step}`);
     }
+    assert.ok(recreations > 0);
   } finally { indexed.destroy(); projection.destroy(); replica.destroy(); }
 });
 

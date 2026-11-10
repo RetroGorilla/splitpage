@@ -14,6 +14,7 @@ import { redactPerfText } from "../privacy.ts";
 import type { collectLifetimeCounts } from "./counts.ts";
 import { lifetimeProbe } from "./probe.ts";
 import { lifetimeSources } from "./source.ts";
+import { validateLifetimeTimingSource } from "./audit.ts";
 import { canonicalLifetimeSource, lifetimePlan } from "./workload.ts";
 
 export interface LifetimeCountEvidence {
@@ -147,7 +148,7 @@ export async function recordLifetimeTimings(directory = lifetimeSnapshotDirector
 
 export function validateLifetimeTimings(value: LifetimeTimingEvidence, counts = readLifetimeCounts()): void {
   assert.equal(value.version, 1);
-  assert.deepEqual(value.source, counts.source); assert.deepEqual(value.method, lifetimeTimingMethod);
+  validateLifetimeTimingSource(value.source, counts.source); assert.deepEqual(value.method, lifetimeTimingMethod);
   assert.equal(value.machine.node, "v24.22.1"); assert.match(value.sourceHead, /^[a-f0-9]{40}$/);
   const valid = value.runs.filter(run => run.valid); assert.equal(valid.length, 5); assert.deepEqual(valid.map(run => run.round), [0, 1, 2, 3, 4]);
   for (const run of valid) {

@@ -24,12 +24,20 @@ export class IndexedStructureProjection {
     this.retired = replica.doc.getMap("retiredStatus");
     for (const [id, event] of this.status) this.put(id, event);
     this.changes = event => {
+      const affected = new Set<string>();
       for (const key of event.keysChanged) {
         const id = String(key);
         const old = this.targets.get(id);
         const value = this.status.get(id);
-        if (old && old !== value?.target) { this.events.get(old)?.delete(id); this.values.delete(old); this.targets.delete(id); }
-        if (value) this.put(id, value);
+        if (old) affected.add(old);
+        if (value) { affected.add(value.target); this.targets.set(id, value.target); }
+        else this.targets.delete(id);
+      }
+      for (const target of affected) { this.events.set(target, new Map()); this.values.delete(target); }
+      // why: Yjs retains a recreated key's position; rebuild changed targets in that replica's map order.
+      for (const [id, value] of this.status) {
+        this.statusRecordsRead++;
+        if (affected.has(value.target)) this.events.get(value.target)?.set(id, value);
       }
     };
     this.retirements = event => { for (const key of event.keysChanged) { const target = this.targets.get(String(key)); if (target) this.values.delete(target); } };
