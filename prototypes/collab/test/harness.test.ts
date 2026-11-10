@@ -9,7 +9,8 @@ import { readReplica } from "../src/reader.ts";
 import type { ReplicaCaretAnchor, ReplicaCarets } from "../src/reader.ts";
 import type { SchemaCandidate } from "../src/schema.ts";
 import { copyOnJoin, copyOnRestore, deleteStaleOffsets, omitLength, replaceWithStaleBeat, singleCommentMark } from "../src/defects.ts";
-import { commentsOracle, deletionOracle, joinOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
+import { commentsOracle, deletionOracle, joinNarrationOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
+import { insertWithCaret, restoreStructuralAnchor, splitWithCaret } from "../src/structure-selection.ts";
 
 function checkEvery(harness: ReplicaHarness, oracle: ScriptOracle, carets: ReplicaCarets): void {
   for (const replica of harness.replicas) {
@@ -80,7 +81,7 @@ for (const candidate of ["A", "B"] as const) {
       for (const replica of harness.replicas) {
         const actual = readReplica(replica.doc, candidate, harness.identities, carets);
         assert.equal(actual.rows[0]?.characters.map(character => character.value).join(""), "abcd cd");
-        assert.throws(() => checkModel(actual, joinOracle, harness.identities, "T06"), /T06.rows\[0\].characters\[2\].identity/);
+        assert.throws(() => checkModel(actual, joinNarrationOracle, harness.identities, "T06"), /T06.rows\[0\].characters\[2\].identity/);
       }
     } finally {
       harness.destroy();
@@ -172,17 +173,14 @@ function runSplit(candidate: SchemaCandidate, order: DeliveryOrder, swapped: boo
   const undo = harness.alice.undoManager();
   try {
     const restoredCaret = caret(harness, "R1", 2);
-    harness.alice.split("R1", 2, "Ra", "a1");
-    const aCaret = caret(harness, "Ra", 0, -1);
-    harness.bob.insert("R1", 2, "X", ["b1"]);
-    const bobLocation = harness.bob.locate("R1");
-    const bCaret = Y.createRelativePositionFromTypeIndex(bobLocation.text, bobLocation.start + 3, -1);
-    const carets = new Map([["A", { position: aCaret }], ["B", { position: bCaret }]]);
+    const aCaret = splitWithCaret(harness.alice, "R1", 2, "Ra", "a1");
+    const bCaret = insertWithCaret(harness.bob, "R1", 2, "X", ["b1"]);
+    const carets = new Map([["A", aCaret], ["B", bCaret]]);
     harness.queue.flush(order);
     if (order === "late-C") harness.lateJoin(harness.bob);
     checkEvery(harness, swapped ? swappedSplitOracle : splitOracle, carets);
     undo.undo();
-    carets.set("A", { position: restoredCaret });
+    carets.set("A", restoreStructuralAnchor(harness.alice, { position: restoredCaret }));
     harness.queue.flush(order);
     checkEvery(harness, splitUndoOracle, carets);
   } finally {

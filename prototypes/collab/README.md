@@ -42,3 +42,9 @@ Read [slice-results.md](slice-results.md) for real browser input observations, t
 `npm run slice` builds `slice.html` into a temporary local file, drives one headless Edge through its debugging protocol, and records `slice-evidence.json`, the generated report and histories. Run it through the smoke-lock wrapper described in the report; set the lane's TEMP/TMP first. The browser chooses a free port and temporary profile and is closed in finally. `SLICE_EDGE` can override its executable path. The prototype-only `esbuild` 0.28.2 dev dependency bundles the TypeScript page and Yjs; the protocol client uses Node's built-in WebSocket.
 
 Browser execution is separate from `npm test`. Browser-free tests recheck retained forward/undo models through the independent checker, assert the failure evidence and require generated report/history consistency. `node src/slice/report.ts --check` checks just those generated artifacts; `--write` regenerates them from retained raw evidence without launching a browser.
+
+## Structural traces
+
+[structure-results.md](structure-results.md) records the beat and movement matrix. `node src/structure-report.ts` reruns it; `--write` refreshes the report and native-undo failure histories. `test/structure.test.ts` checks every required delivery order, specified undo checkpoint and retained artifact. Full T06 includes visual identities, folded gallery links, unchanged stored gallery items, statuses, both join undos and the earlier bold step. Its narration-only deliberate-defect probe remains separately named.
+
+`src/structure-reader.ts` independently scans candidate state, including headings, removed identities, visual components and gallery items. The model checks those fields against literal data. Join retirement and top-item-only undo are explicit prototype mechanisms with their storage and reader costs listed in the report. Nothing here selects a schema or changes app code.

@@ -8,6 +8,7 @@ export interface SeedBeat {
   id: string;
   text: string;
   lengthSeconds?: number;
+  kind?: "heading";
 }
 
 export interface LocatedCharacter {
@@ -63,8 +64,8 @@ export class SchemaReplica {
     const segments = this.doc.getMap("segments");
     return [...new Set(this.doc.getArray<string>("order").toArray())].map(id => {
       const segment = mapValue(segments.get(id));
-      const head = segment.get("head") as { b: string };
-      return { text: textValue(segment.get("text")), head: head.b };
+      const head = segment.get("head") as { b?: string; h?: string };
+      return { text: textValue(segment.get("text")), head: head.b ?? head.h ?? null };
     });
   }
 
@@ -82,10 +83,10 @@ export class SchemaReplica {
           }
           index += insert.length;
         } else {
-          if (typeof insert !== "object" || insert === null || !("b" in insert) || typeof insert.b !== "string") {
+          if (typeof insert !== "object" || insert === null) {
             throw new Error("Unsupported feasibility atom");
           }
-          beat = insert.b;
+          beat = "b" in insert ? String(insert.b) : "h" in insert ? String(insert.h) : null;
           index++;
         }
       }
@@ -104,10 +105,10 @@ export class SchemaReplica {
           index += insert.length;
         } else {
           if (beat === beatId) return { text, start, end: index };
-          if (typeof insert !== "object" || insert === null || !("b" in insert) || typeof insert.b !== "string") {
+          if (typeof insert !== "object" || insert === null) {
             throw new Error("Unsupported feasibility atom");
           }
-          beat = insert.b;
+          beat = "b" in insert ? String(insert.b) : "h" in insert ? String(insert.h) : null;
           start = ++index;
         }
       }
@@ -131,13 +132,13 @@ export class SchemaReplica {
         let text: Y.Text;
         if (this.candidate === "A") {
           text = this.doc.getText("flow");
-          text.insertEmbed(text.length, { b: beat.id }, {});
+          text.insertEmbed(text.length, beat.kind === "heading" ? { h: beat.id } : { b: beat.id }, {});
         } else {
           const segment = new Y.Map<unknown>();
           this.doc.getMap("segments").set(`seg-${beat.id}`, segment);
           text = new Y.Text();
           segment.set("text", text);
-          segment.set("head", { b: beat.id });
+          segment.set("head", beat.kind === "heading" ? { h: beat.id } : { b: beat.id });
           this.doc.getArray<string>("order").push([`seg-${beat.id}`]);
         }
         const start = text.length;
@@ -187,7 +188,7 @@ export class SchemaReplica {
     }, this.localOrigin);
   }
 
-  remove(beatId: string, removalId: string, by: string): void {
+  remove(beatId: string, removalId: string, by: string, observed?: readonly CollabIdentity[]): void {
     this.doc.transact(() => {
       const beat = mapValue(this.doc.getMap("beats").get(beatId));
       mapValue(beat.get("removals")).set(removalId, true);
@@ -197,7 +198,7 @@ export class SchemaReplica {
       record.set("by", by);
       record.set("at", 0);
       record.set("beat", beatId);
-      record.set("observed", this.characters().filter(character => character.beat === beatId).map(character => ({ ...character.identity, len: 1 })));
+      record.set("observed", (observed ?? this.characters().filter(character => character.beat === beatId).map(character => character.identity)).map(identity => ({ ...identity, len: 1 })));
       record.set("atoms", []);
       record.set("components", []);
     }, this.localOrigin);
@@ -211,7 +212,10 @@ export class SchemaReplica {
 
   join(from: string, into: string, id: string): void {
     this.doc.transact(() => {
-      mapValue(mapValue(this.doc.getMap("beats").get(from)).get("joins")).set(id, { into, glue: " " });
+      const left = this.locate(into);
+      const right = this.locate(from);
+      const glue = left.end > left.start && right.end > right.start ? " " : "";
+      mapValue(mapValue(this.doc.getMap("beats").get(from)).get("joins")).set(id, { into, glue });
     }, this.localOrigin);
   }
 

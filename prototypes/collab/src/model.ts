@@ -17,6 +17,12 @@ export interface CollabRow {
   id: string;
   characters: CollabCharacter[];
   lengthSeconds?: number;
+  kind?: "heading";
+  paragraphStart?: boolean;
+  status?: string;
+  visuals?: CollabRow[];
+  gallery?: unknown[];
+  visualText?: string;
 }
 
 export interface CollabCaret {
@@ -35,6 +41,8 @@ export interface CollabModel {
   rows: CollabRow[];
   carets: Record<string, CollabCaret>;
   recovery: CollabRecovery[];
+  records?: Record<string, unknown>;
+  notices?: string[];
 }
 
 export type OracleCharacter = readonly [notation: string, value: string, marks: CollabMarks];
@@ -43,12 +51,20 @@ export interface OracleRow {
   id: string;
   characters: readonly OracleCharacter[];
   lengthSeconds?: number;
+  kind?: "heading";
+  paragraphStart?: boolean;
+  status?: string;
+  visuals?: readonly OracleRow[];
+  gallery?: readonly unknown[];
+  visualText?: string;
 }
 
 export interface ScriptOracle {
   rows: readonly OracleRow[];
   carets: Readonly<Record<string, CollabCaret>>;
   recovery: readonly { row: OracleRow; by: string; edited: string[] }[];
+  records?: Record<string, unknown>;
+  notices?: string[];
 }
 
 export class IdentityBook {
@@ -76,7 +92,9 @@ export class IdentityBook {
 }
 
 function expectedRow(row: OracleRow, identities: IdentityBook): CollabRow {
+  const { visuals, gallery, ...fields } = row;
   return {
+    ...fields,
     id: row.id,
     characters: row.characters.map(([notation, value, marks]) => ({
       identity: notation === "[glue]" ? null : identities.identity(notation),
@@ -85,7 +103,8 @@ function expectedRow(row: OracleRow, identities: IdentityBook): CollabRow {
       marks,
       beat: row.id
     })),
-    ...(row.lengthSeconds === undefined ? {} : { lengthSeconds: row.lengthSeconds })
+    ...(visuals === undefined ? {} : { visuals: visuals.map(visual => expectedRow(visual, identities)) }),
+    ...(gallery === undefined ? {} : { gallery: [...gallery] })
   };
 }
 
@@ -115,6 +134,7 @@ function firstDifference(expected: unknown, actual: unknown, path: string): stri
 
 export function checkModel(actual: CollabModel, oracle: ScriptOracle, identities: IdentityBook, replica: string): void {
   const expected: CollabModel = {
+    ...oracle,
     rows: oracle.rows.map(row => expectedRow(row, identities)),
     carets: { ...oracle.carets },
     recovery: oracle.recovery.map(entry => ({ ...entry, row: expectedRow(entry.row, identities) }))
