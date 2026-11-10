@@ -1,0 +1,11 @@
+{
+  "shows": "Not detected by this harness: the early acknowledgement occurs after unlock, outside the frozen pong prefix, before COMMIT returns.",
+  "mode": "after-unlock-ack",
+  "expectedDisposition": "accepted",
+  "writerBusyTimeoutMs": 15000,
+  "receiptHandlingDelayMs": 250,
+  "statusesBeforePong": [],
+  "rejectedByOrderingChecker": false,
+  "recoveredRows": 2,
+  "rawUpdateJournaled": true
+}

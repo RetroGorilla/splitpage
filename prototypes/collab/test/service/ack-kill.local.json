@@ -1,0 +1,28 @@
+{
+  "label": "PROBABILISTIC LOCAL PROCESS-KILL CHECK; zero misses does not prove COMMIT/status ordering",
+  "measuredAt": "2026-11-10T01:52:18.803Z",
+  "node": "v24.22.1",
+  "platform": "win32",
+  "totalElapsedMs": 78619.27,
+  "method": "Serial fresh child server/database per iteration, one accepted full update abcde, SIGKILL requested directly in the first positive status WebSocket frame callback; await process exit, independently open the recovered SQLite journal read-only and require the exact raw update. No success window or delay is used. The mutation signals the server after BEGIN/INSERT, sends its positive status, then receives permission to COMMIT. No extra delay is inserted in the mutation window.",
+  "results": [
+    {
+      "mode": "journal",
+      "iterations": 200,
+      "exactRowsRecovered": 200,
+      "missingRows": 0,
+      "detectionRate": 0,
+      "elapsedMs": 38020.49,
+      "firstMissing": null
+    },
+    {
+      "mode": "after-unlock-ack",
+      "iterations": 200,
+      "exactRowsRecovered": 103,
+      "missingRows": 97,
+      "detectionRate": 0.485,
+      "elapsedMs": 40598.19,
+      "firstMissing": 2
+    }
+  ]
+}

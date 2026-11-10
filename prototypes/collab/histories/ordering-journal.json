@@ -1,0 +1,11 @@
+{
+  "shows": "No acknowledgement precedes the matching pong while the harness holds the write lock; exact update bytes are present after unlocking and a hard kill.",
+  "mode": "journal",
+  "expectedDisposition": "accepted",
+  "writerBusyTimeoutMs": 15000,
+  "receiptHandlingDelayMs": 250,
+  "statusesBeforePong": [],
+  "rejectedByOrderingChecker": false,
+  "recoveredRows": 2,
+  "rawUpdateJournaled": true
+}

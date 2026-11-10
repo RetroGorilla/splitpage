@@ -1,0 +1,13 @@
+{
+  "shows": "A premature acknowledgement precedes the same-socket pong while an independent write lock makes commit impossible; the ordering checker rejects it even with delayed receipt handling.",
+  "mode": "ack-wait-commit",
+  "expectedDisposition": "accepted",
+  "writerBusyTimeoutMs": 15000,
+  "receiptHandlingDelayMs": 250,
+  "statusesBeforePong": [
+    true
+  ],
+  "rejectedByOrderingChecker": true,
+  "recoveredRows": 2,
+  "rawUpdateJournaled": true
+}

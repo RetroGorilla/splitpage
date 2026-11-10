@@ -1,0 +1,48 @@
+{
+  "shows": "A socket maximum payload blocks oversized processing but repeatedly closes on the provider's automatic initial sync while the local update is not committed.",
+  "replay": "node --test test/service/review.test.ts",
+  "fixture": {
+    "initial": "abcd",
+    "appended": {
+      "character": "Z",
+      "count": 2200000
+    }
+  },
+  "maxPayloadBytes": 2097152,
+  "reconnectDelayMs": 50,
+  "expected": {
+    "closeCodes": [
+      1009,
+      1009,
+      1009
+    ],
+    "journalRows": 1,
+    "status": "Offline, saved on this device",
+    "positiveReceiptsForOversize": 0
+  },
+  "observed": {
+    "closes": [
+      {
+        "lifetime": 1,
+        "code": 1009,
+        "reason": "",
+        "status": "Offline, saved on this device"
+      },
+      {
+        "lifetime": 2,
+        "code": 1009,
+        "reason": "",
+        "status": "Offline, saved on this device"
+      },
+      {
+        "lifetime": 3,
+        "code": 1009,
+        "reason": "",
+        "status": "Offline, saved on this device"
+      }
+    ],
+    "connections": 3,
+    "status": "Offline, saved on this device",
+    "journalRows": 1
+  }
+}
