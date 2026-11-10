@@ -1,0 +1,22 @@
+{
+  "schema": 2,
+  "title": "Quoted tag attribute",
+  "docId": "d88888888888888888888888888888888",
+  "rev": 0,
+  "wordsPerMinute": 150,
+  "rows": [
+    {
+      "id": "quote-row",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"A > B\" contenteditable=\"false\">label</span>",
+      "audioText": "",
+      "status": "todo",
+      "updatedAt": "",
+      "updatedBy": null,
+      "visualImage": null
+    }
+  ],
+  "comments": [],
+  "people": [],
+  "productionTags": [{ "id": "t_gt", "cat": "prop", "name": "A > B", "owner": "", "notes": "", "status": "needed" }],
+  "brollShots": []
+}

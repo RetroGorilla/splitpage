@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "title": "Special unknown keys",
+  "docId": "daaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "__proto__": { "kept": "document" }, "constructor": ["document"], "prototype": "document",
+  "rows": [{ "id": "special-row", "audioText": "", "visualText": "", "__proto__": { "kept": "row" }, "constructor": ["row"], "prototype": "row" }],
+  "comments": [{ "id": "special-comment", "rowId": "special-row", "field": "audioText", "body": "", "__proto__": { "kept": "comment" }, "constructor": ["comment"], "prototype": "comment", "replies": [{ "id": "special-reply", "body": "", "__proto__": { "kept": "reply" }, "constructor": ["reply"], "prototype": "reply" }] }],
+  "people": [{ "id": "special-person", "name": "Mira", "__proto__": { "kept": "person" }, "constructor": ["person"], "prototype": "person" }],
+  "productionTags": [{ "id": "special-tag", "cat": "prop", "name": "Cup", "__proto__": { "kept": "tag" }, "constructor": ["tag"], "prototype": "tag" }],
+  "brollShots": [{ "id": "special-shot", "name": "List shot", "origin": "list", "__proto__": { "kept": "shot" }, "constructor": ["shot"], "prototype": "shot" }]
+}
