@@ -4,6 +4,8 @@ import * as Y from "yjs";
 import type { ConnectionReceipts } from "../receipts.ts";
 import { RefusedDevicePolicy } from "../refusal/policy.ts";
 import { readFrame, syncFrame } from "../wire.ts";
+import { imageControl } from "./configuration.ts";
+import type { ImageInstanceConfiguration } from "./configuration.ts";
 
 export type ImageGalleryItem = { id: string; beat: "R1"; ref: string; pending: boolean };
 export type ImageDesign = "upload-before-sync" | "pending-image";
@@ -83,8 +85,14 @@ export class ImagePublication {
   #transport: ImageTransport | null = null;
   #fence = 0;
   #control: string | null = null;
+  readonly #instance: string;
+  readonly #token: string;
 
-  constructor(seed: Y.Doc, design: ImageDesign, mechanism: ImageMechanism = "one-document", capture?: ImageReplicaCapture) {
+  constructor(seed: Y.Doc, design: ImageDesign, mechanism: ImageMechanism = "one-document", capture?: ImageReplicaCapture,
+    configuration: ImageInstanceConfiguration = { instance: "fixture", token: "" }) {
+    if (!/^(fixture|d[0-9a-f]{32})$/.test(configuration.instance)) throw new Error("Invalid image instance");
+    this.#instance = configuration.instance;
+    this.#token = configuration.token;
     this.#editing = new Y.Doc();
     Y.applyUpdate(this.#editing, capture ? Buffer.from(capture.editing, "base64") : Y.encodeStateAsUpdate(seed));
     this.#editing.clientID = seed.clientID;
@@ -137,11 +145,11 @@ export class ImagePublication {
     const encoded = Buffer.from(bytes).toString("base64");
     if (encoded === this.#control) { this.#control = null; return true; }
     if (bytes.length === 1 && (bytes[0] === 9 || bytes[0] === 10)) return true;
-    if (Buffer.from(bytes).equals(Buffer.from([7, ...Buffer.from("fixture"), 7]))) return true;
-    if (Buffer.from(bytes).equals(Buffer.from([7, ...Buffer.from("fixture"), 2, 0, 0, 5, ...Buffer.from("4.8.0")]))) return true;
-    if (Buffer.from(bytes).equals(Buffer.from(syncFrame("fixture", 0, Y.encodeStateVector(this.#network))))) return true;
+    if (Buffer.from(bytes).equals(Buffer.from(imageControl(this.#instance, 7)))) return true;
+    if (Buffer.from(bytes).equals(Buffer.from(imageControl(this.#instance, 2, [0, this.#token, "4.8.0"])))) return true;
+    if (Buffer.from(bytes).equals(Buffer.from(syncFrame(this.#instance, 0, Y.encodeStateVector(this.#network))))) return true;
     const frame = readFrame(bytes);
-    if (frame.name === "fixture" && frame.kind === 0 && (frame.subtype === 1 || frame.subtype === 2)) return this.#network !== this.#editing;
+    if (frame.name === this.#instance && frame.kind === 0 && (frame.subtype === 1 || frame.subtype === 2)) return this.#network !== this.#editing;
     throw new Error(`Image gate refuses outgoing frame kind ${frame.kind}`);
   }
 
@@ -151,7 +159,7 @@ export class ImagePublication {
     const socket = new HocuspocusProviderWebsocket({ url, autoConnect: false, WebSocketPolyfill: Gate,
       delay: 10000, initialDelay: 0, jitter: false, maxAttempts: 1 });
     socket.shouldConnect = false;
-    const provider = new HocuspocusProvider({ name: "fixture", document: this.#network, awareness: null,
+    const provider = new HocuspocusProvider({ name: this.#instance, token: this.#token, document: this.#network, awareness: null,
       websocketProvider: socket, onStateless: ({ payload }) => stateless(payload) });
     const policy = new RefusedDevicePolicy(provider, socket);
     const update = (bytes: Uint8Array, origin: unknown): void => {
@@ -179,8 +187,7 @@ export class ImagePublication {
       outgoing: (listener: () => boolean): void => { provider.on("outgoingMessage", () => listener()); },
       fence: (): string => {
         const label = JSON.stringify({ imageFence: ++this.#fence });
-        const value = Buffer.from(label);
-        this.#control = Buffer.from([7, ...Buffer.from("fixture"), 5, value.length, ...value]).toString("base64");
+        this.#control = Buffer.from(imageControl(this.#instance, 5, [label])).toString("base64");
         try { provider.sendStateless(label); } finally { this.#control = null; }
         return label;
       },

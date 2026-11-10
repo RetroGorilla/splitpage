@@ -5,7 +5,7 @@ import type { InstanceGateway } from "./gateway.ts";
 export function instanceBoundary(
   gateway: InstanceGateway,
   owner: string,
-  requiredAssetsDurable: (state: Uint8Array) => Promise<void> = async () => {},
+  requiredAssetsDurable: (state: Uint8Array, instance: string) => Promise<void> = async () => {},
   beforeUpdate: () => Promise<void> = async () => {},
   bodyProgress: () => void = () => {},
 ): Extension {
@@ -42,10 +42,11 @@ export function instanceBoundary(
           result = { id: record.id, state: record.state };
         } else if (data.action === "upload") {
           const payload = Buffer.from(String(data.payload), "base64");
-          await requiredAssetsDurable(payload);
           const record = await gateway.request("upload", { operation: data.operation, owner, payload });
           result = record ? { uploaded: true } : null;
         } else if (data.action === "commit") {
+          const initial = await gateway.initial(String(data.operation), owner);
+          await requiredAssetsDurable(initial.payload, initial.id);
           const record = await gateway.request("commit", { operation: data.operation, owner });
           result = record ? { committed: true } : null;
         } else throw new Error("Unknown management request");

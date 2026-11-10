@@ -8,6 +8,7 @@ import { checkModel, IdentityBook } from "../../../src/model.ts";
 import type { CollabCharacter } from "../../../src/model.ts";
 import { ConnectionReceipts } from "../../../src/service/receipts.ts";
 import type { ImagePublication, ImageNetworkPort, ImageTransport } from "../../../src/service/images/publication.ts";
+import type { ImageInstanceConfiguration } from "../../../src/service/images/configuration.ts";
 import { readFrame } from "../../../src/service/wire.ts";
 import { readRecoveredRows, until } from "../harness.ts";
 import type { JournalChild } from "../harness.ts";
@@ -27,9 +28,9 @@ export function initial(): Y.Doc {
   return document;
 }
 
-export function membership(path: string): string[] {
+export function membership(path: string, document = "fixture"): string[] {
   const database = new DatabaseSync(path, { readOnly: true });
-  try { return database.prepare("SELECT sha FROM image_membership WHERE document='fixture' ORDER BY sha").all().map(row => String(row.sha)); }
+  try { return database.prepare("SELECT sha FROM image_membership WHERE document=? ORDER BY sha").all(document).map(row => String(row.sha)); }
   finally { database.close(); }
 }
 
@@ -51,9 +52,11 @@ export function imagePort(server: JournalChild): number {
   assert.ok(port > 0); return port;
 }
 
-export async function upload(server: JournalChild, bytes: Uint8Array = png, ref = sha): Promise<Response> {
-  return fetch(`http://127.0.0.1:${imagePort(server)}/api/images/fixture/${ref}`, {
-    method: "PUT", headers: { "content-type": "image/png" }, body: Uint8Array.from(bytes), signal: AbortSignal.timeout(15000),
+export async function upload(server: JournalChild, bytes: Uint8Array = png, ref = sha,
+  configuration: ImageInstanceConfiguration = { instance: "fixture", token: "" }): Promise<Response> {
+  return fetch(`http://127.0.0.1:${imagePort(server)}/api/images/${configuration.instance}/${ref}`, {
+    method: "PUT", headers: { "content-type": "image/png", ...(configuration.token ? { Authorization: `Bearer ${configuration.token}` } : {}) },
+    body: Uint8Array.from(bytes), signal: AbortSignal.timeout(15000),
   });
 }
 
@@ -71,9 +74,12 @@ export class ImageClient {
   private readonly replyReleases: (() => void)[] = [];
   private readonly expectations: ("accepted" | "missing-blob")[];
   private lifetime = 0;
+  private readonly instance: string;
 
   constructor(port: number, path: string, publication: ImagePublication, expected: ("accepted" | "missing-blob")[] = ["accepted"],
-    acknowledged: ImageAcknowledgedCapture | null = null) {
+    acknowledged: ImageAcknowledgedCapture | null = null, configuration: ImageInstanceConfiguration = { instance: "fixture", token: "" }) {
+    this.instance = configuration.instance;
+    const rows = (): { sequence: number; payload: string }[] => imageJournalRows(path, configuration.instance);
     this.publication = publication;
     this.receipts = new ConnectionReceipts(path);
     if (acknowledged) this.receipts.restoreAcknowledged({ instance: acknowledged.instance, updates: acknowledged.updates.map(bytes => Buffer.from(bytes, "base64")) });
@@ -94,7 +100,7 @@ export class ImageClient {
             const sent = owner.sent.find(item => item.lifetime === this.generation && item.applied === null);
             assert.ok(sent, "Receipt must match an actual harness-observed transmission");
             sent.applied = frame.subtype === 1;
-            if (!sent.applied) sent.journalAtRefusal = readRecoveredRows(path).length;
+            if (!sent.applied) sent.journalAtRefusal = rows().length;
             owner.receipts.received(this.generation, bytes);
           }
           queueMicrotask(() => owner.observe(path));
@@ -109,7 +115,7 @@ export class ImageClient {
           const disposition = owner.expectations.shift();
           assert.ok(disposition, "Each transmitted update needs a harness-declared disposition");
           owner.sent.push({ lifetime: this.generation, subtype: frame.subtype, payload: Buffer.from(frame.payload).toString("base64"),
-            disposition, applied: null, membership: membership(path), journalBefore: readRecoveredRows(path).length, journalAtRefusal: null });
+            disposition, applied: null, membership: membership(path, configuration.instance), journalBefore: rows().length, journalAtRefusal: null });
         }
         owner.receipts.sent(this.generation, data); super.send(Uint8Array.from(data));
       }
@@ -128,7 +134,7 @@ export class ImageClient {
 
   expect(...values: ("accepted" | "missing-blob")[]): void { this.expectations.push(...values); }
   get status(): string { return this.policy.current(this.publication.status(this.receipts.status)).status; }
-  observe(path: string): void { this.observed.push({ status: this.status, refs: this.publication.items.map(item => item.ref), membership: membership(path) }); }
+  observe(path: string): void { this.observed.push({ status: this.status, refs: this.publication.items.map(item => item.ref), membership: membership(path, this.instance) }); }
   async connect(): Promise<void> { void this.provider.connect(); await until(() => this.provider.status() === "connected", "image client connected"); }
   async saved(): Promise<void> { await until(() => this.status === saved, "image saved status"); }
   async drop(): Promise<void> {
@@ -154,7 +160,7 @@ export class ImageClient {
     if (typeof expected === "string") checkText(this.publication.editing, expected === "abZ");
     else assert.deepEqual(imageIdentities(this.publication.editing), expected);
     assert.deepEqual(this.expectations, [], "Every declared transmission must occur");
-    const rows = readRecoveredRows(path);
+    const rows = imageJournalRows(path, this.instance);
     for (const sent of this.sent) {
       assert.equal(sent.applied, sent.disposition === "accepted", "Status contradicts harness-declared disposition");
       if (sent.disposition === "accepted") assert.ok(rows.some(row => row.payload === sent.payload), "Accepted update missing exact journal bytes");
@@ -227,8 +233,19 @@ export function checkHeld(payloads: readonly string[]): void {
     "Held image or subsequent text reached the network boundary");
 }
 
-export function journalDocument(path: string): Y.Doc {
+export function imageJournalRows(path: string, document = "fixture"): { sequence: number; payload: string }[] {
+  if (document === "fixture") return readRecoveredRows(path);
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    return database.prepare("SELECT sequence, payload FROM updates WHERE document=? ORDER BY sequence").all(document).map(row => {
+      assert.ok(row.payload instanceof Uint8Array);
+      return { sequence: Number(row.sequence), payload: Buffer.from(row.payload).toString("base64") };
+    });
+  } finally { database.close(); }
+}
+
+export function journalDocument(path: string, instance = "fixture"): Y.Doc {
   const document = new Y.Doc();
-  for (const row of readRecoveredRows(path)) Y.applyUpdate(document, Buffer.from(row.payload, "base64"));
+  for (const row of imageJournalRows(path, instance)) Y.applyUpdate(document, Buffer.from(row.payload, "base64"));
   return document;
 }

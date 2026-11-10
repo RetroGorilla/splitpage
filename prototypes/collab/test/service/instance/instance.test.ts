@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { createHash } from "node:crypto";
 import * as Y from "yjs";
 import { MemoryCompletionStore, NodeInstanceReplica, StandaloneHandoff, instanceRequest } from "../../../src/service/instance/client.ts";
 import { JournalWorkerClient } from "../../../src/service/journal-client.ts";
@@ -11,42 +10,14 @@ import { characterIdentities, until, workspace } from "../harness.ts";
 import { OWNER, INVITE, acknowledged, captureCheckpoint, checkpoint, createFixture, joinFixture, releaseGate, waitGate } from "./harness.ts";
 import { assertInvitation, assertNoCredentials, assertSingleCreation, inspectInstance, recoverIndependently } from "./oracle.ts";
 import { observeInstanceFacts } from "./facts.ts";
+import { rejectInstanceDefects } from "./defects.ts";
 
 const expected13 = ["a:7:0", "b:7:1", "c:7:2", "d:7:3", "X:11:0", "Y:11:1"];
 const expected17 = ["a:7:0", "b:7:1", "c:11:0", "d:12:0"];
 
 test("instance feasibility: four deliberate defects must fail before traces count", { timeout: 180000 }, async t => {
   await t.test("defects: duplicate retry, early invitation, lying coverage and over-pruning are rejected", async () => {
-    const work = await workspace();
-    let source: Y.Doc | undefined;
-    try {
-      const server = await work.start({ INSTANCE_OWNER: OWNER });
-      const first = await createFixture(server);
-      source = first.source;
-      const duplicate = await instanceRequest(server.port, OWNER, { action: "create", operation: "defective-retry-new-k", invite: INVITE });
-      assert.throws(() => assertSingleCreation(work.path, [first.id, String(duplicate.id)]), /second instance/);
-      assert.throws(() => assertInvitation(work.path, String(duplicate.id), "defective-visible-invite", String(duplicate.id)), /preceded server commit/);
-      assert.throws(() => assertInvitation(work.path, first.id, "defective-visible-invite", null), /preceded local commit/);
-      await checkpoint(server, first.id);
-      const db = new DatabaseSync(work.path);
-      const changed = new Y.Doc();
-      try {
-        Y.applyUpdate(changed, Y.encodeStateAsUpdate(source));
-        changed.clientID = 11;
-        const vector = Y.encodeStateVector(changed);
-        changed.getText("R1").insert(4, "X");
-        const update = Y.encodeStateAsUpdate(changed, vector);
-        const sequence = Number(db.prepare("INSERT INTO updates(document, payload) VALUES (?, ?)").run(first.id, update).lastInsertRowid);
-        const saved = inspectInstance(work.path, first.id).checkpoint;
-        assert.ok(saved);
-        db.prepare("INSERT INTO instance_checkpoints VALUES (?, ?, ?, ?)")
-          .run(first.id, sequence, saved.payload, createHash("sha256").update(JSON.stringify([first.id, sequence])).update(saved.payload).digest("hex"));
-        assert.throws(() => recoverIndependently(work.path, first.id, [update]), /Acknowledged insertion missing/);
-        db.prepare("DELETE FROM instance_checkpoints WHERE sequence = ?").run(sequence);
-        db.prepare("DELETE FROM updates WHERE document = ? AND sequence > ?").run(first.id, saved.sequence);
-        assert.throws(() => recoverIndependently(work.path, first.id, [update]), /Acknowledged insertion missing/);
-      } finally { changed.destroy(); db.close(); }
-    } finally { source?.destroy(); await work.clean(); }
+    await rejectInstanceDefects();
   });
 
   await t.test("T13: g0 upload retains g1/g2, completion gates invitation, receipt gates server-saved, retry is unique", async () => {

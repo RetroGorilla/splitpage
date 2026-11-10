@@ -3,10 +3,28 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Worker } from "node:worker_threads";
+import { createHash } from "node:crypto";
 import type { Connection, Extension } from "@hocuspocus/server";
 import * as Y from "yjs";
 
-export async function imageService(path: string): Promise<{
+export async function initialImagesDurable(port: number, instance: string, token: string, state: Uint8Array): Promise<void> {
+  const document = new Y.Doc();
+  try {
+    Y.applyUpdate(document, state);
+    for (const item of document.getMap<{ ref: string }>("gallery").values()) {
+      if (!/^[a-f0-9]{64}$/.test(item.ref)) throw new Error("Invalid initial image reference");
+      const response = await fetch(`http://127.0.0.1:${port}/api/images/${instance}/${item.ref}`, {
+        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000),
+      });
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!response.ok || createHash("sha256").update(bytes).digest("hex") !== item.ref) throw new Error("Initial image is not durable");
+    }
+  } finally { document.destroy(); }
+}
+
+export async function imageService(path: string, authorize: (instance: string, token: string) => Promise<void> = async (instance, token) => {
+  if (instance !== "fixture" || token !== "") throw new Error("Image access denied");
+}): Promise<{
   extension: Extension; port: number; command: (message: Record<string, unknown>) => Promise<void>; close: () => Promise<void>;
 }> {
   const folder = `${path}.images`;
@@ -65,10 +83,14 @@ export async function imageService(path: string): Promise<{
   };
   const http = createServer((req, res) => {
     void (async () => {
-      const match = /^\/api\/images\/(fixture)\/([a-f0-9]{64})$/.exec(req.url ?? "");
+      const match = /^\/api\/images\/(fixture|d[0-9a-f]{32})\/([a-f0-9]{64})$/.exec(req.url ?? "");
       if (!match) { res.writeHead(404).end(); return; }
       const document = match[1] ?? "";
       const sha = match[2] ?? "";
+      const authorization = req.headers.authorization;
+      const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
+      try { await authorize(document, token); }
+      catch { res.writeHead(403).end(); req.resume(); return; }
       if (req.method === "GET") {
         if (!has(document, sha)) { res.writeHead(404).end(); return; }
         res.writeHead(200, { "content-type": "image/png" }).end(await readFile(join(folder, sha)));
@@ -85,6 +107,7 @@ export async function imageService(path: string): Promise<{
         if (size > 16777216) { res.writeHead(413).end(); req.resume(); return; }
         chunks.push(bytes);
       }
+      await authorize(document, token);
       const result = await request("upload", { document, sha, bytes: Buffer.concat(chunks) });
       res.writeHead(201, { "content-type": "application/json" }).end(JSON.stringify(result));
     })().catch(error => { if (!res.headersSent) res.writeHead(422); res.end(error instanceof Error ? error.message : String(error)); });
