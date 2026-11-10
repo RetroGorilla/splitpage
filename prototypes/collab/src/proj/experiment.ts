@@ -6,6 +6,7 @@ import { createProjectionReplica, fromDocument, toDocument } from "./document.ts
 import { projectionReferences, serializeProjection } from "./reference.ts";
 import type { ProjectionBag } from "./value.ts";
 import type { SchemaCandidate } from "../schema.ts";
+import { assertProjectionBytes, projectionExclusion } from "./exclusions.ts";
 
 export interface ProjectionDifference {
   path: string;
@@ -71,11 +72,13 @@ export function runRoundTrips() {
     if (!fixture || !reference) throw new Error("Missing projection fixture");
     const saved = serializeProjection(projection.document);
     const appSaved = reference.appSaved.full ?? fixture.bytes;
+    assertProjectionBytes(fixture.name, appSaved, saved);
     return {
       candidate: projection.candidate, fixture: fixture.name, source: fixture.source,
       fileBytes: Buffer.byteLength(fixture.bytes), savedBytes: Buffer.byteLength(saved), encodedBytes: projection.encoded,
       byteIdentical: fixture.bytes === saved, appSaveIdentical: fixture.bytes === appSaved,
       sameAsAppSave: reference.appSaved.bytes === Buffer.byteLength(saved) && reference.appSaved.sha256 === createHash("sha256").update(saved).digest("hex"),
+      ...(fixture.name === projectionExclusion.fixture ? { declaredExclusions: projectionExclusion.fields } : {}),
       originalDifference: firstByteDifference(fixture.bytes, saved),
       appSaveDifference: firstByteDifference(appSaved, saved),
       appNormalizations: differences(JSON.parse(fixture.bytes), JSON.parse(appSaved)),

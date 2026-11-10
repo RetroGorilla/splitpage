@@ -1,13 +1,19 @@
 import type * as Y from "yjs";
-import { toHtml } from "../../../../src/core/text/html.ts";
 import { cleanMarks, defaultTagId, defaultTagOf, settleCues } from "../../../../src/core/text/runs.ts";
 import type { Marks, Run } from "../../../../src/core/text/runs.ts";
 import { bag, records } from "./value.ts";
 import type { ProjectionBag } from "./value.ts";
+import { storedRunsToHtml } from "./stored-html.ts";
 
 export interface ProjectionDelta {
   insert: string | ProjectionBag;
   attributes?: Record<string, unknown>;
+}
+
+export type ProjectionSurfacePart = { storedHtml: string } | { caretSentinel: "\u200b" };
+
+export function surfaceToDelta(parts: readonly ProjectionSurfacePart[], tags: unknown, comments: unknown): ProjectionDelta[] {
+  return htmlToDelta(parts.map(part => "storedHtml" in part ? part.storedHtml : "").join(""), tags, comments);
 }
 
 function unescape(value: string): string {
@@ -144,11 +150,9 @@ export function deltaToRuns(delta: readonly ProjectionDelta[], tags: unknown, co
 
 export function deltaToHtml(delta: readonly ProjectionDelta[], tags: unknown, comments: unknown, deriveCue = false): string {
   const registry = records(tags);
-  return toHtml(deltaToRuns(delta, registry, comments, deriveCue), {
-    tagOf: id => {
-      const tag = registry.find(entry => entry.id === id);
-      return tag ? { cat: String(tag.cat), name: String(tag.name) } : defaultTagOf(id);
-    }
+  return storedRunsToHtml(deltaToRuns(delta, registry, comments, deriveCue), id => {
+    const tag = registry.find(entry => entry.id === id);
+    return tag ? { cat: String(tag.cat), name: String(tag.name) } : defaultTagOf(id);
   });
 }
 

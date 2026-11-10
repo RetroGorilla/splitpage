@@ -7,6 +7,7 @@ import { inventoryFields, runRoundTrips } from "../../src/proj/experiment.ts";
 import { assertProjectionMapping, projectionFieldMapping } from "../../src/proj/mapping.ts";
 import { mapValue, textValue } from "../../src/schema.ts";
 import { projectionReferences } from "../../src/proj/reference.ts";
+import { projectionExclusion } from "../../src/proj/exclusions.ts";
 
 test("PROJ inventory: every current field row has a location in both candidates", () => {
   const inventory = inventoryFields();
@@ -133,28 +134,24 @@ test("PROJ canonical fixture experiment retains a complete exact-difference reco
     assert.equal(result.byteIdentical, result.originalDifference === null, result.fixture);
     assert.equal(result.sameAsAppSave, result.appSaveDifference === null, result.fixture);
     assert.ok(result.encodedBytes > 0);
-    const unicode = new Map([
-      ["merge-text-unicode-and-atoms.json/inputs/base", ["a&nbsp;b c\u200bd", "a&nbsp;b cd"]],
-      ["merge-text-unicode-and-atoms.json/inputs/mine", ["a&nbsp;b c\u200bd e", "a&nbsp;b cd e"]],
-      ["merge-text-unicode-and-atoms.json/inputs/theirs", ["A&nbsp;b c\u200bd", "A&nbsp;b cd"]]
-    ]).get(result.fixture);
-    if (unicode) {
-      assert.deepEqual(result.projectionDifferences, [{ path: "$.rows.3.visualText", before: unicode[0], after: unicode[1] }]);
-      assert.deepEqual(result.savedDifferences, result.projectionDifferences);
-    } else if (result.fixture === "migrate-golden.json/scenarios/media in cells/output") {
-      const before = '<span class="cmt-anchor" data-cmt="mintedc1">anchor without id</span> and <span class="broll-key" data-broll-id="mintedbs1" contenteditable="false">B-roll:</span> city <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape" contenteditable="false">gaffer tape</span> <span class="audio-cue">SFX: <span class="tag-anchor" data-tag-cat="sound" data-tag-name="Thunder" contenteditable="false">Thunder</span></span>';
-      const after = '<span class="cmt-anchor" data-cmt="mintedc1">anchor without id</span> and <span class="broll-key" data-broll-id="mintedbs1" contenteditable="false">B-roll:</span> city <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape" contenteditable="false">gaffer tape</span> SFX: <span class="tag-anchor" data-tag-cat="sound" data-tag-name="Thunder" contenteditable="false">Thunder</span>';
-      assert.deepEqual(result.projectionDifferences, [{ path: "$.rows.1.audioText", before, after }]);
-      assert.deepEqual(result.savedDifferences, result.projectionDifferences);
-    } else if (result.fixture === "supplement.splitpage") {
+    if (result.fixture === "supplement.splitpage") {
+      assert.deepEqual(result.declaredExclusions, projectionExclusion.fields);
       assert.deepEqual(result.projectionDifferences, [
         { path: "$.rows.0.imageLinks.0.location", before: { kind: "path", path: "C:\\shoot\\take.mp4" } },
         { path: "$.rows.0.imageLinks.1.location", before: { kind: "bundled", name: "notes.pdf" } }
       ]);
       assert.deepEqual(result.savedDifferences, result.projectionDifferences);
     } else {
+      assert.deepEqual(result.declaredExclusions ?? [], []);
       assert.deepEqual(result.projectionDifferences, [], `${result.candidate} ${result.fixture}`);
       assert.equal(result.sameAsAppSave, true, `${result.candidate} ${result.fixture}`);
     }
+  }
+  for (const candidate of ["A", "B"]) {
+    const runs = results.filter(result => result.candidate === candidate);
+    assert.equal(runs.length, 291);
+    assert.equal(runs.filter(result => result.byteIdentical).length, 7);
+    assert.equal(runs.filter(result => result.sameAsAppSave).length, 290);
+    assert.equal(runs.filter(result => result.declaredExclusions?.length).length, 1);
   }
 });
