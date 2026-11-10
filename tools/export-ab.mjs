@@ -1,11 +1,14 @@
 import { cpSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { JSDOM } from "jsdom";
 import { zipRead } from "../src/adapters/formats/zip.ts";
+import { clockProblems } from "./export-ab-environment.mjs";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 export const PRODUCER = "tools/export-ab-produce.mjs";
+export const PRODUCER_FILES = [PRODUCER, "tools/export-ab-environment.mjs"];
 export const CANONICAL_DOCUMENTS = "prototypes/collab/test/proj";
 
 export const FORMATS = [
@@ -149,38 +152,55 @@ export async function zipDifferences(a, b) {
   return lines;
 }
 
+export const STANDALONE_FIELDS = [
+  { key: "stateData", select: (document) => [...document.querySelectorAll("script")].filter((e) => e.id === "state-data") },
+  { key: "title", select: (document) => [...document.getElementsByTagName("title")] },
+  { key: "description", select: (document) => [...document.getElementsByTagName("meta")].filter((e) => e.getAttribute("name") === "description") }
+];
+
 export function standaloneParts(html) {
-  const text = Buffer.from(html).toString("utf8");
-  const data = /<script id="state-data" type="application\/json">([\s\S]*?)<\/script>/.exec(text);
-  const title = /<title>([\s\S]*?)<\/title>/.exec(text);
-  const description = /<meta name="description" content="([^"]*)"/.exec(text);
-  const found = [data, title, description].filter(Boolean).reduce((n, m) => n + Buffer.byteLength(m[0]), 0);
-  return {
-    stateData: data ? data[1] : null,
-    title: title ? title[1] : null,
-    description: description ? description[1] : null,
-    restBytes: Buffer.byteLength(text) - found
-  };
+  const bytes = Buffer.from(html);
+  const dom = new JSDOM(bytes.toString("latin1"), { includeNodeLocations: true });
+  const parts = {};
+  let found = 0;
+  for (const field of STANDALONE_FIELDS) {
+    parts[field.key] = field.select(dom.window.document).map((element) => {
+      const at = dom.nodeLocation(element);
+      found += at.endOffset - at.startOffset;
+      return bytes.subarray(at.startOffset, at.endOffset);
+    });
+  }
+  dom.window.close();
+  return { ...parts, restBytes: bytes.length - found };
+}
+
+function noOutput(base, head) {
+  if (base.error !== undefined && head.error !== undefined) return `no output on both sides: base ${base.error}; head ${head.error}`;
+  return base.error !== undefined ? `no output on base: ${base.error}` : `no output on head: ${head.error}`;
 }
 
 export async function compareOutput(format, base, head, exclusions = EXCLUSIONS) {
-  if (base.error !== undefined || head.error !== undefined) {
-    if (base.error === head.error) return { same: true, detail: `both fail: ${base.error}` };
-    return { same: false, detail: `base ${base.error === undefined ? "builds" : `fails: ${base.error}`}; head ${head.error === undefined ? "builds" : `fails: ${head.error}`}` };
-  }
+  if (base.error !== undefined || head.error !== undefined) return { same: false, detail: noOutput(base, head) };
   const rules = exclusions.filter((e) => e.format === format.id);
   if (format.standalone) {
     const pa = standaloneParts(base.bytes);
     const pb = standaloneParts(head.bytes);
     const info = `page shell around them: base ${pa.restBytes} bytes, head ${pb.restBytes} bytes`;
-    const missing = ["stateData", "title", "description"].filter((k) => pa[k] === null || pb[k] === null);
-    if (missing.length) return { same: false, detail: `no ${missing.join(", ")} found`, info };
-    const differing = ["stateData", "title", "description"].filter((k) => !compareMasked(Buffer.from(pa[k]), Buffer.from(pb[k]), rules).same);
-    if (differing.length) {
-      const where = differing.map((k) => `${k} differs at offset ${compareMasked(Buffer.from(pa[k]), Buffer.from(pb[k]), rules).offset}`);
-      return { same: false, detail: where.join("; "), info };
+    const where = [];
+    const excluded = { base: [], head: [] };
+    for (const { key } of STANDALONE_FIELDS) {
+      if (!pa[key].length || !pb[key].length) where.push(`no ${key} element on ${pa[key].length ? "head" : pb[key].length ? "base" : "either side"}`);
+      else if (pa[key].length !== pb[key].length) where.push(`${key}: base has ${pa[key].length} elements, head ${pb[key].length}`);
+      pa[key].forEach((element, i) => {
+        if (!pb[key][i]) return;
+        const result = compareMasked(element, pb[key][i], rules);
+        excluded.base.push(...result.excluded.base);
+        excluded.head.push(...result.excluded.head);
+        if (!result.same) where.push(`${key} element ${i + 1} differs at byte ${result.offset} of the element (base ${element.length} bytes, head ${pb[key][i].length} bytes)`);
+      });
     }
-    return { same: true, info, excluded: rules.length ? compareMasked(Buffer.from(pa.stateData), Buffer.from(pb.stateData), rules).excluded : null };
+    if (where.length) return { same: false, detail: where.join("; "), info };
+    return { same: true, info, excluded: rules.length ? excluded : null };
   }
   const result = compareMasked(base.bytes, head.bytes, rules);
   if (result.same) return { same: true, excluded: rules.length ? result.excluded : null };
@@ -197,7 +217,10 @@ function readOutput(dir, entry) {
 export async function compareRuns(dirs, formats = FORMATS, exclusions = EXCLUSIONS) {
   const manifests = {};
   for (const side of ["base", "head"]) manifests[side] = JSON.parse(readFileSync(join(dirs[side], "manifest.json"), "utf8"));
-  const problems = [...completeness(manifests.base, "base", formats), ...completeness(manifests.head, "head", formats)];
+  const problems = [
+    ...completeness(manifests.base, "base", formats), ...completeness(manifests.head, "head", formats),
+    ...clockProblems("base", manifests.base.fixtures), ...clockProblems("head", manifests.head.fixtures)
+  ];
   const names = manifests.head.fixtures.map((f) => f.name);
   const baseNames = manifests.base.fixtures.map((f) => f.name);
   if (names.join("\n") !== baseNames.join("\n")) problems.push(`the fixtures differ: base ${baseNames.join(", ")}; head ${names.join(", ")}`);
@@ -209,14 +232,17 @@ export async function compareRuns(dirs, formats = FORMATS, exclusions = EXCLUSIO
       cells.push({ format: format.id, fixture: name, ...result });
     }
   }
-  return { fixtures: names, formats: formats.map((f) => f.id), cells, problems, same: !problems.length && cells.every((c) => c.same) };
+  const clocks = manifests.head.fixtures.map((f) => ({ name: f.name, ...f.clock }));
+  return { fixtures: names, formats: formats.map((f) => f.id), cells, problems, clocks, same: !problems.length && cells.every((c) => c.same) };
 }
 
 export function report(base, head, result, formats = FORMATS) {
   const label = (id) => formats.find((f) => f.id === id)?.label ?? id;
   const cell = (format, fixture) => result.cells.find((c) => c.format === format && c.fixture === fixture);
   const lines = [
-    `Exports of ${result.fixtures.length} fixtures in ${result.formats.length} formats, base ${base.slice(0, 8)} against head ${head.slice(0, 8)}: ${result.same ? "every compared format is byte-identical" : "DIFFERENCES"}.`,
+    `Exports of ${result.fixtures.length} fixtures in ${result.formats.length} formats, base ${base.slice(0, 8)} against head ${head.slice(0, 8)}: ${result.same ? "every cell has identical compared bytes" : "DIFFERENCES"}.`,
+    "Compared bytes: the whole output, except Standalone HTML, where only the state-data script, title and description meta elements are compared (found by an HTML parse, as raw bytes).",
+    `Capture clock ${result.clocks[0]?.capturedAt ?? "unknown"}; wall clock ${result.clocks[0]?.now ?? "unknown"}, so an export that reads the wall clock instead of the capture time differs.`,
     "",
     `| Format | ${result.fixtures.join(" | ")} |`,
     `| --- | ${result.fixtures.map(() => "---").join(" | ")} |`
@@ -224,15 +250,13 @@ export function report(base, head, result, formats = FORMATS) {
   for (const format of result.formats) {
     lines.push(`| ${label(format)} | ${result.fixtures.map((fixture) => {
       const c = cell(format, fixture);
-      if (!c.same) return "DIFF";
-      return c.detail ? "same error" : "same";
+      if (c.same) return "same";
+      return c.detail.startsWith("no output") ? "NO OUTPUT" : "DIFF";
     }).join(" | ")} |`);
   }
-  if (result.problems.length) lines.push("", "Completeness:", "", ...result.problems.map((p) => `- ${p}`));
+  if (result.problems.length) lines.push("", "Problems:", "", ...result.problems.map((p) => `- ${p}`));
   const differing = result.cells.filter((c) => !c.same);
-  if (differing.length) lines.push("", "Differences:", "", ...differing.map((c) => `- ${c.format} / ${c.fixture}: ${c.detail}`));
-  const errors = result.cells.filter((c) => c.same && c.detail);
-  if (errors.length) lines.push("", "Same error on both sides:", "", ...errors.map((c) => `- ${c.format} / ${c.fixture}: ${c.detail}`));
+  if (differing.length) lines.push("", "Differences and missing output:", "", ...differing.map((c) => `- ${c.format} / ${c.fixture}: ${c.detail}`));
   const excluded = result.cells.filter((c) => c.excluded);
   lines.push("", "Declared exclusions:", "");
   if (!excluded.length) lines.push("- none: every compared byte is compared");
@@ -260,7 +284,7 @@ export async function main(argv, repo = REPO, seen = () => {}) {
     if (!existsSync(documents)) throw new Error(`${CANONICAL_DOCUMENTS} is missing`);
     const out = {};
     for (const side of ["base", "head"]) {
-      cpSync(join(repo, PRODUCER), join(dirs[side], PRODUCER));
+      for (const file of PRODUCER_FILES) cpSync(join(repo, file), join(dirs[side], file));
       out[side] = join(scratch, `out-${side}`);
       console.error(`export-ab: producing ${side} exports`);
       await run(process.execPath, [PRODUCER, out[side], documents], dirs[side], { ...process.env, TZ: "UTC" });

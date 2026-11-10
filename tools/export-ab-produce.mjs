@@ -1,17 +1,16 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { freezeClockAndRandom, image, jsonCopy } from "../src/test/golden-helpers.mjs";
+import { CAPTURED_ISO, clockProblems, pinnedDateTimeFormat } from "./export-ab-environment.mjs";
 
-const RealDateTimeFormat = Intl.DateTimeFormat;
-function PinnedDateTimeFormat(locale, opts) {
-  return new RealDateTimeFormat("en-US", Object.assign({}, opts, { timeZone: "UTC" }));
-}
-PinnedDateTimeFormat.supportedLocalesOf = RealDateTimeFormat.supportedLocalesOf;
-Intl.DateTimeFormat = PinnedDateTimeFormat;
+Intl.DateTimeFormat = pinnedDateTimeFormat(Intl.DateTimeFormat);
 freezeClockAndRandom(1414);
 
 const [outDir, protoDir] = process.argv.slice(2);
 if (!outDir || !protoDir) throw new Error("usage: node tools/export-ab-produce.mjs <out-dir> <canonical-documents-dir>");
+
+const { systemClock } = await import("../src/adapters/identity/ids.ts");
+systemClock.nowIso = () => CAPTURED_ISO;
 
 const { bootApp, closeApp } = await import("../src/test/_app-boot.mjs");
 await bootApp();
@@ -137,7 +136,10 @@ for (const fixture of FIXTURES) {
       results[output.id] = { error: error instanceof Error ? error.message : String(error) };
     }
   }
-  manifest.fixtures.push({ name: fixture.name, outputs: results });
+  const clock = { capturedAt: captureExportDocument().capturedAt, now: new Date().toISOString() };
+  manifest.fixtures.push({ name: fixture.name, clock, outputs: results });
 }
+const clockTrouble = clockProblems("producer", manifest.fixtures);
+if (clockTrouble.length) throw new Error(clockTrouble.join("\n"));
 writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 closeApp();
