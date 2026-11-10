@@ -50,7 +50,7 @@ export function validateLifetimeTimingSource(recorded: ReturnType<typeof lifetim
   validateStatusTimingChanges();
   assert.equal(recorded.dependencies, statusTimingChanges().dependencies.before);
   const changes = statusTimingChanges();
-  assert.equal(current.dependencies, changes.reviewDependencies?.after ?? changes.dependencies.after); assert.equal(current.fixture, recorded.fixture);
+  assert.equal(current.dependencies, changes.validationDependencies?.after ?? changes.reviewDependencies?.after ?? changes.dependencies.after); assert.equal(current.fixture, recorded.fixture);
   assert.deepEqual(current, lifetimeSources());
   const files = Object.fromEntries(Object.keys(current.files).map(file => [file, readFileSync(new URL(file, import.meta.url), "utf8")]));
   validateLifetimeCharacterSource(archive.files, files);

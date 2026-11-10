@@ -29,13 +29,13 @@ test("status index updates only changed keys, handles reassignment and invalidat
   const events = replica.doc.getMap("statusEvents");
   const statuses = () => indexed.view(document).groups.map(group => group.status);
   try {
-    events.set("a", { target: "R1", value: "ready", prior: "todo", parents: [] });
-    events.set("b", { target: "R1", value: "shot", prior: "todo", parents: [] });
+    events.set("a", { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] });
+    events.set("b", { by: "writer", target: "R1", value: "shot", prior: "todo", parents: [] });
     assert.deepEqual(statuses(), ["todo", "todo"]);
     mapValue(replica.doc.getMap("beats").get("R1")).set("status", "shot");
     assert.deepEqual(statuses(), ["shot", "todo"]);
     const before = indexed.statusRecordsRead;
-    events.set("a", { target: "R2", value: "ready", prior: "todo", parents: [] });
+    events.set("a", { by: "writer", target: "R2", value: "ready", prior: "todo", parents: [] });
     assert.equal(indexed.statusRecordsRead - before, 1);
     assert.deepEqual(statuses(), ["shot", "ready"]);
     events.delete("b"); assert.deepEqual(statuses(), ["shot", "ready"]);
@@ -46,7 +46,7 @@ test("resolved statuses reach removed beats and join-group ranking", () => {
   const replica = fromDocument({ title: "", rows: ["R1", "R2"].map(id => ({ id, audioText: "", visualText: "", status: "todo" })) }, "B");
   replica.doc.getMap("gallery").clear();
   try {
-    replica.doc.getMap("statusEvents").set("a", { target: "R2", value: "shot", prior: "todo", parents: [] });
+    replica.doc.getMap("statusEvents").set("a", { by: "writer", target: "R2", value: "shot", prior: "todo", parents: [] });
     replica.join("R2", "R1", "join");
     assert.equal(readStructure(replica.doc, "B", new IdentityBook()).rows[0]?.status, "shot");
     replica.doc.getMap("retiredJoins").set("join", true);

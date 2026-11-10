@@ -34,7 +34,9 @@ export function validateTimedSource(sourceHead: string, sourceDigest: string, au
   const files = perfSourceFiles().filter(file => !["setup.ts", "report.ts", "timing-report.ts", "privacy.ts"].includes(file));
   const changes = new Map((snapshot.postTimingChanges ?? []).map(change => [change.path, change]));
   validateStatusTimingChanges();
-  const statusChanges = new Map(statusTimingChanges().files.map(change => [change.path.replace(/^src\/perf\//, "").replace(/^src\//, "../"), change]));
+  const statusManifest = statusTimingChanges();
+  const statusFiles = [...statusManifest.files, ...statusManifest.validationChanges?.filter(change => !statusManifest.files.some(file => file.path === change.path)) ?? []];
+  const statusChanges = new Map(statusFiles.map(change => [change.path.replace(/^src\/perf\//, "").replace(/^src\//, "../"), change]));
   assert.equal(changes.size, snapshot.postTimingChanges?.length ?? 0, "Duplicate post-timing source declaration");
   for (const change of changes.values()) {
     assert.equal(change.timedSha256, snapshot.files[change.path] ?? null, `Wrong timed hash: ${change.path}`);

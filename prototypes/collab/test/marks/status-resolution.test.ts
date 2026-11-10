@@ -94,7 +94,7 @@ const deeper = [
 for (const fixture of deeper) test(`${fixture.name}: event spelling, priors, parent order and insertion order cannot choose the value`, () => {
   for (const reverse of [false, true]) for (const rename of [false, true]) {
     const key = (id: string): string => rename ? String.fromCharCode(300 - id.charCodeAt(0)) : id;
-    const entries = fixture.events.map(([id, value, parents]) => [key(id), { target: "R1", value, prior: "deliberately wrong", parents: [...parents].reverse().map(key) }] as const);
+    const entries = fixture.events.map(([id, value, parents]) => [key(id), { by: "writer", target: "R1", value, prior: "deliberately wrong", parents: [...parents].reverse().map(key) }] as const);
     const events = new Map(reverse ? entries.reverse() : entries);
     assert.equal(resolveBeatStatus(events, new Set(fixture.retired.map(key)), "todo"), fixture.expected);
   }
@@ -102,22 +102,22 @@ for (const fixture of deeper) test(`${fixture.name}: event spelling, priors, par
 
 const branchMatrices: { name: string; shared: Record<string, BeatStatusEvent>; events: Record<string, BeatStatusEvent>; retired: string[]; expected: string }[] = [
   { name: "identical frontier", shared: {}, retired: [], expected: "shot", events: {
-    a: { target: "R1", value: "ready", prior: "todo", parents: [] }, c: { target: "R1", value: "shot", prior: "ready", parents: ["a"] },
-    b: { target: "R1", value: "ready", prior: "todo", parents: [] }, d: { target: "R1", value: "shot", prior: "ready", parents: ["b"] }
+    a: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] }, c: { by: "writer", target: "R1", value: "shot", prior: "ready", parents: ["a"] },
+    b: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] }, d: { by: "writer", target: "R1", value: "shot", prior: "ready", parents: ["b"] }
   } },
   { name: "identical frontier undone by either writer", shared: {}, retired: ["c", "d"], expected: "ready", events: {
-    a: { target: "R1", value: "ready", prior: "todo", parents: [] }, c: { target: "R1", value: "shot", prior: "ready", parents: ["a"] },
-    b: { target: "R1", value: "ready", prior: "todo", parents: [] }, d: { target: "R1", value: "shot", prior: "ready", parents: ["b"] }
+    a: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] }, c: { by: "writer", target: "R1", value: "shot", prior: "ready", parents: ["a"] },
+    b: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] }, d: { by: "writer", target: "R1", value: "shot", prior: "ready", parents: ["b"] }
   } },
-  { name: "shared ancestor", shared: { p: { target: "R1", value: "ready", prior: "todo", parents: [] } }, retired: [], expected: "ready", events: {
-    a: { target: "R1", value: "shot", prior: "ready", parents: ["p"] }, c: { target: "R1", value: "todo", prior: "shot", parents: ["a"] },
-    b: { target: "R1", value: "todo", prior: "ready", parents: ["p"] }, d: { target: "R1", value: "shot", prior: "todo", parents: ["b"] }
+  { name: "shared ancestor", shared: { p: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] } }, retired: [], expected: "ready", events: {
+    a: { by: "writer", target: "R1", value: "shot", prior: "ready", parents: ["p"] }, c: { by: "writer", target: "R1", value: "todo", prior: "shot", parents: ["a"] },
+    b: { by: "writer", target: "R1", value: "todo", prior: "ready", parents: ["p"] }, d: { by: "writer", target: "R1", value: "shot", prior: "todo", parents: ["b"] }
   } },
   { name: "recursive conflicting common ancestors", shared: {
-    p: { target: "R1", value: "ready", prior: "todo", parents: [] }, q: { target: "R1", value: "shot", prior: "todo", parents: [] }
+    p: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: [] }, q: { by: "writer", target: "R1", value: "shot", prior: "todo", parents: [] }
   }, retired: [], expected: "todo", events: {
-    a: { target: "R1", value: "ready", prior: "todo", parents: ["p", "q"] }, c: { target: "R1", value: "shot", prior: "ready", parents: ["a"] },
-    b: { target: "R1", value: "shot", prior: "todo", parents: ["q", "p"] }, d: { target: "R1", value: "ready", prior: "shot", parents: ["b"] }
+    a: { by: "writer", target: "R1", value: "ready", prior: "todo", parents: ["p", "q"] }, c: { by: "writer", target: "R1", value: "shot", prior: "ready", parents: ["a"] },
+    b: { by: "writer", target: "R1", value: "shot", prior: "todo", parents: ["q", "p"] }, d: { by: "writer", target: "R1", value: "ready", prior: "shot", parents: ["b"] }
   } }
 ];
 

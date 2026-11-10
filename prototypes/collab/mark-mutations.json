@@ -391,8 +391,8 @@
       "edits": [
         {
           "file": "src/marks/commands.ts",
-          "before": ".filter(([, event]) => isBeatStatusEvent(event) && event.target === target)",
-          "after": ""
+          "before": "event?.target === target",
+          "after": "event"
         }
       ]
     },

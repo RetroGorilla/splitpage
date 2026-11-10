@@ -1,7 +1,8 @@
 import * as Y from "yjs";
 import { mapValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
-import { statusValue } from "../marks/commands.ts";
+import { statusFrontier, statusValue } from "../marks/commands.ts";
+import { readStatusEvent } from "../marks/status-resolution.ts";
 import { records } from "../proj/value.ts";
 import type { ProjectionBag } from "../proj/value.ts";
 import type { PerfBlockIndex } from "./blocks.ts";
@@ -18,9 +19,9 @@ export function splitPerfBeat(replica: SchemaReplica, beat: string, offset: numb
 }
 
 export function writePerfStatus(replica: SchemaReplica, beat: string, id: string, value: string): void {
-  const events = [...replica.doc.getMap<{ target: string; parents: string[] }>("statusEvents")].filter(([, event]) => event.target === beat);
-  const parents = new Set(events.flatMap(([, event]) => event.parents));
-  replica.doc.getMap("statusEvents").set(id, { target: beat, value, prior: statusValue(replica, beat), parents: events.filter(([key]) => !parents.has(key)).map(([key]) => key).sort(), by: "writer" });
+  const event = readStatusEvent({ target: beat, value, parents: statusFrontier(replica, beat).map(([key]) => key).sort(), by: "writer" });
+  if (!event) throw new Error("Invalid performance status command");
+  replica.doc.getMap("statusEvents").set(id, { target: event.target, value: event.value, prior: statusValue(replica, beat), parents: event.parents, by: event.by });
 }
 
 export function capturePerfBeat(index: PerfBlockIndex, beat: string): Y.RelativePosition[] {

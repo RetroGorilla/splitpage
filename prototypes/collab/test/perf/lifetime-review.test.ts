@@ -5,14 +5,14 @@ import { test } from "node:test";
 import { lifetimeDataHash, readLifetimeTimedArchive, validateLifetimeCharacterSource } from "../../src/perf/lifetime/audit.ts";
 import { readLifetimeCounts } from "../../src/perf/lifetime/record.ts";
 import { readLifetimeSensitivity } from "../../src/perf/lifetime/sensitivity.ts";
-import { observeStatusOrder, statusOrderEvidence, statusOrderHistory } from "../../src/perf/lifetime/status-order.ts";
+import { legacyReviewerStatusEvents, observeStatusOrder, statusOrderEvidence, statusOrderHistory } from "../../src/perf/lifetime/status-order.ts";
 import { LifetimeHistory } from "../../src/perf/lifetime/workload.ts";
 import { legacyStatusValue } from "../marks/status-readers.ts";
 import { statusTimingChanges, validateStatusTimingChanges } from "../../src/marks/status-source-audit.ts";
 
 for (const recreate of [false, true]) for (const clients of [[1, 2], [2, 1]] as const) {
   test(`T21 scalar literal delivery-order disagreement, authors ${clients.join("/")}, recreation ${recreate}`, () => {
-    const value = observeStatusOrder(["a", "c", "b", "d"], recreate, clients, legacyStatusValue);
+    const value = observeStatusOrder(["a", "c", "b", "d"], recreate, clients, legacyStatusValue, [], legacyReviewerStatusEvents);
     assert.deepEqual(value.observations.map(row => row.status), clients[0] === 1 ? ["ready", "shot", "shot"] : ["ready", "shot", "ready"]);
     assert.deepEqual(value.observations.slice(0, 2).map(row => row.keys), [["a", "c", "b", "d"], ["b", "d", "a", "c"]]);
     assert.equal(value.identicalEncodedState, true); assert.equal(value.agrees, false);
@@ -20,7 +20,7 @@ for (const recreate of [false, true]) for (const clients of [[1, 2], [2, 1]] as 
 }
 
 test("all 96 scalar delivery observations and the minimized failing history reproduce without repairing the legacy reader", () => {
-  const value = statusOrderEvidence(legacyStatusValue); assert.equal(value.total, 96); assert.equal(value.disagreements, 80);
+  const value = statusOrderEvidence(legacyStatusValue, legacyReviewerStatusEvents); assert.equal(value.total, 96); assert.equal(value.disagreements, 80);
   assert.equal(value.rows.filter(row => row.recreate && !row.agrees).length, 40);
   assert.equal(value.rows.filter(row => !row.recreate && !row.agrees).length, 40);
   assert.deepEqual(JSON.parse(readFileSync(new URL("../../src/perf/lifetime/status-order.json", import.meta.url), "utf8")) as unknown, value);
@@ -61,7 +61,7 @@ test("post-status source audit pins declared changed work and rejects unlisted c
     assert.throws(() => validateLifetimeCharacterSource(archive.files, changed));
   }
   assert.equal(statusTimingChanges().counts.before, archive.defaultDataSha256);
-  assert.equal(lifetimeDataHash(readLifetimeCounts().data), statusTimingChanges().reviewCounts?.after ?? statusTimingChanges().counts.after);
+  assert.equal(lifetimeDataHash(readLifetimeCounts().data), statusTimingChanges().validationCounts?.after ?? statusTimingChanges().reviewCounts?.after ?? statusTimingChanges().counts.after);
   assert.equal(createHash("sha256").update(readFileSync(new URL("../../src/perf/lifetime/timings.json", import.meta.url))).digest("hex"), archive.timingsSha256);
 });
 
@@ -85,6 +85,19 @@ test("status review audit rejects broken before/after chains and duplicate decla
     if (defect === "duplicate") changed.reviewChanges?.push(file);
     if (defect === "dependencies") { assert.ok(changed.reviewDependencies); changed.reviewDependencies.before = "0".repeat(64); }
     if (defect === "counts") { assert.ok(changed.reviewCounts); changed.reviewCounts.before = "0".repeat(64); }
+    assert.throws(() => validateStatusTimingChanges(changed));
+  }
+});
+
+test("status validation audit rejects broken source, dependency and count chains", () => {
+  for (const defect of ["before", "after", "duplicate", "extra", "dependencies", "counts"] as const) {
+    const changed = structuredClone(statusTimingChanges()), file = changed.validationChanges?.[0]; assert.ok(file);
+    if (defect === "before") file.before = "0".repeat(64);
+    if (defect === "after") file.after = "0".repeat(64);
+    if (defect === "duplicate") changed.validationChanges?.push(file);
+    if (defect === "extra") changed.validationChanges?.push({ ...file, path: "src/schema.ts" });
+    if (defect === "dependencies") { assert.ok(changed.validationDependencies); changed.validationDependencies.before = "0".repeat(64); }
+    if (defect === "counts") { assert.ok(changed.validationCounts); changed.validationCounts.before = "0".repeat(64); }
     assert.throws(() => validateStatusTimingChanges(changed));
   }
 });

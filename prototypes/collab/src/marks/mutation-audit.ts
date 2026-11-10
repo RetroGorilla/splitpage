@@ -40,7 +40,7 @@ export const markMutationDefinitions: readonly MarkMutationDefinition[] = [
   { id: "author-command-guard", edits: [{ file: commands, before: 'if (item.get("author") !== author) return false;', after: "void author;" }] },
   { id: "tag-registry-id", edits: [{ file: commands, before: "const id = `tag-${kind}-${Array.from", after: "const id = `other-${kind}-${Array.from" }] },
   { id: "local-undo-origin", edits: [{ file: "src/structure.ts", before: "trackedOrigins: new Set([replica.localOrigin])", after: 'trackedOrigins: new Set([replica.localOrigin, "delivery"])' }] },
-  { id: "status-target-filter", edits: [{ file: commands, before: '.filter(([, event]) => isBeatStatusEvent(event) && event.target === target)', after: "" }] },
+  { id: "status-target-filter", edits: [{ file: commands, before: 'event?.target === target', after: "event" }] },
   { id: "status-command-parents", edits: [{ file: commands, before: "parents: frontier.map(([key]) => key).sort()", after: "parents: []" }] },
   { id: "status-prior-after-retirement", edits: [{ file: commands, before: 'resolveBeatStatus(new Map(statusEvents(replica, target)), replica.doc.getMap("retiredStatus"),', after: 'resolveBeatStatus(new Map(statusEvents(replica, target)), new Set<string>(),' }] },
   { id: "status-reader-frontier", edits: [{ file: resolution, before: "return resolve(statusHeads(events));", after: "return resolve([...events.keys()]);" }] },

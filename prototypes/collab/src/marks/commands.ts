@@ -6,7 +6,7 @@ import type { ReplicaCaretAnchor } from "../reader.ts";
 import type { StructuralRangeCapture } from "../structure-selection.ts";
 import { restoreStructuralAnchor } from "../structure-selection.ts";
 import { undoOne } from "../structure.ts";
-import { isBeatStatusEvent, resolveBeatStatus, statusHeads } from "./status-resolution.ts";
+import { readStatusEvent, resolveBeatStatus, statusHeads } from "./status-resolution.ts";
 import type { BeatStatusEvent } from "./status-resolution.ts";
 
 export function formatCapturedMarks(replica: SchemaReplica, selection: StructuralRangeCapture, marks: CollabMarks): void {
@@ -53,7 +53,11 @@ export function ensureTag(replica: SchemaReplica, kind: string, name: string): s
 }
 
 function statusEvents(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {
-  return [...replica.doc.getMap<BeatStatusEvent>("statusEvents")].filter(([, event]) => isBeatStatusEvent(event) && event.target === target);
+  const result: [string, BeatStatusEvent][] = [];
+  for (const [id, raw] of replica.doc.getMap("statusEvents")) {
+    const event = readStatusEvent(raw); if (event?.target === target) result.push([id, event]);
+  }
+  return result;
 }
 
 export function statusFrontier(replica: SchemaReplica, target: string): [string, BeatStatusEvent][] {
@@ -69,7 +73,9 @@ export function statusValue(replica: SchemaReplica, target: string): string {
 
 export function changeStatus(replica: SchemaReplica, manager: Y.UndoManager, target: string, id: string, value: string, by: string): void {
   const frontier = statusFrontier(replica, target);
-  const event: BeatStatusEvent = { target, value, prior: statusValue(replica, target), parents: frontier.map(([key]) => key).sort(), by };
+  const validated = readStatusEvent({ target, value, parents: frontier.map(([key]) => key).sort(), by });
+  if (!validated) throw new Error("Invalid status command");
+  const event = { target: validated.target, value: validated.value, prior: statusValue(replica, target), parents: validated.parents, by: validated.by };
   manager.stopCapturing();
   replica.doc.transact(() => replica.doc.getMap("statusEvents").set(id, event), replica.localOrigin);
   const item = manager.undoStack.at(-1);
@@ -81,7 +87,7 @@ export function changeStatus(replica: SchemaReplica, manager: Y.UndoManager, tar
 export function undoStatus(replica: SchemaReplica, manager: Y.UndoManager): void {
   const id: unknown = manager.undoStack.at(-1)?.meta.get("statusEvent");
   if (typeof id !== "string") throw new Error("Top undo item is not a status command");
-  const event = replica.doc.getMap<BeatStatusEvent>("statusEvents").get(id);
+  const event = readStatusEvent(replica.doc.getMap("statusEvents").get(id));
   if (!event) throw new Error("Missing local status command");
   const frontier = statusFrontier(replica, event.target);
   if (frontier.some(([key]) => key === id)) {

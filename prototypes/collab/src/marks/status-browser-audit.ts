@@ -10,6 +10,7 @@ interface StatusBrowserArchive {
   files: Record<string, string>;
   bundles: Record<string, { before: string; after: string }>;
   postReviewBundles?: Record<string, { before: string; after: string }>;
+  postValidationBundles?: Record<string, { before: string; after: string }>;
 }
 
 export async function validateStatusBrowserBundle(entry: string, recorded: string, current: string): Promise<void> {
@@ -19,7 +20,9 @@ export async function validateStatusBrowserBundle(entry: string, recorded: strin
   assert.equal(recorded, declaration.before);
   const reviewed = archive.postReviewBundles?.[entry];
   if (reviewed) assert.equal(reviewed.before, declaration.after);
-  assert.equal(current, reviewed?.after ?? declaration.after, "Current status bundle differs from its declared post-browser change");
+  const validated = archive.postValidationBundles?.[entry];
+  if (validated) assert.equal(validated.before, reviewed?.after ?? declaration.after);
+  assert.equal(current, validated?.after ?? reviewed?.after ?? declaration.after, "Current status bundle differs from its declared post-browser change");
   validateStatusTimingChanges();
   assert.deepEqual(Object.keys(archive.files).sort(), ["src/marks/commands.ts", "src/marks/projection.ts", "src/structure-reader.ts"]);
   const original = new Map<string, string>();

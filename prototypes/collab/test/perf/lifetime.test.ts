@@ -36,7 +36,7 @@ test("literal writing history pins correction, revision, structural, metadata an
 test("status index preserves literal conflict, retirement, overwrite, deletion and fallback results", () => {
   const replica = fromDocument({ title: "", rows: [{ id: "R1", audioText: "ab", visualText: "", status: "todo" }] }, "B");
   const projection = new IncrementalProjection(replica), indexed = new IndexedStructureProjection(replica);
-  const event = (id: string, value: string, parents: string[], prior = "todo") => replica.doc.getMap("statusEvents").set(id, { target: "R1", value, parents, prior });
+  const event = (id: string, value: string, parents: string[], prior = "todo") => replica.doc.getMap("statusEvents").set(id, { by: "writer", target: "R1", value, parents, prior });
   const check = (expected: string): void => {
     assert.equal(indexed.view(projection.document).groups[0]?.status, expected);
     assert.deepEqual(indexed.view(projection.document), perfStructureView(replica, toDocument(replica.doc, "B")));

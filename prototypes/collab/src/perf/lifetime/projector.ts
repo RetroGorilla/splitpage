@@ -4,32 +4,32 @@ import type { SchemaReplica } from "../../schema.ts";
 import { records } from "../../proj/value.ts";
 import type { ProjectionBag } from "../../proj/value.ts";
 import type { PerfStructureView } from "../operations.ts";
-import { isBeatStatusEvent, resolveBeatStatus } from "../../marks/status-resolution.ts";
+import { readStatusEvent, resolveBeatStatus } from "../../marks/status-resolution.ts";
 import type { BeatStatusEvent } from "../../marks/status-resolution.ts";
 
 export class IndexedStructureProjection {
   private readonly events = new Map<string, Map<string, BeatStatusEvent>>();
   private readonly targets = new Map<string, string>();
   private readonly values = new Map<string, { stored: string; value: string }>();
-  private readonly status: Y.Map<BeatStatusEvent>;
+  private readonly status: Y.Map<unknown>;
   private readonly retired: Y.Map<unknown>;
-  private readonly changes: (event: Y.YMapEvent<BeatStatusEvent>) => void;
+  private readonly changes: (event: Y.YMapEvent<unknown>) => void;
   private readonly retirements: (event: Y.YMapEvent<unknown>) => void;
   statusRecordsRead = 0;
   readonly replica: SchemaReplica;
 
   constructor(replica: SchemaReplica) {
     this.replica = replica;
-    this.status = replica.doc.getMap<BeatStatusEvent>("statusEvents");
+    this.status = replica.doc.getMap("statusEvents");
     this.retired = replica.doc.getMap("retiredStatus");
-    for (const [id, event] of this.status) if (isBeatStatusEvent(event)) this.put(id, event);
+    for (const [id, raw] of this.status) { const event = readStatusEvent(raw); if (event) this.put(id, event); }
     this.changes = event => {
       for (const key of event.keysChanged) {
         const id = String(key);
         const old = this.targets.get(id);
-        const value = this.status.get(id);
+        const value = readStatusEvent(this.status.get(id));
         if (old) { this.events.get(old)?.delete(id); this.values.delete(old); }
-        if (isBeatStatusEvent(value)) { this.statusRecordsRead++; this.put(id, value); }
+        if (value) { this.statusRecordsRead++; this.put(id, value); }
         else this.targets.delete(id);
       }
     };

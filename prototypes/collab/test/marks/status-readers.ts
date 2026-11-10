@@ -8,8 +8,16 @@ import { IndexedStructureProjection } from "../../src/perf/lifetime/projector.ts
 import type { SchemaReplica } from "../../src/schema.ts";
 import { mapValue } from "../../src/schema.ts";
 import type { BeatStatusEvent } from "../../src/marks/status-resolution.ts";
+import * as Y from "yjs";
 
-export function statusReaders(replica: SchemaReplica): Record<string, string | undefined> {
+export function projectedStatusData(value: unknown): unknown {
+  if (value instanceof Y.AbstractType) return projectedStatusData(value.toJSON());
+  if (Array.isArray(value)) return value.map(projectedStatusData);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectedStatusData(entry)]));
+  return value;
+}
+
+export function statusReaderResults(replica: SchemaReplica) {
   const model: CollabModel = { rows: [{ id: "R1", characters: [], status: "todo" }], carets: {}, recovery: [] };
   projectStatus(model, replica.doc);
   const indexed = new IndexedStructureProjection(replica);
@@ -17,11 +25,16 @@ export function statusReaders(replica: SchemaReplica): Record<string, string | u
   const book = new IdentityBook();
   for (const character of replica.characters()) book.bind(`char-${character.identity.client}-${character.identity.clock}`, character.identity);
   try {
-    return { command: statusValue(replica, "R1"), projection: model.rows[0]?.status,
-      structure: readStructure(replica.doc, replica.candidate, book).rows[0]?.status,
-      perf: perfStructureView(replica, document).groups[0]?.status,
-      indexed: indexed.view(document).groups[0]?.status };
+    return { command: statusValue(replica, "R1"), projection: model,
+      structure: readStructure(replica.doc, replica.candidate, book),
+      perf: perfStructureView(replica, document), indexed: indexed.view(document) };
   } finally { indexed.destroy(); }
+}
+
+export function statusReaders(replica: SchemaReplica): Record<string, string | undefined> {
+  const results = statusReaderResults(replica);
+  return { command: results.command, projection: results.projection.rows[0]?.status, structure: results.structure.rows[0]?.status,
+    perf: results.perf.groups[0]?.status, indexed: results.indexed.groups[0]?.status };
 }
 
 export function legacyStatusValue(replica: SchemaReplica, target: string): string {

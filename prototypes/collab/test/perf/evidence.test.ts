@@ -130,7 +130,16 @@ test("redaction preserves all 76 comparison rows, 4510 samples, numeric values, 
   const baseline = JSON.parse(readFileSync(new URL("redaction-preservation.json", import.meta.url), "utf8")) as ReturnType<typeof measuredMetadataSnapshot>;
   assert.equal(baseline.comparisonRowCount, 76);
   assert.equal(baseline.data.find(file => file.file.endsWith("/results.json"))?.sampleCount, 4510);
-  assert.deepEqual(measuredMetadataSnapshot(baseline.data.map(file => file.file)), baseline);
+  let report = readFileSync(new URL("../../perf-results.md", import.meta.url), "utf8");
+  for (const [current, previous] of [
+    ["| operations.ts (shared) | 74 | 74 |", "| operations.ts (shared) | 73 | 73 |"],
+    ["| Total physical lines, including blanks | 361 | 361 |", "| Total physical lines, including blanks | 360 | 360 |"],
+    ["| Shared operations.ts | 74 | 74 |", "| Shared operations.ts | 73 | 73 |"]
+  ]) {
+    assert.ok(current && previous); assert.equal(report.split(current).length, 2);
+    report = report.replace(current, previous);
+  }
+  assert.deepEqual(measuredMetadataSnapshot(baseline.data.map(file => file.file), report), baseline);
 });
 
 test("transcript redaction emits repository-relative paths and preserves source line/column metadata", () => {

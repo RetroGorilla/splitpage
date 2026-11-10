@@ -35,7 +35,7 @@ function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-export function measuredMetadataSnapshot(files: string[]) {
+export function measuredMetadataSnapshot(files: string[], reportText?: string) {
   const data = files.filter(file => file.endsWith(".json")).map(file => {
     const numbers: [string, number][] = [], timestamps: [string, string][] = [], samples: [string, number[]][] = [];
     const visit = (value: unknown, path: string): void => {
@@ -51,7 +51,7 @@ export function measuredMetadataSnapshot(files: string[]) {
     visit(JSON.parse(readFileSync(join(root, file), "utf8")) as unknown, "$value");
     return { file, numberCount: numbers.length, numbersSha256: digest(numbers), timestampCount: timestamps.length, timestampsSha256: digest(timestamps), sampleCount: samples.reduce((sum, [, values]) => sum + values.length, 0), samplesSha256: digest(samples) };
   });
-  const text = readFileSync(join(root, "prototypes/collab/perf-results.md"), "utf8");
+  const text = reportText ?? readFileSync(join(root, "prototypes/collab/perf-results.md"), "utf8");
   const allRows = text.split("\n").filter(line => line.startsWith("|"));
   const comparisonRows: string[] = [];
   let comparison = false;

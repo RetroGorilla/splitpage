@@ -8,13 +8,18 @@ import { changeStatus, statusValue, undoStatus } from "../../marks/commands.ts";
 import { structureManager } from "../../structure.ts";
 import type { SchemaReplica } from "../../schema.ts";
 import type { BeatStatusEvent } from "../../marks/status-resolution.ts";
-import { isBeatStatusEvent } from "../../marks/status-resolution.ts";
+import { readStatusEvent } from "../../marks/status-resolution.ts";
 
-export const reviewerStatusEvents = {
+export const legacyReviewerStatusEvents = {
   a: { target: "R1", value: "ready", prior: "todo", parents: [] as string[] },
   c: { target: "R1", value: "shot", prior: "ready", parents: ["a"] },
   b: { target: "R1", value: "shot", prior: "todo", parents: [] as string[] },
   d: { target: "R1", value: "ready", prior: "shot", parents: ["b"] }
+};
+
+export const reviewerStatusEvents = {
+  a: { ...legacyReviewerStatusEvents.a, by: "Alice" }, c: { ...legacyReviewerStatusEvents.c, by: "Alice" },
+  b: { ...legacyReviewerStatusEvents.b, by: "Bob" }, d: { ...legacyReviewerStatusEvents.d, by: "Bob" }
 };
 
 function permutations(values: string[]): string[][] {
@@ -42,7 +47,7 @@ export function observeStatusOrder(order: readonly string[], recreate: boolean, 
     for (const [index, keys] of [[0, ["a", "c"]], [1, ["b", "d"]]] as const) {
       const writer = writers[index]; assert.ok(writer);
       for (const key of keys) capture(writer, key, () => {
-        if (undo.length) { const event = events[key], manager = managers[index]; assert.ok(isBeatStatusEvent(event) && manager); changeStatus(writer, manager, "R1", key, event.value, `writer${index}`); }
+        if (undo.length) { const event = readStatusEvent(events[key]), manager = managers[index]; assert.ok(event && manager); changeStatus(writer, manager, "R1", key, event.value, `writer${index}`); }
         else writer.doc.transact(() => {
           writer.doc.getMap("statusEvents").set(key, structuredClone(events[key]));
           if (retired.includes(key)) writer.doc.getMap("retiredStatus").set(key, true);
@@ -85,10 +90,10 @@ export function observeStatusOrder(order: readonly string[], recreate: boolean, 
   } finally { for (const manager of managers) manager.destroy(); for (const replica of [...writers, ...readers]) replica.destroy(); seed.destroy(); }
 }
 
-export function statusOrderEvidence(read = statusValue) {
+export function statusOrderEvidence(read = statusValue, events: Readonly<Record<string, unknown>> = reviewerStatusEvents) {
   const rows = [];
-  for (const clients of [[1, 2], [2, 1]] as const) for (const recreate of [false, true]) for (const order of permutations(["a", "c", "b", "d"])) rows.push(observeStatusOrder(order, recreate, clients, read));
-  return { events: reviewerStatusEvents, rows, total: rows.length, disagreements: rows.filter(row => !row.agrees).length };
+  for (const clients of [[1, 2], [2, 1]] as const) for (const recreate of [false, true]) for (const order of permutations(["a", "c", "b", "d"])) rows.push(observeStatusOrder(order, recreate, clients, read, [], events));
+  return { events, rows, total: rows.length, disagreements: rows.filter(row => !row.agrees).length };
 }
 
 export function statusOrderHistory(evidence = JSON.parse(readFileSync(new URL("status-order.json", import.meta.url), "utf8")) as ReturnType<typeof statusOrderEvidence>): string {

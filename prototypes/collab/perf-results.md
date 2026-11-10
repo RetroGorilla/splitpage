@@ -2,7 +2,7 @@
 
 The initial PR contained deterministic structural evidence only; its earlier game-session timing attempts remain void. The guarded timed follow-up below was run only after the coordinator authorized it and after the initial PR opened. A game was running during the accepted set; each run's recorded RAM and background CPU is disclosed below. No schema is selected.
 
-Current reviewed source SHA-256: **cc88dfeb2d10d283648d5bf3845884b6de8a06c6f8557db35692ddf0f3ad9f0a**. The source-hash list covers every src/perf TypeScript module, every src/proj module, schema/model/structure/status helpers and the prototype lockfile. setup.json fixes Node v24.22.1, Yjs 13.6.33, five alternating paired runs, three warm-up operations per case and eleven samples per run. The recorded timed source is identified separately below; the source audit distinguishes that implementation from declared post-timing changes.
+Current reviewed source SHA-256: **3ef67a25a054d08783995254774aac057143b98805fa0bf9832f2019ba27659f**. The source-hash list covers every src/perf TypeScript module, every src/proj module, schema/model/structure/status helpers and the prototype lockfile. setup.json fixes Node v24.22.1, Yjs 13.6.33, five alternating paired runs, three warm-up operations per case and eleven samples per run. The recorded timed source is identified separately below; the source audit distinguishes that implementation from declared post-timing changes.
 
 ## What is implemented
 
@@ -19,8 +19,8 @@ Metadata events invalidate affected beat records. Gallery/visual ownership chang
 | delta.ts (shared) | 57 | 57 |
 | blocks.ts (shared) | 111 | 111 |
 | incremental.ts (shared) | 119 | 119 |
-| operations.ts (shared) | 73 | 73 |
-| Total physical lines, including blanks | 360 | 360 |
+| operations.ts (shared) | 74 | 74 |
+| Total physical lines, including blanks | 361 | 361 |
 
 The same implementation is instantiated for either candidate. The stream-selection branch in blocks.ts is one line for A and five for B; shared lines are counted for each, rather than inventing two independent implementations. The layout makes A's ordering simple but changed-range attribution global. B directly identifies the changed segment but must recover each beat's position within a split segment and the segment's position in global order.
 
@@ -305,7 +305,7 @@ Timing starts immediately before local mutation or applyUpdate and ends after sy
 | Shared delta.ts | 57 | 57 |
 | Shared blocks.ts | 111 | 111 |
 | Shared incremental.ts | 119 | 119 |
-| Shared operations.ts | 73 | 73 |
+| Shared operations.ts | 74 | 74 |
 
 Both instantiate the same implementation: A selects flow; B selects segments/order. A's stream-selection branch is one line; B's is five. These are physical lines including blanks; shared code is counted for each implementation, not presented as separate implementations. The index's public text-to-span map makes B reverse lookup segment-local; A searches the flow's spans after resolving the Yjs position.
 

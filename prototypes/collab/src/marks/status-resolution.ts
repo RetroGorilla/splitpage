@@ -1,16 +1,34 @@
+import { AbstractType, Doc } from "yjs";
+import { createEncoder, toUint8Array, writeAny } from "lib0/encoding";
+import { createDecoder, readAny } from "lib0/decoding";
+
 export interface BeatStatusEvent {
   target: string;
-  value: string;
+  value: "todo" | "ready" | "shot";
   prior?: unknown;
   parents: readonly string[];
-  by?: string;
+  by: string;
 }
 
-export function isBeatStatusEvent(value: unknown): value is BeatStatusEvent {
-  if (!value || typeof value !== "object") return false;
-  const event = value as Partial<BeatStatusEvent>;
-  return typeof event.target === "string" && typeof event.value === "string"
-    && Array.isArray(event.parents) && event.parents.every(parent => typeof parent === "string");
+export function readStatusEvent(raw: unknown): BeatStatusEvent | null {
+  if (!raw || typeof raw !== "object") return null;
+  try {
+    const constructor: unknown = (raw as { constructor?: unknown }).constructor;
+    if (constructor === Doc || constructor === Uint8Array) return null;
+    if ((raw instanceof AbstractType || raw instanceof Doc) && ![Object, Number, Boolean, Array, String, Date, BigInt].some(type => type === constructor)) return null;
+    const encoded = createEncoder(); writeAny(encoded, raw as Parameters<typeof writeAny>[1]);
+    const decoded: unknown = readAny(createDecoder(toUint8Array(encoded)));
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded) || decoded instanceof Uint8Array) return null;
+    for (const key of ["target", "value", "parents", "by"]) if (!Object.prototype.hasOwnProperty.call(decoded, key)) return null;
+    const source = decoded as Record<string, unknown>, target = source.target, value = source.value, by = source.by, rawParents = source.parents;
+    if (typeof target !== "string" || typeof by !== "string" || value !== "todo" && value !== "ready" && value !== "shot" || !Array.isArray(rawParents)) return null;
+    const parents: string[] = [];
+    for (let index = 0; index < rawParents.length; index++) {
+      const parent: unknown = rawParents[index]; if (typeof parent !== "string") return null;
+      parents.push(parent);
+    }
+    return { target, value, parents, by };
+  } catch { return null; }
 }
 
 export function statusHeads(events: ReadonlyMap<string, BeatStatusEvent>): string[] {
@@ -20,7 +38,9 @@ export function statusHeads(events: ReadonlyMap<string, BeatStatusEvent>): strin
 
 export function resolveBeatStatus(input: ReadonlyMap<string, unknown>, retired: { has: (id: string) => boolean }, stored: string): string {
   const events = new Map<string, BeatStatusEvent>();
-  for (const [id, event] of input) if (typeof id === "string" && isBeatStatusEvent(event)) events.set(id, event);
+  for (const [id, raw] of input) {
+    const event = readStatusEvent(raw); if (typeof id === "string" && event) events.set(id, event);
+  }
   if (new Set([...events.values()].map(event => event.target)).size > 1) return stored;
   const pending = new Map<string, number>(), children = new Map<string, string[]>(), ordered: string[] = [];
   for (const [id, event] of events) {

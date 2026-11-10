@@ -25,5 +25,15 @@
       "before": "fc1d8a3ee0bfffb826e75c8ddd73ae16bf760312367ff84698e9f45aa772b82a",
       "after": "32c7eb4bc6aa0f62baecfda9e3a0d1323fe72406179f011bf546e07445639571"
     }
+  },
+  "postValidationBundles": {
+    "src/app-binding-2/page.ts": {
+      "before": "db84a87fd3a473d5c4825ec9071d9b2a05cb76e9bf4ca9a5a095eb0717c448f9",
+      "after": "8ca45e732da19321f4bb7f5605c915fe05c221ca53bde98d3d5f50d25c42a5df"
+    },
+    "src/b-surfaces/followup-page.ts": {
+      "before": "32c7eb4bc6aa0f62baecfda9e3a0d1323fe72406179f011bf546e07445639571",
+      "after": "726ddb1b0dfb08b3462a71b467b056879f090bc839257e1e2db60d01197606b9"
+    }
   }
 }

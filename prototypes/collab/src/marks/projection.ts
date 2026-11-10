@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import type { CollabMarks, CollabModel, CollabRow } from "../model.ts";
 import { mapValue } from "../schema.ts";
-import { isBeatStatusEvent, resolveBeatStatus } from "./status-resolution.ts";
+import { readStatusEvent, resolveBeatStatus } from "./status-resolution.ts";
 import type { BeatStatusEvent } from "./status-resolution.ts";
 
 interface TagExtent {
@@ -101,7 +101,8 @@ export function storedMarkNames(key: string, characters: readonly { text: Y.Text
 }
 
 export function projectStatus(model: CollabModel, doc: Y.Doc): void {
-  const events = [...doc.getMap<BeatStatusEvent>("statusEvents")].filter(([, event]) => isBeatStatusEvent(event));
+  const events: [string, BeatStatusEvent][] = [];
+  for (const [id, raw] of doc.getMap("statusEvents")) { const event = readStatusEvent(raw); if (event) events.push([id, event]); }
   if (!events.length) return;
   for (const row of [...model.rows, ...model.recovery.map(entry => entry.row)]) {
     const relevant = events.filter(([, event]) => event.target === row.id);
