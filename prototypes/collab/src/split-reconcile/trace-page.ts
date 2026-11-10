@@ -13,6 +13,21 @@ function log(site: string, detail?: unknown): void {
   traceLog.push({ site, depth: domDepth, stack: new Error(site).stack ?? "", ...(detail === undefined ? {} : { detail }) });
 }
 traceRealm.__splitCall = site => { log(site); };
+const addListener = EventTarget.prototype.addEventListener;
+const removeListener = EventTarget.prototype.removeEventListener;
+const listeners = new WeakMap<EventListener, EventListener>();
+EventTarget.prototype.addEventListener = function (type, listener, options) {
+  if (type !== "focusout" || typeof listener !== "function" || !(this instanceof Element) || this.id !== "rows") return addListener.call(this, type, listener, options);
+  const wrapped: EventListener = function (this: EventTarget, event) {
+    log("focusout-handler:enter", { phase: event.eventPhase, source: listener.toString() });
+    try { listener.call(this, event); } finally { log("focusout-handler:exit"); }
+  };
+  listeners.set(listener, wrapped);
+  return addListener.call(this, type, wrapped, options);
+};
+EventTarget.prototype.removeEventListener = function (type, listener, options) {
+  return removeListener.call(this, type, typeof listener === "function" ? listeners.get(listener) ?? listener : listener, options);
+};
 const nodeIds = new WeakMap<Node, number>();
 let nextNode = 1;
 const nodeLabel = (node: Node): string => {

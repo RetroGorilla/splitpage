@@ -9,7 +9,7 @@ import { withSliceBrowser } from "../slice/protocol.ts";
 import { bufferOracles, bufferTraceOrder } from "../../test/buffer-oracles.ts";
 import type { BufferTrace } from "../../test/buffer-oracles.ts";
 import type { BMatrixCase, BMatrixSnapshot } from "../b-surfaces/run.ts";
-import { publicBEvidence } from "../b-surfaces/public.ts";
+import { serializeSplitRecord } from "./records.ts";
 
 const folder = fileURLToPath(new URL("../../", import.meta.url));
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -77,5 +77,5 @@ try {
       bundleSha256: createHash("sha256").update(script).digest("hex"), repair: "prototype paint re-entry guard only; app source tree equals c67139b8", off, controls, cases };
   });
   await mkdir(join(folder, "split-reconcile"), { recursive: true });
-  await writeFile(join(folder, "split-reconcile/evidence.json"), publicBEvidence(evidence) + "\n");
+  await writeFile(join(folder, "split-reconcile/evidence.json"), serializeSplitRecord(evidence));
 } finally { await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }

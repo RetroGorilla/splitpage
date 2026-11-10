@@ -6,8 +6,8 @@ import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { withSliceBrowser } from "../slice/protocol.ts";
-import { publicBEvidence } from "../b-surfaces/public.ts";
 import { redactPerfText } from "../perf/privacy.ts";
+import { serializeSplitRecord } from "./records.ts";
 
 const folder = fileURLToPath(new URL("../../", import.meta.url));
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -24,7 +24,7 @@ const probes = [
 
 const temporary = await mkdtemp(join(tmpdir(), "split-localize-"));
 try {
-  const pages: { name: string; commit: string; html: string; hash: string }[] = [];
+  const pages: { name: string; commit: string; sourceTree: string; html: string; hash: string }[] = [];
   for (const [name, commit] of [["binding", "c67139b8806d04231d2f2c5bb89814370bab8ef6"], ["guarded", "224b60c580dd03d2541f4edd58a9324b07ff389c"], ["standalone", "efcd94c2"]] as const) {
     const directory = join(temporary, name); await mkdir(directory);
     const archive = join(temporary, `${name}.tar`);
@@ -43,7 +43,7 @@ try {
     execFileSync(process.execPath, [buildFile, "--test"], { cwd: directory, windowsHide: true });
     let html = (await readFile(join(directory, "index.html"), "utf8")).replace(/<link[^>]*href="https:\/\/fonts[^>]*>/g, "");
     html = html.replace(/(<script id="state-data" type="application\/json">)([\s\S]*?)(<\/script>)/, (_all, start: string, data: string, end: string) => start + JSON.stringify({ ...JSON.parse(data) as Record<string, unknown>, docId: "d" + randomUUID().replaceAll("-", ""), rows: [{ id: "R1", audioText: "abcd", visualText: "", status: "todo", imageRef: null }, { id: "R2", audioText: "ef", visualText: "", status: "todo", imageRef: null }], paragraphsDecided: true }) + end);
-    pages.push({ name, commit, html, hash: createHash("sha256").update(html).digest("hex") });
+    pages.push({ name, commit: execFileSync("git", ["rev-parse", commit], { cwd: repo, encoding: "utf8" }).trim(), sourceTree: execFileSync("git", ["rev-parse", `${commit}:src`], { cwd: repo, encoding: "utf8" }).trim(), html, hash: createHash("sha256").update(html).digest("hex") });
   }
   const traceBundle = (await build({ absWorkingDir: repo, entryPoints: [join(folder, "src/split-reconcile/trace-page.ts")], bundle: true, write: false, platform: "browser", format: "iife" })).outputFiles?.[0]?.text;
   const makeBinding = async (entry: string): Promise<string> => {
@@ -88,7 +88,7 @@ try {
           try { await protocol.evaluate("{const button=document.querySelector('#rows [data-action=delete-row][data-id=R1]');button.click();button.click()}"); } catch (error) { failure = String(error); }
         }
       }
-      cases.push({ mode: page.name, kind, sourceCommit: page.commit, diagnosticHtmlHash: page.hash, failure,
+      cases.push({ mode: page.name, kind, sourceCommit: page.commit, sourceTree: page.sourceTree, diagnosticHtmlHash: page.hash, failure,
         trace: await protocol.evaluate("splitTrace.snapshot()"), snapshot: await protocol.evaluate(page.name !== "standalone" ? "appBinding.snapshot()" : "({rows:document.querySelectorAll('#rows .row').length,model:__splitpageFormats.state().rows.map(row=>({id:row.id,audioText:row.audioText})),dom:[...document.querySelectorAll('#rows .cell-editable[data-field=audioText]')].map(el=>({id:el.dataset.id,text:el.textContent}))})") });
       process.stdout.write(`${page.name}/${kind}: ${failure ? "FAIL" : "completed"}\n`);
     }
@@ -96,5 +96,5 @@ try {
   });
   await mkdir(join(folder, "split-reconcile"), { recursive: true });
   const redacted = JSON.parse(JSON.stringify(results, (_key, value: unknown) => typeof value === "string" ? redactPerfText(value) : value)) as unknown;
-  await writeFile(join(folder, "split-reconcile/localization.json"), publicBEvidence(redacted) + "\n");
+  await writeFile(join(folder, "split-reconcile/localization.json"), serializeSplitRecord(redacted));
 } finally { await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
