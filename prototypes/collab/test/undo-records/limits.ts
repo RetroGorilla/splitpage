@@ -1,4 +1,4 @@
-import { runDoubleDelete, runJoinTargetRemoved, runLaterFormat, runRedoneMarkReversed, runRedoneRecovery, runRemovedAfterInsert, runRemovedSplit, runSequentialStatus } from "./cases.ts";
+import { runJoinTargetRemoved, runLaterFormat, runRedoneMarkReversed, runRedoneRecovery, runRemovedAfterInsert, runRemovedSplit, runSequentialStatus } from "./cases.ts";
 import type { CaseResult } from "./cases.ts";
 import type { GeneratedHistory, Violation } from "./generator.ts";
 import { minimalHistories } from "./limit-histories.ts";
@@ -23,13 +23,6 @@ export interface DeclaredLimit {
 }
 
 export const declaredLimits: DeclaredLimit[] = [
-  {
-    id: "double-restore", owner: "undo",
-    title: "Concurrent undos of one doubly deleted character restore it twice",
-    matches: violation => violation.check === "restored twice",
-    literal: { file: "UR-concurrent-double-restore.md", run: () => runDoubleDelete("D1", "Alice", true), failure: /both undone\/client\d+\.rows\[0\]\.characters\[3\]/ },
-    library: "double restore"
-  },
   {
     id: "later-format", owner: "undo",
     title: "A format undo overwrites the other writer's later formatting of the same characters",

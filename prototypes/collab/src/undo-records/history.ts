@@ -5,7 +5,7 @@ import { mapValue, textValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { statusFrontier, statusValue } from "../marks/commands.ts";
 import { readStatusEvent } from "../marks/status-resolution.ts";
-import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity, selectionOf } from "./identity.ts";
+import { anchorOf, contentAt, identityKey, insertContent, itemAt, resolveIdentity, restoreBefore, sameIdentity, selectionOf } from "./identity.ts";
 import type { IdentityPoint, ResolvedIdentity, SelectionRecord, StoredContent } from "./identity.ts";
 
 export type CommandPart =
@@ -29,7 +29,7 @@ export interface CommandRecord {
   selection?: SelectionRecord;
 }
 
-export const undoDefects = ["fall-through", "no-restoration-record", "retire-without-own-entry", "span-delete", "positions"] as const;
+export const undoDefects = ["fall-through", "no-restoration-record", "retire-without-own-entry", "span-delete", "positions", "restore-twice", "index-placement", "loser-not-followed"] as const;
 export type UndoDefect = typeof undoDefects[number];
 
 export interface UndoOutcome {
@@ -40,11 +40,56 @@ export interface UndoOutcome {
   consumed: number;
 }
 
-export const restorationRoot = "restoredIdentities";
+export const restorationRoot = "restorations";
+const legacyRestorationRoot = "restoredIdentities";
+export const settleOrigin = { settleRestorations: true };
 
 interface Reversal {
   effective: boolean;
   inverse: CommandPart;
+}
+
+function parseIdentityKey(key: string): CollabIdentity {
+  const [client, clock] = key.split(":").map(Number);
+  return { client: client ?? 0, clock: clock ?? 0 };
+}
+
+function earliest(ids: readonly CollabIdentity[]): CollabIdentity | null {
+  let best: CollabIdentity | null = null;
+  for (const id of ids) if (!best || id.client < best.client || (id.client === best.client && id.clock < best.clock)) best = id;
+  return best;
+}
+
+function restorationsOf(doc: Y.Doc, original: CollabIdentity): CollabIdentity[] {
+  const wanted = identityKey(original);
+  const found: CollabIdentity[] = [];
+  for (const [key, value] of doc.getMap<CollabIdentity>(restorationRoot)) if (identityKey(value) === wanted) found.push(parseIdentityKey(key));
+  return found;
+}
+
+export function restorationWinner(doc: Y.Doc, original: CollabIdentity): CollabIdentity | null {
+  return earliest(restorationsOf(doc, original));
+}
+
+export function settleRestorations(replica: SchemaReplica): CollabIdentity[] {
+  const groups = new Map<string, CollabIdentity[]>();
+  for (const [key, original] of replica.doc.getMap<CollabIdentity>(restorationRoot)) {
+    const group = groups.get(identityKey(original)) ?? [];
+    group.push(parseIdentityKey(key));
+    groups.set(identityKey(original), group);
+  }
+  const losers = [...groups.values()].flatMap(group => {
+    const winner = earliest(group);
+    return group.filter(id => winner && !sameIdentity(id, winner) && resolveIdentity(replica.doc, id)?.live);
+  });
+  if (losers.length === 0) return [];
+  replica.doc.transact(() => {
+    for (const id of losers) {
+      const at = resolveIdentity(replica.doc, id);
+      if (at?.live) at.type.delete(at.index, 1);
+    }
+  }, settleOrigin);
+  return losers;
 }
 
 function attributeValue(attributes: Record<string, unknown>, key: string): unknown {
@@ -138,8 +183,18 @@ export class CommandHistory {
     const local = this.restoredHere.get(key);
     if (local) return local;
     if (this.defect === "no-restoration-record") return null;
-    const shared = this.replica.doc.getMap<CollabIdentity>(restorationRoot).get(key);
-    return shared ? { client: shared.client, clock: shared.clock } : null;
+    if (this.defect === "restore-twice") {
+      const shared = this.replica.doc.getMap<CollabIdentity>(legacyRestorationRoot).get(key);
+      return shared ? { client: shared.client, clock: shared.clock } : null;
+    }
+    return restorationWinner(this.replica.doc, id);
+  }
+
+  private winnerInstead(id: CollabIdentity): CollabIdentity | null {
+    if (this.defect === "no-restoration-record" || this.defect === "restore-twice" || this.defect === "loser-not-followed") return null;
+    const original = this.replica.doc.getMap<CollabIdentity>(restorationRoot).get(identityKey(id));
+    const winner = original ? restorationWinner(this.replica.doc, original) : null;
+    return winner && !sameIdentity(winner, id) ? winner : null;
   }
 
   private follow(id: CollabIdentity): CollabIdentity {
@@ -147,6 +202,11 @@ export class CommandHistory {
     let current = id;
     while (!seen.has(identityKey(current))) {
       seen.add(identityKey(current));
+      const winner = this.winnerInstead(current);
+      if (winner) {
+        current = winner;
+        continue;
+      }
       if (resolveIdentity(this.replica.doc, current)?.live) return current;
       const next = this.restored(current);
       if (!next) return current;
@@ -277,21 +337,30 @@ export class CommandHistory {
         placed.set(key, known);
         return;
       }
-      const previous = index > 0 ? part.deleted[index - 1] : undefined;
-      const previousPlaced = previous ? placed.get(identityKey(previous.id)) : undefined;
-      const previousBefore: ResolvedIdentity | null | undefined = before[index - 1];
-      let target = resolveIdentity(doc, content.id)?.index ?? tombstone.index;
-      if (previousPlaced && previousBefore && previousBefore.type === tombstone.type && previousBefore.index === tombstone.index) {
-        const anchor = resolveIdentity(doc, previousPlaced);
-        if (anchor?.live && anchor.type === tombstone.type) target = anchor.index + 1;
-      }
-      const created = insertContent(tombstone.type, target, content);
+      const created = this.defect === "restore-twice" || this.defect === "index-placement"
+        ? this.insertAtIndex(part.deleted, index, before, placed, tombstone)
+        : restoreBefore(tombstone.type, content.id, content);
       placed.set(key, created);
       this.restoredHere.set(key, created);
       restoredIds.push(created);
-      if (this.defect !== "no-restoration-record") doc.getMap<CollabIdentity>(restorationRoot).set(key, created);
+      if (this.defect === "restore-twice") doc.getMap<CollabIdentity>(legacyRestorationRoot).set(key, created);
+      else if (this.defect !== "no-restoration-record") doc.getMap<CollabIdentity>(restorationRoot).set(identityKey(created), content.id);
     });
     return { effective: removed.length > 0 || restoredIds.length > 0, inverse: { kind: "sequence", inserted: restoredIds, deleted: removed } };
+  }
+
+  private insertAtIndex(deleted: StoredContent[], index: number, before: (ResolvedIdentity | null)[], placed: Map<string, CollabIdentity>, tombstone: ResolvedIdentity): CollabIdentity {
+    const content = deleted[index];
+    if (!content) throw new Error("Missing deleted content");
+    const previous = index > 0 ? deleted[index - 1] : undefined;
+    const previousPlaced = previous ? placed.get(identityKey(previous.id)) : undefined;
+    const previousBefore = before[index - 1];
+    let target = resolveIdentity(this.replica.doc, content.id)?.index ?? tombstone.index;
+    if (previousPlaced && previousBefore && previousBefore.type === tombstone.type && previousBefore.index === tombstone.index) {
+      const anchor = resolveIdentity(this.replica.doc, previousPlaced);
+      if (anchor?.live && anchor.type === tombstone.type) target = anchor.index + 1;
+    }
+    return insertContent(tombstone.type, target, content);
   }
 
   private reversePositional(part: Extract<CommandPart, { kind: "positional" }>): Reversal {

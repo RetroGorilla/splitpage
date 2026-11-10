@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordTiming, runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalRemovalRedo,runIdenticalTag, runInsideRange, runJoinRedo, runJoinTargetRemoved, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneMarkReversed, runRedoneRecovery, runRejoin, runRemovedAfterInsert, runRemovedSplit, runReRemoval, runRestoredChain, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
+import { recordTiming, runAdjacentRestore, runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalRemovalRedo, runIdenticalTag, runInsideRange, runJoinRedo, runJoinTargetRemoved, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneMarkReversed, runRedoneRecovery, runRejoin, runRemovedAfterInsert, runRemovedSplit, runReRemoval, runRestoredChain, runRestoreOnce, runRestoreOnceChain, runRestoreRun, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
 import type { CaseResult } from "./cases.ts";
 
 const identicalOrders = ["D1", "dup", "rev", "late-C"] as const;
@@ -70,7 +70,16 @@ for (const order of identicalOrders) {
     assert.match(runReRemoval(order, "retire-without-own-entry").failure ?? "", /consumed identical undo reached an older step or wrote state/);
   });
   for (const first of ["Alice", "Bob"] as const) {
-    test(`a delete the other writer also made ${order}, ${first} first: both undos restore each character once`, () => passes(runDoubleDelete(order, first, false)));
+    test(`a delete the other writer also made ${order}, ${first} first: both undos restore each character once`, () => passes(runDoubleDelete(order, first)));
+  }
+  for (const swapped of [false, true]) {
+    const ids = swapped ? "swapped client ids" : "normal client ids";
+    for (const first of ["Alice", "Bob"] as const) {
+      test(`concurrent undos of one character both writers deleted ${order}, ${ids}, ${first} redoes first: once, then one redo removes it`, () => passes(runRestoreOnce(order, swapped, first)));
+      test(`a character restored twice, deleted again by ${first} and undone ${order}, ${ids}: once`, () => passes(runRestoreOnceChain(order, swapped, first)));
+      test(`concurrent undos of overlapping three-character deletes ${order}, ${ids}, ${first} redoes first: each character once, in order`, () => passes(runRestoreRun(order, swapped, first)));
+    }
+    test(`concurrent undos of adjacent characters deleted by different writers ${order}, ${ids}: in order`, () => passes(runAdjacentRestore(order, swapped)));
   }
 }
 
@@ -106,7 +115,11 @@ for (const order of identicalOrders) {
       assert.match(runIdenticalTag(order, false, first, "fall-through").failure ?? "", /consumed identical undo reached an older step/);
     });
     test(`mechanism control: without shared restoration records the second undo duplicates a character ${order}, ${first} first`, () => {
-      assert.match(runDoubleDelete(order, first, false, "no-restoration-record").failure ?? "", /both undone\/client\d+\.rows\[0\]\.characters/);
+      assert.match(runDoubleDelete(order, first, "no-restoration-record").failure ?? "", /both undone\/client\d+\.rows\[0\]\.characters/);
+    });
+    test(`control: #1418's restorations bring a character both writers deleted back twice ${order}, ${first} redoes first`, () => {
+      assert.match(runRestoreOnce(order, false, first, "restore-twice").failure ?? "", /restored\/client\d+\.rows\[0\]\.characters\[3\]/);
+      assert.match(runRestoreRun(order, false, first, "restore-twice").failure ?? "", /restored\/client\d+\.rows\[0\]\.characters/);
     });
     test(`mechanism control: per-writer tag occurrence keys keep identical tags apart ${order}, ${first} first`, () => {
       assert.match(runIdenticalTag(order, false, first, undefined, true).failure ?? "", /tagged\/client\d+\.rows\[0\]\.characters\[4\]\.marks/);
@@ -115,8 +128,12 @@ for (const order of identicalOrders) {
   test(`mechanism control: join undo without its own-entry check retires the later rejoin ${order}`, () => {
     assert.match(runRejoin(order, "retire-without-own-entry").failure ?? "", /consumed identical undo reached an older step or wrote state/);
   });
-  test(`limit: concurrent undos of a doubly deleted character restore it twice ${order}`, () => {
-    assert.match(runDoubleDelete(order, "Alice", true).failure ?? "", /both undone\/client\d+\.rows\[0\]\.characters\[3\]/);
+  test(`mechanism control: restoring by index puts concurrent restorations in client-id order ${order}`, () => {
+    assert.match(runAdjacentRestore(order, true, "index-placement").failure ?? "", /restored\/client\d+\.rows\[0\]\.characters\[1\]/);
+    assert.match(runRestoreRun(order, true, "Alice", "index-placement").failure ?? "", /restored\/client\d+\.rows\[0\]\.characters\[1\]/);
+  });
+  test(`mechanism control: a redo that does not map the losing restoration to the kept one changes nothing ${order}`, () => {
+    assert.match(runRestoreOnce(order, false, "Bob", "loser-not-followed").failure ?? "", /Bob's redo changed nothing/);
   });
 }
 

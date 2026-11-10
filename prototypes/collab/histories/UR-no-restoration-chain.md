@@ -20,7 +20,7 @@ deliver A2 A->B copy 1
 deliver A3 A->B copy 1
 deliver A4 A->B copy 1
 check commands
-enqueue A5 A->B 30 bytes
+enqueue A5 A->B 36 bytes
 Alice undo delete effective=true consumed=1
 deliver A5 A->B copy 1
 check delete undone

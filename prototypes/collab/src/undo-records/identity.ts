@@ -94,6 +94,55 @@ export function insertContent(type: SequenceType, index: number, content: Stored
   return created;
 }
 
+function restoredPayload(type: SequenceType, content: StoredContent): Y.ContentAny | Y.ContentString | Y.ContentEmbed {
+  if (type instanceof Y.Array) return new Y.ContentAny([content.insert]);
+  return typeof content.insert === "string" ? new Y.ContentString(content.insert) : new Y.ContentEmbed(content.insert as Record<string, unknown>);
+}
+
+function attributesBefore(type: SequenceType, right: Y.Item): Map<string, unknown> {
+  const attributes = new Map<string, unknown>();
+  if (!(type instanceof Y.Text)) return attributes;
+  for (let item = type._start; item && item !== right; item = item.right) {
+    if (item.deleted || !(item.content instanceof Y.ContentFormat)) continue;
+    if (item.content.value === null) attributes.delete(item.content.key);
+    else attributes.set(item.content.key, item.content.value);
+  }
+  return attributes;
+}
+
+function formatMark(key: string, value: unknown): Y.ContentFormat {
+  return new Y.ContentFormat(key, value as object);
+}
+
+export function restoreBefore(type: SequenceType, tombstone: CollabIdentity, content: StoredContent): CollabIdentity {
+  const doc = type.doc;
+  if (!doc) throw new Error("Restore target is not in a document");
+  const result: { id: CollabIdentity | null } = { id: null };
+  doc.transact(transaction => {
+    const right = Y.getItemCleanStart(transaction, Y.createID(tombstone.client, tombstone.clock));
+    const context = attributesBefore(type, right);
+    const changed = [...new Set([...context.keys(), ...Object.keys(content.attributes)])]
+      .filter(key => JSON.stringify(context.get(key) ?? null) !== JSON.stringify(content.attributes[key] ?? null));
+    const contents = [
+      ...changed.map(key => formatMark(key, content.attributes[key] ?? null)),
+      restoredPayload(type, content),
+      ...changed.map(key => formatMark(key, context.get(key) ?? null))
+    ];
+    let left = right.left;
+    for (const [index, payload] of contents.entries()) {
+      const id = Y.createID(doc.clientID, Y.getState(doc.store, doc.clientID));
+      const item = new Y.Item(id, left, left ? left.lastId : null, right, right.id, type, null, payload);
+      item.integrate(transaction, 0);
+      if (index === changed.length) result.id = { client: id.client, clock: id.clock };
+      left = item;
+    }
+    // why: raw items bypass the index bookkeeping that Y.Text and Y.Array keep for their search markers.
+    if (type._searchMarker) type._searchMarker.length = 0;
+  });
+  if (!result.id) throw new Error("Restored content has no identity");
+  return result.id;
+}
+
 export function anchorOf(point: IdentityPoint): Y.RelativePosition {
   return Y.createRelativePositionFromJSON(point.id ? { item: point.id, assoc: point.assoc } : point.container);
 }
