@@ -48,6 +48,7 @@ const bindingSwitch = appBindingAsked();
 let experimentBinding: { sync: (id: string, runs: readonly Run[]) => void; undo: () => void } | null = null;
 let experimentCommand: ((name: string, before: FlowRange | null) => FlowOutcome | undefined) | null = null;
 const experimentCounts = { compositionMark: 0, dropEmptySince: 0, hold: 0 };
+const experimentPaints: { phase: "start" | "end"; at: number }[] = [];
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
@@ -108,6 +109,7 @@ export function mountWriterRuntimeFeature() {
           if (initialized.kind === "failed") throw initialized.error;
           let dismissedGhost: typeof tagGhost = null;
           return createFlowWriter({
+            paintObservation: phase => { if (bindingSwitch) experimentPaints.push({ phase, at: performance.now() }); },
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,
@@ -243,6 +245,8 @@ export function mountWriterRuntimeFeature() {
       experiment: bindingSwitch ? {
         install: (binding: typeof experimentBinding) => { experimentBinding = binding; setAppBindingActive(binding !== null); },
         command: (handler: typeof experimentCommand) => { experimentCommand = handler; },
+        paintEvents: () => experimentPaints.map(event => ({ ...event })),
+        clearPaintEvents: () => { experimentPaints.length = 0; },
         model: () => ({ document: documentReader.current(), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes(), heldSelection: writerEditing.selection().resolveFlow(), counts: { ...experimentCounts } }),
         offset: (el: HTMLElement, node: Node, offset: number) => domToPos(el, node, offset),
         point: (el: HTMLElement, offset: number) => posToDom(el, offset),

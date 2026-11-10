@@ -23,6 +23,7 @@ const INPUT_MARKS: Readonly<Record<string, MarkName>> = {
 };
 
 export interface SurfacePorts {
+  readonly paintObservation?: (phase: "start" | "end") => void;
   readonly clipboard?: {
     readonly mount: (handlers: Readonly<Record<"copy" | "cut" | "paste", (event: ClipboardEvent) => void>>) => () => void;
     readonly copy: (range: FlowRange, data: DataTransfer, cut: boolean) => void;
@@ -215,6 +216,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     syncComposition();
     repaintOwed = false;
     painting = true;
+    ports.paintObservation?.("start");
     const doc = ports.doc();
     const keptBeats = new Map<string, HTMLElement>();
     root.querySelectorAll<HTMLElement>(".wr-beat").forEach(el => keptBeats.set(el.getAttribute("data-id") as string, el));
@@ -292,6 +294,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     keptBeats.forEach(el => { if (el.isConnected) el.remove(); });
     keptHeads.forEach(el => { if (el.isConnected) el.remove(); });
     painting = false;
+    ports.paintObservation?.("end");
   }
 
   function posFromDom(node: Node, offset: number): FlowPos | null {

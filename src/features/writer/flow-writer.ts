@@ -30,6 +30,7 @@ export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | 
 }
 
 export interface FlowWriterPorts {
+  readonly paintObservation?: SurfacePorts["paintObservation"];
   readonly openFind?: () => void;
   readonly closeFind?: () => void;
   readonly pictures?: Pick<PictureStore, "imgHtml">;
@@ -147,6 +148,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   const surface = createSurface({
+    ...(ports.paintObservation ? { paintObservation: ports.paintObservation } : {}),
     ...(ports.clipboard ? { clipboard: ports.clipboard } : {}),
     root,
     lifetime: ports.lifetime,
