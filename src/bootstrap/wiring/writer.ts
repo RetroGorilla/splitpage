@@ -22,7 +22,7 @@ import { caretAfterStep } from "../../features/undo/caret.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
 import { gallerySize } from "../../core/document/gallery.ts";
-import type { FlowDoc, FlowPorts, FlowRow } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowPorts, FlowRow, FlowRange, FlowOutcome } from "../../core/flow/flow.ts";
 import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
@@ -46,6 +46,7 @@ import { addCommentCommand, addReplyCommand, unwrapCommentAnchorCommand } from "
 
 const bindingSwitch = appBindingAsked();
 let experimentBinding: { sync: (id: string, runs: readonly Run[]) => void; undo: () => void } | null = null;
+let experimentCommand: ((name: string, before: FlowRange | null) => FlowOutcome | undefined) | null = null;
 const experimentCounts = { compositionMark: 0, dropEmptySince: 0, hold: 0 };
 
 const MEDIA_CELL = Object.freeze({ media: true });
@@ -166,6 +167,7 @@ export function mountWriterRuntimeFeature() {
               experimentBinding.sync(id, runs);
               return true;
             },
+            commandOverride: (name, before) => bindingSwitch && experimentBinding ? experimentCommand?.(name, before) : undefined,
             moveBeat: swapBeatsCommand,
             shown: edit => paintGuard().whileShown(edit),
             editingBlocked: () => paintGuard().painting() || undoGuard().applying() || screenIsStale(),
@@ -240,6 +242,7 @@ export function mountWriterRuntimeFeature() {
     exposeTestHook("__writerFlowTest", () => ({
       experiment: bindingSwitch ? {
         install: (binding: typeof experimentBinding) => { experimentBinding = binding; setAppBindingActive(binding !== null); },
+        command: (handler: typeof experimentCommand) => { experimentCommand = handler; },
         model: () => ({ document: documentReader.current(), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes(), heldSelection: writerEditing.selection().resolveFlow(), counts: { ...experimentCounts } }),
         offset: (el: HTMLElement, node: Node, offset: number) => domToPos(el, node, offset),
         point: (el: HTMLElement, offset: number) => posToDom(el, offset),

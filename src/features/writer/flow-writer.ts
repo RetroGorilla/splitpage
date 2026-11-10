@@ -48,6 +48,7 @@ export interface FlowWriterPorts {
   readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
   readonly run: (command: Command) => CommandOutcome;
   readonly syncBeatOverride?: (rowId: string, runs: readonly Run[]) => boolean;
+  readonly commandOverride?: (name: string, before: FlowRange | null) => FlowOutcome | undefined;
   readonly shown: <T>(edit: () => T) => T;
   readonly editingBlocked: () => boolean;
   readonly text: CellTextPorts;
@@ -133,6 +134,8 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   function commit(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
     if (!isCurrent() || ports.editingBlocked()) return null;
+    const overridden = ports.commandOverride?.(name, before);
+    if (overridden !== undefined) return overridden;
     let result: FlowOutcome = null;
     const command = flowCommand(name, doc => {
       result = operation(doc);
