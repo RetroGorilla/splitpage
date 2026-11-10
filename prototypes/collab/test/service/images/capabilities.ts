@@ -8,6 +8,8 @@ import type { ImageDocumentPort } from "../../../src/service/images/publication.
 import { readFrame, syncFrame } from "../../../src/service/wire.ts";
 import { until, workspace } from "../harness.ts";
 import { checkText, initial, journalDocument, membership, png, saved, sha, upload, waiting } from "./harness.ts";
+import type { ImageProbeTarget } from "./target.ts";
+import { imageControl } from "../../../src/service/images/configuration.ts";
 
 function observeTransport(image: ImagePublication, port: number, path: string) {
   const receipts = new ConnectionReceipts(path);
@@ -33,17 +35,18 @@ function observeTransport(image: ImagePublication, port: number, path: string) {
   return { transport, receipts, frames, notices };
 }
 
-export async function observeNetworkWrites(t: TestContext): Promise<void> {
+export async function observeNetworkWrites(t: TestContext, target?: ImageProbeTarget): Promise<void> {
   for (const probe of ["text PRIVATE", "held gallery item"] as const) {
-    await t.test(`M3 read-only N rejects ${probe} without journal or socket publication`, async () => {
+    await t.test(`M3 read-only N rejects ${probe} without journal or socket publication${target ? " (configured instance)" : ""}`, async () => {
       const work = await workspace(); let image: ImagePublication | undefined;
       try {
-        const server = await work.start({ IMAGE_POLICY: "1" });
-        image = new ImagePublication(initial(), "upload-before-sync", "two-documents");
+        const server = await work.start({ IMAGE_POLICY: "1", ...target?.environment });
+        const configuration = await target?.configure(server);
+        image = new ImagePublication(initial(), "upload-before-sync", "two-documents", undefined, configuration);
         const { transport, receipts, frames, notices } = observeTransport(image, server.port, work.path);
         await transport.connect(); await until(() => receipts.status === saved, "initial M3 receipt");
         image.insert(png, sha); image.editing.getText("R1").insert(2, "Z");
-        assert.equal(image.status(receipts.status), waiting); assert.deepEqual(membership(work.path), []);
+        assert.equal(image.status(receipts.status), waiting); assert.deepEqual(membership(work.path, configuration?.instance), []);
         const before = frames.length;
         const network = image.network as ImageDocumentPort;
         if (probe === "text PRIVATE") assert.throws(() => network.getText("R1").insert(2, "PRIVATE"), TypeError);
@@ -54,11 +57,11 @@ export async function observeNetworkWrites(t: TestContext): Promise<void> {
         assert.equal(frames.length, before, "N write probe must emit no frame");
         const fence = transport.fence(); await until(() => notices.includes(fence), "M3 probe ordered fence");
         assert.deepEqual(frames.slice(before).map(frame => frame.kind), [5], "Only the module's content-free fence may leave");
-        const recovered = journalDocument(work.path);
+        const recovered = journalDocument(work.path, configuration?.instance);
         try { checkText(recovered, false); assert.deepEqual([...recovered.getMap("gallery").values()], []); }
         finally { recovered.destroy(); }
         checkText(image.editing, true); checkText(image.network, false);
-        assert.deepEqual(membership(work.path), []);
+        assert.deepEqual(membership(work.path, configuration?.instance), []);
       } finally { image?.destroy(); await work.clean(); }
     });
   }
@@ -123,13 +126,14 @@ function noLive(value: unknown, seen = new Set<object>()): void {
   }
 }
 
-export async function observeCapabilityInventory(t: TestContext): Promise<void> {
+export async function observeCapabilityInventory(t: TestContext, target?: ImageProbeTarget): Promise<void> {
   for (const mechanism of ["one-document", "two-documents"] as const) {
-    await t.test(`closed caller capability inventory after attach: ${mechanism}`, async () => {
+    await t.test(`closed caller capability inventory after attach: ${mechanism}${target ? " (configured instance)" : ""}`, async () => {
       const work = await workspace(); let image: ImagePublication | undefined;
       try {
-        const server = await work.start({ IMAGE_POLICY: "1" });
-        image = new ImagePublication(initial(), "upload-before-sync", mechanism);
+        const server = await work.start({ IMAGE_POLICY: "1", ...target?.environment });
+        const configuration = await target?.configure(server);
+        image = new ImagePublication(initial(), "upload-before-sync", mechanism, undefined, configuration);
         const { transport, receipts, notices } = observeTransport(image, server.port, work.path);
         const connected = transport.connect();
         assert.equal(Object.getPrototypeOf(connected), Promise.prototype);
@@ -221,7 +225,7 @@ export async function observeCapabilityInventory(t: TestContext): Promise<void> 
         assert.equal(typeof transport.status(), "string"); assert.equal(typeof transport.shouldConnect(), "boolean"); assert.equal(typeof transport.closed(), "boolean");
         assert.equal(transport.forceSync(), undefined);
         const fence = transport.fence(); assert.equal(typeof fence, "string"); await until(() => notices.includes(fence), "inventory owned fence");
-        const response = await upload(server); assert.equal(response.status, 201); await response.arrayBuffer();
+        const response = await upload(server, png, sha, configuration); assert.equal(response.status, 201); await response.arrayBuffer();
         assert.equal(image.durable(sha), undefined); await until(() => receipts.status === saved, "inventory released receipt");
         const networkBefore = image.network.snapshot();
         const networkItem = networkMap.values().next().value; assert.ok(networkItem); networkItem.ref = "copy-only";
@@ -237,7 +241,7 @@ export async function observeCapabilityInventory(t: TestContext): Promise<void> 
           ? ["blobs:object", "editing:string", "network:object"] : ["blobs:object", "editing:string", "network:string"]);
         assert.deepEqual(transport.view(saved), { status: saved, explanation: null, reason: null, publication: "attached", export: "Standalone copy" });
         assert.equal(transport.sendStateless("{}"), undefined);
-        assert.equal(transport.send(new Uint8Array([7, ...Buffer.from("fixture"), 5, 2, ...Buffer.from("{}")])), undefined);
+        assert.equal(transport.send(imageControl(configuration?.instance ?? "fixture", 5, ["{}"])), undefined);
         for (const value of [image.items, image.export(), image.capture(), transport.view(saved), image.network.snapshot(), networkMap.values()]) noLive(value);
         assert.equal(transport.drop(), undefined); await until(() => transport.closed(), "inventory transport closed");
         assert.equal(transport.closed(), true); assert.equal(transport.shouldConnect(), false); assert.equal(typeof transport.status(), "string");

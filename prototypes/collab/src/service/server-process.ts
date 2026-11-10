@@ -7,7 +7,7 @@ import { InstanceGateway } from "./instance/gateway.ts";
 import { instanceBoundary } from "./instance/extension.ts";
 import type { InstanceSnapshot } from "./instance/storage.ts";
 import { loadingProbe } from "./instance/loading-probe.ts";
-import { imageService } from "./images/service.ts";
+import { imageService, initialImagesDurable } from "./images/service.ts";
 
 const path = process.argv[2];
 if (!path) throw new Error("Database path required");
@@ -15,7 +15,6 @@ const journal = new JournalWorkerClient(path, {
   journalMode: process.env.JOURNAL_MODE ?? "WAL", synchronous: process.env.JOURNAL_SYNC ?? "FULL",
 });
 const journalConfiguration = await journal.ready;
-const images = process.env.IMAGE_POLICY ? await imageService(path) : null;
 let hold = "";
 let premature = false;
 let prematureAfter20 = false;
@@ -41,11 +40,15 @@ const snapshots = new Map<string, InstanceSnapshot>();
 const instances = process.env.INSTANCE_OWNER ? new InstanceGateway(journal, async phase => {
   if (instanceHold === phase) await gate(`instance-${phase}`);
 }) : null;
+const images = process.env.IMAGE_POLICY ? await imageService(path, instances
+  ? (instance, token) => instances.authorizeBlob(instance, token) : undefined) : null;
 const server = new Server({
   port: 0, address: "127.0.0.1", quiet: true, stopOnSignals: false,
   extensions: [
     ...(process.env.INSTANCE_PROBE ? [loadingProbe(emit)] : []),
-    ...(instances ? [instanceBoundary(instances, String(process.env.INSTANCE_OWNER), async () => {}, async () => {
+    ...(instances ? [instanceBoundary(instances, String(process.env.INSTANCE_OWNER), async (state, instance) => {
+      if (images) await initialImagesDurable(images.port, instance, String(process.env.INSTANCE_OWNER), state);
+    }, async () => {
       if (instanceHold === "before-receipt") await gate("instance-before-receipt");
     }, () => emit("instance-request-chunk"))] : []),
     ...(process.env.REFUSAL_POLICY ? [refusalBoundary(process.env.REFUSAL_FROZEN_CLOCK ? () => 0 : Date.now)] : []),

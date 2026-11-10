@@ -66,16 +66,25 @@ export class InstanceStorage {
       pause("after-pending");
       return record;
     }
-    if (action === "authorize") {
+    if (action === "authorize" || action === "authorize-blob") {
       const record = this.db.prepare("SELECT * FROM instances WHERE id = ?").get(id) as InstanceRecord | undefined;
-      if (!record || record.state !== "committed") throw new Error("Instance unavailable");
+      if (!record) throw new Error("Instance unavailable");
       const hash = digest(String(data.token));
+      if (record.state !== "committed" && !(action === "authorize-blob" && record.state === "pending" && hash === record.ownerHash)) {
+        throw new Error("Instance unavailable");
+      }
       if (hash !== record.inviteHash && hash !== record.ownerHash) throw new Error("Invalid invitation");
       return record;
     }
-    if (action === "upload" || action === "commit") {
+    if (action === "upload" || action === "commit" || action === "initial") {
       const record = this.record(operation);
       if (!record || record.ownerHash !== digest(String(data.owner))) throw new Error("Unknown creation");
+      if (action === "initial") {
+        if (record.state === "committed") return { id: record.id, payload: this.recover(record.id).payload };
+        const row = this.db.prepare("SELECT payload FROM instance_uploads WHERE document = ?").get(record.id);
+        if (!(row?.payload instanceof Uint8Array)) throw new Error("Initial generation not uploaded");
+        return { id: record.id, payload: row.payload };
+      }
       if (record.state === "committed") {
         if (action === "upload" && (!(data.payload instanceof Uint8Array) || digest(data.payload) !== record.initialHash)) {
           throw new Error("Creation generation changed");

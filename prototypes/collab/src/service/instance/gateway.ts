@@ -21,6 +21,14 @@ export class InstanceGateway {
     return await this.request("authorize", { id, token }) as InstanceRecord;
   }
 
+  async authorizeBlob(id: string, token: string): Promise<void> {
+    await this.request("authorize-blob", { id, token });
+  }
+
+  async initial(operation: string, owner: string): Promise<{ id: string; payload: Uint8Array }> {
+    return await this.request("initial", { operation, owner }) as { id: string; payload: Uint8Array };
+  }
+
   async capture(id: string): Promise<InstanceSnapshot> {
     return await this.request("capture", { id }) as InstanceSnapshot;
   }
