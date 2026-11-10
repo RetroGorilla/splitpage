@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { checkModel, IdentityBook } from "./checker.ts";
 import type { CollabCharacter, CollabMarks, CollabModel, ScriptOracle } from "./checker.ts";
 import { commentsOverlapOracle, deletionOracle, joinNarrationOracle, lengthOracle, restorationOracle } from "./oracles/oracles.ts";
@@ -158,8 +159,47 @@ test("every Stage 2 deliberate defect has a checker test", () => {
   assert.deepEqual(new Set(defects.map(defect => defect.name.replace(/ \(.*\)$/, ""))), new Set(["lost remote character", "duplicated identity", "omitted field", "lost mark", "stale base"]));
 });
 
-test("the checker imports neither Yjs nor app code", () => {
-  const source = readFileSync(new URL("./checker.ts", import.meta.url), "utf8");
-  assert.deepEqual([...source.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s+["']([^"']+)["']/gm)].map(match => match[1]), []);
-  assert.doesNotMatch(source, /\bimport\s*\(|\brequire\s*\(/);
+const LOADER_NAMES = new Set(["require", "process", "globalThis", "module"]);
+
+function moduleLoads(text: string): string[] {
+  const source = ts.createSourceFile("probe.ts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const found = [...source.referencedFiles, ...source.typeReferenceDirectives, ...source.libReferenceDirectives].map(reference => `reference ${reference.fileName}`);
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) found.push(`import ${node.moduleSpecifier.getText(source)}`);
+    else if (ts.isImportEqualsDeclaration(node)) found.push(`import-equals ${node.moduleReference.getText(source)}`);
+    else if (ts.isExportDeclaration(node) && node.moduleSpecifier) found.push(`export-from ${node.moduleSpecifier.getText(source)}`);
+    else if (ts.isImportTypeNode(node)) found.push(`import-type ${node.argument.getText(source)}`);
+    else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) found.push("import.meta");
+    else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) found.push("dynamic import");
+    else if (ts.isIdentifier(node) && LOADER_NAMES.has(node.text)) found.push(`global ${node.text}`);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+test("the checker loads no module: neither Yjs nor app code nor anything else", () => {
+  assert.deepEqual(moduleLoads(readFileSync(new URL("./checker.ts", import.meta.url), "utf8")), []);
+});
+
+test("the module-load scan finds every way of loading a module", () => {
+  const controls: readonly (readonly [string, string])[] = [
+    ['import "node:fs";\n', 'import "node:fs"'],
+    ['import fs from "node:fs";\n', 'import "node:fs"'],
+    ['import * as Y from "yjs";\n', 'import "yjs"'],
+    ['import { Doc } from "yjs";\n', 'import "yjs"'],
+    ['import type { Doc } from "yjs";\n', 'import "yjs"'],
+    ['import fs = require("node:fs");\n', 'import-equals require("node:fs")'],
+    ['export { Doc } from "yjs";\n', 'export-from "yjs"'],
+    ['export * from "yjs";\n', 'export-from "yjs"'],
+    ['export const load = () => import("yjs");\n', "dynamic import"],
+    ['export type Doc = import("yjs").Doc;\n', 'import-type "yjs"'],
+    ["export const here = import.meta.url;\n", "import.meta"],
+    ['/// <reference path="./other.ts" />\nexport {};\n', "reference ./other.ts"],
+    ['const fs = require("node:fs");\n', "global require"],
+    ['const fs = process.getBuiltinModule("node:fs");\n', "global process"],
+    ['const fs = globalThis["process"].getBuiltinModule("node:fs");\n', "global globalThis"],
+    ['const fs = module["require"]("node:fs");\n', "global module"]
+  ];
+  for (const [text, expected] of controls) assert.deepEqual(moduleLoads(text), [expected], text);
 });

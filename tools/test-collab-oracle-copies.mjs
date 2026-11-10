@@ -26,39 +26,54 @@ const DECLARATION_KINDS = new Map([
 function declarationsOf(text, path) {
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const declarations = new Map();
-  const aliases = {};
+  const exports = new Map();
+  const refusals = [];
   const problems = [];
-  const exported = (node) => (ts.getModifiers(node) ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+  const modifiers = (node) => (ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []).map((m) => m.kind);
+  const exportName = (name, local, statement) => {
+    if (exports.has(name)) refusals.push(`${path}: ${name} is exported twice`);
+    exports.set(name, local);
+    if (modifiers(statement).includes(ts.SyntaxKind.DefaultKeyword)) refusals.push(`${path}: unsupported export form: export default`);
+  };
   for (const statement of source.statements) {
+    const exported = modifiers(statement).includes(ts.SyntaxKind.ExportKeyword);
     if (ts.isImportDeclaration(statement)) continue;
     if (ts.isExportDeclaration(statement)) {
-      if (statement.moduleSpecifier) problems.push(`${path}: re-export from ${statement.moduleSpecifier.getText(source)}`);
-      for (const element of statement.exportClause && ts.isNamedExports(statement.exportClause) ? statement.exportClause.elements : []) {
-        aliases[element.name.text] = (element.propertyName ?? element.name).text;
-      }
+      if (statement.moduleSpecifier) refusals.push(`${path}: unsupported export form: re-export from ${statement.moduleSpecifier.getText(source)}`);
+      else if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) refusals.push(`${path}: unsupported export form: ${statement.getText(source)}`);
+      else for (const element of statement.exportClause.elements) exportName(element.name.text, (element.propertyName ?? element.name).text, statement);
+      continue;
+    }
+    if (ts.isExportAssignment(statement)) {
+      refusals.push(`${path}: unsupported export form: ${statement.isExportEquals ? "export =" : "export default"}`);
       continue;
     }
     if (ts.isVariableStatement(statement)) {
       const keyword = statement.declarationList.flags & ts.NodeFlags.Const ? "const" : "let";
       for (const declaration of statement.declarationList.declarations) {
-        declarations.set(declaration.name.getText(source), { kind: keyword, exported: exported(statement), text: `${keyword} ${declaration.getText(source)}` });
+        const name = declaration.name.getText(source);
+        declarations.set(name, { kind: keyword, text: `${keyword} ${declaration.getText(source)}` });
+        if (exported) exportName(name, name, statement);
       }
       continue;
     }
     const kind = DECLARATION_KINDS.get(statement.kind);
     if (kind && statement.name) {
-      declarations.set(statement.name.text, { kind, exported: exported(statement), text: statement.getText(source).replace(/^export\s+/, "") });
+      declarations.set(statement.name.text, { kind, text: statement.getText(source).replace(/^export\s+/, "") });
+      if (exported) exportName(statement.name.text, statement.name.text, statement);
+      else if (modifiers(statement).includes(ts.SyntaxKind.DefaultKeyword)) refusals.push(`${path}: unsupported export form: export default`);
       continue;
     }
-    problems.push(`${path}: unexpected statement ${statement.getText(source).slice(0, 60)}`);
+    if (exported) refusals.push(`${path}: unsupported export form: ${statement.getText(source).slice(0, 60)}`);
+    else problems.push(`${path}: unexpected statement ${statement.getText(source).slice(0, 60)}`);
   }
-  return { declarations, aliases, problems };
+  return { declarations, exports, refusals, problems };
 }
 
 function compareCopy(pair, originalText, copyText) {
   const original = declarationsOf(originalText, pair.original);
   const copy = declarationsOf(copyText, pair.copy);
-  const problems = [...copy.problems];
+  const problems = [...original.refusals, ...copy.refusals, ...copy.problems];
   if (!pair.only) problems.push(...original.problems);
   for (const name of pair.omitted) {
     if (original.declarations.get(name)?.kind !== "function") problems.push(`${pair.original}: omitted ${name} is not a function there`);
@@ -72,12 +87,17 @@ function compareCopy(pair, originalText, copyText) {
     else if (got.text !== wanted.text) problems.push(`${pair.copy}: ${name} differs from the original`);
   }
   for (const name of copy.declarations.keys()) if (!expected.includes(name)) problems.push(`${pair.copy}: ${name} is not in the original`);
-  const wantedExports = [...expected.filter((name) => original.declarations.get(name)?.exported), ...Object.keys(pair.aliases)].sort();
-  const gotExports = [...[...copy.declarations].filter(([, d]) => d.exported).map(([name]) => name), ...Object.keys(copy.aliases)].sort();
-  if (JSON.stringify(gotExports) !== JSON.stringify(wantedExports)) problems.push(`${pair.copy}: exports ${JSON.stringify(gotExports)}, expected ${JSON.stringify(wantedExports)}`);
-  for (const [alias, local] of Object.entries(pair.aliases)) {
-    if (copy.aliases[alias] !== local) problems.push(`${pair.copy}: ${alias} does not export ${local}`);
+  const wantedExports = new Map();
+  for (const [name, local] of original.exports) {
+    if (expected.includes(local)) wantedExports.set(name, local);
+    else if (!pair.only && !pair.omitted.includes(local)) problems.push(`${pair.original}: exports ${name} as ${local}, which is not a copied declaration`);
   }
+  for (const [alias, local] of Object.entries(pair.aliases)) {
+    if (wantedExports.has(alias)) problems.push(`${pair.original}: listed alias ${alias} is already exported there`);
+    wantedExports.set(alias, local);
+  }
+  const listed = (exports) => JSON.stringify([...exports].map(([name, local]) => (name === local ? name : `${name}=${local}`)).sort());
+  if (listed(copy.exports) !== listed(wantedExports)) problems.push(`${pair.copy}: exports ${listed(copy.exports)}, expected ${listed(wantedExports)}`);
   return problems;
 }
 
@@ -105,11 +125,32 @@ const copy = 'import type { X } from "./x.ts";\nexport type Pair = readonly [num
 eq("a faithful copy passes", compareCopy(control, original, copy), []);
 eq("an edited literal fails", compareCopy(control, original, copy.replace("const local = [1, 2]", "const local = [1, 3]")), ["tests/c.ts: local differs from the original"]);
 eq("reformatting a literal fails", compareCopy(control, original, copy.replace("export const data: Pair = [1, 2]", "export const data: Pair = [1,2]")), ["tests/c.ts: data differs from the original"]);
-eq("a missing declaration fails", compareCopy(control, original, copy.replace("export const data: Pair = [1, 2];\n", "")), ["tests/c.ts: missing data", 'tests/c.ts: exports ["Pair","listed"], expected ["Pair","data","listed"]']);
-eq("an added declaration fails", compareCopy(control, original, copy + "export const extra = 1;\n"), ["tests/c.ts: extra is not in the original", 'tests/c.ts: exports ["Pair","data","extra","listed"], expected ["Pair","data","listed"]']);
-eq("a dropped export fails", compareCopy(control, original, copy.replace("export const data", "const data")), ['tests/c.ts: exports ["Pair","listed"], expected ["Pair","data","listed"]']);
+eq("a missing declaration fails", compareCopy(control, original, copy.replace("export const data: Pair = [1, 2];\n", "")), ["tests/c.ts: missing data", 'tests/c.ts: exports ["Pair","listed=local"], expected ["Pair","data","listed=local"]']);
+eq("an added declaration fails", compareCopy(control, original, copy + "export const extra = 1;\n"), ["tests/c.ts: extra is not in the original", 'tests/c.ts: exports ["Pair","data","extra","listed=local"], expected ["Pair","data","listed=local"]']);
+eq("a dropped export fails", compareCopy(control, original, copy.replace("export const data", "const data")), ['tests/c.ts: exports ["Pair","listed=local"], expected ["Pair","data","listed=local"]']);
 eq("omitting data instead of a function fails", compareCopy({ ...control, omitted: ["data"] }, original, copy).includes("prototypes/o.ts: omitted data is not a function there"), true);
-eq("a re-export fails", compareCopy(control, original, copy + 'export { data as again } from "./o.ts";\n').some((p) => p.includes("re-export")), true);
+eq("an alias added to the original fails", compareCopy(control, original + "export { data as extraOracle };\n", copy), ['tests/c.ts: exports ["Pair","data","listed=local"], expected ["Pair","data","extraOracle=data","listed=local"]']);
+eq("an alias added to the copy fails", compareCopy(control, original, copy + "export { data as extraOracle };\n"), ['tests/c.ts: exports ["Pair","data","extraOracle=data","listed=local"], expected ["Pair","data","listed=local"]']);
+eq("the same alias on both sides passes", compareCopy(control, original + "export { data as extraOracle };\n", copy + "export { data as extraOracle };\n"), []);
+eq("an alias pointing at another declaration fails", compareCopy(control, original, copy.replace("export { local as listed }", "export { data as listed }")), ['tests/c.ts: exports ["Pair","data","listed=data"], expected ["Pair","data","listed=local"]']);
+eq("an original export of something not copied fails", compareCopy(control, original + 'export { assert as checked };\n', copy), ["prototypes/o.ts: exports checked as assert, which is not a copied declaration"]);
+eq("a name exported twice fails", compareCopy(control, original, copy + "export { data };\n"), ["tests/c.ts: data is exported twice"]);
+eq("a type-only alias list counts as an export", compareCopy(control, original + "export type { Pair as Couple };\n", copy).at(-1), 'tests/c.ts: exports ["Pair","data","listed=local"], expected ["Couple=Pair","Pair","data","listed=local"]');
+const refused = [
+  ["export default expression", "export default data;\n", "unsupported export form: export default"],
+  ["export default declaration", "export default function made(): number { return 1; }\n", "unsupported export form: export default"],
+  ["export =", "export = data;\n", "unsupported export form: export ="],
+  ["export * from", 'export * from "./o.ts";\n', 'unsupported export form: re-export from "./o.ts"'],
+  ["export * as namespace from", 'export * as all from "./o.ts";\n', 'unsupported export form: re-export from "./o.ts"'],
+  ["named re-export", 'export { data as again } from "./o.ts";\n', 'unsupported export form: re-export from "./o.ts"'],
+  ["exported import alias", 'export import fs = require("node:fs");\n', "unsupported export form: export import fs"],
+  ["exported namespace", "export namespace Space { export const x = 1; }\n", "unsupported export form: export namespace Space"]
+];
+for (const [form, line, message] of refused) {
+  for (const [side, path, originalText, copyText] of [["original", "prototypes/o.ts", original + line, copy], ["copy", "tests/c.ts", original, copy + line]]) {
+    eq(`${form} on the ${side} side is refused`, compareCopy(control, originalText, copyText).some((p) => p.startsWith(`${path}: ${message}`)), true);
+  }
+}
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

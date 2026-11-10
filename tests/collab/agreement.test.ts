@@ -83,7 +83,50 @@ test("a difference only in key order or map entry order is a disagreement", () =
   assert.throws(() => assertReplicasAgree("rows", [
     { order: "D1", replica: "A", output: [{ id: "R1", tags: new Set(["P", "S"]) }] },
     { order: "late-C", replica: "C", output: [{ id: "R1", tags: new Set(["S", "P"]) }] }
-  ]), /at rows\[0\]\.tags<0>: "P" against "S"/);
+  ]), /at rows\[0\]\["tags"\]<0>: "P" against "S"/);
+});
+
+function pair(expected: unknown, actual: unknown): ReplicaReading<unknown>[] {
+  return [{ order: "D1", replica: "A", output: expected }, { order: "late-C", replica: "C", output: actual }];
+}
+
+function arrayWithProperty(value: number): number[] {
+  return Object.assign([1], { x: value });
+}
+
+test("outputs that differ only in an empty key, an undefined value, a joined key, a hole or an array property are not equal", () => {
+  const cases: readonly (readonly [string, unknown, unknown, RegExp])[] = [
+    ["an empty key", {}, { "": 1 }, /at out: keys \[\] against \[""\]$/],
+    ["an undefined value against a missing key", { "": undefined }, {}, /at out: keys \[""\] against \[\]$/],
+    ["a key holding a separator against two keys", { "a\0b": undefined }, { a: 1, b: 2 }, /at out: keys \["a\\u0000b"\] against \["a","b"\]$/],
+    ["a hole against undefined", new Array<unknown>(1), [undefined], /at out\[0\]: hole against value$/],
+    ["an array's own property", arrayWithProperty(1), arrayWithProperty(2), /at out\["x"\]: 1 against 2$/]
+  ];
+  for (const [name, expected, actual, failure] of cases) assert.throws(() => assertReplicasAgree("out", pair(expected, actual)), failure, name);
+  assertReplicasAgree("out", pair(arrayWithProperty(1), arrayWithProperty(1)));
+  assertReplicasAgree("out", pair({ a: [1, undefined], b: new Map([["k", new Set([1])]]) }, { a: [1, undefined], b: new Map([["k", new Set([1])]]) }));
+});
+
+test("a value kind the helper does not compare exactly is refused, never declared equal", () => {
+  class Row {
+    readonly id = "R1";
+  }
+  const symbol = Symbol("k");
+  const cases: readonly (readonly [string, () => unknown, RegExp])[] = [
+    ["Date", () => new Date(0), /^Error: out: unsupported output kind Date$/],
+    ["RegExp", () => /a/, /^Error: out: unsupported output kind RegExp$/],
+    ["typed array", () => new Uint8Array([1]), /^Error: out: unsupported output kind Uint8Array$/],
+    ["class instance", () => new Row(), /^Error: out: unsupported output kind Row$/],
+    ["function", () => () => 1, /^Error: out: unsupported output kind function$/],
+    ["symbol value", () => symbol, /^Error: out: unsupported output kind symbol$/],
+    ["symbol key", () => ({ [symbol]: 1 }), /^Error: out: unsupported output kind symbol key Symbol\(k\)$/],
+    ["accessor property", () => Object.defineProperty({}, "a", { get: () => 1, enumerable: true }), /^Error: out\["a"\]: unsupported output kind accessor property$/],
+    ["nested Date", () => ({ when: new Date(0) }), /^Error: out\["when"\]: unsupported output kind Date$/]
+  ];
+  for (const [name, make, failure] of cases) assert.throws(() => assertReplicasAgree("out", pair(make(), make())), failure, name);
+  assert.throws(() => assertReplicasAgree("out", pair(Object.assign(new Map(), { x: 1 }), new Map())), /at out: keys \["x"\] against \[\]$/);
+  assert.throws(() => assertReplicasAgree("out", pair(new Date(0), new Date(1))), /unsupported output kind Date/);
+  assert.throws(() => assertReplicasAgree("out", pair(/a/, /b/)), /unsupported output kind RegExp/);
 });
 
 test("readings must cover more than one delivery order and include the late joiner", () => {
