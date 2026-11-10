@@ -9,6 +9,11 @@
       "paragraphStart": true,
       "audioText": "",
       "visualText": "<span class=\"who-anchor\" data-who=\"Mira\" contenteditable=\"false\">@Mira</span>",
+      "imageRef": { "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "width": 1, "height": 1, "mime": "image/png" },
+      "imageAnnotation": {
+        "imageRef": { "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "width": 1, "height": 1, "mime": "image/png" },
+        "marks": [{ "kind": "highlight", "color": "#ffb703", "width": 0.02, "points": [0.1, 0.2, 0.3, 0.4] }]
+      },
       "imageLinks": [
         { "name": "take.mp4", "size": 42, "poster": true, "location": { "kind": "path", "path": "C:\\shoot\\take.mp4" } },
         { "name": "notes.pdf", "size": 123, "location": { "kind": "bundled", "name": "notes.pdf" } }

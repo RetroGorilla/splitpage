@@ -1,37 +1,32 @@
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { bag, copy, records } from "./value.ts";
 import type { ProjectionBag } from "./value.ts";
 
 export const projectionRepo = fileURLToPath(new URL("../../../../", import.meta.url));
 
 export interface ProjectionReference {
+  name: string;
+  source: string;
+  selection: string[];
+  original: { bytes: number; sha256: string };
   document: ProjectionBag;
-  saved: string;
+  appSaved: { bytes: number; sha256: string; full?: string };
 }
 
-const worker = `
-import { readFileSync } from 'node:fs';
-await import('./src/test/_dom.mjs');
-const { migrateRows, withDocumentPorts } = await import('./src/bootstrap/document-ports.ts');
-const { migrateDocument } = await import('./src/core/migrate.ts');
-const { STATE_FIELDS } = await import('./src/core/merge/state-fields.ts');
-const { buildSplitpageFile } = await import('./src/adapters/formats/project-file.ts');
-const { parseSplitpageFile } = await import('./src/adapters/formats/splitpage-file.ts');
-const values = JSON.parse(readFileSync(0, 'utf8'));
-const results = values.map(value => {
-  const parsed = parseSplitpageFile(typeof value === 'string' ? value : JSON.stringify(value));
-  const document = withDocumentPorts(STATE_FIELDS, ports => migrateDocument(parsed, { kind: 'file' }, ports));
-  return { document, saved: buildSplitpageFile({ document }, { migrateRows }) };
-});
-process.stdout.write(JSON.stringify(results));
-process.exit(0);
-`;
+export function projectionReferences(): ProjectionReference[] {
+  const manifest = JSON.parse(readFileSync(new URL("../../test/proj/app-reference.json", import.meta.url), "utf8")) as { version: number; fixtures: ProjectionReference[] };
+  if (manifest.version !== 1) throw new Error("Unsupported projection reference manifest");
+  return manifest.fixtures;
+}
 
-export function appReferences(values: readonly (ProjectionBag | string)[]): ProjectionReference[] {
-  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", worker], {
-    cwd: projectionRepo, input: JSON.stringify(values), encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
-    timeout: 60000, windowsHide: true
-  });
-  if (result.status !== 0) throw new Error(`Reference serializer failed: ${result.stderr || String(result.error)}`);
-  return JSON.parse(result.stdout) as ProjectionReference[];
+export function serializeProjection(document: ProjectionBag): string {
+  const result = copy(document);
+  for (const row of records(result.rows)) {
+    if (Object.hasOwn(row, "imageRef") && row.imageRef === null) {
+      delete row.imageRef;
+      row.visualImage = null;
+    }
+  }
+  return JSON.stringify(bag(result), null, 2);
 }

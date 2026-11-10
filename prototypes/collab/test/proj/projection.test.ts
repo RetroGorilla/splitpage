@@ -5,8 +5,8 @@ import * as Y from "yjs";
 import { fromDocument, toDocument } from "../../src/proj/document.ts";
 import { inventoryFields, runRoundTrips } from "../../src/proj/experiment.ts";
 import { assertProjectionMapping, projectionFieldMapping } from "../../src/proj/mapping.ts";
-import { appReferences } from "../../src/proj/reference.ts";
 import { mapValue } from "../../src/schema.ts";
+import { projectionReferences } from "../../src/proj/reference.ts";
 
 test("PROJ inventory: every current field row has a location in both candidates", () => {
   const inventory = inventoryFields();
@@ -39,13 +39,11 @@ for (const candidate of ["A", "B"] as const) {
       productionTags: [{ id: "t1", cat: "prop", name: "Mug", mystery: { a: 5 } }],
       brollShots: [{ id: "s1", name: "No key", origin: "list", mystery: 6 }]
     };
-    const reference = appReferences([raw])[0];
-    assert.ok(reference);
-    const replica = fromDocument(reference.document, candidate);
+    const replica = fromDocument(raw, candidate);
     const other = new Y.Doc();
     try {
       Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
-      assert.deepEqual(toDocument(other, candidate), reference.document);
+      assert.deepEqual(toDocument(other, candidate), raw);
     } finally { replica.destroy(); other.destroy(); }
   });
 
@@ -61,6 +59,36 @@ for (const candidate of ["A", "B"] as const) {
       assert.equal(comment.rowId, "gap-row");
       assert.equal(comment.field, "visualText");
       assert.equal(comment.body, '<img class="comment-img" data-blob="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">');
+    } finally { replica.destroy(); other.destroy(); }
+  });
+
+  test(`PROJ transport equality protects titleVersion, paragraphStart and shot props ${candidate}`, () => {
+    const source = {
+      schema: 2, title: "Fields", titleVersion: "v12", rows: [{ id: "R1", audioText: "a", visualText: "", paragraphStart: true }],
+      brollShots: [{ id: "S1", props: [{ id: "t_cup", name: "Cup" }] }]
+    };
+    const replica = fromDocument(source, candidate);
+    const other = new Y.Doc();
+    try {
+      Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
+      const projected = toDocument(other, candidate);
+      assert.equal(projected.titleVersion, "v12");
+      assert.equal((projected.rows as Record<string, unknown>[])[0]?.paragraphStart, true);
+      assert.deepEqual((projected.brollShots as Record<string, unknown>[])[0]?.props, [{ id: "t_cup", name: "Cup" }]);
+    } finally { replica.destroy(); other.destroy(); }
+  });
+
+  test(`PROJ highlight annotation is transported unchanged ${candidate}`, () => {
+    const reference = projectionReferences().find(reference => reference.name === "supplement.splitpage");
+    assert.ok(reference);
+    const replica = fromDocument(reference.document, candidate);
+    const other = new Y.Doc();
+    try {
+      Y.applyUpdate(other, Y.encodeStateAsUpdate(replica.doc));
+      const row = (toDocument(other, candidate).rows as Record<string, unknown>[])[0];
+      assert.deepEqual((row?.imageAnnotation as Record<string, unknown>).marks, [
+        { kind: "highlight", color: "#ffb703", width: 0.02, points: [0.1, 0.2, 0.3, 0.4] }
+      ]);
     } finally { replica.destroy(); other.destroy(); }
   });
 }

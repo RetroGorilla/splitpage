@@ -20,9 +20,35 @@ function unescape(value: string): string {
 }
 
 function attributes(token: string): Record<string, string> {
-  const result: Record<string, string> = {};
+  const result = Object.create(null) as Record<string, string>;
   for (const match of token.matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
     result[match[1] as string] = unescape(match[2] ?? match[3] ?? match[4] ?? "");
+  }
+  return result;
+}
+
+function htmlTokens(html: string): string[] {
+  const result: string[] = [];
+  let start = 0;
+  while (start < html.length) {
+    if (html[start] !== "<") {
+      const next = html.indexOf("<", start);
+      const end = next < 0 ? html.length : next;
+      result.push(html.slice(start, end));
+      start = end;
+      continue;
+    }
+    let quote: string | null = null;
+    let end = start + 1;
+    for (; end < html.length; end++) {
+      const character = html[end];
+      if (quote) { if (character === quote) quote = null; }
+      else if (character === '"' || character === "'") quote = character;
+      else if (character === ">") break;
+    }
+    if (end === html.length) throw new Error("Unterminated sanitized HTML tag");
+    result.push(html.slice(start, end + 1));
+    start = end + 1;
   }
   return result;
 }
@@ -37,7 +63,7 @@ export function htmlToDelta(html: string, tags: unknown, comments: unknown): Pro
   function current(): Record<string, unknown> {
     return Object.assign({}, ...stack.map(entry => entry.attrs)) as Record<string, unknown>;
   }
-  for (const token of html.match(/<[^>]*>|[^<]+/g) ?? []) {
+  for (const token of htmlTokens(html)) {
     if (token[0] !== "<") {
       if (atom) atom.label += unescape(token);
       else result.push({ insert: unescape(token).replace(/[\n\r]/g, " "), attributes: current() });

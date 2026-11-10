@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import * as Y from "yjs";
 import { canonicalFixtures } from "./fixtures.ts";
 import { fromDocument, toDocument } from "./document.ts";
-import { appReferences } from "./reference.ts";
+import { projectionReferences, serializeProjection } from "./reference.ts";
 import type { ProjectionBag } from "./value.ts";
 import type { SchemaCandidate } from "../schema.ts";
 
@@ -38,7 +39,14 @@ export function inventoryFields(): string[] {
 
 export function runRoundTrips() {
   const fixtures = canonicalFixtures();
-  const references = appReferences(fixtures.map(fixture => fixture.bytes));
+  const references = projectionReferences();
+  for (const [index, reference] of references.entries()) {
+    const fixture = fixtures[index];
+    if (!fixture || fixture.name !== reference.name) throw new Error("Reference fixture order changed");
+    if (Buffer.byteLength(fixture.bytes) !== reference.original.bytes || createHash("sha256").update(fixture.bytes).digest("hex") !== reference.original.sha256) throw new Error(`Stale reference source: ${fixture.name}`);
+    const saved = serializeProjection(reference.document);
+    if (Buffer.byteLength(saved) !== reference.appSaved.bytes || createHash("sha256").update(saved).digest("hex") !== reference.appSaved.sha256) throw new Error(`Prototype file encoding differs from direct app save: ${fixture.name}`);
+  }
   const projections: { candidate: SchemaCandidate; index: number; document: ProjectionBag; encoded: number; plainDifferences: ProjectionDifference[] }[] = [];
   for (const candidate of ["A", "B"] as const) {
     references.forEach((reference, index) => {
@@ -57,22 +65,22 @@ export function runRoundTrips() {
       }
     });
   }
-  const saved = appReferences([...fixtures.map(fixture => fixture.bytes), ...projections.map(projection => projection.document)]).slice(fixtures.length);
-  return projections.map((projection, index) => {
+  return projections.map(projection => {
     const fixture = fixtures[projection.index];
     const reference = references[projection.index];
-    const result = saved[index];
-    if (!fixture || !reference || !result) throw new Error("Missing projection fixture");
+    if (!fixture || !reference) throw new Error("Missing projection fixture");
+    const saved = serializeProjection(projection.document);
+    const appSaved = reference.appSaved.full ?? fixture.bytes;
     return {
       candidate: projection.candidate, fixture: fixture.name, source: fixture.source,
-      fileBytes: Buffer.byteLength(fixture.bytes), savedBytes: Buffer.byteLength(result.saved), encodedBytes: projection.encoded,
-      byteIdentical: fixture.bytes === result.saved, appSaveIdentical: fixture.bytes === reference.saved,
-      sameAsAppSave: reference.saved === result.saved,
-      originalDifference: firstByteDifference(fixture.bytes, result.saved),
-      appSaveDifference: firstByteDifference(reference.saved, result.saved),
-      appNormalizations: differences(JSON.parse(fixture.bytes), JSON.parse(reference.saved)),
+      fileBytes: Buffer.byteLength(fixture.bytes), savedBytes: Buffer.byteLength(saved), encodedBytes: projection.encoded,
+      byteIdentical: fixture.bytes === saved, appSaveIdentical: fixture.bytes === appSaved,
+      sameAsAppSave: reference.appSaved.bytes === Buffer.byteLength(saved) && reference.appSaved.sha256 === createHash("sha256").update(saved).digest("hex"),
+      originalDifference: firstByteDifference(fixture.bytes, saved),
+      appSaveDifference: firstByteDifference(appSaved, saved),
+      appNormalizations: differences(JSON.parse(fixture.bytes), JSON.parse(appSaved)),
       projectionDifferences: projection.plainDifferences,
-      savedDifferences: differences(JSON.parse(reference.saved), JSON.parse(result.saved))
+      savedDifferences: differences(JSON.parse(appSaved), JSON.parse(saved))
     };
   });
 }

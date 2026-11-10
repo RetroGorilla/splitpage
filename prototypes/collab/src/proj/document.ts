@@ -50,7 +50,7 @@ function gallerySlot(doc: Y.Doc, row: ProjectionBag, slot: ProjectionBag, index:
   const picture: ProjectionBag = {};
   for (const key of ["imageRef", "name", "annotation"]) setIf(slot, key, picture);
   value.set("picture", picture);
-  value.set("extra", without(slot, ["imageRef", "name", "annotation", "links"]));
+  value.set("extra", JSON.stringify(without(slot, ["imageRef", "name", "annotation", "links"])));
   const links = new Y.Map<unknown>();
   value.set("links", links);
   records(slot.links).forEach((link, linkIndex) => {
@@ -195,7 +195,7 @@ function registry(doc: Y.Doc, root: string, fields: readonly string[]): Projecti
 
 function galleryFor(doc: Y.Doc, id: string): ProjectionBag[] {
   return ranked(doc.getMap("gallery")).filter(([, value]) => value.get("beat") === id).map(([, value]) => {
-    const result = { ...copy(bag(value.get("extra") ?? {})), ...copy(bag(value.get("picture"))) };
+    const result = { ...JSON.parse(String(value.get("extra") ?? "{}")) as ProjectionBag, ...copy(bag(value.get("picture"))) };
     const links = ranked(mapValue(value.get("links"))).map(([, link]) => readRecord(link, ["href", "name", "size", "duration", "poster"]));
     if (links.length || (value.get("keys") as string[]).includes("links")) result.links = links;
     return ordered(result, value.get("keys"));

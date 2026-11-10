@@ -1,0 +1,26 @@
+{
+  "schema": 2,
+  "title": "Sanitized attribute character cases",
+  "docId": "dbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "rows": [
+    { "id": "less", "audioText": "", "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"A < B\" contenteditable=\"false\">less</span>" },
+    { "id": "amp", "audioText": "", "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"A &amp; B\" contenteditable=\"false\">amp</span>" },
+    { "id": "double", "audioText": "", "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"A &quot;B&quot;\" contenteditable=\"false\">double</span>" },
+    { "id": "single", "audioText": "", "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"A 'B'\" contenteditable=\"false\">single</span>" },
+    { "id": "entities", "audioText": "", "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"A &amp;gt; B\" contenteditable=\"false\">entity text</span>" },
+    { "id": "numeric", "audioText": "", "visualText": "<span class=\"who-anchor\" data-who=\"Mira &#62; &#x1f3ac;\" contenteditable=\"false\">@Mira &gt; 🎬</span>" },
+    { "id": "who-combined", "audioText": "", "visualText": "<span class=\"who-anchor\" data-who=\"Mira &quot;Q&quot; 'S' &amp; Nia < C > D\" contenteditable=\"false\">@Mira &quot;Q&quot; 'S' &amp; Nia &lt; C &gt; D</span>" },
+    { "id": "href", "audioText": "", "visualText": "<a href=\"https://example.com/?q=<>&amp;quote=&quot;&amp;apostrophe='\" target=\"_blank\" rel=\"noopener\">link</a>" },
+    { "id": "nbsp", "audioText": "", "visualText": "<span class=\"who-anchor\" data-who=\"Mira&nbsp;Nia\" contenteditable=\"false\">@Mira Nia</span>" }
+  ],
+  "comments": [],
+  "people": [],
+  "productionTags": [
+    { "id": "tag-less", "cat": "prop", "name": "A < B" },
+    { "id": "tag-amp", "cat": "prop", "name": "A & B" },
+    { "id": "tag-double", "cat": "prop", "name": "A \"B\"" },
+    { "id": "tag-single", "cat": "prop", "name": "A 'B'" },
+    { "id": "tag-entities", "cat": "prop", "name": "A &gt; B" }
+  ],
+  "brollShots": []
+}

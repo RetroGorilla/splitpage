@@ -1,0 +1,22 @@
+{
+  "schema": 2,
+  "title": "Quoted who attribute",
+  "docId": "d99999999999999999999999999999999",
+  "rev": 0,
+  "wordsPerMinute": 150,
+  "rows": [
+    {
+      "id": "quote-row",
+      "visualText": "<span class=\"who-anchor\" data-who=\"Mira > Nia\" contenteditable=\"false\">@Mira &gt; Nia</span>",
+      "audioText": "",
+      "status": "todo",
+      "updatedAt": "",
+      "updatedBy": null,
+      "visualImage": null
+    }
+  ],
+  "comments": [],
+  "people": [],
+  "productionTags": [],
+  "brollShots": []
+}

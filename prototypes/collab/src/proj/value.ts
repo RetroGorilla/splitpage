@@ -23,7 +23,7 @@ export function rank(index: number): string {
 export function ordered(values: ProjectionBag, keys: unknown): ProjectionBag {
   const result: ProjectionBag = {};
   for (const key of [...(Array.isArray(keys) ? keys as string[] : []), ...Object.keys(values)]) {
-    if (Object.hasOwn(values, key)) result[key] = values[key];
+    if (Object.hasOwn(values, key)) Object.defineProperty(result, key, { value: values[key], enumerable: true, configurable: true, writable: true });
   }
   return result;
 }
@@ -33,13 +33,13 @@ export function writeRecord(target: Y.Map<unknown>, source: ProjectionBag, field
   const extra: ProjectionBag = {};
   for (const [key, value] of Object.entries(source)) {
     if (fields.includes(key)) target.set(key, copy(value));
-    else extra[key] = copy(value);
+    else Object.defineProperty(extra, key, { value: copy(value), enumerable: true, configurable: true, writable: true });
   }
-  target.set("extra", extra);
+  target.set("extra", JSON.stringify(extra));
 }
 
 export function readRecord(source: Y.Map<unknown>, fields: readonly string[]): ProjectionBag {
-  const result = copy(bag(source.get("extra") ?? {}));
+  const result = JSON.parse(String(source.get("extra") ?? "{}")) as ProjectionBag;
   for (const key of fields) if (source.has(key)) result[key] = copy(source.get(key));
   return ordered(result, source.get("keys"));
 }
