@@ -86,11 +86,13 @@ export class ReplicaHarness {
   readonly bob: SchemaReplica;
   readonly queue: DeliveryQueue;
   readonly replicas: SchemaReplica[];
+  private readonly initializeRoots: boolean;
 
-  constructor(candidate: SchemaCandidate, beats: readonly SeedBeat[], swapped = false) {
-    const seed = new SchemaReplica(candidate, 10, this.identities);
-    this.alice = new SchemaReplica(candidate, swapped ? 2 : 1, this.identities);
-    this.bob = new SchemaReplica(candidate, swapped ? 1 : 2, this.identities);
+  constructor(candidate: SchemaCandidate, beats: readonly SeedBeat[], swapped = false, initializeRoots = true) {
+    this.initializeRoots = initializeRoots;
+    const seed = new SchemaReplica(candidate, 10, this.identities, initializeRoots);
+    this.alice = new SchemaReplica(candidate, swapped ? 2 : 1, this.identities, initializeRoots);
+    this.bob = new SchemaReplica(candidate, swapped ? 1 : 2, this.identities, initializeRoots);
     try {
       seed.seed(beats);
       const update = Y.encodeStateAsUpdate(seed.doc);
@@ -103,8 +105,8 @@ export class ReplicaHarness {
     this.queue = new DeliveryQueue({ A: this.alice, B: this.bob });
   }
 
-  lateJoin(source: SchemaReplica = this.alice): SchemaReplica {
-    const carol = new SchemaReplica(source.candidate, 3, this.identities);
+  lateJoin(source: SchemaReplica = this.alice, initializeRoots = this.initializeRoots): SchemaReplica {
+    const carol = new SchemaReplica(source.candidate, 3, this.identities, initializeRoots);
     Y.applyUpdate(carol.doc, Y.encodeStateAsUpdate(source.doc), "delivery");
     this.replicas.push(carol);
     this.queue.addReplica("C", carol);

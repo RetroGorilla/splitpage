@@ -5,7 +5,7 @@ import type { SchemaReplica } from "./schema.ts";
 export function structureManager(replica: SchemaReplica): Y.UndoManager {
   return new Y.UndoManager([
     replica.doc.getText("flow"), replica.doc.getMap("segments"), replica.doc.getArray("order"),
-    replica.doc.getMap("beats"), replica.doc.getMap("comments"), replica.doc.getMap("replies")
+    replica.doc.getMap("beats"), replica.doc.getMap("comments"), replica.doc.getMap("replies"), replica.doc.getMap("statusEvents")
   ] as Y.AbstractType<unknown>[], { trackedOrigins: new Set([replica.localOrigin]), captureTimeout: 1000 });
 }
 

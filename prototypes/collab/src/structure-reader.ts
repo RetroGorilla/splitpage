@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import type { CollabCharacter, CollabMarks, CollabModel, CollabRow, IdentityBook } from "./model.ts";
 import type { ReplicaCarets } from "./reader.ts";
 import type { SchemaCandidate } from "./schema.ts";
+import { projectComments, projectStatus, projectStructuralMarks } from "./marks/projection.ts";
 
 interface StructureSpan {
   row: CollabRow;
@@ -104,7 +105,8 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
     if (typeof beat.get("status") === "string") row.status = String(beat.get("status"));
     const removal = activeRemovals.find(item => item.get("beat") === row.id || row.characters.some(character => hasIdentity(character, item)));
     if (removal) {
-      model.recovery.push({ row, by: String(removal.get("by")), edited: row.characters.filter(character => !hasIdentity(character, removal)).map(character => character.notation) });
+      const splitBy = removal.get("beat") === row.id ? undefined : beat.get("splitBy");
+      model.recovery.push({ row, by: String(removal.get("by")), edited: row.characters.filter(character => !hasIdentity(character, removal)).map(character => character.notation), ...(typeof splitBy === "string" ? { splitBy } : {}) });
       continue;
     }
     const joins = record(beat.get("joins"));
@@ -189,5 +191,8 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
       model.carets[writer] = { ...start, selection: { beat: end.beat, from: start.offset, to: end.offset } };
     }
   }
+  projectStructuralMarks(model, doc);
+  projectComments(model, doc);
+  projectStatus(model, doc);
   return model;
 }

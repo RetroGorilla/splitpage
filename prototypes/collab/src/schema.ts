@@ -46,17 +46,27 @@ export function identityAt(text: Y.Text, index: number): CollabIdentity {
   return { client: identity.client, clock: identity.clock };
 }
 
+export function initializeSchemaRoots(doc: Y.Doc, candidate: SchemaCandidate): void {
+  if (candidate === "A") doc.getText("flow");
+  else {
+    doc.getMap("segments");
+    doc.getArray("order");
+  }
+  for (const name of ["beats", "visuals", "gallery", "comments", "replies", "people", "tags", "shots", "meta", "removalRecords", "retiredJoins", "statusEvents", "retiredStatus"]) doc.getMap(name);
+}
+
 export class SchemaReplica {
   readonly doc: Y.Doc;
   readonly localOrigin = {};
   readonly candidate: SchemaCandidate;
   readonly identities: IdentityBook;
 
-  constructor(candidate: SchemaCandidate, client: number, identities: IdentityBook) {
+  constructor(candidate: SchemaCandidate, client: number, identities: IdentityBook, initializeRoots = true) {
     this.doc = new Y.Doc();
     this.doc.clientID = client;
     this.candidate = candidate;
     this.identities = identities;
+    if (initializeRoots) initializeSchemaRoots(this.doc, candidate);
   }
 
   private texts(): { text: Y.Text; head: string | null }[] {
@@ -179,12 +189,13 @@ export class SchemaReplica {
     }, this.localOrigin);
   }
 
-  split(beat: string, offset: number, newBeat: string, name: string): void {
+  split(beat: string, offset: number, newBeat: string, name: string, by?: string): void {
     this.doc.transact(() => {
       const { text, start } = this.locate(beat);
       text.insertEmbed(start + offset, { b: newBeat }, {});
       this.identities.bind(name, identityAt(text, start + offset));
       this.addBeat(newBeat);
+      if (by) mapValue(this.doc.getMap("beats").get(newBeat)).set("splitBy", by);
     }, this.localOrigin);
   }
 

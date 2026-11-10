@@ -9,7 +9,7 @@ import { readReplica } from "../src/reader.ts";
 import type { ReplicaCaretAnchor, ReplicaCarets } from "../src/reader.ts";
 import type { SchemaCandidate } from "../src/schema.ts";
 import { copyOnJoin, copyOnRestore, deleteStaleOffsets, omitLength, replaceWithStaleBeat, singleCommentMark } from "../src/defects.ts";
-import { commentsOracle, deletionOracle, joinNarrationOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
+import { commentsOverlapOracle, deletionOracle, joinNarrationOracle, lengthOracle, removedOracle, restorationOracle, splitOracle, splitUndoOracle, swappedSplitOracle } from "./oracles.ts";
 import { insertWithCaret, restoreStructuralAnchor, splitWithCaret } from "../src/structure-selection.ts";
 
 function checkEvery(harness: ReplicaHarness, oracle: ScriptOracle, carets: ReplicaCarets): void {
@@ -97,7 +97,7 @@ for (const candidate of ["A", "B"] as const) {
       for (const replica of harness.replicas) {
         const actual = readReplica(replica.doc, candidate, harness.identities);
         assert.equal(Object.keys(actual.rows[0]?.characters[2]?.marks ?? {}).length, 1);
-        assert.throws(() => checkModel(actual, commentsOracle, harness.identities, "T11"), /T11.rows\[0\].characters\[2\].marks.c:C1/);
+        assert.throws(() => checkModel(actual, commentsOverlapOracle, harness.identities, "T11"), /T11.rows\[0\].characters\[2\].marks.c:C1/);
       }
     } finally {
       harness.destroy();
@@ -122,7 +122,7 @@ for (const candidate of ["A", "B"] as const) {
       harness.alice.format("R1", 1, 2, { "c:C1": true });
       harness.bob.format("R1", 2, 2, { "c:C2": true });
       harness.queue.flush("D1");
-      checkEvery(harness, commentsOracle, new Map());
+      checkEvery(harness, commentsOverlapOracle, new Map());
     } finally {
       harness.destroy();
     }
