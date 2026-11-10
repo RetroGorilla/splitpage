@@ -7,6 +7,7 @@ import { caretAfterInserted, structuralCaret } from "../structure-selection.ts";
 import { createHeading, removeHeading } from "../structure.ts";
 import { writeStatusEvent } from "./history.ts";
 import type { CommandHistory, CommandPart } from "./history.ts";
+import { hiddenKey, textIndex } from "./hidden.ts";
 import { contentAt, itemAt, pointAt, resolveIdentity, selectionOf } from "./identity.ts";
 import type { SelectionRecord, StoredContent } from "./identity.ts";
 
@@ -27,7 +28,20 @@ export function insertText(history: CommandHistory, beat: string, offset: number
   return { position: Y.createRelativePositionFromTypeIndex(text, start + offset + value.length, -1) };
 }
 
+function hideRange(history: CommandHistory, beat: string, from: number, to: number): ReplicaCaretAnchor {
+  const replica = history.replica;
+  const { text, start } = replica.locate(beat);
+  const first = textIndex(text, start, from);
+  const end = textIndex(text, start, to - 1) + 1;
+  const selection: SelectionRecord = { start: pointAt(text, first, 0), end: pointAt(text, end, -1) };
+  const parts = formatParts(text, first, end, { [hiddenKey]: true });
+  replica.doc.transact(() => text.format(first, end - first, { [hiddenKey]: true }), replica.localOrigin);
+  history.record({ label: "delete", parts, selection });
+  return { position: Y.createRelativePositionFromTypeIndex(text, first, -1) };
+}
+
 export function deleteRange(history: CommandHistory, beat: string, from: number, to: number): ReplicaCaretAnchor {
+  if (history.deleteRule === "hide") return hideRange(history, beat, from, to);
   const replica = history.replica;
   const { text, start } = replica.locate(beat);
   const selection: SelectionRecord = { start: pointAt(text, start + from, 0), end: pointAt(text, start + to, -1) };

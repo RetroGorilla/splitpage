@@ -133,6 +133,7 @@ export class CommandHistory {
   readonly bound: number;
   readonly defect: UndoDefect | null;
   readonly route: RestoreRoute;
+  readonly deleteRule: "remove" | "hide";
   dropped = 0;
   private restoredHere = new Map<string, CollabIdentity>();
   private popped = new Map<string, CollabIdentity>();
@@ -154,8 +155,9 @@ export class CommandHistory {
     this.capture = capture;
   };
 
-  constructor(replica: SchemaReplica, options: { bound?: number; defect?: UndoDefect; onDrop?: (entry: CommandRecord) => void; route?: RestoreRoute } = {}) {
+  constructor(replica: SchemaReplica, options: { bound?: number; defect?: UndoDefect; onDrop?: (entry: CommandRecord) => void; route?: RestoreRoute; deleteRule?: "remove" | "hide" } = {}) {
     this.replica = replica;
+    this.deleteRule = options.deleteRule ?? "remove";
     this.bound = options.bound ?? 200;
     this.defect = options.defect ?? null;
     this.onDrop = options.onDrop ?? null;
