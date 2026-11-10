@@ -6,7 +6,8 @@
     "character": "Z",
     "count": 3145728
   },
-  "expectedAttempts": 1,
-  "observedAttempts": 2,
-  "checker": "Refused policy must not reconnect"
+  "totalAttempts": 2,
+  "checker": "Refused policy must not reconnect",
+  "expectedAfterRefusal": 0,
+  "observedAfterRefusal": 1
 }

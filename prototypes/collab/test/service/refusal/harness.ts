@@ -12,14 +12,71 @@ import { fixture, readRecoveredRows, until } from "../harness.ts";
 export type RefusalExpectation = "accepted" | "invalid-update" | "state-too-large" | "rate-window" | "frame-too-large" | "malformed-frame" | "access-removed" | "merged-state-too-large";
 type Sent = { expectation: RefusalExpectation; subtype: number; payload: Uint8Array; applied: boolean | null };
 
+function observeProxyRefusal(refused: () => void): (chunk: Buffer) => void {
+  let buffer = Buffer.alloc(0);
+  let upgraded = false;
+  let fragments: Buffer[] = [];
+  return chunk => {
+    buffer = Buffer.concat([buffer, chunk]);
+    if (!upgraded) {
+      const end = buffer.indexOf("\r\n\r\n");
+      if (end < 0) return;
+      assert.match(buffer.subarray(0, end).toString(), /^HTTP\/1\.1 101 /);
+      buffer = buffer.subarray(end + 4);
+      upgraded = true;
+    }
+    while (buffer.length >= 2) {
+      const first = buffer[0] ?? 0;
+      const second = buffer[1] ?? 0;
+      assert.equal(first & 0x70, 0, "Proxy observation requires uncompressed server frames");
+      assert.equal(second & 0x80, 0, "Server frames must be unmasked");
+      let length = second & 0x7f;
+      let offset = 2;
+      if (length === 126) {
+        if (buffer.length < 4) return;
+        length = buffer.readUInt16BE(2); offset = 4;
+      } else if (length === 127) {
+        if (buffer.length < 10) return;
+        const wide = buffer.readBigUInt64BE(2);
+        assert.ok(wide <= 41943040n, "Bound the proxy's server-frame buffering");
+        length = Number(wide); offset = 10;
+      }
+      if (buffer.length < offset + length) return;
+      const payload = buffer.subarray(offset, offset + length);
+      buffer = buffer.subarray(offset + length);
+      const opcode = first & 0x0f;
+      if (opcode === 8 && payload.length >= 2 && payload.readUInt16BE(0) === 1009) refused();
+      if (opcode === 1 || opcode === 2) fragments = [payload];
+      else if (opcode === 0) fragments.push(payload);
+      else continue;
+      if (!(first & 0x80)) continue;
+      const message = readFrame(Buffer.concat(fragments));
+      fragments = [];
+      if (message.kind !== 5) continue;
+      let prefix = 0;
+      while (true) {
+        const byte = message.payload[prefix++];
+        assert.notEqual(byte, undefined, "Stateless string must have a complete length prefix");
+        if (byte !== undefined && byte < 128) break;
+      }
+      const notice: unknown = JSON.parse(new TextDecoder().decode(message.payload.subarray(prefix)));
+      if (notice && typeof notice === "object" && "rejected" in notice && typeof notice.rejected === "string") refused();
+    }
+  };
+}
+
 export async function countingProxy(target: number): Promise<{
-  port: number; attempts: () => number; close: () => Promise<void>;
+  port: number; attempts: () => number; refusalSeen: () => boolean; afterRefusal: () => number; close: () => Promise<void>;
 }> {
   let accepts = 0;
+  let refusalSeen = false;
+  let afterRefusal = 0;
   const sockets = new Set<Socket>();
   const proxy = createServer(incoming => {
     accepts++;
+    if (refusalSeen) afterRefusal++;
     const outgoing = connect(target, "127.0.0.1");
+    outgoing.on("data", observeProxyRefusal(() => { refusalSeen = true; }));
     for (const socket of [incoming, outgoing]) {
       sockets.add(socket);
       socket.on("error", () => { incoming.destroy(); outgoing.destroy(); });
@@ -32,7 +89,7 @@ export async function countingProxy(target: number): Promise<{
   const address = proxy.address();
   assert.ok(address && typeof address !== "string");
   return {
-    port: address.port, attempts: () => accepts,
+    port: address.port, attempts: () => accepts, refusalSeen: () => refusalSeen, afterRefusal: () => afterRefusal,
     async close() {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) => proxy.close(error => error ? reject(error) : resolve()));
@@ -147,8 +204,9 @@ export class RefusalClient {
 
   edit(text: string): void { this.document.getText("R1").insert(this.document.getText("R1").length, text); }
 
-  assertDetached(attempts: number, expectedAttempts: number): void {
-    assert.equal(attempts, expectedAttempts, "Refused policy must not reconnect");
+  assertDetached(proxy: { refusalSeen: () => boolean; afterRefusal: () => number }): void {
+    assert.equal(proxy.refusalSeen(), true, "Proxy must independently observe the first refusal");
+    assert.equal(proxy.afterRefusal(), 0, "Refused policy must not reconnect");
     assert.equal(this.socket.shouldConnect, false, "Refused policy must cancel connection retries");
     assert.equal(this.socket.reconnectTimeout, null, "Refused policy must cancel scheduled reconnect");
     assert.equal(this.socket.configuration.providerMap.has("fixture"), false, "Refused provider must detach");

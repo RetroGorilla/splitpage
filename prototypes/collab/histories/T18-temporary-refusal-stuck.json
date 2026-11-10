@@ -1,0 +1,10 @@
+{
+  "shows": "The original rate retry oracle ended before checking saved status and explanation; all refused work could be acknowledged while the tracker and policy remained stuck.",
+  "originalHead": "aa3ddaf8e7937b93f9b0562d2c5c8771e7ec5495",
+  "replay": "Run the extended T18 rate-limit test with src/service/receipts.ts and src/service/refusal/policy.ts from the original head.",
+  "fixture": { "initial": "abcd", "insertions": { "character": "e", "client": 11, "clocks": "0..199" }, "acceptedInitially": 50, "temporaryRefusals": 150 },
+  "afterForceSync": { "serverIdentities": "7:0..3 and 11:0..199", "lateJoinIdentities": "7:0..3 and 11:0..199", "outstandingReceipts": 0 },
+  "originalObserved": { "status": "Saved on this device, sending", "explanation": "refusal.retry-after" },
+  "trackerOnlyFixObserved": { "status": "Your changes saved to server", "explanation": "refusal.retry-after", "publication": "retry-after" },
+  "expected": { "status": "Your changes saved to server", "explanation": null, "reason": null, "publication": "attached" }
+}

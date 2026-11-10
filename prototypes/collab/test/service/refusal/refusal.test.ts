@@ -7,6 +7,8 @@ import { countingProxy, frame, RefusalClient } from "./harness.ts";
 import { observeDependencies } from "./dependencies.ts";
 import { observeRevocation } from "./revocation.ts";
 import { observeStateLimit } from "./state-limit.ts";
+import { rateSavedIdentities } from "./rate-expected.ts";
+import { observeRefusedCoverage } from "./receipt-coverage.ts";
 
 const keptView = {
   status: "Saved on this device", explanation: "refusal.export-standalone-then-rejoin",
@@ -35,23 +37,49 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
       client.expect("state-too-large");
       client.edit("Z".repeat(3145728));
       const counter = proxy;
-      await until(() => counter.attempts() >= 2, "mutation opens a second real TCP connection");
+      await until(() => counter.afterRefusal() >= 1, "mutation opens a real TCP connection after the proxy observes refusal");
       client.socket.disconnect();
-      assert.throws(() => client.assertDetached(counter.attempts(), 1), /must not reconnect/);
+      assert.throws(() => client.assertDetached(counter), /must not reconnect/);
       mutationRejected = true;
       await writeFile(new URL("../../../histories/T19-reconnecting-policy.json", import.meta.url), `${JSON.stringify({
         shows: "The harness rejects a policy that reconnects after its first permanent refusal, before any passing trace counts.",
         replay: "node --test --test-concurrency=1 test/service/refusal/refusal.test.ts",
         initial: "abcd", insertion: { character: "Z", count: 3145728 },
-        expectedAttempts: 1, observedAttempts: proxy.attempts(), checker: "Refused policy must not reconnect",
+        totalAttempts: proxy.attempts(), checker: "Refused policy must not reconnect",
+        expectedAfterRefusal: 0, observedAfterRefusal: proxy.afterRefusal(),
       }, null, 2)}\n`);
     } finally { for (const client of clients) client.destroy(); await proxy?.close(); await work.clean(); }
   });
 
   assert.equal(mutationRejected, true, "No passing trace counts until the reconnect defect is rejected");
+  await t.test("T19 honest transport retry before first refusal still detaches without reconnecting after refusal", async () => {
+    const work = await workspace();
+    let client: RefusalClient | undefined;
+    let proxy: Awaited<ReturnType<typeof countingProxy>> | undefined;
+    try {
+      const server = await work.start({ REFUSAL_POLICY: "1" });
+      proxy = await countingProxy(server.port);
+      client = new RefusalClient(proxy.port, ["accepted"]);
+      await client.connect(); await client.saved();
+      client.expect("accepted");
+      client.socket.webSocket?.close();
+      const counter = proxy;
+      await until(() => counter.attempts() === 2 && client?.sent.length === 2 && client.sent.at(-1)?.applied === true,
+        "ordinary transport reconnect completes before any refusal");
+      assert.equal(client.notices.length, 0);
+      await client.saved();
+      client.expect("state-too-large"); client.edit("Z".repeat(3145728));
+      await until(() => client?.closes.length === 2, "first refusal disconnects the retried transport");
+      assert.deepEqual(client.policy.current(client.receipts.status), keptView);
+      assert.equal(proxy.attempts(), 2);
+      client.assertDetached(proxy);
+      client.checkJournal(work.path);
+    } finally { client?.destroy(); await proxy?.close(); await work.clean(); }
+  });
   await observeDependencies(t);
   await observeRevocation(t);
   await observeStateLimit(t);
+  await observeRefusedCoverage(t);
 
   for (const mode of ["incremental", "restart-syncstep2"] as const) {
     await t.test(`T19 ${mode}: first refusal detaches, preserves export, and permits deliberate fresh rejoin`, async () => {
@@ -107,7 +135,7 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
           assert.equal(end?.client, 11);
           assert.equal(end?.clock, 3145727);
         } finally { standalone.destroy(); }
-        client.assertDetached(proxy.attempts(), 1);
+        client.assertDetached(proxy);
         assert.equal(client.views.includes("Your changes saved to server"), mode === "incremental");
         assert.equal(seed.document.getText("R1").toString(), "abcd");
         assert.equal(readRecoveredRows(work.path).length, before.length + (mode === "incremental" ? 1 : 0));
@@ -119,9 +147,12 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
         });
         assert.ok(fresh);
         await fresh.connect(); await fresh.saved();
+        assert.equal(fresh.receipts.status, "Your changes saved to server");
+        assert.deepEqual(client.policy.current(fresh.receipts.status), keptView,
+          "A successful fresh rejoin must never clear the old replica's permanent refusal");
         assert.deepEqual(characterIdentities(fresh.document), ["a:7:0", "b:7:1", "c:7:2", "d:7:3"]);
         assert.deepEqual(Y.encodeStateAsUpdate(client.document), retained);
-        client.assertDetached(proxy.attempts(), 1);
+        client.assertDetached(proxy);
         client.checkJournal(work.path);
         assert.equal(server.stderr.includes("exception"), false);
       } finally { for (const client of clients) client.destroy(); await proxy?.close(); await work.clean(); }
@@ -190,7 +221,7 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
       client.expect("invalid-update");
       client.socket.send(frame(1, Buffer.from("AQELAIQHAw==", "base64")));
       await until(() => client?.closes.length === 1, "logical close triggers dedicated-socket shutdown");
-      client.assertDetached(proxy.attempts(), 1);
+      client.assertDetached(proxy);
       assert.deepEqual(client.policy.current(client.receipts.status), { ...keptView, reason: "invalid-update" });
       assert.equal(client.notices.length, 1);
       assert.deepEqual(readRecoveredRows(work.path), before);
@@ -215,7 +246,7 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
       client.socket.send(frame(2, new Uint8Array(20971520)));
       await until(() => client.closes.length === 1, "socket 1009 close");
       assert.deepEqual(client.closes, [1009]);
-      client.assertDetached(proxy.attempts(), 1);
+      client.assertDetached(proxy);
       assert.deepEqual(client.policy.current(client.receipts.status), { ...keptView, reason: "frame-too-large" });
       assert.deepEqual(readRecoveredRows(work.path), before);
       assert.equal(server.events.filter(event => event.event === "before").length, hooks);
@@ -228,6 +259,7 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
   await t.test("T18 rate limit: 200 updates in a frozen one-second window, 50 accepted and 150 temporary refusals", async () => {
     const work = await workspace();
     let client: RefusalClient | undefined;
+    let late: RefusalClient | undefined;
     try {
       const server = await work.start({ REFUSAL_POLICY: "1", REFUSAL_FROZEN_CLOCK: "1" });
       client = new RefusalClient(server.port, ["accepted"]);
@@ -250,7 +282,23 @@ test("refusal checker rejects reconnecting policy before endorsing T18/T19", asy
       client.provider.forceSync();
       await until(() => client?.sent.length === 202 && client.sent.at(-1)?.applied === true, "temporary read-only flag cleared before retry");
       assert.equal(readRecoveredRows(work.path).length, 52);
+      const inspection = await server.command("inspect", {}, "inspection");
+      assert.equal(typeof inspection.state, "string");
+      const serverState = new Y.Doc();
+      try {
+        Y.applyUpdate(serverState, Buffer.from(String(inspection.state), "base64"));
+        assert.deepEqual(characterIdentities(serverState), rateSavedIdentities);
+      } finally { serverState.destroy(); }
+      late = new RefusalClient(server.port, ["accepted"], new Y.Doc());
+      await late.connect(); await late.saved();
+      assert.deepEqual(characterIdentities(late.document), rateSavedIdentities);
+      assert.equal(client.receipts.outstanding, 0);
+      assert.equal(client.receipts.status, "Your changes saved to server");
+      assert.deepEqual(client.policy.current(client.receipts.status), {
+        status: "Your changes saved to server", explanation: null, reason: null,
+        publication: "attached", export: "Standalone copy",
+      });
       assert.equal(server.stderr.includes("exception"), false);
-    } finally { client?.destroy(); await work.clean(); }
+    } finally { late?.destroy(); client?.destroy(); await work.clean(); }
   });
 });

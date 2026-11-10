@@ -57,6 +57,9 @@ export class RefusedDevicePolicy {
   }
 
   current(receiptStatus: string): RefusalView {
+    if (!this.stopped && this.view.publication === "retry-after" && receiptStatus === "Your changes saved to server") {
+      this.view = { ...this.view, publication: "attached", reason: null, explanation: null };
+    }
     return { ...this.view, status: this.stopped ? this.view.status : receiptStatus };
   }
 
