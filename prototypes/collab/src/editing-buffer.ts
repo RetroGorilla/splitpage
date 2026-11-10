@@ -162,6 +162,13 @@ export class EditableBeatBuffer {
     this.history.push(`buffer start epoch ${painted.epoch} ${painted.id} selection ${from}:${to}`);
   }
 
+  retainBeforeInput(from: number, to: number): void { this.begin(from, to); }
+
+  nativeBaseChanged(): boolean {
+    const painted = this.requirePaint();
+    return this.snapshot(painted.id).version !== painted.version;
+  }
+
   private splice(from: number, to: number, data: string): void {
     if (from < 0 || to < from || to > this.nativeValue.length) throw new Error("Native target range outside buffer");
     this.nativeValue = this.nativeValue.slice(0, from) + data + this.nativeValue.slice(to);
