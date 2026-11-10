@@ -8,6 +8,9 @@ const CORE = fileURLToPath(new URL("../../src/core/", import.meta.url));
 const globalsBefore = new Set(Reflect.ownKeys(globalThis));
 
 const modules: Record<string, Record<string, unknown>> = {
+  "collab/operations.ts": await import("../../src/core/collab/operations.ts"),
+  "collab/read-operation.ts": await import("../../src/core/collab/read-operation.ts"),
+  "collab/refusals.ts": await import("../../src/core/collab/refusals.ts"),
   "document/broll.ts": await import("../../src/core/document/broll.ts"),
   "document/clone.ts": await import("../../src/core/document/clone.ts"),
   "document/comments.ts": await import("../../src/core/document/comments.ts"),
