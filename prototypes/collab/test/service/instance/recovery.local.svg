@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="300" viewBox="0 0 800 300" role="img" aria-labelledby="title desc">
   <title id="title">Recovery after 3,000 individually committed edits</title>
-  <desc id="desc">On DESKTOP-NEFVS90, median replay was 27.593 ms with the whole journal and 11.766 ms with a checkpoint plus 500 tail rows. Journal payload was 35,818 bytes and 6,000 bytes respectively. Five fresh histories per case.</desc>
+  <desc id="desc">On local PC, median replay was 27.593 ms with the whole journal and 11.766 ms with a checkpoint plus 500 tail rows. Journal payload was 35,818 bytes and 6,000 bytes respectively. Five fresh histories per case.</desc>
   <rect width="800" height="300" fill="#f8fafc"/>
   <g font-family="Segoe UI, sans-serif" fill="#0f172a">
     <text x="24" y="32" font-size="20" font-weight="600">Checkpoint and journal-tail recovery</text>
-    <text x="24" y="56" font-size="12" fill="#475569">DESKTOP-NEFVS90 · Node 24.22.1 · C: volume · five histories per case</text>
+    <text x="24" y="56" font-size="12" fill="#475569">local PC · Node 24.22.1 · C: volume · five histories per case</text>
     <text x="24" y="94" font-size="14" font-weight="600">Median replay time (ms)</text>
     <text x="416" y="94" font-size="14" font-weight="600">Retained journal payload (bytes)</text>
     <text x="24" y="127" font-size="12">Whole journal</text>

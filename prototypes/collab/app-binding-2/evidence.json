@@ -1,7 +1,7 @@
 {
   "appCommit": "935e618949a2e964198847daa2115d35e1da58ef",
   "bundleSha256": "4c7340f81ce191908b519f8773d753ace4e2dfe346af645e3613261de87a81c9",
-  "machine": {"host":"DESKTOP-NEFVS90","cpu":"AMD Ryzen 9 9950X3D2 16-Core Processor         ","platform":"win32","release":"10.0.26300","node":"v24.22.1"},
+  "machine": {"host":"<machine>","cpu":"AMD Ryzen 9 9950X3D2 16-Core Processor         ","platform":"win32","release":"10.0.26300","node":"v24.22.1"},
   "version": {"protocolVersion":"1.3","product":"Edg/157.0.4341.42","revision":"@7b1486be4607d53d9f93841b7c776bc525ca74b7","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0","jsVersion":"15.7.11.4"},
   "off": {"rows":2,"experiment":null},
   "results": [

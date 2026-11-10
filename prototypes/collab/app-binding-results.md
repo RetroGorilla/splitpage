@@ -120,9 +120,9 @@ Autocorrect, drag/drop input, protected atoms, surrogate pairs/graphemes, editab
 From this deliverable branch, install root and prototype dependencies. The runner archives the pinned throwaway commit into its own temporary folder, links the root build dependencies, builds the actual app there and removes it afterwards. No branch switch or uncommitted app patch is needed. If the commit is absent locally, fetch `origin/proto/collab-1a-app-binding-throwaway` first. The prototype bundle and expected results come from this deliverable.
 
 ```powershell
-$env:TEMP = 'C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1a-app-binding'
+$env:TEMP = '<temp>/splitpage-lanes/s1a-app-binding'
 $env:TMP = $env:TEMP
-& D:\vibecoding\Splitpage\tools\with-lock.ps1 -Lock smoke -Owner s1a-app-binding -Command 'node prototypes/collab/src/app-binding/run.ts'
+& '<lane-tools>/with-lock.ps1' -Lock smoke -Owner s1a-app-binding -Command 'node prototypes/collab/src/app-binding/run.ts'
 node --test prototypes/collab/test/app-binding/evidence.test.ts
 node prototypes/collab/src/app-binding/report.ts --check
 ```

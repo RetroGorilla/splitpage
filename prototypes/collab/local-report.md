@@ -11,9 +11,9 @@ Recorded runtime: Node **24.22.1**, Windows x64, **Edg/157.0.4341.42**, revision
 From the repository root, install the root dependencies needed by the build/gates and run `node build.mjs --test`. From `prototypes/collab`, run `npm ci`, then:
 
 ```powershell
-$env:TEMP='C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1b-local-store'
+$env:TEMP='<temp>/splitpage-lanes/s1b-local-store'
 $env:TMP=$env:TEMP
-& D:\vibecoding\Splitpage\tools\with-lock.ps1 -Lock smoke -Owner s1b-local-store -Command 'npm run local'
+& '<lane-tools>/with-lock.ps1' -Lock smoke -Owner s1b-local-store -Command 'npm run local'
 npm test
 ```
 

@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { cpus, freemem, hostname, release, totalmem } from "node:os";
+import { cpus, freemem, release, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
 import * as Y from "yjs";
 import { fromDocument, toDocument } from "./document.ts";
@@ -115,7 +115,7 @@ export function measureProjectionCosts(rounds = 5) {
   }
   const after = cpuSnapshot();
   return {
-    measuredAt: new Date().toISOString(), machine: hostname(), cpu: cpus()[0]?.model, architecture: process.arch,
+    measuredAt: new Date().toISOString(), machine: "<machine>", cpu: cpus()[0]?.model, architecture: process.arch,
     platform: process.platform, osRelease: release(), totalMemoryBytes: totalmem(), freeMemoryBefore: memoryBefore, freeMemoryAfter: freemem(),
     aggregateCpuBusyPercent: 100 * (1 - (after.idle - before.idle) / (after.total - before.total)),
     node: process.version, yjs: "13.6.33", rounds, warmupPerInputCandidate: 1,

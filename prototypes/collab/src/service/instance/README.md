@@ -102,7 +102,7 @@ No changes to `journal.ts`, `receipts.ts`, existing harness, refusal files, imag
 Node 24.22.1, free loopback ports, one test process at a time:
 
 ```powershell
-$env:TEMP='C:\Users\Gorbus\AppData\Local\Temp\splitpage-lanes\s1b-handoff-recovery'
+$env:TEMP='<temp>/splitpage-lanes/s1b-handoff-recovery'
 $env:TMP=$env:TEMP
 npm ci
 node --test --test-concurrency=1 test/service/instance/instance.test.ts
@@ -110,7 +110,7 @@ node test/service/instance/measure-recovery.ts 5
 npm test -- --test-concurrency=1
 ```
 
-Measured on **DESKTOP-NEFVS90**, Windows `10.0.26300`, Ryzen 9 9950X3D2, Node **24.22.1**, at **2026-11-10 03:45 UTC**. The timing script retains all ten samples in `test/service/instance/recovery.local.json`: five fresh histories each with and without a checkpoint. Each history contains 3,000 individually committed one-character updates, after one initial instance commit; checkpoint at 2,500 edits, then a 500-row tail. Replay timing includes worker RPC, checkpoint validation, replay and encoding, after fresh worker startup. Restart/join timing includes a fresh service child, authentication, network hydration and completed local model write. Filesystem caches are not flushed. Database allocated bytes and logical payload bytes are reported separately; pruning does not VACUUM. These are this PC's C: disk measurements, not the deployment volume.
+Measured on **<machine>**, Windows `10.0.26300`, Ryzen 9 9950X3D2, Node **24.22.1**, at **2026-11-10 03:45 UTC**. The timing script retains all ten samples in `test/service/instance/recovery.local.json`: five fresh histories each with and without a checkpoint. Each history contains 3,000 individually committed one-character updates, after one initial instance commit; checkpoint at 2,500 edits, then a 500-row tail. Replay timing includes worker RPC, checkpoint validation, replay and encoding, after fresh worker startup. Restart/join timing includes a fresh service child, authentication, network hydration and completed local model write. Filesystem caches are not flushed. Database allocated bytes and logical payload bytes are reported separately; pruning does not VACUUM. These are this PC's C: disk measurements, not the deployment volume.
 
 ![Measured recovery and retained journal payload](../../../test/service/instance/recovery.local.svg)
 

@@ -793,7 +793,7 @@ All six canonical documents holding cue spans were transferred to initialized re
 
 ## Measured cost
 
-Measured 2026-11-10T02:54:48.222Z on DESKTOP-NEFVS90, AMD Ryzen 9 9950X3D2 16-Core Processor, win32 10.0.26300 x64, Node v24.22.1, Yjs 13.6.33. 5 measured runs per fixture/candidate, one declared warmup each, A/B order alternated by round. All samples are retained in src/proj/cost-results.json; table entries are median [min–max], milliseconds.
+Measured 2026-11-10T02:54:48.222Z on <machine>, AMD Ryzen 9 9950X3D2 16-Core Processor, win32 10.0.26300 x64, Node v24.22.1, Yjs 13.6.33. 5 measured runs per fixture/candidate, one declared warmup each, A/B order alternated by round. All samples are retained in src/proj/cost-results.json; table entries are median [min–max], milliseconds.
 
 Free RAM before/after: 5.15/5.06 GiB. Aggregate CPU busy during the batch: 14.4%. Other lanes were running. No browser, server, app or renderer was used for these measurements.
 

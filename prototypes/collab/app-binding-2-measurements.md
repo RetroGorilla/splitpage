@@ -2,7 +2,7 @@
 
 App 935e618949a2e964198847daa2115d35e1da58ef; bundle 4c7340f81ce191908b519f8773d753ace4e2dfe346af645e3613261de87a81c9.
 
-Machine: DESKTOP-NEFVS90; AMD Ryzen 9 9950X3D2 16-Core Processor; win32 10.0.26300; v24.22.1; Edg/157.0.4341.42.
+Machine: <machine>; AMD Ryzen 9 9950X3D2 16-Core Processor; win32 10.0.26300; v24.22.1; Edg/157.0.4341.42.
 
 PASS denotes the declared invariants, or the complete unchanged T04 removed literal oracle. New combined visible scripts and marks are observations, not product oracles. Comment/tag DOM projection is unbound.
 

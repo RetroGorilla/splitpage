@@ -1,7 +1,7 @@
 {
   "sourceHead": "74ed7af06e4859dec5cd3ad84c7195977ca3eac6",
   "sourceDigest": "0798cf18c5c228d4995c738ed3cae70de23fbebad052a601592e5e21caf09b60",
-  "reason": "Original timed implementation hashes are retained. Post-run privacy edits only remove the recorder hostname import/output, verified by reversing those exact metadata substitutions; case/projection sources are unchanged.",
+  "reason": "Original timed implementation hashes are retained. Post-run privacy edits change only hostname metadata in the perf and projection cost recorders, verified by reversing those exact substitutions; editing case/projection logic is unchanged.",
   "files": {
     "blocks.ts": "6329bf87c534624a037ce4a7258627554e374481af0e5e50f194efd131d6a880",
     "browser.ts": "155eeb467232dd215d49ae199e58e513adc34582e3303416949280f5737999b5",
@@ -40,6 +40,7 @@
     "../proj/value.ts": "32e8a4c50c955d899ae6b9a6cf31cf09a3637d712bd48fb29a2fc78eeaae9324"
   },
   "metadataRedactions": {
-    "conditions.ts": "27afd60a2a3593a2b685a681668072cb35bdbae7a18cedbbb8218ec3b6be438c"
+    "conditions.ts": "27afd60a2a3593a2b685a681668072cb35bdbae7a18cedbbb8218ec3b6be438c",
+    "../proj/costs.ts": "497c86633de59b272318e3bef4342efcfe60e06be75aca5d08b92e25166d228c"
   }
 }

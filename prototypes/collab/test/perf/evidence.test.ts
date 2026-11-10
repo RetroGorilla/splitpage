@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { generateCurrentPerfReport, readStructuralEvidence, validateStructuralEvidence } from "../../src/perf/report.ts";
 import { validatePerfSetup, validateTimedSource } from "../../src/perf/setup.ts";
 import type { PerfTimedSourceAudit, plannedPerfSetup } from "../../src/perf/setup.ts";
 import { hasPrivatePerfMetadata, redactPerfText } from "../../src/perf/privacy.ts";
-import { measuredMetadataSnapshot } from "./privacy-check.ts";
+import { measuredMetadataSnapshot, privacyText } from "./privacy-check.ts";
 
 const evidence = readStructuralEvidence();
 const setup = JSON.parse(readFileSync(new URL("../../src/perf/setup.json", import.meta.url), "utf8")) as ReturnType<typeof plannedPerfSetup>;
@@ -73,12 +75,36 @@ test("post-run wording changes preserve the prepared timed implementation and a 
   assert.throws(() => validateTimedSource(audit.sourceHead, audit.sourceDigest, wrong));
 });
 
-test("every added prototype file omits private machine/user tokens and drive-letter absolute paths", () => {
-  const added = JSON.parse(readFileSync(new URL("added-files.json", import.meta.url), "utf8")) as string[];
+test("every tracked prototype text file omits private machine/user tokens and drive-letter absolute paths", () => {
   const root = new URL("../../../../", import.meta.url);
-  assert.equal(added.length, 32);
-  assert.equal(new Set(added).size, 32);
-  for (const file of added) assert.equal(hasPrivatePerfMetadata(readFileSync(new URL(file, root), "utf8")), false, `Private identifying metadata in ${file}`);
+  const tracked = execFileSync("git", ["ls-files", "-z", "--", "prototypes/collab/"], { cwd: fileURLToPath(root), encoding: "utf8" }).split("\0").filter(Boolean);
+  assert.ok(tracked.length > 0);
+  const leaking = tracked.filter(file => {
+    if (file.split("/").includes("node_modules") || /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?)$/.test(file)) return false;
+    const bytes = readFileSync(new URL(file, root));
+    return !bytes.includes(0) && hasPrivatePerfMetadata(privacyText(file, bytes.toString("utf8")));
+  });
+  assert.deepEqual(leaking, [], "Private identifying metadata in tracked prototype files");
+});
+
+test("privacy scanning decodes JSON escapes without mistaking escaped mark-key quotes for paths", () => {
+  const drive = ["Q", ":", "/"].join("");
+  assert.equal(hasPrivatePerfMetadata(privacyText("evidence.json", JSON.stringify({ path: `${drive}checkout/file.ts` }))), true);
+  assert.equal(hasPrivatePerfMetadata(privacyText("mutation.json", JSON.stringify({ before: 'key.startsWith("c:")' }))), false);
+});
+
+test("the synthetic projection fixture exemption rejects another drive path and whole-value prefix/suffix variants", () => {
+  const file = "prototypes/collab/test/proj/supplement.splitpage";
+  const text = readFileSync(new URL("../../../../" + file, import.meta.url), "utf8");
+  const fixture = JSON.parse(text) as { rows: { imageLinks: { location: { path: string } }[] }[] };
+  const location = fixture.rows[0]?.imageLinks[0]?.location;
+  assert.ok(location);
+  const original = location.path;
+  assert.equal(hasPrivatePerfMetadata(privacyText(file, text)), false);
+  for (const changed of [["Q", ":", "/private/take.mp4"].join(""), `${original}/private`, `private/${original}`]) {
+    location.path = changed;
+    assert.equal(hasPrivatePerfMetadata(privacyText(file, JSON.stringify(fixture))), true);
+  }
 });
 
 test("redaction preserves all 76 comparison rows, 4510 samples, numeric values, timestamps and counts", () => {

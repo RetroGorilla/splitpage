@@ -26,7 +26,7 @@ test("follow-up evidence pins the extended throwaway app and covers all 96 mecha
   assert.equal(evidence.appCommit, "935e618949a2e964198847daa2115d35e1da58ef");
   assert.match(String(evidence.version.product), /^Edg\//);
   assert.deepEqual(evidence.off, { rows: 2, experiment: null });
-  assert.equal(evidence.machine.host, "DESKTOP-NEFVS90");
+  assert.equal(evidence.machine.host, "<machine>");
   assert.equal(evidence.machine.node, "v24.22.1");
   const wanted = bindingFollowupCases.flatMap(name => bufferMechanisms.flatMap(mechanism =>
     (name.startsWith("reentry-") ? ["D3"] : name === "removed" ? ["D3", "late-C"] : ["D3", "dup", "late-C"]).flatMap(order =>

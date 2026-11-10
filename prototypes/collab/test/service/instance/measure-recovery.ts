@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { writeFile, stat } from "node:fs/promises";
-import { hostname, cpus, totalmem, platform, release } from "node:os";
+import { cpus, totalmem, platform, release } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { performance } from "node:perf_hooks";
 import * as Y from "yjs";
@@ -70,9 +70,9 @@ for (const withCheckpoint of [false, true]) {
   }
 }
 const result = {
-  measuredAt: new Date().toISOString(), machine: hostname(), os: `${platform()} ${release()}`,
+  measuredAt: new Date().toISOString(), machine: "<machine>", os: `${platform()} ${release()}`,
   cpu: cpus()[0]?.model, totalMemoryBytes: totalmem(), node: process.version,
-  volume: process.env.TEMP, updates: 3000, checkpointAfter: 2500, tail: 500, repetitions, samples,
+  volume: "<temp>", updates: 3000, checkpointAfter: 2500, tail: 500, repetitions, samples,
 };
 await writeFile(new URL("./recovery.local.json", import.meta.url), `${JSON.stringify(result, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

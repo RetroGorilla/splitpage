@@ -1,11 +1,11 @@
 {
   "measuredAt": "2026-11-10T03:45:31.919Z",
-  "machine": "DESKTOP-NEFVS90",
+  "machine": "<machine>",
   "os": "win32 10.0.26300",
   "cpu": "AMD Ryzen 9 9950X3D2 16-Core Processor         ",
   "totalMemoryBytes": 33189883904,
   "node": "v24.22.1",
-  "volume": "C:\\Users\\Gorbus\\AppData\\Local\\Temp\\splitpage-lanes\\s1b-handoff-recovery",
+  "volume": "<temp>/splitpage-lanes/s1b-handoff-recovery",
   "updates": 3000,
   "checkpointAfter": 2500,
   "tail": 500,

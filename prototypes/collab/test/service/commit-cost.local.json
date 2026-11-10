@@ -6,7 +6,7 @@
   "platform": "win32",
   "osRelease": "10.0.26300",
   "architecture": "x64",
-  "directory": "C:\\Users\\Gorbus\\AppData\\Local\\Temp\\splitpage-lanes\\s1b-journal",
+  "directory": "<temp>/splitpage-lanes/s1b-journal",
   "durability": {
     "journalMode": "wal",
     "synchronous": 2

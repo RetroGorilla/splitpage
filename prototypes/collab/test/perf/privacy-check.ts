@@ -5,6 +5,32 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 
+// why: This projection path is fictional; whole-value hashes also pin its retained diff excerpt, naming no machine.
+const syntheticProjectionValues = new Set([
+  "19cab2c169d6736ee405a375da246ecb934c3130ecfb2f1ae0b01dda88786f78",
+  "310b9a9dd461be6587541783b96827fd4a98ecc2d68512ceb4484af3c2f7edd1"
+]);
+
+function privacyString(value: string): string {
+  if (syntheticProjectionValues.has(createHash("sha256").update(value).digest("hex"))) return "<synthetic projection fixture>";
+  return value.replace(/"(?:[^"\\\r\n]|\\.)*"/g, literal => {
+    let decoded: string;
+    try { decoded = JSON.parse(literal) as string; } catch { return literal; }
+    return syntheticProjectionValues.has(createHash("sha256").update(decoded).digest("hex")) ? "<synthetic projection fixture>" : `"${decoded}"`;
+  });
+}
+
+export function privacyText(file: string, text: string): string {
+  if (!file.endsWith(".json") && !file.endsWith(".splitpage")) return privacyString(text);
+  const strings: string[] = [];
+  JSON.parse(text, (key: string, value: unknown) => {
+    strings.push(privacyString(key));
+    if (typeof value === "string") strings.push(privacyString(value));
+    return value;
+  });
+  return strings.join("\n");
+}
+
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }

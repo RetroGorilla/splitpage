@@ -2,7 +2,7 @@
   "version": 1,
   "status": "not measured",
   "reason": "Earlier game-session attempts are void. Coordinator permits one guarded set after the non-measurement PR is opened, with a lighter game running; state each accepted run's background load.",
-  "sourceDigest": "23d074e0cf11c6a62e48baf3d53934b9f4383591599e8e676f48c8dccba14168",
+  "sourceDigest": "8a98ae2e7338253efa1387bc0f56206136bf55027d5da30b7a9a53bd35a65bc3",
   "node": "v24.22.1",
   "yjs": "13.6.33",
   "rounds": 5,

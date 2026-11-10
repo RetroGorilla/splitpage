@@ -2,7 +2,7 @@ import { build } from "esbuild";
 import { readFile, writeFile, mkdir, mkdtemp, symlink, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { cpus, hostname, tmpdir, platform, release } from "node:os";
+import { cpus, tmpdir, platform, release } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { withSliceBrowser } from "../slice/protocol.ts";
@@ -123,7 +123,7 @@ try {
       }
       process.stdout.write(`${name}: ${results.filter(result => result.name === name && result.status === "PASS").length}/${results.filter(result => result.name === name).length}\n`);
     }
-    return { appCommit, bundleSha256: createHash("sha256").update(script).digest("hex"), machine: { host: hostname(), cpu: cpus()[0]?.model ?? "unknown", platform: platform(), release: release(), node: process.version }, version, off, results };
+    return { appCommit, bundleSha256: createHash("sha256").update(script).digest("hex"), machine: { host: "<machine>", cpu: cpus()[0]?.model ?? "unknown", platform: platform(), release: release(), node: process.version }, version, off, results };
   });
   writeBindingFollowupArtifacts(evidence);
   process.stdout.write(`${evidence.results.length} follow-up cases recorded; ${evidence.results.filter(result => result.status === "FAIL").length} invariant/binding failures retained\n`);
