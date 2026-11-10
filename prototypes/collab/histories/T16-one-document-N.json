@@ -1,0 +1,24 @@
+{
+  "shows": "A one-document transport gate holds every actual update/SyncStep2 before membership, but the provider document already contains gP and Z. It cannot satisfy the literal separate-N clause.",
+  "providerDocument": [
+    "a:7:0",
+    "b:7:1",
+    "Z:11:1"
+  ],
+  "providerGallery": [
+    {
+      "id": "gP",
+      "beat": "R1",
+      "ref": "6b1048f8a6d40bac0b2954c18fefa40c4ea7a96120fc2e54b7317c0e43c2bbec",
+      "pending": false
+    }
+  ],
+  "outgoingUpdatesBeforeMembership": [
+    {
+      "subtype": 1,
+      "payload": "AQEHAAQBAlIxAmFiAA=="
+    }
+  ],
+  "membership": [],
+  "replay": "node --test --test-concurrency=1 test/service/images/images.test.ts"
+}

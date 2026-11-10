@@ -29,6 +29,10 @@ export class ConnectionReceipts {
     this.edits.push(ranges(update));
   }
 
+  restoreAcknowledged(updates: readonly Uint8Array[]): void {
+    for (const update of updates) this.durable.push(...ranges(update));
+  }
+
   open(): number {
     this.lifetime++;
     this.online = true;

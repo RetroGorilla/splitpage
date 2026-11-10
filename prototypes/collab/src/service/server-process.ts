@@ -7,6 +7,7 @@ import { InstanceGateway } from "./instance/gateway.ts";
 import { instanceBoundary } from "./instance/extension.ts";
 import type { InstanceSnapshot } from "./instance/storage.ts";
 import { loadingProbe } from "./instance/loading-probe.ts";
+import { imageService } from "./images/service.ts";
 
 const path = process.argv[2];
 if (!path) throw new Error("Database path required");
@@ -14,6 +15,7 @@ const journal = new JournalWorkerClient(path, {
   journalMode: process.env.JOURNAL_MODE ?? "WAL", synchronous: process.env.JOURNAL_SYNC ?? "FULL",
 });
 const journalConfiguration = await journal.ready;
+const images = process.env.IMAGE_POLICY ? await imageService(path) : null;
 let hold = "";
 let premature = false;
 let prematureAfter20 = false;
@@ -47,6 +49,7 @@ const server = new Server({
       if (instanceHold === "before-receipt") await gate("instance-before-receipt");
     }, () => emit("instance-request-chunk"))] : []),
     ...(process.env.REFUSAL_POLICY ? [refusalBoundary(process.env.REFUSAL_FROZEN_CLOCK ? () => 0 : Date.now)] : []),
+    ...(images ? [images.extension] : []),
   ],
   ...(process.env.REFUSAL_POLICY ? {
     websocketOptions: { maxPayload: 4194304 },
@@ -126,6 +129,7 @@ process.on("message", (message: unknown) => {
 async function handleCommand(message: unknown): Promise<void> {
   if (typeof message !== "object" || message === null || !("command" in message)) return;
   const m = message as Record<string, unknown>;
+  if (images && String(m.command).startsWith("image-")) { await images.command(m); return; }
   if (m.command === "configure") {
     instanceHold = String(m.instanceHold ?? "");
     hold = typeof m.hold === "string" ? m.hold : "";
@@ -177,9 +181,10 @@ async function handleCommand(message: unknown): Promise<void> {
   } else if (m.command === "stop") {
     for (const resolve of gates.values()) resolve();
     await server.destroy();
+    await images?.close();
     await journal.close();
     process.exit(0);
   }
 }
 await server.listen();
-emit("ready", { port: server.address.port, configuration: journalConfiguration });
+emit("ready", { port: server.address.port, configuration: journalConfiguration, ...(images ? { imagePort: images.port } : {}) });
