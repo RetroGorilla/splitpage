@@ -16,6 +16,7 @@ import type { StructureRunResult } from "../structure-runner.ts";
 import { commentsOracle, commentsRemovedOracle, commentsReplyOracle, commentsRestoredOracle } from "../oracles.ts";
 import { markOracles } from "./oracles.ts";
 import { statusReaders } from "./status-readers.ts";
+import { ReaderConvergence } from "../reader-convergence.ts";
 
 export const markTraces: Record<string, readonly DeliveryOrder[]> = {
   T11: ["D1", "dup", "late-C"], "T20 nest": ["D1", "dup", "late-C"], "T20 cross": ["D1", "dup", "rev", "late-C"],
@@ -26,6 +27,7 @@ export function runMark(trace: string, candidate: SchemaCandidate, order: Delive
   const seed = trace === "T11" ? [{ id: "R1", text: "abcd" }, { id: "R2", text: "ef" }] : [{ id: "R1", text: trace.startsWith("T20") ? "the red mug" : trace === "T21 scalar" ? "ab" : "abcd" }];
   const harness = new ReplicaHarness(candidate, seed);
   const { alice: a, bob: b, queue } = harness;
+  const convergence = new ReaderConvergence(harness, markTraces[trace] ?? [order]);
   const ua = structureManager(a);
   const ub = structureManager(b);
   const carets = new Map<string, ReplicaCaretAnchor>();
@@ -36,6 +38,7 @@ export function runMark(trace: string, candidate: SchemaCandidate, order: Delive
     const oracle = explicit ?? markOracles[phase];
     if (!oracle) throw new Error(`Missing literal mark oracle ${phase}`);
     queue.history.push(`check ${phase}`);
+    convergence.checkKnown(phase, carets);
     for (const replica of harness.replicas) {
       let updates = 0;
       const countUpdate = (): void => { updates++; };
@@ -162,6 +165,7 @@ export type MarkRootProbeMode = typeof rootProbeModes[number];
 export function runRootInitializationProbe(candidate: SchemaCandidate, mode: MarkRootProbeMode): StructureRunResult {
   const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "abcd" }], false, mode === "eager");
   const { alice: a, bob: b, queue } = harness;
+  const convergence = new ReaderConvergence(harness, ["D2", "late-C"]);
   const managers = mode === "destroyed-managers" || mode.includes("delete-") ? [structureManager(a), structureManager(b)] : [];
   const trace = mode === "lazy" ? "T11 fully deleted" : `T11 root ${mode}`;
   let checks = 0;
@@ -203,6 +207,7 @@ export function runRootInitializationProbe(candidate: SchemaCandidate, mode: Mar
       const actual = readStructure(replica.doc, candidate, harness.identities);
       queue.history.push(`client${replica.doc.clientID} ${JSON.stringify(actual)}`);
     }
+    convergence.checkKnown("T11 root full output");
     for (const replica of harness.replicas) {
       checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "T11 fully deleted");
       checks++;

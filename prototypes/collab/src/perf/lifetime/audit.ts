@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { lifetimeSources } from "./source.ts";
 import { currentStatusHash, statusTimingChanges, validateStatusTimingChanges } from "../../marks/status-source-audit.ts";
+import { readerCurrentHash, readerOrderChanges } from "../../readers/source-audit.ts";
 
 interface LifetimeTimedArchive {
   timedHead: string;
@@ -31,11 +32,14 @@ export function validateLifetimeCharacterSource(original: Record<string, string>
     if (file === "projector.ts") {
       const declared = statusTimingChanges().files.find(change => change.path === "src/perf/lifetime/projector.ts"); assert.ok(declared);
       assert.equal(createHash("sha256").update(text).digest("hex"), declared.before);
-      assert.equal(createHash("sha256").update(now).digest("hex"), currentStatusHash(declared.path), "Changed sampled projector work");
+      assert.equal(createHash("sha256").update(now).digest("hex"), readerCurrentHash(declared.path, currentStatusHash(declared.path)), "Changed sampled projector work");
     } else if (file === "record.ts") {
-      assert.equal(now.replace('import { validateLifetimeTimingSource } from "./audit.ts";\n', "")
+      const changed = readerOrderChanges().files.find(change => change.path === `src/perf/lifetime/${file}`);
+      const previous = changed?.original ?? now;
+      assert.equal(createHash("sha256").update(now).digest("hex"), readerCurrentHash(`src/perf/lifetime/${file}`, createHash("sha256").update(previous).digest("hex")));
+      assert.equal(previous.replace('import { validateLifetimeTimingSource } from "./audit.ts";\n', "")
         .replace("validateLifetimeTimingSource(value.source, counts.source);", "assert.deepEqual(value.source, counts.source);"), text, "Changed timing driver or guards");
-    } else assert.equal(now, text, `Changed timed dependency ${file}`);
+    } else assert.equal(createHash("sha256").update(now).digest("hex"), readerCurrentHash(`src/perf/lifetime/${file}`, createHash("sha256").update(text).digest("hex")), `Changed timed dependency ${file}`);
   }
   const oldWorkload = original["workload.ts"], newWorkload = current["workload.ts"]; assert.ok(oldWorkload && newWorkload);
   assert.equal(section(newWorkload, "export function canonicalLifetimeSource()", "\nfunction blockSource"), section(oldWorkload, "export function canonicalLifetimeSource()", "\nfunction blockSource"));
@@ -50,7 +54,8 @@ export function validateLifetimeTimingSource(recorded: ReturnType<typeof lifetim
   validateStatusTimingChanges();
   assert.equal(recorded.dependencies, statusTimingChanges().dependencies.before);
   const changes = statusTimingChanges();
-  assert.equal(current.dependencies, changes.validationDependencies?.after ?? changes.reviewDependencies?.after ?? changes.dependencies.after); assert.equal(current.fixture, recorded.fixture);
+  assert.equal(readerOrderChanges().dependencies.before, changes.validationDependencies?.after ?? changes.reviewDependencies?.after ?? changes.dependencies.after);
+  assert.equal(current.dependencies, readerOrderChanges().dependencies.after); assert.equal(current.fixture, recorded.fixture);
   assert.deepEqual(current, lifetimeSources());
   const files = Object.fromEntries(Object.keys(current.files).map(file => [file, readFileSync(new URL(file, import.meta.url), "utf8")]));
   validateLifetimeCharacterSource(archive.files, files);

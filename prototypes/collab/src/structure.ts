@@ -1,3 +1,4 @@
+import { identityEntries, wireIdentity } from "./readers/identity.ts";
 import * as Y from "yjs";
 import { identityAt, mapValue, textValue } from "./schema.ts";
 import type { SchemaReplica } from "./schema.ts";
@@ -19,9 +20,10 @@ export function undoOne(manager: Y.UndoManager): void {
 }
 
 export function undoJoin(replica: SchemaReplica, manager: Y.UndoManager, from: string, into: string): void {
+  from = wireIdentity(from); into = wireIdentity(into);
   const joins = mapValue(mapValue(replica.doc.getMap("beats").get(from)).get("joins"));
   replica.doc.transact(() => {
-    for (const [id, value] of joins) {
+    for (const [id, value] of identityEntries(joins)) {
       if ((value as { into: string }).into === into) replica.doc.getMap("retiredJoins").set(id, true);
     }
   }, "semantic-undo");
@@ -29,6 +31,7 @@ export function undoJoin(replica: SchemaReplica, manager: Y.UndoManager, from: s
 }
 
 export function clearGlue(replica: SchemaReplica, from: string): void {
+  from = wireIdentity(from);
   replica.doc.transact(() => {
     const joins = mapValue(mapValue(replica.doc.getMap("beats").get(from)).get("joins"));
     for (const [id, value] of joins) joins.set(id, { ...(value as object), glue: "" });
@@ -56,6 +59,7 @@ function addRecord(replica: SchemaReplica, id: string): void {
 }
 
 export function removeHeading(replica: SchemaReplica, heading: string, newBeat: string, next: string): void {
+  heading = wireIdentity(heading); newBeat = wireIdentity(newBeat); next = wireIdentity(next);
   replica.doc.transact(() => {
     replaceBoundary(replica, heading, { b: newBeat });
     addRecord(replica, newBeat);
@@ -64,6 +68,7 @@ export function removeHeading(replica: SchemaReplica, heading: string, newBeat: 
 }
 
 export function createHeading(replica: SchemaReplica, beat: string, heading: string, nameLength: number, follows: boolean, names: readonly string[]): void {
+  beat = wireIdentity(beat); heading = wireIdentity(heading);
   replica.doc.transact(() => {
     const location = replica.locate(beat);
     location.text.delete(location.start, 2);
@@ -85,6 +90,7 @@ export function createHeading(replica: SchemaReplica, beat: string, heading: str
 }
 
 export function moveBeat(replica: SchemaReplica, beat: string, before: string | null): boolean {
+  beat = wireIdentity(beat); before = before === null ? null : wireIdentity(before);
   if (replica.candidate === "A") return false;
   const order = replica.doc.getArray<string>("order");
   const segmentId = `seg-${beat}`;
@@ -129,6 +135,7 @@ export function seedJoinMetadata(replica: SchemaReplica): void {
 }
 
 export function visualInsert(replica: SchemaReplica, component: string, offset: number, value: string, notation: string): Y.RelativePosition {
+  component = wireIdentity(component);
   const text = textValue(mapValue(replica.doc.getMap("visuals").get(component)).get("text"));
   replica.doc.transact(() => {
     text.insert(offset, value, {});

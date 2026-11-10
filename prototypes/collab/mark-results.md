@@ -54,7 +54,7 @@ Reproduce with node src/marks/mutation-audit.ts --write. It copies source/tests 
 | split-descendant-classification | DETECTED (6) | A: full T11 D1, including specified recovery and undo |
 | acceptance-extent-sort | SURVIVED — claim withdrawn | No detecting test; not claimed necessary |
 | outer-inner-stack-sort | SURVIVED — claim withdrawn | No detecting test; not claimed necessary |
-| both-nesting-sorts | DETECTED (2) | A: same-start nested occurrences project longest outermost |
+| both-nesting-sorts | DETECTED (4) | A: same-start nested occurrences project longest outermost |
 | crossing-rejection | DETECTED (8) | A: full T20 cross D1, including specified recovery and undo |
 | crossing-recovery | DETECTED (8) | A: full T20 cross D1, including specified recovery and undo |
 | whole-tag-comment-union | DETECTED (4) | A: full T20 mark D1, including specified recovery and undo |
@@ -68,7 +68,7 @@ Reproduce with node src/marks/mutation-audit.ts --write. It copies source/tests 
 | detached-field-fallback | DETECTED (2) | A: a detached comment preserves its stored visual field |
 | first-marked-anchor | DETECTED (6) | A: full T11 D1, including specified recovery and undo |
 | comment-recovery-classification | DETECTED (22) | A: full T11 D1, including specified recovery and undo |
-| reply-order | DETECTED (2) | A: replies sort oldest first, tie by id; author guard refuses other writers without mutation |
+| reply-order | DETECTED (60) | A: full T11 D1, including specified recovery and undo |
 | orphan-reply-recovery | DETECTED (4) | A: full T21 comment D2, including specified recovery and undo |
 | author-command-guard | DETECTED (2) | A: replies sort oldest first, tie by id; author guard refuses other writers without mutation |
 | tag-registry-id | DETECTED (2) | A: same tag registry creation on two replicas has one literal id |
@@ -85,7 +85,7 @@ Reproduce with node src/marks/mutation-audit.ts --write. It copies source/tests 
 | status-retire-whole-frontier | DETECTED (16) | A: A-H12 identical status values D1, normal ids, Alice undoes |
 | status-noop-emits-no-update | DETECTED (16) | A: A-H12 identical status values D1, normal ids, Alice undoes |
 | ineffective-status-consumption | DETECTED (2) | A: ineffective identical-status undo consumes its step before the writer's earlier insertion |
-| projection-emits-repair | DETECTED (38) | A: full T11 D1, including specified recovery and undo |
+| projection-emits-repair | DETECTED (60) | A: full T11 D1, including specified recovery and undo |
 | format-selection-reanchor | SURVIVED — claim withdrawn | No detecting test; not claimed necessary |
 
 Withdrawn claims: undo retention as the cause of deletion failure; independent necessity of the acceptance extent sort and of the outer/inner sort; necessity of reanchoring unchanged character identities for mark-only undo. T21's captured selection outcome remains checked, but returning its original anchor passes because no characters were deleted. The structural deletion reanchoring result belongs to the earlier beat report.

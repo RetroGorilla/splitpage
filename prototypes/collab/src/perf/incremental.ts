@@ -1,12 +1,14 @@
+import { identityEntries, identityGet, wireIdentity } from "../readers/identity.ts";
 import * as Y from "yjs";
 import { toDocument } from "../proj/document.ts";
 import { records } from "../proj/value.ts";
 import type { ProjectionBag } from "../proj/value.ts";
 import type { ProjectionDelta } from "../proj/richtext.ts";
 import { readDelta } from "../proj/richtext.ts";
-import { mapValue, textValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { PerfBlockIndex } from "./blocks.ts";
+import { readGallerySlotRecord, readVisualRecord, rootMap, sameProjectionValue } from "../readers/records.ts";
+import { copyFileOrders } from "../readers/output.ts";
 
 export class IncrementalProjection {
   readonly replica: SchemaReplica;
@@ -48,13 +50,17 @@ export class IncrementalProjection {
       }
     };
     const block = this.index.spans.find(span => span.block.id === id)?.block;
-    for (const [key, value] of this.replica.doc.getMap("visuals")) {
-      const visual = mapValue(value);
-      this.owners.set(`visuals:${key}`, String(visual.get("beat")));
-      if (visual.get("beat") === id) collect(readDelta(textValue(visual.get("text"))), "visualText");
+    for (const [key, value] of identityEntries(rootMap(this.replica.doc, "visuals"))) {
+      const visual = readVisualRecord(value);
+      if (!visual) { this.owners.delete(`visuals:${key}`); continue; }
+      this.owners.set(`visuals:${key}`, visual.beat);
+      if (visual.beat === id) collect(readDelta(visual.text), "visualText");
     }
     if (block) collect(block.delta, "audioText");
-    for (const [key, value] of this.replica.doc.getMap("gallery")) this.owners.set(`gallery:${key}`, String(mapValue(value).get("beat")));
+    for (const [key, value] of identityEntries(rootMap(this.replica.doc, "gallery"))) {
+      const slot = readGallerySlotRecord(value);
+      if (slot) this.owners.set(`gallery:${key}`, slot.beat); else this.owners.delete(`gallery:${key}`);
+    }
     this.anchors.set(id, found);
   }
 
@@ -66,27 +72,29 @@ export class IncrementalProjection {
     for (const { root, event, path } of pending) {
       if (root === "tags" || (root === "comments" && event instanceof Y.YMapEvent && (path.length === 0 || event.keysChanged.has("anchorId")))) all = true;
       if (!["beats", "visuals", "gallery"].includes(root)) continue;
-      const ids = path.length ? [String(path[0])] : event instanceof Y.YMapEvent ? [...event.keysChanged].map(String) : [];
+      const ids = path.length ? [wireIdentity(String(path[0]))] : event instanceof Y.YMapEvent ? [...event.keysChanged].map(key => wireIdentity(String(key))) : [];
       for (const id of ids) {
         if (root === "beats") dirty.add(id);
         else {
-          const value = this.replica.doc.getMap(root).get(id);
+          const value = identityGet(rootMap(this.replica.doc, root), id);
           const old = this.owners.get(`${root}:${id}`);
           if (old) dirty.add(old);
-          if (value instanceof Y.Map) dirty.add(String(value.get("beat")));
+          const record = root === "visuals" ? readVisualRecord(value) : readGallerySlotRecord(value);
+          if (record) dirty.add(record.beat);
         }
       }
     }
     if (all) for (const span of this.index.spans) dirty.add(span.block.id);
     const blocks = this.index.spans.map(span => span.block);
-    const partial = toDocument(this.replica.doc, this.replica.candidate, { blocks: blocks.filter(block => block.kind === "h" || dirty.has(block.id)) });
+    const partial = toDocument(this.replica.doc, this.replica.candidate, { blocks: blocks.filter(block => block.kind === "h" || dirty.has(block.id)), sectionBlocks: blocks });
     const replacements = new Map(records(partial.rows).map(row => [String(row.id), row]));
     const old = new Map(records(this.document.rows).map(row => [String(row.id), row]));
-    const rows = blocks.filter(block => block.kind === "b").map(block => {
+    const rows = blocks.filter(block => block.kind === "b").flatMap(block => {
       const row = replacements.get(block.id) ?? old.get(block.id);
-      if (!row) throw new Error(`No projected row ${block.id}`);
+      if (!row) return [];
       const previous = old.get(block.id);
-      return previous && row !== previous && JSON.stringify(row) === JSON.stringify(previous) ? previous : row;
+      if (previous && row !== previous && sameProjectionValue(row, previous)) { copyFileOrders(row, previous); return [previous]; }
+      return [row];
     });
     for (const id of dirty) this.updateAnchors(id);
     const first = new Map<string, { rowId: string; field: string }>();
@@ -94,22 +102,10 @@ export class IncrementalProjection {
       if (!first.has(anchor.id)) first.set(anchor.id, { rowId: String(row.id), field: anchor.field });
     }
     for (const comment of records(partial.comments)) {
-      const anchor = first.get(String(comment.id));
-      if (anchor) Object.assign(comment, anchor);
-    }
-    const sections: ProjectionBag[] = [];
-    let heading: (typeof blocks)[number] | undefined;
-    for (const block of blocks) {
-      if (block.kind === "h") heading = block;
-      else if (heading) {
-        const name = heading.delta.map(item => typeof item.insert === "string" ? item.insert : "").join("");
-        if (name) sections.push({ id: heading.id, name, firstSceneId: block.id });
-        heading = undefined;
-      }
+      const anchor = typeof comment.id === "string" ? first.get(comment.id) : undefined;
+      if (anchor) { comment.rowId = anchor.rowId; comment.field = anchor.field; }
     }
     partial.rows = rows;
-    if (sections.length || (this.replica.doc.getMap("meta").get("keys") as string[]).includes("sections")) partial.sections = sections;
-    else delete partial.sections;
     this.document = partial;
     this.lastProjected = [...replacements.keys()];
     this.commits++;

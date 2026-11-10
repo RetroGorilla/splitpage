@@ -61,25 +61,6 @@ export const declaredLimits: DeclaredLimit[] = [
     library: "redone mark, reversed delivery"
   },
   {
-    id: "join-target", owner: "reader",
-    title: "Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable)",
-    matches: violation => violation.check === "threw" && violation.detail.startsWith("reader on client") && violation.detail.endsWith("Structural join target unavailable"),
-    minimal: minimal("join-target"),
-    literal: { file: "UR-join-target.md", run: runJoinTargetRemoved, failure: /Structural join target unavailable/ }
-  },
-  {
-    id: "recovery-attribution", owner: "reader",
-    title: "Replicas name a different remover, splitter or edit list for the same recovery entry",
-    matches: violation => violation.check === "replicas differ" && violation.detail.startsWith("only in recovery attribution: "),
-    minimal: minimal("recovery-attribution"),
-    literal: { file: "UR-recovery-edited.md", run: runRemovedAfterInsert, failure: /replicas differ: .*edited=\["a1"\]/ }
-  },
-  {
-    id: "recovery-split-by", owner: "reader",
-    title: "Only the replica that saw the split names its splitter in recovery",
-    literal: { file: "UR-recovery-split-by.md", run: runRemovedSplit, failure: /replicas differ: .*splitBy=Alice/ }
-  },
-  {
     id: "pending-update", owner: "delivery",
     title: "A replica holding one writer's later update before the earlier one cannot be read until the earlier one arrives",
     matches: violation => violation.check === "threw" && /Cannot read properties of undefined \(reading 'b'\)/.test(violation.detail),
@@ -87,9 +68,15 @@ export const declaredLimits: DeclaredLimit[] = [
   }
 ];
 
+export const fixedReaderLimits = [
+  { id: "join-target", file: "UR-join-target.md", run: runJoinTargetRemoved, minimal: minimal("join-target") },
+  { id: "recovery-attribution", file: "UR-recovery-edited.md", run: runRemovedAfterInsert, minimal: minimal("recovery-attribution") },
+  { id: "recovery-split-by", file: "UR-recovery-split-by.md", run: runRemovedSplit }
+] as const;
+
 export const keptSeeds: readonly { seed: number; writers: 2 | 3; found: string; reaches: string | null }[] = [
-  { seed: 2, writers: 2, found: "the reader's join-target error", reaches: "join-target" },
-  { seed: 3, writers: 3, found: "replicas name different removers", reaches: "recovery-attribution" },
+  { seed: 2, writers: 2, found: "the reader's join-target error (fixed by #1421)", reaches: null },
+  { seed: 3, writers: 3, found: "replicas name different removers (fixed by #1421)", reaches: null },
   { seed: 1685, writers: 3, found: "a status redo after a conflict", reaches: "status-redo-conflict" },
   { seed: 424, writers: 2, found: "an undo threw writing a key on a beat record another writer's undo had deleted (fixed)", reaches: null },
   { seed: 1095, writers: 2, found: "an undo threw retiring a removal on a deleted beat record (fixed)", reaches: null },

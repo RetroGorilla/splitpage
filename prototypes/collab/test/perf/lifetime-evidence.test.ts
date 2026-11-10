@@ -20,7 +20,7 @@ test("lifetime evidence pins method, sources, wire totals, three history checkpo
   const synthetic = counts.data.synthetic.checkpoints.at(-1); assert.ok(synthetic);
   assert.equal(synthetic.bytes.encodedBytes, 3356090);
   assert.equal(synthetic.bytes.categories["removal records"], 2585302);
-  assert.equal(synthetic.legacy.work.structure.records.statusEvents, 700000);
+  assert.equal(synthetic.legacy.work.structure.records.statusEvents, 800000);
   assert.equal(synthetic.indexed.work.structure.records.statusEvents ?? 0, 0);
   for (const defect of ["source", "method", "bytes", "scan", "instrumentation"] as const) {
     const changed = structuredClone(counts);

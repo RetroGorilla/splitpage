@@ -17,3 +17,5 @@ deliver B3 B->A copy 1
 compare replicas both removed
 FAIL both removed: replicas differ: client1: R2[s2]; recovery R1 by Alice edited=[] | client2: R2[s2]; recovery R1 by Bob edited=["a1"]
 ```
+
+Fixed by this pull request (#1421): the original failure above is retained; the literal reader regression now passes in test/undo-records/cases.test.ts and generator.test.ts.

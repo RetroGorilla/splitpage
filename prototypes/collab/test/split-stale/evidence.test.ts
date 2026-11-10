@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { validateReaderBrowserBundle } from "../../src/marks/status-browser-audit.ts";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -42,7 +43,7 @@ test("literal expectations cover all nine replay cases, forty stages and eight c
 
 test("native proof and replay pin the current injected bundle", async () => {
   const built = await build({ absWorkingDir: fileURLToPath(new URL("../../../../", import.meta.url)), entryPoints: [fileURLToPath(new URL("../../src/split-stale/page-probe.ts", import.meta.url))], bundle: true, write: false, platform: "browser", format: "iife", target: "es2023" });
-  assert.equal(createHash("sha256").update(present(built.outputFiles?.[0]?.text)).digest("hex"), evidence.bundleSha256);
+  await validateReaderBrowserBundle("src/split-stale/page-probe.ts", evidence.bundleSha256, createHash("sha256").update(present(built.outputFiles?.[0]?.text)).digest("hex"));
 });
 
 for (const item of evidence.cases) test(`Split stale binding B/M1 ${item.trace}/${item.order}`, () => {
