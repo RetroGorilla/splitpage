@@ -3,14 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import * as Y from "yjs";
 import { checkModel, IdentityBook } from "../../../src/model.ts";
 import type { CollabCharacter } from "../../../src/model.ts";
 import { ConnectionReceipts } from "../../../src/service/receipts.ts";
-import { RefusedDevicePolicy } from "../../../src/service/refusal/policy.ts";
-import { imageSocket } from "../../../src/service/images/publication.ts";
-import type { ImagePublication } from "../../../src/service/images/publication.ts";
+import type { ImagePublication, ImageDocumentPort, ImageTransport } from "../../../src/service/images/publication.ts";
 import { readFrame } from "../../../src/service/wire.ts";
 import { readRecoveredRows, until } from "../harness.ts";
 import type { JournalChild } from "../harness.ts";
@@ -22,6 +19,7 @@ export const waiting = "Saved on this device, waiting for images to upload";
 export const offline = "Offline, saved on this device";
 export type ImageSend = { lifetime: number; subtype: number; payload: string; disposition: "accepted" | "missing-blob";
   applied: boolean | null; membership: string[]; journalBefore: number; journalAtRefusal: number | null };
+export type ImageAcknowledgedCapture = { instance: string; updates: string[] };
 
 export function initial(): Y.Doc {
   const document = new Y.Doc(); document.clientID = 7;
@@ -61,24 +59,22 @@ export async function upload(server: JournalChild, bytes: Uint8Array = png, ref 
 
 export class ImageClient {
   readonly publication: ImagePublication;
-  readonly receipts = new ConnectionReceipts();
-  readonly socket: HocuspocusProviderWebsocket;
-  readonly provider: HocuspocusProvider;
-  readonly policy: RefusedDevicePolicy;
+  readonly receipts: ConnectionReceipts;
+  readonly provider: ImageTransport;
+  readonly policy: { current: ImageTransport["view"] };
   readonly sent: ImageSend[] = [];
   readonly attempts: { lifetime: number; kind: number; subtype: number; payload: string }[] = [];
   readonly frames: { lifetime: number; kind: number; subtype: number; bytes: string }[] = [];
   readonly notices: string[] = [];
   readonly observed: { status: string; refs: string[]; membership: string[] }[] = [];
   private readonly expectations: ("accepted" | "missing-blob")[];
-  private fenceCount = 0;
   private lifetime = 0;
-  private readonly update: (bytes: Uint8Array, origin: unknown) => void;
 
-  constructor(port: number, path: string, publication: ImagePublication, expected: ("accepted" | "missing-blob")[] = ["accepted"], defect = false,
-    acknowledged: readonly string[] = []) {
+  constructor(port: number, path: string, publication: ImagePublication, expected: ("accepted" | "missing-blob")[] = ["accepted"],
+    acknowledged: ImageAcknowledgedCapture | null = null) {
     this.publication = publication;
-    this.receipts.restoreAcknowledged(acknowledged.map(bytes => Buffer.from(bytes, "base64")));
+    this.receipts = new ConnectionReceipts(path);
+    if (acknowledged) this.receipts.restoreAcknowledged({ instance: acknowledged.instance, updates: acknowledged.updates.map(bytes => Buffer.from(bytes, "base64")) });
     this.expectations = [...expected];
     function observed(owner: ImageClient): typeof WebSocket {
     class ObservedSocket extends WebSocket {
@@ -111,42 +107,30 @@ export class ImageClient {
         owner.receipts.sent(this.generation, data); super.send(Uint8Array.from(data));
       }
     }
-    const Gate = defect ? ObservedSocket : imageSocket(ObservedSocket, publication);
-    class AttemptSocket extends Gate {
-      override send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-        assert.ok(data instanceof Uint8Array);
-        const frame = readFrame(data);
-        owner.attempts.push({ lifetime: owner.lifetime, kind: frame.kind, subtype: frame.subtype, payload: Buffer.from(frame.payload).toString("base64") });
-        super.send(Uint8Array.from(data));
-      }
+    return ObservedSocket;
     }
-    return AttemptSocket;
-    }
-    this.socket = new HocuspocusProviderWebsocket({ url: `ws://127.0.0.1:${port}`, autoConnect: false,
-      WebSocketPolyfill: observed(this), delay: 10000, initialDelay: 0, jitter: false, maxAttempts: 1 });
-    this.socket.shouldConnect = false;
-    this.provider = new HocuspocusProvider({ name: "fixture", document: publication.network, awareness: null, websocketProvider: this.socket,
-      onStateless: ({ payload }) => this.notices.push(payload) });
-    this.policy = new RefusedDevicePolicy(this.provider, this.socket);
-    this.update = (bytes, origin): void => { if (origin !== this.provider && !publication.isInbound(origin)) this.receipts.localUpdate(bytes); };
-    publication.editing.on("update", this.update);
-    this.receipts.localUpdate(Y.encodeStateAsUpdate(publication.editing));
-    publication.resume = () => this.provider.forceSync();
-    this.provider.attach();
+    const allow = publication.allow.bind(publication);
+    publication.allow = bytes => {
+      const frame = readFrame(bytes);
+      this.attempts.push({ lifetime: this.lifetime, kind: frame.kind, subtype: frame.subtype, payload: Buffer.from(frame.payload).toString("base64") });
+      return allow(bytes);
+    };
+    this.provider = publication.attach(`ws://127.0.0.1:${port}`, observed(this), this.receipts, payload => this.notices.push(payload));
+    this.policy = { current: status => this.provider.view(status) };
   }
 
   expect(...values: ("accepted" | "missing-blob")[]): void { this.expectations.push(...values); }
   get status(): string { return this.policy.current(this.publication.status(this.receipts.status)).status; }
   observe(path: string): void { this.observed.push({ status: this.status, refs: this.publication.items.map(item => item.ref), membership: membership(path) }); }
-  async connect(): Promise<void> { void this.socket.connect(); await until(() => this.socket.status === "connected", "image client connected"); }
+  async connect(): Promise<void> { void this.provider.connect(); await until(() => this.provider.status() === "connected", "image client connected"); }
   async saved(): Promise<void> { await until(() => this.status === saved, "image saved status"); }
   async drop(): Promise<void> {
-    this.socket.shouldConnect = false; this.socket.webSocket?.close();
-    await until(() => this.socket.webSocket === null, "image client closed");
+    this.provider.drop();
+    await until(() => this.provider.closed(), "image client closed");
   }
   async fence(): Promise<void> {
-    const label = JSON.stringify({ imageFence: ++this.fenceCount });
-    this.provider.sendStateless(label); await until(() => this.notices.includes(label), "ordered socket image fence");
+    const label = this.provider.fence();
+    await until(() => this.notices.includes(label), "ordered socket image fence");
   }
   check(path: string): void {
     assert.deepEqual(this.expectations, [], "Every declared transmission must occur");
@@ -164,8 +148,7 @@ export class ImageClient {
     checkImagePromises(this.observed);
   }
   destroy(): void {
-    this.publication.editing.off("update", this.update); this.publication.resume = () => {};
-    this.policy.destroy(); this.provider.destroy(); this.socket.destroy(); this.publication.destroy(); this.publication.editing.destroy();
+    this.publication.destroy();
   }
 }
 
@@ -180,7 +163,8 @@ export function checkUploadReceipt(ref: string, status: number, recovered: { ref
   assert.ok(recovered.refs.includes(ref), "Acknowledged upload lacks recovered membership");
 }
 
-export function checkText(document: Y.Doc, z: boolean): void {
+export function checkText(input: Y.Doc | ImageDocumentPort, z: boolean): void {
+  const document = input instanceof Y.Doc ? input : snapshotDocument(input);
   const identities = new IdentityBook();
   identities.bind("s1", { client: 7, clock: 0 }); identities.bind("s2", { client: 7, clock: 1 });
   identities.bind("a1", { client: 11, clock: 1 });
@@ -200,6 +184,22 @@ export function checkText(document: Y.Doc, z: boolean): void {
     rows: [{ id: "R1", characters: z ? [["s1", "a", {}], ["s2", "b", {}], ["a1", "Z", {}]] : [["s1", "a", {}], ["s2", "b", {}]] }],
     carets: {}, recovery: [],
   }, identities, "image-text");
+  if (!(input instanceof Y.Doc)) document.destroy();
+}
+
+export function snapshotDocument(port: ImageDocumentPort): Y.Doc {
+  const document = new Y.Doc(); Y.applyUpdate(document, port.snapshot()); return document;
+}
+
+export function imageIdentities(port: ImageDocumentPort | Y.Doc): string[] {
+  const document = port instanceof Y.Doc ? port : snapshotDocument(port);
+  try {
+    const text = document.getText("R1");
+    return Array.from(text.toString(), (character, index) => {
+      const id = Y.createRelativePositionFromTypeIndex(text, index).item; assert.ok(id);
+      return `${character}:${id.client}:${id.clock}`;
+    });
+  } finally { if (!(port instanceof Y.Doc)) document.destroy(); }
 }
 
 export function checkHeld(payloads: readonly string[]): void {

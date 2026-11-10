@@ -5,9 +5,11 @@ import { test } from "node:test";
 import * as Y from "yjs";
 import { ImagePublication } from "../../../src/service/images/publication.ts";
 import type { ImageDesign, ImageReplicaCapture } from "../../../src/service/images/publication.ts";
-import { characterIdentities, readRecoveredRows, until, workspace } from "../harness.ts";
+import { readRecoveredRows, until, workspace } from "../harness.ts";
 import { ImageClient, checkHeld, checkImagePromises, checkText, checkUploadReceipt, imagePort, initial, journalDocument,
-  membership, offline, png, recoveredStore, saved, sha, upload, waiting } from "./harness.ts";
+  membership, offline, png, recoveredStore, saved, sha, upload, waiting, imageIdentities as characterIdentities } from "./harness.ts";
+import type { ImageAcknowledgedCapture } from "./harness.ts";
+import { observeImageReview } from "./review.ts";
 
 function publication(design: ImageDesign): ImagePublication { return new ImagePublication(initial(), design); }
 
@@ -18,11 +20,12 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       const work = await workspace(); let client: ImageClient | undefined;
       class Premature extends ImagePublication {
         override status(receiptStatus: string): string { return receiptStatus; }
+        override allow(): boolean { return true; }
       }
       try {
         const server = await work.start({ IMAGE_POLICY: "1", IMAGE_MISSING_RECEIPT: "1" });
         const image = new Premature(initial(), design);
-        client = new ImageClient(server.port, work.path, image, ["accepted"], true);
+        client = new ImageClient(server.port, work.path, image, ["accepted"]);
         await client.connect(); await client.saved();
         client.expect("accepted"); image.insert(png, sha);
         await client.saved(); await client.fence();
@@ -57,6 +60,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
   });
 
   assert.equal(defectsRejected, 3, "All deliberate image defects must be rejected before any passing trace counts");
+  await observeImageReview(t);
 
   await t.test("blob upload: hash/size/header refusal before storage, duplicate and 2 MiB upload survive immediate hard kill", async () => {
     const work = await workspace();
@@ -95,19 +99,19 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           const server = await work.start({ IMAGE_POLICY: "1", REFUSAL_POLICY: "1" });
           let image = new ImagePublication(initial(), "upload-before-sync", mechanism);
           let client = new ImageClient(server.port, work.path, image); clients.push(client);
-          await client.connect(); await client.saved(); await client.drop();
+          await client.connect(); await client.saved(); checkText(image.editing, false); await client.drop();
           image.insert(png, sha); image.editing.getText("R1").insert(2, "Z");
           assert.equal(client.status, offline); checkText(image.editing, true);
           assert.deepEqual(image.export(), { text: "abZ", images: [sha], missingImages: [] });
           const states = [client.status];
           if (reload) {
             client.check(work.path);
-            const capture = { replica: image.capture(), acknowledged: client.sent.filter(sent => sent.applied).map(sent => sent.payload) };
+            const capture = { replica: image.capture(), acknowledged: { instance: work.path, updates: client.sent.filter(sent => sent.applied).map(sent => sent.payload) } };
             await writeFile(`${work.path}.local`, JSON.stringify(capture)); client.destroy(); clients.pop();
-            const restored = JSON.parse(await readFile(`${work.path}.local`, "utf8")) as { replica: ImageReplicaCapture; acknowledged: string[] };
+            const restored = JSON.parse(await readFile(`${work.path}.local`, "utf8")) as { replica: ImageReplicaCapture; acknowledged: ImageAcknowledgedCapture };
             const editing = new Y.Doc();
             image = new ImagePublication(editing, "upload-before-sync", mechanism, restored.replica);
-            client = new ImageClient(server.port, work.path, image, mechanism === "two-documents" ? ["accepted"] : [], false, restored.acknowledged); clients.push(client);
+            client = new ImageClient(server.port, work.path, image, mechanism === "two-documents" ? ["accepted"] : [], restored.acknowledged); clients.push(client);
             checkText(image.editing, true); assert.deepEqual(image.blobs.get(sha), png);
           } else if (mechanism === "two-documents") client.expect("accepted");
           await server.command("image-configure", { hold: true }, "image-configured");
@@ -117,6 +121,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           await until(() => client.attempts.some(frame => frame.lifetime >= (reload ? 1 : 2) && frame.kind === 0 && frame.subtype === 1), "actual provider reconnect SyncStep2 attempt");
           await client.fence();
           states.push(client.status); assert.equal(client.status, waiting);
+          checkText(image.editing, true);
           assert.deepEqual(membership(work.path), []);
           checkHeld(client.sent.map(sent => sent.payload));
           checkHeld(readRecoveredRows(work.path).map(row => row.payload));
@@ -126,7 +131,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
             checkText(image.network, false); assert.deepEqual([...image.network.getMap("gallery").values()], []);
           } else {
             assert.equal(image.network, image.editing);
-            assert.throws(() => checkHeld([Buffer.from(Y.encodeStateAsUpdate(image.network)).toString("base64")]), /Held image or subsequent text/);
+            assert.throws(() => checkHeld([Buffer.from(image.network.snapshot()).toString("base64")]), /Held image or subsequent text/);
             const attempted = client.attempts.filter(frame => frame.kind === 0 && frame.subtype === 1).at(-1);
             assert.ok(attempted); assert.throws(() => checkHeld([attempted.payload]), /Held image or subsequent text/);
             if (!reload) await writeFile(new URL("../../../histories/T16-one-document-N.json", import.meta.url), `${JSON.stringify({
@@ -137,7 +142,8 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
             }, null, 2)}\n`);
           }
           const vector = Y.encodeStateVector(before);
-          const release = Y.encodeStateAsUpdate(image.editing, vector);
+          const released = new Y.Doc(); docs.push(released); Y.applyUpdate(released, image.editing.snapshot());
+          const release = Y.encodeStateAsUpdate(released, vector);
           await server.command("configure", { hold: Buffer.from(release).toString("base64") });
           server.child.send({ command: "image-release" });
           const uploaded = await pendingUpload; pendingUpload = undefined;
@@ -149,6 +155,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           assert.equal(client.status, "Saved on this device, sending");
           server.child.send({ command: "release", gate: "held" });
           await client.saved(); await client.fence(); states.push(client.status);
+          checkText(image.editing, true); checkText(image.network, true);
           assert.deepEqual(states, [offline, waiting, saved]);
           client.observe(work.path); client.check(work.path);
           await server.kill(); assert.deepEqual((await recoveredStore(work.path)).refs, [sha]);
@@ -162,7 +169,8 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
           const download = await fetch(`http://127.0.0.1:${imagePort(restarted)}/api/images/fixture/${sha}`);
           const bytes = Buffer.from(await download.arrayBuffer()); assert.deepEqual(bytes, png);
           peerImage.blobs.set(sha, bytes); peer.expect("accepted"); peerImage.durable(sha);
-          await peer.saved(); await peer.fence(); assert.equal(peerImage.picture(sha), "picture"); peer.check(work.path);
+          await peer.saved(); await peer.fence(); checkText(peerImage.editing, true);
+          assert.equal(peerImage.picture(sha), "picture"); peer.check(work.path);
         } finally {
           for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy();
           await work.clean(); await pendingUpload?.catch(() => {});
@@ -177,14 +185,14 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       try {
         const server = await work.start({ IMAGE_POLICY: "1", REFUSAL_POLICY: "1" });
         const image = publication("pending-image"); const client = new ImageClient(server.port, work.path, image); clients.push(client);
-        await client.connect(); await client.saved(); await client.drop();
+        await client.connect(); await client.saved(); checkText(image.editing, false); await client.drop();
         image.insert(png, sha); image.editing.getText("R1").insert(2, "Z"); assert.equal(client.status, offline);
         assert.deepEqual(image.export(), { text: "abZ", images: [sha], missingImages: [] });
         client.expect("accepted", "accepted", "accepted"); await client.connect(); await client.fence();
         assert.equal(client.status, waiting); checkText(image.editing, true);
         const durable = journalDocument(work.path); docs.push(durable); checkText(durable, true);
         assert.deepEqual([...durable.getMap("gallery").values()], [{ id: "gP", beat: "R1", ref: sha, pending: true }]);
-        client.expect("accepted"); client.provider.forceSync(); await client.fence();
+        client.expect("accepted"); client.provider.forceSync(); await client.fence(); checkText(image.editing, true);
         const peerImage = new ImagePublication(new Y.Doc(), "pending-image");
         const peer = new ImageClient(server.port, work.path, peerImage); clients.push(peer);
         await peer.connect(); await peer.fence(); checkText(peerImage.editing, true);
@@ -192,29 +200,33 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
         assert.deepEqual(peerImage.export(), { text: "abZ", images: [], missingImages: [sha] });
         assert.deepEqual(membership(work.path), []); client.check(work.path); peer.check(work.path);
         if (neverReturns) {
-          await client.drop(); await server.kill();
+          await client.drop(); checkText(image.editing, true); checkText(peerImage.editing, true); await server.kill();
           const restarted = await work.start({ IMAGE_POLICY: "1" });
           const lateImage = new ImagePublication(new Y.Doc(), "pending-image");
           const late = new ImageClient(restarted.port, work.path, lateImage); clients.push(late);
           await late.connect(); await late.fence(); checkText(lateImage.editing, true);
           assert.equal(lateImage.picture(sha), "placeholder"); assert.equal(late.status, waiting);
           assert.deepEqual(lateImage.export(), { text: "abZ", images: [], missingImages: [sha] }); late.check(work.path);
+          checkText(peerImage.editing, true); checkText(image.editing, true);
         } else {
           const uploaded = await upload(server); assert.equal(uploaded.status, 201); await uploaded.arrayBuffer();
-          const next = new Y.Doc(); docs.push(next); Y.applyUpdate(next, Y.encodeStateAsUpdate(image.editing)); next.clientID = 11;
+          const next = new Y.Doc(); docs.push(next); Y.applyUpdate(next, image.editing.snapshot()); next.clientID = 11;
           const vector = Y.encodeStateVector(next); const item = image.items[0]; assert.ok(item);
           next.getMap("gallery").set("gP", { ...item, pending: false });
           await server.command("configure", { hold: Buffer.from(Y.encodeStateAsUpdate(next, vector)).toString("base64") });
           client.expect("accepted", "accepted"); image.durable(sha);
           await until(() => server.events.some(event => event.event === "held"), "pending flag receipt held");
+          checkText(image.editing, true); checkText(peerImage.editing, true);
           assert.equal(client.status, "Saved on this device, sending"); assert.equal(peerImage.picture(sha), "placeholder");
           server.child.send({ command: "release", gate: "held" }); await client.saved(); await client.fence();
           await until(() => peerImage.items[0]?.pending === false, "peer receives completed image flag");
+          checkText(image.editing, true); checkText(peerImage.editing, true);
           assert.equal(peer.status, waiting);
           const get = await fetch(`http://127.0.0.1:${imagePort(server)}/api/images/fixture/${sha}`);
           const bytes = Buffer.from(await get.arrayBuffer()); assert.deepEqual(bytes, png);
           peerImage.blobs.set(sha, bytes); peer.expect("accepted"); peerImage.durable(sha);
           await peer.saved(); await peer.fence(); assert.equal(peerImage.picture(sha), "picture");
+          checkText(image.editing, true); checkText(peerImage.editing, true);
           client.observe(work.path); peer.observe(work.path); client.check(work.path); peer.check(work.path);
         }
       } finally { for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy(); await work.clean(); }
@@ -236,6 +248,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
         const peer = new ImageClient(server.port, work.path, peerImage); clients.push(peer);
         await peer.connect(); await peer.saved(); peerImage.editing.clientID = 22;
         peer.expect("accepted"); peerImage.editing.getText("R1").insert(2, "X"); await peer.saved();
+        assert.deepEqual(characterIdentities(peerImage.editing), ["a:7:0", "b:7:1", "X:22:0"]);
         await until(() => image.editing.getText("R1").length === 4, "inbound integrates while image holds outbound work");
         assert.deepEqual(characterIdentities(image.editing), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
         await client.fence(); checkHeld(client.sent.map(sent => sent.payload));
@@ -244,6 +257,9 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
         const uploaded = await upload(server); assert.equal(uploaded.status, 201); await uploaded.arrayBuffer();
         client.expect(...(mechanism === "two-documents" ? ["accepted", "accepted"] as const : ["accepted"] as const));
         image.durable(sha); await client.saved(); await client.fence(); client.check(work.path);
+        await peer.fence();
+        assert.deepEqual(characterIdentities(image.editing), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
+        assert.deepEqual(characterIdentities(peerImage.editing), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
         const after = journalDocument(work.path); docs.push(after);
         assert.deepEqual(characterIdentities(after), ["a:7:0", "b:7:1", "Z:11:1", "X:22:0"]);
       } finally { for (const client of clients) client.destroy(); for (const doc of docs) doc.destroy(); await work.clean(); }
@@ -258,16 +274,18 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       await client.connect(); await client.saved(); await client.drop();
       image.insert(png, sha); image.editing.getText("R1").insert(2, "Z");
       client.expect("accepted", "accepted", "accepted"); await client.connect(); await client.fence(); client.check(work.path);
-      const capture = { replica: image.capture(), acknowledged: client.sent.filter(sent => sent.applied).map(sent => sent.payload) };
+      checkText(image.editing, true);
+      const capture = { replica: image.capture(), acknowledged: { instance: work.path, updates: client.sent.filter(sent => sent.applied).map(sent => sent.payload) } };
       await writeFile(`${work.path}.local`, JSON.stringify(capture)); client.destroy(); clients.pop();
-      const restored = JSON.parse(await readFile(`${work.path}.local`, "utf8")) as { replica: ImageReplicaCapture; acknowledged: string[] };
+      const restored = JSON.parse(await readFile(`${work.path}.local`, "utf8")) as { replica: ImageReplicaCapture; acknowledged: ImageAcknowledgedCapture };
       const resumedImage = new ImagePublication(new Y.Doc(), "pending-image", "one-document", restored.replica);
-      const resumed = new ImageClient(server.port, work.path, resumedImage, ["accepted"], false, restored.acknowledged); clients.push(resumed);
+      const resumed = new ImageClient(server.port, work.path, resumedImage, ["accepted"], restored.acknowledged); clients.push(resumed);
       checkText(resumedImage.editing, true); assert.deepEqual(resumedImage.blobs.get(sha), png);
       assert.deepEqual(resumedImage.items, [{ id: "gP", beat: "R1", ref: sha, pending: true }]);
       await resumed.connect(); await resumed.fence(); assert.equal(resumed.status, waiting);
       const response = await upload(server); assert.equal(response.status, 201); await response.arrayBuffer();
       resumed.expect("accepted", "accepted"); resumedImage.durable(sha); await resumed.saved(); await resumed.fence(); resumed.check(work.path);
+      checkText(resumedImage.editing, true);
     } finally { for (const client of clients) client.destroy(); await work.clean(); }
   });
 
@@ -278,7 +296,7 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       const image = publication("pending-image"); client = new ImageClient(server.port, work.path, image);
       await client.connect(); await client.saved();
       let notifications = 0;
-      client.provider.on("outgoingMessage", () => { notifications++; return false; });
+      client.provider.outgoing(() => { notifications++; return false; });
       client.expect("accepted"); image.insert(png, sha); await client.fence();
       assert.equal(client.sent.at(-1)?.subtype, 2); assert.equal(client.sent.at(-1)?.applied, true);
       await client.drop(); client.expect("accepted"); await client.connect(); await client.fence();
@@ -306,18 +324,22 @@ test("image checker rejects all three premature-save defects before T16/T19 pass
       const state = journalDocument(work.path); docs.push(state); checkText(state, false);
       assert.deepEqual([...state.getMap("gallery").values()], []);
       const uploaded = await upload(server); assert.equal(uploaded.status, 201); await uploaded.arrayBuffer();
-      const difference = Y.encodeStateAsUpdate(image.editing, Y.encodeStateVector(state));
+      const retry = new Y.Doc(); docs.push(retry); Y.applyUpdate(retry, image.editing.snapshot());
+      const difference = Y.encodeStateAsUpdate(retry, Y.encodeStateVector(state));
       await server.command("configure", { hold: Buffer.from(difference).toString("base64") });
       client.expect("accepted"); image.durable(sha);
       await until(() => server.events.some(event => event.event === "held"), "retry forceSync held before receipt");
       assert.equal(client.status, "Saved on this device, sending"); assert.equal(client.receipts.outstanding, 1);
       server.child.send({ command: "release", gate: "held" });
       await client.saved(); await client.fence();
+      await peer.fence(); checkText(image.editing, false); checkText(peerImage.editing, false);
+      assert.deepEqual(peerImage.items, [{ id: "gP", beat: "R1", ref: sha, pending: false }]);
       assert.equal(client.sent.at(-1)?.subtype, 1); assert.equal(client.sent.at(-1)?.applied, true);
-      assert.equal(client.policy.current(client.status).publication, "attached"); assert.equal(client.socket.shouldConnect, true);
+      assert.equal(client.policy.current(client.status).publication, "attached"); assert.equal(client.provider.shouldConnect(), true);
       assert.equal(client.receipts.outstanding, 0);
       client.expect("accepted"); image.editing.getText("R1").insert(2, "Z");
       await client.saved(); await client.fence(); assert.equal(new Set(client.frames.map(frame => frame.lifetime)).size, 1);
+      await peer.fence(); checkText(image.editing, true); checkText(peerImage.editing, true);
       client.check(work.path); peer.check(work.path);
       const recovered = journalDocument(work.path); docs.push(recovered); checkText(recovered, true);
       assert.deepEqual([...recovered.getMap("gallery").values()], [{ id: "gP", beat: "R1", ref: sha, pending: false }]);

@@ -16,6 +16,7 @@ function ranges(update: Uint8Array): ReceiptRange[] {
 }
 
 export class ConnectionReceipts {
+  private readonly instance: string | null;
   private lifetime = 0;
   private online = false;
   private exchangeSeen = false;
@@ -25,12 +26,15 @@ export class ConnectionReceipts {
   private invalid = false;
   private refused: ReceiptRange[][] = [];
 
+  constructor(instance: string | null = null) { this.instance = instance; }
+
   localUpdate(update: Uint8Array): void {
     this.edits.push(ranges(update));
   }
 
-  restoreAcknowledged(updates: readonly Uint8Array[]): void {
-    for (const update of updates) this.durable.push(...ranges(update));
+  restoreAcknowledged(capture: { instance: string; updates: readonly Uint8Array[] }): void {
+    if (!this.instance || capture.instance !== this.instance) throw new Error("Receipt instance mismatch");
+    for (const update of capture.updates) this.durable.push(...ranges(update));
   }
 
   open(): number {
