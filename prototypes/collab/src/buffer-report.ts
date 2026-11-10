@@ -11,6 +11,8 @@ import type { BufferTrace } from "../test/buffer-oracles.ts";
 import { finishTrace, stageTrace } from "../test/buffer-runner.ts";
 import { observeBuffers, probeAmbiguousDiff, probeDeleteFirst, probeMissingRecovery, probeProviderBypass, probeQueueBound, probeRecapturedBase } from "../test/buffer-probes.ts";
 import type { BufferProbeEvidence } from "../test/buffer-probes.ts";
+import { replacementIntentFixtures } from "../test/buffer-replacements.ts";
+import { runReplacementIntent } from "../test/buffer-replacement-runner.ts";
 
 export interface BufferExperimentResult {
   trace: BufferTrace;
@@ -26,6 +28,7 @@ export interface BufferExperimentResult {
 export interface BufferExperimentReport {
   cases: BufferExperimentResult[];
   probes: BufferProbeEvidence[];
+  replacements: BufferProbeEvidence[];
   files: Map<string, string>;
   markdown: string;
 }
@@ -71,6 +74,7 @@ function probeHistory(probes: BufferProbeEvidence[]): string {
 export function runBufferExperiments(): BufferExperimentReport {
   const cases: BufferExperimentResult[] = [];
   const probes: BufferProbeEvidence[] = [];
+  const replacements: BufferProbeEvidence[] = [];
   const files = new Map<string, string>();
   for (const trace of bufferTraceOrder) {
     for (const mechanism of bufferMechanisms) {
@@ -110,10 +114,32 @@ export function runBufferExperiments(): BufferExperimentReport {
   for (const trace of new Set(probes.map(probe => probe.trace))) {
     files.set(historyName(trace), probeHistory(probes.filter(probe => probe.trace === trace)));
   }
+  for (const fixture of replacementIntentFixtures) {
+    for (const mechanism of bufferMechanisms) {
+      for (const candidate of ["A", "B"] as const) {
+        for (const order of fixture.orders) {
+          const harness = new BufferHarness(candidate, mechanism, [{ id: "R1", text: "the the" }]);
+          try {
+            let difference: string | null = null;
+            try { runReplacementIntent(harness, fixture, order); }
+            catch (error) {
+              if (!(error instanceof Error)) throw error;
+              difference = error.message;
+            }
+            const result: BufferProbeEvidence = { trace: fixture.name, mechanism, candidate, order, status: difference ? "FAIL" : "PASS", difference, history: harness.history(), observed: observeBuffers(harness), shows: `Target-evidenced ${fixture.name} preserves intended identities and undo selection.` };
+            replacements.push(result);
+            if (difference) files.set(historyName(`T03-intent-${mechanism}-${candidate}-${fixture.name.replaceAll(" ", "-")}-${order}`), probeHistory([result]));
+          } finally {
+            harness.destroy();
+          }
+        }
+      }
+    }
+  }
   const markdown = [
     "# Stale-base experiment results",
     "",
-    "The simulated editable beat retains paint-time identities, runs, epoch and beat version. Native edits change a string; commit finds its difference from that paint and maps only observed identities. Synthetic composition start/update/end events keep the native buffer unchanged by remote integration. Both candidate layouts run; no DOM or real editor is used.",
+    "The simulated editable beat retains paint-time identities, runs, epoch and beat version. Native target evidence retains which painted characters survive and which characters are new; commit plans that replacement even when its string is unchanged or its difference is nonminimal. Without target evidence, the minimal-string-diff ambiguity guard is unchanged. Synthetic composition start/update/end events keep the native buffer unchanged by remote integration. Both candidate layouts run; no DOM or real editor is used.",
     "",
     `Main traces: ${cases.filter(result => result.status === "PASS").length}/${cases.length} pass, including each row's undo outcome, carets, selections, marks and recovery list. Counts include both candidates and all listed orders. M3 checks every E and N document separately, plus late-C where listed.`,
     "",
@@ -122,6 +148,19 @@ export function runBufferExperiments(): BufferExperimentReport {
     ...bufferTraceOrder.map(trace => `| ${trace} | ${bufferMechanisms.map(mechanism => cell(mechanism, trace, cases)).join(" | ")} | ${bufferOracles[trace].orders.join(", ")} |`),
     "",
     "Main runs use target-range evidence and insert replacements at the painted gap before deleting the selected identities. T01's composition variant is additional to the seven requested rows. T01 undo selects the restored bXc; T03 replace undo selects the restored second word. The older harness's T01 undo oracle now checks that selection too; it failed with `carets.A.selection … got <missing>` before reanchoring it.",
+    "",
+    "## Target-evidenced replacement intent",
+    "",
+    `Additional replacement cases: ${replacements.filter(result => result.status === "PASS").length}/${replacements.length} pass, including identities, deletion of s5/s6/s7, caret, recovery and undo selection. Literal expectations are in test/buffer-replacements.ts; the original 144 results and 34 probes are unchanged.`,
+    "",
+    "| Replacement | M1 | M2 | M3 | Delivery orders |",
+    "| --- | --- | --- | --- | --- |",
+    ...replacementIntentFixtures.map(fixture => `| ${fixture.name} | ${bufferMechanisms.map(mechanism => {
+      const group = replacements.filter(result => result.trace === fixture.name && result.mechanism === mechanism);
+      return `${group.every(result => result.status === "PASS") ? "PASS" : "FAIL"} (${group.filter(result => result.status === "PASS").length}/${group.length})`;
+    }).join(" | ")} | ${fixture.orders.join(", ")} |`),
+    "",
+    "Before the planner change, all 78 cases failed with 0 compatible minimal splices. Reproduce with node --test test/buffer-replacements.test.ts. Replacing s5 s6 s7 (the) with typed or pasted the now yields s1..s4 a1 a2 a3, caret after a3; undo yields s1..s4 s5* s6* s7* and selects the restored word. A concurrent n (b1) at the left gap, inside the word or at the right gap survives after a3 under D1, D3 and dup. Undo restores b1's original relation to the restored word; selection includes b1 only when it lies inside that word. Prefix/suffix replacements mint every typed identity, including unchanged letters. Paste here uses the same simulated target/data contract, without a clipboard or browser. Disjoint native targets remain uncommitted rather than deleting an untouched painted character.",
     "",
     "## Failure probes and predictions",
     "",
@@ -151,7 +190,7 @@ export function runBufferExperiments(): BufferExperimentReport {
     ""
   ].join("\n");
   files.set("buffer-results.md", markdown);
-  return { cases, probes, files, markdown };
+  return { cases, probes, replacements, files, markdown };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -162,5 +201,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (process.argv.includes("--check") && readFileSync(path, "utf8") !== contents) throw new Error(`Stale experiment artifact: ${name}`);
   }
   process.stdout.write(report.markdown);
-  if (report.cases.some(result => result.status === "FAIL")) process.exitCode = 1;
+  if ([...report.cases, ...report.replacements].some(result => result.status === "FAIL")) process.exitCode = 1;
 }

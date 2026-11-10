@@ -173,7 +173,11 @@ export async function runSlice(): Promise<SliceEvidence> {
       await select(protocol, 4, 7);
       await protocol.evaluate("slice.clear()");
       await protocol.insert("the");
-      evidence.probes.push({ name: `T03 replace identical text ${mechanism}`, stages: [await snapshot(protocol)] });
+      await protocol.evaluate("slice.checkIdentical(false)");
+      const forward = await snapshot(protocol);
+      await protocol.key("z", 2);
+      await protocol.evaluate("slice.checkIdentical(true)");
+      evidence.probes.push({ name: `T03 replace identical text ${mechanism}`, stages: [forward, await snapshot(protocol)] });
     }
     await protocol.evaluate("slice.reset('observe'); slice.tryCancelComposition()");
     await select(protocol, 4);

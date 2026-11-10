@@ -201,14 +201,20 @@ export class EditableBeatBuffer {
 
   plan(): NativeSplice {
     const painted = this.requirePaint();
-    let choices = minimalSplices(painted.value, this.nativeValue);
     if (this.targetEvidence) {
-      choices = choices.filter(choice => {
-        const origins: (number | null)[] = painted.identities.map((_, index) => index);
-        origins.splice(choice.from, choice.to - choice.from, ...Array<null>(choice.insert.length).fill(null));
-        return JSON.stringify(origins) === JSON.stringify(this.origins);
-      });
+      let from = 0;
+      while (from < this.origins.length && this.origins[from] === from) from++;
+      let to = painted.identities.length;
+      let end = this.origins.length;
+      while (to > from && end > from && this.origins[end - 1] === to - 1) { to--; end--; }
+      const insert = this.nativeValue.slice(from, end);
+      if (this.origins.slice(from, end).some(origin => origin !== null)
+        || painted.value.slice(0, from) + insert + painted.value.slice(to) !== this.nativeValue) {
+        throw new BufferMappingError("Target evidence does not describe a single native splice");
+      }
+      return { from, to, insert };
     }
+    const choices = minimalSplices(painted.value, this.nativeValue);
     if (choices.length !== 1) throw new BufferMappingError(`Ambiguous native diff: ${choices.length} minimal splices; target evidence ${this.targetEvidence ? "present" : "absent"}`);
     const choice = choices[0];
     if (!choice) throw new BufferMappingError("No native diff");

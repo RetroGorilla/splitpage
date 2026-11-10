@@ -1,6 +1,6 @@
 # Stale-base experiment results
 
-The simulated editable beat retains paint-time identities, runs, epoch and beat version. Native edits change a string; commit finds its difference from that paint and maps only observed identities. Synthetic composition start/update/end events keep the native buffer unchanged by remote integration. Both candidate layouts run; no DOM or real editor is used.
+The simulated editable beat retains paint-time identities, runs, epoch and beat version. Native target evidence retains which painted characters survive and which characters are new; commit plans that replacement even when its string is unchanged or its difference is nonminimal. Without target evidence, the minimal-string-diff ambiguity guard is unchanged. Synthetic composition start/update/end events keep the native buffer unchanged by remote integration. Both candidate layouts run; no DOM or real editor is used.
 
 Main traces: 144/144 pass, including each row's undo outcome, carets, selections, marks and recovery list. Counts include both candidates and all listed orders. M3 checks every E and N document separately, plus late-C where listed.
 
@@ -16,6 +16,22 @@ Main traces: 144/144 pass, including each row's undo outcome, carets, selections
 | T03 replace | PASS (6/6) | PASS (6/6) | PASS (6/6) | D1, D3, dup |
 
 Main runs use target-range evidence and insert replacements at the painted gap before deleting the selected identities. T01's composition variant is additional to the seven requested rows. T01 undo selects the restored bXc; T03 replace undo selects the restored second word. The older harness's T01 undo oracle now checks that selection too; it failed with `carets.A.selection … got <missing>` before reanchoring it.
+
+## Target-evidenced replacement intent
+
+Additional replacement cases: 78/78 pass, including identities, deletion of s5/s6/s7, caret, recovery and undo selection. Literal expectations are in test/buffer-replacements.ts; the original 144 results and 34 probes are unchanged.
+
+| Replacement | M1 | M2 | M3 | Delivery orders |
+| --- | --- | --- | --- | --- |
+| typed identical text | PASS (2/2) | PASS (2/2) | PASS (2/2) | D1 |
+| pasted identical text | PASS (2/2) | PASS (2/2) | PASS (2/2) | D1 |
+| replacement sharing a prefix | PASS (2/2) | PASS (2/2) | PASS (2/2) | D1 |
+| replacement sharing a suffix | PASS (2/2) | PASS (2/2) | PASS (2/2) | D1 |
+| identical replacement with remote at left gap | PASS (6/6) | PASS (6/6) | PASS (6/6) | D1, D3, dup |
+| identical replacement with remote inside word | PASS (6/6) | PASS (6/6) | PASS (6/6) | D1, D3, dup |
+| identical replacement with remote at right gap | PASS (6/6) | PASS (6/6) | PASS (6/6) | D1, D3, dup |
+
+Before the planner change, all 78 cases failed with 0 compatible minimal splices. Reproduce with node --test test/buffer-replacements.test.ts. Replacing s5 s6 s7 (the) with typed or pasted the now yields s1..s4 a1 a2 a3, caret after a3; undo yields s1..s4 s5* s6* s7* and selects the restored word. A concurrent n (b1) at the left gap, inside the word or at the right gap survives after a3 under D1, D3 and dup. Undo restores b1's original relation to the restored word; selection includes b1 only when it lies inside that word. Prefix/suffix replacements mint every typed identity, including unchanged letters. Paste here uses the same simulated target/data contract, without a clipboard or browser. Disjoint native targets remain uncommitted rather than deleting an untouched painted character.
 
 ## Failure probes and predictions
 
