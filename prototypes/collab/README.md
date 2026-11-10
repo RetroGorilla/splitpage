@@ -34,3 +34,11 @@ The six deliberate defects run against literal oracles under both layouts. Their
 M1 holds inbound bytes while dirty. M2 integrates them immediately, repaints clean buffers synchronously and cancels a stale `beforeinput` into a model edit. M3 has separate network and editor documents with origin-filtered forwarding. All run under A and B; these are simulations of the binding contract, not real editor integration or a mechanism selection.
 
 Read [buffer-results.md](buffer-results.md) for the measured matrix, failure probes and remaining limits. `npm run experiments` reproduces it; `node src/buffer-report.ts --write` refreshes the generated report and histories after an intentional experiment change. The tests require those artifacts to match the experiment exactly. Literal expected states remain in `test/buffer-oracles.ts`; regenerating evidence does not alter them.
+
+## Browser beat slice
+
+Read [slice-results.md](slice-results.md) for real browser input observations, the 72-case trace matrix, retained failures and the differences from the app. This is an isolated one-beat page, not the app's editor binding. Candidate A runs under all three mechanisms with the existing literal buffer oracles. Repainting active composition and identical-text replacements expose limitations despite the prescribed traces passing.
+
+`npm run slice` builds `slice.html` into a temporary local file, drives one headless Edge through its debugging protocol, and records `slice-evidence.json`, the generated report and histories. Run it through the smoke-lock wrapper described in the report; set the lane's TEMP/TMP first. The browser chooses a free port and temporary profile and is closed in finally. `SLICE_EDGE` can override its executable path. The prototype-only `esbuild` 0.28.2 dev dependency bundles the TypeScript page and Yjs; the protocol client uses Node's built-in WebSocket.
+
+Browser execution is separate from `npm test`. Browser-free tests recheck retained forward/undo models through the independent checker, assert the failure evidence and require generated report/history consistency. `node src/slice/report.ts --check` checks just those generated artifacts; `--write` regenerates them from retained raw evidence without launching a browser.
