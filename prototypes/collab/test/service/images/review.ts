@@ -9,12 +9,12 @@ import { syncFrame } from "../../../src/service/wire.ts";
 import { workspace } from "../harness.ts";
 import { ImageClient, checkHeld, checkText, imageIdentities, initial, journalDocument, membership, png, saved, sha, upload, waiting } from "./harness.ts";
 
-function awarenessFrame(payload: Uint8Array): Uint8Array {
+function opaqueFrame(kind: number, payload: Uint8Array): Uint8Array {
   let length = payload.length;
   const size: number[] = [];
   while (length > 127) { size.push(length & 127 | 128); length >>>= 7; }
   size.push(length);
-  return Buffer.concat([Buffer.from([7, ...Buffer.from("fixture"), 1, ...size]), payload]);
+  return Buffer.concat([Buffer.from([7, ...Buffer.from("fixture"), kind, ...size]), payload]);
 }
 
 export async function observeImageReview(t: TestContext): Promise<void> {
@@ -33,15 +33,16 @@ export async function observeImageReview(t: TestContext): Promise<void> {
         if (mechanism === "two-documents") client.expect("accepted");
         await client.connect(); await client.fence(); assert.equal(client.status, waiting);
         const sent = client.frames.length;
-        const payload = { gallery: image.items, text: image.export().text };
+        const payload = { imageFence: 0, gallery: image.items, text: image.export().text };
         if (probe === "stateless") {
           const active = client;
           assert.throws(() => active.provider.sendStateless(JSON.stringify(payload)), /refuses outgoing frame kind 5/);
+          assert.throws(() => active.provider.send(opaqueFrame(5, Buffer.from(JSON.stringify(payload)))), /refuses outgoing frame kind 5/);
           assert.throws(() => active.provider.sendStateless('{"imageFence":999}'), /refuses outgoing frame kind 5/);
         } else if (probe === "awareness") {
           awareness.setLocalState(payload);
           const active = client;
-          assert.throws(() => active.provider.send(awarenessFrame(encodeAwarenessUpdate(awareness, [awarenessDocument.clientID]))), /refuses outgoing frame kind 1/);
+          assert.throws(() => active.provider.send(opaqueFrame(1, encodeAwarenessUpdate(awareness, [awarenessDocument.clientID]))), /refuses outgoing frame kind 1/);
           assert.throws(() => active.provider.send(new Uint8Array([7, ...Buffer.from("fixture"), 3])), /refuses outgoing frame kind 3/);
           assert.throws(() => active.provider.send(new Uint8Array([7, ...Buffer.from("fixture"), 42])), /refuses outgoing frame kind 42/);
           assert.throws(() => active.provider.send(syncFrame("fixture", 1, image.editing.snapshot())), /refuses caller-provided sync frames/);

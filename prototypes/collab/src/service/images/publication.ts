@@ -17,7 +17,7 @@ export type ImageDocumentPort = {
   on: () => never;
 };
 export type ImageTransport = {
-  connect: () => Promise<unknown>;
+  connect: () => Promise<void>;
   drop: () => void;
   status: () => string;
   shouldConnect: () => boolean;
@@ -139,20 +139,23 @@ export class ImagePublication {
     this.#editing.on("update", update);
     receipts.localUpdate(Y.encodeStateAsUpdate(this.#editing));
     this.#transport = Object.freeze({
-      connect: (): Promise<unknown> => socket.connect(),
+      connect: async (): Promise<void> => { await socket.connect(); },
       drop: (): void => { socket.shouldConnect = false; socket.webSocket?.close(); },
       status: (): string => socket.status,
       shouldConnect: (): boolean => socket.shouldConnect,
       closed: (): boolean => socket.webSocket === null,
       forceSync: (): void => provider.forceSync(),
-      sendStateless: (payload: string): void => provider.sendStateless(payload),
+      sendStateless: (payload: string): void => {
+        if (this.design === "upload-before-sync" && this.waiting) throw new Error("Image gate refuses outgoing frame kind 5");
+        provider.sendStateless(payload);
+      },
       send: (bytes: Uint8Array): void => {
         if (this.design === "upload-before-sync" && this.waiting && readFrame(bytes).kind === 0) {
           throw new Error("Image gate refuses caller-provided sync frames");
         }
         socket.webSocket?.send(Uint8Array.from(bytes));
       },
-      outgoing: (listener: () => boolean): void => { provider.on("outgoingMessage", listener); },
+      outgoing: (listener: () => boolean): void => { provider.on("outgoingMessage", () => listener()); },
       fence: (): string => {
         const label = JSON.stringify({ imageFence: ++this.#fence });
         const value = Buffer.from(label);
