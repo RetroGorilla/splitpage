@@ -120,6 +120,16 @@ export const statusRedoObserved: Record<string, ScriptOracle> = {
   ready: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "ready" }], carets: {}, recovery: [], notices: statusNotices }
 };
 
+export const throwingUndoOracles: Record<string, ScriptOracle> = {
+  thrown: { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["a1", "x", {}]] }], carets: {}, recovery: [] },
+  "insert undone": { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]] }], carets: {}, recovery: [] }
+};
+
+export const redoneMarkOracles: Record<string, ScriptOracle> = {
+  tag: { rows: [{ id: "R1", characters: [["s1", "a", { b: true, tag: "P" }], ["s2", "b", { tag: "P" }]] }], carets: {}, recovery: [] },
+  comment: { rows: [{ id: "R1", characters: [["s1", "a", { b: true, "c:C1": true }], ["s2", "b", { "c:C1": true }]] }], carets: {}, recovery: [], records: { comments: { C1: { author: "Alice", createdAt: 0, text: "", rowId: "R1", field: "audioText", recovery: false, replies: [] } }, recoveryReplies: [] } }
+};
+
 export const positionControlOracle: ScriptOracle = {
   rows: [{ id: "R1", characters: [["b1", "Q", {}], ["s1", "a", {}], ["s2", "b", {}]] }], carets: {}, recovery: []
 };

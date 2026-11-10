@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalTag, runInsideRange, runJoinRedo, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneRecovery, runRejoin, runReRemoval, runRestoredChain, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
+import { recordTiming, runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalRemovalRedo,runIdenticalTag, runInsideRange, runJoinRedo, runJoinTargetRemoved, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneMarkReversed, runRedoneRecovery, runRejoin, runRemovedAfterInsert, runRemovedSplit, runReRemoval, runRestoredChain, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "./cases.ts";
 import type { CaseResult } from "./cases.ts";
 
 const identicalOrders = ["D1", "dup", "rev", "late-C"] as const;
@@ -27,7 +27,33 @@ for (const order of everyOrder) {
   });
 }
 
-test("an undo that throws keeps its entry", () => passes({ ...runThrowingUndo(), checks: 2 }));
+test("an undo that throws keeps its entry and writes nothing; the entry below it still undoes", () => passes(runThrowingUndo()));
+
+for (const mark of ["tag", "comment"] as const) {
+  test(`limit: a redone ${mark} is lost when the writer's undo and redo updates arrive in reverse`, () => {
+    assert.match(runRedoneMarkReversed(mark).failure ?? "", /redone\/client\d+\.rows\[0\]\.characters\[0\]\.marks\.(tag|c:C1): expected (true|"P"), got <missing>/);
+  });
+}
+
+test("reader limit: a removal racing an unseen insert lists the insert as edited on one replica only", () => {
+  assert.match(runRemovedAfterInsert().failure ?? "", /replicas differ: .*edited=\[\]/);
+  assert.match(runRemovedAfterInsert().failure ?? "", /replicas differ: .*edited=\["a1"\]/);
+});
+
+test("reader limit: the splitter of a removed split beat appears on one replica only", () => {
+  assert.match(runRemovedSplit().failure ?? "", /replicas differ: .*splitBy=Alice/);
+});
+
+test("reader limit: removing the target of a join leaves the joined beat unreadable", () => {
+  assert.match(runJoinTargetRemoved().failure ?? "", /Structural join target unavailable/);
+});
+
+test("a command records after its transaction: an afterTransaction listener sees the edit while the history is still empty", () => {
+  const timing = recordTiming();
+  assert.ok(timing.listenerSaw.length > 0);
+  assert.ok(timing.listenerSaw.every(length => length === 0));
+  assert.equal(timing.after, 1);
+});
 
 for (const order of identicalOrders) {
   for (const swapped of [false, true]) {
@@ -38,6 +64,7 @@ for (const order of identicalOrders) {
     }
   }
   test(`intentional rejoin after both joins were retired ${order}`, () => passes(runRejoin(order)));
+  test(`redo of an identical removal restores both writers' removal entries ${order}`, () => passes(runIdenticalRemovalRedo(order)));
   test(`intentional re-removal after both removals were undone ${order}`, () => passes(runReRemoval(order)));
   test(`mechanism control: removal undo without its own-entry check restores the later re-removal ${order}`, () => {
     assert.match(runReRemoval(order, "retire-without-own-entry").failure ?? "", /consumed identical undo reached an older step or wrote state/);

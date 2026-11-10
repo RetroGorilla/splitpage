@@ -1,12 +1,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bufferOracles, bufferTraceOrder } from "../../test/buffer-oracles.ts";
-import { replacementIntentFixtures } from "../../test/buffer-replacements.ts";
-import { attempt, bufferOrders, runBufferTrace, runReplacement } from "../../test/undo-records/buffer-runner.ts";
-import { runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalTag, runInsideRange, runJoinRedo, runLaterFormat, runLongChain, runPositionControl, runRedoAfterRemote, runRedoneRecovery, runRejoin, runReRemoval, runRestoredChain, runSequentialStatus, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "../../test/undo-records/cases.ts";
+import { runDoubleDelete, runEmptyBeatInsert, runHeldSelection, runIdenticalRemoval, runIdenticalRemovalRedo, runIdenticalTag, runInsideRange, runJoinRedo, runLongChain, runPositionControl, runRedoAfterRemote, runRejoin, runReRemoval, runRestoredChain, runSplitAtEnd, runStatusRedo, runThrowingUndo } from "../../test/undo-records/cases.ts";
 import type { CaseResult } from "../../test/undo-records/cases.ts";
-import { recordTraces, runRecord } from "../../test/undo-records/runner.ts";
+import { commandOps, defaultGeneratorRuns, execute, generate, generatorLength } from "../../test/undo-records/generator.ts";
+import { declaredLimits, keptSeeds, limitFor } from "../../test/undo-records/limits.ts";
+import { libraryProbes } from "../../test/undo-records/probes.ts";
+import { retainedFamilies, retainedUndoSources } from "../../test/undo-records/retained.ts";
 import { boundCounts, measureKinds, runBoundHistory } from "./measure.ts";
 
 interface Row {
@@ -17,61 +17,77 @@ interface Row {
   failures: string[];
 }
 
-function fixtureRows(): Row[] {
-  const rows: Row[] = [];
-  for (const [trace, orders] of Object.entries(recordTraces)) {
-    for (const swapped of trace === "T06" ? [false, true] : [false]) {
-      const runs = orders.map(order => runRecord(trace, order, swapped));
-      rows.push({ name: `${trace}${swapped ? " (swapped client ids)" : ""}`, orders: orders.join(", "), passed: runs.filter(run => !run.failure).length, total: runs.length, failures: runs.flatMap(run => run.failure ? [`${run.order}: ${run.failure}`] : []) });
-    }
-  }
-  for (const trace of bufferTraceOrder) {
-    const orders = bufferOrders(bufferOracles[trace].orders);
-    const failures = orders.flatMap(order => { const failure = attempt(() => runBufferTrace(trace, order)); return failure ? [`${order}: ${failure}`] : []; });
-    rows.push({ name: `${trace} undo half, M1`, orders: orders.join(", "), passed: orders.length - failures.length, total: orders.length, failures });
-  }
-  for (const fixture of replacementIntentFixtures) {
-    const orders = bufferOrders(fixture.orders);
-    const failures = orders.flatMap(order => { const failure = attempt(() => runReplacement(fixture, order)); return failure ? [`${order}: ${failure}`] : []; });
-    rows.push({ name: `replacement: ${fixture.name}, M1`, orders: orders.join(", "), passed: orders.length - failures.length, total: orders.length, failures });
-  }
-  return rows;
-}
-
 function caseRow(name: string, orders: string, runs: CaseResult[]): Row {
   return { name, orders, passed: runs.filter(run => !run.failure).length, total: runs.length, failures: runs.flatMap(run => run.failure ? [run.failure] : []) };
 }
 
-function history(title: string, line: string, run: CaseResult): string {
-  return [`${line}`, "", "Replay: `node --test test/undo-records/cases.test.ts`.", "", `# ${title}`, "", `Failure: ${run.failure ?? "unexpected pass"}`, "", "```text", ...run.history, "```", ""].join("\n");
+function history(title: string, line: string, replay: string, failure: string, lines: readonly string[]): string {
+  return [line, "", `Replay: \`${replay}\`.`, "", `# ${title}`, "", `Failure: ${failure}`, "", "```text", ...lines, "```", ""].join("\n");
+}
+
+function generatorCounts(): { runs: number; executed: Record<string, number>; byLimit: Map<string, { runs: number; violations: number }>; unmatched: number } {
+  const executed: Record<string, number> = {};
+  const byLimit = new Map<string, { runs: number; violations: number }>();
+  let runs = 0;
+  let unmatched = 0;
+  for (const writers of [2, 3] as const) {
+    for (let seed = 1; seed <= defaultGeneratorRuns; seed++) {
+      const run = execute(generate(seed, writers, generatorLength));
+      runs++;
+      for (const [op, count] of Object.entries(run.executed)) executed[op] = (executed[op] ?? 0) + count;
+      const hit = new Set<string>();
+      for (const violation of run.violations) {
+        const limit = limitFor(violation);
+        if (!limit) {
+          unmatched++;
+          continue;
+        }
+        const entry = byLimit.get(limit.id) ?? { runs: 0, violations: 0 };
+        entry.violations++;
+        if (!hit.has(limit.id)) entry.runs++;
+        hit.add(limit.id);
+        byLimit.set(limit.id, entry);
+      }
+    }
+  }
+  return { runs, executed, byLimit, unmatched };
 }
 
 export function undoRecordReport(): { files: Map<string, string>; markdown: string; failures: string[] } {
   const files = new Map<string, string>();
+  const failures: string[] = [];
   const identical = ["D1", "dup", "rev", "late-C"] as const;
   const follow = ["D2", "dup", "late-C"] as const;
   const every = ["D1", "D2", "dup", "rev", "late-C"] as const;
-  const fixtures = fixtureRows();
+  const familyRows = retainedFamilies.map(family => {
+    const runs = family.runs.map(run => ({ label: run.label, result: run.run() }));
+    const sources = Object.entries(retainedUndoSources).filter(([, names]) => names.includes(family.name)).map(([file]) => `\`${file}\``);
+    const failed = runs.filter(run => run.result.failure);
+    for (const run of failed) failures.push(`${family.name} ${run.label}: ${run.result.failure ?? ""}`);
+    return { name: family.name, sources: sources.join(", "), passed: runs.length - failed.length, total: runs.length };
+  });
   const both = [false, true].flatMap(swapped => (["Alice", "Bob"] as const).map(first => ({ swapped, first })));
   const removals = identical.flatMap(order => both.map(({ swapped, first }) => runIdenticalRemoval(order, swapped, first)));
   const cases = [
     caseRow("Identical simultaneous removal; either writer undoes first; both client-id orders", identical.join(", "), removals),
+    caseRow("Identical simultaneous removal; one writer undoes and redoes: both removal entries return", identical.join(", "), identical.map(order => runIdenticalRemovalRedo(order))),
     caseRow("Identical simultaneous tag; either writer undoes first; both client-id orders", identical.join(", "), identical.flatMap(order => both.map(({ swapped, first }) => runIdenticalTag(order, swapped, first)))),
     caseRow("Intentional rejoin after both joins were retired; the other writer's stale undo", identical.join(", "), identical.map(order => runRejoin(order))),
     caseRow("Intentional re-removal after both removals were undone; the other writer's stale undo", identical.join(", "), identical.map(order => runReRemoval(order))),
     caseRow("Undo after the other writer typed inside the undone insertion", follow.join(", "), follow.map(order => runInsideRange(order))),
     caseRow("Undo of a delete the other writer also made; final state after both undos; either first", identical.join(", "), identical.flatMap(order => (["Alice", "Bob"] as const).map(first => runDoubleDelete(order, first, false)))),
     caseRow("Redo after undo with a remote insertion elsewhere", follow.join(", "), follow.map(order => runRedoAfterRemote(order, false))),
-    caseRow("Redo after undo with a remote insertion at the undone gap (full model, observed outcome of open question 2)", follow.join(", "), follow.map(order => runRedoAfterRemote(order, true))),
+    caseRow("Redo after undo with a remote insertion at the undone gap (observed outcome of open question 2)", follow.join(", "), follow.map(order => runRedoAfterRemote(order, true))),
     caseRow("Insert, bold and delete one character, then three undos and three redos", follow.join(", "), follow.map(order => runRestoredChain(order))),
     caseRow("Split at the end of a beat, then undo (caret at the end)", every.join(", "), every.map(order => runSplitAtEnd(order))),
     caseRow("Insert into an empty beat, then undo (caret in the empty beat)", every.join(", "), every.map(order => runEmptyBeatInsert(order))),
     caseRow("Bold one character, delete and undo it 64 times, then undo the bold", every.join(", "), every.map(order => runLongChain(order))),
     caseRow("A selection held outside the history, mapped through it after delete and undo", every.join(", "), every.map(order => runHeldSelection(order))),
     caseRow("Join redo after the other writer joined the same beat elsewhere: the earlier winner wins again", every.join(", "), every.map(order => runJoinRedo(order))),
-    caseRow("An undo whose record cannot be resolved throws and keeps its entry", "D1", [runThrowingUndo()])
+    caseRow("An undo whose record cannot be resolved throws, keeps its entry and writes nothing; the entry below it still undoes", "D1", [runThrowingUndo()]),
+    caseRow("Status redo after concurrent status changes that did not apply (observed outcome of open question 4)", every.join(", "), every.map(order => runStatusRedo(order)))
   ];
-  cases.push(caseRow("Status redo after concurrent status changes that did not apply (observed outcome of open question 4)", every.join(", "), every.map(order => runStatusRedo(order))));
+  for (const row of cases) if (row.failures.length) failures.push(`${row.name}: ${row.failures.join("; ")}`);
   const statusRedo = runStatusRedo("D1").observation ?? "";
   const held = runHeldSelection("D1").observation ?? "";
   const named = [...new Set(removals.flatMap(run => run.observation ? [run.observation] : []))];
@@ -87,23 +103,43 @@ export function undoRecordReport(): { files: Map<string, string>; markdown: stri
     { title: "Removal undo without its own-entry check", file: "UR-re-removal-restored.md", line: "Deleting every removal entry of the beat without checking the writer's own entry lets Bob's stale undo restore Alice's later re-removal.", run: runReRemoval("D1", "retire-without-own-entry"), pattern: /older step or wrote state/ },
     { title: "Per-writer tag occurrence keys", file: "UR-per-writer-tag-keys.md", line: "With one occurrence key per writer, identical simultaneous tags show as a tag nested in itself.", run: runIdenticalTag("D1", false, "Alice", undefined, true), pattern: /marks/ }
   ];
-  const limits: { title: string; file: string; line: string; run: CaseResult; pattern: RegExp; library: string }[] = [
-    { title: "Concurrent undos of a doubly deleted character", file: "UR-concurrent-double-restore.md", line: "Alice and Bob both deleted c and undo without seeing each other's undo: c comes back twice.", run: runDoubleDelete("D1", "Alice", true), pattern: /characters\[3\]/, library: "Also with the library: two `Y.UndoManager`s undoing the same delete give `abccd` (probe, both client-id orders)." },
-    { title: "Second status undo by one writer", file: "UR-sequential-status.md", line: "Under main's status rule only frontier events retire, so a writer's second status undo changes nothing.", run: runSequentialStatus("D2"), pattern: /expected "todo", got "ready"/, library: "Also with the library: main's `undoStatus` applies the same retirement." },
-    { title: "Format undo over the other writer's later formatting", file: "UR-later-format.md", line: "Alice bolds ab; Bob unbolds then bolds bc; Alice's undo removes Bob's bold from b. Expected (decided row: a person undoes only their own changes): b keeps Bob's bold.", run: runLaterFormat("D1"), pattern: /characters\[1\]\.marks\.b: expected true, got <missing>/, library: "Also with the library: `Y.UndoManager` undoing Alice's bold leaves a, b, c and d all plain (probe)." },
-    { title: "Recovery after undo and redo inside a removed beat", file: "UR-redone-recovery.md", line: "Alice inserts x; Bob removes the beat; Alice undoes and redoes: recovery lists the restored x as an edit made after the removal.", run: runRedoneRecovery("D1"), pattern: /edited\[0\]: expected <missing>, got "a1\*"/, library: "Also with the library: after `Y.UndoManager` undo and redo the reader lists the redone x as edited (probe)." }
-  ];
-  const failures: string[] = [];
-  for (const row of [...fixtures, ...cases]) if (row.failures.length) failures.push(`${row.name}: ${row.failures.join("; ")}`);
-  for (const probe of [...controls, ...limits]) {
+  for (const probe of controls) {
     if (!probe.pattern.test(probe.run.failure ?? "")) failures.push(`${probe.title} did not fail as expected: ${probe.run.failure ?? "passed"}`);
-    files.set(`histories/${probe.file}`, history(probe.title, probe.line, probe.run));
+    files.set(`histories/${probe.file}`, history(probe.title, probe.line, "node --test test/undo-records/cases.test.ts", probe.run.failure ?? "unexpected pass", probe.run.history));
   }
+  const probes = libraryProbes();
+  const generatorRows = generatorCounts();
+  if (generatorRows.unmatched) failures.push(`${generatorRows.unmatched} generator violations match no declared limit`);
+  const limitRows = declaredLimits.map(limit => {
+    const found: string[] = [];
+    const links: string[] = [];
+    let failure = "";
+    if (limit.literal) {
+      const run = limit.literal.run();
+      if (!limit.literal.failure.test(run.failure ?? "")) failures.push(`${limit.id} literal case did not fail as declared: ${run.failure ?? "passed"}`);
+      failure = (run.failure ?? "passed").split("\n")[0] ?? "";
+      found.push("literal case");
+      links.push(`[literal](histories/${limit.literal.file})`);
+      files.set(`histories/${limit.literal.file}`, history(limit.title, `Owner: ${limit.owner}.`, "node --test test/undo-records/generator.test.ts", run.failure ?? "unexpected pass", run.history));
+    }
+    if (limit.minimal) {
+      const run = execute(limit.minimal, { actOnPending: limit.actOnPending ?? false });
+      const violation = run.violations.find(entry => limit.matches?.(entry));
+      if (!violation) failures.push(`${limit.id} minimized history no longer shows it`);
+      if (!failure) failure = `${violation?.check ?? "none"}: ${violation?.detail ?? ""}`;
+      links.push(`[generator, ${limit.minimal.steps.length} steps](histories/UR-gen-${limit.id}.md)`);
+      files.set(`histories/UR-gen-${limit.id}.md`, history(limit.title, `Owner: ${limit.owner}. Minimized generator history (${limit.minimal.writers} writers${limit.actOnPending ? ", acting on a replica that holds an out-of-order update" : ""}); queue lines are omitted.`, "node --test test/undo-records/generator.test.ts", violation ? `${violation.check}: ${violation.detail}` : "not reproduced", run.history.filter(line => !line.startsWith("enqueue"))));
+    }
+    const counted = generatorRows.byLimit.get(limit.id);
+    if (limit.matches) found.push(counted ? `generator: ${counted.runs} of ${generatorRows.runs} runs` : `generator: 0 of ${generatorRows.runs} runs`);
+    const library = limit.library ? `\`${probes[limit.library] ?? "missing probe"}\`` : "not probed";
+    return `| ${limit.title} | ${limit.owner} | ${found.join("; ")} | ${failure.replaceAll("|", "\\|").slice(0, 300)} | ${library} | ${links.join(", ")} |`;
+  });
   const kinds = measureKinds();
   const growth = (kind: string): number => {
-    const found = kinds.find(entry => entry.kind === kind);
-    if (!found) throw new Error(`Missing measurement ${kind}`);
-    return found.stateGrowthBytes;
+    const entry = kinds.find(item => item.kind === kind);
+    if (!entry) throw new Error(`Missing measurement ${kind}`);
+    return entry.stateGrowthBytes;
   };
   const bound = runBoundHistory();
   const counts = boundCounts(bound);
@@ -111,72 +147,96 @@ export function undoRecordReport(): { files: Map<string, string>; markdown: stri
   const restoredAfterBound = bound.harness.alice.doc.getMap("restoredIdentities").size;
   const retiredAfterBound = bound.harness.alice.doc.getMap("retiredStatus").size;
   bound.harness.destroy();
-  const line = (text: string | null): string => (text ?? "passed").split("\n")[0] ?? "";
-  const cell = (row: Row): string => row.failures.length ? `FAIL ${row.passed}/${row.total}: ${row.failures.map(line).join("; ")}` : `PASS ${row.passed}/${row.total}`;
-  const familyNames = Object.keys(recordTraces);
-  const rowsOf = (name: string): Row[] => fixtures.filter(row => row.name === name || row.name === `${name} (swapped client ids)`);
-  const familyRows = familyNames.flatMap(rowsOf);
-  const bufferRows = fixtures.filter(row => !familyRows.includes(row));
-  const sum = (rows: Row[], field: "passed" | "total"): number => rows.reduce((total, row) => total + row[field], 0);
-  const passingFamilies = familyNames.filter(name => rowsOf(name).every(row => !row.failures.length));
-  const failingFamilies = familyNames.filter(name => !passingFamilies.includes(name));
+  const cell = (row: Row): string => row.failures.length ? `FAIL ${row.passed}/${row.total}: ${row.failures.map(text => text.split("\n")[0] ?? "").join("; ")}` : `PASS ${row.passed}/${row.total}`;
+  const familyTotal = familyRows.reduce((sum, row) => sum + row.total, 0);
+  const familyPassed = familyRows.reduce((sum, row) => sum + row.passed, 0);
+  const passingFamilies = familyRows.filter(row => row.passed === row.total).length;
+  const executed = generatorRows.executed;
+  const commandTotal = commandOps.reduce((sum, op) => sum + (executed[op] ?? 0), 0);
   const markdown = [
     "# Command-record undo results", "",
-    "Generated by `node src/undo-records/report.ts --write`; `test/undo-records/report.test.ts` requires this file and the `UR-` histories to match. Retained fixtures use their existing literal oracles unchanged. The new cases' expected results are literal data in `test/undo-records/oracles.ts`, written from the decided product rows. One commit cannot show that they were written before the first run: the oracles and the code that passes them land together. Candidate B only; the buffer traces run M1. Status uses main's rule (`statusFrontier`/`statusValue` in `src/marks/commands.ts`); #1413 was still open.", "",
+    "Generated by `node src/undo-records/report.ts --write`; `test/undo-records/report.test.ts` requires this file and the `UR-` histories to match. Candidate B only; the buffer families run M1. Status uses main's rule (`statusFrontier`/`statusValue` in `src/marks/commands.ts`).", "",
+    "The limits below are the ones these literal fixtures and this generator have found so far; passing them does not show that there are no others.", "",
     "## Answer", "",
-    `${passingFamilies.length} of ${familyNames.length} retained candidate B families pass (${sum(familyRows, "passed")}/${sum(familyRows, "total")} runs)${failingFamilies.length ? `; failing: ${failingFamilies.join(", ")}` : ""}, and ${sum(bufferRows, "passed")}/${sum(bufferRows, "total")} M1 buffer and replacement runs. The families are every structural and mark trace with an undo step plus the two U-H1 traces, derived from the native runners' trace lists. Undo runs on a per-writer history of command records: each record holds identities and shared record ids, and undo applies its reverse as a new local transaction. No library undo or redo is called; the M1 buffer's inherited constructor still builds a \`Y.UndoManager\`, which is destroyed unused.`, "",
-    `${limits.length} limits remain, each with a failing literal test and a minimized history below: concurrent undos of one doubly deleted character restore it twice (a convergent rule is in #1419); main's status rule cannot undo a writer's second status change (#1413); a format undo overwrites the other writer's later formatting; and recovery lists a redone character as an edit made after the removal. Each also occurs with the library's undo stack, so none comes from leaving it. The structural reader's "Structural join target unavailable" error (join R2 into R1, then remove or move R1) is not reached by any retained family.`, "",
-    "## Retained candidate B families", "",
-    "| Family | Delivery orders | Result |", "| --- | --- | --- |",
-    ...familyRows.map(row => `| ${row.name} | ${row.orders} | ${cell(row)} |`), "",
-    "## M1 buffer and replacement fixtures", "",
-    "| Fixture | Delivery orders | Result |", "| --- | --- | --- |",
-    ...bufferRows.map(row => `| ${row.name} | ${row.orders} | ${cell(row)} |`), "",
-    "## Cases Stage 1 left unproved", "",
+    `Undo runs on a per-writer history of command records: each record holds identities and shared record ids, and undo applies its reverse as a new local transaction. The command-record path calls no library undo or redo (\`bound.test.ts\` scans for it); the M1 buffer's inherited constructor still builds a \`Y.UndoManager\`, which is destroyed unused, and the library probes call the library on purpose.`, "",
+    `- Retained families: ${passingFamilies} of ${familyRows.length} pass (${familyPassed}/${familyTotal} runs, \`fixtures.test.ts\`). The list is derived from the retained test files that contain an undo step: \`fixtures.test.ts\` scans \`test/\` for undo calls and fails if a file with one is missing from the list, or if a listed family does not run.`,
+    `- New cases: ${cases.filter(row => !row.failures.length).length} of ${cases.length} rows pass (\`cases.test.ts\`).`,
+    `- Generator: ${generatorRows.runs} seeded histories in the suite (\`generator.test.ts\`; set \`UNDO_GENERATOR_RUNS\` for more). ${generatorRows.unmatched ? `${generatorRows.unmatched} violations match no declared limit.` : "Each violation they produce matches a declared limit."}`,
+    `- Declared limits: ${declaredLimits.length}, each with a failing literal case, a minimized generator history, or both (\`generator.test.ts\` re-runs each one). ${declaredLimits.filter(limit => limit.owner === "undo").length} belong to undo; the rest belong to the reader, main's status rule, delivery order or the library's formatting.`, "",
+    "## Literal fixtures that pass, by family", "",
+    "### Retained families", "",
+    "| Family | Retained source | Result |", "| --- | --- | --- |",
+    ...familyRows.map(row => `| ${row.name} | ${row.sources} | ${row.passed === row.total ? "PASS" : "FAIL"} ${row.passed}/${row.total} |`), "",
+    "The retained families keep their existing literal oracles. Structural and mark traces add a late joiner to their delivery orders.", "",
+    "### Cases Stage 1 left unproved", "",
+    "The expected results are literal data in `test/undo-records/oracles.ts`, written from the decided product rows. One commit cannot show that they were written before the first run: the oracles and the code that passes them land together.", "",
     "| Case | Delivery orders | Result |", "| --- | --- | --- |",
     ...cases.map(row => `| ${row.name} | ${row.orders} | ${cell(row)} |`), "",
     "Each identical-change case also checks that the other writer's later undo writes nothing, consumes one entry and leaves that writer's older step for the next undo.", "",
+    "## Declared limits", "",
+    "A violation the generator finds is accepted only if it matches one row's predicate in `test/undo-records/limits.ts`; anything else fails `generator.test.ts`. The library column is an executed probe (`test/undo-records/probes.ts`, pinned by `probes.test.ts`): what the library's undo stack, or plain formatting with no undo, does on the same history.", "",
+    "| Limit | Owner | Found by | Failure | Library probe | History |", "| --- | --- | --- | --- | --- | --- |",
+    ...limitRows, "",
+    "- Double restore needs a convergent rule for two restorations of one identity; #1419 keeps one restoration per identity. The generator has not produced one: it needs both writers to delete the same character and both undo before either undo arrives.",
+    "- Format overwrite is a design question. Expected: b keeps Bob's bold. Plausible rules: (a) undo reverts only characters whose current value this change set last, which needs every format command to record, per character and key in shared state, the id of the change that set the value; (b) the current rule, undo sets the recorded prior over the recorded span, which needs nothing more and overwrites later formatting by others.",
+    "- Redone recovery is a reader question. Expected: x was inserted before the removal, so recovery lists no edit. Plausible rules: (a) the reader treats a restored identity whose original predates the removal as not edited, which needs the reader to follow the restoration map; (b) the current rule, any item created after the removal is an edit, so the redone x is listed.",
+    "- Second status undo: the library's undo stack goes shot, ready, todo; main's `undoStatus`, which pops its stack by hand and retires only frontier events, goes shot, ready, ready, and command records do the same. The limit comes from main's retirement rule, not from leaving the library.",
+    "- Status redo after a conflict is open question 4 below: the redo writes a fresh event, so a status that had not applied applies after undo and redo.",
+    "- Redone mark: plain formatting with no undo (remove the highlight, add it again) loses it the same way in one client-id order, so the cause is Yjs's formatting cleanup when one writer's two format updates arrive in reverse. A relay server delivers each writer's updates in order.",
+    "- Reader limits are reported here because the generator reaches them; the reader fix is in another lane.",
+    "- Pending update: the generator does not act on a replica while it holds an out-of-order update. The minimized history does, and the replica's own segment walk throws until the earlier update arrives.", "",
+    "## Generator", "",
+    `\`test/undo-records/generator.ts\` builds seeded histories of ${generatorLength} steps on the fixture \`# Ab\` / heading \`In\` / \`cde\` / \`fg\`, with two writers, or three where Carol joins from encoded state before the first step. Each step is a command of one of ${commandOps.length} kinds (${commandOps.join(", ")}), an undo, a redo, an undo immediately followed by a redo, a delivery of one queued update (sometimes twice), or, in two-writer runs, a late joiner from encoded state. A quarter of the seeds let one sender's updates arrive out of order; the rest keep each sender's updates in order, as a relay server does, and reorder only across senders. At the end every update is delivered and a fresh replica is loaded from Alice's encoded state.`, "",
+    "Checks:", "",
+    "- After each undo: an ineffective undo consumes exactly one entry and writes nothing; an effective one removes no character whose root original another writer created (roots follow `restoredIdentities`).",
+    "- After an undo immediately followed by a redo: the writer's model is the same, with identities compared by root original.",
+    "- After delivery: every replica and the fresh one read the same model through `readStructure`; no identity appears twice; no root original appears twice.",
+    "- Nothing throws: commands, undo, redo and the reader.", "",
+    `Counts for the ${generatorRows.runs} histories in the suite (seeds 1 to ${defaultGeneratorRuns}, two and three writers):`, "",
+    "| Executed | Count |", "| --- | --- |",
+    `| commands | ${commandTotal} (${commandOps.map(op => `${op} ${executed[op] ?? 0}`).join(", ")}) |`,
+    ...["undo", "redo", "undo-redo", "deliver", "late", "effective undos checked", "ineffective undos checked", "undo-then-redo round trips checked", "waited on an out-of-order update"].map(op => `| ${op} | ${executed[op] ?? 0} |`), "",
+    "| Limit | Runs with it | Violations |", "| --- | --- | --- |",
+    ...declaredLimits.filter(limit => limit.matches).map(limit => { const entry = generatorRows.byLimit.get(limit.id); return `| ${limit.title} | ${entry?.runs ?? 0} | ${entry?.violations ?? 0} |`; }),
+    `| Unmatched | ${generatorRows.unmatched ? "FAIL" : "0"} | ${generatorRows.unmatched} |`, "",
+    "Once the reader throws on a replica, the undo checks on that replica in that run are skipped; the reader's join-target error is the most frequent class, so it hides other checks in the runs it reaches.", "",
+    "Kept seeds, re-run by `generator.test.ts`:", "",
+    ...keptSeeds.map(kept => `- ${kept.seed}, ${kept.writers} writers: ${kept.found}.`), "",
+    "The four undo defects the generator found in this round are fixed: a key or removal undo now changes nothing when its beat record is gone instead of throwing; a removal redo restores every removal entry its undo deleted; and a beat-record undo keeps the record's fields so its redo restores other writers' removal entries and joins.", "",
     "## Open questions", "",
     `1. Undo of a delete the other writer also made. The decided rows list joins, status, tags and beat removals as identical changes, not deleted characters. Plausible outcomes: (a) the first undo restores every character its record deleted, including ones the other writer also deleted, and the other writer's later undo of them changes nothing; (b) it restores only characters nobody else deleted. Observed (a): ${doubleDelete.join("; ")}. Only the final state after both undos is checked. (b) would need shared per-writer deletion attribution.`,
-    `2. Redo at the gap where the other writer typed after the undo. Plausible outcomes: redone text before or after the other writer's insertion. Observed ${gap}: redone characters return at their tombstones, ahead of the later insertion, on every replica.`,
-    `3. Which writer an identical simultaneous removal names in recovery. Plausible outcomes: either writer, or both. Observed per replica: ${named.join("; ")}. Replicas disagree: \`src/structure-reader.ts\` takes the first removal entry in each replica's local key order. This is a reader convergence defect outside undo; the case's forward check accepts either name and the undo checks are unaffected.`,
-    `4. Redo of a status change that had not applied. Alice and Bob change the status at once; under main's rule neither applies (the status stays todo and each gets a notice). Alice's undo retires both frontier events, and the status stays todo. Plausible outcomes of her redo: (a) it writes a fresh event and her status applies (ready); (b) it restores the state before the undo, a conflict in which neither applies (todo), which would need the record to keep the conflicting events and redo to make them the frontier again. Observed (a) on every order: ${statusRedo}, final status ready. Both outcomes are literal data in \`statusRedoObserved\`; re-run after #1413 merges.`, "",
+    `2. Redo at the gap where the other writer typed after the undo. Plausible outcomes: redone text before or after the other writer's insertion. Observed ${gap}: redone characters return at their tombstones, ahead of the later insertion, on each replica the case reads.`,
+    `3. Which writer an identical simultaneous removal names in recovery. Observed per replica: ${named.join("; ")}. Replicas disagree, and the remover's name is not the only recovery field that does: with no undo involved, the reader on main (\`src/structure-reader.ts\`) also gives replicas different \`edited\` lists and \`splitBy\` values. Two histories: R1 \`a\`; Alice inserts x, then removes R1; Bob concurrently removes R1 without seeing x; Alice reads \`edited=[]\` and Bob \`edited=["a1"]\`. Alice splits \`abcd\` at 2 into Ra; Bob concurrently splits at 1 into Rb and removes Rb; after synchronizing, Bob removes Ra; \`splitBy: "Alice"\` appears only on Bob. Both are reader limits above. The identical-removal case's forward check accepts either name; after its undo the beat has left recovery, so the later checks compare no remover.`,
+    `4. Redo of a status change that had not applied. Alice and Bob change the status at once; under main's rule neither applies (the status stays todo and each gets a notice). Alice's undo retires both frontier events, and the status stays todo. Plausible outcomes of her redo: (a) it writes a fresh event and her status applies (ready); (b) it restores the state before the undo, a conflict in which neither applies (todo), which would need the record to keep the conflicting events and redo to make them the frontier again. Observed (a) on the five delivery orders of \`cases.test.ts\`: ${statusRedo}, final status ready. The generator reaches it too (limit above).`, "",
     "## Controls", "",
-    "Each control must fail its test in `test/undo-records/cases.test.ts`; all do.", "",
+    "Each control has a test in `test/undo-records/cases.test.ts` that requires it to fail; the report fails if one stops failing.", "",
     "| Control | Shows | Failure | History |", "| --- | --- | --- | --- |",
-    ...controls.map(probe => `| ${probe.title} | ${probe.line} | ${line(probe.run.failure)} | [history](histories/${probe.file}) |`), "",
-    "## Limits", "",
-    "| Case | Shows | Failure | With the library's undo stack | History |", "| --- | --- | --- | --- | --- |",
-    ...limits.map(probe => `| ${probe.title} | ${probe.line} | ${line(probe.run.failure)} | ${probe.library} | [history](histories/${probe.file}) |`), "",
-    "- Double restore needs a convergent rule for two restorations of one identity; #1419 keeps one restoration per identity.",
-    "- Second status undo is the status rule's retirement, which `undoStatus` on main uses too; it belongs with the status fix in #1413.",
-    "- Format overwrite is a design question. Expected: b keeps Bob's bold. Plausible rules: (a) undo reverts only characters whose current value this change set last, which needs every format command to record, per character and key in shared state, the id of the change that set the value; (b) the current rule, undo sets the recorded prior over the recorded span, which needs nothing more and overwrites later formatting by others.",
-    "- Redone recovery is a design question. Expected: x was inserted before the removal, so recovery lists no edit. Plausible rules: (a) the reader treats a restored identity whose original predates the removal as not edited, which needs the reader to follow the restoration map; (b) the current rule, any item created after the removal is an edit, so the redone x is listed.", "",
+    ...controls.map(probe => `| ${probe.title} | ${probe.line} | ${(probe.run.failure ?? "passed").split("\n")[0] ?? ""} | [history](histories/${probe.file}) |`), "",
     "## Counts", "",
     "Record bytes are the UTF-8 length of the record's JSON, a proxy for what the history keeps in memory, not a heap measurement. Undo update bytes are what the undo transaction sends. State growth is the change in `Y.encodeStateAsUpdate` length; negative values are deleted format markers and text collapsing into deletion ranges. Durable records are entries the undo adds to shared maps; only a join redo removes any, the retirements its undo wrote.", "",
     "| Command | Record bytes | Undo update bytes | State growth | Durable records written by undo |", "| --- | --- | --- | --- | --- |",
     ...kinds.map(kind => `| ${kind.kind} | ${kind.recordBytes} | ${kind.undoUpdateBytes} | ${kind.stateGrowthBytes} | ${Object.entries(kind.durable).map(([root, count]) => `${count} in \`${root}\``).join(", ") || "none"} |`), "",
     `Each restored character costs one \`restoredIdentities\` entry: undoing a one-character delete grows the shared state by ${growth("range delete, 1 character")} bytes, a ten-character delete by ${growth("range delete, 10 characters")}. Recording one entry per contiguous run would cut this; not tried.`, "",
     "### A 200-entry bound per writer", "",
-    `Alice runs 250 commands: 50 single-character inserts, one status change, then 199 commands cycling insert, bold, tag, whole-segment move and delete, while Bob inserts ${bound.bobInserts.length} characters. With a bound of 200 the history drops the ${counts.dropped} oldest records (${counts.droppedBytes} bytes) and releases them, keeping only that count; it keeps ${counts.kept} (${counts.keptBytes} bytes: ${Object.entries(counts.keptByKind).map(([kind, count]) => `${count} ${kind}`).join(", ")}). The kept records name ${counts.referencedIdentities} distinct identities and ${counts.referencedStatusEvents} status event. All 200 undo, the oldest kept entry (the status change) included, on every replica and on a late joiner; a 201st undo finds nothing. Undoing them writes ${restoredAfterBound} \`restoredIdentities\` entries and ${retiredAfterBound} \`retiredStatus\` entry. The same 200 records, copied as JSON into a history on a fresh replica loaded from Alice's encoded state, undo the same way.`, "",
-    "So a bound drops only local records. Nothing shared has to be kept for the dropped entries. For the kept ones to work, these must stay durable: the document's deleted items (their positions; their text is in the record), every `restoredIdentities` and `retiredStatus` entry and status event, every removal record, and the comment and reply records. A `retiredJoins` entry must stay until a join redo deletes it, which is the only removal. Any writer's kept entry may follow a restoration chain or test a retirement written by another writer. No entry in those maps can be compacted until no history, including a reloaded one, can name it.", "",
+    `Alice runs 250 commands: 50 single-character inserts, one status change, then 199 commands cycling insert, bold, tag, whole-segment move and delete, while Bob inserts ${bound.bobInserts.length} characters. With a bound of 200 the history drops the ${counts.dropped} oldest records (${counts.droppedBytes} bytes) and releases them, keeping only that count; it keeps ${counts.kept} (${counts.keptBytes} bytes: ${Object.entries(counts.keptByKind).map(([kind, count]) => `${count} ${kind}`).join(", ")}). The kept records name ${counts.referencedIdentities} distinct identities and ${counts.referencedStatusEvents} status event. \`bound.test.ts\` undoes the 200 kept entries one by one, requires each to be effective, the oldest kept entry (the status change) included, checks the result on Alice, Bob and a late joiner, and requires a 201st undo to find nothing. Undoing them writes ${restoredAfterBound} \`restoredIdentities\` entries and ${retiredAfterBound} \`retiredStatus\` entry. The second test in that file copies the 200 records as JSON into a history on a fresh replica loaded from Alice's encoded state and checks the same result.`, "",
+    "So a bound drops only local records. Nothing shared has to be kept for the dropped entries. For the kept ones to work, these must stay durable: the document's deleted items (their positions; their text is in the record), the `restoredIdentities` and `retiredStatus` entries and status events, the removal records, and the comment and reply records. A `retiredJoins` entry must stay until a join redo deletes it, which is the only removal. A writer's kept entry may follow a restoration chain or test a retirement written by another writer, so an entry in those maps can be compacted only once no history, including a reloaded one, can name it.", "",
     "## What the command layer must record", "",
-    "Each command records, when it runs and in the same local transaction:", "",
+    "Each command records right after its local transaction commits, not inside it. `cases.test.ts` shows the gap: an `afterTransaction` listener sees the inserted text while the history is still empty. A crash between the two leaves the edit without a record, so it cannot be undone. A listener that calls undo in that gap undoes the writer's previous entry instead. Recording inside the transaction would close the gap; the #1419 capture route depends on recording after it.", "",
     "- Text insert: the identities of the inserted characters, and the caret before the command as an identity with its side.",
     "- Range delete: each deleted character's identity, value and attributes in document order, and the selection as identities with sides. Undo restores each at its own tombstone; a run with no live text between tombstones stays together.",
     "- Replacement (one native commit): both of the above in one record.",
     "- Split: the new boundary embed's identity and the caret before the split, held as identities with sides; a caret at the end of a beat is held by the character before it, and an empty beat by its container. Undo deletes the embed and leaves the beat record; redo restores the embed as a new identity.",
     "- Join: the join entry id and its two beats. Undo checks that its own entry is live, then retires every live matching entry and records which entries it retired; redo deletes those retirements, so the join that won before the undo wins again.",
-    "- Heading create or remove: the deleted or restored marker characters, the boundary embed or the segment's `head` key with its prior value, the beat record's presence, and the removal record the heading replaced.",
+    "- Heading create or remove: the deleted or restored marker characters, the boundary embed or the segment's `head` key with its prior value, the beat record's presence, and the removal record the heading replaced. A beat-record undo keeps the record's fields, so its redo restores the joins and removal entries other writers stored in it.",
     "- Range replacement across beats (cut and paste, header rewrite): the deleted characters as identities with values and attributes, the beats removed whole, and the inserted identities.",
-    "- Plain key of a shared map (segment head, paragraph start): the path, the prior and the written value; undo writes the prior only while the current value is still the written one.",
-    "- Soft removal: the beat and the removal entry id. Undo checks that its own entry exists, then deletes every beat removal entry of that beat; redo sets its entry again.",
+    "- Plain key of a shared map (segment head, paragraph start): the path, the prior and the written value; undo writes the prior only while the record still exists and the current value is still the written one.",
+    "- Soft removal: the beat and the removal entry id. Undo checks that its own entry exists, then deletes every beat removal entry of that beat and records which; redo sets those entries again.",
     "- Whole-segment move: the identities and values of the deleted order entries and the identity of the inserted one.",
-    "- Mark add or remove (bold, link, comment highlight, tag): the key, the first and last identity, and each character's prior value. Undo sets every character now between the two identities to the prior value of the nearest recorded character on its left (the first one if none), which also clears a mark another writer's concurrent insertion picked up. A tag's key is derived from the tag and its first and last identity, so identical simultaneous tags are one mark.",
+    "- Mark add or remove (bold, link, comment highlight, tag): the key, the first and last identity, and each character's prior value. Undo sets each character now between the two identities to the prior value of the nearest recorded character on its left (the first one if none), which also clears a mark another writer's concurrent insertion picked up. A tag's key is derived from the tag and its first and last identity, so identical simultaneous tags are one mark.",
     "- Comment or reply creation: the record id and its fields, so redo can recreate them.",
     "- Status: the event id. Undo applies main's frontier retirement.",
     "- Plain scalar (LWW) value: the prior and the written value. Undo writes the prior only if the current value is still the written one.", "",
-    "The history then needs three shared mechanisms, each with a control above: a shared `restoredIdentities` map that every restore writes and the history follows whenever it resolves a record or returns a selection, with no fixed chain length; an ineffective undo that consumes exactly its own entry, while an undo that throws keeps it; and own-entry checks before retiring joins or removals. Records and the selections the history returns follow restorations through that map, not Yjs `redone` links.", "",
+    "The history then needs three shared mechanisms, each with a control above: a shared `restoredIdentities` map that each restore writes and the history follows whenever it resolves a record or returns a selection, with no fixed chain length; an ineffective undo that consumes exactly its own entry, while an undo that throws keeps it; and own-entry checks before retiring joins or removals. Records and the selections the history returns follow restorations through that map, not Yjs `redone` links.", "",
     `What does not follow restorations: a selection held outside the history follows them only when passed through \`history.mapAnchor\`; read without mapping after Alice deletes bc and undoes, a selection held over bc is ${held}. The recovery reader does not follow them (limit above). This prototype has no typing groups, redo parking or save hold; one command is one entry.`, ""
   ].join("\n");
   files.set("undo-records-results.md", markdown);

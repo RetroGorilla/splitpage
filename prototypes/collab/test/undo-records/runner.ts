@@ -14,11 +14,9 @@ import { clearGlue, cutPaste, seedJoinMetadata, visualInsert } from "../../src/s
 import { addComment, addReply, captureRange, changeStatus, createHeadingRecord, formatRange, formatSelection, insertText, join, moveBeat, removeBeat, removeHeadingRecord, replaceRange, setScalar, split } from "../../src/undo-records/commands.ts";
 import { CommandHistory } from "../../src/undo-records/history.ts";
 import type { UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
-import { markTraces } from "../marks/runner.ts";
 import { markOracles } from "../marks/oracles.ts";
 import { commentsOracle, commentsRemovedOracle, commentsReplyOracle, commentsRestoredOracle, joinBoldUndoOracle, joinOracle, joinUndoOracle, removedOracle, restorationOracle } from "../oracles.ts";
 import { beatOracles } from "../structure-oracles.ts";
-import { structureTraces } from "../structure-runner.ts";
 
 export interface RecordRunResult {
   trace: string;
@@ -28,17 +26,6 @@ export interface RecordRunResult {
   failure: string | null;
   history: string[];
 }
-
-function withLateJoiner(orders: readonly DeliveryOrder[] | undefined): DeliveryOrder[] {
-  if (!orders) throw new Error("Missing retained order list");
-  return orders.includes("late-C") ? [...orders] : [...orders, "late-C"];
-}
-
-export const retainedTraceNames = [...Object.keys(structureTraces), ...Object.keys(markTraces), "U-H1 glue rewrite", "U-H1 top item"];
-
-export const recordTraces: Record<string, DeliveryOrder[]> = Object.fromEntries([
-  ...Object.entries(structureTraces), ...Object.entries(markTraces), ["U-H1 glue rewrite", ["D2"]], ["U-H1 top item", ["D1"]]
-].map(([trace, orders]) => [trace, withLateJoiner(orders as readonly DeliveryOrder[])]));
 
 const glueRewriteOracle: ScriptOracle = {
   rows: [{ id: "R1", characters: [["s1", "a", { i: true }], ["s2", "b", {}]] }, { id: "R2", characters: [["s3", "c", {}], ["b1", "Z", {}], ["s4", "d", {}]] }], carets: {}, recovery: []
@@ -429,8 +416,4 @@ export function runRecord(trace: string, order: DeliveryOrder, swapped = false, 
   } finally {
     harness.destroy();
   }
-}
-
-export function runRecordTraces(): RecordRunResult[] {
-  return Object.entries(recordTraces).flatMap(([trace, orders]) => (trace === "T06" ? [false, true] : [false]).flatMap(swapped => orders.map(order => runRecord(trace, order, swapped))));
 }

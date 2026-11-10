@@ -1,8 +1,8 @@
-Alice bolds ab; Bob unbolds then bolds bc; Alice's undo removes Bob's bold from b. Expected (decided row: a person undoes only their own changes): b keeps Bob's bold.
+Owner: undo.
 
-Replay: `node --test test/undo-records/cases.test.ts`.
+Replay: `node --test test/undo-records/generator.test.ts`.
 
-# Format undo over the other writer's later formatting
+# A format undo overwrites the other writer's later formatting of the same characters
 
 Failure: Alice undone/client1.rows[0].characters[1].marks.b: expected true, got <missing>
 

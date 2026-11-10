@@ -1,8 +1,8 @@
-Alice and Bob both deleted c and undo without seeing each other's undo: c comes back twice.
+Owner: undo.
 
-Replay: `node --test test/undo-records/cases.test.ts`.
+Replay: `node --test test/undo-records/generator.test.ts`.
 
-# Concurrent undos of a doubly deleted character
+# Concurrent undos of one doubly deleted character restore it twice
 
 Failure: both undone/client1.rows[0].characters[3].identity.client: expected 10, got 2
 

@@ -14,9 +14,9 @@ export type CommandPart =
   | { kind: "join"; from: string; into: string; entry: string }
   | { kind: "unjoined"; from: string; into: string; entry: string; retired: string[] }
   | { kind: "key"; path: string[]; key: string; prior: unknown; value: unknown }
-  | { kind: "beat-record"; id: string; present: boolean }
+  | { kind: "beat-record"; id: string; present: boolean; fields?: Record<string, unknown> }
   | { kind: "removal"; beat: string; entry: string }
-  | { kind: "restored"; beat: string; entry: string }
+  | { kind: "restored"; beat: string; entry: string; retired: string[] }
   | { kind: "status"; target: string; event: string; value: string; by: string }
   | { kind: "status-retired"; target: string; event: string; value: string; by: string }
   | { kind: "scalar"; beat: string; key: string; prior: unknown; value: unknown }
@@ -186,25 +186,37 @@ export class CommandHistory {
       case "key": return this.reverseKey(part);
       case "beat-record": {
         const beats = this.replica.doc.getMap("beats");
-        const inverse: CommandPart = { ...part, present: !part.present };
         if (part.present) {
-          if (!beats.has(part.id)) return { effective: false, inverse };
+          const current: unknown = beats.get(part.id);
+          if (!(current instanceof Y.Map)) return { effective: false, inverse: { kind: "beat-record", id: part.id, present: false } };
+          const fields = (current as Y.Map<unknown>).toJSON() as Record<string, unknown>;
           beats.delete(part.id);
-          return { effective: true, inverse };
+          return { effective: true, inverse: { kind: "beat-record", id: part.id, present: false, fields } };
         }
+        const inverse: CommandPart = { kind: "beat-record", id: part.id, present: true };
         if (beats.has(part.id)) return { effective: false, inverse };
         const record = new Y.Map<unknown>();
         beats.set(part.id, record);
-        record.set("joins", new Y.Map<unknown>());
-        record.set("removals", new Y.Map<unknown>());
+        const fields = { joins: {}, removals: {}, ...part.fields };
+        for (const [field, value] of Object.entries(fields)) {
+          if (field !== "joins" && field !== "removals") {
+            record.set(field, value);
+            continue;
+          }
+          const nested = new Y.Map<unknown>();
+          record.set(field, nested);
+          for (const [entry, content] of Object.entries(value as Record<string, unknown>)) nested.set(entry, content);
+        }
         return { effective: true, inverse };
       }
       case "removal": return this.reverseRemoval(part);
       case "restored": {
-        const removals = mapValue(mapValue(this.replica.doc.getMap("beats").get(part.beat)).get("removals"));
-        if (removals.has(part.entry)) return { effective: false, inverse: { kind: "removal", beat: part.beat, entry: part.entry } };
-        removals.set(part.entry, true);
-        return { effective: true, inverse: { kind: "removal", beat: part.beat, entry: part.entry } };
+        const beat: unknown = this.replica.doc.getMap("beats").get(part.beat);
+        if (!(beat instanceof Y.Map)) return { effective: false, inverse: { kind: "removal", beat: part.beat, entry: part.entry } };
+        const removals = mapValue((beat as Y.Map<unknown>).get("removals"));
+        const back = part.retired.filter(id => !removals.has(id));
+        for (const id of back) removals.set(id, true);
+        return { effective: back.length > 0, inverse: { kind: "removal", beat: part.beat, entry: part.entry } };
       }
       case "status": return this.reverseStatus(part);
       case "status-retired": {
@@ -213,9 +225,9 @@ export class CommandHistory {
         return { effective: true, inverse: { kind: "status", target: part.target, event, value: part.value, by: part.by } };
       }
       case "scalar": {
-        const beat = mapValue(this.replica.doc.getMap("beats").get(part.beat));
+        const beat = this.beatRecord(part.beat);
         const inverse: CommandPart = { kind: "scalar", beat: part.beat, key: part.key, prior: part.value, value: part.prior };
-        if (beat.get(part.key) !== part.value) return { effective: false, inverse };
+        if (!beat || beat.get(part.key) !== part.value) return { effective: false, inverse };
         if (part.prior === undefined) beat.delete(part.key);
         else beat.set(part.key, part.prior);
         return { effective: true, inverse };
@@ -321,11 +333,18 @@ export class CommandHistory {
     return { effective: changes.length > 0, inverse: { kind: "format", key: part.key, first: part.first, last: part.last, prior: inverse } };
   }
 
+  private beatRecord(id: string): Y.Map<unknown> | null {
+    const record: unknown = this.replica.doc.getMap("beats").get(id);
+    return record instanceof Y.Map ? record as Y.Map<unknown> : null;
+  }
+
   private reverseJoin(part: Extract<CommandPart, { kind: "join" }>): Reversal {
     const now: string[] = [];
     const inverse: CommandPart = { kind: "unjoined", from: part.from, into: part.into, entry: part.entry, retired: now };
     const retired = this.replica.doc.getMap("retiredJoins");
-    const joins = mapValue(mapValue(this.replica.doc.getMap("beats").get(part.from)).get("joins"));
+    const beat = this.beatRecord(part.from);
+    if (!beat) return { effective: false, inverse };
+    const joins = mapValue(beat.get("joins"));
     const ownLive = joins.has(part.entry) && !retired.has(part.entry);
     if (!ownLive && this.defect !== "retire-without-own-entry") return { effective: false, inverse };
     for (const [id, value] of joins) {
@@ -340,7 +359,11 @@ export class CommandHistory {
   private reverseKey(part: Extract<CommandPart, { kind: "key" }>): Reversal {
     const inverse: CommandPart = { ...part, prior: part.value, value: part.prior };
     let target = this.replica.doc.getMap<unknown>(part.path[0] ?? "");
-    for (const step of part.path.slice(1)) target = mapValue(target.get(step));
+    for (const step of part.path.slice(1)) {
+      const next: unknown = target.get(step);
+      if (!(next instanceof Y.Map)) return { effective: false, inverse };
+      target = next as Y.Map<unknown>;
+    }
     const current: unknown = target.get(part.key);
     if (JSON.stringify(current) !== JSON.stringify(part.value)) return { effective: false, inverse };
     if (part.prior === undefined) target.delete(part.key);
@@ -349,19 +372,21 @@ export class CommandHistory {
   }
 
   private reverseRemoval(part: Extract<CommandPart, { kind: "removal" }>): Reversal {
-    const inverse: CommandPart = { kind: "restored", beat: part.beat, entry: part.entry };
-    const removals = mapValue(mapValue(this.replica.doc.getMap("beats").get(part.beat)).get("removals"));
-    if (!removals.has(part.entry) && this.defect !== "retire-without-own-entry") return { effective: false, inverse };
+    const retired: string[] = [];
+    const inverse: CommandPart = { kind: "restored", beat: part.beat, entry: part.entry, retired };
+    const beat: unknown = this.replica.doc.getMap("beats").get(part.beat);
+    if (!(beat instanceof Y.Map)) return { effective: false, inverse: { ...inverse, retired: [part.entry] } };
+    const removals = mapValue((beat as Y.Map<unknown>).get("removals"));
+    if (!removals.has(part.entry) && this.defect !== "retire-without-own-entry") return { effective: false, inverse: { ...inverse, retired: [part.entry] } };
     const records = this.replica.doc.getMap("removalRecords");
-    let effective = false;
     for (const id of [...removals.keys()]) {
       const record = records.get(id);
       if (id === part.entry || (record instanceof Y.Map && record.get("kind") === "beat")) {
         removals.delete(id);
-        effective = true;
+        retired.push(id);
       }
     }
-    return { effective, inverse };
+    return { effective: retired.length > 0, inverse };
   }
 
   private reverseStatus(part: Extract<CommandPart, { kind: "status" }>): Reversal {

@@ -1,8 +1,8 @@
-Under main's status rule only frontier events retire, so a writer's second status undo changes nothing.
+Owner: status rule.
 
-Replay: `node --test test/undo-records/cases.test.ts`.
+Replay: `node --test test/undo-records/generator.test.ts`.
 
-# Second status undo by one writer
+# A writer's second status undo changes nothing under main's status rule
 
 Failure: second undo/client1.rows[0].status: expected "todo", got "ready"
 

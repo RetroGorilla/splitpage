@@ -8,10 +8,10 @@ import { mapValue } from "../../src/schema.ts";
 import type { SchemaReplica, SeedBeat } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { structuralCaret } from "../../src/structure-selection.ts";
-import { changeStatus, deleteRange, formatRange, insertText, join, removeBeat, split, tagRange } from "../../src/undo-records/commands.ts";
+import { addComment, changeStatus, deleteRange, formatRange, insertText, join, removeBeat, split, tagRange } from "../../src/undo-records/commands.ts";
 import { CommandHistory } from "../../src/undo-records/history.ts";
 import type { UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
-import { chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, positionControlOracle, redoneAtGapOracle, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, statusOracles, statusRedoObserved } from "./oracles.ts";
+import { chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, positionControlOracle, redoneAtGapOracle, redoneMarkOracles, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, statusOracles, statusRedoObserved, throwingUndoOracles } from "./oracles.ts";
 import { bindRestores, countUpdates } from "./runner.ts";
 
 export type Writer = "Alice" | "Bob";
@@ -24,7 +24,7 @@ export interface CaseResult {
   observation?: string;
 }
 
-class Scenario {
+export class Scenario {
   readonly harness: ReplicaHarness;
   readonly histories: Record<Writer, CommandHistory>;
   readonly replicas: Record<Writer, SchemaReplica>;
@@ -48,6 +48,30 @@ class Scenario {
   deliver(): void {
     this.harness.queue.flush(this.order);
     if (this.order === "late-C" && this.harness.replicas.length === 2) this.harness.lateJoin(this.harness.bob);
+  }
+
+  drainReversed(): void {
+    const queue = this.harness.queue;
+    for (let round = 0; queue.pending.length > 0; round++) {
+      const batch = [...queue.pending];
+      if (round === 0) batch.reverse();
+      else this.note(`forward ${batch.length} update(s) the receivers wrote while integrating`);
+      for (const message of batch) queue.deliver(message.id, 1);
+    }
+  }
+
+  agree(phase: string): void {
+    this.deliver();
+    this.note(`compare replicas ${phase}`);
+    const models = this.models();
+    const full = new Set(models.map(model => JSON.stringify({ rows: model.rows, recovery: model.recovery })));
+    if (full.size === 1) return;
+    const summary = models.map((model, index) => {
+      const rows = model.rows.map(row => `${row.id}[${row.characters.map(character => character.notation).join(" ")}]`).join(" ");
+      const recovery = model.recovery.map(entry => `${entry.row.id} by ${entry.by} edited=${JSON.stringify(entry.edited)}${entry.splitBy ? ` splitBy=${entry.splitBy}` : ""}`).join(", ");
+      return `client${this.harness.replicas[index]?.doc.clientID ?? -1}: ${rows}; recovery ${recovery || "none"}`;
+    });
+    throw new Error(`${phase}: replicas differ: ${summary.join(" | ")}`);
   }
 
   models(): CollabModel[] {
@@ -129,6 +153,27 @@ export function runIdenticalRemoval(order: DeliveryOrder, swapped: boolean, firs
     assert.equal(scenario.undo(other(first)).effective, true);
     scenario.check(`${other(first)} older undone`, identicalRemovalOracles[`${other(first)} older undone`] ?? fail());
     return [...named].join(", ");
+  });
+}
+
+export function runIdenticalRemovalRedo(order: DeliveryOrder): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }, { id: "R3", text: "ef" }], order, false);
+  return scenario.run("identical removal; Bob undoes and redoes", () => {
+    insertText(scenario.histories.Alice, "R1", 2, "?", ["a1"]);
+    insertText(scenario.histories.Bob, "R3", 2, "!", ["b1"]);
+    scenario.harness.queue.flush("D2");
+    removeBeat(scenario.histories.Alice, "R2", "rA", "Alice");
+    removeBeat(scenario.histories.Bob, "R2", "rB", "Bob");
+    const either = (model: CollabModel): void => { for (const entry of model.recovery) entry.by = "<either writer>"; };
+    scenario.check("removed", identicalRemovalOracles.removed ?? fail(), either);
+    assert.equal(scenario.undo("Bob").effective, true);
+    scenario.check("restored", identicalRemovalOracles.restored ?? fail());
+    assert.equal(scenario.redo("Bob").effective, true);
+    scenario.check("redone", identicalRemovalOracles.removed ?? fail(), either);
+    for (const replica of scenario.harness.replicas) {
+      assert.deepEqual([...mapValue(mapValue(replica.doc.getMap("beats").get("R2")).get("removals")).keys()].sort(), ["rA", "rB"], "redo restored only its own removal entry");
+    }
+    return undefined;
   });
 }
 
@@ -294,8 +339,80 @@ export function runThrowingUndo(): CaseResult {
     assert.throws(() => alice.undo(), /Format span is not in one text/);
     assert.equal(alice.undoStack.length, 2);
     assert.equal(alice.undoStack.at(-1)?.label, "broken");
+    scenario.check("after the throw", throwingUndoOracles.thrown ?? fail());
+    alice.undoStack.pop();
+    assert.equal(scenario.undo("Alice").effective, true);
+    scenario.check("insert undone", throwingUndoOracles["insert undone"] ?? fail());
     return undefined;
   });
+}
+
+export function runRedoneMarkReversed(mark: "tag" | "comment"): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }], "rev", true);
+  return scenario.run(`Alice ${mark === "tag" ? "tags" : "comments on"} ab while Bob bolds a; Alice undoes and redoes; her two updates arrive in reverse`, () => {
+    const alice = scenario.replicas.Alice;
+    alice.doc.transact(() => alice.doc.getMap("tags").set("P", { kind: "Prop" }), "fixture");
+    scenario.harness.queue.flush("D2");
+    if (mark === "tag") tagRange(scenario.histories.Alice, "R1", 0, 2, "P");
+    else addComment(scenario.histories.Alice, "C1", "R1", 0, 2, "Alice");
+    formatRange(scenario.histories.Bob, "R1", 0, 1, { b: true });
+    scenario.check("marked", redoneMarkOracles[mark] ?? fail());
+    assert.equal(scenario.undo("Alice").effective, true);
+    assert.equal(scenario.redo("Alice").effective, true);
+    scenario.drainReversed();
+    scenario.check("redone", redoneMarkOracles[mark] ?? fail());
+    return undefined;
+  });
+}
+
+export function runRemovedAfterInsert(): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "a" }, { id: "R2", text: "z" }], "D1", false);
+  return scenario.run("Alice inserts x and removes R1; Bob removes R1 without seeing x", () => {
+    insertText(scenario.histories.Alice, "R1", 1, "x", ["a1"]);
+    removeBeat(scenario.histories.Alice, "R1", "rA", "Alice");
+    removeBeat(scenario.histories.Bob, "R1", "rB", "Bob");
+    scenario.agree("both removed");
+    return undefined;
+  });
+}
+
+export function runRemovedSplit(): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], "D1", false);
+  return scenario.run("Alice splits at 2 into Ra; Bob splits at 1 into Rb and removes Rb; then Bob removes Ra", () => {
+    split(scenario.histories.Alice, "R1", 2, "Ra", "a1", "Alice");
+    split(scenario.histories.Bob, "R1", 1, "Rb", "b1", "Bob");
+    removeBeat(scenario.histories.Bob, "Rb", "rB", "Bob");
+    scenario.deliver();
+    removeBeat(scenario.histories.Bob, "Ra", "rB2", "Bob");
+    scenario.agree("Ra removed");
+    return undefined;
+  });
+}
+
+export function runJoinTargetRemoved(): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], "D1", false);
+  return scenario.run("Alice joins R2 into R1; Bob removes R1", () => {
+    join(scenario.histories.Alice, "R2", "R1", "jA");
+    scenario.deliver();
+    removeBeat(scenario.histories.Bob, "R1", "rB", "Bob");
+    scenario.agree("join target removed");
+    return undefined;
+  });
+}
+
+export function recordTiming(): { listenerSaw: number[]; after: number } {
+  const harness = new ReplicaHarness("B", [{ id: "R1", text: "ab" }]);
+  try {
+    const history = new CommandHistory(harness.alice);
+    const listenerSaw: number[] = [];
+    harness.alice.doc.on("afterTransaction", (transaction: { local: boolean }) => {
+      if (transaction.local) listenerSaw.push(history.undoStack.length);
+    });
+    insertText(history, "R1", 2, "x", ["a1"]);
+    return { listenerSaw, after: history.undoStack.length };
+  } finally {
+    harness.destroy();
+  }
 }
 
 export function runHeldSelection(order: DeliveryOrder): CaseResult {

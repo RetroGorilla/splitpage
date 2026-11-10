@@ -1,8 +1,8 @@
-Alice inserts x; Bob removes the beat; Alice undoes and redoes: recovery lists the restored x as an edit made after the removal.
+Owner: reader.
 
-Replay: `node --test test/undo-records/cases.test.ts`.
+Replay: `node --test test/undo-records/generator.test.ts`.
 
-# Recovery after undo and redo inside a removed beat
+# Recovery lists a character undone and redone inside a removed beat as edited after the removal
 
 Failure: recovery after undo and redo/client1.recovery[0].edited[0]: expected <missing>, got "a1*"
 

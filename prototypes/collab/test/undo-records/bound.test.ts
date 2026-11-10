@@ -66,12 +66,12 @@ test("kept records are self-contained data: after a reload from encoded state th
   }
 });
 
-test("the command-record undo path calls no library undo or redo; only the inherited buffer constructor builds a manager", () => {
+test("the command-record undo path calls no library undo or redo; only the inherited buffer constructor builds a manager, and only the library probes call it", () => {
   const forbidden = /new Y\.UndoManager|\.undoManager\.(undo|redo)\(|\b(stopCapturing|structureManager|undoOne|undoJoin|undoStatus|undoCapturedMarks|undoStructuralRange|bindUndoRestores|captureUndoIdentities|undoManager)\(/;
   const folders = [new URL("../../src/undo-records/", import.meta.url), new URL("./", import.meta.url)];
   let scanned = 0;
   for (const folder of folders) {
-    for (const name of readdirSync(folder).filter(file => file.endsWith(".ts") && file !== "bound.test.ts")) {
+    for (const name of readdirSync(folder).filter(file => file.endsWith(".ts") && !["bound.test.ts", "probes.ts"].includes(file))) {
       const source = readFileSync(new URL(name, folder), "utf8");
       assert.doesNotMatch(source, forbidden, name);
       scanned++;
