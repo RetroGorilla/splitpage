@@ -20,3 +20,5 @@ VIOLATION threw: reader on client 1: Structural join target unavailable
 VIOLATION threw: reader on client 2: Structural join target unavailable
 VIOLATION threw: reader on client 7: Structural join target unavailable
 ```
+
+Fixed by this pull request (#1421): the original failure above is retained; the literal reader regression now passes in test/undo-records/cases.test.ts and generator.test.ts.

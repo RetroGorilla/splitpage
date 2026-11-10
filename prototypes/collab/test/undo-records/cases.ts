@@ -12,7 +12,7 @@ import { structuralCaret } from "../../src/structure-selection.ts";
 import { addComment, changeStatus, deleteRange, formatRange, insertText, join, removeBeat, split, tagRange } from "../../src/undo-records/commands.ts";
 import { CommandHistory } from "../../src/undo-records/history.ts";
 import type { UndoDefect, UndoOutcome } from "../../src/undo-records/history.ts";
-import { chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, positionControlOracle, redoneAtGapOracle, redoneMarkOracles, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, statusOracles, statusRedoObserved, throwingUndoOracles } from "./oracles.ts";
+import { chainOracles, doubleDeleteOracles, endpointOracles, fixedReaderOracles, heldSelectionOracle, identicalRemovalOracles, identicalTagOracles, insideRangeOracles, joinRedoOracles, laterFormatOracles, longChainOracle, positionControlOracle, redoneAtGapOracle, redoneMarkOracles, redoneRecoveryOracle, redoOracles, rejoinOracles, reRemovalOracles, statusOracles, statusRedoObserved, throwingUndoOracles } from "./oracles.ts";
 import { bindRestores, countUpdates } from "./runner.ts";
 
 export type Writer = "Alice" | "Bob";
@@ -144,9 +144,7 @@ export function runIdenticalRemoval(order: DeliveryOrder, swapped: boolean, firs
     removeBeat(scenario.histories.Bob, "R2", "rB", "Bob");
     scenario.check("removed", identicalRemovalOracles.removed ?? fail(), (model, client) => {
       for (const entry of model.recovery) {
-        assert.ok(entry.by === "Alice" || entry.by === "Bob", `unexpected remover ${entry.by}`);
         named.add(`client${client}: ${entry.by}`);
-        entry.by = "<either writer>";
       }
     });
     scenario.note(`recovery names ${[...named].join(", ")}`);
@@ -168,12 +166,11 @@ export function runIdenticalRemovalRedo(order: DeliveryOrder): CaseResult {
     scenario.harness.queue.flush("D2");
     removeBeat(scenario.histories.Alice, "R2", "rA", "Alice");
     removeBeat(scenario.histories.Bob, "R2", "rB", "Bob");
-    const either = (model: CollabModel): void => { for (const entry of model.recovery) entry.by = "<either writer>"; };
-    scenario.check("removed", identicalRemovalOracles.removed ?? fail(), either);
+    scenario.check("removed", identicalRemovalOracles.removed ?? fail());
     assert.equal(scenario.undo("Bob").effective, true);
     scenario.check("restored", identicalRemovalOracles.restored ?? fail());
     assert.equal(scenario.redo("Bob").effective, true);
-    scenario.check("redone", identicalRemovalOracles.removed ?? fail(), either);
+    scenario.check("redone", identicalRemovalOracles.removed ?? fail());
     for (const replica of scenario.harness.replicas) {
       assert.deepEqual([...mapValue(mapValue(replica.doc.getMap("beats").get("R2")).get("removals")).keys()].sort(), ["rA", "rB"], "redo restored only its own removal entry");
     }
@@ -224,9 +221,7 @@ export function runReRemoval(order: DeliveryOrder, defect?: UndoDefect): CaseRes
   return scenario.run("intentional re-removal after both removals were undone", () => {
     removeBeat(scenario.histories.Alice, "R2", "rA", "Alice");
     removeBeat(scenario.histories.Bob, "R2", "rB", "Bob");
-    scenario.check("both removed", reRemovalOracles.removed ?? fail(), model => {
-      for (const entry of model.recovery) entry.by = entry.by === "Alice" || entry.by === "Bob" ? "<either writer>" : entry.by;
-    });
+    scenario.check("both removed", reRemovalOracles.removed ?? fail());
     assert.equal(scenario.undo("Alice").effective, true);
     scenario.check("both undone", reRemovalOracles.restored ?? fail());
     removeBeat(scenario.histories.Alice, "R2", "rA2", "Alice");
@@ -369,37 +364,37 @@ export function runRedoneMarkReversed(mark: "tag" | "comment"): CaseResult {
   });
 }
 
-export function runRemovedAfterInsert(): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "a" }, { id: "R2", text: "z" }], "D1", false);
+export function runRemovedAfterInsert(order: DeliveryOrder = "D1", swapped = false): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "a" }, { id: "R2", text: "z" }], order, swapped);
   return scenario.run("Alice inserts x and removes R1; Bob removes R1 without seeing x", () => {
     insertText(scenario.histories.Alice, "R1", 1, "x", ["a1"]);
     removeBeat(scenario.histories.Alice, "R1", "rA", "Alice");
     removeBeat(scenario.histories.Bob, "R1", "rB", "Bob");
-    scenario.agree("both removed");
+    scenario.check("both removed", fixedReaderOracles["both removed"] ?? fail());
     return undefined;
   });
 }
 
-export function runRemovedSplit(): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "abcd" }], "D1", false);
+export function runRemovedSplit(order: DeliveryOrder = "D1", swapped = false): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "abcd" }], order, swapped);
   return scenario.run("Alice splits at 2 into Ra; Bob splits at 1 into Rb and removes Rb; then Bob removes Ra", () => {
     split(scenario.histories.Alice, "R1", 2, "Ra", "a1", "Alice");
     split(scenario.histories.Bob, "R1", 1, "Rb", "b1", "Bob");
     removeBeat(scenario.histories.Bob, "Rb", "rB", "Bob");
     scenario.deliver();
     removeBeat(scenario.histories.Bob, "Ra", "rB2", "Bob");
-    scenario.agree("Ra removed");
+    scenario.check("Ra removed", fixedReaderOracles["Ra removed"] ?? fail());
     return undefined;
   });
 }
 
-export function runJoinTargetRemoved(): CaseResult {
-  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], "D1", false);
+export function runJoinTargetRemoved(order: DeliveryOrder = "D1", swapped = false): CaseResult {
+  const scenario = new Scenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order, swapped);
   return scenario.run("Alice joins R2 into R1; Bob removes R1", () => {
     join(scenario.histories.Alice, "R2", "R1", "jA");
     scenario.deliver();
     removeBeat(scenario.histories.Bob, "R1", "rB", "Bob");
-    scenario.agree("join target removed");
+    scenario.check("join target removed", fixedReaderOracles["join target removed"] ?? fail());
     return undefined;
   });
 }

@@ -9,9 +9,9 @@ The limits below are the ones these literal fixtures and this generator have fou
 Undo runs on a per-writer history of command records: each record holds identities and shared record ids, and undo applies its reverse as a new local transaction. The command-record path calls no library undo or redo (`bound.test.ts` scans for it); the M1 buffer's inherited constructor still builds a `Y.UndoManager`, which is destroyed unused, and the library probes call the library on purpose.
 
 - Retained families: 50 of 50 pass (257/257 runs, `fixtures.test.ts`). The list is derived from the retained test files that contain an undo step: `fixtures.test.ts` scans `test/` for undo calls and fails if a file with one is missing from the list, or if a listed family does not run.
-- New cases: 17 of 17 rows pass (`cases.test.ts`).
+- New cases: 20 of 20 rows pass (`cases.test.ts`).
 - Generator: 300 seeded histories in the suite (`generator.test.ts`; set `UNDO_GENERATOR_RUNS` for more). Each violation they produce matches a declared limit.
-- Declared limits: 10, each with a failing literal case, a minimized generator history, or both (`generator.test.ts` re-runs each one). 2 belong to undo; the rest belong to the reader, main's status rule, delivery order or the library's formatting.
+- Declared limits: 7, each with a failing literal case, a minimized generator history, or both (`generator.test.ts` re-runs each one). 2 belong to undo; the rest belong to the reader, main's status rule, delivery order or the library's formatting.
 
 ## Literal fixtures that pass, by family
 
@@ -95,6 +95,9 @@ The expected results are literal data in `test/undo-records/oracles.ts`, written
 | Join redo after the other writer joined the same beat elsewhere: the earlier winner wins again | D1, D2, dup, rev, late-C | PASS 5/5 |
 | An undo whose record cannot be resolved throws, keeps its entry and writes nothing; the entry below it still undoes | D1 | PASS 1/1 |
 | Status redo after concurrent status changes that did not apply (observed outcome of open question 4) | D1, D2, dup, rev, late-C | PASS 5/5 |
+| Fixed reader limit: join-target | D1, D2, dup, rev, late-C; both client-id orders | PASS 10/10 |
+| Fixed reader limit: recovery-attribution | D1, D2, dup, rev, late-C; both client-id orders | PASS 10/10 |
+| Fixed reader limit: recovery-split-by | D1, D2, dup, rev, late-C; both client-id orders | PASS 10/10 |
 
 Each identical-change case also checks that the other writer's later undo writes nothing, consumes one entry and leaves that writer's older step for the next undo.
 
@@ -110,9 +113,6 @@ A violation the generator finds is accepted only if it matches one row's predica
 | A writer's second status undo changes nothing under main's status rule | status rule | literal case | second undo/client1.rows[0].status: expected "todo", got "ready" | `library undo: shot → ready → todo; main's undoStatus: shot → ready → ready` | [literal](histories/UR-sequential-status.md) |
 | Redo of a status change that had not applied (a conflict) makes it apply | status rule | generator: 0 of 300 runs | undo then redo changed the model: Bob status: before R1[s1 s2 s3 s4] H1[s5 s6] R2(undefined)[s7 s8 s9] R3[s10 s11]; recovery none; notices Bob: concurrent status change did not apply, Carol: concurrent status change did not apply \|\| after R1[s1 s2 s3 s4] H1[s5 s6] R2(ready)[s7 s8 s9] R3[s10 s11];  | not probed | [generator, 8 steps](histories/UR-gen-status-redo-conflict.md) |
 | A redone tag or comment highlight is lost when the writer's undo and redo updates arrive in reverse | library formatting | literal case | redone/client2.rows[0].characters[0].marks.tag: expected "P", got <missing> | `library undo and redo: a{b}b; library undo and redo, swapped ids: a{b}b; plain remove then add, no undo: a{b,c:C1}b{c:C1}; plain remove then add, no undo, swapped ids: a{b}b` | [literal](histories/UR-redone-mark-reversed.md) |
-| Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable) | reader | literal case; generator: 67 of 300 runs | Structural join target unavailable | not probed | [literal](histories/UR-join-target.md), [generator, 3 steps](histories/UR-gen-join-target.md) |
-| Replicas name a different remover, splitter or edit list for the same recovery entry | reader | literal case; generator: 21 of 300 runs | both removed: replicas differ: client1: R2[s2]; recovery R1 by Alice edited=[] \| client2: R2[s2]; recovery R1 by Bob edited=["a1"] | not probed | [literal](histories/UR-recovery-edited.md), [generator, 2 steps](histories/UR-gen-recovery-attribution.md) |
-| Only the replica that saw the split names its splitter in recovery | reader | literal case | Ra removed: replicas differ: client1: R1[s1]; recovery Rb by Bob edited=[], Ra by Bob edited=[] \| client2: R1[s1]; recovery Rb by Bob edited=[], Ra by Bob edited=[] splitBy=Alice | not probed | [literal](histories/UR-recovery-split-by.md) |
 | A replica holding one writer's later update before the earlier one cannot be read until the earlier one arrives | delivery | generator: 0 of 300 runs | threw: Bob move: Cannot read properties of undefined (reading 'b') | not probed | [generator, 5 steps](histories/UR-gen-pending-update.md) |
 
 - Double restore needs a convergent rule for two restorations of one identity; #1419 keeps one restoration per identity. The generator has not produced one: it needs both writers to delete the same character and both undo before either undo arrives.
@@ -121,7 +121,7 @@ A violation the generator finds is accepted only if it matches one row's predica
 - Second status undo: the library's undo stack goes shot, ready, todo; main's `undoStatus`, which pops its stack by hand and retires only frontier events, goes shot, ready, ready, and command records do the same. The limit comes from main's retirement rule, not from leaving the library.
 - Status redo after a conflict is open question 4 below: the redo writes a fresh event, so a status that had not applied applies after undo and redo.
 - Redone mark: plain formatting with no undo (remove the highlight, add it again) loses it the same way in one client-id order, so the cause is Yjs's formatting cleanup when one writer's two format updates arrive in reverse. A relay server delivers each writer's updates in order.
-- Reader limits are reported here because the generator reaches them; the reader fix is in another lane.
+- #1421 removes the join-target, recovery-attribution and recovery-split-by reader limits. Their literal cases now pass; the original histories remain as the record of the defect. The separate redone-recovery limit remains.
 - Pending update: the generator does not act on a replica while it holds an out-of-order update. The minimized history does, and the replica's own segment walk throws until the earlier update arrives.
 
 ## Generator
@@ -140,34 +140,32 @@ Counts for the 300 histories in the suite (seeds 1 to 150, two and three writers
 
 | Executed | Count |
 | --- | --- |
-| commands | 6382 (insert 469, delete 479, bold 496, unbold 421, tag 435, comment 429, reply 132, split 436, join 247, remove 440, move 395, status 475, scalar 442, replace 459, heading 269, unheading 358) |
+| commands | 6384 (insert 470, delete 479, bold 496, unbold 421, tag 435, comment 429, reply 132, split 436, join 247, remove 440, move 393, status 475, scalar 443, replace 459, heading 270, unheading 359) |
 | undo | 1386 |
-| redo | 151 |
+| redo | 150 |
 | undo-redo | 1322 |
 | deliver | 4666 |
 | late | 98 |
-| effective undos checked | 2112 |
+| effective undos checked | 2184 |
 | ineffective undos checked | 137 |
-| undo-then-redo round trips checked | 1041 |
-| status events validated | 2244 |
-| status events written by a redo validated | 428 |
-| waited on an out-of-order update | 1411 |
+| undo-then-redo round trips checked | 1075 |
+| status events validated | 2257 |
+| status events written by a redo validated | 441 |
+| waited on an out-of-order update | 1406 |
 
 | Limit | Runs with it | Violations |
 | --- | --- | --- |
 | Concurrent undos of one doubly deleted character restore it twice | 0 | 0 |
 | Redo of a status change that had not applied (a conflict) makes it apply | 0 | 0 |
-| Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable) | 67 | 275 |
-| Replicas name a different remover, splitter or edit list for the same recovery entry | 21 | 21 |
 | A replica holding one writer's later update before the earlier one cannot be read until the earlier one arrives | 0 | 0 |
 | Unmatched | 0 | 0 |
 
-Once the reader throws on a replica, the undo checks on that replica in that run are skipped; the reader's join-target error is the most frequent class, so it hides other checks in the runs it reaches.
+Once the reader throws on a replica, the undo checks on that replica in that run are skipped. The former join-target exception no longer hides those checks in this matrix.
 
 Kept seeds, re-run by `generator.test.ts`:
 
-- 2, 2 writers: the reader's join-target error.
-- 3, 3 writers: replicas name different removers.
+- 2, 2 writers: the reader's join-target error (fixed by #1421).
+- 3, 3 writers: replicas name different removers (fixed by #1421).
 - 1685, 3 writers: a status redo after a conflict.
 - 424, 2 writers: an undo threw writing a key on a beat record another writer's undo had deleted (fixed).
 - 1095, 2 writers: an undo threw retiring a removal on a deleted beat record (fixed).
@@ -180,7 +178,7 @@ The four undo defects the generator found in this round are fixed: a key or remo
 
 1. Undo of a delete the other writer also made. The decided rows list joins, status, tags and beat removals as identical changes, not deleted characters. Plausible outcomes: (a) the first undo restores every character its record deleted, including ones the other writer also deleted, and the other writer's later undo of them changes nothing; (b) it restores only characters nobody else deleted. Observed (a): after Alice's undo: s1 s2* s3* s4; Bob's undo effective=false; after Bob's undo: s1 s3* s4; Alice's undo effective=true. Only the final state after both undos is checked. (b) would need shared per-writer deletion attribution.
 2. Redo at the gap where the other writer typed after the undo. Plausible outcomes: redone text before or after the other writer's insertion. Observed R1 = s1 s2 a1* a2* b1: redone characters return at their tombstones, ahead of the later insertion, on each replica the case reads.
-3. Which writer an identical simultaneous removal names in recovery. Observed per replica: client1: Alice, client2: Bob; client2: Alice, client1: Bob; client1: Alice, client2: Bob, client3: Bob; client2: Alice, client1: Bob, client3: Alice. Replicas disagree, and the remover's name is not the only recovery field that does: with no undo involved, the reader on main (`src/structure-reader.ts`) also gives replicas different `edited` lists and `splitBy` values. Two histories: R1 `a`; Alice inserts x, then removes R1; Bob concurrently removes R1 without seeing x; Alice reads `edited=[]` and Bob `edited=["a1"]`. Alice splits `abcd` at 2 into Ra; Bob concurrently splits at 1 into Rb and removes Rb; after synchronizing, Bob removes Ra; `splitBy: "Alice"` appears only on Bob. Both are reader limits above. The identical-removal case's forward check accepts either name; after its undo the beat has left recovery, so the later checks compare no remover.
+3. Removal attribution now follows #1421's coordinator assumption: distinct active remover names in UTF-16 order, so identical simultaneous removals name Alice, Bob on the tested replicas. Observed per replica: client1: Alice, Bob, client2: Alice, Bob; client2: Alice, Bob, client1: Alice, Bob; client1: Alice, Bob, client2: Alice, Bob, client3: Alice, Bob; client2: Alice, Bob, client1: Alice, Bob, client3: Alice, Bob. Literal expectations no longer erase the name before checking it. The repaired recovery cases pin edited=["a1"] when at least one removal had not observed x, and retain splitBy Alice when an inherited removal applies alongside a direct removal. Those assumptions remain labelled for product review in reader-order-results.md; the originals are retained in UR-recovery-edited.md and UR-recovery-split-by.md. Undo expectations are unchanged.
 4. Redo of a status change that had not applied. Alice and Bob change the status at once; under main's rule neither applies (the status stays todo and each gets a notice). Alice's undo retires both frontier events, and the status stays todo. Plausible outcomes of her redo: (a) it writes a fresh event and her status applies (ready); (b) it restores the state before the undo, a conflict in which neither applies (todo), which would need the record to keep the conflicting events and redo to make them the frontier again. Observed (a) on the five delivery orders of `cases.test.ts`: undo effective=true, redo effective=true, final status ready. The generator reaches it too (limit above).
 
 ## Controls

@@ -9,14 +9,14 @@ const removalRows = {
 } as const;
 
 export const identicalRemovalOracles: Record<string, ScriptOracle> = {
-  removed: { rows: [removalRows.r1, removalRows.r3], carets: {}, recovery: [{ row: removalRows.r2, by: "<either writer>", edited: [] }] },
+  removed: { rows: [removalRows.r1, removalRows.r3], carets: {}, recovery: [{ row: removalRows.r2, by: "Alice, Bob", edited: [] }] },
   restored: { rows: [removalRows.r1, removalRows.r2, removalRows.r3], carets: {}, recovery: [] },
   "Alice older undone": { rows: [removalRows.r1Older, removalRows.r2, removalRows.r3], carets: {}, recovery: [] },
   "Bob older undone": { rows: [removalRows.r1, removalRows.r2, removalRows.r3Older], carets: {}, recovery: [] }
 };
 
 export const reRemovalOracles: Record<string, ScriptOracle> = {
-  removed: { rows: [removalRows.r1Older, removalRows.r3Older], carets: {}, recovery: [{ row: removalRows.r2, by: "<either writer>", edited: [] }] },
+  removed: { rows: [removalRows.r1Older, removalRows.r3Older], carets: {}, recovery: [{ row: removalRows.r2, by: "Alice, Bob", edited: [] }] },
   "removed by Alice": { rows: [removalRows.r1Older, removalRows.r3Older], carets: {}, recovery: [{ row: removalRows.r2, by: "Alice", edited: [] }] },
   restored: { rows: [removalRows.r1Older, removalRows.r2, removalRows.r3Older], carets: {}, recovery: [] }
 };
@@ -61,6 +61,24 @@ export const redoneAtGapOracle: ScriptOracle = {
 };
 
 const abcd = [["s1", "a", {}], ["s2", "b", {}], ["s3", "c", {}], ["s4", "d", {}]] as const;
+
+export const fixedReaderOracles: Record<string, ScriptOracle> = {
+  "both removed": {
+    rows: [{ id: "R2", characters: [["s2", "z", {}]] }], carets: {},
+    recovery: [{ row: { id: "R1", characters: [["s1", "a", {}], ["a1", "x", {}]] }, by: "Alice, Bob", edited: ["a1"] }]
+  },
+  "Ra removed": {
+    rows: [{ id: "R1", characters: [["s1", "a", {}]] }], carets: {},
+    recovery: [
+      { row: { id: "Rb", characters: [["s2", "b", {}]] }, by: "Bob", edited: [] },
+      { row: { id: "Ra", characters: [["s3", "c", {}], ["s4", "d", {}]] }, by: "Bob", edited: [], splitBy: "Alice" }
+    ]
+  },
+  "join target removed": {
+    rows: [], carets: {},
+    recovery: [{ row: { id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["[glue]", " ", {}], ["s3", "c", {}], ["s4", "d", {}]] }, by: "Bob", edited: ["s3", "s4"] }]
+  }
+};
 
 export const endpointOracles: Record<string, ScriptOracle> = {
   "split at end": { rows: [{ id: "R1", characters: abcd }, { id: "Ra", characters: [] }], carets: {}, recovery: [] },

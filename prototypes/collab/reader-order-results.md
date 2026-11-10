@@ -68,10 +68,66 @@ These are coordinator assumptions, not maintainer decisions. Adding a removal mu
 
 The source audit declares **43 changed/new production sources**, original/current hashes, dependency/count digests and separate current browser-bundle hashes. Historical observations, timing files, samples and original archives are not regenerated. Retained timing rows are labelled as predating these changes. Affected incremental/structure/component/withIdentity and earlier reader/export/load/heap paths still need retiming; count-only observations establish no elapsed cost.
 
-Final validation: **1,808/1,808 prototype tests pass, zero skipped**, from one full-suite run. The strict harness records **1,708 positive checkpoint inspections / 45,080 complete projections / 35,854 comparisons** (executions, including repeated inspections and canonical probes). The separate wire properties record **16,596 reload checkpoints** (15,672 values + 891 keys + 33 later-field cases). No further difference appeared in those cases. The accessor control is the eighth strict-comparison control. The mark mutation audit retains **116 baseline passes / 34 detected defects / 3 withdrawn claims**. Seven historical bundles reproduce exactly; current hashes are separate.
+Validation before rebasing onto #1418: **1,808/1,808 prototype tests pass, zero skipped**, from one full-suite run. The strict harness records **1,708 positive checkpoint inspections / 45,080 complete projections / 35,854 comparisons** (executions, including repeated inspections and canonical probes). The separate wire properties record **16,596 reload checkpoints** (15,672 values + 891 keys + 33 later-field cases). No further difference appeared in those cases. The accessor control is the eighth strict-comparison control. The mark mutation audit retains **116 baseline passes / 34 detected defects / 3 withdrawn claims**. Seven historical bundles reproduce exactly; current hashes are separate.
 
 Lint, typecheck, check:comments and check:deps pass. Privacy and git diff --check pass, including the two requested trailing-blank-line removals. Count-only regeneration leaves lifetime work counters, structural-count data and sensitivity rows unchanged from **82e15f19**. The PR retains **321** numeric work-counter deltas from 8efcff79 (the earlier 293 plus 28 metadata-lookup reductions); exact paths are in src/readers/count-changes.json. Current source metadata is refreshed. Sensitivity crossings remain 36/31/34/26/36. The four-file physical-line subtotal is **305** (delta 62, blocks 74, incremental 115, operations 54), excluding shared reader helpers. Retained measured rows and samples are unchanged.
 
+## Undo-record tests reconciled
+
+Rebased onto origin/main at **3cb3b680**, which contains #1418 (merge 0a58ad91). The original check-only commit 8efcff798f7d92ab890207d414ec2f416b69f695 is now **f4e6429d0771923c23a820f6c165eaceda06c587**, first in the rebased series with the same patch content. Original evidence hashes in the audits still identify the historical source snapshot; the rebase does not rewrite that snapshot. A range comparison confirms the four pre-reconciliation commits replay unchanged.
+
+The first undo-records run on the rebased tree found **44 failing tests out of 441**. Classification counts count each failing test once, not each root cause. Table expansions below identify those tests; `O` is D1, dup, rev, late-C.
+
+| Class | Tests failing after rebase | Count | Reconciliation |
+| --- | --- | ---: | --- |
+| 1: removed reader limit | cases.test.ts: the three `reader limit:` tests (unseen insert, splitter, join target) | 3 | Passing literal regressions now run D1, D2, dup, rev, late-C with normal/swapped clients: 30 cases. |
+| 1 | generator kept seeds 2/2 and 3/3 | 2 | Retained as fixed histories; no longer required to exhibit the removed failure. |
+| 1 | generator minimized join-target and recovery-attribution limit tests | 2 | Retained inputs now require zero violations. |
+| 1 | generator literal join-target, recovery-attribution and recovery-split-by limit tests | 3 | Converted to passing literal checks; the limits are removed from declaredLimits. |
+| 2: old reader expectation | identical simultaneous removal O x normal/swapped x Alice/Bob first | 16 | Recovery attribution is literal Alice, Bob; first undo/restoration and other undo consumption unchanged. |
+| 2 | intentional re-removal O | 4 | Initial combined attribution changes; later Alice-only removal and undo expectations unchanged. |
+| 2 | removal own-entry negative control O | 4 | Now reaches its original undo-specific failure rather than failing on earlier attribution. |
+| 2 | ineffective identical undo fall-through control O x Alice/Bob first | 8 | Now reaches its original older-step failure rather than failing on attribution. |
+| 2 (derived aggregate) | command-record undo results and retained histories reproduce exactly | 1 | Report regenerated for the class-1 removals and class-2 literals; counted here once although it depended on both. |
+| 3: other | retained-source inventory assertion in fixtures.test.ts | 1 | Kept failing unchanged; two new reader-order source files have no retained-family mapping. |
+| **Total** | **Class 1: 10; class 2: 33; class 3: 1** | **44** | **No undo mechanism was changed.** |
+
+Class-1 literals in fixedReaderOracles pin: insert/remove R1 ax in recovery by Alice, Bob with edited=["a1"]; split Ra retains splitBy Alice beside Bob's direct removal (Rb remains a separate Bob recovery entry); removed join target R1 contains ab + glue + cd in one Bob recovery group, with source identities s3/s4 edited because that removal observed only R1. These follow the recorded reader rules/assumptions. The five UR-join-target / UR-gen-join-target / UR-recovery-edited / UR-gen-recovery-attribution / UR-recovery-split-by history files keep the defect trace and add a fixed-by-#1421 line. The redone-recovery reader limit is separate and remains.
+
+Class-2 literal changes, individually:
+
+| Expected data / check | Old | New |
+| --- | --- | --- |
+| identicalRemovalOracles.removed.recovery[0].by | <either writer>, after accepting Alice or Bob and erasing the value | Alice, Bob, with no erasure |
+| runIdenticalRemovalRedo removed and redone phases (same oracle) | <either writer>, after unconditional erasure | Alice, Bob, with no erasure |
+| reRemovalOracles.removed.recovery[0].by | <either writer>, after accepting Alice or Bob | Alice, Bob, with no erasure |
+
+The restored rows, Alice-only re-removal, consumed stale undo, older insertion, and redo removal-entry assertions retain their expected results. The own-entry and fall-through controls still require their original undo-specific failures. The report now has 20 passing case rows and seven declared limits, reduced from ten; report.files has 16 generated artifacts instead of 21 because the five repaired histories are retained as historical records rather than regenerated as active failures.
+
+The class-3 failure is minimized in [UR-reader-order-inventory.md](histories/UR-reader-order-inventory.md). The scan finds test/reader-order/readers.test.ts and test/reader-order/review.test.ts, absent from retainedUndoSources. It fails without running a Yjs command; either missing path suffices. Neither the assertion nor its inventory was adjusted, per class 3. The existing 50 listed families pass 257/257 runs. Focused undo-records result after reconciliation: **467 pass / 1 fail / 468 tests**, zero skipped; the remaining failure is that inventory assertion.
+
+Generator regeneration uses the same 300 histories (150 seeds for each of two/three writers), length 60. Previous join-target class: **67 runs / 275 violations -> 0 / 0**. Previous recovery-attribution class: **21 / 21 -> 0 / 0**. Remaining matched classes double-restore, status-redo-conflict and pending-update each read **0 / 0** in this finite matrix. **Unmatched: 0 / 0**, unchanged. Effective undo checks increase 2,112 -> 2,184; undo/redo checks 1,041 -> 1,075; status validations 2,244 -> 2,257, including redo 428 -> 441. Commands executed 6,382 -> 6,384; undo 1,386; redo 151 -> 150; undo-redo 1,322; deliveries 4,666; late joins 98; pending waits 1,411 -> 1,406. The corrected readers let the same seeds reach more checks; this is no new proof beyond those runs.
+
+### Undo-record shared-state access audit
+
+No undo-record command or history implementation was changed in this reconciliation. Status resolution already uses statusFrontier/statusValue and readStatusEvent (history.ts:48, history.ts:386). The following direct accesses remain outside the malformed-record property claims; this explicitly records them rather than claiming the undo command layer is validated:
+
+| Location under src/undo-records | Remaining direct access |
+| --- | --- |
+| history.ts:141 | restoredIdentities typed-map entry and client/clock fields, without a raw-record validator. |
+| history.ts:174; history.ts:392 | retired join/status membership in reversal commands. Status event content still goes through the common status reader. |
+| history.ts:184-200 | Beat record type guard and toJSON snapshot, then recreation of its fields/joins/removals. |
+| history.ts:208-212; history.ts:371-379 | Beat removal membership and removalRecords.kind during reverse/redo; raw records, not readRemovalRecord. |
+| history.ts:224; history.ts:331; history.ts:341-345 | Beat scalar equality, beat map guard and join membership/into fields. |
+| history.ts:233-240; history.ts:354-364 | Generic record presence and key-path/current-value comparison. |
+| commands.ts:141-154; commands.ts:162-184; commands.ts:273-274 | Segment text/head and order during capture/move, paragraphStart and scalar priors. |
+| identity.ts:44-73 | Native relative-position identity operations, Y.Array values and Y.Text delta/attribute snapshots, without wire/record normalization. |
+| buffer.ts:45-50 | Native identity resolution/content capture through the above identity helpers. |
+| measure.ts:53,109; report.ts | Fixture writes/map count instrumentation and report-local records; no additional shared-content resolution. |
+
+These commands can preserve raw prior fields on undo/redo; malformed inputs are not certified by the reader reload properties. The new undo generator checks finite histories of valid command arguments. The additional production change here is only undo-records/report.ts (generated result text/case aggregation), outside the pinned timed reader paths; no timed source or count data changes in this reconciliation.
+
+Final rebased validation: one full prototype run, **2,275 pass / 1 fail / 2,276 tests**, zero skipped/cancelled. The only failure is the unchanged class-3 retained-source inventory assertion. The strict reader harness totals remain **1,708 inspections / 45,080 projections / 35,854 comparisons**. Root lint, typecheck (260 prototype files), check:comments and check:deps pass; privacy and git diff --check pass. No timing, Edge or browser run. This head does not claim a green CI checks job while that inventory failure remains.
 ## Not shown
 
 Agreement for every possible stored record is not proven. Three review rounds each found a further case. The finite generators and literal controls establish their stated coverage; they do not certify arbitrary stored-record semantics, complete schema validation, arbitrary serializer cloning, or production cost.

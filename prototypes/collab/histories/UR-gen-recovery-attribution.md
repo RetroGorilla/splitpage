@@ -19,3 +19,5 @@ deliver B5 B->C copy 1
 drained; fresh replica client 7 from Alice's encoded state
 VIOLATION replicas differ: only in recovery attribution: client1: H1[s5 s6] R2[s7 s8 s9] R3[s10 s11]; recovery R1 by Carol edited=[] | client2: H1[s5 s6] R2[s7 s8 s9] R3[s10 s11]; recovery R1 by Bob edited=[] | client3: H1[s5 s6] R2[s7 s8 s9] R3[s10 s11]; recovery R1 by Carol edited=[] | client7: H1[s5 s6] R2[s7 s8 s9] R3[s10 s11]; recovery R1 by Carol edited=[]
 ```
+
+Fixed by this pull request (#1421): the original failure above is retained; the literal reader regression now passes in test/undo-records/cases.test.ts and generator.test.ts.

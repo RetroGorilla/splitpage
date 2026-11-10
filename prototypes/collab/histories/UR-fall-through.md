@@ -17,7 +17,7 @@ enqueue B4 B->A 185 bytes
 deliver A3 A->B copy 1
 deliver B4 B->A copy 1
 check removed
-recovery names client1: Alice, client2: Bob
+recovery names client1: Alice, Bob, client2: Alice, Bob
 enqueue A5 A->B 10 bytes
 Alice undo remove effective=true consumed=1
 deliver A5 A->B copy 1
