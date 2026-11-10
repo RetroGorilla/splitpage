@@ -14,7 +14,7 @@ enqueue B2 B->A 210 bytes
 deliver B2 B->A copy 1
 enqueue A3 A->B 6 bytes
 Alice undo insert effective=true consumed=1
-enqueue A4 A->B 57 bytes
+enqueue A4 A->B 51 bytes
 Alice redo insert effective=true
 deliver A3 A->B copy 1
 deliver A4 A->B copy 1

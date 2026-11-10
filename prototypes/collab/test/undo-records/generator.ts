@@ -7,7 +7,7 @@ import type { SeedBeat } from "../../src/schema.ts";
 import { readStatusEvent } from "../../src/marks/status-resolution.ts";
 import { readStructure } from "../../src/structure-reader.ts";
 import { addComment, addReply, captureRange, changeStatus, createHeadingRecord, deleteRange, formatRange, insertText, join, moveBeat, removeBeat, removeHeadingRecord, replaceRange, setScalar, split, tagRange } from "../../src/undo-records/commands.ts";
-import { CommandHistory } from "../../src/undo-records/history.ts";
+import { CommandHistory, restorationRoot, settleRestorations } from "../../src/undo-records/history.ts";
 import type { UndoOutcome } from "../../src/undo-records/history.ts";
 
 export const commandOps = ["insert", "delete", "bold", "unbold", "tag", "comment", "reply", "split", "join", "remove", "move", "status", "scalar", "replace", "heading", "unheading"] as const;
@@ -127,7 +127,7 @@ function key(id: CollabIdentity): string {
 
 function originals(replica: SchemaReplica): Map<string, string> {
   const back = new Map<string, string>();
-  for (const [original, restored] of replica.doc.getMap<CollabIdentity>("restoredIdentities")) back.set(key(restored), original);
+  for (const [restored, original] of replica.doc.getMap<CollabIdentity>(restorationRoot)) back.set(restored, key(original));
   return back;
 }
 
@@ -193,6 +193,12 @@ export function execute(generated: GeneratedHistory, options: ExecuteOptions = {
     history.push(`generated: ${generated.writers} writers, ${generated.reorderWithinSender ? "one sender's updates may arrive out of order" : "each sender's updates arrive in order"}, fixture ${JSON.stringify(generatorSeed)}`);
     let joined = generated.writers === 3;
     const note = (line: string): void => { history.push(line); };
+    const settle = (): void => {
+      for (const replica of harness.replicas) {
+        const losers = settleRestorations(replica);
+        if (losers.length) note(`client${replica.doc.clientID} deleted losing restorations ${losers.map(key).join(", ")}`);
+      }
+    };
     const flag = (check: ViolationCheck, detail: string): void => {
       violations.push({ check, detail });
       note(`VIOLATION ${check}: ${detail}`);
@@ -266,7 +272,10 @@ export function execute(generated: GeneratedHistory, options: ExecuteOptions = {
             : harness.queue.pending.filter((message, index) => !harness.queue.pending.slice(0, index).some(earlier => earlier.from === message.from && earlier.to === message.to));
           const message = pick(eligible, r0);
           if (!message) ran = false;
-          else harness.queue.deliver(message.id, r1 < 0.2 ? 2 : 1);
+          else {
+            harness.queue.deliver(message.id, r1 < 0.2 ? 2 : 1);
+            settle();
+          }
         } else if (step.op === "late") {
           if (joined) ran = false;
           else {
@@ -316,6 +325,7 @@ export function execute(generated: GeneratedHistory, options: ExecuteOptions = {
     }
     for (let round = 0; harness.queue.pending.length > 0 && round < 50; round++) {
       for (const message of [...harness.queue.pending]) harness.queue.deliver(message.id, 1);
+      settle();
     }
     fresh = new SchemaReplica("B", 7, harness.identities);
     Y.applyUpdate(fresh.doc, Y.encodeStateAsUpdate(harness.alice.doc), "reload");

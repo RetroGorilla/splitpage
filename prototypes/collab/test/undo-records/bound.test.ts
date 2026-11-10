@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as Y from "yjs";
 import type { ReplicaHarness } from "../../src/delivery.ts";
-import { checkModel } from "../../src/model.ts";
+import { IdentityBook, checkModel } from "../../src/model.ts";
 import type { OracleCharacter, ScriptOracle } from "../../src/model.ts";
 import { SchemaReplica } from "../../src/schema.ts";
 import { readStructure } from "../../src/structure-reader.ts";
@@ -66,16 +66,29 @@ test("kept records are self-contained data: after a reload from encoded state th
   }
 });
 
-test("the command-record undo path calls no library undo or redo; only the inherited buffer constructor builds a manager, and only the library probes call it", () => {
+test("the default route calls no library undo or redo; the capture route's managers only re-create deleted text, and only the library probes call the library", () => {
   const forbidden = /new Y\.UndoManager|\.undoManager\.(undo|redo)\(|\b(stopCapturing|structureManager|undoOne|undoJoin|undoStatus|undoCapturedMarks|undoStructuralRange|bindUndoRestores|captureUndoIdentities|undoManager)\(/;
   const folders = [new URL("../../src/undo-records/", import.meta.url), new URL("./", import.meta.url)];
   let scanned = 0;
   for (const folder of folders) {
     for (const name of readdirSync(folder).filter(file => file.endsWith(".ts") && !["bound.test.ts", "probes.ts"].includes(file))) {
-      const source = readFileSync(new URL(name, folder), "utf8");
+      let source = readFileSync(new URL(name, folder), "utf8");
+      if (name === "history.ts") {
+        assert.equal(source.match(/new Y\.UndoManager\(/g)?.length, 1);
+        assert.match(source, /deleteFilter: \(\) => false/);
+        assert.equal(source.match(/\.undo\(\)/g)?.length, 1);
+        assert.match(source, /capture\.manager\.undo\(\);/);
+        source = source.replace("new Y.UndoManager(", "");
+      }
       assert.doesNotMatch(source, forbidden, name);
       scanned++;
     }
   }
   assert.ok(scanned >= 10);
+  const replica = new SchemaReplica("B", 1, new IdentityBook());
+  try {
+    assert.equal(new CommandHistory(replica).route, "items");
+  } finally {
+    replica.destroy();
+  }
 });

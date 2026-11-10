@@ -9,9 +9,9 @@ The limits below are the ones these literal fixtures and this generator have fou
 Undo runs on a per-writer history of command records: each record holds identities and shared record ids, and undo applies its reverse as a new local transaction. The command-record path calls no library undo or redo (`bound.test.ts` scans for it); the M1 buffer's inherited constructor still builds a `Y.UndoManager`, which is destroyed unused, and the library probes call the library on purpose.
 
 - Retained families: 50 of 50 pass (257/257 runs, `fixtures.test.ts`). The list is derived from the retained test files that contain an undo step: `fixtures.test.ts` scans `test/` for undo calls and fails if a file with one is missing from the list, or if a listed family does not run.
-- New cases: 17 of 17 rows pass (`cases.test.ts`).
+- New cases: 21 of 21 rows pass (`cases.test.ts`), including the 56 restore-once runs: concurrent undos of a character both writers deleted restore it once (see Restoring once). Restore-once fails in three named ways, each a declared limit: a restoration of a losing restoration survives settling, so the character shows twice; settling deletes the losing copy together with the bold another writer gave it; and it deletes a comment anchor on that copy, sending the comment to recovery. Settling is not extended to ancestry or to moving edits from the loser to the kept copy; this rule is a comparison point, not a design.
 - Generator: 300 seeded histories in the suite (`generator.test.ts`; set `UNDO_GENERATOR_RUNS` for more). Each violation they produce matches a declared limit.
-- Declared limits: 10, each with a failing literal case, a minimized generator history, or both (`generator.test.ts` re-runs each one). 2 belong to undo; the rest belong to the reader, main's status rule, delivery order or the library's formatting.
+- Declared limits: 12, each with a failing literal case, a minimized generator history, or both (`generator.test.ts` re-runs each one). 4 belong to undo; the rest belong to the reader, main's status rule, delivery order or the library's formatting.
 
 ## Literal fixtures that pass, by family
 
@@ -85,6 +85,10 @@ The expected results are literal data in `test/undo-records/oracles.ts`, written
 | Intentional re-removal after both removals were undone; the other writer's stale undo | D1, dup, rev, late-C | PASS 4/4 |
 | Undo after the other writer typed inside the undone insertion | D2, dup, late-C | PASS 3/3 |
 | Undo of a delete the other writer also made; final state after both undos; either first | D1, dup, rev, late-C | PASS 8/8 |
+| Both writers delete one character and undo concurrently; either redoes first; both client-id orders | D1, dup, rev, late-C | PASS 16/16 |
+| That character, restored twice, deleted again by one writer and undone; both client-id orders | D1, dup, rev, late-C | PASS 16/16 |
+| Three-character deletes overlapping in the middle, concurrent undos; either redoes first; both client-id orders | D1, dup, rev, late-C | PASS 16/16 |
+| Adjacent characters deleted by different writers, concurrent undos; both client-id orders | D1, dup, rev, late-C | PASS 8/8 |
 | Redo after undo with a remote insertion elsewhere | D2, dup, late-C | PASS 3/3 |
 | Redo after undo with a remote insertion at the undone gap (observed outcome of open question 2) | D2, dup, late-C | PASS 3/3 |
 | Insert, bold and delete one character, then three undos and three redos | D2, dup, late-C | PASS 3/3 |
@@ -98,24 +102,56 @@ The expected results are literal data in `test/undo-records/oracles.ts`, written
 
 Each identical-change case also checks that the other writer's later undo writes nothing, consumes one entry and leaves that writer's older step for the next undo.
 
+## Restoring once
+
+Yjs cannot undelete, so two concurrent undos of one deleted character each insert a new item. The rule that makes them one:
+
+1. Every restore writes one entry to the shared map `restorations`, keyed by the new item's identity, with the original identity as its value. Concurrent restores never overwrite each other's entry.
+2. Of the restorations of one original, the kept one is the one with the lowest client id, then the lowest clock. Readers compare ids as numbers; no map iteration order or string collation is involved.
+3. After applying remote updates, each replica deletes each live restoration that is not the kept one, in a transaction no history records. Deletions are idempotent, so replicas that delete the same loser converge.
+4. Resolution maps a losing restoration to the kept one before checking whether it is live, then follows later restorations of the kept one. A record or selection naming the loser therefore reaches the kept character, and a redo that deletes it deletes the kept one.
+
+A restore also has to land at its own tombstone. Inserting at the live index puts each restoration after the whole run of tombstones, so concurrent restorations of neighbouring characters land in client-id order (control Restore by index). #1418 had this limit for two writers undoing adjacent deletes at the same time, overlapping or not; its cases did not cover it. Each restore now inserts its item directly before its own tombstone, with the tombstone's left neighbour as origin, which is how `Y.UndoManager`'s redo places items. Its marks go in as format items placed tightly around it, because `Y.Text.format` places the closing mark after any following tombstones, where it would also cover a concurrent restoration of the next character. This default route needs Yjs internals:
+
+| Symbol | What it is for |
+| --- | --- |
+| `Item` and `Item.integrate` | Builds the restored item and the format items around it with explicit origins, so they land before the own tombstone |
+| `ContentString`, `ContentEmbed`, `ContentAny` | The restored character, embed or array entry as item content |
+| `ContentFormat` | The opening and closing marks placed tightly around the restored item |
+| `getItemCleanStart` | Splits the tombstone's struct so the item's right origin is exactly the tombstone |
+| `createID`, `getState`, `doc.store` | The next local identity for each new item |
+| `.left`, `.lastId` | The tombstone's left neighbour and its last identity, the new item's left origin |
+| `_start`, `.right` | Walks the text to find the marks in force before the tombstone |
+| `_searchMarker` | Cleared after integrating, because raw items bypass the index cache `Y.Text` and `Y.Array` keep |
+
+A documented route was tried as `route: "capture"` (`src/undo-records/history.ts`). Each local transaction between two records runs under a `Y.UndoManager` scoped to the sequence types, with `deleteFilter` returning false so it never deletes; it is used only to re-create its deleted text, and the new identities are found by the state vector and mapped to the recorded ones in document order. The command history and the restorations map are unchanged. Marks the other writer's concurrent delete cleaned up are re-applied with `Y.Text.format`. It passes 40 of the 56 restore runs (`cases.test.ts`, "capture route"): the characters land in the right order, but the adjacent cases (8) and the overlapping run with swapped client ids (8) fail on marks (`restored/client<n>.rows[0].characters[2].marks.i: expected <missing>, got true`): the closing mark `Y.Text.format` writes lands after the following tombstone and covers the other writer's restored c. Without re-applying marks, b loses its italic instead (measured once: 32/56). Only the tight `ContentFormat` items fix it, so those 16 runs need `Item.integrate`, `ContentFormat`, `getItemCleanStart`, `createID`/`getState`/`doc.store`, `.left`/`.lastId` and `_searchMarker`; placement before the own tombstone (`_start`/`.right` and the hand-built character item) is not needed with the capture. The capture route also needs the capture to exist: records reloaded from JSON have none, so the reload case is unproved with it. Both routes stay; the hand-built one is the default.
+
+The review also observed, not counted here: commands issued against the intermediate state, before settling, depend on delivery timing (with the M1 buffer, a replacement painted as `aXc` while a remote restore was held converged to `abXc`); and this placement differs from the library's own undo in some histories (start `ab`; Alice deletes both; Bob inserts X at 0 on his old state; Alice undoes before receiving it: `aXb` here, `abX` with the library). The decided rows do not say which.
+
+These oracles encode choices the decided rule does not determine, so they are not product decisions: which physical copy survives (the lowest restoration id; `s3*` names the kept one); that either writer's redo removes the shared restoration and the other's redo is consumed (`restoreOnceOracles.redone`); the overlapping run's redo outcomes (`restoreRunOracles` "Alice redone", "Bob redone", "both redone"); and in the settling limits, that Alice's copy is the one expected to stay.
+
+The restore cases above check each replica after each delivery, including a late joiner, for: the character present once with its marks; the order of a three-character run; no undo entry created by deleting losers; the first redo deleting the character whichever writer's restoration was kept, its selection resolving to the kept identity, and the other writer's redo writing nothing and consuming one entry; a further undo restoring the kept character once, never the loser; and the chain of a second delete and its undo.
+
 ## Declared limits
 
 A violation the generator finds is accepted only if it matches one row's predicate in `test/undo-records/limits.ts`; anything else fails `generator.test.ts`. The library column is an executed probe (`test/undo-records/probes.ts`, pinned by `probes.test.ts`): what the library's undo stack, or plain formatting with no undo, does on the same history.
 
 | Limit | Owner | Found by | Failure | Library probe | History |
 | --- | --- | --- | --- | --- | --- |
-| Concurrent undos of one doubly deleted character restore it twice | undo | literal case; generator: 0 of 300 runs | both undone/client1.rows[0].characters[3].identity.client: expected 10, got 2 | `abccd; abccd` | [literal](histories/UR-concurrent-double-restore.md) |
 | A format undo overwrites the other writer's later formatting of the same characters | undo | literal case | Alice undone/client1.rows[0].characters[1].marks.b: expected true, got <missing> | `abcd` | [literal](histories/UR-later-format.md) |
 | Recovery lists a character undone and redone inside a removed beat as edited after the removal | reader | literal case | recovery after undo and redo/client1.recovery[0].edited[0]: expected <missing>, got "a1*" | `edited characters per recovery entry: [1]` | [literal](histories/UR-redone-recovery.md) |
 | A writer's second status undo changes nothing under main's status rule | status rule | literal case | second undo/client1.rows[0].status: expected "todo", got "ready" | `library undo: shot → ready → todo; main's undoStatus: shot → ready → ready` | [literal](histories/UR-sequential-status.md) |
 | Redo of a status change that had not applied (a conflict) makes it apply | status rule | generator: 0 of 300 runs | undo then redo changed the model: Bob status: before R1[s1 s2 s3 s4] H1[s5 s6] R2(undefined)[s7 s8 s9] R3[s10 s11]; recovery none; notices Bob: concurrent status change did not apply, Carol: concurrent status change did not apply \|\| after R1[s1 s2 s3 s4] H1[s5 s6] R2(ready)[s7 s8 s9] R3[s10 s11];  | not probed | [generator, 8 steps](histories/UR-gen-status-redo-conflict.md) |
 | A redone tag or comment highlight is lost when the writer's undo and redo updates arrive in reverse | library formatting | literal case | redone/client2.rows[0].characters[0].marks.tag: expected "P", got <missing> | `library undo and redo: a{b}b; library undo and redo, swapped ids: a{b}b; plain remove then add, no undo: a{b,c:C1}b{c:C1}; plain remove then add, no undo, swapped ids: a{b}b` | [literal](histories/UR-redone-mark-reversed.md) |
-| Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable) | reader | literal case; generator: 67 of 300 runs | Structural join target unavailable | not probed | [literal](histories/UR-join-target.md), [generator, 3 steps](histories/UR-gen-join-target.md) |
+| Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable) | reader | literal case; generator: 68 of 300 runs | Structural join target unavailable | not probed | [literal](histories/UR-join-target.md), [generator, 3 steps](histories/UR-gen-join-target.md) |
 | Replicas name a different remover, splitter or edit list for the same recovery entry | reader | literal case; generator: 21 of 300 runs | both removed: replicas differ: client1: R2[s2]; recovery R1 by Alice edited=[] \| client2: R2[s2]; recovery R1 by Bob edited=["a1"] | not probed | [literal](histories/UR-recovery-edited.md), [generator, 2 steps](histories/UR-gen-recovery-attribution.md) |
 | Only the replica that saw the split names its splitter in recovery | reader | literal case | Ra removed: replicas differ: client1: R1[s1]; recovery Rb by Bob edited=[], Ra by Bob edited=[] \| client2: R1[s1]; recovery Rb by Bob edited=[], Ra by Bob edited=[] splitBy=Alice | not probed | [literal](histories/UR-recovery-split-by.md) |
+| Settling keeps a restoration of a losing restoration, so the character shows twice | undo | literal case; generator: 0 of 300 runs | settled/client1.rows[0].characters[2].identity.client: expected 10, got 2 | not probed | [literal](histories/UR-loser-descendant.md) |
+| Settling deletes the losing copy together with the bold another writer gave it | undo | literal case | settled/client1.rows[0].characters[1].marks.b: expected true, got <missing> | not probed | [literal](histories/UR-loser-bold.md) |
+| Settling deletes a comment anchor on the losing copy, sending the comment to recovery | undo | literal case | settled/client1.rows[0].characters[1].marks.c:C1: expected true, got <missing> | not probed | [literal](histories/UR-loser-comment.md) |
 | A replica holding one writer's later update before the earlier one cannot be read until the earlier one arrives | delivery | generator: 0 of 300 runs | threw: Bob move: Cannot read properties of undefined (reading 'b') | not probed | [generator, 5 steps](histories/UR-gen-pending-update.md) |
 
-- Double restore needs a convergent rule for two restorations of one identity; #1419 keeps one restoration per identity. The generator has not produced one: it needs both writers to delete the same character and both undo before either undo arrives.
+- The three settling limits come from restore-once itself. The library has no settling step and keeps each concurrent copy: on the double-delete history its probe gives `abccd; abccd`, which was #1418's double-restore limit. The generator's restored-twice check matches the descendant limit.
 - Format overwrite is a design question. Expected: b keeps Bob's bold. Plausible rules: (a) undo reverts only characters whose current value this change set last, which needs every format command to record, per character and key in shared state, the id of the change that set the value; (b) the current rule, undo sets the recorded prior over the recorded span, which needs nothing more and overwrites later formatting by others.
 - Redone recovery is a reader question. Expected: x was inserted before the removal, so recovery lists no edit. Plausible rules: (a) the reader treats a restored identity whose original predates the removal as not edited, which needs the reader to follow the restoration map; (b) the current rule, any item created after the removal is an edit, so the redone x is listed.
 - Second status undo: the library's undo stack goes shot, ready, todo; main's `undoStatus`, which pops its stack by hand and retires only frontier events, goes shot, ready, ready, and command records do the same. The limit comes from main's retirement rule, not from leaving the library.
@@ -130,7 +166,7 @@ A violation the generator finds is accepted only if it matches one row's predica
 
 Checks:
 
-- After each undo: an ineffective undo consumes exactly one entry and writes nothing; an effective one removes no character whose root original another writer created (roots follow `restoredIdentities`).
+- After each undo: an ineffective undo consumes exactly one entry and writes nothing; an effective one removes no character whose root original another writer created (roots follow `restorations`).
 - After an undo immediately followed by a redo: the writer's model is the same, with identities compared by root original.
 - After delivery: every replica and the fresh one read the same model through `readStructure`; no identity appears twice; no root original appears twice.
 - After delivery: `readStatusEvent` accepts every status event on every replica, including the events a status redo writes. Every literal check that goes through `Scenario.check` (`test/undo-records/cases.ts`) makes the same assertion on each replica.
@@ -140,25 +176,25 @@ Counts for the 300 histories in the suite (seeds 1 to 150, two and three writers
 
 | Executed | Count |
 | --- | --- |
-| commands | 6382 (insert 469, delete 479, bold 496, unbold 421, tag 435, comment 429, reply 132, split 436, join 247, remove 440, move 395, status 475, scalar 442, replace 459, heading 269, unheading 358) |
+| commands | 6383 (insert 469, delete 479, bold 496, unbold 421, tag 435, comment 429, reply 132, split 436, join 247, remove 440, move 395, status 475, scalar 442, replace 459, heading 270, unheading 358) |
 | undo | 1386 |
 | redo | 151 |
 | undo-redo | 1322 |
 | deliver | 4666 |
 | late | 98 |
-| effective undos checked | 2112 |
-| ineffective undos checked | 137 |
-| undo-then-redo round trips checked | 1041 |
+| effective undos checked | 2111 |
+| ineffective undos checked | 138 |
+| undo-then-redo round trips checked | 1040 |
 | status events validated | 2244 |
 | status events written by a redo validated | 428 |
 | waited on an out-of-order update | 1411 |
 
 | Limit | Runs with it | Violations |
 | --- | --- | --- |
-| Concurrent undos of one doubly deleted character restore it twice | 0 | 0 |
 | Redo of a status change that had not applied (a conflict) makes it apply | 0 | 0 |
-| Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable) | 67 | 275 |
+| Removing or moving the target of a join leaves the joined beat unreadable (Structural join target unavailable) | 68 | 275 |
 | Replicas name a different remover, splitter or edit list for the same recovery entry | 21 | 21 |
+| Settling keeps a restoration of a losing restoration, so the character shows twice | 0 | 0 |
 | A replica holding one writer's later update before the earlier one cannot be read until the earlier one arrives | 0 | 0 |
 | Unmatched | 0 | 0 |
 
@@ -192,7 +228,10 @@ Each control has a test in `test/undo-records/cases.test.ts` that requires it to
 | Record stores positions | A record holding beat and offset deletes the wrong characters once the other writer inserts before them. | undone/client1.rows[0].characters[2].identity.client: expected 10, got 1 | [history](histories/UR-position-record.md) |
 | Undo deletes the whole inserted span | Deleting from the first to the last inserted identity also removes Bob's character typed inside it. | undone/client1.rows[0].characters[2]: expected {"identity":{"client":2,"clock":0},"notation":"b1","value":"Q","marks":{},"beat":"R1"}, got <missing> | [history](histories/UR-span-delete.md) |
 | Ineffective undo falls through | When an ineffective identical undo pops the next entry, Bob's consumed undo removes his older insertion. | Bob's consumed identical undo reached an older step or wrote state (effective=true, consumed=2, updates=1) | [history](histories/UR-fall-through.md) |
-| No shared restoration record | Without the shared map of restored identities, Bob's later undo restores a character Alice already restored. | both undone/client1.rows[0].characters[1].identity.client: expected 1, got 2 | [history](histories/UR-no-restoration-record.md) |
+| No shared restoration record | Without the shared map of restorations, Bob's later undo restores a character Alice already restored. | both undone/client1.rows[0].characters[3].identity.client: expected 10, got 2 | [history](histories/UR-no-restoration-record.md) |
+| #1418's restorations | With one last-writer-wins restoration entry per original and no losing restoration deleted, both concurrent undos keep their copy of c. | restored/client1.rows[0].characters[3].identity.client: expected 10, got 2 | [history](histories/UR-concurrent-double-restore.md) |
+| Restore by index | Restoring at the live index puts each restoration after the whole run of tombstones, so concurrent restorations of b and c land in client-id order: c before b. | restored/client2.rows[0].characters[1].identity.client: expected 2, got 1 | [history](histories/UR-index-placement.md) |
+| Losing restoration not followed | If a record naming the deleted losing restoration does not resolve to the kept one, Bob's redo finds nothing to delete. | Bob's redo changed nothing | [history](histories/UR-loser-not-followed.md) |
 | Older records do not follow restorations | Without following restored identities, undoing the bold after undoing the delete changes nothing. | format undone changed nothing | [history](histories/UR-no-restoration-chain.md) |
 | Join undo without its own-entry check | Retiring every matching join without checking the writer's own entry lets Bob's stale undo split Alice's later rejoin. | Bob's consumed identical undo reached an older step or wrote state (effective=true, consumed=1, updates=1) | [history](histories/UR-rejoin-retired.md) |
 | Removal undo without its own-entry check | Deleting every removal entry of the beat without checking the writer's own entry lets Bob's stale undo restore Alice's later re-removal. | Bob's consumed identical undo reached an older step or wrote state (effective=true, consumed=1, updates=1) | [history](histories/UR-re-removal-restored.md) |
@@ -206,9 +245,9 @@ Record bytes are the UTF-8 length of the record's JSON, a proxy for what the his
 | --- | --- | --- | --- | --- |
 | insert, 1 character | 161 | 6 | 3 | none |
 | insert, 10 characters | 370 | 6 | -6 | none |
-| range delete, 1 character | 245 | 58 | 53 | 1 in `restoredIdentities` |
-| range delete, 10 characters | 791 | 540 | 535 | 10 in `restoredIdentities` |
-| replacement, 3 characters for 3 | 440 | 163 | 155 | 3 in `restoredIdentities` |
+| range delete, 1 character | 245 | 51 | 46 | 1 in `restorations` |
+| range delete, 10 characters | 791 | 471 | 502 | 10 in `restorations` |
+| replacement, 3 characters for 3 | 440 | 147 | 147 | 3 in `restorations` |
 | bold, 1 character | 284 | 6 | -8 | none |
 | bold, 10 characters | 687 | 6 | -8 | none |
 | tag, 7 characters | 563 | 6 | -33 | none |
@@ -217,24 +256,24 @@ Record bytes are the UTF-8 length of the record's JSON, a proxy for what the his
 | split | 160 | 6 | -6 | none |
 | join | 79 | 25 | 20 | 1 in `retiredJoins` |
 | soft removal | 72 | 6 | 3 | none |
-| whole-segment move | 160 | 70 | 57 | 1 in `restoredIdentities` |
+| whole-segment move | 160 | 62 | 49 | 1 in `restorations` |
 | status change | 102 | 26 | 21 | 1 in `retiredStatus` |
 | scalar (LWW) change | 91 | 6 | 2 | none |
 
-Each restored character costs one `restoredIdentities` entry: undoing a one-character delete grows the shared state by 53 bytes, a ten-character delete by 535. Recording one entry per contiguous run would cut this; not tried.
+Each restored character costs one `restorations` entry: undoing a one-character delete grows the shared state by 46 bytes, a ten-character delete by 502. Recording one entry per contiguous run would cut this; not tried.
 
 ### A 200-entry bound per writer
 
-Alice runs 250 commands: 50 single-character inserts, one status change, then 199 commands cycling insert, bold, tag, whole-segment move and delete, while Bob inserts 12 characters. With a bound of 200 the history drops the 50 oldest records (8082 bytes) and releases them, keeping only that count; it keeps 200 (47384 bytes: 1 status, 40 insert, 40 format, 40 tag, 40 move, 39 delete). The kept records name 81 distinct identities and 1 status event. `bound.test.ts` undoes the 200 kept entries one by one, requires each to be effective, the oldest kept entry (the status change) included, checks the result on Alice, Bob and a late joiner, and requires a 201st undo to find nothing. Undoing them writes 79 `restoredIdentities` entries and 1 `retiredStatus` entry. The second test in that file copies the 200 records as JSON into a history on a fresh replica loaded from Alice's encoded state and checks the same result.
+Alice runs 250 commands: 50 single-character inserts, one status change, then 199 commands cycling insert, bold, tag, whole-segment move and delete, while Bob inserts 12 characters. With a bound of 200 the history drops the 50 oldest records (8082 bytes) and releases them, keeping only that count; it keeps 200 (47384 bytes: 1 status, 40 insert, 40 format, 40 tag, 40 move, 39 delete). The kept records name 81 distinct identities and 1 status event. `bound.test.ts` undoes the 200 kept entries one by one, requires each to be effective, the oldest kept entry (the status change) included, checks the result on Alice, Bob and a late joiner, and requires a 201st undo to find nothing. Undoing them writes 79 `restorations` entries and 1 `retiredStatus` entry. The second test in that file copies the 200 records as JSON into a history on a fresh replica loaded from Alice's encoded state and checks the same result.
 
-So a bound drops only local records. Nothing shared has to be kept for the dropped entries. For the kept ones to work, these must stay durable: the document's deleted items (their positions; their text is in the record), the `restoredIdentities` and `retiredStatus` entries and status events, the removal records, and the comment and reply records. A `retiredJoins` entry must stay until a join redo deletes it, which is the only removal. A writer's kept entry may follow a restoration chain or test a retirement written by another writer, so an entry in those maps can be compacted only once no history, including a reloaded one, can name it.
+So a bound drops only local records. Nothing shared has to be kept for the dropped entries. For the kept ones to work, these must stay durable: the document's deleted items (their positions; their text is in the record), the `restorations` and `retiredStatus` entries and status events, the removal records, and the comment and reply records. A `retiredJoins` entry must stay until a join redo deletes it, which is the only removal. A writer's kept entry may follow a restoration chain or test a retirement written by another writer, so an entry in those maps can be compacted only once no history, including a reloaded one, can name it.
 
 ## What the command layer must record
 
-Each command records right after its local transaction commits, not inside it. `cases.test.ts` shows the gap: an `afterTransaction` listener sees the inserted text while the history is still empty. A crash between the two leaves the edit without a record, so it cannot be undone. A listener that calls undo in that gap undoes the writer's previous entry instead. Recording inside the transaction would close the gap; the #1419 capture route depends on recording after it.
+Each command records right after its local transaction commits, not inside it. `cases.test.ts` shows the gap: an `afterTransaction` listener sees the inserted text while the history is still empty. A crash between the two leaves the edit without a record, so it cannot be undone. A listener that calls undo in that gap undoes the writer's previous entry instead. Recording inside the transaction would close the gap; the capture route above depends on recording after it.
 
 - Text insert: the identities of the inserted characters, and the caret before the command as an identity with its side.
-- Range delete: each deleted character's identity, value and attributes in document order, and the selection as identities with sides. Undo restores each at its own tombstone; a run with no live text between tombstones stays together.
+- Range delete: each deleted character's identity, value and attributes in document order, and the selection as identities with sides. Undo restores each directly before its own tombstone, with its recorded marks around it.
 - Replacement (one native commit): both of the above in one record.
 - Split: the new boundary embed's identity and the caret before the split, held as identities with sides; a caret at the end of a beat is held by the character before it, and an empty beat by its container. Undo deletes the embed and leaves the beat record; redo restores the embed as a new identity.
 - Join: the join entry id and its two beats. Undo checks that its own entry is live, then retires every live matching entry and records which entries it retired; redo deletes those retirements, so the join that won before the undo wins again.
@@ -248,6 +287,6 @@ Each command records right after its local transaction commits, not inside it. `
 - Status: the event id. Undo applies main's frontier retirement; redo writes a fresh event that `readStatusEvent` accepts.
 - Plain scalar (LWW) value: the prior and the written value. Undo writes the prior only if the current value is still the written one.
 
-The history then needs three shared mechanisms, each with a control above: a shared `restoredIdentities` map that each restore writes and the history follows whenever it resolves a record or returns a selection, with no fixed chain length; an ineffective undo that consumes exactly its own entry, while an undo that throws keeps it; and own-entry checks before retiring joins or removals. Records and the selections the history returns follow restorations through that map, not Yjs `redone` links.
+The history then needs these mechanisms, each with a control above: a shared `restorations` map that each restore writes and the history follows whenever it resolves a record or returns a selection, with no fixed chain length, the lowest restoration id kept and the others deleted by whichever replica sees them; restores placed at their own tombstone; an ineffective undo that consumes exactly its own entry, while an undo that throws keeps it; and own-entry checks before retiring joins or removals. Records and the selections the history returns follow restorations through that map, not Yjs `redone` links. The binding has to run the loser deletion after it applies remote updates, outside any history.
 
-What does not follow restorations: a selection held outside the history follows them only when passed through `history.mapAnchor`; read without mapping after Alice deletes bc and undoes, a selection held over bc is {"beat":"R1","offset":1,"selection":{"beat":"R1","from":1,"to":1}}. The recovery reader does not follow them (limit above). This prototype has no typing groups, redo parking or save hold; one command is one entry.
+What does not follow restorations: a selection held outside the history follows them only when passed through `history.mapAnchor`; read without mapping after Alice deletes bc and undoes, a selection held over bc is {"beat":"R1","offset":2,"selection":{"beat":"R1","from":2,"to":3}}. The recovery reader does not follow them (limit above). This prototype has no typing groups, redo parking or save hold; one command is one entry.
