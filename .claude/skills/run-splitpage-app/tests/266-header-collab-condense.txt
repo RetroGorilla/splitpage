@@ -3,7 +3,7 @@ viewport 1920 900
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 
-expect document.querySelectorAll('.toolbar .btn-accent').length === 1 && document.querySelector('.toolbar .btn-accent').id === 'btn-present'
+expect document.querySelectorAll('.toolbar .btn-accent:not([hidden])').length === 1 && document.querySelector('.toolbar .btn-accent:not([hidden])').id === 'btn-present' && document.getElementById('btn-present-more').hidden
 
 eval document.getElementById('btn-comments').focus()
 key Tab
