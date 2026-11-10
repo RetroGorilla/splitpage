@@ -257,6 +257,15 @@ export function mountWriterRuntimeFeature() {
             dropEmptySince: (...args: Parameters<typeof drop>) => { experimentCounts.dropEmptySince++; return drop(...args); }
           });
         },
+        markProbe: () => {
+          const owner = undoOwner();
+          const mark = owner.compositionMark("R1", "audioText");
+          return owner.dropEmptySince(mark, false);
+        },
+        heldUndoProbe: () => {
+          const release = undoOwner().hold();
+          try { return undoOwner().undo(); } finally { release(); }
+        },
         open: () => mounted.openWriter(),
         project: (rows: readonly { id: string; audioText: string }[]) => {
           const outcome = liveSession().stamp({ name: "app-binding-projection", plan: doc => ({
