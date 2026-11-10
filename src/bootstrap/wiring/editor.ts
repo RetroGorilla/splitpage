@@ -136,6 +136,10 @@ import { cellSelection, setCellSelection } from "../../features/common/cell-sele
 
 const splitBindingSwitch = appBindingAsked();
 let splitExperiment: { sync: (cell: Element, runs: readonly Run[]) => void; undo: () => void } | null = null;
+let splitReconciling = false;
+let splitCoordinateLeave = true;
+let splitDeferredLeave: Event | null = null;
+const splitLeaveCounts = { held: 0, handled: 0 };
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -326,16 +330,35 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       shown: function <T>(edit: () => T): T { return paintGuard().whileShown(edit); },
       announce: announceGalleryEdit
     });
+    const rows = document.getElementById("rows") as HTMLElement;
+    const holdReconcileLeave = (event: Event): void => {
+      if (!splitBindingSwitch || !splitExperiment || !splitCoordinateLeave || !splitReconciling) return;
+      splitDeferredLeave = event;
+      splitLeaveCounts.held++;
+      event.stopImmediatePropagation();
+    };
+    rows.addEventListener("focusout", holdReconcileLeave, true);
     let withdraw: (() => void) | null = null;
     exposeTestHook("__splitBindingTest", () => splitBindingSwitch ? {
       install: (binding: typeof splitExperiment) => { splitExperiment = binding; setAppBindingActive(binding !== null); },
       sync: (cell: Element) => editing.sync(cell),
-      render: () => render(),
+      coordinateLeave: (enabled: boolean) => { splitCoordinateLeave = enabled; },
+      leaveState: () => ({ reconciling: splitReconciling, pending: splitDeferredLeave !== null, ...splitLeaveCounts }),
+      render: () => {
+        if (!splitCoordinateLeave || !splitExperiment) { render(); return; }
+        splitReconciling = true;
+        try { render(); } finally {
+          splitReconciling = false;
+          const deferred = splitDeferredLeave;
+          splitDeferredLeave = null;
+          if (deferred) { splitLeaveCounts.handled++; onRootFocusOut(deferred); }
+        }
+      },
       selection: (cell: Element) => cellSelection(cell),
       select: (cell: Element, from: number, to: number) => { (cell as HTMLElement).focus(); setCellSelection(cell, from, to); }
     } : null, done => { withdraw = done; });
     const dispose = installCellEditing(editing);
-    return { dispose: () => { withdraw?.(); dispose(); } };
+    return { dispose: () => { rows.removeEventListener("focusout", holdReconcileLeave, true); withdraw?.(); dispose(); } };
   }, () => [() => connectWriter((control) => {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
     undoRoutePorts.writerStep = dir => {
