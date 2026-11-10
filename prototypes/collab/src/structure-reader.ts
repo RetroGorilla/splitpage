@@ -138,6 +138,7 @@ export function readStructure(doc: Y.Doc, candidate: SchemaCandidate, book: Iden
       index += insert.length;
     }
     (target.visuals ??= []).push(visual);
+    target.visualText = target.visuals.filter(item => item.characters.length > 0).map(item => item.characters.map(character => character.value).join("")).join("<br>");
   }
   const gallery = [...doc.getMap("gallery").values()] as { id: string; beat: string; rank: string; ref: string; name: string; annotation: string; links: { href: string; poster?: string }[] }[];
   for (const item of gallery.sort((a, b) => (spans.findIndex(span => span.row.id === a.beat) - spans.findIndex(span => span.row.id === b.beat)) || a.rank.localeCompare(b.rank) || a.id.localeCompare(b.id))) {

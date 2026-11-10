@@ -10,11 +10,11 @@ export const beatOracles: Record<string, ScriptOracle> = {
     carets: { A: { beat: "R1", offset: 2 }, B: { beat: "Rb", offset: 0 } }, recovery: []
   },
   T07: {
-    rows: [{ id: "R1", characters: [], visuals: [{ id: "V1", characters: [["v1", "v", {}]] }, { id: "V2", characters: [["w1", "w", {}], ["b1", "Q", {}], ["w2", "z", {}]] }] }],
+    rows: [{ id: "R1", characters: [], visualText: "v<br>wQz", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }, { id: "V2", characters: [["w1", "w", {}], ["b1", "Q", {}], ["w2", "z", {}]] }] }],
     carets: { B: { beat: "R1:visual", offset: 4 } }, recovery: []
   },
   "T07 undo": {
-    rows: [{ id: "R1", characters: [], visuals: [{ id: "V1", characters: [["v1", "v", {}]] }] }, { id: "R2", characters: [], visuals: [{ id: "V2", characters: [["w1", "w", {}], ["b1", "Q", {}], ["w2", "z", {}]] }] }],
+    rows: [{ id: "R1", characters: [], visualText: "v", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }] }, { id: "R2", characters: [], visualText: "wQz", visuals: [{ id: "V2", characters: [["w1", "w", {}], ["b1", "Q", {}], ["w2", "z", {}]] }] }],
     carets: { B: { beat: "R2:visual", offset: 2 } }, recovery: []
   },
   "T08 remove": {

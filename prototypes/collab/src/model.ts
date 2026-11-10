@@ -22,6 +22,7 @@ export interface CollabRow {
   status?: string;
   visuals?: CollabRow[];
   gallery?: unknown[];
+  visualText?: string;
 }
 
 export interface CollabCaret {
@@ -55,6 +56,7 @@ export interface OracleRow {
   status?: string;
   visuals?: readonly OracleRow[];
   gallery?: readonly unknown[];
+  visualText?: string;
 }
 
 export interface ScriptOracle {

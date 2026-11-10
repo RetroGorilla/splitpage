@@ -33,7 +33,7 @@ export const joinNarrationOracle: ScriptOracle = {
 
 export const joinOracle: ScriptOracle = {
   rows: [{ id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }], ["[glue]", " ", {}], ["s3", "c", {}], ["s4", "d", {}]],
-    status: "ready", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }, { id: "V2", characters: [["w1", "w", {}]] }],
+    status: "ready", visualText: "v<br>w", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }, { id: "V2", characters: [["w1", "w", {}]] }],
     gallery: [{ ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] }, { ref: "Q", name: "", annotation: "", links: [] }] }],
   carets: { A: { beat: "R1", offset: 3 }, B: { beat: "R1", offset: 3 } }, recovery: [],
   records: { gallery: {
@@ -45,18 +45,18 @@ export const joinOracle: ScriptOracle = {
 
 export const joinUndoOracle: ScriptOracle = {
   rows: [
-    { id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }]], status: "todo", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }],
+    { id: "R1", characters: [["s1", "a", { b: true }], ["s2", "b", { b: true }]], status: "todo", visualText: "v", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }],
       gallery: [{ ref: "P", name: "", annotation: "", links: [{ href: "https://v/1" }] }] },
-    { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "ready", visuals: [{ id: "V2", characters: [["w1", "w", {}]] }],
+    { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "ready", visualText: "w", visuals: [{ id: "V2", characters: [["w1", "w", {}]] }],
       gallery: [{ ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] }, { ref: "Q", name: "", annotation: "", links: [] }] }
   ], carets: { A: { beat: "R2", offset: 0 }, B: { beat: "R2", offset: 0 } }, recovery: [], records: { ...joinOracle.records }
 };
 
 export const joinBoldUndoOracle: ScriptOracle = {
   rows: [
-    { id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }],
+    { id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: "todo", visualText: "v", visuals: [{ id: "V1", characters: [["v1", "v", {}]] }],
       gallery: [{ ref: "P", name: "", annotation: "", links: [{ href: "https://v/1" }] }] },
-    { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "ready", visuals: [{ id: "V2", characters: [["w1", "w", {}]] }],
+    { id: "R2", characters: [["s3", "c", {}], ["s4", "d", {}]], status: "ready", visualText: "w", visuals: [{ id: "V2", characters: [["w1", "w", {}]] }],
       gallery: [{ ref: "P", name: "wide", annotation: "", links: [{ href: "https://v/1", poster: "poster" }, { href: "https://v/2" }] }, { ref: "Q", name: "", annotation: "", links: [] }] }
   ], carets: { A: { beat: "R2", offset: 0 }, B: { beat: "R2", offset: 0 } }, recovery: [], records: { ...joinOracle.records }
 };

@@ -128,10 +128,11 @@ export function seedJoinMetadata(replica: SchemaReplica): void {
   }, "fixture");
 }
 
-export function visualInsert(replica: SchemaReplica, component: string, offset: number, value: string, notation: string): void {
+export function visualInsert(replica: SchemaReplica, component: string, offset: number, value: string, notation: string): Y.RelativePosition {
+  const text = textValue(mapValue(replica.doc.getMap("visuals").get(component)).get("text"));
   replica.doc.transact(() => {
-    const text = textValue(mapValue(replica.doc.getMap("visuals").get(component)).get("text"));
     text.insert(offset, value, {});
     replica.identities.bind(notation, identityAt(text, offset));
   }, replica.localOrigin);
+  return Y.createRelativePositionFromTypeIndex(text, offset + value.length, -1);
 }

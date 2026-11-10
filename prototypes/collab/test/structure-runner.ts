@@ -5,12 +5,13 @@ import type { DeliveryOrder } from "../src/delivery.ts";
 import { checkModel } from "../src/model.ts";
 import type { ScriptOracle } from "../src/model.ts";
 import type { ReplicaCaretAnchor } from "../src/reader.ts";
-import { identityAt, mapValue, textValue } from "../src/schema.ts";
-import type { SchemaCandidate, SchemaReplica, SeedBeat } from "../src/schema.ts";
+import { identityAt, mapValue } from "../src/schema.ts";
+import type { SchemaCandidate, SeedBeat } from "../src/schema.ts";
 import { readStructure } from "../src/structure-reader.ts";
 import { clearGlue, createHeading, cutPaste, moveBeat, removeHeading, seedJoinMetadata, structureManager, undoJoin, undoOne, visualInsert } from "../src/structure.ts";
 import { joinBoldUndoOracle, joinOracle, joinUndoOracle, removedOracle, restorationOracle } from "./oracles.ts";
 import { beatOracles } from "./structure-oracles.ts";
+import { captureStructuralRange, insertWithCaret, planHeadingWithCaret, replaceStructuralRange, restoreStructuralAnchor, splitWithCaret, structuralCaret as structureCaret, undoStructuralRange } from "../src/structure-selection.ts";
 
 export const structureTraces: Record<string, readonly DeliveryOrder[]> = {
   "T05 two splits": ["D1", "dup", "rev", "late-C"], T06: ["D1", "dup", "rev", "late-C"],
@@ -43,11 +44,6 @@ function fixture(trace: string): SeedBeat[] {
   return [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }, ...(trace === "T10" || trace.startsWith("MOVE") ? [{ id: "R3", text: "ef" }] : [])];
 }
 
-export function structureCaret(replica: SchemaReplica, beat: string, offset: number, assoc = 0): Y.RelativePosition {
-  const { text, start } = replica.locate(beat);
-  return Y.createRelativePositionFromTypeIndex(text, start + offset, assoc);
-}
-
 export function runStructure(trace: string, candidate: SchemaCandidate, order: DeliveryOrder, nativeJoinUndo = false, swapped = false): StructureRunResult {
   const harness = new ReplicaHarness(candidate, fixture(trace), swapped);
   const { alice: a, bob: b, queue } = harness;
@@ -74,13 +70,12 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
     queue.history.push(`fixture ${JSON.stringify(fixture(trace))}`);
     switch (trace) {
       case "T05 two splits": {
-        a.split("R1", 2, "Ra", "a1");
-        carets.set("A", { position: structureCaret(a, "Ra", 0, -1) });
-        b.split("R1", 2, "Rb", "b1");
-        carets.set("B", { position: structureCaret(b, "Rb", 0, -1) });
+        const original = { position: structureCaret(a, "R1", 2, -1) };
+        carets.set("A", splitWithCaret(a, "R1", 2, "Ra", "a1"));
+        carets.set("B", splitWithCaret(b, "R1", 2, "Rb", "b1"));
         check(trace);
         undoOne(ua);
-        carets.set("A", { position: structureCaret(a, "R1", 2, -1) });
+        carets.set("A", restoreStructuralAnchor(a, original));
         check(`${trace} undo`);
         break;
       }
@@ -118,9 +113,7 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
           }
         }, "fixture");
         queue.flush("D2");
-        remote(() => visualInsert(b, "V2", 1, "Q", "b1"));
-        const text = textValue(mapValue(b.doc.getMap("visuals").get("V2")).get("text"));
-        carets.set("B", { position: Y.createRelativePositionFromTypeIndex(text, 2, -1) });
+        remote(() => carets.set("B", { position: visualInsert(b, "V2", 1, "Q", "b1") }));
         a.join("R2", "R1", "jA");
         check(trace);
         undoJoin(a, ua, "R2", "R1");
@@ -147,10 +140,9 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
         a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R2")).set("paragraphStart", true), "fixture");
         queue.flush("D2");
         const restores = a.captureUndoIdentities(["s2", "s3"]);
-        const next = structureCaret(a, "R3", 0);
+        const apply = planHeadingWithCaret(a, "R2", "H2", 2, false, ["a1"]);
         remote(() => { b.insert("R2", 4, "e", ["b1"]); b.insert("R3", 0, "Q", ["b2"]); });
-        createHeading(a, "R2", "H2", 2, false, ["a1"]);
-        carets.set("A", { position: next });
+        carets.set("A", apply());
         check(trace);
         undoOne(ua);
         a.bindUndoRestores(restores);
@@ -165,30 +157,20 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
         break;
       }
       case "T09": {
-        const restores = a.captureUndoIdentities(["s2", "s3", "s6", "s7"]);
-        const observed = a.characters().filter(character => character.beat === "R2").map(character => character.identity);
+        const selection = captureStructuralRange(a, "R1", 1, "R3", 2);
         remote(() => { b.insert("R1", 2, "W", ["b1"]); b.insert("R2", 1, "X", ["b2"]); b.insert("R3", 2, "Y", ["b3"]); });
-        a.doc.transact(() => {
-          a.remove("R2", "rA", "Alice", observed);
-          a.insert("R1", 1, "Z", ["a1"]);
-          a.deleteIdentities(["s2", "s3", "s6", "s7"]);
-        }, a.localOrigin);
-        carets.set("A", { position: structureCaret(a, "R1", 2, -1) });
+        carets.set("A", replaceStructuralRange(a, selection, "Z", ["a1"], "Alice"));
         check(trace);
-        undoOne(ua);
-        a.bindUndoRestores(restores);
-        carets.set("A", { position: structureCaret(a, "R1", 1), selectionEnd: structureCaret(a, "R3", 2, -1) });
+        carets.set("A", undoStructuralRange(a, ua, selection));
         check(`${trace} undo`);
         break;
       }
       case "T09 header": {
-        const restores = a.captureUndoIdentities(["s2", "s3"]);
+        const selection = captureStructuralRange(a, "R1", 1, "H1", 1);
         remote(() => b.insert("H1", 2, "Q", ["b1"]));
-        a.deleteIdentities(["s2", "s3"]);
-        carets.set("A", { position: structureCaret(a, "R1", 1, -1) });
+        carets.set("A", replaceStructuralRange(a, selection, "", [], "Alice"));
         check(trace);
-        undoOne(ua);
-        a.bindUndoRestores(restores);
+        undoStructuralRange(a, ua, selection);
         carets.clear();
         check(`${trace} undo`);
         break;
@@ -215,7 +197,7 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
         queue.flush(order);
         if (order === "late-C") harness.lateJoin(b);
         undoOne(ua);
-        carets.set("A", { position: restore });
+        carets.set("A", restoreStructuralAnchor(a, { position: restore }));
         check("T12 undo");
         ua.redo();
         const redone = a.locate("Ra");
@@ -228,8 +210,7 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
         carets.set("A", { position: structureCaret(a, "R2", 0) });
         a.join("R2", "R1", "jA");
         queue.flush(order);
-        b.insert("R2", 1, "Z", ["b1"]);
-        carets.set("B", { position: structureCaret(b, "R2", 2, -1) });
+        carets.set("B", insertWithCaret(b, "R2", 1, "Z", ["b1"]));
         check(trace);
         undoJoin(a, ua, "R2", "R1");
         check(`${trace} undo`);
@@ -239,8 +220,7 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
         carets.set("A", { position: structureCaret(a, "R3", 0) });
         assert.equal(moveBeat(a, "R3", "R1"), candidate === "B");
         assert.equal(moveBeat(b, "R3", "R2"), candidate === "B");
-        b.insert("R3", 1, "X", ["b1"]);
-        carets.set("B", { position: structureCaret(b, "R3", 2, -1) });
+        carets.set("B", insertWithCaret(b, "R3", 1, "X", ["b1"]));
         check(`${trace} ${candidate}`);
         if (candidate === "B") {
           undoOne(ua);
@@ -250,8 +230,7 @@ export function runStructure(trace: string, candidate: SchemaCandidate, order: D
       }
       case "MOVE destination": {
         carets.set("A", { position: structureCaret(a, "R3", 0) });
-        remote(() => { b.insert("R1", 0, "Y", ["b1"]); b.insert("R2", 2, "W", ["b2"]); });
-        carets.set("B", { position: structureCaret(b, "R2", 3, -1) });
+        remote(() => { b.insert("R1", 0, "Y", ["b1"]); carets.set("B", insertWithCaret(b, "R2", 2, "W", ["b2"])); });
         assert.equal(moveBeat(a, "R3", "R1"), candidate === "B");
         check(`${trace} ${candidate}`);
         if (candidate === "B") {
@@ -323,6 +302,40 @@ export function runGlueRewrite(candidate: SchemaCandidate): StructureRunResult {
     };
     for (const replica of harness.replicas) checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "U-H1 glue rewrite");
     return { trace: "U-H1 glue rewrite", candidate, order: "D2", checks: 2, failure: null, history: [...harness.queue.history] };
+  } finally {
+    manager.destroy();
+    harness.destroy();
+  }
+}
+
+export function runIneffectiveUndo(candidate: SchemaCandidate, isolated: boolean): StructureRunResult {
+  const harness = new ReplicaHarness(candidate, [{ id: "R1", text: "ab" }]);
+  const { alice: a, bob: b, queue } = harness;
+  const manager = structureManager(a);
+  let checks = 0;
+  try {
+    a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R1")).set("status", "todo"), "fixture");
+    queue.flush("D2");
+    a.insert("R1", 2, "Z", ["a1"]);
+    manager.stopCapturing();
+    a.doc.transact(() => mapValue(a.doc.getMap("beats").get("R1")).set("status", "ready"), a.localOrigin);
+    b.doc.transact(() => mapValue(b.doc.getMap("beats").get("R1")).set("status", "shot"), b.localOrigin);
+    queue.flush("D1");
+    queue.history.push(`undo overwritten status with ${isolated ? "undoOne" : "plain undo"}`);
+    if (isolated) undoOne(manager);
+    else manager.undo();
+    queue.flush("D1");
+    const oracle: ScriptOracle = {
+      rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["a1", "Z", {}]], status: "shot" }], carets: {}, recovery: []
+    };
+    for (const replica of harness.replicas) {
+      checkModel(readStructure(replica.doc, candidate, harness.identities), oracle, harness.identities, "U-H1 top item");
+      checks++;
+    }
+    return { trace: "U-H1 top item", candidate, order: "D1", checks, failure: null, history: [...queue.history] };
+  } catch (error) {
+    const failure = error instanceof Error ? error.message : String(error);
+    return { trace: "U-H1 top item", candidate, order: "D1", checks, failure, history: [...queue.history, `FAIL ${failure}`] };
   } finally {
     manager.destroy();
     harness.destroy();
