@@ -1,0 +1,75 @@
+{
+  "shows": "Premature receipt falsely reports u1 durable; a hard kill before commit loses it.",
+  "trace": "T22",
+  "expected": {
+    "text": "abcde",
+    "identities": [
+      "a:7:0",
+      "b:7:1",
+      "c:7:2",
+      "d:7:3",
+      "e:11:0"
+    ],
+    "status": "Your changes saved to server"
+  },
+  "sent": [
+    {
+      "lifetime": 1,
+      "bytes": "AQEHAAQBAlIxBGFiY2QA",
+      "applied": true
+    },
+    {
+      "lifetime": 1,
+      "bytes": "AQELAIQHAwFlAA==",
+      "applied": true
+    }
+  ],
+  "told": [
+    {
+      "status": "Your changes saved to server",
+      "local": [
+        "AQEHAAQBAlIxBGFiY2QA"
+      ],
+      "acknowledged": [
+        "AQEHAAQBAlIxBGFiY2QA"
+      ]
+    },
+    {
+      "status": "Your changes saved to server",
+      "local": [
+        "AQEHAAQBAlIxBGFiY2QA"
+      ],
+      "acknowledged": [
+        "AQEHAAQBAlIxBGFiY2QA"
+      ]
+    },
+    {
+      "status": "Your changes saved to server",
+      "local": [
+        "AQEHAAQBAlIxBGFiY2QA",
+        "AQELAIQHAwFlAA=="
+      ],
+      "acknowledged": [
+        "AQEHAAQBAlIxBGFiY2QA",
+        "AQELAIQHAwFlAA=="
+      ]
+    },
+    {
+      "status": "Your changes saved to server",
+      "local": [
+        "AQEHAAQBAlIxBGFiY2QA",
+        "AQELAIQHAwFlAA=="
+      ],
+      "acknowledged": [
+        "AQEHAAQBAlIxBGFiY2QA",
+        "AQELAIQHAwFlAA=="
+      ]
+    }
+  ],
+  "recovered": [
+    {
+      "sequence": 1,
+      "payload": "AQEHAAQBAlIxBGFiY2QA"
+    }
+  ]
+}
