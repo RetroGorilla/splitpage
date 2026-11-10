@@ -1,0 +1,16 @@
+{
+  "shows": "The normally returning read-only refusal hook sends its reason, but malformed SyncStep2 throws in the library snapshot check and closes the logical connection.",
+  "replay": "node --test --test-concurrency=1 test/service/refusal/refusal.test.ts",
+  "update": "AQELAIQHAw==",
+  "subtype": 1,
+  "observed": {
+    "notice": {
+      "rejected": "invalid-update",
+      "permanent": true
+    },
+    "positiveReceipt": false,
+    "logicalClose": true,
+    "journalAdded": 0
+  },
+  "requiredLibraryChange": "A supported reject-this-sync-message result that bypasses snapshotContainsUpdate without throwing or closing."
+}

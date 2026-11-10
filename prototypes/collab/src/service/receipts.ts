@@ -22,7 +22,8 @@ export class ConnectionReceipts {
   private pending: ReceiptRange[][] = [];
   private durable: ReceiptRange[] = [];
   private edits: ReceiptRange[][] = [];
-  private refused = false;
+  private invalid = false;
+  private refused: ReceiptRange[][] = [];
 
   localUpdate(update: Uint8Array): void {
     this.edits.push(ranges(update));
@@ -47,7 +48,7 @@ export class ConnectionReceipts {
     const frame = readFrame(bytes);
     if (frame.kind === 0 && (frame.subtype === 1 || frame.subtype === 2)) {
       try { this.pending.push(ranges(frame.payload)); }
-      catch { this.refused = true; this.pending.push([]); }
+      catch { this.invalid = true; this.pending.push([]); }
       if (frame.subtype === 1) this.exchangeSeen = true;
     }
   }
@@ -59,7 +60,7 @@ export class ConnectionReceipts {
     const accepted = this.pending.shift();
     if (!accepted) throw new Error("Acknowledgement without a transmitted message");
     if (frame.subtype === 1) this.durable.push(...accepted);
-    else this.refused = true;
+    else this.refused.push(accepted);
   }
 
   get outstanding(): number {
@@ -68,7 +69,7 @@ export class ConnectionReceipts {
 
   get status(): string {
     if (!this.online) return "Offline, saved on this device";
-    const covered = this.edits.every(edit => edit.every(range => {
+    const covered = [...this.edits, ...this.refused].every(edit => edit.every(range => {
       let cursor = range.start;
       const matches = this.durable.filter(item => item.client === range.client && item.deletion === range.deletion)
         .sort((a, b) => a.start - b.start);
@@ -78,7 +79,7 @@ export class ConnectionReceipts {
       }
       return cursor >= range.end;
     }));
-    return this.exchangeSeen && !this.refused && this.pending.length === 0 && covered
+    return this.exchangeSeen && !this.invalid && this.pending.length === 0 && covered
       ? "Your changes saved to server" : "Saved on this device, sending";
   }
 }

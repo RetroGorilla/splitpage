@@ -1,0 +1,13 @@
+{
+  "shows": "The harness rejects a policy that reconnects after its first permanent refusal, before any passing trace counts.",
+  "replay": "node --test --test-concurrency=1 test/service/refusal/refusal.test.ts",
+  "initial": "abcd",
+  "insertion": {
+    "character": "Z",
+    "count": 3145728
+  },
+  "totalAttempts": 2,
+  "checker": "Refused policy must not reconnect",
+  "expectedAfterRefusal": 0,
+  "observedAfterRefusal": 1
+}
