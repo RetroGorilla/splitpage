@@ -108,7 +108,7 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     const rowId = at.rowId as string;
     const field = at.field as string;
     const runs = cellRuns(ports.decode.withMedia(page.html(cell)));
-    if (ports.syncOverride?.(cell, runs)) return;
+    if (ports.syncOverride?.(cell, runs.runs)) return;
     took(ports.run(cellTextCommand(rowId, field, runs, ports.text)));
     const doc = ports.document();
     if (doc) ports.painted(cell, field, doc.rows[idx] as ShownRow);
