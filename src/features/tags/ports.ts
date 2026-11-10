@@ -1,4 +1,4 @@
-import type { DocumentSession } from "../../application/session/document-session.ts";
+import type { CommonDocumentSession, StandaloneDocumentSession } from "../../application/session/document-session.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
@@ -88,7 +88,7 @@ export interface TagPanelPorts {
   readonly beats: { readonly setFilmed: (rowId: string, filmed: boolean) => void; readonly reveal: (rowId: string) => void };
   readonly footage: { readonly entries: () => readonly BrollEntry[]; readonly open: (id: string) => void };
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
-  readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;
   readonly production: Pick<ProductionIndexOwner, "entries" | "current">;
@@ -106,8 +106,8 @@ export interface TagPanelPorts {
 export interface ProductionTagPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
-  readonly refresh: { readonly request: DocumentSession["refresh"]; readonly cancel: DocumentSession["cancelRefresh"] };
-  readonly stamping: Pick<DocumentSession, "stamp">;
+  readonly refresh: { readonly request: CommonDocumentSession["refresh"]; readonly cancel: CommonDocumentSession["cancelRefresh"] };
+  readonly stamping: Pick<StandaloneDocumentSession, "stamp">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "productionReaders">;
   readonly production: () => Pick<ProductionIndexOwner, "entries" | "current" | "recordsPlan" | "derived" | "resetDerived">;
   readonly editing: {

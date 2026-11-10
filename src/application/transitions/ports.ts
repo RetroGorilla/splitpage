@@ -1,7 +1,7 @@
 import type { HomeFields } from "../location/document-location.ts";
 import type { DocumentView } from "../session/document-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import type { CommandOutcome, Stamp } from "../session/document-session.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { DocumentEntry } from "../session/ports.ts";
 
 export interface DocumentDestination {
@@ -12,9 +12,9 @@ export interface DocumentDestination {
 export const NO_DESTINATION: DocumentDestination = Object.freeze({ kind: "none" });
 
 export interface LiveDocumentPort {
-  readonly current: () => ValidatedDocument | null;
-  readonly assign: (doc: ValidatedDocument) => void;
-  readonly stamp: (stamp: Stamp) => CommandOutcome;
+  readonly current: StandaloneDocumentSession["held"];
+  readonly assign: (doc: NonNullable<ReturnType<StandaloneDocumentSession["adopt"]>>) => void;
+  readonly stamp: StandaloneDocumentSession["stamp"];
 }
 
 export interface DestinationPort<D> {

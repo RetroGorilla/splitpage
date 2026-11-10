@@ -35,18 +35,11 @@ for (const mark of ["tag", "comment"] as const) {
   });
 }
 
-test("reader limit: a removal racing an unseen insert lists the insert as edited on one replica only", () => {
-  assert.match(runRemovedAfterInsert().failure ?? "", /replicas differ: .*edited=\[\]/);
-  assert.match(runRemovedAfterInsert().failure ?? "", /replicas differ: .*edited=\["a1"\]/);
-});
-
-test("reader limit: the splitter of a removed split beat appears on one replica only", () => {
-  assert.match(runRemovedSplit().failure ?? "", /replicas differ: .*splitBy=Alice/);
-});
-
-test("reader limit: removing the target of a join leaves the joined beat unreadable", () => {
-  assert.match(runJoinTargetRemoved().failure ?? "", /Structural join target unavailable/);
-});
+for (const order of everyOrder) for (const swapped of [false, true]) {
+  test(`reader regression: a removal racing an unseen insert retains the edit ${order}, swapped=${swapped}`, () => passes(runRemovedAfterInsert(order, swapped)));
+  test(`reader regression: an inherited removal retains the splitter with a direct removal ${order}, swapped=${swapped}`, () => passes(runRemovedSplit(order, swapped)));
+  test(`reader regression: a joined source stays inside the removed target ${order}, swapped=${swapped}`, () => passes(runJoinTargetRemoved(order, swapped)));
+}
 
 test("a command records after its transaction: an afterTransaction listener sees the edit while the history is still empty", () => {
   const timing = recordTiming();

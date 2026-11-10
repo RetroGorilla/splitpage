@@ -1,9 +1,10 @@
 import { resolveSelection, takeSnapshot } from "../../core/text/selection.ts";
 import type { ModelSelection, SelectionField, SelectionSnapshot } from "../../core/text/selection.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
+import type { CommonDocumentSession } from "../session/document-session.ts";
 
 export interface SelectionPorts {
-  readonly epoch: () => number;
+  readonly epoch: CommonDocumentSession["epoch"];
   readonly order: () => readonly string[];
   readonly keys: (rowId: string, field: SelectionField) => readonly string[] | null;
 }

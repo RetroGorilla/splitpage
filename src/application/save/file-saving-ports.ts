@@ -10,7 +10,7 @@ import type { PictureStore } from "../media/picture-store.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
 import type { DocumentEdits } from "../session/document-edits.ts";
 import type { Undo } from "../editing/undo/undo.ts";
-import type { Stamp } from "../session/document-session.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { Operations } from "../session/operation.ts";
 import type { AutoSaveChange, AutoSavePolicy } from "./autosave.ts";
 import type { DestinationKey } from "./coordinator.ts";
@@ -60,7 +60,7 @@ export interface FileSavingPorts {
   readonly deferred: FileSavingDeferredPorts;
   readonly ids: Pick<IdSource, "docId">;
   readonly clock: Clock;
-  readonly document: Pick<DocumentReader, "current"> & { readonly stamp: (stamp: Stamp) => unknown };
+  readonly document: Pick<DocumentReader, "current"> & { readonly stamp: (...args: Parameters<StandaloneDocumentSession["stamp"]>) => unknown };
   readonly location: Pick<DocumentLocation, "home" | "fileHome" | "setHome" | "amendHome" | "restoreHome" | "writtenOut" | "markWrittenOut">;
   readonly lastFile: { readonly remember: (handle: FileSaveHandle) => Promise<void> };
   readonly pictures: Pick<PictureStore, "ensureBytes">;

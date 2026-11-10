@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { removalIds } from "../readers/removals.ts";
 import { mapValue } from "../schema.ts";
 import type { SchemaReplica } from "../schema.ts";
 import { records } from "../proj/value.ts";
@@ -44,12 +45,12 @@ export function retainedCounts(replica: SchemaReplica): ProjectionBag {
   for (const value of replica.doc.getMap("beats").values()) {
     const beat = mapValue(value);
     const removals = mapValue(beat.get("removals"));
-    if (removals.size) removedBeats++;
+    if (removalIds(removals).length) removedBeats++;
     removalFlags += removals.size;
     joinEntries += mapValue(beat.get("joins")).size;
   }
   const plain = toDocument(replica.doc, replica.candidate);
-  const activeRows = records(plain.rows).filter(row => !mapValue(mapValue(replica.doc.getMap("beats").get(String(row.id))).get("removals")).size);
+  const activeRows = records(plain.rows).filter(row => !removalIds(mapValue(mapValue(replica.doc.getMap("beats").get(String(row.id))).get("removals"))).length);
   return { beats: replica.doc.getMap("beats").size, removedBeats, removalFlags, removalRecords: replica.doc.getMap("removalRecords").size,
     joinEntries, retiredJoins: replica.doc.getMap("retiredJoins").size, statusEvents: replica.doc.getMap("statusEvents").size,
     projectedFileBytes: Buffer.byteLength(serializeProjection(plain)), activeFileBytes: Buffer.byteLength(serializeProjection({ ...plain, rows: activeRows })) };

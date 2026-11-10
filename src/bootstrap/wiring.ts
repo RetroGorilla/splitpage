@@ -26,7 +26,7 @@ import type { ExportRegistry } from "../application/export/registry.ts";
 import { installExportServices } from "../application/export/services.ts";
 import { installProjectFileServices } from "../application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../application/formats/project-file-services.ts";
-import type { DocumentSession, DocumentView } from "../application/session/document-session.ts";
+import type { CommonDocumentSession, DocumentView, StandaloneDocumentSession } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import type { DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
@@ -79,7 +79,7 @@ export interface Wiring {
   readonly captureExportDocument: ExportKit["captureExportDocument"];
   readonly actions: ActionRegistry;
   readonly exports: ExportRegistry;
-  readonly session: DocumentSession;
+  readonly session: CommonDocumentSession & StandaloneDocumentSession;
   readonly keyTarget: EventTarget;
   readonly dispose: () => void;
 }

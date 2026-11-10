@@ -1,6 +1,6 @@
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { DocumentReader } from "../../../application/session/document-reader.ts";
-import type { DocumentSession } from "../../../application/session/document-session.ts";
+import type { CommonDocumentSession, StandaloneDocumentSession } from "../../../application/session/document-session.ts";
 import { cancelRefresh, currentDocument, documentNumbering, liveSession, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../session-owner.ts";
 
 export const documentReader: DocumentReader<ValidatedDocument> = {
@@ -12,8 +12,8 @@ export const documentReader: DocumentReader<ValidatedDocument> = {
   onRefresh: onRefresh
 };
 
-export const refresh = { request: requestRefresh, cancel: cancelRefresh };
+export const refresh: { readonly request: CommonDocumentSession["refresh"]; readonly cancel: CommonDocumentSession["cancelRefresh"] } = { request: requestRefresh, cancel: cancelRefresh };
 
-export const documentLifetime: Pick<DocumentSession, "epoch"> = { epoch: () => liveSession().epoch() };
+export const documentLifetime: Pick<CommonDocumentSession, "epoch"> = { epoch: () => liveSession().epoch() };
 
-export const stamping = { stamp: stampDocument };
+export const stamping: Pick<StandaloneDocumentSession, "stamp"> = { stamp: stampDocument };

@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { removalIds } from "./readers/removals.ts";
 import type { CollabIdentity } from "./model.ts";
 import type { ReplicaCaretAnchor } from "./reader.ts";
 import type { SchemaReplica, UndoIdentityAnchor } from "./schema.ts";
@@ -229,7 +230,7 @@ export class EditableBeatBuffer {
   }
 
   private isRemoved(beat: string): boolean {
-    return mapValue(mapValue(this.editor.doc.getMap("beats").get(beat)).get("removals")).size > 0;
+    return removalIds(mapValue(mapValue(this.editor.doc.getMap("beats").get(beat)).get("removals"))).length > 0;
   }
 
   commit(names: readonly string[], operationOrder: "insert-first" | "delete-first" = "insert-first"): void {

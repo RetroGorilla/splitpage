@@ -1,4 +1,4 @@
-import type { CommandRefusal, Replay, ReplayPlan } from "../../session/document-session.ts";
+import type { CommandRefusal, CommonDocumentSession, Replay, ReplayPlan, StandaloneDocumentSession } from "../../session/document-session.ts";
 import type { StampPorts } from "../../session/ports.ts";
 import { applySteps } from "../../../core/text/steps.ts";
 import type { Step, StepRow } from "../../../core/text/steps.ts";
@@ -14,7 +14,7 @@ export type ReplayOutcome =
   | { readonly kind: "rejected"; readonly reason: string }
   | { readonly kind: "failed"; readonly error: unknown };
 
-export type ReplayRunner = (replay: Replay) => ReplayOutcome;
+export type ReplayRunner = (...args: Parameters<StandaloneDocumentSession["replay"]>) => ReplayOutcome;
 
 export interface UndoHooks {
   readonly afterApply?: (steps: readonly Step[], dir: UndoDirection) => void;
@@ -30,8 +30,8 @@ export type UndoResult = StepResult | { ok: false; reason: string };
 const HELD: UndoResult = Object.freeze({ ok: false, empty: true });
 
 export interface UndoPorts {
-  readonly held: () => ValidatedDocument | null;
-  readonly epoch: () => number;
+  readonly held: StandaloneDocumentSession["held"];
+  readonly epoch: CommonDocumentSession["epoch"];
   readonly runs: HtmlRunDecoder;
   readonly now: () => number;
   readonly cleared: (count: number) => void;

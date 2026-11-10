@@ -19,3 +19,5 @@ deliver B4 B->A copy 1
 compare replicas Ra removed
 FAIL Ra removed: replicas differ: client1: R1[s1]; recovery Rb by Bob edited=[], Ra by Bob edited=[] | client2: R1[s1]; recovery Rb by Bob edited=[], Ra by Bob edited=[] splitBy=Alice
 ```
+
+Fixed by this pull request (#1421): the original failure above is retained; the literal reader regression now passes in test/undo-records/cases.test.ts and generator.test.ts.

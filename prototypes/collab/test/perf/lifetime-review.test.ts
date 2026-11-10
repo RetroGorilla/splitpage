@@ -9,6 +9,7 @@ import { legacyReviewerStatusEvents, observeStatusOrder, statusOrderEvidence, st
 import { LifetimeHistory } from "../../src/perf/lifetime/workload.ts";
 import { legacyStatusValue } from "../marks/status-readers.ts";
 import { statusTimingChanges, validateStatusTimingChanges } from "../../src/marks/status-source-audit.ts";
+import { readerOrderChanges } from "../../src/readers/source-audit.ts";
 
 for (const recreate of [false, true]) for (const clients of [[1, 2], [2, 1]] as const) {
   test(`T21 scalar literal delivery-order disagreement, authors ${clients.join("/")}, recreation ${recreate}`, () => {
@@ -61,7 +62,8 @@ test("post-status source audit pins declared changed work and rejects unlisted c
     assert.throws(() => validateLifetimeCharacterSource(archive.files, changed));
   }
   assert.equal(statusTimingChanges().counts.before, archive.defaultDataSha256);
-  assert.equal(lifetimeDataHash(readLifetimeCounts().data), statusTimingChanges().validationCounts?.after ?? statusTimingChanges().reviewCounts?.after ?? statusTimingChanges().counts.after);
+  assert.equal(readerOrderChanges().counts.before, statusTimingChanges().validationCounts?.after ?? statusTimingChanges().reviewCounts?.after ?? statusTimingChanges().counts.after);
+  assert.equal(lifetimeDataHash(readLifetimeCounts().data), readerOrderChanges().counts.after);
   assert.equal(createHash("sha256").update(readFileSync(new URL("../../src/perf/lifetime/timings.json", import.meta.url))).digest("hex"), archive.timingsSha256);
 });
 

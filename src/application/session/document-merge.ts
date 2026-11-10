@@ -5,6 +5,7 @@ import { applyIncomingMerge } from "./apply-merge.ts";
 import type { ApplyMergeOptions, ApplyMergePorts, MergeKind, MergeOutcome } from "./apply-merge.ts";
 import { mergeIncoming } from "./merge-incoming.ts";
 import type { NoticeKind } from "../effects/ports.ts";
+import type { StandaloneDocumentSession } from "./document-session.ts";
 
 export interface MergeReportOptions {
   readonly kind?: MergeKind | undefined;
@@ -15,7 +16,7 @@ export interface MergeReportOptions {
 
 export interface MergeOutcomeView {
   readonly banner: (result: MergedStates, undo: boolean | undefined) => void;
-  readonly absorbed: (kind: MergeKind) => void;
+  readonly absorbed: (kind: Extract<Parameters<StandaloneDocumentSession["settle"]>[0], MergeKind>) => void;
   readonly autoSave: (paused: boolean) => void;
   readonly toast: (text: string, tone: NoticeKind, sticky: boolean) => void;
 }

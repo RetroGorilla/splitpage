@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { readerCurrentHash, validateReaderOrderChanges } from "../readers/source-audit.ts";
 
 interface StatusTimingChanges {
   trackingIssue: string;
@@ -31,6 +32,7 @@ export function currentStatusHash(path: string): string {
 }
 
 export function validateStatusTimingChanges(changes = statusTimingChanges()): void {
+  validateReaderOrderChanges();
   assert.equal(changes.trackingIssue, "https://github.com/RetroGorilla/splitpage/issues/1376");
   assert.equal(new Set(changes.files.map(file => file.path)).size, changes.files.length);
   assert.equal(new Set(changes.reviewChanges?.map(file => file.path)).size, changes.reviewChanges?.length ?? 0);
@@ -56,8 +58,8 @@ export function validateStatusTimingChanges(changes = statusTimingChanges()): vo
   for (const file of changes.files) {
     const reviewed = changes.reviewChanges?.find(change => change.path === file.path);
     const validated = changes.validationChanges?.find(change => change.path === file.path);
-    assert.equal(createHash("sha256").update(readFileSync(new URL(`../../${file.path}`, import.meta.url))).digest("hex"), validated?.after ?? reviewed?.after ?? file.after, `Status source changed: ${file.path}`);
+    assert.equal(createHash("sha256").update(readFileSync(new URL(`../../${file.path}`, import.meta.url))).digest("hex"), readerCurrentHash(file.path, validated?.after ?? reviewed?.after ?? file.after), `Status source changed: ${file.path}`);
   }
   for (const file of changes.validationChanges?.filter(file => !changes.files.some(original => original.path === file.path)) ?? [])
-    assert.equal(createHash("sha256").update(readFileSync(new URL(`../../${file.path}`, import.meta.url))).digest("hex"), file.after, `Status validation source changed: ${file.path}`);
+    assert.equal(createHash("sha256").update(readFileSync(new URL(`../../${file.path}`, import.meta.url))).digest("hex"), readerCurrentHash(file.path, file.after), `Status validation source changed: ${file.path}`);
 }

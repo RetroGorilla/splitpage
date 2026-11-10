@@ -15,3 +15,5 @@ deliver B2 B->A copy 1
 compare replicas join target removed
 FAIL Structural join target unavailable
 ```
+
+Fixed by this pull request (#1421): the original failure above is retained; the literal reader regression now passes in test/undo-records/cases.test.ts and generator.test.ts.

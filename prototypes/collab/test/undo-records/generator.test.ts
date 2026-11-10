@@ -2,10 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execute, generate, generatorLength, generatorRuns } from "./generator.ts";
 import type { Violation } from "./generator.ts";
-import { declaredLimits, keptSeeds, limitFor } from "./limits.ts";
+import { declaredLimits, fixedReaderLimits, keptSeeds, limitFor } from "./limits.ts";
 
 function unmatched(violations: readonly Violation[]): Violation[] {
   return violations.filter(violation => !limitFor(violation));
+}
+
+for (const fixed of fixedReaderLimits) {
+  test(`fixed reader limit ${fixed.id}: the literal now passes`, () => {
+    const result = fixed.run();
+    assert.equal(result.failure, null, result.history.join("\n"));
+    assert.ok(result.checks >= 2);
+  });
+  if ("minimal" in fixed) test(`fixed reader limit ${fixed.id}: its minimized generator history has no violation`, () => {
+    const run = execute(fixed.minimal);
+    assert.deepEqual(run.violations, [], run.history.join("\n"));
+  });
 }
 
 for (const writers of [2, 3] as const) {

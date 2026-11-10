@@ -15,7 +15,7 @@ import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
-import type { DocumentSession } from "../../application/session/document-session.ts";
+import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 
 const ZWSP = String.fromCharCode(0x200B);
 const ZWSP_ALL = new RegExp(ZWSP, "g");
@@ -29,7 +29,7 @@ export interface SurfacePorts {
     readonly copy: (range: FlowRange, data: DataTransfer, cut: boolean) => void;
     readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
   };
-  readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
