@@ -69,12 +69,32 @@ test("the 23 text/structure builders and 24 flow rows record their audited branc
   assert.equal(builders.length, 23);
   for (const row of builders) {
     assert.equal(row.length, 4, row[0]);
-    if (row.length === 4) assert.ok(row[3].length > 0 && row[3].every(branch => branch.length > 0), row[0]);
+    if (row.length === 4) assert.ok(row[3].length > 0 && row[3].every(branch => branch[0].length > 0), row[0]);
   }
-  for (const row of flowOperationCoverage) assert.ok(row[3].length > 0 && row[3].every(branch => branch.length > 0), row[0]);
+  for (const row of flowOperationCoverage) assert.ok(row[3].length > 0 && row[3].every(branch => branch[0].length > 0), row[0]);
   const paste = builderOperationCoverage.find(row => row[0] === "pasteBeatsCommand");
   assert.ok(paste);
   for (const kind of ["remove", "heading-create"]) assert.ok(paste[2].split(/[|,]/).map(value => value.trim()).includes(kind));
+});
+
+test("each audited row declares exactly the union of its literal branch requirements", context => {
+  let rows = 0, branches = 0;
+  for (const row of [...builderOperationCoverage, ...flowOperationCoverage]) {
+    if (row.length !== 4) continue;
+    const required = new Set<string>();
+    for (const [branch, kinds] of row[3]) {
+      assert.ok(branch.length > 0, row[0]);
+      for (const kind of kinds) required.add(kind);
+      branches++;
+    }
+    const declared = row[2].split(" | ").flatMap(part => part === "whole-field today, needs package 9" ? [part] : part.split(","));
+    assert.deepEqual(declared.sort(), [...required].sort(), row[0]);
+    rows++;
+  }
+  assert.equal(rows, 47);
+  assert.equal(flowOperationCoverage.find(row => row[0] === "typeWithMarks")?.[2], "text-insert");
+  assert.equal(flowOperationCoverage.find(row => row[0] === "replaceAll")?.[2], "text-insert,text-delete,heading-remove,scalar");
+  context.diagnostic(`${rows} rows equal the union of ${branches} literal branch requirements`);
 });
 
 function branchPorts(): FlowPorts {
