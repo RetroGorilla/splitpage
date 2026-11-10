@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
-import type { Command, CommandOutcome, DocumentSession, DocumentView, Plan, SessionCounters } from "../../src/application/session/document-session.ts";
+import type { Command, CommandOutcome, CommonDocumentSession, DocumentSession, DocumentView, Plan, SessionCounters } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, needsReconciliation } from "../../src/application/session/change-set.ts";
 import type { ChangeSet, SessionChange } from "../../src/application/session/change-set.ts";
 import type { Capability, RecordsPlan, TimerPort } from "../../src/application/session/ports.ts";
@@ -138,7 +138,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
 
 type Bag = Record<string, unknown>;
 
-function snapshotOf(session: DocumentSession): Bag | null {
+function snapshotOf(session: Pick<CommonDocumentSession, "read">): Bag | null {
   const text = session.read(function (doc) { return doc ? JSON.stringify(doc) : null; });
   if (text === null) return null;
   const parsed: unknown = JSON.parse(text);
@@ -195,7 +195,7 @@ export function writesOutside(before: Bag, after: Bag, changes: ChangeSet): stri
   return out;
 }
 
-export function runConfined(session: DocumentSession, command: Command): CommandOutcome {
+export function runConfined(session: Pick<CommonDocumentSession, "read" | "run">, command: Command): CommandOutcome {
   let plannedWrite = false;
   const watched: Command = {
     name: command.name,
