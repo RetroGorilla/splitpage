@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Collaboration browser slice</title>
+<style>
+body { font: 20px/1.6 sans-serif; margin: 40px; }
+.wr-flow { white-space: pre-wrap; outline: 1px solid #888; padding: 20px; }
+.wr-beat { white-space: pre-wrap; }
+textarea { display: block; margin-top: 30px; }
+</style>
+<h1>One editable beat, deterministic replicas</h1>
+<div id="writer" class="wr-flow" contenteditable="true" spellcheck="false"><div class="wr-par"><span class="wr-beat" data-id="R1" data-field="audioText"></span></div></div>
+<textarea id="clipboard" aria-label="Clipboard fixture">Q</textarea>
+<pre id="state"></pre>
+<script>SLICE_BUNDLE</script>
+</html>
