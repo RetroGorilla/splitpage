@@ -9,7 +9,7 @@ import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import { DeliveryQueue } from "../../collab/delivery.ts";
-import { deliveryReplica, validatedFixture } from "./helpers.ts";
+import { deliveryReplica, validatedFixture, readRoots } from "./helpers.ts";
 
 function textOf(handle: SharedDocumentHandle): Y.Text {
   const segment = collabState(handle).roots.segments.get("b:R1");
@@ -164,4 +164,60 @@ test("seeded malformed segment records and references resolve identically after 
     destroySharedDocument(a);
     destroySharedDocument(c);
   }
+});
+
+test("seeded three-writer inserts, deletes, marks and malformed records agree at every encoded checkpoint and delivery order", () => {
+  const source = seeded("abcdefgh");
+  const initial = encodeSharedState(source);
+  const reference = createSharedAnchor(source, "b:R1", 3, "after");
+  const readings: ReplicaReading<unknown>[] = [];
+  const declaredLimits: readonly string[] = [];
+  const violations: string[] = [];
+  for (const order of ["D1", "rev", "dup"] as const) {
+    const writers = [createSharedDocument(), createSharedDocument(), createSharedDocument()];
+    const names = ["A", "B", "C"] as const;
+    const queue = new DeliveryQueue<Uint8Array>(update => update.slice(), update => `${update.length} bytes`);
+    writers.forEach((handle, index) => {
+      collabState(handle).doc.clientID = 101 + index;
+      assert.deepEqual(applySharedUpdate(handle, initial), { ok: true });
+      queue.addReplica(names[index] as typeof names[number], deliveryReplica(handle));
+    });
+    let seed = 0x5aa51414;
+    const next = (): number => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+    for (let step = 0; step < 36; step++) {
+      const handle = writers[step % 3] as SharedDocumentHandle;
+      const text = textOf(handle);
+      const command = Math.floor(step / 3) % 4;
+      transactSharedDocument(handle, "local-command", () => {
+        if (command === 0) text.insert(next() % (text.length + 1), String.fromCharCode(65 + next() % 26), {});
+        if (command === 1 && text.length) text.delete(next() % text.length, 1);
+        if (command === 2 && text.length) text.format(next() % text.length, 1, { b: true });
+        if (command === 3) collabState(handle).roots.people.set(`P${step}`, next() % 2 ? { id: "dangling", rank: [] } : null);
+      });
+      const checkpoint = createSharedDocument();
+      assert.deepEqual(applySharedUpdate(checkpoint, encodeSharedState(handle)), { ok: true });
+      assertReplicasAgree(`checkpoint ${order}/${step}`, [
+        { order, replica: names[step % 3] as typeof names[number], output: { roots: readRoots(handle), anchor: resolveSharedAnchor(handle, reference) } },
+        { order: "late-C", replica: "C", output: { roots: readRoots(checkpoint), anchor: resolveSharedAnchor(checkpoint, reference) } }
+      ]);
+      destroySharedDocument(checkpoint);
+      if (order === "D1") queue.flush(order);
+    }
+    queue.flush(order);
+    writers.forEach((handle, index) => {
+      readings.push({ order, replica: names[index] as typeof names[number], output: { roots: readRoots(handle), anchor: resolveSharedAnchor(handle, reference) } });
+    });
+    queue.destroy();
+    const late = createSharedDocument();
+    const lateQueue = new DeliveryQueue<Uint8Array>(update => update.slice(), update => `${update.length} bytes`);
+    lateQueue.addReplica("A", deliveryReplica(writers[0] as SharedDocumentHandle));
+    lateQueue.lateJoin("C", deliveryReplica(late), "A", encodeSharedState(writers[0] as SharedDocumentHandle));
+    readings.push({ order: "late-C", replica: "C", output: { roots: readRoots(late), anchor: resolveSharedAnchor(late, reference) } });
+    try { assertReplicasAgree(`three writers ${order}`, readings.slice(-4)); }
+    catch (error) { violations.push(String(error)); }
+    lateQueue.destroy();
+    for (const handle of [...writers, late]) destroySharedDocument(handle);
+  }
+  assert.deepEqual(violations, declaredLimits);
+  destroySharedDocument(source);
 });
