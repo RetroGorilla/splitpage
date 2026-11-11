@@ -6,12 +6,13 @@ import { collabState, SharedExecutionWriteError } from "../../../src/adapters/co
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeSharedStateVector, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
-import { createCollabText } from "../../../src/adapters/collab/text-target.ts";
+import { createCollabText, collabTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { insertSharedHtml } from "../../../src/adapters/collab/text-import.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { execute, operation, ref, replicas } from "./executor-support.ts";
 import { validatedFixture } from "./helpers.ts";
 
-for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "mark-write", "destroy"] as const) {
+for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "html-import", "mark-write", "destroy"] as const) {
   test(`${writer} cannot reenter from ${phase}, and the guard clears after the error`, () => {
     const run = replicas();
     try {
@@ -20,6 +21,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
       const ordinary = operation({ kind: "scalar", id: "ordinary", by: "A", target, field: "lengthSeconds", value: 7 });
       const custom = operation({ kind: "record-delete", id: "custom", by: "A", target: { collection: "people", record: "P" } });
       const textTarget = { segment: ref("b:R1"), owner: ref("R1"), field: "audioText" as const };
+      const text = collabTextTarget(run.a, textTarget)?.text; assert.ok(text);
       execute(run.b, { kind: "scalar", id: "remote", by: "B", target, field: "lengthSeconds", value: 99 });
       const incoming = encodeSharedState(run.b), source = validatedFixture({ title: "nested", rows: [] });
       const attempt = (): void => {
@@ -28,6 +30,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
         else if (writer === "update") applySharedUpdate(run.a, incoming);
         else if (writer === "hydration") hydrateSharedDocument(run.a, source);
         else if (writer === "text-create") createCollabText(run.a, collabState(run.a).roots.meta, true);
+        else if (writer === "html-import") insertSharedHtml(run.a, textTarget, text, "nested", [], [], "nested");
         else if (writer === "mark-write") writeSharedMarkRecord(run.a, textTarget, "nested", null);
         else destroySharedDocument(run.a);
       };
@@ -42,6 +45,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
       assert.throws(() => executeSharedOperations(run.a, phase === "observer" ? [ordinary] : [custom, nested]), SharedExecutionWriteError);
       assert.equal(collabState(run.a).roots.statusEvents.size, 0);
       assert.equal(collabState(run.a).roots.meta.has("nested"), false);
+      assert.equal(text.toString(), "abZ");
       assert.equal(updates, phase === "observer" ? 1 : 0);
       if (phase !== "observer") { assert.deepEqual(encodeSharedState(run.a), before); assert.deepEqual(encodeSharedStateVector(run.a), vector); }
       assert.deepEqual(executeSharedOperations(run.a, [ordinary]), { ok: true });
