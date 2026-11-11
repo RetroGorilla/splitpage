@@ -319,3 +319,24 @@ test("concurrent creations keep their own scenes at the middle, end and first he
     } finally { set.close(); }
   }
 });
+
+
+test("creation before a heading stays outside its inline first beat", () => {
+  for (const mode of ["enter", "paste", "fallback"]) {
+    const source = { rows: [{ id: "R0", audioText: "abcd" }], sections: [{ id: "H0", name: "First", firstSceneId: "R0" }] }, set = replicas(2, source);
+    try {
+      registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.a);
+      const doc = run(set.a, { ...source, comments: [] }, enterInHeading({ ...source, comments: [] }, headingPos("H0", 2),
+        { ...runtime.ports, newId: () => "tail", operations: { id: "tail", by: "Writer" } }));
+      const ports = { ...runtime.ports, newId: () => "new", operations: { id: "before", by: "Writer" } };
+      if (mode === "fallback") assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "segment-create", id: "before:0", by: "Writer",
+        beat: "new", segment: "new", at: { left: "future", right: "R0", affinity: "after" }, fields: { audioText: "N" } })], { base: readSharedRevision(set.a) }), { ok: true });
+      else run(set.a, doc, mode === "paste" ? insertBeats(doc, headingPos("H0", 0), [{ id: "p1", audioText: "P" }, { id: "p2", audioText: "Q" }], ports)
+        : enterInHeading(doc, headingPos("H0", 0), ports));
+      const tail = JSON.stringify(["structure", "1", "tail:0", "beat"]), last = JSON.stringify(["structure", "1", "before:0", "beat"]), first = JSON.stringify(["structure", "1", "before:2", "beat"]);
+      const expected = mode === "paste" ? [[first, null], [last, null], [tail, "H0"], ["R0", "H0"]]
+        : mode === "fallback" ? [[tail, "H0"], [last, "H0"], ["R0", "H0"]] : [[last, null], [tail, "H0"], ["R0", "H0"]];
+      set.queue.flush("rev"); agree("before inline heading beat", "rev", [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), expected);
+    } finally { set.close(); }
+  }
+});

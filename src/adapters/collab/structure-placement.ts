@@ -27,7 +27,8 @@ export function prepareSharedBeatPlacement(view: SharedPreparationView, order: S
     if (reference === null) continue;
     const located = side === "left" ? left : right; if (!located) continue;
     const { key, plan, span } = located;
-    if (plan && span) {
+    const beforeHeading = side === "right" && gap.affinity === "after" && readProjectionHead(view.get(["segments", key, "head"]))?.kind === "h";
+    if (plan && span && !beforeHeading) {
       if (side === "right" ? span.from > 0 : span.to < plan.units.length) {
         const offset = sharedTextInsertionPosition(plan, side === "right" ? span.from - 1 : span.to);
         return { kind: "inline" as const, plan, offset };
@@ -38,7 +39,10 @@ export function prepareSharedBeatPlacement(view: SharedPreparationView, order: S
       for (let index = located.index - 1; index >= 0; index--) {
         const previous = sharedPlannedSegmentAt(view, order, index);
         const head = previous === undefined ? undefined : view.get(["segments", previous, "head"]);
-        if (readProjectionHead(head)?.kind !== "h") break;
+        const boundary = readProjectionHead(head);
+        if (boundary?.kind !== "h" || previous === undefined) break;
+        const previousPlan = sharedTextCommandPlan(view, { owner: boundary.id as SharedContentRef, segment: previous as SharedContentRef, field: "heading" });
+        if (sharedStructureSpans(head, previousPlan.units).some(span => span.field === "audioText")) break;
         rightKey = previous as string;
       }
     }

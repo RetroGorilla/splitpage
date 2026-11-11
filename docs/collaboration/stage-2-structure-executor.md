@@ -27,7 +27,9 @@ Two existing neighbours in reversed order refuse the entire list.
 The creation emitter records scene intent: `before` joins the right neighbour's
 scene, while `after` stays on the left side of any intervening heading. With no
 left neighbour yet, `after` falls back before the right neighbour's preceding
-headings. The order cache supplies that preceding position without rereading the
+heading-only segments; it does not cross a segment containing narration. When the
+right beat is inline under a heading, that heading's whole segment is the outer
+insertion point. The order cache supplies that position without rereading the
 whole order. This also covers reverse-emitted groups and insertion before the
 first heading. Scene repairs are supplied to the emitter before describing a
 creation; the executor does not infer intent from later scalar operations.
