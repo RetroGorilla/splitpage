@@ -40,6 +40,20 @@ test("a caret visual changes its beat without splitting or changing metadata", (
   assert.deepEqual(result.selection, range);
 });
 
+test("a collapsed standalone visual edit reads row ids only for the edit", () => {
+  let idReads = 0;
+  const rows = Array.from({ length: 1000 }, (_, index) => ({
+    get id() { idReads++; return "row" + index; }, audioText: "Body", visualText: "Original"
+  }));
+  const ports: FlowPorts = { cells: html => fromHtml(html ?? ""), newId: () => "unused", hasVisual: row => !!row.visualText };
+  const result = setVisualForRange({ rows, comments: [] }, caretAt(beatPos("row999", 0)), "Harbour", ports);
+  assert.equal(idReads, 1001);
+  assert.ok(result && "rows" in result);
+  assert.equal(result.rows.length, 1000);
+  assert.equal(result.rows[999]?.visualText, "Harbour");
+  assert.equal(result.rows[0], rows[0]);
+});
+
 test("seeded visual selections preserve narration, scene membership and the original beat's metadata", () => {
   for (let seed = 1; seed <= 60; seed++) {
     const narration = "Before " + "word ".repeat(seed % 8 + 1) + "after";
