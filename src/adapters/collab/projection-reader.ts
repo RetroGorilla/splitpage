@@ -7,6 +7,11 @@ function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
   return json !== null && typeof json === "object" && !Array.isArray(json) ? json as Record<string, unknown> : {};
 }
+function retainedStamp(value: unknown): boolean {
+  const stamp = bag(value);
+  return Object.hasOwn(stamp, "at") && Object.keys(stamp).every(key => key === "at" || key === "by")
+    && (stamp.by === null || typeof stamp.by === "string");
+}
 export function readProjectionFields(raw: unknown, scope: "document" | "beat" | "heading"): Record<string, unknown> | null {
   if (!(raw instanceof Y.Map)) return null;
   const output: [string, unknown][] = [];
@@ -14,7 +19,7 @@ export function readProjectionFields(raw: unknown, scope: "document" | "beat" | 
     : scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra"] : ["extra"];
   for (const key of fields) {
     const value = sharedJson(raw.get(key));
-    if (scalarFieldAllowed(scope, key, value, false)) output.push([key, value]);
+    if (key === "stamp" ? retainedStamp(value) : scalarFieldAllowed(scope, key, value, false)) output.push([key, value]);
   }
   if (scope === "document") {
     const id: unknown = raw.get("docId"), schema: unknown = raw.get("schema"), capture = bag(raw.get("capture"));
@@ -23,7 +28,7 @@ export function readProjectionFields(raw: unknown, scope: "document" | "beat" | 
     const retained: [string, unknown][] = [];
     for (const key of ["rev", "lastEditedBy", "lastEditedAt", "personColors"]) {
       const value = capture[key];
-      if (key === "rev" ? typeof value === "number" : key === "personColors" ? value !== null && typeof value === "object" && !Array.isArray(value) : typeof value === "string") retained.push([key, value]);
+      if (Object.hasOwn(capture, key) && (key === "lastEditedAt" || (key === "rev" ? typeof value === "number" : key === "personColors" ? value !== null && typeof value === "object" && !Array.isArray(value) : typeof value === "string"))) retained.push([key, value]);
     }
     output.push(["capture", Object.fromEntries(retained)]);
   } else {
