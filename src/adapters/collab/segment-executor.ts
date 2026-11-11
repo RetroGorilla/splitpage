@@ -41,7 +41,7 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
         if (typeof value !== "string" && value !== null) throw new SharedStructurePreparationError("unsupported-beat-field");
         stamp[field === "updatedAt" ? "at" : "by"] = value; continue;
       }
-      if (["status", "lengthSeconds", "paragraphStart", "id"].includes(field)) {
+      if (["status", "lengthSeconds", "paragraphStart", "id", "stamp"].includes(field)) {
         if (field !== "status" && !scalarFieldAllowed("beat", field, value, false) || field === "status" && !["todo", "ready", "shot"].includes(String(value))) throw new SharedStructurePreparationError("unsupported-beat-field");
         writes.push({ kind: "set", path: [...beatPath, field], value });
       } else extra.push([field, value]);

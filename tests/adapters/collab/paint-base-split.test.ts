@@ -20,10 +20,11 @@ const WHO = '<span class="who-anchor" data-who="Sam">@Sam</span>';
 const NEW = JSON.stringify(["structure", "1", "enter", "beat"]);
 const SOURCE: SharedTextAddress = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" };
 const CREATED: SharedTextAddress = { owner: ref(NEW), segment: ref("b:R1"), field: "audioText" };
+const structurePorts = { cells: createFlowLoadRuntime().cells };
 
 function splitAtD(before: boolean) {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" + WHO + "cdef" }, { id: "R2", audioText: "gh" }] });
-  for (const handle of [set.a, set.b]) { registerSharedSplitHandlers(handle, { cells: createFlowLoadRuntime().cells }); registerSharedTextOperationHandlers(handle); }
+  for (const handle of [set.a, set.b]) { registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle); }
   const whole = readSharedPaintedText(set.a, SOURCE);
   assert.ok(whole);
   assert.deepEqual([whole.text, whole.revision], ["ab￼cdef", 1]);
