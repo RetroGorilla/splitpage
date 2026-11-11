@@ -7,6 +7,7 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { transactSharedDocument } from "./document.ts";
 import { collabState } from "./state.ts";
 import { insertSharedHtml } from "./text-import.ts";
+import { createCollabText, readSharedTextTarget } from "./text-target.ts";
 
 type ImportBag = Record<string, unknown>;
 
@@ -62,9 +63,13 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
   transactSharedDocument(handle, "hydration", () => {
     write(roots.meta, source, metaFields, ["title", "rows", "sections", "comments", "people", "productionTags", "brollShots", ...captureFields]);
     roots.meta.set("capture", selected(source, captureFields));
-    const title = new Y.Text();
-    roots.meta.set("title", title);
-    title.insert(0, source.title, {});
+    const title = createCollabText(handle, roots.meta, true);
+    title.insert(0, source.title.replace(/\p{Cs}/gu, "\ufffd"));
+    function textTarget(owner: string, segment: string, field: "audioText" | "heading" | "visualText" | "title") {
+      const target = readSharedTextTarget({ owner, segment, field });
+      if (!target) throw new Error("Cannot address hydrated text marks");
+      return target;
+    }
     for (const [root, entries, fields] of [
       [roots.people, source.people, ["id", "name"]],
       [roots.tags, tags, ["id", "cat", "name", "owner", "notes", "status"]],
@@ -92,11 +97,11 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
       const segment = new Y.Map<unknown>();
       roots.segments.set(key, segment);
       segment.set("head", { [kind]: id });
-      const text = new Y.Text();
-      segment.set("text", text);
+      const text = createCollabText(handle, segment);
       roots.order.push([key]);
-      if (kind === "h") text.insert(0, html, {});
-      else insertSharedHtml(text, html, tags, source.comments, `${key}:audioText`);
+      const target = textTarget(id, key, kind === "h" ? "heading" : "audioText");
+      if (kind === "h") text.insert(0, html.replace(/\p{Cs}/gu, "\ufffd"));
+      else insertSharedHtml(handle, target, text, html, tags, source.comments, `${key}:audioText`);
     }
     for (const row of source.rows) {
       for (const section of sections) if (section.firstSceneId === row.id) {
@@ -116,9 +121,8 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
       roots.visuals.set(row.id, visual);
       visual.set("beat", row.id);
       visual.set("rank", rank(0));
-      const text = new Y.Text();
-      visual.set("text", text);
-      insertSharedHtml(text, row.visualText ?? "", tags, source.comments, `${row.id}:visualText`);
+      const text = createCollabText(handle, visual);
+      insertSharedHtml(handle, textTarget(row.id, row.id, "visualText"), text, row.visualText ?? "", tags, source.comments, `${row.id}:visualText`);
       const first = selected(row, ["imageRef", "imageLinks"]);
       if (Object.hasOwn(row, "imageName")) first.name = row.imageName;
       if (Object.hasOwn(row, "imageAnnotation")) first.annotation = row.imageAnnotation;

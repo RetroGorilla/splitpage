@@ -1,14 +1,15 @@
+import { createMonitoredSharedDocument as createSharedDocument } from "../helpers.ts";
 import * as Y from "yjs";
-import { createSharedDocument, applySharedUpdate, encodeSharedState, destroySharedDocument, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, encodeSharedState, destroySharedDocument, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../../src/adapters/collab/state.ts";
 import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.ts";
-import { initializeSharedMarkStore, prepareSharedMarkRecord, writeSharedMarkRecord, readSharedMarkCharacters } from "../../../../src/adapters/collab/mark-store.ts";
+import { prepareSharedMarkRecord, writeSharedMarkRecord, readSharedMarkCharacters } from "../../../../src/adapters/collab/mark-store.ts";
 import type { SharedMarkBirth } from "../../../../src/adapters/collab/mark-record.ts";
 import type { SharedMarkValue, SharedTextAddress } from "../../../../src/core/collab/operations.ts";
 import { readMarkChange } from "../../../../src/core/collab/read-operation.ts";
 import { typingMarks } from "../../../../src/core/text/edits.ts";
 import type { Marks } from "../../../../src/core/text/runs.ts";
-import { validatedFixture, deliveryReplica, monitorSharedFormatting } from "../helpers.ts";
+import { validatedFixture, deliveryReplica } from "../helpers.ts";
 import type { IdentityBook, CollabIdentity } from "../../../collab/checker.ts";
 
 export interface MarkTraceCommand {
@@ -29,13 +30,12 @@ export class MarkTraceReplica {
   readonly target: SharedTextAddress;
   constructor(client: number, initial?: string, state?: Uint8Array) {
     collabState(this.handle).doc.clientID = client;
-    monitorSharedFormatting(this.handle);
+
     if (state) { if (!applySharedUpdate(this.handle, state).ok) throw new Error("Invalid fixture state"); }
     else hydrateSharedDocument(this.handle, validatedFixture({ rows: [{ id: "R1", audioText: initial ?? "" }] }));
     const operation = readMarkChange({ kind: "mark", id: "target", by: "", target: { owner: "R1", segment: "b:R1", field: "audioText" }, observed: [], mark: { kind: "b", value: true } });
     if (!operation) throw new Error("Invalid target");
     this.target = operation.target;
-    if (!state && !initializeSharedMarkStore(this.handle, this.target).ok) throw new Error("Missing mark store");
     const segment = collabState(this.handle).roots.segments.get("b:R1");
     if (!(segment instanceof Y.Map)) throw new Error("Missing segment");
     const text: unknown = segment.get("text");

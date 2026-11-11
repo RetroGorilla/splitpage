@@ -14,17 +14,6 @@ type LocatedMark = { record: SharedMarkRecord; reference: SharedContentRef; from
 
 function writingIdentity(handle: SharedDocumentHandle) { const state = collabState(handle); return state.hydrating ? "hydration" as const : state.doc.clientID; }
 
-export function initializeSharedMarkStore(handle: SharedDocumentHandle, target: SharedTextAddress): SharedMarkWriteResult {
-  const found = collabTextTarget(handle, target);
-  if (!found) return { ok: false, reason: "missing-text" };
-  const current: unknown = found.container.get(found.marksKey);
-  if (current instanceof Y.Map) return { ok: true };
-  if (current !== undefined) return { ok: false, reason: "missing-store" };
-  // why: Hydration or text creation initializes this map before peers fork; concurrent lazy map creation loses entries.
-  transactSharedDocument(handle, "local-command", () => found.container.set(found.marksKey, new Y.Map<unknown>()));
-  return { ok: true };
-}
-
 export function writeSharedMarkRecord(handle: SharedDocumentHandle, target: SharedTextAddress, key: string, raw: unknown): SharedMarkWriteResult {
   const normalized = sharedMarkRecordKey(key, writingIdentity(handle)), record = normalized && readSharedMarkRecord(normalized, raw);
   if (!record) return { ok: false, reason: "invalid-record" };

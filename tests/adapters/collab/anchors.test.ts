@@ -3,7 +3,7 @@ import { test } from "node:test";
 import * as Y from "yjs";
 import { createSharedAnchor, readSharedAnchor, resolveSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { applySharedUpdate, encodeSharedState, transactSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
-import { initializeSharedMarkStore, prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
@@ -25,7 +25,6 @@ function seeded(text = "abcd"): SharedDocumentHandle {
   const handle = createSharedDocument();
   hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: text }] }));
   const target = readSharedTextTarget({ owner: "R1", segment: "b:R1", field: "audioText" }); assert.ok(target);
-  assert.equal(initializeSharedMarkStore(handle, target).ok, true);
   return handle;
 }
 
