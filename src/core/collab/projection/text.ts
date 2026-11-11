@@ -1,4 +1,4 @@
-import { cleanMarks, defaultTagOf } from "../../text/runs.ts";
+import { cleanMarks, defaultTagOf, normalizeCell } from "../../text/runs.ts";
 import type { Marks, Run } from "../../text/runs.ts";
 import { toHtml } from "../../text/html.ts";
 import type { SharedProjectionUnit } from "./units.ts";
@@ -25,6 +25,7 @@ export function projectSharedText(units: readonly SharedProjectionUnit[], tags: 
 export function projectSharedTextResult(source: readonly SharedProjectionUnit[], tags: readonly Readonly<Record<string, unknown>>[]): {
   readonly html: string;
   readonly rejected: readonly SharedTagProjectionRejection[];
+  readonly runs: readonly Run[];
 } {
   const { units, rejected } = projectSharedTagExtents(source, tags);
   const runs: Run[] = [];
@@ -49,9 +50,10 @@ export function projectSharedTextResult(source: readonly SharedProjectionUnit[],
     else if (value.atom === "image") runs.push({ atom: "image", ref: value.ref, text: "", marks });
     else runs.push({ atom: "video", href: value.href, host: value.host, text: "", marks });
   }
-  const html = toHtml(runs, { tagOf: id => {
+  const normalized = normalizeCell(runs);
+  const html = toHtml(normalized, { tagOf: id => {
     const tag = tags.find(tag => tag.id === id);
     return tag && typeof tag.cat === "string" && typeof tag.name === "string" ? { cat: tag.cat, name: tag.name } : defaultTagOf(id);
   } });
-  return { html, rejected };
+  return { html, rejected, runs: normalized };
 }
