@@ -8,6 +8,7 @@ import { isStableSharedIdentity } from "./identity.ts";
 export interface SharedStructureOrderView {
   readonly length: () => number;
   readonly index: (segment: string) => number;
+  readonly at: (index: number) => string | undefined;
 }
 
 let orderViews: WeakMap<SharedDocumentHandle, SharedStructureOrderView> | null = null;
@@ -33,7 +34,7 @@ export function observeSharedStructureOrder(handle: SharedDocumentHandle): Share
     rebuild();
   };
   order.observe(observe); state.doc.once("destroy", () => order.unobserve(observe));
-  const view = Object.freeze({ length: () => values.length, index: (segment: string) => positions.get(segment) ?? -1 });
+  const view = Object.freeze({ length: () => values.length, index: (segment: string) => positions.get(segment) ?? -1, at: (index: number) => values[index] });
   orderViews.set(handle, view); return view;
 }
 
@@ -50,7 +51,7 @@ export function sharedStructureSegment(view: SharedPreparationView, raw: SharedC
 }
 
 function sharedOrderPlan(view: SharedPreparationView, order: SharedStructureOrderView) {
-  return view.scratch("structure-order", () => ({ length: order.length(), positions: [] as { segment: string; index: number }[], insertions: [] as number[] }));
+  return view.scratch("structure-order", () => ({ length: order.length(), positions: [] as { segment: string; index: number }[], insertions: [] as { segment: string; index: number }[] }));
 }
 
 export function sharedPlannedSegmentIndex(view: SharedPreparationView, order: SharedStructureOrderView, segment: string): number {
@@ -58,8 +59,19 @@ export function sharedPlannedSegmentIndex(view: SharedPreparationView, order: Sh
   if (cached) return cached.index;
   let index = order.index(segment);
   if (index < 0) throw new SharedStructurePreparationError("missing-order-target");
-  for (const inserted of plan.insertions) if (inserted <= index) index++;
+  for (const inserted of plan.insertions) if (inserted.index <= index) index++;
   plan.positions.push({ segment, index }); return index;
+}
+
+export function sharedPlannedSegmentAt(view: SharedPreparationView, order: SharedStructureOrderView, index: number): string | undefined {
+  const plan = sharedOrderPlan(view, order);
+  for (let step = plan.insertions.length - 1; step >= 0; step--) {
+    const inserted = plan.insertions[step];
+    if (!inserted) continue;
+    if (index === inserted.index) return inserted.segment;
+    if (index > inserted.index) index--;
+  }
+  return order.at(index);
 }
 
 export function prepareSharedOrderInsertion(view: SharedPreparationView, order: SharedStructureOrderView, at: SharedIdentityGap, segment: string): number {
@@ -68,7 +80,7 @@ export function prepareSharedOrderInsertion(view: SharedPreparationView, order: 
   if (left !== null && right !== null && left >= right) throw new SharedStructurePreparationError("invalid-order-gap");
   const index = (at.affinity === "before" ? right ?? (left === null ? null : left + 1) : left === null ? right : left + 1) ?? plan.length;
   for (const position of plan.positions) if (position.index >= index) position.index++;
-  plan.positions.push({ segment, index }); plan.insertions.push(index); plan.length++;
+  plan.positions.push({ segment, index }); plan.insertions.push({ segment, index }); plan.length++;
   return index;
 }
 

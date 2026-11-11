@@ -17,5 +17,11 @@
     "find": "return { kind: \"inline\" as const, plan, offset };",
     "replace": "return { kind: \"inline\" as const, plan, offset: plan.units.length };",
     "tests": ["tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "scene affinity ignored by placement",
+    "file": "src/adapters/collab/structure-placement.ts",
+    "find": "const locate = (reference: SharedContentRef | null) => {",
+    "replace": "gap = { ...gap, affinity: \"before\" }; const locate = (reference: SharedContentRef | null) => {",
+    "tests": ["tests/adapters/collab/structure-create.test.ts"]
   }]
 }

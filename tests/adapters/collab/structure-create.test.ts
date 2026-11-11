@@ -9,7 +9,7 @@ import { readSharedRevision, encodeSharedState, encodeSharedStateVector, observe
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
-import { startBeat, startParagraph, insertBeats, typeWithMarks, beatPos } from "../../../src/core/flow/flow.ts";
+import { startBeat, startParagraph, insertBeats, typeWithMarks, beatPos, headingPos, enterInHeading } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowOutcome, FlowRow } from "../../../src/core/flow/flow.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
@@ -25,6 +25,20 @@ import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segme
 import { registerSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
 
 const runtime = createFlowLoadRuntime(), structurePorts = { cells: runtime.cells };
+
+function membership(handle: SharedDocumentHandle) {
+  const roots = collabState(handle).roots, rows: { id: string; heading: string | null }[] = [];
+  let heading: string | null = null;
+  for (const key of roots.order.toArray()) {
+    const segment = roots.segments.get(key) as Y.Map<unknown>, head = segment.get("head") as { b?: string; h?: string };
+    if (head.h) heading = head.h;
+    if (head.b) rows.push({ id: head.b, heading });
+    for (const delta of (segment.get("text") as Y.Text).toDelta() as { insert: unknown }[]) {
+      if (typeof delta.insert !== "string" && (delta.insert as { b?: string }).b) rows.push({ id: (delta.insert as { b: string }).b, heading });
+    }
+  }
+  return rows;
+}
 
 function read(handle: SharedDocumentHandle) {
   const roots = collabState(handle).roots, rows: { id: string; units: SharedProjectionUnit[] }[] = [], headings: string[] = [];
@@ -59,6 +73,9 @@ function run(handle: SharedDocumentHandle, doc: FlowDoc, outcome: FlowOutcome, c
   const rows = expected.rows.map(row => ({ ...row, id: aliases.get(String(row.id)) ?? String(row.id) })) as FlowRow[];
   assert.deepEqual(executeSharedOperations(handle, outcome.ops, { base: readSharedRevision(handle) }), { ok: true });
   assert.deepEqual(read(handle).rows, rows.map(row => ({ id: row.id, text: toHtml(structurePorts.cells(row.audioText ?? "")), visual: toHtml(structurePorts.cells(row.visualText ?? "")) })));
+  const sections = expected.sections?.map(scene => ({ id: scene.id, firstSceneId: aliases.get(scene.firstSceneId) ?? scene.firstSceneId })) ?? [];
+  const shared = membership(handle);
+  assert.deepEqual(sections, shared.filter((row, index) => row.heading !== null && shared[index - 1]?.heading !== row.heading).map(row => ({ id: row.heading, firstSceneId: row.id })));
   if (counts) { counts.calls++; counts.executed += outcome.ops.length; for (const op of outcome.ops) counts.kinds[op.kind] = (counts.kinds[op.kind] ?? 0) + 1; }
   return { ...doc, rows, sections: expected.sections?.map(scene => ({ ...scene, firstSceneId: aliases.get(scene.firstSceneId) ?? scene.firstSceneId })) } as FlowDoc;
 }
@@ -169,7 +186,9 @@ test("late creation refusals preserve bytes, vector, revision and delivered coun
     const create = { kind: "segment-create", id: "create", by: "Writer", beat: "new", segment: "new", at: { left: "R1", right: "R2", affinity: "before" }, fields: { visualText: "Look" } };
     const lists = [[operation(create), operation({ kind: "record-create", id: "record", by: "Writer", target: { collection: "visuals", record: "new:visual" }, fields: { beat: "new", html: "Different" } })],
       [operation({ ...create, at: { left: "R2", right: "R1", affinity: "before" } })], [operation({ ...create, segment: "b:R1" })],
-      [operation({ ...create, fields: { visualText: "Look", imageLinks: [{ name: "File", size: 1, location: { kind: "bundled", name: "clip.mp4" } }] } })]];
+      [operation({ ...create, fields: { visualText: "Look", imageLinks: [{ name: "File", size: 1, location: { kind: "bundled", name: "clip.mp4" } }] } })],
+      [operation({ ...create, fields: { visualText: "Look", visualImage: "data:image/png;base64,AAAA" } })],
+      [operation({ ...create, fields: { imageLinks: [{ href: "https://example.com" }, { href: "https://example.com" }] } })]];
     for (const operations of lists) {
       assert.ok(!executeSharedOperations(set.a, operations, { base: revision }).ok);
       assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision); assert.equal(updates.length, 0);
@@ -206,7 +225,7 @@ test("inline rich creation reads only touched records and freezes its descriptio
       } finally { whole.mock.restore(); }
     } finally { set.close(); }
   }
-  assert.equal(counts[0], counts[1]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, wholeOrderReads: 0 }));
+  assert.deepEqual(counts, [10, 10]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, wholeOrderReads: 0 }));
 });
 
 test("insertBeats initializes visual runs, marks, gallery records and following narration through the app list", () => {
@@ -233,4 +252,70 @@ test("startParagraph before a scene's first beat stays after its heading and rep
     assert.deepEqual(collabState(set.a).roots.order.toArray(), ["h:H1", JSON.stringify(["structure", "1", "enter:0", "segment"]), "b:R1"]);
     set.queue.flush("D1"); agree("scene first paragraph", "D1", [set.a, set.b], read);
   } finally { set.close(); }
+});
+
+
+test("creation affinity preserves literal scene membership at scene gaps and script edges", () => {
+  const source = { rows: [{ id: "R0", audioText: "abcd" }, { id: "R1", audioText: "efgh", paragraphStart: true }],
+    sections: [{ id: "H0", name: "First", firstSceneId: "R0" }, { id: "H1", name: "Second", firstSceneId: "R1" }] };
+  const fresh = JSON.stringify(["structure", "1", "action:0", "beat"]);
+  const cases = [
+    { kind: "beat", owner: "R0", offset: 4, affinity: "after", expected: [["R0", "H0"], [fresh, "H0"], ["R1", "H1"]] },
+    { kind: "paragraph", owner: "R0", offset: 4, affinity: "after", expected: [["R0", "H0"], [fresh, "H0"], ["R1", "H1"]] },
+    { kind: "paste", owner: "R0", offset: 4, affinity: "after", expected: [["R0", "H0"], [fresh, "H0"], ["R1", "H1"]] },
+    { kind: "paragraph", owner: "R1", offset: 0, affinity: "before", expected: [["R0", "H0"], [fresh, "H1"], ["R1", "H1"]] },
+    { kind: "beat", owner: "R1", offset: 4, affinity: "after", expected: [["R0", "H0"], ["R1", "H1"], [fresh, "H1"]] },
+    { kind: "paragraph", owner: "R1", offset: 4, affinity: "after", expected: [["R0", "H0"], ["R1", "H1"], [fresh, "H1"]] },
+    { kind: "paste", owner: "R1", offset: 4, affinity: "after", expected: [["R0", "H0"], ["R1", "H1"], [fresh, "H1"]] },
+    { kind: "heading", owner: "H0", offset: 0, affinity: "after", expected: [[fresh, null], ["R0", "H0"], ["R1", "H1"]] },
+    { kind: "paste-heading", owner: "H0", offset: 0, affinity: "after", expected: [[fresh, null], ["R0", "H0"], ["R1", "H1"]] },
+    { kind: "paragraph", owner: "R0", offset: 0, affinity: "before", expected: [[fresh, "H0"], ["R0", "H0"], ["R1", "H1"]] }
+  ];
+  for (const item of cases) {
+    const set = replicas(2, source), doc = { ...source, comments: [] }, ports = { ...runtime.ports, newId: () => "new", operations: { id: "action", by: "Writer" } };
+    try {
+      registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.a);
+      const pos = item.kind.includes("heading") ? headingPos(item.owner, item.offset) : beatPos(item.owner, item.offset);
+      const out = item.kind === "beat" ? startBeat(doc, pos, ports) : item.kind === "paragraph" ? startParagraph(doc, pos, ports)
+        : item.kind === "heading" ? enterInHeading(doc, pos, ports) : insertBeats(doc, pos, [{ id: "pasted", audioText: "P" }], ports);
+      assert.ok(out && "ops" in out); assert.equal(out.ops?.[0]?.kind, "segment-create");
+      assert.equal((out.ops?.[0] as { at: { affinity: string } }).at.affinity, item.affinity);
+      run(set.a, doc, out); set.queue.flush("rev");
+      agree("scene gap " + item.kind + item.owner + item.offset, "rev", [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), item.expected);
+    } finally { set.close(); }
+  }
+});
+
+test("reverse-emitted pasted groups stay before the next scene's heading", () => {
+  for (const first of [false, true]) {
+    const source = { rows: [{ id: "R0", audioText: "abcd" }, { id: "R1", audioText: "efgh" }],
+      sections: [{ id: "H0", name: "First", firstSceneId: "R0" }, { id: "H1", name: "Second", firstSceneId: "R1" }] };
+    const set = replicas(2, source), doc = { ...source, comments: [] };
+    try {
+      registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.a);
+      run(set.a, doc, insertBeats(doc, first ? headingPos("H0", 0) : beatPos("R0", 4), [{ id: "p1", audioText: "P" }, { id: "p2", audioText: "Q" }],
+        { ...runtime.ports, operations: { id: "paste", by: "Writer" } }));
+      const p1 = JSON.stringify(["structure", "1", "paste:2", "beat"]), p2 = JSON.stringify(["structure", "1", "paste:0", "beat"]);
+      const expected = first ? [[p1, null], [p2, null], ["R0", "H0"], ["R1", "H1"]] : [["R0", "H0"], [p1, "H0"], [p2, "H0"], ["R1", "H1"]];
+      set.queue.flush("dup"); agree("reverse paste scene edge", "dup", [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), expected);
+    } finally { set.close(); }
+  }
+});
+
+test("concurrent creations keep their own scenes at the middle, end and first heading", () => {
+  for (const edge of ["middle", "end", "first"] as const) for (const order of ["D1", "dup", "rev", "late-C"] as const) {
+    const source = { rows: [{ id: "R0", audioText: "abcd" }, { id: "R1", audioText: "efgh", paragraphStart: true }],
+      sections: [{ id: "H0", name: "First", firstSceneId: "R0" }, { id: "H1", name: "Second", firstSceneId: "R1" }] };
+    const set = replicas(2, source), doc = { ...source, comments: [] };
+    try {
+      for (const handle of [set.a, set.b]) registerSharedSplitHandlers(handle, structurePorts);
+      const ports = { ...runtime.ports, newId: () => "same", operations: { id: "enter", by: "Writer" } };
+      run(set.a, doc, edge === "first" ? enterInHeading(doc, headingPos("H0", 0), ports) : startBeat(doc, beatPos(edge === "middle" ? "R0" : "R1", 4), ports));
+      run(set.b, doc, startParagraph(doc, beatPos(edge === "first" ? "R0" : "R1", edge === "end" ? 4 : 0), ports));
+      const a = JSON.stringify(["structure", "1", "enter:0", "beat"]), b = JSON.stringify(["structure", "2", "enter:0", "beat"]);
+      const expected = edge === "middle" ? [["R0", "H0"], [a, "H0"], [b, "H1"], ["R1", "H1"]]
+        : edge === "end" ? [["R0", "H0"], ["R1", "H1"], [a, "H1"], [b, "H1"]] : [[a, null], [b, "H0"], ["R0", "H0"], ["R1", "H1"]];
+      set.queue.flush(order); agree("concurrent scene intent " + edge, order, [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), expected);
+    } finally { set.close(); }
+  }
 });

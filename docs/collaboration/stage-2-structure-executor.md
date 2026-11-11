@@ -24,6 +24,33 @@ be absent during preparation; the available neighbour determines placement, or a
 null right neighbour means document end, matching the independent flow applier.
 Two existing neighbours in reversed order refuse the entire list.
 
+The creation emitter records scene intent: `before` joins the right neighbour's
+scene, while `after` stays on the left side of any intervening heading. With no
+left neighbour yet, `after` falls back before the right neighbour's preceding
+headings. The order cache supplies that preceding position without rereading the
+whole order. This also covers reverse-emitted groups and insertion before the
+first heading. Scene repairs are supplied to the emitter before describing a
+creation; the executor does not infer intent from later scalar operations.
+
+| Emitter | Affinity and scene intent |
+| --- | --- |
+| replaceRange repair | before when the repaired row joins its right neighbour's repaired scene, otherwise after |
+| startParagraph end, startBeat end, blankAfter | before within the same scene; after at a scene or script end |
+| startParagraph beginning, blankBefore | before, using the repaired scene anchor to join the right beat |
+| enterInHeading at zero | after, placing narration before that heading |
+| finalizeHeading empty retained beat | before within the right scene, otherwise after; heading-finalize subsequently claims the retained beat |
+| finalizeHeading existing-scene repair | before within the repaired scene, otherwise after |
+| insertBeats | before when the right neighbour belongs to the insertion scene, otherwise after; heading offset zero stays before the heading |
+| pasteFlowRange empty/header placeholders | before within the repaired scene, otherwise after; heading-create subsequently claims new heading placeholders |
+| splitBeat, selectionToOwnBeat, insertBeats narration split | before a right text unit, after the last left unit; the text address stays inside the source beat's scene |
+| enterInHeading and insertBeats heading-tail split | before a right heading unit, after the last left unit; the resulting beat remains under that heading |
+
+These are emitted-list changes only: standalone rows and sections are unchanged.
+The independent flow applier honours the same affinity when choosing a row gap.
+Literal tests compare the heading preceding every shared row at scene and script
+edges, including concurrent creation and encoded late joins. The app agreement
+helper also compares shared scene anchors with the app and independent applier.
+
 Initial narration and visual runs use the existing text and mark preparation.
 Every created beat gets an independent visual text/store; `beats[id].visual` names
 that component, whose own `beat` remains its origin. Gallery records retain slot
@@ -35,7 +62,8 @@ their supplied names; it does not create a second text or attachment. A conflict
 observation refuses the whole list. Later calls use native identities from paint.
 
 Legacy image data URLs and gallery links containing device-local locations refuse
-the whole list; ingesting those bytes remains a caller responsibility. Prefix
+the whole list; duplicate gallery links also refuse `invalid-initial-gallery`.
+Ingesting local bytes remains a caller responsibility. Prefix
 splits accept narration; a heading prefix returns
 `invalid-split-target`. No flow emitter produces that heading-prefix operation.
 
@@ -82,5 +110,5 @@ its interpretation belongs to the projection lane.
 Join, removal, restoration, heading creation/removal/finalization, movement,
 recovery placement and undo remain later cuts. In particular, the heading-name
 `cappedText` rule, imported-layout movement and the remaining structural Stage 1
-histories are still open here. Nothing in this change edits standalone flow,
-application, features, bootstrap, exports or browser behaviour.
+histories are still open here. Standalone flow results, application, features,
+bootstrap, exports and browser behaviour remain unchanged.

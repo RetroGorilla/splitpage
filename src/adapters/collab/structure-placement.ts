@@ -1,10 +1,11 @@
 import type { SharedContentRef, SharedIdentityGap } from "../../core/collab/operations.ts";
 import type { SharedPreparationView } from "./prepare.ts";
 import type { SharedStructureOrderView } from "./structure-order.ts";
-import { sharedStructureSegment, prepareSharedOrderInsertion, sharedPlannedSegmentIndex } from "./structure-order.ts";
+import { sharedStructureSegment, prepareSharedOrderInsertion, sharedPlannedSegmentIndex, sharedPlannedSegmentAt } from "./structure-order.ts";
 import { sharedStructureReference, SharedStructurePreparationError } from "./structure-identity.ts";
 import { sharedStructureSpans } from "./structure-boundary.ts";
 import { sharedTextCommandPlan, sharedTextInsertionPosition } from "./executor-text-plan.ts";
+import { readProjectionHead } from "./projection-reader.ts";
 
 export function prepareSharedBeatPlacement(view: SharedPreparationView, order: SharedStructureOrderView, gap: SharedIdentityGap, segment: string) {
   const locate = (reference: SharedContentRef | null) => {
@@ -32,7 +33,16 @@ export function prepareSharedBeatPlacement(view: SharedPreparationView, order: S
         return { kind: "inline" as const, plan, offset };
       }
     }
-    const at = { left: side === "left" ? key as SharedContentRef : null, right: side === "right" ? key as SharedContentRef : null, affinity: gap.affinity };
+    let rightKey = key;
+    if (side === "right" && gap.affinity === "after") {
+      for (let index = located.index - 1; index >= 0; index--) {
+        const previous = sharedPlannedSegmentAt(view, order, index);
+        const head = previous === undefined ? undefined : view.get(["segments", previous, "head"]);
+        if (readProjectionHead(head)?.kind !== "h") break;
+        rightKey = previous as string;
+      }
+    }
+    const at = { left: side === "left" ? key as SharedContentRef : null, right: side === "right" ? rightKey as SharedContentRef : null, affinity: gap.affinity };
     return { kind: "order" as const, index: prepareSharedOrderInsertion(view, order, at, segment) };
   }
   if (gap.right !== null) throw new SharedStructurePreparationError("missing-order-target");

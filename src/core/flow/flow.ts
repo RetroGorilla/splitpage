@@ -330,9 +330,9 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
     repaired.push({ kind: "beat", row: blankRow(ports.newId(), false), origin: source[0]?.origin ?? from });
   }
   const rows = repaired.flatMap(part => part.kind === "beat" ? [part.row] : []);
-  if (ports.trace) rows.forEach((row, index) => { if (!doc.rows.some(item => item.id === row.id)) ports.trace?.create(row, rows, index); });
   const sections = repaired.flatMap((part, index) => part.kind === "heading"
     ? [withSceneFirstBeat(part.scene, (repaired[index + 1] as { row: FlowRow }).row.id)] : []);
+  if (ports.trace) rows.forEach((row, index) => { if (!doc.rows.some(item => item.id === row.id)) ports.trace?.create(row, rows, index, sections); });
   let caret: FlowPos;
   const firstRow = from.kind === "beat" ? kept.get(from.rowId) ?? replacementRow : undefined;
   const firstHeading = from.kind === "heading" ? sections.find(scene => scene.id === from.sceneId) : undefined;
@@ -420,7 +420,7 @@ export function startParagraph(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
     const fresh = blankRow(ports.newId(), true);
     const rows = doc.rows.slice();
     rows.splice(index + 1, 0, fresh);
-    ports.trace?.create(fresh, rows, index + 1);
+    ports.trace?.create(fresh, rows, index + 1, doc.sections);
     return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
   }
   if (pos.offset === 0) {
@@ -432,8 +432,8 @@ export function startParagraph(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
     const fresh = blankRow(ports.newId(), !!row.paragraphStart);
     rows[index] = withFlag(row);
     rows.splice(index, 0, fresh);
-    ports.trace?.create(fresh, rows, index);
     const sections = scenesOf(doc).map(scene => scene.firstSceneId === row.id ? withSceneFirstBeat(scene, fresh.id) : scene);
+    ports.trace?.create(fresh, rows, index, sections);
     return edit(doc, rows, caretAt(pos), { sections: sections.length ? sections : undefined });
   }
   return splitBeat(doc, index, pos.offset, true, ports);
@@ -463,7 +463,7 @@ export function startBeat(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): FlowOut
     const fresh = blankRow(ports.newId(), false);
     const rows = doc.rows.slice();
     rows.splice(index + 1, 0, fresh);
-    ports.trace?.create(fresh, rows, index + 1);
+    ports.trace?.create(fresh, rows, index + 1, doc.sections);
     return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
   }
   return splitBeat(doc, index, pos.offset, false, ports);
@@ -473,7 +473,7 @@ function blankAfter(doc: FlowDoc, index: number, ports: FlowPorts): FlowEdit {
   const fresh = blankRow(ports.newId(), false);
   const rows = doc.rows.slice();
   rows.splice(index + 1, 0, fresh);
-  ports.trace?.create(fresh, rows, index + 1);
+  ports.trace?.create(fresh, rows, index + 1, doc.sections);
   return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
 }
 
@@ -483,8 +483,8 @@ function blankBefore(doc: FlowDoc, index: number, pos: FlowPos, ports: FlowPorts
   const rows = doc.rows.slice();
   rows[index] = withoutFlag(row);
   rows.splice(index, 0, fresh);
-  ports.trace?.create(fresh, rows, index);
   const sections = scenesOf(doc).map(scene => scene.firstSceneId === row.id ? withSceneFirstBeat(scene, fresh.id) : scene);
+  ports.trace?.create(fresh, rows, index, sections);
   return edit(doc, rows, caretAt(pos), { sections: sections.length ? sections : undefined });
 }
 
@@ -717,7 +717,7 @@ export function enterInHeading(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
     const rows = doc.rows.slice();
     const fresh = blankRow(ports.newId(), false);
     rows.splice(indexOfRow(doc, scene.firstSceneId), 0, fresh);
-    ports.trace?.create(fresh, rows, indexOfRow(doc, scene.firstSceneId));
+    ports.trace?.create(fresh, rows, indexOfRow(doc, scene.firstSceneId), doc.sections);
     return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
   }
   const head = scene.name.slice(0, pos.offset), tail = scene.name.slice(pos.offset);
@@ -790,7 +790,7 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
     } else {
       first = blankRow(ports.newId(), false);
       rows.splice(index, 0, first);
-      ports.trace?.create(first, rows, index);
+      ports.trace?.create(first, rows, index, doc.sections);
     }
   } else {
     first = withoutFlag(writeCell(row, rest));
@@ -810,8 +810,8 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
     const stale = scenes.findIndex(item => item.id === existing.id);
     const blank = blankRow(ports.newId(), false);
     rows.splice(index, 0, blank);
-    ports.trace?.create(blank, rows, index);
     scenes[stale] = withSceneFirstBeat(existing, blank.id);
+    ports.trace?.create(blank, rows, index, scenes);
   }
   scenes.push(fresh);
   const sections = scenesOf({ rows, sections: scenes });
@@ -1180,7 +1180,7 @@ export function insertBeats(doc: FlowDoc, pos: FlowPos, beats: readonly FlowRow[
   rows.splice(index, 0, ...placed);
   if (ports.trace) for (const row of placed.slice().reverse()) {
     if (ports.trace.moving.has(row.id)) continue;
-    ports.trace.create({ ...row, audioText: "" }, rows, rows.indexOf(row));
+    ports.trace.create({ ...row, audioText: "" }, rows, rows.indexOf(row), sections);
     ports.trace.insert(row.id, [], 0, ports.cells(row.audioText));
     if (ports.cells(row.visualText).length) ports.trace.emit({ kind: "record-create", target: { collection: "visuals", record: flowIdentity(row.id + ":visual") },
       fields: { beat: row.id, html: row.visualText ?? "" } });
@@ -1293,8 +1293,8 @@ export function pasteFlowRange(doc: FlowDoc, range: FlowRange, clip: FlowClipboa
       if (scene.firstSceneId !== marker.id) continue;
       const blank = blankRow(ports.newId(), false);
       rows.splice(index, 0, blank);
-      ports.trace?.create(blank, rows, index);
       sections[i] = { ...scene, firstSceneId: blank.id };
+      ports.trace?.create(blank, rows, index, sections);
       insertionIndex++;
     }
   }
@@ -1304,16 +1304,16 @@ export function pasteFlowRange(doc: FlowDoc, range: FlowRange, clip: FlowClipboa
     if (!rows[offset]) {
       const blank = blankRow(ports.newId(), false);
       rows.push(blank);
-      ports.trace?.create(blank, rows, rows.length - 1);
+      ports.trace?.create(blank, rows, rows.length - 1, sections);
     }
     let first = rows[offset] as FlowRow;
     const existing = sections.find(scene => scene.firstSceneId === first.id);
     if (existing) {
       const blank = blankRow(ports.newId(), false);
       rows.splice(offset, 0, blank);
-      ports.trace?.create(blank, rows, offset);
       if (originalAnchors.get(existing.id) !== first.id) sections[sections.indexOf(existing)] = { ...existing, firstSceneId: blank.id };
       else first = blank;
+      ports.trace?.create(blank, rows, offset, sections);
     }
     const scene = { ...header.scene, id: ports.newId(), firstSceneId: first.id };
     sections.push(scene);
