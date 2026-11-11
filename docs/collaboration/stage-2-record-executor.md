@@ -10,8 +10,8 @@ the original operation, its index and a reason, without modifying encoded state.
 Other executors call `registerSharedOperationHandlers(handle, handlers)` from
 `operation-handlers.ts`. A handler maps a vocabulary kind to
 `(operation, view) => {ok:false, reason} | {ok:true, writes, apply}`. The read-only
-view has `get(path)`, `kind(path)`, `keys(path)` and the live `writer` identity;
-its returned values are frozen. `writes` describes fixed path effects (`set`,
+view has `get(path)`, `kind(path)`, `keys(path)`, `text(path)`, per-call `scratch`
+and the live `writer` identity; ordinary read values are frozen. `writes` describes fixed path effects (`set`,
 `delete`, `map`, `text`, `array`) which the entry adds to its overlay. A later
 prepare sees those effects without a copy of the document. Each `apply(handle)`
 executes its already-fixed plan, with no validation or semantic decisions.
@@ -29,6 +29,55 @@ entry's prepared apply phase may use the low-level write interpreter.
 Registration is per live handle and duplicate kinds are refused. Scalar/status
 handlers are built in; text and structure handlers register from their own files.
 No application caller imports the executor. Typing, undo and save paths are untouched.
+
+## Text preparation and mechanical apply
+
+Prepare decides refusal, the units to insert or delete, mark ranges, every record identity
+`[writer, operation id]`, and every observed record identity named by a removal or birth.
+Records planned earlier in the same call are named by their already-known identity.
+Positions are plain UTF-16 indices into the text at that operation's own apply step.
+Apply steps run in list order inside one transaction, with no intervening commands.
+At step k the text therefore equals the planned text after steps before k.
+Apply mechanically translates indices to native anchors and reads the born
+`{client, clock, length}` from the insertion it just made. It does no validation or
+branching on document content; a failure means the prepared plan or its interpreter is defective.
+
+`view.text(path)` caches a frozen facade for one existing text: UTF-16 units and
+their current marks, occupied canonical record keys, validated records with resolved
+ranges (including empty ranges and gone anchors), and `resolveAnchor` returning an
+index or collapsed gap with its affinity, or gone. Embedded payloads are frozen plain wire values.
+No native type leaves the facade. It represents live base text; subsequent text
+planning lives in scratch, while other handler families read planned values through
+ordinary `text` writes in the overlay. A virtual new text has no live facade.
+
+`view.scratch(key, create)` retains a handler's mutable plan only for this prepare
+phase. Text handlers build it once from base units indexed by their live positions,
+advance it in list order, and label inserted units with operation id and offset.
+This maps original-base references and references to an earlier insertion through
+earlier planned edits, including a collapsed gap. Scratch and caches are cleared
+when prepare ends, and later access through the view or an anchor resolver throws.
+
+`prepareSharedMarkWrite` validates a fixed mark plan from plain length, occupied
+record identities and chosen indices/payload/observations. `applySharedMarkWrite(handle,
+{target, plan})` encodes anchors and appends a fixed existing-text record.
+`applySharedTextEdit(handle, {target, edit, marks})` performs a fixed insertion,
+embedded-atom insertion or deletion, then appends its fixed records; an `inserted`
+record plan receives the native birth identity from that insertion.
+`applySharedTextAnchor(handle, {target, index, affinity})` mechanically encodes a position.
+All three require the entry's applying phase, open no transaction, and refuse idle,
+prepare and observer calls. The older idle-only authoring helpers retain validation
+and share native mutation primitives with these interpreters. Text creation remains
+the structure executor's responsibility; these helpers require an existing text and store.
+
+`readSharedRevision(handle)` is a replica-local monotonic number, never stored or
+encoded. A transaction changing the document increments it once, regardless of origin;
+empty transactions and duplicate deliveries leave it unchanged. The optional third
+entry argument `{base}` is checked before preparing any operation. A mismatch returns
+`{ok:false, reason:"stale-base"}` without writing. Package 9b will capture this token
+when painting. Refused and empty calls deliver no update; a changing accepted call
+uses one transaction and delivers one update under the live client identity.
+The view's readonly `base` is that checked token, or null for an unversioned call;
+text handlers can therefore refuse base references when the precondition was not supplied.
 
 ## Scalar coverage
 

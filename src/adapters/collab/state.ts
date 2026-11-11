@@ -17,6 +17,7 @@ export class CollabDocumentState {
   readonly doc = new Y.Doc();
   readonly roots = declareCollabRoots(this.doc);
   fresh = true;
+  revision = 0;
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
   readonly hydrationTransactions = new WeakSet<Y.Transaction>();
   hydrating = false;
@@ -26,6 +27,8 @@ export class CollabDocumentState {
 
   constructor() {
     this.doc.on("beforeObserverCalls", transaction => {
+      if (transaction.changed.size || transaction.deleteSet.clients.size || transaction.beforeState.size !== transaction.afterState.size
+        || [...transaction.beforeState].some(([client, clock]) => transaction.afterState.get(client) !== clock)) this.revision++;
       if (this.adapterTransactions.has(transaction)) this.adapterBatch = true;
       // why: The completed delete set distinguishes native formatting maintenance from ordinary observer writes.
       if (this.adapterBatch && transaction.origin === null && transaction.local && formattingCleanup(transaction)) transaction.origin = "cleanup";
