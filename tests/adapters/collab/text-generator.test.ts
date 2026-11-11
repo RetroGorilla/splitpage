@@ -6,7 +6,7 @@ import { TextExecutorTraceReplica } from "./text-trace-replica.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 
-test("seeded text executor obeys the independent rule in two and three writer histories", t => {
+test("seeded text and mark executor obeys the independent rule in two and three writer histories", t => {
   const limits: readonly string[] = [], violations: string[] = [];
   const kinds = new Map<string, number>(), variants = new Set<string>(), schedules = new Map(deliveryOrders.map(order => [order, 0]));
   let commands = 0, deliveries = 0, checkpoints = 0, joins = 0, sameHistories = 0;
@@ -30,7 +30,7 @@ test("seeded text executor obeys the independent rule in two and three writer hi
   }
   assert.deepEqual(violations, limits);
   assert.deepEqual([...schedules], [["D1",48],["D2",48],["D3",48],["dup",48],["rev",48],["late-C",48]]);
-  assert.deepEqual([...kinds].sort(), [["text-delete", 7200], ["text-insert", 14400]]);
+  assert.deepEqual([...kinds].sort(), [["mark", 14400], ["text-delete", 7200], ["text-insert", 14400]]);
   assert.equal(variants.size, 24); assert.equal(commands, 36000); assert.equal(deliveries, 70200); assert.equal(checkpoints, 6336); assert.equal(joins, 288); assert.equal(sameHistories, 96);
-  t.diagnostic(JSON.stringify({ commands, executed: [...kinds], legacyMarkCommands: commands - 21600, deliveries, checkpoints, joins, sameHistories, schedules: [...schedules], variants: variants.size, limits }));
+  t.diagnostic(JSON.stringify({ commands, executed: [...kinds], deliveries, checkpoints, joins, sameHistories, schedules: [...schedules], variants: variants.size, limits }));
 });

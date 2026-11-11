@@ -15,8 +15,12 @@ export class TextExecutorTraceReplica extends MarkTraceReplica {
     super(client, initial, state); this.executed = executed; registerSharedTextOperationHandlers(this.handle);
   }
   override execute(command: MarkTraceCommand): void {
-    if (command.kind === "add" || command.kind === "remove") { super.execute(command); return; }
     const observed = captureSharedTextRange(this.handle, this.target, command.from, command.to); assert.ok(observed);
+    if (command.kind === "add" || command.kind === "remove") {
+      assert.ok(command.mark);
+      const mark = command.kind === "remove" ? { ...command.mark, value: null } : command.mark;
+      assert.deepEqual(executeSharedOperations(this.handle, [operation({ kind: "mark", id: command.id, by: "Writer", target: this.target, observed: [observed], mark })]), { ok: true }); this.executed("mark"); return;
+    }
     const at = createSharedAnchor(this.handle, this.target, command.from, "after"); assert.ok(at);
     const runs = this.read().map(char => ({ text: char.value, marks: Object.fromEntries(char.marks.filter(mark => !("id" in mark)).map(mark => [mark.kind, true])) as Marks }));
     const marks = command.mode === "inherit" ? Object.keys(typingMarks(runs, command.from)).map(kind => markTraceExample(kind as "b"))

@@ -1,36 +1,18 @@
-import type { SharedTextInsert, SharedTextDelete, SharedInlineValue, SharedTextAddress } from "../../core/collab/operations.ts";
+import type { SharedTextInsert, SharedTextDelete, SharedInlineValue } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
-import type { SharedTextCommandPlan } from "./executor-text-plan.ts";
-import type { SharedMarkWriteChangeInput, SharedMarkWritePlan } from "./mark-plan.ts";
+import type { SharedPreparationView } from "./prepare.ts";
+import type { SharedMarkWritePlan } from "./mark-plan.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextRange, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
-import { prepareSharedMarkWrite } from "./mark-plan.ts";
-import { applySharedTextEdit } from "./text-edit.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { freezeSharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
-import { applySharedMarkWrite } from "./mark-store.ts";
+import { sharedPreparedTextInsert } from "./prepare-value.ts";
 import { prepareSharedMarkTranslation } from "./mark-translation.ts";
 
-export type SharedTextExecutionStep = { readonly kind: "edit"; readonly write: SharedTextWritePlan }
-  | { readonly kind: "mark"; readonly target: SharedTextAddress; readonly plan: Extract<SharedMarkWritePlan, { kind: "record" }> };
-export interface SharedTextExecutionDescription { readonly steps: readonly SharedTextExecutionStep[] }
-export type SharedTextOperationPreparation = Extract<SharedPreparationResult, { ok: false }>
-  | (Extract<SharedPreparationResult, { ok: true }> & { readonly description: SharedTextExecutionDescription });
-
-function applyTextDescription(handle: SharedDocumentHandle, description: SharedTextExecutionDescription): void {
-  for (const step of description.steps) {
-    if (step.kind === "edit") applySharedTextEdit(handle, step.write);
-    else applySharedMarkWrite(handle, { target: step.target, plan: step.plan });
-  }
-}
-
-export function preparedTextDescription(writes: readonly SharedPreparedWrite[], steps: readonly SharedTextExecutionStep[]): Extract<SharedTextOperationPreparation, { ok: true }> {
-  const description = freezeSharedPreparedValue({ steps }), fixedWrites = freezeSharedPreparedValue(writes);
-  return { ok: true, writes: fixedWrites, description, apply: handle => applyTextDescription(handle, description) };
-}
+import { preparedTextDescription, prepareTextMarkWrite, preparedTextOperation } from "./text-description.ts";
+import type { SharedTextOperationPreparation } from "./text-description.ts";
+import { prepareSharedMarkChange } from "./mark-executor.ts";
 
 function inline(value: SharedInlineValue): string | Readonly<Record<string, unknown>> {
   if (typeof value === "string") return value;
@@ -42,19 +24,6 @@ function inline(value: SharedInlineValue): string | Readonly<Record<string, unkn
     case "image": return { img: value.ref };
     case "video": return { video: value.href, host: value.host };
   }
-}
-
-export function prepareTextMarkWrite(plan: SharedTextCommandPlan, view: SharedPreparationView, operation: string, from: number, to: number, change: SharedMarkWriteChangeInput): SharedMarkWritePlan {
-  const record = prepareSharedMarkWrite({ length: plan.units.length, recordKeys: plan.recordKeys }, Number(view.writer), operation, from, to, change);
-  if (!record) throw new SharedTextPreparationError("invalid-or-existing-mark-record");
-  plan.recordKeys.push(record.identity);
-  if (record.change.type === "add") plan.additions.push({ identity: record.identity, mark: record.change.mark });
-  return record;
-}
-
-export function preparedTextOperation(prepare: () => SharedTextOperationPreparation): SharedTextOperationPreparation {
-  try { return prepare(); }
-  catch (error) { if (error instanceof SharedTextPreparationError) return { ok: false, reason: error.message }; throw error; }
 }
 
 function checkAuthor(operation: SharedTextInsert | SharedTextDelete): void {
@@ -118,5 +87,5 @@ export function prepareSharedTextDeletion(operation: SharedTextDelete, view: Sha
 }
 
 export function registerSharedTextOperationHandlers(handle: SharedDocumentHandle): void {
-  registerSharedOperationHandlers(handle, { "text-insert": prepareSharedTextInsertion, "text-delete": prepareSharedTextDeletion });
+  registerSharedOperationHandlers(handle, { "text-insert": prepareSharedTextInsertion, "text-delete": prepareSharedTextDeletion, mark: prepareSharedMarkChange });
 }
