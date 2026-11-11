@@ -37,13 +37,15 @@ const testSteps = ci.jobs.tests.steps;
 assert.equal(testSteps.find((s) => s.name === cache.name)?.run, cache.run);
 assert.ok(testSteps.find((s) => s.name === "Install Chromium")?.run.includes("--with-deps"));
 assert.ok(testSteps.findIndex((s) => s.name === "Install Chromium") < testSteps.findIndex((s) => s.run?.includes("npm run test:all")));
-const installWithFallback = /^npx --yes playwright@\$\{PLAYWRIGHT_VERSION\} install \$\{\{ runner\.environment == 'github-hosted' && '--with-deps' \|\| '' \}\} chromium \|\| \{\n(?: *#[^\n]*\n)* *echo "::warning::[^\n"]*"\n *npx --yes playwright@\$\{PLAYWRIGHT_VERSION\} install chromium\n\}\n/;
+const installWithRetry = /^(npx --yes playwright@\$\{PLAYWRIGHT_VERSION\} install \$\{\{ runner\.environment == 'github-hosted' && '--with-deps' \|\| '' \}\} chromium) \|\| \{\n(?: *#[^\n]*\n)* *echo "::warning::[^\n"]*"\n *echo "nameserver 1\.1\.1\.1" \| sudo -n tee \/etc\/resolv\.conf > \/dev\/null\n *\1\n\}\n/;
 for (const list of [steps, testSteps]) {
   const install = list.find((s) => s.name === "Install Chromium").run;
-  assert.match(install, installWithFallback);
-  assert.doesNotMatch(install.replace("\n  npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium\n", "\n  echo install chromium\n"), installWithFallback);
-  assert.doesNotMatch("true || " + install, installWithFallback);
+  assert.match(install, installWithRetry);
+  assert.doesNotMatch(install.replace(/\n {2}npx[^\n]*\n\}\n/, "\n  echo install chromium\n}\n"), installWithRetry);
+  assert.doesNotMatch(install.replace("--with-deps' || '' }} chromium\n}", "' || '' }} chromium\n}"), installWithRetry);
+  assert.doesNotMatch("true || " + install, installWithRetry);
 }
+assert.match(ci.jobs["desktop-smoke"].steps.find((s) => s.name === "Xvfb and Chromium's shared libraries").run, /^packages\(\) \{\n *sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb && npx --yes playwright@\$\{PLAYWRIGHT_VERSION\} install-deps chromium\n\}\npackages \|\| \{\n(?: *#[^\n]*\n)* *echo "::warning::[^\n"]*"\n *echo "nameserver 1\.1\.1\.1" \| sudo -n tee \/etc\/resolv\.conf > \/dev\/null\n *packages\n\}\n$/);
 assert.equal(ci.jobs.tests.env.SPLITPAGE_CHROME_ARGS, ci.jobs.checks.env.SPLITPAGE_CHROME_ARGS);
 
 const gitPath = process.platform === "win32" ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim() : null;
