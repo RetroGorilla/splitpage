@@ -1,0 +1,5 @@
+[
+  {"writer":0,"command":{"id":"A1","kind":"add","from":1,"to":3,"mark":{"kind":"i","value":true}},"selected":["s1","s2"],"before":"s0","after":"s3"},
+  {"writer":0,"command":{"id":"A2","kind":"delete","from":1,"to":3},"selected":["s1","s2"],"before":"s0","after":"s3"},
+  {"writer":1,"command":{"id":"B1","kind":"insert","from":2,"to":2,"text":"X","mode":"plain"},"selected":[],"before":"s1","after":"s2","position":1500}
+]

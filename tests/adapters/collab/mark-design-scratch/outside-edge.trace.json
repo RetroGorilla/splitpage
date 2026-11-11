@@ -1,0 +1,4 @@
+[
+  {"writer":1,"command":{"id":"B1","kind":"insert","from":1,"to":1,"text":"X","mode":"plain"},"selected":[],"before":"s0","after":"s1","position":500},
+  {"writer":0,"command":{"id":"A1","kind":"add","from":1,"to":3,"mark":{"kind":"b","value":true}},"selected":["s1","s2"],"before":"s0","after":"s3"}
+]
