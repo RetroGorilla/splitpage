@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { createMonitoredSharedDocument, validatedFixture, deliveryReplica } from "./helpers.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
-import { destroySharedDocument, encodeSharedState, encodeSharedStateVector, observeSharedTransactions, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { destroySharedDocument, encodeSharedState, encodeSharedStateVector, observeSharedTransactions, transactSharedDocument, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { registerSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
@@ -35,6 +35,39 @@ function read(handle: SharedDocumentHandle, target: SharedTextAddress) {
   const prep = createSharedPreparation(handle), located = sharedTextLocation(prep.view, target); prep.close();
   const result = readSharedMarkCharacters(handle, located.target); assert.ok(result); return result;
 }
+
+test("reversed native spans refuse alone, after 50 marks and before planned deletion can collapse their endpoints", () => {
+  for (const prefix of ["alone", "marks", "deletion"] as const) {
+    const handle = fixture();
+    try {
+      const target = address(handle, "audioText"), observed = range(handle, target, 1, 3), span = JSON.parse(observed) as unknown[];
+      [span[2], span[3]] = [span[3], span[2]];
+      const mark = (id: string, reference: string) => operation({ kind: "mark", id, by: "A", target, observed: [reference], mark: { kind: "b", value: true } });
+      const before = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle), updates: Uint8Array[] = [];
+      const stop = deliveryReplica(handle).onLocalUpdate(bytes => updates.push(bytes));
+      const commands = prefix === "marks" ? Array.from({ length: 50 }, (_, index) => mark("valid" + index, observed))
+        : prefix === "deletion" ? [operation({ kind: "text-delete", id: "delete", by: "A", target, observed: [observed] })] : [];
+      const rejected = mark("reversed", JSON.stringify(span));
+      assert.deepEqual(executeSharedOperations(handle, [...commands, rejected]), { ok: false, index: commands.length, operation: rejected, reason: "invalid-reference" });
+      assert.deepEqual(encodeSharedState(handle), before); assert.deepEqual(encodeSharedStateVector(handle), vector);
+      assert.equal(readSharedRevision(handle), revision); assert.equal(updates.length, 0); stop();
+    } finally { destroySharedDocument(handle); }
+  }
+});
+
+test("legitimate native spans collapsed by planned or committed deletion remain accepted", () => {
+  for (const separate of [false, true]) {
+    const handle = fixture();
+    try {
+      const target = address(handle, "audioText"), observed = range(handle, target, 1, 3);
+      const deletion = operation({ kind: "text-delete", id: "delete", by: "A", target, observed: [observed] });
+      const mark = operation({ kind: "mark", id: "collapsed", by: "A", target, observed: [observed], mark: { kind: "b", value: true } });
+      if (separate) assert.deepEqual(executeSharedOperations(handle, [deletion]), { ok: true });
+      assert.deepEqual(executeSharedOperations(handle, separate ? [mark] : [deletion, mark]), { ok: true });
+      assert.deepEqual(read(handle, target).map(char => [char.value, char.marks]), [["a", []], ["d", []]]);
+    } finally { destroySharedDocument(handle); }
+  }
+});
 
 for (const field of ["audioText", "visualText", "heading", "title"] as const) test(`all mark additions and removals share one transaction on ${field}`, () => {
   const handle = fixture();

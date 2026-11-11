@@ -9,6 +9,19 @@ the mark; this executor creates no comment body, registry entry or other record.
 Identified marks follow the [Stage 2 occurrence and payload convention](stage-2-identified-marks.md).
 Range additions and removals use this same entry and the same prepare translator.
 
+In a shared script, identified names (tag registry ids, link URLs and comment anchors)
+are present or absent per character: shared content readers union surviving additions
+by kind and payload. The preparation facade retains native identities so a removal
+can name every observed addition.
+Occurrences are immutable storage records, not visible layers. Applying a name adds it
+where missing; clearing a name removes every observed addition with that payload on
+the selected units. Two concurrent additions of one name therefore read once, and
+one later clear removes both. The translator's observed-addition rule is unchanged.
+Standalone can nest the same tag name twice; a shared script shows that name once,
+including when sharing text that already contains doubled tags. The literal add and
+clear differences in narration and visual text are declared in
+`tests/core/flow/mark-occurrence-cases.ts` and pinned by the adapter occurrence tests.
+
 All handlers prepare through the read-only view. Their per-text scratch plan contains
 only plain objects and arrays: original units, units of earlier insertions, moving
 gap indices, known record identities and the active additions on each planned unit.
@@ -42,6 +55,8 @@ heading edits retain their current raw-offset behavior.
 `["shared-text-span", target, startAnchor, endAnchor, unitAnchors]` reference.
 The endpoints follow concurrent text edits. Unit anchors retain the exact observed
 characters for deletion, so a concurrent insertion inside the range is not deleted.
+Reversed live endpoints are refused before mapping through earlier planned edits;
+valid endpoints collapsed to one gap by deletion remain accepted.
 An ordinary adapter anchor can also name a position or one observed character.
 Each operation targets one text; a list can edit several texts atomically.
 
@@ -104,8 +119,10 @@ Full T11 body/reply metadata needs record-handler integration, structural traces
 The three mark-design histories run for all ten kinds through the entry, along with
 the outside-edge literal. The independent seeded model now executes every command
 through the entry: text insertion/deletion and all range mark additions/removals.
-Its declared limits table is empty. The structural and range-flow comparisons retain
-only the separately decided heading rule: raw offsets inside a surrogate pair keep a
+Its declared limits table is empty. The structural and range-flow generators retain
+the separately decided heading rule: raw offsets inside a surrogate pair keep a
 half in standalone headings, while shared edits clamp to pair boundaries. Range-flow
 test reading uses the app's cell serialization and sanitizer; production projection
-is not implemented here.
+is not implemented here. The additional literal tag-name limit covers exactly the
+same-name addition and clear in narration and visual text: standalone may keep nested
+copies of one name; shared content shows that name once, and one clear removes it.
