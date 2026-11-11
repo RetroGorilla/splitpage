@@ -5,6 +5,9 @@ plain validated data in core; adapters read native segment heads, embedded
 boundaries, mark records, joins and removal flags. Reading changes no shared
 bytes, state vector, revision or transaction count. No executor or cache is added.
 
+Production ordinary/prefix splits and blank creation are covered by the
+[split projection rules](stage-2-split-projection.md), including malformed boundary recovery.
+
 ## Answers and literal tests
 
 Source lines refer to [Stage 0 answers](stage-0/8-schema-hypotheses.md#projection-answers-for-merged-states-both-candidates).
