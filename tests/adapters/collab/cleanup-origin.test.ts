@@ -9,6 +9,7 @@ import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { DeliveryQueue, deliveryOrders } from "../../collab/delivery.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { deliveryReplica, storedValue, validatedFixture } from "./helpers.ts";
+import { formattingLibraryControl } from "./formatting-controls.ts";
 
 function textOf(handle: SharedDocumentHandle): Y.Text {
   const segment = collabState(handle).roots.segments.get("b:R1");
@@ -81,7 +82,7 @@ test("cleanup delivery policy sends this copy's maintenance changes and excludes
   assert.equal(shouldDeliverSharedUpdate("remote"), false);
 });
 
-test("seeded formatting cleanup: 48 two-writer histories agree in every order and with a late joiner", t => {
+test(formattingLibraryControl("seeded formatting cleanup: 48 two-writer histories agree in every order and with a late joiner"), t => {
   const limits: readonly string[] = [], violations: string[] = [];
   let commands = 0, deliveries = 0, checkpoints = 0;
   const schedules = new Map(deliveryOrders.map(order => [order, 0]));
@@ -106,12 +107,12 @@ test("seeded formatting cleanup: 48 two-writer histories agree in every order an
   t.diagnostic(`48 histories, 288 distinct schedule runs, ${commands} commands, ${deliveries} deliveries, 288 joins, ${checkpoints} checkpoint reloads, 0 violations`);
 });
 
-test("formatting cleanup literal: deleted italic abc cannot make the untouched suffix italic", () => {
+test(formattingLibraryControl("formatting cleanup literal: deleted italic abc cannot make the untouched suffix italic"), () => {
   const readings = deliveryOrders.flatMap(order => history(1, order, true).readings);
   assertReplicasAgree("italic deletion literal", [{ order: "D1", replica: "A", output: [{ insert: "defgh" }] }, ...readings]);
 });
 
-test("cleanup after a local command publishes a separate checked origin", () => {
+test(formattingLibraryControl("cleanup after a local command publishes a separate checked origin"), () => {
   const handle = createSharedDocument(), peer = createSharedDocument();
   try {
     hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));

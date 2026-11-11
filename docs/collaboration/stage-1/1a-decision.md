@@ -1,5 +1,9 @@
 # Stage 1a feasibility decision
 
+## Amended in Stage 2
+
+Stage 1 stored a mark as one text attribute per formatting kind or per mark id. Stage 2's four-command marked-d history, three-command plain-aXd history and interior-deletion history in [the literal tests](../../../tests/adapters/collab/marks/literals.test.ts) show that the library's formatting cleanup can lose or add a mark under that form. Marks are stored as immutable anchored records instead; shared text carries no formatting attributes, with hydration migrated in the follow-up package.
+
 ## Result
 
 Stage 1a **exits with the listed carry-overs** on merged evidence through `c498f71991e68ea36387c613726c43b657f39b1f`: M1 is the buffer mechanism, B is the schema, and shared undo uses explicit per-writer command records. The status and reader fixes close the draft's convergence blockers within the retained tests; production acceptance remains subject to the later gates. [Exit condition][exit], [product decisions][product-decisions], [status results][status-results], [reader results][reader-results], [undo results][undo-results].

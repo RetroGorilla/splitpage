@@ -6,6 +6,7 @@ import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import { DeliveryQueue } from "../../collab/delivery.ts";
 import type { DeliveryReplica } from "../../collab/delivery.ts";
+import { formattingLibraryControl } from "./formatting-controls.ts";
 
 const expectedRoots = [
   ["segments", "map"],
@@ -159,7 +160,7 @@ function readMarks(doc: Y.Doc): unknown {
 }
 
 for (const gc of [true, false]) for (const deleter of ["live", "late joiner", "reload"] as const) {
-  test(`T11: ${deleter} deletes original commented bc, leaving ad unmarked (gc=${gc})`, () => {
+  test(formattingLibraryControl(`T11: ${deleter} deletes original commented bc, leaving ad unmarked (gc=${gc})`), () => {
     const readings: ReplicaReading<unknown>[] = [];
     for (const order of ["D1", "dup", "rev", "late-C"] as const) {
       const seed = new Y.Doc({ gc });
