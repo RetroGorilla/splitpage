@@ -18,17 +18,20 @@ export function projectSharedTagExtents(units: readonly SharedProjectionUnit[], 
   readonly units: readonly SharedProjectionUnit[];
   readonly rejected: readonly SharedTagProjectionRejection[];
 } {
-  const extents = new Map<string, TagExtent>();
+  const extents: TagExtent[] = [], tails = new Map<string, TagExtent>();
   units.forEach((unit, index) => {
     if (typeof unit.value !== "string") return;
     for (const mark of unit.marks) if (mark.kind === "tag" && mark.id !== undefined && typeof mark.value === "string") {
-      const key = JSON.stringify([mark.id, mark.value]), extent = extents.get(key);
-      if (extent) extent.to = index + 1;
-      else extents.set(key, { id: mark.id, tag: mark.value, from: index, to: index + 1 });
+      const key = JSON.stringify([mark.id, mark.value]), extent = tails.get(key);
+      if (extent?.to === index) extent.to = index + 1;
+      else {
+        const part = { id: mark.id, tag: mark.value, from: index, to: index + 1 };
+        extents.push(part); tails.set(key, part);
+      }
     }
   });
   const names: TagExtent[] = [];
-  for (const extent of [...extents.values()].sort((a, b) => compare(a.tag, b.tag) || a.from - b.from || a.to - b.to || compare(a.id, b.id))) {
+  for (const extent of extents.sort((a, b) => compare(a.tag, b.tag) || a.from - b.from || a.to - b.to || compare(a.id, b.id))) {
     const previous = names.at(-1);
     if (previous?.tag === extent.tag && extent.from <= previous.to) {
       previous.to = Math.max(previous.to, extent.to);
