@@ -8,12 +8,12 @@ import { registerSharedOperationHandlers } from "../../../src/adapters/collab/op
 import { applySharedMapWrites, createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import type { SharedPreparedWrite } from "../../../src/adapters/collab/prepare.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { encodeSharedState, encodeSharedStateVector, transactSharedDocument, createSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
+import { encodeSharedState, encodeSharedStateVector, transactSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
 import { readSharedStatus, readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { deliveryOrders } from "../../collab/delivery.ts";
-import { validatedFixture } from "./helpers.ts";
+import { validatedFixture, createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
 import { agree, execute, operation, ref, replicas } from "./executor-support.ts";
 
 test("prepare overlays created records, replaces descendants, and never exposes writable live values", () => {
@@ -83,32 +83,34 @@ test("scalar calls create no staging document, keep the live client set and use 
 });
 
 test("no full-state encoder runs during accepted, empty or immediately refused calls", () => {
-  const script = `
+  const script = String.raw`
     import assert from "node:assert/strict";
     import { mock } from "node:test";
-    const actual = await import("yjs");
-    let encodes = 0;
+    import * as actual from "yjs";
+    let encodes = 0, monitorEncodes = 0;
+    const count = stack => {
+      const caller = (stack.split("\n")[2] ?? "").replaceAll("\\", "/");
+      if (caller.includes("tests/adapters/collab/helpers.ts:") && /(?:monitorNativeFormatting|observe)/.test(caller)) monitorEncodes++;
+      else encodes++;
+    };
     mock.module("yjs", { namedExports: { ...actual,
-      encodeStateAsUpdate: (...args) => { encodes++; return actual.encodeStateAsUpdate(...args); },
-      encodeStateAsUpdateV2: (...args) => { encodes++; return actual.encodeStateAsUpdateV2(...args); }
+      encodeStateAsUpdate: (...args) => { count(new Error().stack ?? ""); return actual.encodeStateAsUpdate(...args); },
+      encodeStateAsUpdateV2: (...args) => { count(new Error().stack ?? ""); return actual.encodeStateAsUpdateV2(...args); }
     } });
-    const { createSharedDocument, destroySharedDocument } = await import("./src/adapters/collab/document.ts");
-    const { hydrateSharedDocument } = await import("./src/adapters/collab/hydrate.ts");
     const { executeSharedOperations } = await import("./src/adapters/collab/execute.ts");
-    const { validatedFixture } = await import("./tests/adapters/collab/helpers.ts");
-    const { operation } = await import("./tests/adapters/collab/executor-support.ts");
-    const handle = createSharedDocument();
+    const { operation, replicas } = await import("./tests/adapters/collab/executor-support.ts");
+    const run = replicas(), handle = run.a;
     try {
-      hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: "" }] }));
       assert.ok(encodes > 0);
-      encodes = 0;
+      encodes = 0; monitorEncodes = 0;
       const scalar = operation({ kind: "scalar", id: "s", by: "A", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 4 });
       const status = operation({ kind: "status", id: "t", by: "A", target: { scope: "beat", record: "R1" }, value: "shot", parents: [] });
       assert.deepEqual(executeSharedOperations(handle, [scalar, status]), { ok: true });
       assert.deepEqual(executeSharedOperations(handle, []), { ok: true });
       assert.equal(executeSharedOperations(handle, [operation({ kind: "record-delete", id: "x", by: "A", target: { collection: "people", record: "missing" } })]).ok, false);
       assert.equal(encodes, 0);
-    } finally { destroySharedDocument(handle); }
+      assert.ok(monitorEncodes > 0);
+    } finally { run.close(); }
   `;
   const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "--eval", script],
     { cwd: fileURLToPath(new URL("../../../", import.meta.url)), encoding: "utf8", windowsHide: true });

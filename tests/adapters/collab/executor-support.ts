@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { readOperation, readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
-import { createSharedDocument, applySharedUpdate, encodeSharedState, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, encodeSharedState, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-import { deliveryReplica, validatedFixture } from "./helpers.ts";
+import { deliveryReplica, validatedFixture, createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
 import { DeliveryQueue } from "../../collab/delivery.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";

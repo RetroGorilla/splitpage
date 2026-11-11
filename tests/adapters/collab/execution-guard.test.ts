@@ -5,12 +5,13 @@ import { registerSharedOperationHandlers } from "../../../src/adapters/collab/op
 import { collabState, SharedExecutionWriteError } from "../../../src/adapters/collab/state.ts";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeSharedStateVector, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
-import { initializeSharedMarkStore, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { createCollabText } from "../../../src/adapters/collab/text-target.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { execute, operation, ref, replicas } from "./executor-support.ts";
 import { validatedFixture } from "./helpers.ts";
 
-for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "mark-init", "mark-write", "destroy"] as const) {
+for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "mark-write", "destroy"] as const) {
   test(`${writer} cannot reenter from ${phase}, and the guard clears after the error`, () => {
     const run = replicas();
     try {
@@ -26,7 +27,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
         else if (writer === "transaction") transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set("nested", true));
         else if (writer === "update") applySharedUpdate(run.a, incoming);
         else if (writer === "hydration") hydrateSharedDocument(run.a, source);
-        else if (writer === "mark-init") initializeSharedMarkStore(run.a, textTarget);
+        else if (writer === "text-create") createCollabText(run.a, collabState(run.a).roots.meta, true);
         else if (writer === "mark-write") writeSharedMarkRecord(run.a, textTarget, "nested", null);
         else destroySharedDocument(run.a);
       };
