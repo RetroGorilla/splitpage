@@ -36,6 +36,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
   "document/validated.ts": await import("../../src/core/document/validated.ts"),
+  "flow/find-replace.ts": await import("../../src/core/flow/find-replace.ts"),
   "flow/flow.ts": await import("../../src/core/flow/flow.ts"),
   "flow/operations.ts": await import("../../src/core/flow/operations.ts"),
   "flow/remove-empty-heading.ts": await import("../../src/core/flow/remove-empty-heading.ts"),

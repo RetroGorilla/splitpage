@@ -8,7 +8,8 @@ import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
 import type { FlowWriter, FlowWriterPorts } from "./ports.ts";
-import { flowMatchStart, replaceFlowMatches, searchFlow, visualMatchHighlight } from "./flow-find.ts";
+import { flowMatchStart, searchFlow, visualMatchHighlight } from "./flow-find.ts";
+import { replaceFlowMatches } from "../../core/flow/find-replace.ts";
 import { rowSlots } from "../../core/document/gallery.ts";
 import { escapeHtml, safeImageSrc } from "../../core/document/text-policy.ts";
 import { toHtml } from "../../core/text/html.ts";

@@ -88,7 +88,7 @@ function image(raw: unknown): unknown {
 function inline(raw: unknown): unknown {
   if (typeof raw === "string") return string(raw);
   need(object(raw));
-  if (raw.atom === "broll") return fields(raw, { atom: oneOf("broll"), id: ref });
+  if (raw.atom === "broll") return fields(raw, { atom: oneOf("broll"), id: ref }, { text: string });
   if (raw.atom === "who") return fields(raw, { atom: oneOf("who"), name: string });
   if (raw.atom === "image") return fields(raw, { atom: oneOf("image"), ref: image });
   return fields(raw, { atom: oneOf("video"), href: string, host: string });
@@ -160,7 +160,7 @@ export function readJoinGlue(raw: unknown) {
 }
 export function readSoftRemove(raw: unknown) {
   return readKind(raw, "remove", { removalKind: oneOf("beat", "range", "header", "became-heading"), targets: list(ref),
-    observed: list(ref), boundaries: list(ref), components: list(ref), gallery: list(ref), at: numeric });
+    observed: list(ref), boundaries: list(ref), components: list(ref), gallery: list(ref), at: numeric }, { comments: list(ref) });
 }
 export function readRestore(raw: unknown) {
   return readKind(raw, "restore", { removals: list(ref) });

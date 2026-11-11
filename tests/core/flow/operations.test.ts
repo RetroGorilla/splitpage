@@ -20,16 +20,16 @@ function source(file: string): string {
   if (!sources.has(file)) sources.set(file, readFileSync(new URL(file, import.meta.url), "utf8"));
   return sources.get(file) as string;
 }
-function generator(file: string, start: string, end: string, result: string, scope: Record<string, unknown>) {
+export function generator(file: string, start: string, end: string, result: string, scope: Record<string, unknown>) {
   const input = source(file), a = input.indexOf(start), b = input.indexOf(end, a);
   assert.ok(a >= 0 && b > a, "generator source boundaries: " + file);
   const output = ts.transpileModule(input.slice(a, b) + "\nreturn " + result, { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText;
   return Function(...Object.keys(scope), output)(...Object.values(scope)) as unknown;
 }
-const fixture = generator("fuzz.test.ts", "function random(", "function applied(", "fixture", { cells, toHtml }) as
+export const fixture = generator("fuzz.test.ts", "function random(", "function applied(", "fixture", { cells, toHtml }) as
   (seed: number) => { doc: FlowDoc; pick: (limit: number) => number; ports: FlowPorts };
-const offsets = generator("fuzz.test.ts", "function offsets(", 'test("seeded flow:', "offsets", { cells, projection }) as (row: FlowRow) => number[];
-const reference = (seed: number) => generator("reference-fuzz.test.ts", "    let state = seed;", "    for (let operation", "{ doc, positions, pick }", {
+export const offsets = generator("fuzz.test.ts", "function offsets(", 'test("seeded flow:', "offsets", { cells, projection }) as (row: FlowRow) => number[];
+export const reference = (seed: number) => generator("reference-fuzz.test.ts", "    let state = seed;", "    for (let operation", "{ doc, positions, pick }", {
   seed, cells, beatPos: flow.beatPos, headingPos: flow.headingPos,
   row: (id: string, audioText: string, visualText = "") => ({ id, audioText, visualText }),
   scene: (id: string, firstSceneId: string, name = "Title") => ({ id, firstSceneId, name }),

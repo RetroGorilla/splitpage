@@ -2,7 +2,7 @@ import { readFlowBaseReference } from "../../../src/core/collab/base-reference.t
 import type { SharedContentRef, SharedIdentityGap, SharedOperation, SharedTextAddress } from "../../../src/core/collab/operations.ts";
 import { explode, implode } from "../../../src/core/text/edits.ts";
 import type { Char } from "../../../src/core/text/edits.ts";
-import { commentIds, projection } from "../../../src/core/text/runs.ts";
+import { commentIds, projection, withTagStack, tagStack, OBJ } from "../../../src/core/text/runs.ts";
 import type { Marks, Run } from "../../../src/core/text/runs.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import { migrateGallery, rowSlots, setRowSlots, videoLinkKey } from "../../../src/core/document/gallery.ts";
@@ -11,7 +11,7 @@ import { cappedText } from "../../../src/core/document/text-policy.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 import type { FlowDoc, FlowRow } from "../../../src/core/flow/flow.ts";
 
-interface ObservedUnit { char: Char; owner: string; offset: number }
+interface ObservedUnit { char: Char; owner: string; offset: number; field: SharedTextAddress["field"] }
 
 export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation[], cells: (html: string | null | undefined) => readonly Run[]) {
   const rows = base.rows.map(row => ({ ...row })) as Record<string, unknown>[];
@@ -24,20 +24,22 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
     if (!units.has(address)) {
       const chars: Char[] = field === "heading" ? (sections.find(scene => scene.id === owner)?.name ?? "").split("").map(ch => ({ ch, marks: {} }))
         : explode(cells(rows.find(row => row.id === owner)?.[field] as string | undefined));
-      units.set(address, chars.map((char, offset) => ({ char, owner, offset })));
+      units.set(address, chars.map((char, offset) => ({ char, owner, offset, field })));
     }
     return units.get(address) as ObservedUnit[];
   };
   const selected = (unit: ObservedUnit, refs: readonly SharedContentRef[]) => refs.some(ref => {
     const span = readFlowBaseReference(ref);
-    return span.owner === unit.owner && unit.offset >= span.from && unit.offset < span.to;
+    return span.owner === unit.owner && span.field === unit.field && unit.offset >= span.from && unit.offset < span.to;
   });
   const position = (chars: ObservedUnit[], gap: SharedIdentityGap) => {
     const ref = gap.right ?? gap.left;
     if (!ref) return 0;
     const span = readFlowBaseReference(ref);
-    const at = chars.findIndex(unit => unit.owner === span.owner && unit.offset >= span.from);
-    return at < 0 ? chars.length : at;
+    const at = chars.findIndex(unit => unit.owner === span.owner && unit.field === span.field && unit.offset >= span.from);
+    if (gap.right) return at < 0 ? chars.length : at;
+    const left = chars.findIndex(unit => unit.owner === span.owner && unit.offset === span.from);
+    return left < 0 ? chars.length : left + 1;
   };
   const write = (owner: string, field: SharedTextAddress["field"], chars: ObservedUnit[]) => {
     units.set(key(owner, field), chars);
@@ -46,7 +48,7 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
     else { const row = rows.find(item => item.id === owner); if (row) row[field] = toHtml(implode(chars.map(unit => unit.char))); }
   };
   const blank = (id: string) => ({ id, visualText: "", imageRef: null, audioText: "", status: "todo" });
-  const removedRanges = new Set<string>();
+  const removedRanges = new Set<string>(), reportedComments = new Set<string>();
   for (const op of ops) {
     if (op.kind === "segment-create") {
       const before = rows.findIndex(row => row.id === op.at.right), after = rows.findIndex(row => row.id === op.at.left);
@@ -56,31 +58,73 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
     } else if (op.kind === "text-insert") {
       const chars = text(op.target.owner, op.target.field).slice(), at = position(chars, op.at);
       const inserted = op.content.flatMap(chunk => {
-        if (typeof chunk.value !== "string") throw new Error("Unexpected structural insertion atom");
         const marks: Marks = {};
         for (const mark of chunk.marks) {
           if (mark.kind === "comment") marks.cmt = [...marks.cmt ?? [], mark.id];
           else if (mark.kind === "link") { if (mark.value) marks.href = mark.value; }
-          else if (mark.kind !== "tag") marks[mark.kind] = true;
+          else if (mark.kind === "tag") Object.assign(marks, withTagStack(marks, [...tagStack(marks), mark.id]));
+          else marks[mark.kind] = true;
         }
-        const chars: Char[] = op.target.field === "heading" ? chunk.value.split("").map(ch => ({ ch, marks })) : explode([{ text: chunk.value, marks }]);
-        return chars.map((char, offset) => ({ char, owner: op.id, offset }));
+        const value = chunk.value;
+        if (typeof value !== "string" && value.atom === "broll" && value.text === undefined) throw new Error("Flow b-roll insertion needs its displayed label");
+        const run: Run = typeof value === "string" ? { text: value, marks } : value.atom === "broll" ? { ...value, text: value.text ?? "B-ROLL", marks }
+          : value.atom === "who" ? { ...value, text: "@" + value.name, marks } : { ...value, text: "" as const, marks };
+        const chars: Char[] = op.target.field === "heading" ? (typeof value === "string" ? value : OBJ).split("").map(ch => ({ ch, marks })) : explode([run]);
+        return chars.map((char, offset) => ({ char, owner: op.id, offset, field: op.target.field }));
       });
       chars.splice(at, 0, ...inserted);
       write(op.target.owner, op.target.field, chars);
-    } else if (op.kind === "split") {
+    } else if (op.kind === "mark") {
+      const chars = text(op.target.owner, op.target.field).map(unit => {
+        if (!selected(unit, op.observed)) return unit;
+        let marks: Marks = { ...(unit.char.atom ? unit.char.atom.marks : unit.char.marks) };
+        const mark = op.mark;
+        if (unit.char.atom && (mark.kind === "tag" || mark.kind === "dir" || mark.kind === "cue")) return unit;
+        if (mark.kind === "comment") {
+          const ids = (marks.cmt ?? []).filter(id => id !== mark.id);
+          if (mark.value) ids.push(mark.id);
+          if (ids.length) marks.cmt = ids; else delete marks.cmt;
+        } else if (mark.kind === "tag") marks = withTagStack(marks, mark.value && tagStack(marks).includes(mark.value) ? tagStack(marks)
+          : [...tagStack(marks).filter(id => id !== mark.id), ...(mark.value ? [mark.value] : [])]);
+        else if (mark.kind === "link") { if (mark.value) marks.href = mark.value; else delete marks.href; }
+        else if (mark.value) marks[mark.kind] = true; else Reflect.deleteProperty(marks, mark.kind);
+        return { ...unit, char: unit.char.atom ? { atom: { ...unit.char.atom, marks } } : { ...unit.char, marks } };
+      });
+      write(op.target.owner, op.target.field, chars);
+    } else if (op.kind === "split" || op.kind === "split-before") {
       const chars = text(op.target.owner, op.target.field), at = position(chars, op.at);
       const first = op.target.field === "heading" ? sections.find(scene => scene.id === op.target.owner)?.firstSceneId : op.target.owner;
       const index = rows.findIndex(row => row.id === first);
-      rows.splice(index + (op.target.field === "heading" ? 0 : 1), 0, { id: op.beat, ...op.fields });
-      write(op.target.owner, op.target.field, chars.slice(0, at));
-      write(op.beat, "audioText", chars.slice(at));
+      const before = op.kind === "split-before";
+      rows.splice(index + (before || op.target.field === "heading" ? 0 : 1), 0, { id: op.beat, ...op.fields });
+      write(op.target.owner, op.target.field, before ? chars.slice(at) : chars.slice(0, at));
+      write(op.beat, "audioText", before ? chars.slice(0, at) : chars.slice(at));
     } else if (op.kind === "remove") {
       for (const id of op.targets) {
         const index = rows.findIndex(row => row.id === id);
-        if (op.removalKind === "range") removedRanges.add(id);
+        if (op.removalKind === "range" && !op.comments) removedRanges.add(id);
         if (index >= 0) rows.splice(index, 1);
       }
+      for (const id of op.comments ?? []) reportedComments.add(id);
+    } else if (op.kind === "heading-create") {
+      sections.push({ id: op.heading, firstSceneId: op.firstBeat, name: "" });
+    } else if (op.kind === "record-create") {
+      if (op.target.collection === "visuals") {
+        const row = rows.find(row => row.id === op.fields.beat);
+        if (!row) throw new Error("Missing visual beat");
+        row.visualText = op.fields.html;
+      } else if (op.target.collection !== "gallery") throw new Error("Unexpected record collection");
+    } else if (op.kind === "record-set") {
+      if (op.target.collection !== "visuals" || op.field !== "html") throw new Error("Unexpected record field");
+      const row = rows.find(row => String(row.id) + ":visual" === op.target.record);
+      if (!row) throw new Error("Missing visual record");
+      row.visualText = op.clear ? "" : op.value;
+    } else if (op.kind === "segment-move") {
+      const moved = op.segments.map(id => rows.find(row => row.id === id));
+      if (moved.some(row => !row)) throw new Error("Missing moved segment");
+      for (const id of op.segments) rows.splice(rows.findIndex(row => row.id === id), 1);
+      const before = rows.findIndex(row => row.id === op.at.right), after = rows.findIndex(row => row.id === op.at.left);
+      rows.splice(before >= 0 ? before : after >= 0 ? after + 1 : rows.length, 0, ...moved as Record<string, unknown>[]);
     } else if (op.kind === "heading-remove") {
       const scene = sections.find(item => item.id === op.heading);
       if (op.newBeat && scene) rows.splice(rows.findIndex(row => row.id === scene.firstSceneId), 0,
@@ -132,7 +176,7 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
     .sort((a, b) => rows.findIndex(row => row.id === a.firstSceneId) - rows.findIndex(row => row.id === b.firstSceneId));
   const gone = new Set(base.rows.filter(row => removedRanges.has(row.id)).flatMap(row => [...commentIds(cells(row.audioText)), ...commentIds(cells(row.visualText))]));
   const kept = new Set(rows.flatMap(row => [...commentIds(cells(row.audioText as string)), ...commentIds(cells(row.visualText as string))]));
-  const removedComments = base.comments.filter(comment => !kept.has(comment.anchorId || comment.id)
+  const removedComments = base.comments.filter(comment => reportedComments.has(comment.id) || !kept.has(comment.anchorId || comment.id)
     && (gone.has(comment.anchorId || comment.id) || !!comment.rowId && removedRanges.has(comment.rowId))).map(comment => comment.id);
   return { rows, sections: ordered.length ? ordered : undefined, removedComments };
 }
