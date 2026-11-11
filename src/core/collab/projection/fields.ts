@@ -34,12 +34,18 @@ export function projectSharedBeatFields(id: string, fields: Readonly<Record<stri
   for (const key of ["lengthSeconds", "paragraphStart"]) if (Object.hasOwn(fields, key)) out[key] = fields[key];
   if (Object.hasOwn(stamp, "at")) out.updatedAt = stamp.at;
   if (Object.hasOwn(stamp, "by")) out.updatedBy = stamp.by;
-  const slots = gallery.filter(slot => slot.fields.beat === id).map(slot => {
+  return projectSharedGalleryFields(out, projectSharedGallerySlots(gallery.filter(slot => slot.fields.beat === id)));
+}
+export function projectSharedGallerySlots(gallery: readonly { readonly fields: Readonly<Record<string, unknown>> }[]): Record<string, unknown>[] {
+  return gallery.map(slot => {
     const value = { ...sharedProjectionExtra(slot.fields), ...bag(slot.fields.picture) };
     const links = list(slot.fields.links).map(link => plain(bag(link.fields)));
     if (links.length) value.links = links;
     return value;
   });
+}
+export function projectSharedGalleryFields(fields: Readonly<Record<string, unknown>>, slots: readonly Readonly<Record<string, unknown>>[]): Record<string, unknown> {
+  const out = { ...fields };
   const first = slots[0];
   if (first) for (const [source, target] of [["imageRef", "imageRef"], ["name", "imageName"], ["annotation", "imageAnnotation"], ["links", "imageLinks"]]) {
     if (source && target && Object.hasOwn(first, source)) out[target] = first[source];

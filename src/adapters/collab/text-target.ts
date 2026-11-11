@@ -11,8 +11,21 @@ export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<
   if (container.doc !== collabState(handle).doc) throw new Error("New text requires an attached container in this document");
   if (container.has(textKey) || container.has(marksKey)) throw new Error("Cannot create text or marks for an existing text target");
   const text = new Y.Text();
-  transactSharedDocument(handle, "local-command", () => { container.set(textKey, text); container.set(marksKey, new Y.Map<unknown>()); });
+  transactSharedDocument(handle, "local-command", () => { attachCollabText(container, textKey, marksKey, text); });
   return text;
+}
+
+function attachCollabText(container: Y.Map<unknown>, textKey: string, marksKey: string, text = new Y.Text()): Y.Text {
+  container.set(textKey, text); container.set(marksKey, new Y.Map<unknown>());
+  return text;
+}
+
+export function applySharedTextCreation(handle: SharedDocumentHandle, description: { readonly path: readonly string[]; readonly title: boolean }): void {
+  const state = collabState(handle);
+  if (!state.execution?.applying) throw new SharedExecutionWriteError();
+  let container: unknown = state.roots[description.path[0] as keyof typeof state.roots];
+  for (const key of description.path.slice(1)) container = (container as Y.Map<unknown>).get(key);
+  attachCollabText(container as Y.Map<unknown>, description.title ? "title" : "text", description.title ? "titleMarks" : "markRecords");
 }
 
 export function readSharedTextTarget(raw: unknown): SharedTextAddress | null {

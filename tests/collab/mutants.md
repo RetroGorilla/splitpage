@@ -1,4 +1,5 @@
 duplicated identity | src/adapters/collab/hydrate.ts textSegment | duplicated identity: hydration keeps original ids and two hydrations have equal root content
+duplicated identity (split) | src/adapters/collab/split-executor.ts: copies observed text when applying a split | tests/adapters/collab/structure-stage1.test.ts: Stage 1 T05 two splits retains literal identities and both carets | tests/collab/structure-mutants.json
 lost mark | src/adapters/collab/mark-store.ts: readCollabMarkState drops an addition when its anchored range is empty | tests/adapters/collab/marks/literals.test.ts: i: interior deletion retains unseen mark
 omitted field | src/core/collab/projection/fields.ts: omits lengthSeconds | tests/adapters/collab/projection-omitted-field.test.ts: omitted field: lengthSeconds 12 survives transfer | tests/collab/projection-mutants.json
 stale base | src/adapters/collab/execute.ts: executeSharedOperations revision guard | tests/adapters/collab/text-preparation.test.ts: stale base: a received update refuses the painted revision before prepare without writing

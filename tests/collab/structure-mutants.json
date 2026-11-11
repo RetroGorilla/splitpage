@@ -1,0 +1,9 @@
+{
+  "mutants": [{
+    "label": "duplicated identity on split",
+    "file": "src/adapters/collab/split-executor.ts",
+    "find": "applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit);",
+    "replace": "applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit); applySharedTextEdit(handle, { target: description.edit.target, edit: { type: \"text\", at: 0, value: \"abcd\" }, marks: [] });",
+    "tests": ["tests/adapters/collab/structure-stage1.test.ts"]
+  }]
+}
