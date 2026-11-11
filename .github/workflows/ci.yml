@@ -136,7 +136,12 @@ jobs:
       - name: Install Chromium
         if: needs.changes.outputs.app == 'true'
         run: |
-          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium || {
+            # why: on the hosted image --with-deps adds only fallback fonts, so an unreachable package
+            # server should not stop the job; a browser that cannot start still fails the tests.
+            echo "::warning::Chromium's system packages could not be installed; continuing with the browser alone"
+            npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium
+          }
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
           if [ -z "$exe" ]; then
             echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
@@ -226,7 +231,12 @@ jobs:
 
       - name: Install Chromium
         run: |
-          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium || {
+            # why: on the hosted image --with-deps adds only fallback fonts, so an unreachable package
+            # server should not stop the job; a browser that cannot start still fails the tests.
+            echo "::warning::Chromium's system packages could not be installed; continuing with the browser alone"
+            npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium
+          }
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
           if [ -z "$exe" ]; then
             echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
