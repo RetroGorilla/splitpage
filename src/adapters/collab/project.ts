@@ -14,6 +14,8 @@ import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core
 import type { SharedTagProjectionRejection } from "../../core/collab/projection/tag-extents.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
 import type { SharedProjectionFragmentReason } from "../../core/collab/projection/blocks.ts";
+import { projectSharedBrollKeys } from "../../core/collab/projection/broll.ts";
+import type { SharedProjectionGalleryOverflow } from "../../core/collab/projection/gallery.ts";
 
 export interface SharedDocumentFieldProjection {
   readonly document: Readonly<Record<string, unknown>>;
@@ -27,6 +29,7 @@ export function projectSharedDocument(handle: SharedDocumentHandle): DocumentSha
 export interface SharedDocumentProjectionResult {
   readonly document: DocumentShape;
   readonly recovery: readonly ((SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
+    | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
     | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[] }
     | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
       readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
@@ -60,17 +63,24 @@ export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle):
       html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", false) });
     const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
     const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinGroups(order.map(id => readProjectionBeatStructure(roots.beats.get(id), id, roots.retiredJoins)));
-    const rows: Record<string, unknown>[] = [];
-    for (const group of groups) {
-      const root = byId.get(group.root); if (!root) continue;
+    const rows: Record<string, unknown>[] = [], plans = groups.flatMap(group => {
+      const root = byId.get(group.root); if (!root) return [];
       const members = group.members.map(member => member.id), inOrder = order.filter(id => members.includes(id));
-      const row = projectSharedJoinedFields(root, inOrder.flatMap(id => { const row = byId.get(id); return row ? [row] : []; }), gallery);
+      const projected = projectSharedJoinedFields(root, inOrder.flatMap(id => { const row = byId.get(id); return row ? [row] : []; }), gallery);
       const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue })), tags, group.cyclic);
-      const audioText = cell(narration, group.root, "audioText", !group.removed);
-      const visualText = members.flatMap(id => visuals.filter(visual => visual.fields.beat === id)).map(visual => {
+      const visualCells = members.flatMap(id => visuals.filter(visual => visual.fields.beat === id)).map(visual => {
         const container: unknown = roots.visuals.get(visual.key);
-        return container instanceof Y.Map ? cell(units(container), group.root, "visualText", !group.removed) : "";
-      }).filter(Boolean).join("<br>");
+        return { key: JSON.stringify([group.root, "visualText", visual.key]), units: container instanceof Y.Map ? units(container) : [] };
+      });
+      return [{ group, members, ...projected, audio: { key: JSON.stringify([group.root, "audioText"]), units: narration }, visualCells }];
+    });
+    const broll = new Map(projectSharedBrollKeys(plans.filter(plan => !plan.group.removed).flatMap(plan => [...plan.visualCells, plan.audio]),
+      (out.brollShots as Record<string, unknown>[]).map(shot => String(shot.id))).map(value => [value.key, value.units]));
+    for (const { group, members, row, overflow, audio, visualCells } of plans) {
+      recovery.push(...overflow.map(entry => ({ kind: "gallery-overflow" as const, rowId: group.root, ...entry,
+        slot: canonicalSharedProjection(entry.slot, "gallery") as Record<string, unknown> })));
+      const audioText = cell(broll.get(audio.key) ?? audio.units, group.root, "audioText", !group.removed);
+      const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", !group.removed)).filter(Boolean).join("<br>");
       Object.assign(row, { audioText, visualText });
       if (group.removed) recovery.push({ kind: "removed-beat", row: canonicalSharedProjection(row, "row") as Record<string, unknown>, members });
       else rows.push(row);
