@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createMonitoredSharedDocument, validatedFixture } from "./helpers.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
-import { readSharedDocumentFieldProjection } from "../../../src/adapters/collab/project.ts";
+import { readSharedDocumentFieldProjection, projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 
 test("omitted field: lengthSeconds 12 survives transfer", () => {
   const a = createMonitoredSharedDocument(), b = createMonitoredSharedDocument();
@@ -12,5 +12,6 @@ test("omitted field: lengthSeconds 12 survives transfer", () => {
     assert.ok(applySharedUpdate(b, encodeSharedState(a)).ok);
     const rows = readSharedDocumentFieldProjection(b).document.rows as Record<string, unknown>[];
     assert.equal(rows[0]?.lengthSeconds, 12);
+    assert.equal(projectSharedDocument(b).rows[0]?.lengthSeconds, 12);
   } finally { destroySharedDocument(a); destroySharedDocument(b); }
 });
