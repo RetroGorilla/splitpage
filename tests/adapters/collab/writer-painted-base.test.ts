@@ -20,16 +20,18 @@ import { deliveryOrders } from "../../collab/delivery.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 
-function paintOnA(h: Stage1ExecutorHarness): Surface {
+function paintOnA(h: Stage1ExecutorHarness): { surface: Surface; project: () => void } {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
   document.body.innerHTML = '<div id="writer-doc" contenteditable="true"></div>';
   const root = document.getElementById("writer-doc") as HTMLElement;
+  const projection = () => ({ rows: projectSharedDocument(h.a).rows as readonly FlowRow[], revision: readSharedRevision(h.a) });
+  let projected = projection();
   const surface = createSurface({
-    paintedText: { read: (rowId, field) => field === "audioText" ? readSharedPaintedText(h.a, h.target(rowId)) : null },
+    paintedText: { documentRevision: () => projected.revision, read: (rowId, field) => field === "audioText" ? readSharedPaintedText(h.a, h.target(rowId)) : null },
     lifetime: { epoch: () => 1 },
     heldSelection: createEditorSelection({ epoch: () => 1, order: () => [], keys: () => null }),
-    root, doc: () => ({ rows: projectSharedDocument(h.a).rows as readonly FlowRow[], comments: [] }),
+    root, doc: () => ({ rows: projected.rows, comments: [] }),
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: () => false },
     decode: fromHtml, storedHtml: html => html,
     moveBeat: () => {}, editingBlocked: () => false, syncBeat: () => {}, commit: () => null,
@@ -38,7 +40,7 @@ function paintOnA(h: Stage1ExecutorHarness): Surface {
     openFind: () => {}, plainVisual: () => ""
   });
   surface.paint();
-  return surface;
+  return { surface, project: () => { projected = projection(); } };
 }
 
 function painted(surface: Surface, row: string): PaintedText {
@@ -83,7 +85,8 @@ test("positions painted on A name the same characters, or the gap one left, afte
     const h = new Stage1ExecutorHarness([{ id: "R1", text: "abcdef" }, { id: "R2", text: "gh" }]);
     let surface: Surface | null = null;
     try {
-      surface = paintOnA(h);
+      const view = paintOnA(h);
+      surface = view.surface;
       const base = painted(surface, "R1"), seen = units(base);
       assert.deepEqual([base.text, base.revision, painted(surface, "R2").text], ["abcdef", 1, "gh"]);
       assert.deepEqual(locate(h.a, seen), ["index 0", "index 1", "index 2", "index 3", "index 4", "index 5"]);
@@ -99,6 +102,7 @@ test("positions painted on A name the same characters, or the gap one left, afte
         assert.deepEqual(output, expected);
         readings.push({ order: replica === "C" ? "late-C" : order === "late-C" ? "D1" : order, replica, output });
       }
+      view.project();
       surface.repaint();
       const fresh = painted(surface, "R1");
       assert.deepEqual([fresh.text, fresh.revision], ["XabcYefZ", readSharedRevision(h.a)]);
@@ -114,7 +118,8 @@ test("an operation list built from A's painted base is refused whole as stale on
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "abcdef" }, { id: "R2", text: "gh" }]);
   let surface: Surface | null = null;
   try {
-    surface = paintOnA(h);
+    const view = paintOnA(h);
+    surface = view.surface;
     const base = painted(surface, "R1"), operations = fromPaintedBase(h, units(base));
     remoteEdits(h);
     h.queue.flush("D1");
@@ -125,6 +130,7 @@ test("an operation list built from A's painted base is refused whole as stale on
     assert.equal(readSharedRevision(h.a), revision);
     assert.equal(h.queue.pending.length, 0);
     assert.deepEqual(h.characters(h.a, "R1").map(char => char.value).join(""), "XabcYefZ");
+    view.project();
     surface.repaint();
     const fresh = painted(surface, "R1");
     assert.deepEqual(executeSharedOperations(h.a, fromPaintedBase(h, units(fresh).slice(1)), { base: fresh.revision }), { ok: true });
@@ -136,10 +142,44 @@ test("the same list is accepted whole while the revision is the painted one", ()
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "abcdef" }, { id: "R2", text: "gh" }]);
   let surface: Surface | null = null;
   try {
-    surface = paintOnA(h);
+    surface = paintOnA(h).surface;
     const base = painted(surface, "R1");
     assert.deepEqual(executeSharedOperations(h.a, fromPaintedBase(h, units(base)), { base: base.revision }), { ok: true });
     assert.deepEqual(h.characters(h.a, "R1").map(char => char.value).join(""), "acQdef");
     assert.equal(readSharedRevision(h.a), base.revision + 1);
+  } finally { surface?.dispose(); h.destroy(); }
+});
+
+test("a paint from a projection behind the shared text records no base, though the text reads the same", () => {
+  const h = new Stage1ExecutorHarness([{ id: "R1", text: "aa" }]);
+  let surface: Surface | null = null;
+  try {
+    const view = paintOnA(h);
+    surface = view.surface;
+    const base = painted(surface, "R1"), seen = units(base);
+    assert.deepEqual([base.text, base.revision], ["aa", 1]);
+    const first = seen[0];
+    assert.ok(first);
+    const afterFirst = sharedAnchorCharacterEnd(first);
+    assert.ok(afterFirst);
+    h.execute("B", [h.deletion("B", "R1", h.range("B", "R1", 0, 1)), h.insertion("B", "R1", h.point("B", "R1", 2), "a")], ["a3"]);
+    h.queue.flush("D1");
+    assert.deepEqual([h.characters(h.a, "R1").map(char => char.value).join(""), readSharedRevision(h.a)], ["aa", 2]);
+    surface.paint();
+    assert.equal(surface.paintedBase("R1"), null);
+    const bytes = encodeSharedState(h.a);
+    assert.deepEqual(executeSharedOperations(h.a, [h.insertion("A", "R1", afterFirst, "X")], { base: base.revision }), { ok: false, reason: "stale-base" });
+    assert.deepEqual(encodeSharedState(h.a), bytes);
+    view.project();
+    surface.paint();
+    const fresh = painted(surface, "R1"), now = units(fresh);
+    assert.deepEqual([fresh.text, fresh.revision], ["aa", 2]);
+    assert.equal(now[0], seen[1]);
+    assert.notEqual(now[1], seen[0]);
+    assert.deepEqual(locate(h.a, [...seen, ...now]), ["gap 0", "index 0", "index 0", "index 1"]);
+    const afterNow = sharedAnchorCharacterEnd(now[0] as SharedContentRef);
+    assert.ok(afterNow);
+    assert.deepEqual(executeSharedOperations(h.a, [h.insertion("A", "R1", afterNow, "X")], { base: fresh.revision }), { ok: true });
+    assert.deepEqual(h.characters(h.a, "R1").map(char => char.value).join(""), "aXa");
   } finally { surface?.dispose(); h.destroy(); }
 });

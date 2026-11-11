@@ -11,11 +11,12 @@ export function createPaintedBeats(source: PaintedTextSource): PaintedBeats {
   let bases = new Map<string, PaintedText>();
   return {
     record: (rows, painted) => {
-      const next = new Map<string, PaintedText>();
+      const next = new Map<string, PaintedText>(), shown = source.documentRevision();
       for (const row of rows) {
         const read = source.read(row.id, "audioText");
-        // why: an offset names a shared unit only while the painted text equals the shared text unit for unit
-        if (read && read.text === painted(row)) next.set(row.id, read);
+        // why: equal text is not proof; a later revision can hold the same string in other units, so the
+        // record must be of the revision that was painted, and its units must be the painted ones one for one
+        if (read && read.revision === shown && read.text === painted(row)) next.set(row.id, read);
       }
       bases = next;
     },

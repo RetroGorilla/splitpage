@@ -405,17 +405,18 @@ export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
 
 export type FakePaintedBeat = { readonly revision: number; readonly units: readonly (readonly [identity: string, text: string])[] };
 
-export function fakePaintedText(initial: Readonly<Record<string, FakePaintedBeat>>) {
+export function fakePaintedText(projected: number, initial: Readonly<Record<string, FakePaintedBeat>>) {
   const reads: [rowId: string, field: string][] = [];
-  let beats = initial;
-  const paintedText: PaintedTextSource = { read: (rowId, field) => {
+  let beats = initial, documentRevision = projected;
+  const paintedText: PaintedTextSource = { documentRevision: () => documentRevision, read: (rowId, field) => {
     reads.push([rowId, field]);
     const beat = Object.hasOwn(beats, rowId) ? beats[rowId] : undefined;
     if (!beat) return null;
     const identities = beat.units.map(([identity]) => readSharedContentRef(identity));
     return { revision: beat.revision, text: beat.units.map(([, text]) => text).join(""), identity: index => identities[index] ?? null };
   } };
-  return { paintedText, reads, show: (next: Readonly<Record<string, FakePaintedBeat>>): void => { beats = next; } };
+  return { paintedText, reads, show: (next: Readonly<Record<string, FakePaintedBeat>>): void => { beats = next; },
+    project: (revision: number): void => { documentRevision = revision; } };
 }
 
 export function fakeUndo() {

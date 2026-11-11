@@ -31,8 +31,7 @@ export function readSharedPaintedText(handle: SharedDocumentHandle, address: Sha
     from = span.from; to = span.to;
   }
   const length = to - from;
-  // why: units typed together have consecutive clocks, so runs keep the record small; an anchor string per
-  // painted unit would hold megabytes for a long script.
+  // why: units typed together have consecutive clocks, so the record keeps runs and builds an anchor only when asked
   const starts: number[] = [], clients: number[] = [], clocks: number[] = [];
   for (let index = 0; index < length; index++) {
     const id = Y.createRelativePositionFromTypeIndex(found.text, from + index, 0).item;

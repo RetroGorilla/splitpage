@@ -13,5 +13,6 @@ export interface PaintedText {
 }
 
 export interface PaintedTextSource {
+  readonly documentRevision: () => number;
   readonly read: (rowId: string, field: string) => PaintedText | null;
 }
