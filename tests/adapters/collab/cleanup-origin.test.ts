@@ -111,7 +111,7 @@ test("formatting cleanup literal: deleted italic abc cannot make the untouched s
   assertReplicasAgree("italic deletion literal", [{ order: "D1", replica: "A", output: [{ insert: "defgh" }] }, ...readings]);
 });
 
-test("cleanup after a local command is separately visible and has no command attribution", () => {
+test("cleanup after a local command publishes a separate checked origin", () => {
   const handle = createSharedDocument(), peer = createSharedDocument();
   try {
     hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
@@ -187,5 +187,26 @@ test("callers cannot assign the checked cleanup origin to a command", () => {
     assert.throws(() => transactSharedDocument(handle, "cleanup" as "local-command", () => collabState(handle).roots.meta.set("raw", true)), /assigned only to checked formatting maintenance/);
     assert.deepEqual(encodeSharedState(handle), before);
     assert.equal(collabState(handle).fresh, true);
+  } finally { destroySharedDocument(handle); }
+});
+
+for (const event of ["beforeTransaction", "beforeAllTransactions"] as const) test(`an adapter call from ${event} recognises its pending owner and leaves the document usable`, () => {
+  const handle = createSharedDocument();
+  try {
+    hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
+    const { doc, roots } = collabState(handle), origins: unknown[] = [];
+    let calls = 0;
+    doc.once(event, () => {
+      calls++;
+      transactSharedDocument(handle, "local-command", () => roots.meta.set("early", true));
+    });
+    observeSharedTransactions(handle, origin => origins.push(origin));
+    transactSharedDocument(handle, "local-command", () => textOf(handle).insert(0, "X", {}));
+    transactSharedDocument(handle, "local-command", () => textOf(handle).insert(0, "Y", {}));
+    assert.equal(calls, 1);
+    assert.equal(roots.meta.get("early"), true);
+    assert.equal(textOf(handle).toString(), "YXabcd");
+    assert.deepEqual(origins, ["local-command", "local-command"]);
+    assert.equal(collabState(handle).pendingTickets.size, 0);
   } finally { destroySharedDocument(handle); }
 });

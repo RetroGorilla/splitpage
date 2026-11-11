@@ -18,6 +18,7 @@ export class CollabDocumentState {
   readonly roots = declareCollabRoots(this.doc);
   fresh = true;
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
+  readonly pendingTickets = new Map<object, Exclude<SharedTransactionOrigin, "cleanup">>();
   adapterBatch = false;
 
   constructor() {
@@ -34,16 +35,20 @@ export function transactCollabState(state: CollabDocumentState, origin: Exclude<
   const requested: unknown = origin;
   if (requested === "cleanup") throw new Error("Cleanup origin is assigned only to checked formatting maintenance");
   const ticket = {};
-  state.doc.transact(transaction => {
-    if (transaction.origin === ticket) {
-      transaction.origin = origin;
-      state.adapterTransactions.add(transaction);
-    } else if (!state.adapterTransactions.has(transaction)) {
-      throw new Error("Shared adapter calls cannot run inside an external transaction");
-    }
-    state.fresh = false;
-    change();
-  }, ticket);
+  state.pendingTickets.set(ticket, origin);
+  try {
+    state.doc.transact(transaction => {
+      const pendingOrigin = state.pendingTickets.get(transaction.origin as object);
+      if (pendingOrigin !== undefined) {
+        transaction.origin = pendingOrigin;
+        state.adapterTransactions.add(transaction);
+      } else if (!state.adapterTransactions.has(transaction)) {
+        throw new Error("Shared adapter calls cannot run inside an external transaction");
+      }
+      state.fresh = false;
+      change();
+    }, ticket);
+  } finally { state.pendingTickets.delete(ticket); }
 }
 
 export function collabState(handle: SharedDocumentHandle): CollabDocumentState {
