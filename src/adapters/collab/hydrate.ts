@@ -104,7 +104,7 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
       roots.order.push([key]);
       const target = textTarget(id, key, kind === "h" ? "heading" : "audioText");
       if (kind === "h") editCollabText(text, { type: "text", at: 0, value: html.replace(/\p{Cs}/gu, "\ufffd") });
-      else insertSharedHtml(handle, target, text, html, tags, source.comments, `${key}:audioText`);
+      else insertSharedHtml(handle, target, text, html, tags, `${key}:audioText`);
     }
     for (const row of source.rows) {
       for (const section of sections) if (section.firstSceneId === row.id) {
@@ -125,7 +125,7 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
       visual.set("beat", row.id);
       visual.set("rank", rank(0));
       const text = createCollabText(handle, visual);
-      insertSharedHtml(handle, textTarget(row.id, row.id, "visualText"), text, row.visualText ?? "", tags, source.comments, `${row.id}:visualText`);
+      insertSharedHtml(handle, textTarget(row.id, row.id, "visualText"), text, row.visualText ?? "", tags, `${row.id}:visualText`);
       const first = selected(row, ["imageRef", "imageLinks"]);
       if (Object.hasOwn(row, "imageName")) first.name = row.imageName;
       if (Object.hasOwn(row, "imageAnnotation")) first.annotation = row.imageAnnotation;

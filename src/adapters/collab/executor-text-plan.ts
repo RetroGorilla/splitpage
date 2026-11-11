@@ -1,4 +1,5 @@
-import type { SharedContentRef, SharedTextAddress, SharedMarkValue } from "../../core/collab/operations.ts";
+import type { SharedContentRef, SharedTextAddress } from "../../core/collab/operations.ts";
+import type { SharedStoredMarkValue } from "./stored-mark.ts";
 import type { SharedPreparationView } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 
@@ -18,7 +19,7 @@ export interface SharedTextCommandPlan {
   readonly units: SharedPlannedTextUnit[];
   readonly sources: SharedTextProvenance[];
   readonly recordKeys: string[];
-  readonly additions: { readonly identity: SharedContentRef; readonly mark: SharedMarkValue }[];
+  readonly additions: { readonly identity: SharedContentRef; readonly mark: SharedStoredMarkValue }[];
 }
 
 function segmentOwner(value: unknown, field: "audioText" | "heading"): string | null {

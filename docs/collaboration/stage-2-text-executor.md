@@ -6,6 +6,7 @@ explicit: each chunk has a birth record excluding known additions and immutable
 addition records for its requested positive marks; null attributes mean absent.
 Comment, tag and link records contain only
 the mark; this executor creates no comment body, registry entry or other record.
+Identified marks follow the [Stage 2 occurrence and payload convention](stage-2-identified-marks.md).
 The following mark-handler change adds range additions and removals to this same entry.
 
 All handlers prepare through the read-only view. Their per-text scratch plan contains

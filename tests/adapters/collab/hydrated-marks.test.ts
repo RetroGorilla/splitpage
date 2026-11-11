@@ -1,7 +1,7 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
-import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { hydrateWithDecodedLinkAudit as hydrateSharedDocument, readHydrationLinkAudit } from "./link-policy-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSharedTransactions } from "../../../src/adapters/collab/document.ts";
 import { createCollabText, collabTextTarget, readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
@@ -9,6 +9,12 @@ import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-stor
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { createMonitoredSharedDocument, readRoots, validatedFixture } from "./helpers.ts";
 import { fieldMappingSource } from "./mapping-source.ts";
+
+after(() => {
+  const counts = readHydrationLinkAudit();
+  assert.deepEqual(counts, { documents: 3, fields: 8, linkRuns: 4, linkedUnits: 52 });
+  console.info("rich hydration link audit: " + JSON.stringify(counts));
+});
 
 test("two rich hydrations have equal deterministic record identities and literal per-character marks", () => {
   const a = createMonitoredSharedDocument(), b = createMonitoredSharedDocument(), c = createMonitoredSharedDocument();
@@ -23,8 +29,8 @@ test("two rich hydrations have equal deterministic record identities and literal
       const expected = [
         { from: 0, to: 15, marks: [{ kind: "b", value: true }, { kind: "hl", value: true }, { kind: "i", value: true }, { kind: "s", value: true }, { kind: "u", value: true }] },
         { from: 16, to: 29, marks: [{ kind: "link", id: segment + ":" + field + ":1", value: "https://example.test/text-link" }] },
-        { from: 30, to: 46, marks: [{ kind: "comment", id: "Cprobe", value: true }] },
-        { from: 47, to: 59, marks: [{ kind: "tag", id: segment + ":" + field + ":0000000002", value: "t_probe" }] },
+        { from: 30, to: 46, marks: [{ kind: "comment", id: segment + ":" + field + ":0000000002", value: "Canchor" }] },
+        { from: 47, to: 59, marks: [{ kind: "tag", id: segment + ":" + field + ":0000000003", value: "t_probe" }] },
         { from: 60, to: 78, marks: [{ kind: "dir", value: true }] },
         { from: 79, to: 91, marks: [{ kind: "cue", value: true }] }
       ];

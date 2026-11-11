@@ -1,9 +1,9 @@
 import { createMonitoredSharedDocument as createSharedDocument, createMonitoredNativeDocument, createLibraryControlDocument } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import * as Y from "yjs";
 import { applySharedUpdate, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, transactSharedDocument, observeSharedTransactions, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
-import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { hydrateWithDecodedLinkAudit as hydrateSharedDocument, readHydrationLinkAudit } from "./link-policy-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
@@ -12,6 +12,12 @@ import { decodeBody } from "../../../src/adapters/richtext/decode.ts";
 import { jsdomParser } from "../richtext/jsdom.mjs";
 import { validatedFixture, storedValue, readRoots, deliveryReplica } from "./helpers.ts";
 import { formattingLibraryControl } from "./formatting-controls.ts";
+
+after(() => {
+  const counts = readHydrationLinkAudit();
+  assert.deepEqual(counts, { documents: 21, fields: 40, linkRuns: 1, linkedUnits: 4 });
+  console.info("document hydration link audit: " + JSON.stringify(counts));
+});
 
 test("empty script hydrates all sixteen roots without inventing a beat", () => {
   const handle = createSharedDocument();
@@ -92,8 +98,8 @@ test("hydration keeps comments, replies, tags, gallery metadata, stamps and unkn
   hydrateSharedDocument(handle, source);
   const { roots } = collabState(handle);
   assert.deepEqual(storedValue(roots.segments.get("b:R1")), { head: { b: "R1" }, markRecords: [
-    { type: "add", operation: '["hydrate","audioText","b:R1",0]', writer: "hydration", start: 0, end: 5, mark: { kind: "comment", id: "C1", value: true }, born: null },
-    { type: "add", operation: '["hydrate","audioText","b:R1",1]', writer: "hydration", start: 5, end: 8, mark: { kind: "tag", id: "b:R1:audioText:0000000001", value: "t_one" }, born: null }
+    { type: "add", operation: '["hydrate","audioText","b:R1",0]', writer: "hydration", start: 0, end: 5, mark: { kind: "comment", id: "b:R1:audioText:0000000001", value: "C1" }, born: null },
+    { type: "add", operation: '["hydrate","audioText","b:R1",1]', writer: "hydration", start: 5, end: 8, mark: { kind: "tag", id: "b:R1:audioText:0000000002", value: "t_one" }, born: null }
   ], text: [{ insert: "wordsCup" }] });
   assert.deepEqual(storedValue(roots.comments.get("C1")), { anchorId: "C1", assignee: "Jo", author: "Jo", createdAt: "2026-01-01", extra: '{"future":5}', field: "audioText", id: "C1", kind: "anchor", quote: "words", rank: "0000000000", resolution: { resolved: true, resolvedAt: "2026-01-02", resolvedBy: "Jo" }, rowId: "R1", text: "Body", updatedAt: "2026-01-02" });
   assert.deepEqual(storedValue(roots.replies), { '["C1","RP1"]': { author: "Jo", commentId: "C1", createdAt: "2026-01-02", extra: '{"future":6}', id: "RP1", rank: "0000000000", text: "Reply" } });

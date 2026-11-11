@@ -51,7 +51,7 @@ function htmlTokens(html: string): string[] {
   return result;
 }
 
-export function insertSharedHtml(handle: SharedDocumentHandle, target: SharedTextAddress, text: Y.Text, html: string, tags: readonly Record<string, unknown>[], comments: readonly Record<string, unknown>[], scope: string): void {
+export function insertSharedHtml(handle: SharedDocumentHandle, target: SharedTextAddress, text: Y.Text, html: string, tags: readonly Record<string, unknown>[], scope: string): void {
   assertSharedDocumentIdle(collabState(handle));
   const result: ImportDelta[] = [];
   const stack: { name: string; attrs: Record<string, unknown> }[] = [];
@@ -92,8 +92,7 @@ export function insertSharedHtml(handle: SharedDocumentHandle, target: SharedTex
     if (source.href) attrs[`l:${scope}:${++serial}`] = source.href;
     if (source["data-cmt"]) {
       const anchor = source["data-cmt"];
-      const comment = comments.find(value => value.anchorId === anchor);
-      attrs[`c:${String(comment?.id ?? anchor)}`] = true;
+      attrs[`c:${scope}:${String(++serial).padStart(10, "0")}`] = anchor;
     }
     if (classes.includes("tag-anchor")) {
       const tag = tags.find(value => value.cat === source["data-tag-cat"] && value.name === source["data-tag-name"]);

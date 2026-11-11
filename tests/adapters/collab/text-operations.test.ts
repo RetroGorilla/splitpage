@@ -108,7 +108,7 @@ test("C returns a deeply frozen description and apply ignores retained mutable s
       scratch.units.splice(0, scratch.units.length); scratch.recordKeys.length = 0; scratch.additions.length = 0; scratch.sources.length = 0;
       return prepared;
     } });
-    assert.deepEqual(executeSharedOperations(handle, [insert("frozen", address, 1, [{ value: "X", marks: [{ kind: "link", id: ref("L"), value: "https://x" }] }])], { base: readSharedRevision(handle) }), { ok: true });
+    assert.deepEqual(executeSharedOperations(handle, [insert("frozen", address, 1, [{ value: "X", marks: [{ kind: "link", id: ref("https://x"), value: "https://x" }] }])], { base: readSharedRevision(handle) }), { ok: true });
     assert.equal(read(handle, address).map(char => char.value).join(""), "aXbcd"); assert.deepEqual(read(handle, address)[1]?.marks[0]?.values, ["https://x"]);
   } finally { destroySharedDocument(handle); }
 });
