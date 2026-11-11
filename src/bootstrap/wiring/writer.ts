@@ -4,7 +4,7 @@ import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentLifetime, documentReader, refresh } from "./ports/document.ts";
-import { edits, writerEditing, writerUndo } from "./ports/editing.ts";
+import { edits, wholeFieldText, writerEditing, writerUndo } from "./ports/editing.ts";
 import { text } from "./ports/text.ts";
 import { writerPanels } from "./ports/panels.ts";
 import { writerPreferences, writerView } from "./ports/preferences.ts";
@@ -153,6 +153,7 @@ export function mountWriterRuntimeFeature() {
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,
+            wholeFieldText,
             moveBeat: swapBeatsCommand,
             shown: edit => paintGuard().whileShown(edit),
             editingBlocked: () => paintGuard().painting() || undoGuard().applying() || screenIsStale(),

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { startWriter } from "../../../src/features/writer/writer.ts";
-import type { FlowWriter } from "../../../src/features/writer/flow-writer.ts";
+import type { FlowWriter } from "../../../src/features/writer/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeWriterPorts } from "../fakes.ts";

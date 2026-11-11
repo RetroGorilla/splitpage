@@ -8,6 +8,7 @@ import type { GalleryEdit } from "../commands/gallery.ts";
 import { moveBeatCommand } from "../commands/rows.ts";
 import type { CommandOutcome, CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
+import type { WholeFieldTextCommit } from "./ports.ts";
 
 export interface CellRange {
   readonly from: number;
@@ -47,6 +48,7 @@ export interface CellEditingPorts<E, Html = never> {
   readonly document: () => DocumentView | null;
   readonly run: CommonDocumentSession["run"];
   readonly text: CellTextPorts;
+  readonly wholeFieldText: WholeFieldTextCommit;
   readonly decode: CellDecoders;
   readonly undo: CellUndoPorts;
   readonly stale: () => boolean;
@@ -106,7 +108,7 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     if (idx === -1) return;
     const rowId = at.rowId as string;
     const field = at.field as string;
-    took(ports.run(cellTextCommand(rowId, field, cellRuns(ports.decode.withMedia(page.html(cell))), ports.text)));
+    took(ports.wholeFieldText.commit(rowId, field, ports.decode.withMedia(page.html(cell))));
     const doc = ports.document();
     if (doc) ports.painted(cell, field, doc.rows[idx] as ShownRow);
   }

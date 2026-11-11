@@ -3,6 +3,7 @@ import type { ProductionSelection } from "../../../application/editing/productio
 import { productionSelection as productionSelectionOwner } from "../production-editing-owners.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
+import { createWholeFieldTextCommit } from "../../../application/editing/whole-field-text.ts";
 import { undoOwner } from "../undo.ts";
 import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../editor-owners.ts";
@@ -22,6 +23,8 @@ export const edits: DocumentEdits = {
   stamps: sessionStamps,
   text: sessionTextPorts
 };
+
+export const wholeFieldText = createWholeFieldTextCommit(edits);
 
 export const undoControl: UndoControl = {
   breakCoalescing: () => { undoOwner().breakCoalescing(); },

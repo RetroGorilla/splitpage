@@ -3,7 +3,9 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
-import type { FlowWriterPorts } from "../../../src/features/writer/flow-writer.ts";
+import type { FlowWriterPorts } from "../../../src/features/writer/ports.ts";
+import { createWholeFieldTextCommit } from "../../../src/application/editing/whole-field-text.ts";
+import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { beatPos } from "../../../src/core/flow/flow.ts";
 import { scenesInOrder } from "../../../src/core/document/scenes.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -25,6 +27,15 @@ function harness(initial?: Parameters<typeof migrateRows>[0]) {
   let opens = 0;
   let closes = 0;
   let commands = 0;
+  const run = (command: Command): CommandOutcome => {
+    const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
+    if (!plan) return { kind: "noop" };
+    if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
+    commands++;
+    plan.apply(doc);
+    return { kind: "applied", generation: 1, changes: plan.changes };
+  };
+  const text = { cells: fromHtml, clock: { nowIso: () => "2026-11-05T12:00:00.000Z" }, editor: { name: () => "Editor" } };
   const ports: FlowWriterPorts = {
     root, doc: () => doc,
     openFind: () => { opens++; }, closeFind: () => { closes++; },
@@ -33,17 +44,11 @@ function harness(initial?: Parameters<typeof migrateRows>[0]) {
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: row => !!row.visualText },
     decode: fromHtml, storedHtml: html => html,
     moveBeat: swapBeatsCommand,
-    run: command => {
-      const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
-      if (!plan) return { kind: "noop" };
-      if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
-      commands++;
-      plan.apply(doc);
-      return { kind: "applied", generation: 1, changes: plan.changes };
-    },
+    wholeFieldText: createWholeFieldTextCommit({ run, text }),
+    run,
     shown: edit => edit(),
     editingBlocked: () => false,
-    text: { cells: fromHtml, clock: { nowIso: () => "2026-11-05T12:00:00.000Z" }, editor: { name: () => "Editor" } },
+    text,
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: message => { notices.push(message); }, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
