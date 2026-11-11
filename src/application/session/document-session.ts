@@ -1,3 +1,4 @@
+import type { SharedOperation } from "../../core/collab/operations.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { FlowSelectionPair } from "../../core/flow/flow.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
@@ -15,10 +16,16 @@ export type DeepReadonly<T> =
 
 export type DocumentView = DeepReadonly<ValidatedDocument>;
 
+export interface SharedPlan {
+  readonly operations: readonly SharedOperation[];
+  readonly base?: number;
+}
+
 export interface Plan {
   readonly selection?: FlowSelectionPair;
   readonly changes: ChangeSet;
   readonly apply: (doc: ValidatedDocument) => void;
+  readonly shared?: SharedPlan;
 }
 
 export interface CommandRefusal {
