@@ -112,7 +112,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
       ports.report(error);
       return;
     }
-    // why: An unrecognised origin still changed the document, so it is published as the kind that records and saves nothing.
+    // why: An unrecognised origin still changed the document; remote is the kind that records and saves nothing.
     const kind = document === null ? "adopt" : known(origin) ? ORIGIN_KINDS[origin] : "remote";
     if (!known(origin)) ports.report(new Error(UNRECOGNISED_ORIGIN + ": " + String(origin)));
     document = step.document;
