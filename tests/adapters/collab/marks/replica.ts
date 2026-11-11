@@ -75,14 +75,14 @@ export class MarkTraceReplica {
         if (!text.length) return;
         const first = this.identity(from), born: SharedMarkBirth = { client: first.client, clock: first.clock, length: text.length };
         const after = readSharedMarkCharacters(this.handle, this.target);
-        const observed = [...new Set(after?.slice(from, from + text.length).flatMap(char => char.marks.flatMap(group => group.additions.map(add => add.operation))))].sort();
+        const observed = [...new Set(after?.slice(from, from + text.length).flatMap(char => char.marks.flatMap(group => group.additions.map(add => add.record))))].sort();
         write(command.id, from, from + text.length, { type: "birth", observed, born });
         marks.forEach((mark, index) => write(command.id + ":" + index, from, from + text.length, { type: "add", mark, born }));
       } else if (command.mark) {
         if (command.kind === "add") write(command.id, from, to, { type: "add", mark: command.mark });
         else {
           const mark = command.mark;
-          const observed = [...new Set(before.slice(from, to).flatMap(char => char.marks.filter(group => group.kind === mark.kind && group.id === ("id" in mark ? mark.id : null)).flatMap(group => group.additions.map(add => add.operation))))].sort();
+          const observed = [...new Set(before.slice(from, to).flatMap(char => char.marks.filter(group => group.kind === mark.kind && group.id === ("id" in mark ? mark.id : null)).flatMap(group => group.additions.map(add => add.record))))].sort();
           write(command.id, from, to, { type: "remove", observed });
         }
       }

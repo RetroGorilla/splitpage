@@ -16,6 +16,7 @@ function readAnchorValue(raw: unknown): AnchorValue | null {
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const record = value as Record<string, unknown>;
     const target = record.v === 2 ? readSharedTextTarget(record.target) : null;
+    if (target && (target.field === "audioText" || target.field === "heading")) return null;
     if (record.v === 1 ? Object.keys(record).sort().join(",") !== "relative,segment,v" : record.v !== 2 || Object.keys(record).sort().join(",") !== "relative,target,v" || !target) return null;
     const segment: unknown = target ? target.segment : record.segment;
     if (typeof segment !== "string" || !segment || hasLoneSurrogate(segment)) return null;

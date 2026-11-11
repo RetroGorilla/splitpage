@@ -7,7 +7,7 @@ import { collabState } from "../../../../src/adapters/collab/state.ts";
 import { initializeSharedMarkStore, prepareSharedMarkRecord, writeSharedMarkRecord, readSharedMarkCharacters } from "../../../../src/adapters/collab/mark-store.ts";
 import { readSharedMarkRecord, sharedMarkRecordKey } from "../../../../src/adapters/collab/mark-record.ts";
 import { readSharedTextTarget } from "../../../../src/adapters/collab/text-target.ts";
-import { createSharedAnchor, resolveSharedTextAnchor } from "../../../../src/adapters/collab/anchors.ts";
+import { createSharedAnchor, resolveSharedTextAnchor, readSharedAnchor } from "../../../../src/adapters/collab/anchors.ts";
 import { monitorSharedFormatting, validatedFixture } from "../helpers.ts";
 import { assertReplicasAgree } from "../../../collab/agreement.ts";
 import { MarkTraceHistory } from "./driver.ts";
@@ -30,6 +30,11 @@ for (const field of ["audioText", "visualText", "heading", "title"] as const) te
     const ref = createSharedAnchor(handle, target, 1, "after"); assert.ok(ref);
     assert.equal((JSON.parse(ref) as { v: number }).v, field === "visualText" || field === "title" ? 2 : 1);
     assert.equal(resolveSharedTextAnchor(handle, ref, target), 1);
+    if (field === "audioText" || field === "heading") {
+      const bytes = (JSON.parse(ref) as { relative: number[] }).relative;
+      assert.equal(readSharedAnchor(JSON.stringify({ v: 2, target, relative: bytes })), null);
+      assert.equal(createSharedAnchor(handle, target.segment, 1, "after"), ref);
+    }
     assert.equal(resolveSharedTextAnchor(handle, ref, address(field === "visualText" ? "audioText" : "visualText")), null);
     const record = prepareSharedMarkRecord(handle, target, "A1", 1, 3, { type: "add", mark: { kind: "i", value: true } }); assert.ok(record);
     assert.deepEqual(writeSharedMarkRecord(handle, target, "A1", record), { ok: true });
@@ -50,7 +55,8 @@ test("identified additions retain all payloads and an unobserved addition surviv
       assert.equal(writeSharedMarkRecord(handle, target, operation, record).ok, true);
     }
     assert.deepEqual(readSharedMarkCharacters(handle, target)?.[1]?.marks[0]?.values, ["https://a", "https://b"]);
-    const remove = prepareSharedMarkRecord(handle, target, "A2", 1, 3, { type: "remove", observed: ["A1"] }); assert.ok(remove);
+    const observed = readSharedMarkCharacters(handle, target)?.[1]?.marks[0]?.additions.find(add => add.operation === "A1")?.record; assert.ok(observed);
+    const remove = prepareSharedMarkRecord(handle, target, "A2", 1, 3, { type: "remove", observed: [observed] }); assert.ok(remove);
     assert.equal(writeSharedMarkRecord(handle, target, "A2", remove).ok, true);
     assert.deepEqual(readSharedMarkCharacters(handle, target)?.[1]?.marks[0]?.values, ["https://b"]);
   } finally { destroySharedDocument(handle); }
@@ -84,14 +90,14 @@ test("seeded malformed mark records and normalized ids read identically after en
     assert.equal(good.operation, "op�");
     const segment = collabState(handle).roots.segments.get("b:R1"); assert.ok(segment instanceof Y.Map);
     const store: unknown = segment.get("markRecords"); assert.ok(store instanceof Y.Map);
-    const goodKey = sharedMarkRecordKey("op�"); assert.ok(goodKey); assert.equal(store.has(goodKey), true);
-    const values: unknown[] = [null, true, 3, [], {}, { ...good, extra: true }, { ...good, start: "gone" }, { ...good, born: { client: 1, clock: -1, length: 2 } }, { type: "remove", operation: "bad", start: good.start, end: good.end, observed: new Array(1) }];
+    const goodKey = sharedMarkRecordKey("op�", good.writer); assert.ok(goodKey); assert.equal(store.has(goodKey), true);
+    const values: unknown[] = [null, true, 3, [], {}, { ...good, extra: true }, { ...good, start: "gone" }, { ...good, born: { client: 1, clock: -1, length: 2 } }, { type: "remove", operation: "bad", writer: good.writer, start: good.start, end: good.end, observed: new Array(1) }];
     let seed = 0x1414;
     for (let sample = 0; sample < 256; sample++) {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       const operation = `bad${sample}`, value = values[seed % values.length];
       const raw: unknown = sample % 17 === 0 ? { ...good, operation } : value !== null && typeof value === "object" && !Array.isArray(value) ? { ...value, operation } : value;
-      const key = sample % 17 === 0 || sample % 2 ? sharedMarkRecordKey(operation) ?? "" : `["${operation}\ud800"]`;
+      const key: string = sample % 17 === 0 || sample % 2 ? sharedMarkRecordKey(operation, good.writer) ?? "" : `["${operation}\ud800"]`;
       assert.equal(readSharedMarkRecord(key, raw) !== null, sample % 17 === 0);
       transactSharedDocument(handle, "local-command", () => store.set(key, raw));
       assert.equal(applySharedUpdate(peer, encodeSharedState(handle)).ok, true);
