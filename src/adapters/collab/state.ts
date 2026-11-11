@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 import { declareCollabRoots } from "./roots.ts";
+import { CollabReadCaches } from "./read-cache.ts";
 
 function formattingCleanup(transaction: Y.Transaction): boolean {
   if (transaction.beforeState.size !== transaction.afterState.size) return false;
@@ -25,8 +26,12 @@ export class CollabDocumentState {
   adapterBatch = false;
   execution: { applying: boolean } | null = null;
 
+  readonly reads = new CollabReadCaches();
+
   constructor() {
+    this.doc.on("beforeTransaction", () => { this.reads.begin(); });
     this.doc.on("beforeObserverCalls", transaction => {
+      this.reads.settle(transaction.changed);
       if (transaction.changed.size || transaction.deleteSet.clients.size || transaction.beforeState.size !== transaction.afterState.size
         || [...transaction.beforeState].some(([client, clock]) => transaction.afterState.get(client) !== clock)) this.revision++;
       if (this.adapterTransactions.has(transaction)) this.adapterBatch = true;

@@ -8,6 +8,7 @@ import { withSharedSnapshot } from "./snapshot.ts";
 import { createSharedPreparation, applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { countSharedRead } from "./read-counts.ts";
 
 function sameTarget(a: SharedStatusEvent["target"], b: SharedStatusEvent["target"]): boolean {
   return a.scope === b.scope && a.record === b.record;
@@ -20,8 +21,9 @@ function stableEvent(event: SharedStatusEvent): boolean {
 
 function eventsFor(view: SharedPreparationView, target: SharedStatusEvent["target"]): Map<string, SharedStatusEvent> {
   const events = new Map<string, SharedStatusEvent>();
-  for (const id of view.keys(["statusEvents"])) {
+  for (const id of view.statusEvents(target)) {
     if (!isStableSharedIdentity(id)) continue;
+    countSharedRead("statusEvents");
     const event = readSharedStatusEvent(view.get(["statusEvents", id]));
     if (event && stableEvent(event) && id === event.id && sameTarget(event.target, target)) events.set(id, event);
   }

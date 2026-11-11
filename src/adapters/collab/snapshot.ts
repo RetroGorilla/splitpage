@@ -1,9 +1,11 @@
 import * as Y from "yjs";
 import { CollabDocumentState, collabState } from "./state.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { countSharedRead } from "./read-counts.ts";
 
 export function withSharedSnapshot<T>(handle: SharedDocumentHandle, read: (copy: CollabDocumentState) => T): T {
   const copy = new CollabDocumentState();
+  countSharedRead("snapshots");
   try {
     // why: Public wire decoding normalizes malformed strings and colliding map keys exactly as a late join does.
     Y.applyUpdate(copy.doc, Y.encodeStateAsUpdate(collabState(handle).doc));
