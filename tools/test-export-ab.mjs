@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { zipWrite } from "../src/adapters/formats/zip.ts";
 import { compareMasked, compareOutput, compareRuns, completeness, FORMATS, main, parseArgs, report, zipDifferences } from "./export-ab.mjs";
 import { clockProblems, pinnedDateTimeFormat } from "./export-ab-environment.mjs";
@@ -12,9 +12,23 @@ import { REPO } from "./source-scan.mjs";
 const EXPORT_FACTS_DATE_FORMATS = ["docx", "html", "md", "md-table", "pdf print page"];
 const DATE_TEXT_FORMATS = ["b-roll pdf print page", "docx", "html", "md", "md-table", "packing-gear print page", "packing-prop print page", "pdf print page"];
 
+const SYSTEM_TMP = tmpdir();
+const RUN_TMP = realpathSync.native(mkdtempSync(join(SYSTEM_TMP, "export-ab-test-run-")));
+process.env.TEMP = RUN_TMP;
+process.env.TMP = RUN_TMP;
+process.env.TMPDIR = RUN_TMP;
+
 const git = (args, cwd = REPO, env = process.env) => execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+const normal = (path) => path.replaceAll("\\", "/").toLowerCase();
+const ownRoot = `${normal(RUN_TMP)}/`;
+// why: other checkouts' runs register worktrees in this repository too; only those under this run's folder are ours
 const leftovers = () => git(["worktree", "list", "--porcelain"]).split("\n")
-  .filter((l) => l.startsWith("worktree ") && /splitpage-export-ab-|export-ab-test-/.test(l));
+  .filter((l) => l.startsWith("worktree ") && normal(l.slice("worktree ".length)).startsWith(ownRoot));
+
+after(() => {
+  for (const line of leftovers()) git(["worktree", "remove", "--force", line.slice("worktree ".length)]);
+  rmSync(RUN_TMP, { recursive: true, force: true });
+});
 
 function manifestOf(formats) {
   const registered = [];
@@ -181,6 +195,22 @@ test("the same commit on both sides is identical in every format and fixture, an
   }
 });
 
+test("two runs at once both pass, and a worktree another run owns is neither counted nor touched", async () => {
+  const foreign = mkdtempSync(join(SYSTEM_TMP, "export-ab-foreign-"));
+  const elsewhere = join(realpathSync.native(foreign), "splitpage-export-ab-other");
+  try {
+    git(["worktree", "add", "--detach", elsewhere, "HEAD"]);
+    const statuses = await Promise.all([main(["HEAD", "HEAD"]), main(["HEAD", "HEAD"])]);
+    assert.deepEqual(statuses, [0, 0]);
+    assert.deepEqual(leftovers(), []);
+    assert.ok(existsSync(join(elsewhere, "package.json")), "the other run's worktree is intact");
+    assert.ok(git(["worktree", "list", "--porcelain"]).includes("splitpage-export-ab-other"), "the other run's worktree is still registered");
+  } finally {
+    if (existsSync(elsewhere)) git(["worktree", "remove", "--force", elsewhere]);
+    rmSync(foreign, { recursive: true, force: true });
+  }
+});
+
 async function plantedRun(edits) {
   const work = mkdtempSync(join(tmpdir(), "export-ab-test-"));
   const plant = join(work, "plant");
@@ -202,7 +232,7 @@ async function plantedRun(edits) {
     assert.deepEqual(leftovers(), []);
     return { status, seen };
   } finally {
-    if (leftovers().length) git(["worktree", "remove", "--force", plant]);
+    if (existsSync(plant)) git(["worktree", "remove", "--force", plant]);
     rmSync(work, { recursive: true, force: true });
   }
 }
