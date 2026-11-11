@@ -1,21 +1,21 @@
-import * as Y from "yjs";
 import type { SharedStatusEvent } from "../../core/collab/operations.ts";
 import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";
 import { ROW_STATUS_IDS } from "../../core/document/timing.ts";
 import { TAG_STATUS_IDS } from "../../core/document/tags.ts";
 import { BROLL_STATUS_IDS } from "../../core/document/broll.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState } from "./state.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
+import { createSharedPreparation, applySharedMapWrites } from "./prepare.ts";
+import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
 
 function sameTarget(a: SharedStatusEvent["target"], b: SharedStatusEvent["target"]): boolean {
   return a.scope === b.scope && a.record === b.record;
 }
 
-function eventsFor(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): Map<string, SharedStatusEvent> {
+function eventsFor(view: SharedPreparationView, target: SharedStatusEvent["target"]): Map<string, SharedStatusEvent> {
   const events = new Map<string, SharedStatusEvent>();
-  for (const [id, raw] of collabState(handle).roots.statusEvents) {
-    const event = readSharedStatusEvent(raw);
+  for (const id of view.keys(["statusEvents"])) {
+    const event = readSharedStatusEvent(view.get(["statusEvents", id]));
     if (event && id === event.id && sameTarget(event.target, target)) events.set(id, event);
   }
   return events;
@@ -26,20 +26,18 @@ function heads(events: ReadonlyMap<string, SharedStatusEvent>): string[] {
   return [...events.keys()].filter(id => !parents.has(id)).sort();
 }
 
-function targetRecord(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): Y.Map<unknown> | null {
-  const roots = collabState(handle).roots;
-  const raw = roots[target.scope === "beat" ? "beats" : target.scope === "tag" ? "tags" : "shots"].get(target.record);
-  return raw instanceof Y.Map ? raw : null;
+function targetPath(target: SharedStatusEvent["target"]): string[] {
+  return [target.scope === "beat" ? "beats" : target.scope === "tag" ? "tags" : "shots", target.record];
 }
 
-function storedStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string {
+function storedStatus(view: SharedPreparationView, target: SharedStatusEvent["target"]): string {
   const ids = target.scope === "beat" ? ROW_STATUS_IDS : target.scope === "tag" ? TAG_STATUS_IDS : BROLL_STATUS_IDS;
-  const value = targetRecord(handle, target)?.get("status");
+  const value = view.get([...targetPath(target), "status"]);
   return typeof value === "string" && (ids as readonly string[]).includes(value) ? value : ids[0];
 }
 
-function resolveStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string {
-  const stored = storedStatus(handle, target), events = eventsFor(handle, target);
+function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["target"]): string {
+  const stored = storedStatus(view, target), events = eventsFor(view, target);
   const pending = new Map<string, number>(), children = new Map<string, string[]>(), ordered: string[] = [];
   for (const [id, event] of events) {
     const parents = new Set(event.parents.filter(parent => events.has(parent)));
@@ -91,41 +89,51 @@ function resolveStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["
   };
   for (const id of ordered) {
     const event = events.get(id);
-    if (event) resolved.set(id, collabState(handle).roots.retiredStatus.has(id)
+    if (event) resolved.set(id, view.kind(["retiredStatus", id]) !== "missing"
       ? resolve(event.parents.filter(parent => events.has(parent))) : event.value);
   }
   return resolve(heads(events));
 }
 
 export function readSharedStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string {
-  return withSharedSnapshot(handle, copy => resolveStatus(copy as unknown as SharedDocumentHandle, target));
+  return withSharedSnapshot(handle, copy => resolveStatus(createSharedPreparation(copy as unknown as SharedDocumentHandle).view, target));
 }
 
 export function readSharedStatusHeads(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string[] {
-  return withSharedSnapshot(handle, copy => heads(eventsFor(copy as unknown as SharedDocumentHandle, target)));
+  return withSharedSnapshot(handle, copy => heads(eventsFor(createSharedPreparation(copy as unknown as SharedDocumentHandle).view, target)));
 }
 
 export function readSharedStatusNotices(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string[] {
   return withSharedSnapshot(handle, copy => {
-    const events = [...eventsFor(copy as unknown as SharedDocumentHandle, target).values()];
+    const events = [...eventsFor(createSharedPreparation(copy as unknown as SharedDocumentHandle).view, target).values()];
     const conflicts = events.filter(event => events.some(other => other.value !== event.value
       && JSON.stringify([...new Set(event.parents)].sort()) === JSON.stringify([...new Set(other.parents)].sort())));
     return [...new Set(conflicts.map(event => `${event.by}: concurrent status change did not apply`))].sort();
   });
 }
 
-export function writeSharedStatusEvent(handle: SharedDocumentHandle, operation: SharedStatusEvent): string | null {
+export function prepareSharedStatusEvent(operation: SharedStatusEvent, view: SharedPreparationView): SharedPreparationResult {
   const event = readSharedStatusEvent(operation);
-  if (!event || !targetRecord(handle, event.target)) return "missing-status-target";
-  const root = collabState(handle).roots.statusEvents;
-  if (root.has(event.id)) return "duplicate-status-event";
-  const events = eventsFor(handle, event.target);
+  if (!event || view.kind(targetPath(event.target)) !== "map") return { ok: false, reason: "missing-status-target" };
+  const key = JSON.stringify([view.writer, event.id]);
+  if (view.kind(["statusEvents", key]) !== "missing") return { ok: false, reason: "duplicate-status-event" };
+  const events = eventsFor(view, event.target);
   for (const known of events.values()) {
-    if (known.parents.some(parent => !events.has(parent))) return "incomplete-status-ancestry";
+    if (known.parents.some(parent => !events.has(parent))) return { ok: false, reason: "incomplete-status-ancestry" };
   }
-  if (JSON.stringify([...new Set(event.parents)].sort()) !== JSON.stringify(heads(events))) return "stale-status-parents";
-  const stored = readSharedStatusEvent({ ...event, prior: resolveStatus(handle, event.target) });
-  if (!stored) return "invalid-status-event";
-  root.set(event.id, stored);
-  return null;
+  const parents: string[] = [];
+  for (const parent of event.parents) {
+    if (events.has(parent)) { parents.push(parent); continue; }
+    const candidates = [...events.keys()].filter(id => {
+      try { const scoped: unknown = JSON.parse(id); return Array.isArray(scoped) && scoped.length === 2 && scoped[1] === parent; }
+      catch { return false; }
+    });
+    if (candidates.length !== 1 || candidates[0] === undefined) return { ok: false, reason: "stale-or-ambiguous-status-parent" };
+    parents.push(candidates[0]);
+  }
+  if (JSON.stringify([...new Set(parents)].sort()) !== JSON.stringify(heads(events))) return { ok: false, reason: "stale-status-parents" };
+  const stored = readSharedStatusEvent({ ...event, id: key, parents, prior: resolveStatus(view, event.target) });
+  if (!stored) return { ok: false, reason: "invalid-status-event" };
+  const writes: SharedPreparedWrite[] = [{ path: ["statusEvents", key], kind: "set", value: stored }];
+  return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }

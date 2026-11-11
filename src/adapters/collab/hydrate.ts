@@ -10,7 +10,7 @@ import { insertSharedHtml } from "./text-import.ts";
 
 type ImportBag = Record<string, unknown>;
 
-const metaFields = ["titleOrigin", "titleVersion", "docId", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "schema"];
+const metaFields = ["docId", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "schema"];
 const captureFields = ["rev", "lastEditedBy", "lastEditedAt", "personColors"];
 const beatFields = ["id", "status", "lengthSeconds", "paragraphStart"];
 const rowSpecial = ["audioText", "visualText", "updatedAt", "updatedBy", "imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"];
@@ -60,7 +60,8 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
   for (const comment of source.comments) unique(records(comment.replies));
   const roots = state.roots;
   transactSharedDocument(handle, "hydration", () => {
-    write(roots.meta, source, metaFields, ["title", "rows", "sections", "comments", "people", "productionTags", "brollShots", ...captureFields]);
+    write(roots.meta, source, metaFields, ["title", "titleOrigin", "titleVersion", "rows", "sections", "comments", "people", "productionTags", "brollShots", ...captureFields]);
+    roots.meta.set("fileTitle", selected(source, ["titleOrigin", "titleVersion"]));
     roots.meta.set("capture", selected(source, captureFields));
     const title = new Y.Text();
     roots.meta.set("title", title);

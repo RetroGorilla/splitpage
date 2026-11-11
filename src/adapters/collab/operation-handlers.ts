@@ -1,10 +1,11 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import type { SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
 
 export type SharedOperationHandlers = {
   readonly [Kind in SharedOperation["kind"]]?: (
-    handle: SharedDocumentHandle, operation: Extract<SharedOperation, { kind: Kind }>
-  ) => string | null;
+    operation: Extract<SharedOperation, { kind: Kind }>, view: SharedPreparationView
+  ) => SharedPreparationResult;
 };
 
 let registrations: WeakMap<SharedDocumentHandle, SharedOperationHandlers> | null = null;

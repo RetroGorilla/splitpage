@@ -23,6 +23,8 @@ test("ordered dispatch stages dependencies, commits once as local-command, and l
   const run = replicas();
   try {
     const origins: unknown[] = [], detach = observeSharedTransactions(run.a, origin => origins.push(origin));
+    let updates = 0;
+    collabState(run.a).doc.on("update", () => { updates++; });
     const first = scalar("one", "beat", "R1", "lengthSeconds", 4);
     for (const refused of [scalar("bad", "beat", "missing", "lengthSeconds", 7), scalar("bad", "beat", "R1", "status", "shot"),
       { kind: "record-delete", id: "bad", by: "Alice", target: { collection: "people", record: "P" } }]) {
@@ -32,16 +34,16 @@ test("ordered dispatch stages dependencies, commits once as local-command, and l
     }
     assert.deepEqual(origins, []);
     execute(run.a, first, status("a", "ready"), status("b", "shot", ["a"]));
-    assert.deepEqual(origins, ["local-command"]); assert.equal(readSharedStatus(run.a, target), "shot");
+    assert.deepEqual(origins, ["local-command"]); assert.equal(updates, 1); assert.equal(readSharedStatus(run.a, target), "shot");
     detach();
-    registerSharedOperationHandlers(run.a, { "record-delete": (handle, command) => {
-      collabState(handle).roots.people.set(command.target.record, "staged"); return "refused-after-write";
+    registerSharedOperationHandlers(run.a, { "record-delete": (command, view) => {
+      assert.equal(view.kind(["people", command.target.record]), "missing"); return { ok: false, reason: "refused-in-prepare" };
     } });
     const before = encodeSharedState(run.a);
     assert.equal(executeSharedOperations(run.a, [operation({ kind: "record-delete", id: "r", by: "A",
       target: { collection: "people", record: "P" } })]).ok, false);
     assert.deepEqual(encodeSharedState(run.a), before);
-    assert.throws(() => registerSharedOperationHandlers(run.a, { "record-delete": () => null }));
+    assert.throws(() => registerSharedOperationHandlers(run.a, { "record-delete": () => ({ ok: false, reason: "duplicate" }) }));
   } finally { run.close(); }
 });
 
@@ -80,7 +82,7 @@ for (const order of deliveryOrders) test(`T21 scalar status portion and identica
     agree("common ready ancestor", order, [run.a, run.b], handle => readSharedStatus(handle, target), "ready");
     execute(run.a, status("f", "shot", ["d", "e"])); execute(run.b, status("g", "shot", ["e", "d"], "Bob")); run.queue.flush(order);
     agree("identical changes", order, [run.a, run.b], handle => readSharedStatus(handle, target), "shot");
-    assert.deepEqual(readSharedStatusHeads(run.a, target), ["f", "g"]);
+    assert.deepEqual(readSharedStatusHeads(run.a, target), ['["1","f"]', '["2","g"]']);
   } finally { run.close(); }
 });
 
