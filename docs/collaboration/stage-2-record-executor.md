@@ -88,7 +88,7 @@ identical results on every copy; this tie-break is assumed.
 
 The T21 scalar fixture's status/notices portion and the repaired four-event
 common-root regression are reproduced. The fixture's text change and undo need
-the text and undo executors. T11 comment/reply records belong to the second part
-of this package; anchors, fully deleted words and recovery require marks,
+the text and undo executors. T11 comment/reply records run through the
+[record handlers](stage-2-record-handlers.md); anchors, fully deleted words and recovery require marks,
 structure and recovery. Remaining Stage 1 histories use text, marks, structural
 commands, projection, buffering or undo outside this package.
