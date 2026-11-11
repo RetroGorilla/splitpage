@@ -17,7 +17,6 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
-import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { BrollEntry } from "../../core/production/broll.ts";
 import type { FieldHtml } from "../../core/production/ports.ts";
 import type { Run } from "../../core/text/runs.ts";
@@ -35,7 +34,7 @@ interface BrollAnchors {
 }
 
 export interface BrollRecordsPorts {
-  readonly document: Pick<DocumentReader, "read" | "numbering"> & { readonly current: () => ValidatedDocument | null };
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "run" | "edit" | "stamps" | "text">;
   readonly cells: Pick<CellEditing<Element>, "edit">;
   readonly paint: Pick<PaintGuard, "whileShown">;

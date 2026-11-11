@@ -11,7 +11,7 @@ import { deriveProductionIndex } from "../../core/production/tags.ts";
 import { brollEntries } from "../../core/production/broll.ts";
 import { toHtml } from "../../core/text/html.ts";
 import type { DocumentEntry } from "../session/ports.ts";
-import type { DocumentView } from "../session/document-session.ts";
+import type { CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 
 export interface ExportAnchor {
   readonly contains: (other: ExportAnchor) => boolean;
@@ -23,8 +23,7 @@ export interface ExportAnchorBody {
   readonly querySelectorAll: (selector: string) => ArrayLike<ExportAnchor>;
 }
 
-export interface ExportKitPorts {
-  readonly read: CapturePorts["read"];
+export interface ExportKitPorts extends Readonly<Pick<CommonDocumentSession, "read">> {
   readonly preferences: { readonly clock: () => string };
   readonly clock: Clock;
   readonly ids: IdSource;
