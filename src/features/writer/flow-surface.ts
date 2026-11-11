@@ -14,6 +14,8 @@ import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
+import { createPaintedBeats } from "./flow-painted-base.ts";
+import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 
@@ -29,6 +31,7 @@ export interface SurfacePorts {
     readonly copy: (range: FlowRange, data: DataTransfer, cut: boolean) => void;
     readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
   };
+  readonly paintedText?: PaintedTextSource;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
@@ -78,6 +81,7 @@ export interface Surface {
   readonly toOwnBeat: (range: FlowRange) => string | null;
   readonly domRange: (range: FlowRange) => Range | null;
   readonly domCheck: () => string[];
+  readonly paintedBase: (rowId: string) => PaintedText | null;
   readonly dispose: () => void;
 }
 
@@ -110,6 +114,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
+  const paintedBeats = ports.paintedText ? createPaintedBeats(ports.paintedText) : null;
   let composing = false;
   const queuedPastes: Pick<DataTransfer, "getData">[] = [];
   let mouseDown = false;
@@ -293,6 +298,8 @@ export function createSurface(ports: SurfacePorts): Surface {
     keptBeats.forEach(el => { if (el.isConnected) el.remove(); });
     keptHeads.forEach(el => { if (el.isConnected) el.remove(); });
     painting = false;
+    // why: the base is what this pass showed, so it is read here; a later read could describe text nobody saw
+    if (paintedBeats) paintedBeats.record(doc.rows, row => projection(cellOf(row)));
   }
 
   function posFromDom(node: Node, offset: number): FlowPos | null {
@@ -1294,9 +1301,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     toOwnBeat,
     domRange,
     domCheck,
+    paintedBase: rowId => paintedBeats ? paintedBeats.base(rowId) : null,
     dispose: () => {
       stopClipboard?.();
       beatMenu.dispose();
+      paintedBeats?.clear();
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       queuedPastes.length = 0;
