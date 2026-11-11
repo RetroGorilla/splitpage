@@ -27,6 +27,8 @@ import type { WriterFindAccess } from "../../src/features/common/writer-find.ts"
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
+import type { PaintedTextSource } from "../../src/application/editing/ports.ts";
+import { readSharedContentRef } from "../../src/core/collab/read-operation.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
 import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
@@ -399,6 +401,22 @@ export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
     stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
   };
   return { edits, ran, answer: (next: CommandOutcome): void => { outcome = next; } };
+}
+
+export type FakePaintedBeat = { readonly revision: number; readonly units: readonly (readonly [identity: string, text: string])[] };
+
+export function fakePaintedText(projected: number, initial: Readonly<Record<string, FakePaintedBeat>>) {
+  const reads: [rowId: string, field: string][] = [];
+  let beats = initial, documentRevision = projected;
+  const paintedText: PaintedTextSource = { documentRevision: () => documentRevision, read: (rowId, field) => {
+    reads.push([rowId, field]);
+    const beat = Object.hasOwn(beats, rowId) ? beats[rowId] : undefined;
+    if (!beat) return null;
+    const identities = beat.units.map(([identity]) => readSharedContentRef(identity));
+    return { revision: beat.revision, text: beat.units.map(([, text]) => text).join(""), identity: index => identities[index] ?? null };
+  } };
+  return { paintedText, reads, show: (next: Readonly<Record<string, FakePaintedBeat>>): void => { beats = next; },
+    project: (revision: number): void => { documentRevision = revision; } };
 }
 
 export function fakeUndo() {
