@@ -10,6 +10,7 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 import { createCellEditing } from "../../../src/application/editing/cell-editing.ts";
+import { createWholeFieldTextCommit } from "../../../src/application/editing/whole-field-text.ts";
 import { createPaintGuard } from "../../../src/application/editing/paint-guard.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { createProductionIndex } from "../../../src/application/production/production-index.ts";
@@ -54,7 +55,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
       attached: cell => cell.isConnected, html: cell => cell.innerHTML, selection: () => null,
       write: (cell, html) => { cell.innerHTML = html; }, focus: () => {}
     },
-    document: () => doc, run, text, decode: { text: fromHtml, withMedia: fromHtml },
+    document: () => doc, run, text, wholeFieldText: createWholeFieldTextCommit({ run, text }), decode: { text: fromHtml, withMedia: fromHtml },
     undo: { applying: () => false, breakCoalescing: () => {}, flush: () => {}, latest: () => null },
     stale: () => false, painted: () => {}, shown: edit => edit(), announce: () => {}
   });
@@ -79,6 +80,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
     shown: edit => edit(),
     editingBlocked: () => guard.painting(),
     text,
+    wholeFieldText: createWholeFieldTextCommit({ run, text }),
     visualInput: tagged
       ? (event, cell) => { maybeAutoTagShortcut(event, cell); updateTagGhost(cell); }
       : (_event, cell) => { inputs.push(cell.innerHTML); cells.sync(cell); },

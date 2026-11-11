@@ -7,8 +7,7 @@ import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { beatPos, caretAt } from "../../core/flow/flow.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 
-import type { FlowWriterMaker, WriterFeaturePorts } from "./ports.ts";
-import type { FlowWriter } from "./flow-writer.ts";
+import type { FlowWriter, FlowWriterMaker, WriterFeaturePorts } from "./ports.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 
