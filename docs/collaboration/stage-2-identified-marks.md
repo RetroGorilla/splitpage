@@ -30,6 +30,13 @@ The comment record retains its `anchorId`. Standalone `syncCommentAnchors` is un
 projection reads payloads when producing plain `cmt` names and derives locations
 without writing shared state. INV-54 remains the separate b-roll-key re-key rule.
 
+In shared content, each kind and payload is present or absent on each character:
+any active addition supplies that name. Occurrences are storage, not visible layers.
+A clear removes every observed addition with the named payload on the selected units.
+Two concurrent additions of one name read once, and one later clear removes both.
+Standalone can stack one tag name twice; sharing it shows that name once. The
+[text executor contract](stage-2-text-executor.md) records this declared difference.
+
 The stored reader accepts only this form. In particular, the old stored comment
 `{id:recordId,value:true}` is invalid, with no compatibility path. Stable native ids,
 comment anchor payloads and tag payloads must be well-formed UTF-16 without U+FFFD.

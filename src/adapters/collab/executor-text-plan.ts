@@ -4,7 +4,7 @@ import type { SharedPreparationView } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 
 export class SharedTextPreparationError extends Error {}
-export interface SharedPlannedTextUnit { readonly value: unknown }
+export interface SharedPlannedTextUnit { readonly value: unknown; additions: SharedContentRef[] }
 export interface SharedTextProvenance {
   readonly owner: string;
   readonly units: readonly SharedPlannedTextUnit[];
@@ -60,7 +60,7 @@ export function sharedTextCommandPlan(view: SharedPreparationView, target: Share
   return view.scratch("text-plan:" + JSON.stringify(located.path), () => {
     const facade = view.text(located.path);
     if (!facade) throw new SharedTextPreparationError("missing-target");
-    const units = facade.units.map(unit => ({ value: unit.value }));
+    const units = facade.units.map(unit => ({ value: unit.value, additions: unit.marks.flatMap(group => group.additions.map(addition => addition.record)) }));
     return { ...located, units, sources: [provenance(target.owner, units, 0)], recordKeys: [...facade.recordKeys],
       additions: facade.records.flatMap(item => item.record.type === "add" ? [{ identity: item.identity, mark: item.record.mark }] : []) };
   });
@@ -80,7 +80,7 @@ export function sharedTextRange(value: string, from: number, to: number) {
 }
 
 export function spliceSharedTextPlan(plan: SharedTextCommandPlan, from: number, to: number, values: readonly unknown[], operation?: string): void {
-  const added = values.map(value => ({ value })), removed = to - from;
+  const added = values.map(value => ({ value, additions: [] as SharedContentRef[] })), removed = to - from;
   for (const source of plan.sources) for (const [positions, stickRight] of [[source.before, false], [source.after, true]] as const) {
     for (let index = 0; index < positions.length; index++) {
       const position = positions[index] as number;

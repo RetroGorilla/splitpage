@@ -68,7 +68,11 @@ export function resolveSharedTextReference(view: SharedPreparationView, plan: Sh
   const span = readSpan(raw);
   if (span) {
     if (purpose !== "range" || span.target.owner !== plan.target.owner || span.target.segment !== plan.target.segment || span.target.field !== plan.target.field || spanString(span) !== reference) throw new SharedTextPreparationError("invalid-reference");
-    const from = anchored(view, plan, span.start, true).from, to = anchored(view, plan, span.end, true).from;
+    const facade = view.text(plan.path);
+    if (!facade) throw new SharedTextPreparationError("missing-target");
+    const start = facade.resolveAnchor(span.start), end = facade.resolveAnchor(span.end);
+    if (start.kind === "gone" || end.kind === "gone" || start.index > end.index) throw new SharedTextPreparationError("invalid-reference");
+    const from = mappedGap(plan, start.index, start.affinity), to = mappedGap(plan, end.index, end.affinity);
     return { from, to: Math.max(from, to), units: span.units.flatMap(unit => anchored(view, plan, unit, false).units) };
   }
   if (!readSharedAnchor(reference)) throw new SharedTextPreparationError("invalid-reference");

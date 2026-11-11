@@ -3,3 +3,4 @@ lost mark | src/adapters/collab/mark-store.ts: readCollabMarkState drops an addi
 omitted field | src/core/collab/projection/fields.ts: omits lengthSeconds | tests/adapters/collab/projection-omitted-field.test.ts: omitted field: lengthSeconds 12 survives transfer | tests/collab/projection-mutants.json
 stale base | src/adapters/collab/execute.ts: executeSharedOperations revision guard | tests/adapters/collab/text-preparation.test.ts: stale base: a received update refuses the painted revision before prepare without writing
 lost mark (executor addition) | src/adapters/collab/text-executor.ts: prepareSharedTextInsertion omits explicit chunk marks | tests/adapters/collab/text-operations.test.ts: text executor inserts explicit marks and deletes in audioText
+lost mark (range executor addition) | src/adapters/collab/mark-executor.ts: prepareSharedMarkChange drops a positive addition | tests/adapters/collab/marks/executor-literals.test.ts: i: four-command marked d
