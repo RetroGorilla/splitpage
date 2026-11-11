@@ -1,0 +1,1 @@
+{"mutants":[{"label":"omitted field","file":"src/core/collab/projection/fields.ts","find":"[\"lengthSeconds\", \"paragraphStart\"]","replace":"[\"paragraphStart\"]","tests":["tests/adapters/collab/projection-omitted-field.test.ts"]}]}
