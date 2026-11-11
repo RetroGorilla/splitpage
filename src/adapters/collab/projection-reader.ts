@@ -2,6 +2,10 @@ import * as Y from "yjs";
 import { scalarFieldAllowed } from "./scalar-executor.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import type { SharedProjectionBeatStructure } from "../../core/collab/projection/joins.ts";
+import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
+import type { SharedInlineValue } from "../../core/collab/operations.ts";
+import { readTextInsert } from "../../core/collab/read-operation.ts";
 
 function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
@@ -43,4 +47,55 @@ export function readProjectionHead(raw: unknown): { readonly kind: "b" | "h"; re
   if (keys.length !== 1 || kind !== "b" && kind !== "h") return null;
   const id = head[kind];
   return typeof id === "string" && id.length > 0 && isStableSharedIdentity(id) ? { kind, id } : null;
+}
+
+export function readProjectionInlineValue(raw: unknown): SharedInlineValue | null {
+  const atom = sharedJson(raw);
+  if (typeof atom === "string") return atom;
+  if (!atom || typeof atom !== "object" || Array.isArray(atom)) return null;
+  const item = atom as Record<string, unknown>;
+  const value = "k" in item ? { atom: "broll", id: item.k, ...(item.label === undefined ? {} : { text: item.label }) }
+    : "w" in item ? { atom: "who", name: item.w } : "img" in item ? { atom: "image", ref: item.img }
+    : { atom: "video", href: item.video, host: item.host };
+  const read = readTextInsert({ kind: "text-insert", id: "projection", by: "", target: { owner: "projection", segment: "projection", field: "audioText" }, at: { left: null, right: null, affinity: "before" }, content: [{ value, marks: [] }] })?.content[0]?.value;
+  return read && (typeof read === "string" || read.atom !== "broll" || isStableSharedIdentity(read.id)) ? read : null;
+}
+
+export function readProjectionBlocks(order: Y.Array<string>, segments: Y.Map<unknown>, readUnits?: (container: Y.Map<unknown>) => readonly SharedProjectionUnit[]) {
+  const blocks: { kind: "b" | "h"; id: string; units: SharedProjectionUnit[] }[] = [], seen = new Set<string>();
+  for (const key of new Set(order.toArray())) {
+    if (typeof key !== "string" || !isStableSharedIdentity(key)) continue;
+    const segment: unknown = segments.get(key); if (!(segment instanceof Y.Map)) continue;
+    const all = readUnits?.(segment) ?? []; let cursor = 0, current: typeof blocks[number] | undefined;
+    function boundary(head: ReturnType<typeof readProjectionHead>): void {
+      if (!head || seen.has(head.kind + head.id)) return;
+      seen.add(head.kind + head.id); current = { ...head, units: [] }; blocks.push(current);
+    }
+    boundary(readProjectionHead(segment.get("head")));
+    const text: unknown = segment.get("text"); if (!(text instanceof Y.Text)) continue;
+    for (const delta of text.toDelta() as { insert: unknown }[]) {
+      const head = readProjectionHead(delta.insert);
+      if (head) boundary(head);
+      else {
+        const value = readProjectionInlineValue(delta.insert), length = typeof value === "string" ? value.length : value ? 1 : 0;
+        if (current) current.units.push(...all.slice(cursor, cursor + length));
+        cursor += length;
+      }
+    }
+  }
+  return blocks;
+}
+
+export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>): SharedProjectionBeatStructure {
+  const joins: SharedProjectionBeatStructure["joins"][number][] = [];
+  if (!(raw instanceof Y.Map) || readProjectionFields(raw, "beat")?.id !== id) return { id, joins, removed: false };
+  const stored: unknown = raw.get("joins"), removals: unknown = raw.get("removals");
+  if (stored instanceof Y.Map) for (const key of [...stored.keys()].sort()) {
+    if (!key || !isStableSharedIdentity(key) || retirements.get(key) === true) continue;
+    const value = bag(stored.get(key));
+    if (typeof value.into === "string" && value.into.length > 0 && isStableSharedIdentity(value.into) && (value.glue === "" || value.glue === " "))
+      joins.push({ id: key, into: value.into, glue: value.glue });
+  }
+  const removed = removals instanceof Y.Map && [...removals.keys()].some(key => key.length > 0 && isStableSharedIdentity(key) && removals.get(key) === true);
+  return { id, joins, removed };
 }

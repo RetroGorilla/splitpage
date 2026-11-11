@@ -10,7 +10,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { ScreenState } from "../../application/screen.ts";
-import type { WholeFieldTextCommit } from "../../application/editing/ports.ts";
+import type { PaintedTextSource, WholeFieldTextCommit } from "../../application/editing/ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { Command, CommonDocumentSession } from "../../application/session/document-session.ts";
@@ -53,6 +53,7 @@ export interface FlowWriterPorts {
   readonly visualLeave?: (cell: HTMLElement) => void;
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
+  readonly paintedText?: PaintedTextSource;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;

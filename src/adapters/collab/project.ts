@@ -5,8 +5,9 @@ import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
 import { readSharedRecords } from "./record-reader.ts";
 import { readSharedStatus } from "./status.ts";
-import { isStableSharedIdentity } from "./identity.ts";
-import { readProjectionFields, readProjectionHead } from "./projection-reader.ts";
+import { readProjectionFields, readProjectionBlocks, readProjectionBeatStructure } from "./projection-reader.ts";
+import { projectSharedJoinGroups, projectSharedJoinedUnits, projectSharedJoinedFields, projectSharedSections } from "../../core/collab/projection/joins.ts";
+import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
 import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
@@ -24,48 +25,56 @@ export function projectSharedDocument(handle: SharedDocumentHandle): DocumentSha
 
 export interface SharedDocumentProjectionResult {
   readonly document: DocumentShape;
-  readonly recovery: readonly (SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })[];
+  readonly recovery: readonly ((SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
+    | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[] }
+    | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null })[];
 }
 
 export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle): SharedDocumentProjectionResult {
   return withSharedSnapshot(handle, state => {
-    const recovery: (SharedTagProjectionRejection & { rowId: string; field: "audioText" | "visualText" })[] = [];
+    const recovery: SharedDocumentProjectionResult["recovery"][number][] = [];
     const copy = state as unknown as SharedDocumentHandle, roots = state.roots;
     const fields = readSharedDocumentFieldProjection(copy), out = { ...fields.document };
     const tags = out.productionTags as Record<string, unknown>[], comments = out.comments as Record<string, unknown>[];
     const title: unknown = roots.meta.get("title");
     Object.assign(out, { title: title instanceof Y.Text ? title.toString() : "", docId: out.docId ?? "", schema: out.schema ?? 2, rev: out.rev ?? 0 });
-    const segments = new Map<string, Y.Map<unknown>>();
-    for (const key of roots.order.toArray()) {
-      if (typeof key !== "string" || !isStableSharedIdentity(key)) continue;
-      const segment: unknown = roots.segments.get(key);
-      if (!(segment instanceof Y.Map)) continue;
-      const head = readProjectionHead(segment.get("head"));
-      if (head && !segments.has(head.kind + head.id)) segments.set(head.kind + head.id, segment);
+    const visuals = readSharedRecords(copy, "visuals"), gallery = readSharedRecords(copy, "gallery"), anchored = new Set<string>();
+    function units(container: Y.Map<unknown> | undefined): SharedProjectionUnit[] {
+      return container ? readProjectionUnits(copy, container.get("text"), container.get("markRecords")) : [];
     }
-    const visuals = readSharedRecords(copy, "visuals"), anchored = new Set<string>();
-    function cell(container: Y.Map<unknown>, rowId: string, field: "audioText" | "visualText"): string {
-      const units = readProjectionUnits(copy, container.get("text"), container.get("markRecords"));
-      projectSharedCommentAnchors(units, comments, rowId, field, anchored);
+    const blocks = readProjectionBlocks(roots.order, roots.segments, units), narrationByBeat = new Map(blocks.filter(block => block.kind === "b").map(block => [block.id, block.units]));
+    function cell(value: readonly SharedProjectionUnit[], rowId: string, field: "audioText" | "visualText", visible: boolean): string {
+      if (visible) projectSharedCommentAnchors(value, comments, rowId, field, anchored);
+      const units = value;
       const result = projectSharedTextResult(units, tags);
       recovery.push(...result.rejected.map(entry => ({ ...entry, rowId, field })));
       return result.html;
     }
-    const rows = (out.rows as Record<string, unknown>[]).map(row => {
-      const id = String(row.id), segment = segments.get("b" + id);
-      const audioText = segment ? cell(segment, id, "audioText") : "";
-      const visualText = visuals.filter(visual => visual.fields.beat === id).map(visual => {
+    const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
+    const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinGroups(order.map(id => readProjectionBeatStructure(roots.beats.get(id), id, roots.retiredJoins)));
+    const rows: Record<string, unknown>[] = [];
+    for (const group of groups) {
+      const root = byId.get(group.root); if (!root) continue;
+      const members = group.members.map(member => member.id), inOrder = order.filter(id => members.includes(id));
+      const row = projectSharedJoinedFields(root, inOrder.flatMap(id => { const row = byId.get(id); return row ? [row] : []; }), gallery);
+      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue })), tags, group.cyclic);
+      const audioText = cell(narration, group.root, "audioText", !group.removed);
+      const visualText = members.flatMap(id => visuals.filter(visual => visual.fields.beat === id)).map(visual => {
         const container: unknown = roots.visuals.get(visual.key);
-        return container instanceof Y.Map ? cell(container, id, "visualText") : "";
+        return container instanceof Y.Map ? cell(units(container), group.root, "visualText", !group.removed) : "";
       }).filter(Boolean).join("<br>");
-      return { ...row, audioText, visualText };
+      Object.assign(row, { audioText, visualText });
+      if (group.removed) recovery.push({ kind: "removed-beat", row: canonicalSharedProjection(row, "row") as Record<string, unknown>, members });
+      else rows.push(row);
+    }
+    const headings = blocks.flatMap<Parameters<typeof projectSharedSections>[0][number]>(block => {
+      if (block.kind === "b") return [{ kind: "b", id: block.id }];
+      const extra = readProjectionFields(roots.headings.get(block.id), "heading");
+      return extra ? [{ kind: "h", id: block.id, name: block.units.map(unit => typeof unit.value === "string" ? unit.value : "").join(""), extra: sharedProjectionExtra(extra) }] : [];
     });
-    const sections = fields.sections.flatMap(section => {
-      const segment = segments.get("h" + section.id), extra = readProjectionFields(roots.headings.get(section.id), "heading");
-      const text: unknown = segment?.get("text");
-      return text instanceof Y.Text && text.toString() ? [{ ...sharedProjectionExtra(extra ?? {}), ...section, name: text.toString() }] : [];
-    });
-    Object.assign(out, { rows }); if (sections.length) out.sections = sections;
+    const { sections, empty } = projectSharedSections(headings, new Set(rows.map(row => String(row.id))));
+    recovery.push(...empty.map(entry => ({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId })));
+    Object.assign(out, { rows }); if (sections.length) out.sections = sections; else delete out.sections;
     return { document: canonicalSharedProjection(out) as DocumentShape, recovery };
   });
 }
@@ -88,14 +97,8 @@ export function readSharedDocumentFieldProjection(handle: SharedDocumentHandle):
     });
     const replies = records("replies"), comments = records("comments").map(record => projectSharedCommentFields(record.fields, replies));
     const gallery = records("gallery"), rows: Record<string, unknown>[] = [], sections: { id: string; firstSceneId: string }[] = [];
-    const seen = new Set<string>(); let heading: string | null = null;
-    for (const key of roots.order.toArray()) {
-      if (typeof key !== "string" || !isStableSharedIdentity(key) || seen.has(key)) continue;
-      seen.add(key);
-      const segment: unknown = roots.segments.get(key);
-      if (!(segment instanceof Y.Map)) continue;
-      const head = readProjectionHead(segment.get("head"));
-      if (!head) continue;
+    let heading: string | null = null;
+    for (const head of readProjectionBlocks(roots.order, roots.segments)) {
       if (head.kind === "h") { heading = readProjectionFields(roots.headings.get(head.id), "heading")?.id === head.id ? head.id : null; continue; }
       const fields = readProjectionFields(roots.beats.get(head.id), "beat"), id = readSharedContentRef(head.id);
       if (!fields || fields.id !== head.id || !id) continue;
