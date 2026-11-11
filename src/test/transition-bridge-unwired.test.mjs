@@ -24,7 +24,7 @@ test("before the transitions are started, every accessor throws instead of runni
 
 function startWith(log) {
   return bridge.startTransitions({
-    live: { current: liveDocumentPort.current, assign: (doc) => { log.push("assign"); liveDocumentPort.assign(doc); }, stamp: liveDocumentPort.stamp },
+    live: { current: liveDocumentPort.current, assign: (doc) => { log.push("assign"); liveDocumentPort.assign(doc); } },
     destination: { set: (d) => log.push("destination:" + d.kind), confirm: (doc, why) => log.push("baseline:" + why) },
     identity: { mint: () => "d" + "9".repeat(32), writtenOut: () => false, markWrittenOut: (out) => log.push("writtenOut:" + out) }
   });
