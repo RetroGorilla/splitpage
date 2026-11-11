@@ -8,6 +8,7 @@ import { createSharedPreparation } from "./prepare.ts";
 import { readSharedRevision } from "./document.ts";
 import { createSharedAnchor, readSharedAnchor, sharedAnchorCharacterEnd } from "./anchors.ts";
 import { readSharedTextTarget } from "./text-target.ts";
+import { sharedStructureReference } from "./structure-identity.ts";
 
 interface CapturedTextSpan { readonly target: SharedTextAddress; readonly start: SharedContentRef; readonly end: SharedContentRef; readonly units: readonly SharedContentRef[] }
 export interface SharedResolvedTextReference { readonly from: number; readonly to: number; readonly units: readonly SharedPlannedTextUnit[] }
@@ -29,7 +30,7 @@ function readSpan(raw: unknown): CapturedTextSpan | null {
 }
 
 function mappedGap(plan: SharedTextCommandPlan, index: number, affinity: "before" | "after"): number {
-  const original = sharedTextSource(plan, plan.target.owner), positions = affinity === "after" ? original?.after : original?.before;
+  const positions = affinity === "after" ? plan.native.after : plan.native.before;
   const mapped = positions?.[index];
   if (mapped === undefined) throw new SharedTextPreparationError("invalid-reference");
   return mapped;
@@ -46,7 +47,7 @@ function anchored(view: SharedPreparationView, plan: SharedTextCommandPlan, refe
   if (!endAnchor) throw new SharedTextPreparationError("invalid-reference");
   const end = facade.resolveAnchor(endAnchor);
   if (end.kind === "gone") throw new SharedTextPreparationError("invalid-reference");
-  const original = sharedTextSource(plan, plan.target.owner), selected = position.kind === "index" ? original?.units[position.index] : undefined;
+  const original = plan.native, selected = position.kind === "index" ? original.units[position.index] : undefined;
   const range = sharedTextRange(original?.value ?? "", position.index, end.index);
   return { from: mappedGap(plan, range.from, "after"), to: mappedGap(plan, range.to, "before"), units: selected ? original?.units.slice(range.from, range.to) ?? [] : [] };
 }
@@ -58,8 +59,8 @@ export function resolveSharedTextReference(view: SharedPreparationView, plan: Sh
     if (view.base === null) throw new SharedTextPreparationError("stale-base");
     let base: ReturnType<typeof readFlowBaseReference>;
     try { base = readFlowBaseReference(reference); } catch { throw new SharedTextPreparationError("invalid-reference"); }
-    const source = sharedTextSource(plan, base.owner);
-    if (!source || base.field !== plan.target.field || purpose !== "range" && base.from !== base.to) throw new SharedTextPreparationError("invalid-reference");
+    const source = sharedTextSource(plan, sharedStructureReference(view, base.owner));
+    if (!source || base.field !== source.field || purpose !== "range" && base.from !== base.to) throw new SharedTextPreparationError("invalid-reference");
     const range = sharedTextRange(source.value, base.from + (purpose === "left" ? 1 : 0), purpose === "range" ? base.to : base.from + (purpose === "left" ? 1 : 0));
     const from = (purpose === "left" ? source.before : source.after)[range.from], to = purpose === "range" ? source.before[range.to] : from;
     if (from === undefined || to === undefined) throw new SharedTextPreparationError("invalid-reference");
@@ -84,10 +85,10 @@ export function captureSharedTextRange(handle: SharedDocumentHandle, target: Sha
   try {
     const plan = sharedTextCommandPlan(prep.view, target), source = sharedTextSource(plan, target.owner);
     if (!source) return null;
-    const range = sharedTextRange(source.value, from, to), start = createSharedAnchor(handle, plan.target, range.from, "after"), end = createSharedAnchor(handle, plan.target, range.to, "before");
+    const range = sharedTextRange(source.value, from, to), start = createSharedAnchor(handle, plan.target, source.after[range.from] as number, "after"), end = createSharedAnchor(handle, plan.target, source.before[range.to] as number, "before");
     if (!start || !end) return null;
     const units: SharedContentRef[] = [];
-    for (let index = range.from; index < range.to; index++) { const unit = createSharedAnchor(handle, plan.target, index, "after"); if (!unit) return null; units.push(unit); }
+    for (let index = range.from; index < range.to; index++) { const unit = createSharedAnchor(handle, plan.target, source.after[index] as number, "after"); if (!unit) return null; units.push(unit); }
     return spanString({ target: plan.target, start, end, units });
   } catch { return null; } finally { prep.close(); }
 }

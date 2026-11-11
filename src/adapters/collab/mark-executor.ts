@@ -2,7 +2,7 @@ import type { SharedMarkChange } from "../../core/collab/operations.ts";
 import type { SharedPreparationView } from "./prepare.ts";
 import type { SharedTextOperationPreparation, SharedTextExecutionStep } from "./text-description.ts";
 import { preparedTextOperation, preparedTextDescription, prepareTextMarkWrite } from "./text-description.ts";
-import { sharedTextCommandPlan, sharedTextRange, SharedTextPreparationError } from "./executor-text-plan.ts";
+import { sharedTextCommandPlan, sharedTextRange, requireSharedTextOwnership, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedMarkTranslation } from "./mark-translation.ts";
@@ -14,7 +14,8 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
     const plan = sharedTextCommandPlan(view, operation.target), value = plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join("");
     const ranges: { from: number; to: number }[] = [];
     const resolved = operation.observed.map(reference => {
-      const range = resolveSharedTextReference(view, plan, reference, "range"); return sharedTextRange(value, range.from, range.to);
+      const range = resolveSharedTextReference(view, plan, reference, "range"), clamped = sharedTextRange(value, range.from, range.to);
+      requireSharedTextOwnership(view, plan, clamped.from, clamped.to); return clamped;
     }).sort((a, b) => a.from - b.from || a.to - b.to);
     for (const range of resolved) {
       if (range.to === range.from) continue;
