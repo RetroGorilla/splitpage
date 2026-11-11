@@ -70,9 +70,10 @@ no seventh difference is needed.
 
 ## Remaining groups
 
-Join groups and their scalar-field assumptions, paragraph flags, removed/empty
-scenes, the empty script, gallery folding/overflow and duplicate b-roll identities
-remain subsequent parts of package 6b. Causal status uses the existing reader.
+Join groups, their scalar-field assumptions, paragraph flags, removed/empty
+scenes and the empty script are covered by the [structure rules](stage-2-projection-structure.md).
+Gallery folding/overflow and duplicate b-roll identities remain the record group
+of package 6b. Causal status uses the existing reader.
 Deleted registry entries, long scene-name notices, missing owners and broader
 recovery UI are not implemented by this text split. The existing named-tag
 fallback is retained for imported tags with no registry record, as required by
