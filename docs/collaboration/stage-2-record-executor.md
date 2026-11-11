@@ -10,7 +10,7 @@ the original operation, its index and a reason, without modifying encoded state.
 Other executors call `registerSharedOperationHandlers(handle, handlers)` from
 `operation-handlers.ts`. A handler maps a vocabulary kind to
 `(operation, view) => {ok:false, reason} | {ok:true, writes, apply}`. The read-only
-view has `get(path)`, `kind(path)`, `keys(path)`, `text(path)`, per-call `scratch`
+view has `get(path)`, `has(path)`, `kind(path)`, `keys(path)`, `text(path)`, per-call `scratch`
 and the live `writer` identity; ordinary read values are frozen. `writes` describes fixed path effects (`set`,
 `delete`, `map`, `text`, `array`) which the entry adds to its overlay. A later
 prepare sees those effects without a copy of the document. Each `apply(handle)`
@@ -141,7 +141,7 @@ identical results on every copy; this tie-break is assumed.
 
 The T21 scalar fixture's status/notices portion and the repaired four-event
 common-root regression are reproduced. The fixture's text change and undo need
-the text and undo executors. T11 comment/reply records belong to the second part
-of this package; anchors, fully deleted words and recovery require marks,
+the text and undo executors. T11 comment/reply records run through the
+[record handlers](stage-2-record-handlers.md); anchors, fully deleted words and recovery require marks,
 structure and recovery. Remaining Stage 1 histories use text, marks, structural
 commands, projection, buffering or undo outside this package.

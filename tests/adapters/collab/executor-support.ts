@@ -18,10 +18,10 @@ export function execute(handle: SharedDocumentHandle, ...commands: unknown[]): v
   assert.deepEqual(executeSharedOperations(handle, commands.map(operation)), { ok: true });
 }
 
-export function replicas(count = 2) {
+export function replicas(count = 2, source?: Record<string, unknown>) {
   const a = createSharedDocument(), b = createSharedDocument(), c = createSharedDocument();
   [a, b, c].forEach((handle, index) => { collabState(handle).doc.clientID = index + 1; });
-  hydrateSharedDocument(a, validatedFixture({ title: "Title", rows: [{ id: "R1", audioText: "abZ", status: "todo" }],
+  hydrateSharedDocument(a, validatedFixture(source ?? { title: "Title", rows: [{ id: "R1", audioText: "abZ", status: "todo" }],
     sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }],
     productionTags: [{ id: "t_1", cat: "prop", name: "Cup", status: "needed" }],
     brollShots: [{ id: "S1", name: "Cup", status: "unshot", origin: "list" }] }));
