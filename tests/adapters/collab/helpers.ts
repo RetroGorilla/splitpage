@@ -1,6 +1,6 @@
 import * as Y from "yjs";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-import { applySharedUpdate } from "../../../src/adapters/collab/document.ts";
+import type { SharedDocumentHandle, SharedTransactionOrigin } from "../../../src/adapters/collab/types.ts";
+import { applySharedUpdate, shouldDeliverSharedUpdate } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -36,12 +36,23 @@ export function readRoots(handle: SharedDocumentHandle): unknown {
 
 export function deliveryReplica(handle: SharedDocumentHandle): DeliveryReplica<Uint8Array> {
   const { doc } = collabState(handle);
+  let receiving = false;
+  const generated: (() => void)[] = [];
   return {
     onLocalUpdate: listener => {
-      const receive = (update: Uint8Array, origin: unknown): void => { if (origin !== "remote") listener(update); };
+      const receive = (update: Uint8Array, origin: SharedTransactionOrigin | null): void => {
+        if (!shouldDeliverSharedUpdate(origin)) return;
+        if (receiving) generated.push(() => listener(update));
+        else listener(update);
+      };
       doc.on("update", receive);
       return () => doc.off("update", receive);
     },
-    apply: update => { if (!applySharedUpdate(handle, update).ok) throw new Error("Queue delivered an invalid update"); }
+    apply: update => {
+      receiving = true;
+      try { if (!applySharedUpdate(handle, update).ok) throw new Error("Queue delivered an invalid update"); }
+      finally { receiving = false; }
+    },
+    afterDelivery: () => { for (const publish of generated.splice(0)) publish(); }
   };
 }

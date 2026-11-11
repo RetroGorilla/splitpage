@@ -1,22 +1,23 @@
 import * as Y from "yjs";
-import { CollabDocumentState, collabState, withSharedOrigin } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
   return new CollabDocumentState() as unknown as SharedDocumentHandle;
 }
 
-export function transactSharedDocument(handle: SharedDocumentHandle, origin: SharedTransactionOrigin, change: () => void): void {
+export function shouldDeliverSharedUpdate(origin: SharedTransactionOrigin | null): boolean { return origin !== "remote"; }
+
+export function transactSharedDocument(handle: SharedDocumentHandle, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void): void {
   const state = collabState(handle);
-  state.fresh = false;
-  withSharedOrigin(state, origin, () => state.doc.transact(change, origin));
+  transactCollabState(state, origin, change);
 }
 
 export function observeSharedTransactions(handle: SharedDocumentHandle, listener: (origin: SharedTransactionOrigin | null) => void): () => void {
   const state = collabState(handle);
   const receive = (transaction: Y.Transaction): void => {
     const origin: unknown = transaction.origin;
-    listener(origin === "local-command" || origin === "local-undo" || origin === "hydration" || origin === "remote" ? origin : null);
+    listener(origin === "local-command" || origin === "local-undo" || origin === "hydration" || origin === "remote" || origin === "cleanup" ? origin : null);
   };
   state.doc.on("afterTransaction", receive);
   return () => state.doc.off("afterTransaction", receive);
@@ -47,8 +48,7 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
   } finally {
     trial.doc.destroy();
   }
-  state.fresh = false;
-  withSharedOrigin(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
+  transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
   return { ok: true };
 }
 

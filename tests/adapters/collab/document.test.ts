@@ -186,7 +186,7 @@ test("seeded truncated and random updates are refused without changing state or 
   destroySharedDocument(writer);
 });
 
-test("remote formatting cleanup retains the remote origin and releases the origin scope afterward", () => {
+test("remote formatting cleanup has its own origin and releases the origin scope afterward", () => {
   const a = createSharedDocument(), b = createSharedDocument();
   hydrateSharedDocument(a, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
   assert.deepEqual(applySharedUpdate(b, encodeSharedState(a)), { ok: true });
@@ -198,9 +198,9 @@ test("remote formatting cleanup retains the remote origin and releases the origi
   const origins: unknown[] = [];
   const detach = observeSharedTransactions(a, origin => origins.push(origin));
   assert.deepEqual(applySharedUpdate(a, encodeSharedState(b)), { ok: true });
-  assert.deepEqual(origins, ["remote", "remote"]);
+  assert.deepEqual(origins, ["remote", "cleanup"]);
   collabState(a).doc.transact(() => collabState(a).roots.meta.set("raw", true));
-  assert.deepEqual(origins, ["remote", "remote", null]);
+  assert.deepEqual(origins, ["remote", "cleanup", null]);
   detach();
   destroySharedDocument(a);
   destroySharedDocument(b);
