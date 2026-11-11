@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { join, relative } from "node:path";
 import ts from "typescript";
 import { sharedCommandPermission } from "../../../src/core/collab/refusals.ts";
 import { readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
@@ -44,7 +45,9 @@ test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one
 
 test("the new core modules define only types and functions when loaded", () => {
   const directory = new URL("../../../src/core/collab/", import.meta.url);
-  for (const file of readdirSync(directory)) {
+  for (const entry of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const file = relative(fileURLToPath(directory), join(entry.parentPath, entry.name)).replaceAll("\\", "/");
     const source = ts.createSourceFile(file, readFileSync(new URL(file, directory), "utf8"), ts.ScriptTarget.Latest, true);
     for (const statement of source.statements) assert.ok(ts.isImportDeclaration(statement) || ts.isInterfaceDeclaration(statement) ||
       ts.isTypeAliasDeclaration(statement) || ts.isFunctionDeclaration(statement), `${file}: module-load work`);
