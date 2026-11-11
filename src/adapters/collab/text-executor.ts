@@ -12,7 +12,7 @@ import { applySharedTextEdit } from "./text-edit.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { freezeSharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
 import { applySharedMarkWrite } from "./mark-store.ts";
-import { stableSharedMark } from "./mark-record.ts";
+import { prepareSharedMarkTranslation } from "./mark-translation.ts";
 
 export type SharedTextExecutionStep = { readonly kind: "edit"; readonly write: SharedTextWritePlan }
   | { readonly kind: "mark"; readonly target: SharedTextAddress; readonly plan: Extract<SharedMarkWritePlan, { kind: "record" }> };
@@ -70,11 +70,15 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
     if (left && right && left.from > right.from || !left && !right && plan.units.length) throw new SharedTextPreparationError("invalid-reference");
     let offset = (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0;
     offset = sharedTextRange(plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join(""), offset, offset).from;
-    const chunks = operation.content.map(chunk => {
+    const chunks = operation.content.map((chunk, chunkIndex) => {
       const value = sharedPreparedTextInsert(inline(chunk.value));
       if (typeof value !== "string" && (!value || typeof value !== "object" || Array.isArray(value))) throw new SharedTextPreparationError("invalid-content");
-      if (!chunk.marks.every(stableSharedMark)) throw new SharedTextPreparationError("unstable-identity");
-      return { value: value as string | Readonly<Record<string, unknown>>, marks: chunk.marks.filter(mark => mark.value !== null) };
+      const marks = chunk.marks.map((mark, markIndex) => {
+        const translated = prepareSharedMarkTranslation(mark, view.writer, operation.id, [chunkIndex, markIndex]);
+        if (!translated) throw new SharedTextPreparationError("unstable-identity");
+        return translated;
+      }).flatMap(mark => mark.type === "add" ? [mark.mark] : []);
+      return { value: value as string | Readonly<Record<string, unknown>>, marks };
     });
     const values = chunks.flatMap<unknown>(chunk => typeof chunk.value === "string" ? chunk.value.split("") : [chunk.value]);
     if (!values.length) return preparedTextDescription([], []);

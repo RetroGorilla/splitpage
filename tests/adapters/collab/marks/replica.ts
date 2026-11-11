@@ -20,7 +20,7 @@ export type MarkTraceReplicaFactory = (client: number, initial?: string, state?:
 export const markTraceKinds = Object.freeze(["b", "i", "u", "s", "hl", "dir", "cue", "comment", "tag", "link"] as const);
 export function markTraceExample(kind: typeof markTraceKinds[number]): SharedMarkValue {
   const mark = readMarkChange({ kind: "mark", id: "example", by: "", target: { owner: "R1", segment: "b:R1", field: "audioText" }, observed: [],
-    mark: kind === "comment" ? { kind, id: "C", value: true } : kind === "tag" ? { kind, id: "T", value: "P" } : kind === "link" ? { kind, id: "L", value: "https://x" } : { kind, value: true } })?.mark;
+    mark: kind === "comment" ? { kind, id: "C", value: true } : kind === "tag" ? { kind, id: "P", value: "P" } : kind === "link" ? { kind, id: "https://x", value: "https://x" } : { kind, value: true } })?.mark;
   if (!mark) throw new Error("Invalid example mark");
   return mark;
 }
@@ -54,9 +54,14 @@ export class MarkTraceReplica {
   read() {
     const characters = readSharedMarkCharacters(this.handle, this.target);
     if (!characters) throw new Error("Missing text");
-    return characters.map(char => ({ identity: char.identity, value: char.value, marks: char.marks.flatMap(group => group.values.map(value => group.id === null
-      ? { kind: group.kind, value } as SharedMarkValue : { kind: group.kind, id: group.id, value } as SharedMarkValue))
-      .sort((a, b) => code(a) < code(b) ? -1 : code(a) > code(b) ? 1 : 0) }));
+    return characters.map(char => {
+      const values = new Map<string, SharedMarkValue>();
+      for (const group of char.marks) for (const value of group.values) {
+        const mark = (group.id === null ? { kind: group.kind, value } : { kind: group.kind, id: value, value: group.kind === "comment" ? true : value }) as SharedMarkValue;
+        values.set(code(mark), mark);
+      }
+      return { identity: char.identity, value: char.value, marks: [...values.keys()].sort().map(key => values.get(key) as SharedMarkValue) };
+    });
   }
   readNamed(book: IdentityBook) { return this.read().map(char => ({ id: book.notation(char.identity), value: char.value, marks: char.marks })); }
   execute(command: MarkTraceCommand): void {
@@ -78,12 +83,12 @@ export class MarkTraceReplica {
         const after = readSharedMarkCharacters(this.handle, this.target);
         const observed = [...new Set(after?.slice(from, from + text.length).flatMap(char => char.marks.flatMap(group => group.additions.map(add => add.record))))].sort();
         write(command.id, from, from + text.length, { type: "birth", observed, born });
-        marks.forEach((mark, index) => write(command.id + ":" + index, from, from + text.length, { type: "add", mark, born }));
+        marks.forEach((mark, index) => write(command.id + ":" + index, from, from + text.length, { type: "add", mark: stored(mark), born }));
       } else if (command.mark) {
-        if (command.kind === "add") write(command.id, from, to, { type: "add", mark: command.mark });
+        if (command.kind === "add") write(command.id, from, to, { type: "add", mark: stored(command.mark) });
         else {
           const mark = command.mark;
-          const observed = [...new Set(before.slice(from, to).flatMap(char => char.marks.filter(group => group.kind === mark.kind && group.id === ("id" in mark ? mark.id : null)).flatMap(group => group.additions.map(add => add.record))))].sort();
+          const observed = [...new Set(before.slice(from, to).flatMap(char => char.marks.filter(group => group.kind === mark.kind && (!("id" in mark) || group.values.includes(mark.id))).flatMap(group => group.additions.map(add => add.record))))].sort();
           write(command.id, from, to, { type: "remove", observed });
         }
       }
@@ -91,3 +96,4 @@ export class MarkTraceReplica {
   }
 }
 function code(mark: SharedMarkValue): string { return JSON.stringify([mark.kind, "id" in mark ? mark.id : null, mark.value]); }
+function stored(mark: SharedMarkValue): unknown { return mark.kind === "comment" ? { kind: mark.kind, id: mark.id, value: mark.id } : mark; }

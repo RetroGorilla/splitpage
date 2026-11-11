@@ -23,8 +23,8 @@ test("two rich hydrations have equal deterministic record identities and literal
       const expected = [
         { from: 0, to: 15, marks: [{ kind: "b", value: true }, { kind: "hl", value: true }, { kind: "i", value: true }, { kind: "s", value: true }, { kind: "u", value: true }] },
         { from: 16, to: 29, marks: [{ kind: "link", id: segment + ":" + field + ":1", value: "https://example.test/text-link" }] },
-        { from: 30, to: 46, marks: [{ kind: "comment", id: "Cprobe", value: true }] },
-        { from: 47, to: 59, marks: [{ kind: "tag", id: segment + ":" + field + ":0000000002", value: "t_probe" }] },
+        { from: 30, to: 46, marks: [{ kind: "comment", id: segment + ":" + field + ":0000000002", value: "Canchor" }] },
+        { from: 47, to: 59, marks: [{ kind: "tag", id: segment + ":" + field + ":0000000003", value: "t_probe" }] },
         { from: 60, to: 78, marks: [{ kind: "dir", value: true }] },
         { from: 79, to: 91, marks: [{ kind: "cue", value: true }] }
       ];

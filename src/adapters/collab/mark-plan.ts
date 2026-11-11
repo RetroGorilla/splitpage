@@ -1,7 +1,9 @@
-import type { SharedContentRef, SharedMarkValue } from "../../core/collab/operations.ts";
-import { readMarkChange, readSharedContentRef } from "../../core/collab/read-operation.ts";
+import type { SharedContentRef } from "../../core/collab/operations.ts";
+import { readSharedContentRef } from "../../core/collab/read-operation.ts";
+import type { SharedStoredMarkValue } from "./stored-mark.ts";
+import { readSharedStoredMark } from "./stored-mark.ts";
 import type { SharedMarkBirth, SharedMarkWriter } from "./mark-record.ts";
-import { readSharedMarkBirth, readSharedMarkRecordIdentity, sharedMarkRecordKey, stableSharedMark } from "./mark-record.ts";
+import { readSharedMarkBirth, readSharedMarkRecordIdentity, sharedMarkRecordKey } from "./mark-record.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
 
 export type SharedMarkWriteChangeInput = { readonly type: "add"; readonly mark: unknown; readonly born?: unknown }
@@ -14,8 +16,8 @@ interface MarkWriteCoordinates {
   readonly to: number;
 }
 export type SharedMarkWritePlan = MarkWriteCoordinates & (
-  { readonly kind: "inserted"; readonly change: { readonly type: "add"; readonly mark: SharedMarkValue; readonly born: "inserted" } | { readonly type: "birth"; readonly observed: readonly SharedContentRef[]; readonly born: "inserted" } }
-  | { readonly kind: "record"; readonly change: { readonly type: "add"; readonly mark: SharedMarkValue; readonly born: SharedMarkBirth | null } | { readonly type: "remove"; readonly observed: readonly SharedContentRef[] } | { readonly type: "birth"; readonly observed: readonly SharedContentRef[]; readonly born: SharedMarkBirth } }
+  { readonly kind: "inserted"; readonly change: { readonly type: "add"; readonly mark: SharedStoredMarkValue; readonly born: "inserted" } | { readonly type: "birth"; readonly observed: readonly SharedContentRef[]; readonly born: "inserted" } }
+  | { readonly kind: "record"; readonly change: { readonly type: "add"; readonly mark: SharedStoredMarkValue; readonly born: SharedMarkBirth | null } | { readonly type: "remove"; readonly observed: readonly SharedContentRef[] } | { readonly type: "birth"; readonly observed: readonly SharedContentRef[]; readonly born: SharedMarkBirth } }
 );
 
 export function prepareSharedMarkWrite(text: { readonly length: number; readonly recordKeys: readonly string[] }, writer: SharedMarkWriter,
@@ -25,8 +27,8 @@ export function prepareSharedMarkWrite(text: { readonly length: number; readonly
   const born = raw.born === "inserted" ? "inserted" : raw.born === undefined || raw.born === null ? null : readSharedMarkBirth(raw.born);
   if (raw.born !== undefined && raw.born !== null && born === null) return null;
   if (raw.type === "add") {
-    const mark = readMarkChange({ kind: "mark", id: "validate", by: "", target: { owner: "validate", segment: "validate", field: "audioText" }, observed: [], mark: raw.mark })?.mark;
-    if (!mark || !stableSharedMark(mark) || mark.value === null) return null;
+    const mark = readSharedStoredMark(raw.mark);
+    if (!mark) return null;
     return born === "inserted" ? freezeSharedPreparedValue({ kind: "inserted", identity, operation: id, writer, from, to, change: { type: "add", mark, born } })
       : freezeSharedPreparedValue({ kind: "record", identity, operation: id, writer, from, to, change: { type: "add", mark, born } });
   }

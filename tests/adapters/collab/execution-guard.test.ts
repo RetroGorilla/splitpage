@@ -30,7 +30,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
         else if (writer === "update") applySharedUpdate(run.a, incoming);
         else if (writer === "hydration") hydrateSharedDocument(run.a, source);
         else if (writer === "text-create") createCollabText(run.a, collabState(run.a).roots.meta, true);
-        else if (writer === "html-import") insertSharedHtml(run.a, textTarget, text, "nested", [], [], "nested");
+        else if (writer === "html-import") insertSharedHtml(run.a, textTarget, text, "nested", [], "nested");
         else if (writer === "mark-write") writeSharedMarkRecord(run.a, textTarget, "nested", null);
         else destroySharedDocument(run.a);
       };
