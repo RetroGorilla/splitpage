@@ -1,1 +1,6 @@
-{"mutants":[{"label":"omitted field","file":"src/core/collab/projection/fields.ts","find":"[\"lengthSeconds\", \"paragraphStart\"]","replace":"[\"paragraphStart\"]","tests":["tests/adapters/collab/projection-omitted-field.test.ts"]}]}
+{"mutants":[
+  {"label":"omitted field","file":"src/core/collab/projection/fields.ts","find":"[\"lengthSeconds\", \"paragraphStart\"]","replace":"[\"paragraphStart\"]","tests":["tests/adapters/collab/projection-omitted-field.test.ts"]},
+  {"label":"crossing tag accepted","file":"src/core/collab/projection/tag-extents.ts","find":"if (missing || crossing)","replace":"if (missing)","tests":["tests/adapters/collab/projection-merged-text.test.ts"]},
+  {"label":"tag containment ignored","file":"src/core/collab/projection/text.ts","find":"const tagged = unit.marks.filter","replace":"const tagged = ordered.filter","tests":["tests/adapters/collab/projection-tag-containment.test.ts"]},
+  {"label":"same name stacked twice","file":"src/core/collab/projection/tag-extents.ts","find":"if (previous?.tag === extent.tag && extent.from <= previous.to)","replace":"if (previous?.tag === extent.tag && extent.from <= previous.to && false)","tests":["tests/adapters/collab/projection-merged-text.test.ts"]}
+]}

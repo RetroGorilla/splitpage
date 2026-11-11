@@ -1,12 +1,10 @@
 import { cleanMarks, defaultTagOf } from "../../text/runs.ts";
 import type { Marks, Run } from "../../text/runs.ts";
 import { toHtml } from "../../text/html.ts";
-import type { SharedInlineValue, SharedMarkValue } from "../operations.ts";
+import type { SharedProjectionUnit } from "./units.ts";
+import { projectSharedTagExtents } from "./tag-extents.ts";
+import type { SharedTagProjectionRejection } from "./tag-extents.ts";
 
-export interface SharedProjectionUnit {
-  readonly value: SharedInlineValue;
-  readonly marks: readonly { readonly kind: SharedMarkValue["kind"]; readonly id?: string; readonly value: true | string }[];
-}
 export function chooseSharedProjectionPayload(values: readonly (true | string)[]): true | string | undefined {
   return [...values].sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : JSON.stringify(a) > JSON.stringify(b) ? 1 : 0)[0];
 }
@@ -22,6 +20,13 @@ export function projectSharedCommentAnchors(units: readonly SharedProjectionUnit
   }
 }
 export function projectSharedText(units: readonly SharedProjectionUnit[], tags: readonly Readonly<Record<string, unknown>>[]): string {
+  return projectSharedTextResult(units, tags).html;
+}
+export function projectSharedTextResult(source: readonly SharedProjectionUnit[], tags: readonly Readonly<Record<string, unknown>>[]): {
+  readonly html: string;
+  readonly rejected: readonly SharedTagProjectionRejection[];
+} {
+  const { units, rejected } = projectSharedTagExtents(source, tags);
   const runs: Run[] = [];
   for (const unit of units) {
     const marks: Marks = cleanMarks(Object.fromEntries(unit.marks.filter(mark => !["comment", "tag", "link"].includes(mark.kind)).map(mark => [mark.kind, mark.value])), typeof unit.value !== "string");
@@ -30,7 +35,7 @@ export function projectSharedText(units: readonly SharedProjectionUnit[], tags: 
     if (anchors.length) marks.cmt = [...new Set(anchors)].sort();
     const link = ordered.find(mark => mark.kind === "link"), href = link && identifiedMarkPayload(link);
     if (href) marks.href = href;
-    const tagged = ordered.filter(mark => mark.kind === "tag").map(mark => identifiedMarkPayload(mark))
+    const tagged = unit.marks.filter(mark => mark.kind === "tag").map(mark => identifiedMarkPayload(mark))
       .filter((id): id is string => id !== null && (tags.some(tag => tag.id === id) || defaultTagOf(id) !== null));
     const value = unit.value;
     if (typeof value === "string") {
@@ -44,8 +49,9 @@ export function projectSharedText(units: readonly SharedProjectionUnit[], tags: 
     else if (value.atom === "image") runs.push({ atom: "image", ref: value.ref, text: "", marks });
     else runs.push({ atom: "video", href: value.href, host: value.host, text: "", marks });
   }
-  return toHtml(runs, { tagOf: id => {
+  const html = toHtml(runs, { tagOf: id => {
     const tag = tags.find(tag => tag.id === id);
     return tag && typeof tag.cat === "string" && typeof tag.name === "string" ? { cat: tag.cat, name: tag.name } : defaultTagOf(id);
   } });
+  return { html, rejected };
 }
