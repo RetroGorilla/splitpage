@@ -1,7 +1,7 @@
 import { projection } from "../../text/runs.ts";
 import { projectSharedTextResult } from "./text.ts";
 import type { SharedProjectionUnit } from "./units.ts";
-import { projectSharedGalleryFields, projectSharedGallerySlots } from "./fields.ts";
+import { projectSharedGroupGallery } from "./gallery.ts";
 
 export interface SharedProjectionBeatStructure {
   readonly id: string;
@@ -94,16 +94,9 @@ export function projectSharedJoinStatus(statuses: readonly unknown[]): string {
 }
 
 export function projectSharedJoinedFields(root: Readonly<Record<string, unknown>>, members: readonly Readonly<Record<string, unknown>>[],
-  gallery: readonly { readonly fields: Readonly<Record<string, unknown>> }[]): Record<string, unknown> {
+  gallery: readonly { readonly key: string; readonly fields: Readonly<Record<string, unknown>> }[]) {
   const row: Record<string, unknown> = { ...root, status: projectSharedJoinStatus(members.map(member => member.status)) };
-  if (members.length > 1) {
-    const slots = members.flatMap(member => projectSharedGallerySlots(gallery.filter(item => item.fields.beat === member.id)))
-      .filter(slot => !Object.keys(slot).every(key => key === "imageRef") || !!slot.imageRef);
-    delete row.imageRef; delete row.imageName; delete row.imageAnnotation; delete row.imageLinks; delete row.moreImages;
-    if (Object.hasOwn(root, "imageRef")) row.imageRef = null;
-    return projectSharedGalleryFields(row, slots);
-  }
-  return row;
+  return projectSharedGroupGallery(row, members, gallery);
 }
 
 export function projectSharedSections(blocks: readonly { readonly kind: "b" | "h"; readonly id: string; readonly name?: string; readonly extra?: Readonly<Record<string, unknown>> }[], visible: ReadonlySet<string>) {
