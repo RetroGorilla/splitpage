@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { fieldMappingSource, legacyMappingSource } from "./mapping-source.ts";
 import { withProjectedFixture } from "./projection-support.ts";
+import { withFullProjectedFixture } from "./projection-roundtrip-support.ts";
 
 const firstRef = { sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", width: 11, height: 13, mime: "image/png" };
 const pen = { kind: "pen", color: "#ffb703", width: 0.02, points: [0.1, 0.2, 0.3, 0.4] };
@@ -98,13 +99,14 @@ test("projection literal probes cover the 82 non-shared-text field rows", () => 
   assert.equal(probes.length, 82); assert.equal(deferred.length, 14);
   assert.deepEqual(probes.map(([field]) => field), inventory.split(/\r?\n/).filter(line => line.startsWith("| ") && !/^\| (Field|Item|---)/.test(line)).map(line => line.split("|")[1]?.trim()).filter(field => !deferred.includes(String(field))));
   const source = fieldMappingSource();
-  withProjectedFixture(source, projected => {
+  const check = (projected: Readonly<Record<string, unknown>>) => {
     for (const [field, paths] of probes) for (const [probe, expected] of Object.entries(paths)) {
       const [path, mode] = probe.split("#"); assert.ok(path); const keys = path.split("."); let value: unknown = projected, present = true;
       for (const key of keys) { if (value === null || typeof value !== "object" || !Object.hasOwn(value, key)) { present = false; break; } value = (value as Record<string, unknown>)[key]; }
       if (mode === "absent") assert.equal(present, false, field);
       else { assert.equal(present, true, field); if (mode === "contains") assert.ok(typeof value === "string" && value.includes(String(expected)), field); else assert.deepEqual(value, expected, field); }
     }
-  });
+  };
+  withProjectedFixture(source, check); withFullProjectedFixture(source, check);
   withProjectedFixture(legacyMappingSource(), projected => { const row = (projected.rows as Record<string, unknown>[])[0]; assert.ok(row); assert.equal(Object.hasOwn(row, "visualImage"), false); assert.deepEqual([((row.imageRef) as { width: number }).width, ((row.imageRef) as { height: number }).height], [3, 5]); });
 });

@@ -7,6 +7,7 @@ import { createMonitoredSharedDocument } from "./helpers.ts";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { readSharedDocumentFieldProjection as projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { projectSharedDocument as fullProjection } from "../../../src/adapters/collab/project.ts";
 import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import type { SharedRecordCollection } from "../../../src/core/collab/operations.ts";
 
@@ -18,6 +19,7 @@ for (const writers of [2, 3]) for (const order of deliveryOrders) test(`projecti
   const submit = (handle: typeof run.a, ...values: unknown[]) => { execute(handle, ...values); commands += values.length; if (order === "D2") run.queue.flush(order); };
   const checkpoint = () => {
     run.queue.flush(order); agree("projection checkpoint " + checkpoints++, order, handles, projectSharedDocument);
+    agree("full projection checkpoint " + checkpoints, order, handles, fullProjection);
     for (const handle of handles) {
       const row = (projectSharedDocument(handle).document.rows as Record<string, unknown>[])[0]; assert.ok(row);
       assert.equal(row.lengthSeconds, expectedLength);
@@ -85,6 +87,7 @@ test("projection T21 common-root fallback: all 96 delivery/client/recreation cas
       }
       assert.deepEqual(encodeSharedState(first), encodeSharedState(reverse));
       agree("96-case status projection", "rev", [first, reverse], projectSharedDocument);
+      agree("96-case full status projection", "rev", [first, reverse], fullProjection);
       for (const reader of [first, reverse]) assert.equal((projectSharedDocument(reader).document.rows as Record<string, unknown>[])[0]?.status, "todo");
       cases++;
     } finally { run.close(); destroySharedDocument(first); destroySharedDocument(reverse); }
