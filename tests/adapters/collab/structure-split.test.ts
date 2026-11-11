@@ -17,6 +17,7 @@ import { prepareSharedTextCreation } from "../../../src/adapters/collab/text-cre
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order.ts";
 import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segment-executor.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { SharedBeatSplit, SharedTextAddress } from "../../../src/core/collab/operations.ts";
 
@@ -57,6 +58,9 @@ for (const before of [false, true]) test(`split${before ? " before" : ""} and su
     assert.deepEqual(executeSharedOperations(handle, [split("enter", before), type("typed", "same-beat", "X")], { base: readSharedRevision(handle) }), { ok: true });
     const id = JSON.stringify(["structure", "1", "enter", "beat"]);
     assert.deepEqual(read(handle), { rows: before ? [{ id, text: "Xab" }, { id: "R1", text: "cd" }] : [{ id: "R1", text: "ab" }, { id, text: "Xcd" }], beats: ["R1", id].sort() });
+    assert.equal((collabState(handle).roots.beats.get(id) as Y.Map<unknown>).get("splitBy"), "Writer");
+    set.queue.flush("D1");
+    assert.equal((collabState(set.b).roots.beats.get(id) as Y.Map<unknown>).get("splitBy"), "Writer");
     assert.deepEqual(origins, ["local-command"]); assert.equal(updates.length, 1);
     const prep = createSharedPreparation(handle);
     assert.equal(sharedTextLocation(prep.view, { ...target, owner: ref(id) }).target.owner, id);
@@ -66,27 +70,64 @@ for (const before of [false, true]) test(`split${before ? " before" : ""} and su
 });
 
 test("seeded two and three writer split, prefix split and blank creation histories match the independent literal model", t => {
-  let seed = 0x14145c, runs = 0;
-  for (let sample = 0; sample < 36; sample++) for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"] as const) {
+  let seed = 0x14145c, runs = 0, nativePairCuts = 0;
+  for (const text of ["abcd", "A😀B"]) for (const form of ["flow-base", "native-anchor"]) for (let sample = 0; sample < 36; sample++) for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"] as const) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    const offset = seed % 5, kind = sample % 3, set = replicas(writers, { rows: [{ id: "R1", audioText: "abcd" }] }), handles = [set.a, set.b, set.c].slice(0, writers);
+    const offset = seed % 5, clamped = text === "A😀B" ? [0, 1, 3, 3, 4][offset] as number : offset;
+    const kind = sample % 3, set = replicas(writers, { rows: [{ id: "R1", audioText: text }] }), handles = [set.a, set.b, set.c].slice(0, writers);
     try {
       const ids = handles.map((_, index) => JSON.stringify(["structure", String(index + 1), "enter", "beat"]));
       for (const [index, handle] of handles.entries()) {
         registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle);
+        const right = form === "native-anchor" ? createSharedAnchor(handle, "b:R1", offset, "after") : flowBaseReference("R1", "audioText", offset); assert.ok(right);
         const command = kind === 2 ? operation({ kind: "segment-create", id: "enter", by: "Writer", beat: "same-beat", segment: "same-segment", fields: { status: "todo", audioText: "" }, at: { left: null, right: "R1", affinity: "before" } })
-          : operation({ ...split("enter", kind === 1), at: { left: null, right: flowBaseReference("R1", "audioText", offset), affinity: "before" } });
+          : operation({ ...split("enter", kind === 1), at: { left: null, right, affinity: "before" } });
         assert.deepEqual(executeSharedOperations(handle, [command, type("typed", "same-beat", "MNO".charAt(index))], { base: readSharedRevision(handle) }), { ok: true });
       }
       set.queue.flush(order);
-      const prefix = "abcd".slice(0, offset), tail = "abcd".slice(offset), empty = ids.map(id => ({ id, text: "" }));
-      const expected = kind === 2 ? [...ids.map((id, index) => ({ id, text: "MNO".charAt(index) })), { id: "R1", text: "abcd" }]
+      const prefix = text.slice(0, clamped), tail = text.slice(clamped), empty = ids.map(id => ({ id, text: "" }));
+      const expected = kind === 2 ? [...ids.map((id, index) => ({ id, text: "MNO".charAt(index) })), { id: "R1", text }]
         : kind === 1 ? empty.map((row, index) => ({ ...row, text: offset === 0 ? "MNO".charAt(index) : index ? "" : "MNO".slice(0, writers) + prefix })).concat([{ id: "R1", text: tail }])
         : [{ id: "R1", text: prefix }, ...ids.map((id, index) => ({ id, text: "MNO".charAt(index) + (index === writers - 1 ? tail : "") }))];
-      agree(`seed=${seed}/kind=${kind}`, order, handles, read, { rows: expected, beats: ["R1", ...ids].sort() }); runs++;
+      agree(`seed=${seed}/kind=${kind}/form=${form}/text=${text}/offset=${offset}`, order, handles, read, { rows: expected, beats: ["R1", ...ids].sort() }); runs++;
+      if (form === "native-anchor" && text === "A😀B" && offset === 2 && kind !== 2) nativePairCuts++;
     } finally { set.close(); }
   }
-  assert.equal(runs, 288); t.diagnostic(JSON.stringify({ histories: runs, kinds: ["split", "split-before", "segment-create"], limits: [] }));
+  assert.equal(runs, 1152); assert.ok(nativePairCuts > 0);
+  t.diagnostic(JSON.stringify({ histories: runs, nativePairCuts, forms: ["flow-base", "native-anchor"], kinds: ["split", "split-before", "segment-create"], limits: [] }));
+});
+
+for (const before of [false, true]) for (const append of [false, true]) for (const order of ["D1", "rev"] as const) test(`native split${before ? " before" : ""} clamps inside an emoji; append=${append}; ${order}`, () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "A😀B" }] });
+  try {
+    registerSharedSplitHandlers(set.a); registerSharedTextOperationHandlers(set.b);
+    const anchor = createSharedAnchor(set.a, "b:R1", 2, "after"); assert.ok(anchor);
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ ...split("enter", before), at: { left: null, right: anchor, affinity: "before" } })], { base: readSharedRevision(set.a) }), { ok: true });
+    const id = JSON.stringify(["structure", "1", "enter", "beat"]);
+    assert.deepEqual(read(set.a).rows, before ? [{ id, text: "A😀" }, { id: "R1", text: "B" }] : [{ id: "R1", text: "A😀" }, { id, text: "B" }]);
+    if (append) {
+      const end = createSharedAnchor(set.b, "b:R1", 4, "after"); assert.ok(end);
+      assert.deepEqual(executeSharedOperations(set.b, [operation({ kind: "text-insert", id: "append", by: "Other", target,
+        at: { left: null, right: end, affinity: "before" }, content: [{ value: "X", marks: [] }] })], { base: readSharedRevision(set.b) }), { ok: true });
+    }
+    set.queue.flush(order);
+    const tail = append ? "BX" : "B";
+    agree("native pair cut", order, [set.a, set.b], read, { rows: before ? [{ id, text: "A😀" }, { id: "R1", text: tail }] : [{ id: "R1", text: "A😀" }, { id, text: tail }], beats: ["R1", id].sort() });
+  } finally { set.close(); }
+});
+
+for (const before of [false, true]) test(`split${before ? " before" : ""} clamps a position in text inserted earlier in the same list`, () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] });
+  try {
+    registerSharedSplitHandlers(set.a); registerSharedTextOperationHandlers(set.a);
+    const insertion = operation({ kind: "text-insert", id: "inserted", by: "Writer", target,
+      at: { left: null, right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, content: [{ value: "😀", marks: [] }] });
+    assert.deepEqual(executeSharedOperations(set.a, [insertion, operation({ ...split("enter", before),
+      at: { left: null, right: flowBaseReference("inserted", "audioText", 1), affinity: "before" } })], { base: readSharedRevision(set.a) }), { ok: true });
+    set.queue.flush("D1");
+    const id = JSON.stringify(["structure", "1", "enter", "beat"]);
+    agree("insert then split", "D1", [set.a, set.b], read, { rows: before ? [{ id, text: "a😀" }, { id: "R1", text: "bcd" }] : [{ id: "R1", text: "a😀" }, { id, text: "bcd" }], beats: ["R1", id].sort() });
+  } finally { set.close(); }
 });
 
 for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"] as const) test(`${writers} writers at the same split gap retain both breaks and typed text: ${order}`, () => {

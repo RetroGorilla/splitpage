@@ -104,6 +104,10 @@ export function sharedTextRange(value: string, from: number, to: number) {
   return { from: cuts(from) ? from - 1 : from, to: cuts(to) ? to + 1 : to };
 }
 
+export function sharedTextInsertionPosition(plan: SharedTextCommandPlan, offset: number): number {
+  return sharedTextRange(plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join(""), offset, offset).from;
+}
+
 export function spliceSharedTextPlan(plan: SharedTextCommandPlan, from: number, to: number, values: readonly unknown[], operation?: string): void {
   const added = values.map(value => ({ value, additions: [] as SharedContentRef[] })), removed = to - from;
   for (const source of [plan.native, ...plan.sources]) for (const [positions, stickRight] of [[source.before, false], [source.after, true]] as const) {

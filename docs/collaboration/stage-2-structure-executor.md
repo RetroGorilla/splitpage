@@ -22,6 +22,8 @@ implemented. Prefix splits accept narration; a heading prefix returns
 
 Splitting inserts one boundary into the existing text and keeps the original
 character identities and anchored mark records. The ordinary boundary is `{b:id}`.
+Boundary and text insertion points share a prepare-time surrogate clamp against
+the current text plan, after resolving native, flow-base or same-list references.
 A prefix split stores `{b:id,before:sourceBeat}` instead of overwriting the shared
 segment head. Thus concurrent commands retain their boundaries and writer-scoped
 beat records. The new beat records its segment and split author.

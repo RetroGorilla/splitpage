@@ -4,7 +4,7 @@ import type { SharedPreparationView } from "./prepare.ts";
 import type { SharedMarkWritePlan } from "./mark-plan.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
-import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextRange, requireSharedTextOwnership, SharedTextPreparationError } from "./executor-text-plan.ts";
+import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextInsertionPosition, requireSharedTextOwnership, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedPreparedTextInsert } from "./prepare-value.ts";
@@ -37,8 +37,7 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
     const left = at.left === null ? null : resolveSharedTextReference(view, plan, at.left, "left");
     const right = at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
     if (left && right && left.from > right.from || !left && !right && plan.units.length) throw new SharedTextPreparationError("invalid-reference");
-    let offset = (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0;
-    offset = sharedTextRange(plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join(""), offset, offset).from;
+    let offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0);
     requireSharedTextOwnership(view, plan, offset, offset);
     const chunks = operation.content.map((chunk, chunkIndex) => {
       const value = sharedPreparedTextInsert(inline(chunk.value));

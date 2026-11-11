@@ -6,7 +6,7 @@ import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
 import { applySharedTextEdit } from "./text-edit.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
-import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, addSharedTextSource, SharedTextPreparationError } from "./executor-text-plan.ts";
+import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, addSharedTextSource, sharedTextInsertionPosition, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { prepareStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
 import { isStableSharedIdentity } from "./identity.ts";
@@ -24,7 +24,7 @@ export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSp
     const right = at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
     const span = sharedStructureSpans(view.get([...plan.path.slice(0, -1), "head"]), plan.units).find(span => span.owner === plan.target.owner);
     if (!span) throw new SharedTextPreparationError("missing-target");
-    const offset = (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from;
+    const offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from);
     if (left && right && left.from > right.from || offset < span.from || offset > span.to) throw new SharedTextPreparationError("invalid-reference");
     for (const ref of operation.observed) resolveSharedTextReference(view, plan, ref, "range");
     const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat), path = ["beats", beat];
