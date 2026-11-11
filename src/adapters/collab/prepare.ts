@@ -1,9 +1,9 @@
 import * as Y from "yjs";
-import { createEncoder, toUint8Array, writeAny } from "lib0/encoding";
-import { createDecoder, readAny } from "lib0/decoding";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
-import { sharedJson } from "./snapshot.ts";
+import { sharedPreparedValue } from "./prepare-value.ts";
+import { createCollabTextFacade } from "./prepare-text.ts";
+import type { SharedPreparationText } from "./prepare-text.ts";
 
 export type SharedPreparedWrite = {
   readonly path: readonly string[];
@@ -12,28 +12,17 @@ export type SharedPreparedWrite = {
 };
 export interface SharedPreparationView {
   readonly writer: string;
+  readonly base: number | null;
   readonly get: (path: readonly string[]) => unknown;
   readonly kind: (path: readonly string[]) => "map" | "text" | "array" | "value" | "missing";
   readonly keys: (path: readonly string[]) => readonly string[];
+  readonly text: (path: readonly string[]) => SharedPreparationText | null;
+  readonly scratch: <T>(key: string, create: () => T) => T;
 }
 export type SharedPreparationResult = { readonly ok: false; readonly reason: string } | {
   readonly ok: true; readonly writes: readonly SharedPreparedWrite[]; readonly apply: (handle: SharedDocumentHandle) => void;
 };
 
-function freeze(value: unknown): unknown {
-  if (value && typeof value === "object") {
-    for (const nested of Object.values(value)) freeze(nested);
-    Object.freeze(value);
-  }
-  return value;
-}
-function wireValue(raw: unknown): unknown {
-  try {
-    if (raw instanceof Y.AbstractType || raw instanceof Y.Doc) return undefined;
-    const encoder = createEncoder(); writeAny(encoder, raw as Parameters<typeof writeAny>[1]);
-    return freeze(sharedJson(readAny(createDecoder(toUint8Array(encoder)))));
-  } catch { return undefined; }
-}
 function liveValue(handle: SharedDocumentHandle, path: readonly string[]): unknown {
   const roots = collabState(handle).roots;
   let value: unknown = roots[path[0] as keyof typeof roots];
@@ -41,8 +30,11 @@ function liveValue(handle: SharedDocumentHandle, path: readonly string[]): unkno
   return value;
 }
 
-export function createSharedPreparation(handle: SharedDocumentHandle) {
+export function createSharedPreparation(handle: SharedDocumentHandle, base: number | null = null) {
   const overlay = new Map<string, SharedPreparedWrite>();
+  const scratch = new Map<string, unknown>(), texts = new Map<string, SharedPreparationText>();
+  let open = true;
+  const ensureOpen = (): void => { if (!open) throw new Error("Preparation has ended"); };
   const lookup = (path: readonly string[]): { kind: ReturnType<SharedPreparationView["kind"]>; value: unknown } => {
     const exact = overlay.get(JSON.stringify(path));
     if (exact) return { kind: exact.kind === "delete" ? "missing" : exact.kind === "set" ? "value" : exact.kind, value: exact.value };
@@ -54,13 +46,16 @@ export function createSharedPreparation(handle: SharedDocumentHandle) {
   };
   const view: SharedPreparationView = Object.freeze({
     writer: String(collabState(handle).doc.clientID),
+    base,
     get: (path: readonly string[]): unknown => {
+      ensureOpen();
       const item = lookup(path);
-      return item.kind === "map" ? undefined : item.value instanceof Y.Text ? wireValue(item.value.toDelta())
-        : item.value instanceof Y.Array ? wireValue(item.value.toArray()) : wireValue(item.value);
+      return item.kind === "map" ? undefined : item.value instanceof Y.Text ? sharedPreparedValue(item.value.toDelta())
+        : item.value instanceof Y.Array ? sharedPreparedValue(item.value.toArray()) : sharedPreparedValue(item.value);
     },
-    kind: (path: readonly string[]) => lookup(path).kind,
+    kind: (path: readonly string[]) => { ensureOpen(); return lookup(path).kind; },
     keys: (path: readonly string[]): readonly string[] => {
+      ensureOpen();
       const item = lookup(path);
       if (item.kind !== "map") return Object.freeze([]);
       const keys = new Set(item.value instanceof Y.Map ? item.value.keys() : []);
@@ -71,17 +66,36 @@ export function createSharedPreparation(handle: SharedDocumentHandle) {
         }
       }
       return Object.freeze([...keys].sort());
+    },
+    text: (path: readonly string[]): SharedPreparationText | null => {
+      ensureOpen();
+      if (lookup(path).kind !== "text") return null;
+      const key = JSON.stringify(path), cached = texts.get(key);
+      if (cached) return cached;
+      const text = liveValue(handle, path);
+      if (!(text instanceof Y.Text)) return null;
+      const parent = liveValue(handle, path.slice(0, -1));
+      if (!(parent instanceof Y.Map)) return null;
+      const facade = createCollabTextFacade(handle, text, parent.get(path.at(-1) === "title" ? "titleMarks" : "markRecords"), ensureOpen);
+      texts.set(key, facade);
+      return facade;
+    },
+    scratch: <T>(key: string, create: () => T): T => {
+      ensureOpen();
+      if (!scratch.has(key)) scratch.set(key, create());
+      return scratch.get(key) as T;
     }
   });
   return { view, include: (writes: readonly SharedPreparedWrite[]): void => {
+    ensureOpen();
     for (const write of writes) if (write.kind === "set" && write.value === undefined) throw new Error("Prepared set writes cannot contain undefined");
     for (const write of writes) {
       for (const [key, previous] of overlay) {
         if (previous.path.length > write.path.length && write.path.every((part, index) => previous.path[index] === part)) overlay.delete(key);
       }
-      overlay.set(JSON.stringify(write.path), { path: [...write.path], kind: write.kind, value: wireValue(write.value) });
+      overlay.set(JSON.stringify(write.path), { path: [...write.path], kind: write.kind, value: sharedPreparedValue(write.value) });
     }
-  } };
+  }, close: (): void => { open = false; scratch.clear(); texts.clear(); overlay.clear(); } };
 }
 
 export function applySharedMapWrites(handle: SharedDocumentHandle, writes: readonly SharedPreparedWrite[]): void {

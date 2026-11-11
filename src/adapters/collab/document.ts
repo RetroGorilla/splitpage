@@ -7,6 +7,7 @@ export function createSharedDocument(): SharedDocumentHandle {
 }
 
 export function shouldDeliverSharedUpdate(origin: SharedTransactionOrigin | null): boolean { return origin !== "remote"; }
+export function readSharedRevision(handle: SharedDocumentHandle): number { return collabState(handle).revision; }
 
 export function transactSharedDocument(handle: SharedDocumentHandle, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void): void {
   const state = collabState(handle);

@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { readMarkChange } from "../../core/collab/read-operation.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState, assertSharedDocumentIdle } from "./state.ts";
+import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from "./state.ts";
 import { transactSharedDocument } from "./document.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
@@ -27,4 +27,12 @@ export function collabTextTarget(handle: SharedDocumentHandle, raw: SharedTextAd
   if (!(container instanceof Y.Map)) return null;
   const text: unknown = container.get(target.field === "title" ? "title" : "text");
   return text instanceof Y.Text ? { target, container, text, marksKey: target.field === "title" ? "titleMarks" : "markRecords" } : null;
+}
+
+export function collabApplyingTextTarget(handle: SharedDocumentHandle, target: SharedTextAddress) {
+  const state = collabState(handle);
+  if (!state.execution?.applying) throw new SharedExecutionWriteError();
+  const container = (target.field === "title" ? state.roots.meta : target.field === "visualText" ? state.roots.visuals.get(target.segment) : state.roots.segments.get(target.segment)) as Y.Map<unknown>;
+  return { text: container.get(target.field === "title" ? "title" : "text") as Y.Text,
+    store: container.get(target.field === "title" ? "titleMarks" : "markRecords") as Y.Map<unknown> };
 }
