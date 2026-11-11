@@ -117,6 +117,7 @@ for (const copies of [2, 3]) for (const order of deliveryOrders) test(`native sp
     transactSharedDocument(run.a, "local-command", () => {
       const roots = collabState(run.a).roots, segment = roots.segments.get("b:R1"); assert.ok(segment instanceof Y.Map);
       const text = segment.get("text"); assert.ok(text instanceof Y.Text); text.insertEmbed(2, { b: "R2" }); roots.order.delete(1, 1);
+      const beat = roots.beats.get("R2"); assert.ok(beat instanceof Y.Map); beat.set("segment", "b:R1");
     });
     run.queue.flush(order);
     const address = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
