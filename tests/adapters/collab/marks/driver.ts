@@ -4,9 +4,10 @@ import { assertReplicasAgree } from "../../../collab/agreement.ts";
 import type { DeliveryOrder } from "../../../collab/delivery.ts";
 import type { DeliveryReplica } from "../../../collab/delivery.ts";
 import { MarkTraceReplica } from "./replica.ts";
-import type { MarkTraceCommand } from "./replica.ts";
+import type { MarkTraceCommand, MarkTraceReplicaFactory } from "./replica.ts";
 import { MarkTraceModel } from "./model.ts";
 import type { MarkTraceExpectedCharacter } from "./model.ts";
+import type { ReplicaReading } from "../../../collab/agreement.ts";
 
 interface MarkTraceMessage { from: number; to: number; update: Uint8Array; known: string[] }
 export class MarkTraceHistory {
@@ -18,6 +19,7 @@ export class MarkTraceHistory {
   readonly ports: DeliveryReplica<Uint8Array>[] = [];
   readonly commands: { writer: number; command: MarkTraceCommand; observed: string[]; selected: string[]; before: string | null; after: string | null; position?: number }[] = [];
   readonly detaches: (() => void)[] = [];
+  readonly finalReadings: ReplicaReading<ReturnType<MarkTraceReplica["readNamed"]>>[] = [];
   deliveries = 0;
   checkpoints = 0;
   sequential = 0;
@@ -27,11 +29,12 @@ export class MarkTraceHistory {
   checkLocal = true;
   readonly order: DeliveryOrder;
   readonly writers: number;
+  private readonly makeReplica: MarkTraceReplicaFactory;
 
-  constructor(order: DeliveryOrder, writers: number, initial: string) {
-    this.order = order; this.writers = writers;
-    const first = new MarkTraceReplica(1, initial);
-    this.replicas = [first, ...Array.from({ length: writers - 1 }, (_, index) => new MarkTraceReplica(index + 2, undefined, first.state()))];
+  constructor(order: DeliveryOrder, writers: number, initial: string, makeReplica: MarkTraceReplicaFactory = (client, text, state) => new MarkTraceReplica(client, text, state)) {
+    this.order = order; this.writers = writers; this.makeReplica = makeReplica;
+    const first = makeReplica(1, initial);
+    this.replicas = [first, ...Array.from({ length: writers - 1 }, (_, index) => makeReplica(index + 2, undefined, first.state()))];
     this.known = this.replicas.map(() => new Set<string>());
     this.model = new MarkTraceModel(initial);
     for (let index = 0; index < initial.length; index++) this.book.bind("s" + index, first.identity(index));
@@ -80,6 +83,7 @@ export class MarkTraceHistory {
     const readings = this.replicas.map((replica, index) => ({ order: index === this.writers ? "late-C" as const : this.order === "late-C" ? "D1" as const : this.order,
       replica: index === this.writers ? "C" as const : index === 0 ? "A" as const : "B" as const, output: replica.readNamed(this.book) }));
     assertReplicasAgree("mark trace final", [{ order: "D1", replica: "A", output }, ...readings]);
+    this.finalReadings.push(...readings);
     return output;
   }
 
@@ -93,7 +97,7 @@ export class MarkTraceHistory {
   checkpoint(): void {
     for (let index = 0; index < this.replicas.length; index++) this.check(index);
     const first = this.replicas[0]; if (!first) throw new Error("Missing first");
-    const reload = new MarkTraceReplica(100 + this.checkpoints, undefined, first.state());
+    const reload = this.makeReplica(100 + this.checkpoints, undefined, first.state());
     try {
       assertReplicasAgree("mark trace settled point", [{ order: "D1", replica: "A", output: this.expected(0) },
         ...this.replicas.map((replica, index) => ({ order: "D1" as const, replica: index === 0 ? "A" as const : "B" as const, output: replica.readNamed(this.book) })),
@@ -111,7 +115,7 @@ export class MarkTraceHistory {
   }
   private join(): void {
     const first = this.replicas[0]; if (!first) throw new Error("Missing first");
-    const replica = new MarkTraceReplica(90, undefined, first.state());
+    const replica = this.makeReplica(90, undefined, first.state());
     this.replicas.push(replica); this.known.push(new Set(this.known[0])); this.attach(replica);
   }
   private deliverFrom(from: number): void { for (const message of this.pending.filter(item => item.from === from)) this.deliver(message); }

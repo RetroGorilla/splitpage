@@ -80,15 +80,17 @@ test("independent model rejects the lost-mark defect even when every replica agr
   } finally { history.destroy(); }
 });
 
-test("seeded malformed mark records and normalized ids read identically after encoded transfer", () => {
+test("seeded malformed mark records and stable ids read identically after encoded transfer", () => {
   const handle = fixture(), target = address("audioText"), peer = createSharedDocument(); monitorSharedFormatting(peer);
   try {
-    const good = prepareSharedMarkRecord(handle, target, "op\ud800", 1, 3, { type: "add", mark: { kind: "tag", id: "T\ud800", value: "P\ud800" } }); assert.ok(good);
-    assert.equal(writeSharedMarkRecord(handle, target, "op\ud800", good).ok, true);
-    assert.equal(good.operation, "op�");
+    const good = prepareSharedMarkRecord(handle, target, "op", 1, 3, { type: "add", mark: { kind: "tag", id: "T", value: "P" } }); assert.ok(good);
+    assert.equal(prepareSharedMarkRecord(handle, target, "op\ud800", 1, 3, { type: "add", mark: { kind: "tag", id: "T\ud800", value: "P\ud800" } }), null);
+    assert.equal(writeSharedMarkRecord(handle, target, "op", good).ok, true);
+    assert.equal(good.operation, "op");
     const segment = collabState(handle).roots.segments.get("b:R1"); assert.ok(segment instanceof Y.Map);
     const store: unknown = segment.get("markRecords"); assert.ok(store instanceof Y.Map);
-    const goodKey = sharedMarkRecordKey("op�", good.writer); assert.ok(goodKey); assert.equal(store.has(goodKey), true);
+    const goodKey = sharedMarkRecordKey("op", good.writer); assert.ok(goodKey); assert.equal(store.has(goodKey), true);
+    assert.equal(sharedMarkRecordKey("op\ud800", good.writer), null); assert.equal(sharedMarkRecordKey("op\ufffd", good.writer), null);
     const values: unknown[] = [null, true, 3, [], {}, { ...good, extra: true }, { ...good, start: "gone" }, { ...good, born: { client: 1, clock: -1, length: 2 } }, { type: "remove", operation: "bad", writer: good.writer, start: good.start, end: good.end, observed: new Array(1) }];
     let seed = 0x1414;
     for (let sample = 0; sample < 256; sample++) {

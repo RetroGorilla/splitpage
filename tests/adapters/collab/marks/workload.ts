@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import type { DeliveryOrder } from "../../../collab/delivery.ts";
 import { MarkTraceHistory } from "./driver.ts";
 import { markTraceExample, markTraceKinds } from "./replica.ts";
-import type { MarkTraceCommand } from "./replica.ts";
+import type { MarkTraceCommand, MarkTraceReplicaFactory } from "./replica.ts";
 import { clampRange } from "../../../../src/core/text/edits.ts";
 
-export function generatedHistory(seed: number, writers: number, order: DeliveryOrder) {
+export function generatedHistory(seed: number, writers: number, order: DeliveryOrder, makeReplica?: MarkTraceReplicaFactory) {
   const initial = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const history = new MarkTraceHistory(order, writers, initial + initial);
+  const history = new MarkTraceHistory(order, writers, initial + initial, makeReplica);
   let state = seed, commands = 0;
   const pick = (limit: number) => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state % limit; };
   const log: string[] = [];
@@ -45,7 +45,7 @@ export function generatedHistory(seed: number, writers: number, order: DeliveryO
       if (round === 4) history.joinEarly();
     }
     const output = history.finish();
-    return { output, log, commands, kinds: [...kinds].sort(), deliveries: history.deliveries, checkpoints: history.checkpoints, sequential: history.sequential,
+    return { output, readings: history.finalReadings, log, commands, kinds: [...kinds].sort(), deliveries: history.deliveries, checkpoints: history.checkpoints, sequential: history.sequential,
       selective: history.selective, early: history.early, afterJoin: history.afterJoin };
   } catch (error) {
     throw new Error(`seed=${seed} writers=${writers} order=${order}\n${log.join("\n")}\n${String(error)}`, { cause: error });

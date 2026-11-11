@@ -16,6 +16,7 @@ export interface MarkTraceCommand {
   readonly id: string; readonly kind: "add" | "remove" | "insert" | "delete"; readonly from: number; readonly to: number;
   readonly mark?: SharedMarkValue; readonly text?: string; readonly mode?: "inherit" | "plain" | "marked"; readonly marks?: readonly SharedMarkValue[];
 }
+export type MarkTraceReplicaFactory = (client: number, initial?: string, state?: Uint8Array) => MarkTraceReplica;
 export const markTraceKinds = Object.freeze(["b", "i", "u", "s", "hl", "dir", "cue", "comment", "tag", "link"] as const);
 export function markTraceExample(kind: typeof markTraceKinds[number]): SharedMarkValue {
   const mark = readMarkChange({ kind: "mark", id: "example", by: "", target: { owner: "R1", segment: "b:R1", field: "audioText" }, observed: [],
