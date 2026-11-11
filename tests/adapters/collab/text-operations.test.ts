@@ -46,12 +46,19 @@ for (const field of ["audioText", "visualText", "heading", "title"] as const) te
   const handle = fixture();
   try {
     const address = target(field, handle), before = read(handle, address).map(char => char.value).join(""), marks = markTraceKinds.map(markTraceExample);
+    const recordRoots = [collabState(handle).roots.comments, collabState(handle).roots.tags, collabState(handle).roots.people,
+      collabState(handle).roots.shots, collabState(handle).roots.replies, collabState(handle).roots.gallery];
+    const recordsBefore = JSON.stringify(recordRoots.map(root => root.toJSON()));
+    const collections = [...recordRoots, collabState(handle).roots.visuals, collabState(handle).roots.beats, collabState(handle).roots.headings];
+    const recordKeysBefore = JSON.stringify(collections.map(root => [...root.keys()]));
     const base = readSharedRevision(handle), updates: Uint8Array[] = [], origins: unknown[] = [];
     const stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update)), detach = observeSharedTransactions(handle, origin => origins.push(origin));
     assert.deepEqual(executeSharedOperations(handle, [insert("typed", address, 1, [{ value: "X", marks }])], { base }), { ok: true });
     stop(); detach(); assert.equal(updates.length, 1); assert.deepEqual(origins, ["local-command"]);
     const after = read(handle, address); assert.equal(after.map(char => char.value).join(""), before.slice(0, 1) + "X" + before.slice(1));
     assert.deepEqual(after[1]?.marks.map(mark => mark.kind).sort(), ["b", "comment", "cue", "dir", "hl", "i", "link", "s", "tag", "u"]);
+    assert.equal(JSON.stringify(recordRoots.map(root => root.toJSON())), recordsBefore);
+    assert.equal(JSON.stringify(collections.map(root => [...root.keys()])), recordKeysBefore);
     assert.deepEqual([...new Set(Y.decodeUpdate(updates[0] as Uint8Array).structs.map(item => item.id.client))], [1]);
     const range = captureSharedTextRange(handle, address, 1, 2); assert.ok(range);
     assert.deepEqual(executeSharedOperations(handle, [operation({ kind: "text-delete", id: "delete", by: "A", target: address, observed: [range] })]), { ok: true });
@@ -191,6 +198,8 @@ test("unsupported, missing, malformed and unversioned late operations refuse the
     const bad = [operation({ kind: "restore", id: "unsupported", by: "A", removals: [] }), insert("missing", { ...address, segment: ref("missing") }, 0),
       operation({ kind: "text-delete", id: "bad-reference", by: "A", target: address, observed: ["nonsense"] }), insert("bad-id\ufffd", address, 0), insert("out-of-bounds", address, 999),
       insert("bad-shot-id", address, 0, [{ value: { atom: "broll", id: ref("S\ufffd") }, marks: [] }]),
+      insert("bad-tag-payload", address, 0, [{ value: "X", marks: [{ kind: "tag", id: ref("T"), value: ref("P\ufffd") }] }]),
+      insert("bad-identified-id", address, 0, [{ value: "X", marks: [{ kind: "tag", id: ref("T\ufffd"), value: ref("P") }] }]),
       { kind: "text-insert", id: "bad-payload", by: "A", target: address, at: { left: null, right: null, affinity: "before" }, content: [{ value: { atom: "who", name: () => "Ada" }, marks: [] }] } as unknown as SharedOperation];
     const before = encodeSharedState(handle), vector = encodeSharedStateVector(handle), base = readSharedRevision(handle);
     for (const command of bad) {
@@ -216,6 +225,27 @@ test("missing or malformed stores refuse all planned writes before apply", () =>
       assert.deepEqual(encodeSharedState(handle), before); assert.deepEqual(encodeSharedStateVector(handle), vector); assert.deepEqual(updates, []); assert.equal(readSharedRevision(handle), revision); stop();
     } finally { destroySharedDocument(handle); }
   }
+});
+
+test("wrong owners and cross-field segments refuse insertion and deletion before any write", () => {
+  const handle = createMonitoredSharedDocument();
+  try {
+    hydrateSharedDocument(handle, validatedFixture({ title: "Title", rows: [{ id: "R1", audioText: "abcd", visualText: "view" }, { id: "R2", audioText: "wxyz" }],
+      sections: [{ id: "H1", name: "Heading", firstSceneId: "R1" }] })); registerSharedTextOperationHandlers(handle);
+    const audio = target("audioText", handle), heading = target("heading", handle), visual = target("visualText", handle), title = target("title", handle);
+    const badTargets: SharedTextAddress[] = [{ ...audio, segment: ref("b:R2") }, { ...audio, segment: ref("h:H1") },
+      { ...heading, segment: ref("b:R1") }, { ...visual, segment: ref("b:R1") }, { ...title, segment: ref("h:H1") }];
+    const bad = [...badTargets.map((address, index) => insert("bad" + index, address, 0)),
+      operation({ kind: "text-delete", id: "bad-delete", by: "A", target: badTargets[0], observed: [flowBaseReference("R1", "audioText", 0, 1)] })];
+    const bytes = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle), updates: Uint8Array[] = [];
+    const stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update));
+    for (const command of bad) {
+      const result = executeSharedOperations(handle, [insert("prepared-first", audio, 0), command], { base: revision });
+      assert.ok(!result.ok && "index" in result); assert.equal(result.index, 1);
+      assert.deepEqual(encodeSharedState(handle), bytes); assert.deepEqual(encodeSharedStateVector(handle), vector); assert.equal(readSharedRevision(handle), revision); assert.deepEqual(updates, []);
+    }
+    stop();
+  } finally { destroySharedDocument(handle); }
 });
 
 test("T01 observed deletion preserves concurrent insertion in six schedules and a late joiner", () => {

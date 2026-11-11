@@ -21,6 +21,13 @@ export interface SharedTextCommandPlan {
   readonly additions: { readonly identity: SharedContentRef; readonly mark: SharedMarkValue }[];
 }
 
+function segmentOwner(value: unknown, field: "audioText" | "heading"): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const kind = field === "heading" ? "h" : "b", record = value as Record<string, unknown>;
+  const owner = record[kind];
+  return Object.keys(record).length === 1 && typeof owner === "string" && isStableSharedIdentity(owner) ? owner : null;
+}
+
 export function sharedTextLocation(view: SharedPreparationView, raw: SharedTextAddress) {
   if (![raw.owner, raw.segment].every(isStableSharedIdentity)) throw new SharedTextPreparationError("unstable-identity");
   let segment: string = raw.segment, parent: readonly string[];
@@ -34,6 +41,7 @@ export function sharedTextLocation(view: SharedPreparationView, raw: SharedTextA
     if (view.kind([raw.field === "heading" ? "headings" : "beats", raw.owner]) !== "map") throw new SharedTextPreparationError("missing-target");
     if (raw.segment === raw.owner && view.kind(["segments", segment, "text"]) !== "text") segment = (raw.field === "heading" ? "h:" : "b:") + raw.owner;
     parent = ["segments", segment];
+    if (segmentOwner(view.get([...parent, "head"]), raw.field) !== raw.owner) throw new SharedTextPreparationError("mismatched-target");
   }
   const path = [...parent, raw.field === "title" ? "title" : "text"], storePath = [...parent, raw.field === "title" ? "titleMarks" : "markRecords"];
   if (view.kind(path) !== "text") throw new SharedTextPreparationError("missing-target");

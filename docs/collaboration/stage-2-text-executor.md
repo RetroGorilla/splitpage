@@ -45,7 +45,9 @@ Each operation targets one text; a list can edit several texts atomically.
 
 Narration and heading owner aliases from flow map to the hydrated `b:<owner>` and
 `h:<owner>` segments. Explicit segment addresses, visual components and the title use
-their existing typed targets. Missing text or store is refused; nothing retrofits a
+their existing typed targets. A segment's declared owner and narration/heading kind
+must match the address before its plan is built; visual components must name their
+beat, and title addresses must name this document. Missing text or store is refused; nothing retrofits a
 store or implicitly creates a title, visual text or segment. Structure commands must
 create a text and its store together before sharing it.
 
