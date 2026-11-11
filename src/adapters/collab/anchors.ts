@@ -51,6 +51,16 @@ export function readSharedAnchor(raw: unknown): SharedContentRef | null {
   return value ? readSharedContentRef(JSON.stringify(value.target ? { v: 2, target: value.target, relative: [...value.relative] } : { v: 1, segment: value.segment, relative: [...value.relative] })) : null;
 }
 
+export function sharedAnchorCharacterEnd(raw: unknown): SharedContentRef | null {
+  const value = readAnchorValue(raw);
+  if (!value) return null;
+  const position = Y.decodeRelativePosition(value.relative);
+  if (position.assoc !== 0 || position.item === null) return null;
+  position.assoc = -1;
+  const relative = [...Y.encodeRelativePosition(position)];
+  return readSharedAnchor(JSON.stringify(value.target ? { v: 2, target: value.target, relative } : { v: 1, segment: value.segment, relative }));
+}
+
 export function createSharedAnchor(handle: SharedDocumentHandle, address: string | SharedTextAddress, offset: number, affinity: "before" | "after"): SharedContentRef | null {
   const target = typeof address === "string" ? null : readSharedTextTarget(address);
   if (typeof address !== "string" && !target) return null;

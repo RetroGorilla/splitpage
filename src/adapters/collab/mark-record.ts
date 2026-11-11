@@ -1,6 +1,7 @@
 import { readMarkChange, readSharedContentRef } from "../../core/collab/read-operation.ts";
 import type { SharedContentRef, SharedMarkValue } from "../../core/collab/operations.ts";
 import { readSharedAnchor } from "./anchors.ts";
+import { isStableSharedIdentity } from "./identity.ts";
 
 export interface SharedTextIdentity { readonly client: number; readonly clock: number }
 export interface SharedMarkBirth { readonly client: number; readonly clock: number; readonly length: number }
@@ -48,6 +49,7 @@ export function readSharedMarkBirth(raw: unknown): SharedMarkBirth | null {
 function writer(raw: unknown): raw is SharedMarkWriter { return raw === "hydration" || typeof raw === "number" && Number.isInteger(raw) && raw >= 0 && raw <= 0xffffffff; }
 
 export function sharedMarkRecordKey(operation: string, author: SharedMarkWriter): string | null {
+  if (!isStableSharedIdentity(operation)) return null;
   const id = readSharedContentRef(operation);
   return id && writer(author) ? JSON.stringify([author, id]).replace(/[^\x20-\x7e]/g, unit => "\\u" + unit.charCodeAt(0).toString(16).padStart(4, "0")) : null;
 }
@@ -67,13 +69,17 @@ export function readSharedMarkRecord(key: string, raw: unknown): SharedMarkRecor
   if (raw.type === "add" && shape(raw, "born,end,mark,operation,start,type,writer")) {
     const mark = readMarkChange({ kind: "mark", id: "validate", by: "", target: { owner: "validate", segment: "validate", field: "audioText" }, observed: [], mark: raw.mark })?.mark;
     const born = raw.born === null ? null : readSharedMarkBirth(raw.born);
-    return mark && mark.value !== null && (raw.born === null || born) ? { type: "add", operation, writer: author, start, end, mark, born } : null;
+    return mark && stableSharedMark(mark) && mark.value !== null && (raw.born === null || born) ? { type: "add", operation, writer: author, start, end, mark, born } : null;
   }
   const ids = observed(raw.observed);
   if (!ids) return null;
   if (raw.type === "remove" && shape(raw, "end,observed,operation,start,type,writer")) return { type: "remove", operation, writer: author, start, end, observed: ids };
   const born = readSharedMarkBirth(raw.born);
   return raw.type === "birth" && born && shape(raw, "born,end,observed,operation,start,type,writer") ? { type: "birth", operation, writer: author, start, end, observed: ids, born } : null;
+}
+
+export function stableSharedMark(mark: SharedMarkValue): boolean {
+  return (!("id" in mark) || isStableSharedIdentity(mark.id)) && (mark.kind !== "tag" || mark.value === null || isStableSharedIdentity(mark.value));
 }
 
 export function sharedMarkContains(born: SharedMarkBirth | null, identity: SharedTextIdentity): boolean {

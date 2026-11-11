@@ -19,6 +19,8 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
     name: (base.sections as DocumentScene[]).find(item => item.id === scene.id)?.name ?? scene.name }));
   const units = new Map<string, ObservedUnit[]>();
   const key = (owner: string, field: string) => JSON.stringify([owner, field]);
+  const identity = (unit: ObservedUnit) => JSON.stringify([unit.owner, unit.field, unit.offset]);
+  const deletedPositions = new Map<string, { before: string | null; after: string | null }>();
   const text = (owner: string, field: SharedTextAddress["field"]): ObservedUnit[] => {
     const address = key(owner, field);
     if (!units.has(address)) {
@@ -36,9 +38,22 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
     const ref = gap.right ?? gap.left;
     if (!ref) return 0;
     const span = readFlowBaseReference(ref);
+    const unit = JSON.stringify([span.owner, span.field, span.from]);
+    if (deletedPositions.has(unit)) {
+      const visited = new Set<string>();
+      let cursor: string | null = unit;
+      while (cursor !== null && !visited.has(cursor)) {
+        visited.add(cursor);
+        const at = chars.findIndex(char => identity(char) === cursor);
+        if (at >= 0) return at + (gap.right ? 0 : 1);
+        const deleted = deletedPositions.get(cursor);
+        cursor = (gap.right ? deleted?.after : deleted?.before) ?? null;
+      }
+      return gap.right ? chars.length : 0;
+    }
     const at = chars.findIndex(unit => unit.owner === span.owner && unit.field === span.field && unit.offset >= span.from);
     if (gap.right) return at < 0 ? chars.length : at;
-    const left = chars.findIndex(unit => unit.owner === span.owner && unit.offset === span.from);
+    const left = chars.findIndex(unit => unit.owner === span.owner && unit.field === span.field && unit.offset === span.from);
     return left < 0 ? chars.length : left + 1;
   };
   const write = (owner: string, field: SharedTextAddress["field"], chars: ObservedUnit[]) => {
@@ -54,9 +69,20 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
       const before = rows.findIndex(row => row.id === op.at.right), after = rows.findIndex(row => row.id === op.at.left);
       rows.splice(before >= 0 ? before : after >= 0 ? after + 1 : rows.length, 0, { id: op.beat, ...op.fields });
     } else if (op.kind === "text-delete") {
-      write(op.target.owner, op.target.field, text(op.target.owner, op.target.field).filter(unit => !selected(unit, op.observed)));
+      const chars = text(op.target.owner, op.target.field), removed = chars.map(unit => selected(unit, op.observed));
+      let before: string | null = null;
+      const left = chars.map((unit, index) => { const prior = before; if (!removed[index]) before = identity(unit); return prior; });
+      let after: string | null = null;
+      // why: Deleted unit identities still name collapsed gaps in later operations from the same base.
+      for (let index = chars.length - 1; index >= 0; index--) {
+        const unit = chars[index] as ObservedUnit;
+        if (removed[index]) deletedPositions.set(identity(unit), { before: left[index] ?? null, after });
+        else after = identity(unit);
+      }
+      write(op.target.owner, op.target.field, chars.filter((_, index) => !removed[index]));
     } else if (op.kind === "text-insert") {
       const chars = text(op.target.owner, op.target.field).slice(), at = position(chars, op.at);
+      let offset = 0;
       const inserted = op.content.flatMap(chunk => {
         const marks: Marks = {};
         for (const mark of chunk.marks) {
@@ -70,7 +96,7 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
         const run: Run = typeof value === "string" ? { text: value, marks } : value.atom === "broll" ? { ...value, text: value.text ?? "B-ROLL", marks }
           : value.atom === "who" ? { ...value, text: "@" + value.name, marks } : { ...value, text: "" as const, marks };
         const chars: Char[] = op.target.field === "heading" ? (typeof value === "string" ? value : OBJ).split("").map(ch => ({ ch, marks })) : explode([run]);
-        return chars.map((char, offset) => ({ char, owner: op.id, offset, field: op.target.field }));
+        return chars.map(char => ({ char, owner: op.id, offset: offset++, field: op.target.field }));
       });
       chars.splice(at, 0, ...inserted);
       write(op.target.owner, op.target.field, chars);

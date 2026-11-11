@@ -99,15 +99,17 @@ test("no full-state encoder runs during accepted, empty or immediately refused c
     } });
     const { executeSharedOperations } = await import("./src/adapters/collab/execute.ts");
     const { operation, replicas } = await import("./tests/adapters/collab/executor-support.ts");
-    const { installTextSeamProbe } = await import("./tests/adapters/collab/text-seam-support.ts");
+    const { registerSharedTextOperationHandlers } = await import("./src/adapters/collab/text-executor.ts");
+    const { readSharedRevision } = await import("./src/adapters/collab/document.ts");
+    const { flowBaseReference } = await import("./src/core/collab/base-reference.ts");
     const run = replicas(), handle = run.a;
     try {
       assert.ok(encodes > 0);
-      encodes = 0; monitorEncodes = 0; installTextSeamProbe(handle);
+      encodes = 0; monitorEncodes = 0; registerSharedTextOperationHandlers(handle);
       const scalar = operation({ kind: "scalar", id: "s", by: "A", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 4 });
       const status = operation({ kind: "status", id: "t", by: "A", target: { scope: "beat", record: "R1" }, value: "shot", parents: [] });
-      const text = operation({ kind: "text-insert", id: "text", by: "A", target: { owner: "R1", segment: "b:R1", field: "audioText" }, at: { left: null, right: "0", affinity: "before" }, content: [{ value: "X", marks: [{ kind: "b", value: true }] }] });
-      assert.deepEqual(executeSharedOperations(handle, [scalar, status, text]), { ok: true });
+      const text = operation({ kind: "text-insert", id: "text", by: "A", target: { owner: "R1", segment: "b:R1", field: "audioText" }, at: { left: null, right: flowBaseReference("R1", "audioText", 0), affinity: "before" }, content: [{ value: "X", marks: [{ kind: "b", value: true }] }] });
+      assert.deepEqual(executeSharedOperations(handle, [scalar, status, text], { base: readSharedRevision(handle) }), { ok: true });
       assert.deepEqual(executeSharedOperations(handle, []), { ok: true });
       assert.equal(executeSharedOperations(handle, [operation({ kind: "record-delete", id: "x", by: "A", target: { collection: "people", record: "missing" } })]).ok, false);
       assert.equal(encodes, 0);

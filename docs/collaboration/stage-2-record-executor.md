@@ -54,8 +54,12 @@ ordinary `text` writes in the overlay. A virtual new text has no live facade.
 phase. Text handlers build it once from base units indexed by their live positions,
 advance it in list order, and label inserted units with operation id and offset.
 This maps original-base references and references to an earlier insertion through
-earlier planned edits, including a collapsed gap. Scratch and caches are cleared
-when prepare ends, and later access through the view or an anchor resolver throws.
+earlier planned edits, including a collapsed gap. The scratch store is closed when
+prepare ends, and later access through the view or an anchor resolver throws.
+Clearing the store does not revoke values a handler retained: those are the handler's
+responsibility. Handlers put only plain plan data in scratch. An apply step must use
+only the deeply frozen description its prepare returned, never the scratch plan or
+a live library object captured during preparation.
 
 `prepareSharedMarkWrite` validates a fixed mark plan from plain length, occupied
 record identities and chosen indices/payload/observations. `applySharedMarkWrite(handle,

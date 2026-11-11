@@ -1,7 +1,7 @@
 import type { SharedContentRef, SharedMarkValue } from "../../core/collab/operations.ts";
 import { readMarkChange, readSharedContentRef } from "../../core/collab/read-operation.ts";
 import type { SharedMarkBirth, SharedMarkWriter } from "./mark-record.ts";
-import { readSharedMarkBirth, readSharedMarkRecordIdentity, sharedMarkRecordKey } from "./mark-record.ts";
+import { readSharedMarkBirth, readSharedMarkRecordIdentity, sharedMarkRecordKey, stableSharedMark } from "./mark-record.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
 
 export type SharedMarkWriteChangeInput = { readonly type: "add"; readonly mark: unknown; readonly born?: unknown }
@@ -26,7 +26,7 @@ export function prepareSharedMarkWrite(text: { readonly length: number; readonly
   if (raw.born !== undefined && raw.born !== null && born === null) return null;
   if (raw.type === "add") {
     const mark = readMarkChange({ kind: "mark", id: "validate", by: "", target: { owner: "validate", segment: "validate", field: "audioText" }, observed: [], mark: raw.mark })?.mark;
-    if (!mark || mark.value === null) return null;
+    if (!mark || !stableSharedMark(mark) || mark.value === null) return null;
     return born === "inserted" ? freezeSharedPreparedValue({ kind: "inserted", identity, operation: id, writer, from, to, change: { type: "add", mark, born } })
       : freezeSharedPreparedValue({ kind: "record", identity, operation: id, writer, from, to, change: { type: "add", mark, born } });
   }
