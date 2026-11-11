@@ -9,7 +9,8 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionFields, readProjectionHead } from "./projection-reader.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
-import { projectSharedText, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
+import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
+import type { SharedTagProjectionRejection } from "../../core/collab/projection/tag-extents.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
 
 export interface SharedDocumentFieldProjection {
@@ -18,7 +19,17 @@ export interface SharedDocumentFieldProjection {
 }
 
 export function projectSharedDocument(handle: SharedDocumentHandle): DocumentShape {
+  return projectSharedDocumentWithRecovery(handle).document;
+}
+
+export interface SharedDocumentProjectionResult {
+  readonly document: DocumentShape;
+  readonly recovery: readonly (SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })[];
+}
+
+export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle): SharedDocumentProjectionResult {
   return withSharedSnapshot(handle, state => {
+    const recovery: (SharedTagProjectionRejection & { rowId: string; field: "audioText" | "visualText" })[] = [];
     const copy = state as unknown as SharedDocumentHandle, roots = state.roots;
     const fields = readSharedDocumentFieldProjection(copy), out = { ...fields.document };
     const tags = out.productionTags as Record<string, unknown>[], comments = out.comments as Record<string, unknown>[];
@@ -36,7 +47,9 @@ export function projectSharedDocument(handle: SharedDocumentHandle): DocumentSha
     function cell(container: Y.Map<unknown>, rowId: string, field: "audioText" | "visualText"): string {
       const units = readProjectionUnits(copy, container.get("text"), container.get("markRecords"));
       projectSharedCommentAnchors(units, comments, rowId, field, anchored);
-      return projectSharedText(units, tags);
+      const result = projectSharedTextResult(units, tags);
+      recovery.push(...result.rejected.map(entry => ({ ...entry, rowId, field })));
+      return result.html;
     }
     const rows = (out.rows as Record<string, unknown>[]).map(row => {
       const id = String(row.id), segment = segments.get("b" + id);
@@ -53,7 +66,7 @@ export function projectSharedDocument(handle: SharedDocumentHandle): DocumentSha
       return text instanceof Y.Text && text.toString() ? [{ ...sharedProjectionExtra(extra ?? {}), ...section, name: text.toString() }] : [];
     });
     Object.assign(out, { rows }); if (sections.length) out.sections = sections;
-    return canonicalSharedProjection(out) as DocumentShape;
+    return { document: canonicalSharedProjection(out) as DocumentShape, recovery };
   });
 }
 

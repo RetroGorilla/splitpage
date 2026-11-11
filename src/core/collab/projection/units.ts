@@ -1,0 +1,6 @@
+import type { SharedInlineValue, SharedMarkValue } from "../operations.ts";
+
+export interface SharedProjectionUnit {
+  readonly value: SharedInlineValue;
+  readonly marks: readonly { readonly kind: SharedMarkValue["kind"]; readonly id?: string; readonly value: true | string }[];
+}

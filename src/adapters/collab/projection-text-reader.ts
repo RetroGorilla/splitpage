@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { readTextInsert } from "../../core/collab/read-operation.ts";
 import { chooseSharedProjectionPayload } from "../../core/collab/projection/text.ts";
-import type { SharedProjectionUnit } from "../../core/collab/projection/text.ts";
+import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
 import type { SharedInlineValue } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { readCollabMarkState } from "./mark-store.ts";
