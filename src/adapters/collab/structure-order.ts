@@ -4,12 +4,10 @@ import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from
 import { SharedStructurePreparationError, sharedStructureReference } from "./structure-identity.ts";
 import type { SharedContentRef, SharedIdentityGap } from "../../core/collab/operations.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { readSharedStructureBoundary } from "./structure-boundary.ts";
 
 export interface SharedStructureOrderView {
   readonly length: () => number;
   readonly index: (segment: string) => number;
-  readonly previous: (segment: string) => string | null;
 }
 
 let orderViews: WeakMap<SharedDocumentHandle, SharedStructureOrderView> | null = null;
@@ -35,8 +33,7 @@ export function observeSharedStructureOrder(handle: SharedDocumentHandle): Share
     rebuild();
   };
   order.observe(observe); state.doc.once("destroy", () => order.unobserve(observe));
-  const view = Object.freeze({ length: () => values.length, index: (segment: string) => positions.get(segment) ?? -1,
-    previous: (segment: string) => values[(positions.get(segment) ?? 0) - 1] ?? null });
+  const view = Object.freeze({ length: () => values.length, index: (segment: string) => positions.get(segment) ?? -1 });
   orderViews.set(handle, view); return view;
 }
 
@@ -52,28 +49,22 @@ export function sharedStructureSegment(view: SharedPreparationView, raw: SharedC
   throw new SharedStructurePreparationError("missing-order-target");
 }
 
+function sharedOrderPlan(view: SharedPreparationView, order: SharedStructureOrderView) {
+  return view.scratch("structure-order", () => ({ length: order.length(), positions: [] as { segment: string; index: number }[], insertions: [] as number[] }));
+}
+
+export function sharedPlannedSegmentIndex(view: SharedPreparationView, order: SharedStructureOrderView, segment: string): number {
+  const plan = sharedOrderPlan(view, order), cached = plan.positions.find(position => position.segment === segment);
+  if (cached) return cached.index;
+  let index = order.index(segment);
+  if (index < 0) throw new SharedStructurePreparationError("missing-order-target");
+  for (const inserted of plan.insertions) if (inserted <= index) index++;
+  plan.positions.push({ segment, index }); return index;
+}
+
 export function prepareSharedOrderInsertion(view: SharedPreparationView, order: SharedStructureOrderView, at: SharedIdentityGap, segment: string): number {
-  const plan = view.scratch("structure-order", () => ({ length: order.length(), positions: [] as { segment: string; index: number }[], insertions: [] as number[] }));
-  const position = (reference: SharedContentRef, side: "left" | "right"): number => {
-    const key = sharedStructureSegment(view, reference);
-    const owner = sharedStructureReference(view, reference);
-    if (view.kind(["headings", owner]) === "map") throw new SharedStructurePreparationError("heading-placement-required");
-    if (view.kind(["beats", owner]) === "map") {
-      const head = readSharedStructureBoundary(view.get(["segments", key, "head"])), deltas = view.get(["segments", key, "text"]);
-      if (head?.owner !== owner || head.field !== "audioText") throw new SharedStructurePreparationError("partial-segment-gap");
-      if (!Array.isArray(deltas)) throw new SharedStructurePreparationError("invalid-order-target");
-      for (let index = 0; index < deltas.length; index++) if (readSharedStructureBoundary((deltas[index] as { insert?: unknown } | undefined)?.insert)) throw new SharedStructurePreparationError("partial-segment-gap");
-      const previous = side === "right" ? order.previous(key) : null;
-      if (previous && readSharedStructureBoundary(view.get(["segments", previous, "head"]))?.field === "heading") throw new SharedStructurePreparationError("heading-placement-required");
-    }
-    const cached = plan.positions.find(position => position.segment === key);
-    if (cached) return cached.index;
-    let index = order.index(key);
-    if (index < 0) throw new SharedStructurePreparationError("missing-order-target");
-    for (const inserted of plan.insertions) if (inserted <= index) index++;
-    plan.positions.push({ segment: key, index }); return index;
-  };
-  const left = at.left === null ? null : position(at.left, "left"), right = at.right === null ? null : position(at.right, "right");
+  const plan = sharedOrderPlan(view, order);
+  const left = at.left === null ? null : sharedPlannedSegmentIndex(view, order, at.left), right = at.right === null ? null : sharedPlannedSegmentIndex(view, order, at.right);
   if (left !== null && right !== null && left >= right) throw new SharedStructurePreparationError("invalid-order-gap");
   const index = (at.affinity === "before" ? right ?? (left === null ? null : left + 1) : left === null ? right : left + 1) ?? plan.length;
   for (const position of plan.positions) if (position.index >= index) position.index++;

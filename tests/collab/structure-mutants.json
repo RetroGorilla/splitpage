@@ -5,5 +5,17 @@
     "find": "applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit);",
     "replace": "applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit); applySharedTextEdit(handle, { target: description.edit.target, edit: { type: \"text\", at: 0, value: \"abcd\" }, marks: [] });",
     "tests": ["tests/adapters/collab/structure-stage1.test.ts"]
+  }, {
+    "label": "omitted initial visual content",
+    "file": "src/adapters/collab/segment-executor.ts",
+    "find": "for (const field of [\"audioText\", \"visualText\"] as const)",
+    "replace": "for (const field of [\"audioText\"] as const)",
+    "tests": ["tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "inline creation placed after its physical container",
+    "file": "src/adapters/collab/structure-placement.ts",
+    "find": "return { kind: \"inline\" as const, plan, offset };",
+    "replace": "return { kind: \"inline\" as const, plan, offset: plan.units.length };",
+    "tests": ["tests/adapters/collab/structure-create.test.ts"]
   }]
 }
