@@ -10,7 +10,8 @@ function plain(fields: Readonly<Record<string, unknown>>, excluded: readonly str
   for (const key of Object.keys(fields).filter(key => !["rank", "extra", ...excluded].includes(key)).sort()) Object.defineProperty(out, key, { value: fields[key], enumerable: true, configurable: true, writable: true });
   return out;
 }
-export function projectSharedRegistryFields(fields: Readonly<Record<string, unknown>>): Record<string, unknown> {
+export function projectSharedRegistryFields(kind: "people" | "tags" | "shots", fields: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  if (kind !== "shots") return plain(fields);
   const out = plain(fields, ["props"]);
   if (Object.hasOwn(fields, "props")) out.props = list(fields.props).map(prop => plain(bag(prop.fields)));
   return out;

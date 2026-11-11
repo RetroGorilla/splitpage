@@ -21,14 +21,14 @@ export function readSharedDocumentFieldProjection(handle: SharedDocumentHandle):
     for (const key of ["docId", "schema", "wordsPerMinute", "targetSeconds", "paragraphsDecided"]) if (Object.hasOwn(meta, key)) out[key] = meta[key];
     for (const key of ["fileTitle", "capture"]) Object.assign(out, meta[key]);
     const records = (collection: Parameters<typeof readSharedRecords>[1]) => readSharedRecords(copy, collection);
-    const people = records("people").map(record => projectSharedRegistryFields(record.fields));
+    const people = records("people").map(record => projectSharedRegistryFields("people", record.fields));
     const tags = records("tags").map(record => {
       const id = readSharedContentRef(record.key);
-      return projectSharedRegistryFields(id ? { ...record.fields, status: readSharedStatus(copy, { scope: "tag", record: id }) } : record.fields);
+      return projectSharedRegistryFields("tags", id ? { ...record.fields, status: readSharedStatus(copy, { scope: "tag", record: id }) } : record.fields);
     });
     const shots = records("shots").map(record => {
       const id = readSharedContentRef(record.key);
-      return projectSharedRegistryFields(id ? { ...record.fields, status: readSharedStatus(copy, { scope: "shot", record: id }) } : record.fields);
+      return projectSharedRegistryFields("shots", id ? { ...record.fields, status: readSharedStatus(copy, { scope: "shot", record: id }) } : record.fields);
     });
     const replies = records("replies"), comments = records("comments").map(record => projectSharedCommentFields(record.fields, replies));
     const gallery = records("gallery"), rows: Record<string, unknown>[] = [], sections: { id: string; firstSceneId: string }[] = [];
