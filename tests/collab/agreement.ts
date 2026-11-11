@@ -93,6 +93,8 @@ function difference(expected: unknown, actual: unknown, path: string): string | 
     return compareEntries([...(wanted as Set<unknown>)].map((item, index) => [index, item] as const), [...(got as Set<unknown>)].map((item, index) => [index, item] as const), path);
   }
   if (wantedKind === "array") {
+    ownProperties(wanted, path, () => false);
+    ownProperties(got, path, () => false);
     const wantedItems = wanted as unknown[];
     const gotItems = got as unknown[];
     if (wantedItems.length !== gotItems.length) return `${path}: length ${wantedItems.length} against ${gotItems.length}`;
@@ -104,7 +106,7 @@ function difference(expected: unknown, actual: unknown, path: string): string | 
       const found = difference(wantedItems[index], gotItems[index], `${path}[${index}]`);
       if (found) return found;
     }
-    return compareProperties(wanted, got, path, key => key === "length" || arrayIndex.test(key));
+    return compareProperties(wanted, got, path, key => key === "length" || arrayIndex.test(key) && Number(key) < wantedItems.length);
   }
   return compareProperties(wanted, got, path, () => false);
 }
