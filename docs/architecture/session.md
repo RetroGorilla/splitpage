@@ -13,7 +13,7 @@ The code lives in `src/application/session/` (`document-session.ts`, `change-set
 | The document | One `ValidatedDocument` or none. It arrives only through the `DocumentEntry` port, which brands it |
 | The epoch | A counter that opens a new epoch when a document is adopted or recovered, even for the same document id |
 | The generation | A counter of accepted user edits. It never resets, and a new epoch does not clear it |
-| Transaction kinds | `TransactionKind`: `edit`, `replay`, `amend`, `disk`, `reload`, `recovery`, `adopt`; `replay` and `amend` advance generation and run effects without recording undo |
+| Transaction kinds | `TransactionKind`: `edit`, `replay`, `amend`, `disk`, `reload`, `recovery`, `adopt`, `remote`; `replay` and `amend` advance generation and run effects without recording undo. `remote` is a change another person made to a shared document; this session never publishes it |
 | Capability | Whether an edit is allowed, asked of the `CapabilityPort` before a command plans |
 | Change sets | `ChangeSet`: what a transaction touched, published as a `SessionChange` |
 | Selectors | `read(select)` hands a function the live document typed as a deep-readonly `DocumentView`, or `null`; the type is compile-time only. The selector functions themselves (`sceneAt`, `sceneStatus`, `cellHtml`, `bothScenesHaveVisual`) live in the command modules, not in `document-session.ts` as the milestone's layout says |
@@ -56,7 +56,7 @@ Boot recovery of unsaved work (`openInitialDocument` in `src/bootstrap/startup/i
 
 ## 3. The command shape
 
-A `Command` has a `name`, `needs` (`"edit"` or `"nothing"`) and `plan(doc, capability)`, which gets a `DocumentView` and the session's `CapabilityPort` and returns a `Plan`, a `Refusal`, or `null`. A `"nothing"` command can ask the port itself to refuse part of what it does (the typing command does, below). A `Plan` is a `ChangeSet` and an `apply(doc)` function that gets the live `ValidatedDocument`. `session.run(command)` returns a `CommandOutcome`.
+A `Command` has a `name`, `needs` (`"edit"` or `"nothing"`) and `plan(doc, capability)`, which gets a `DocumentView` and the session's `CapabilityPort` and returns a `Plan`, a `Refusal`, or `null`. A `"nothing"` command can ask the port itself to refuse part of what it does (the typing command does, below). A `Plan` is a `ChangeSet` and an `apply(doc)` function that gets the live `ValidatedDocument`. It may also carry `shared` (a `SharedPlan`: the same edit as a list of shared operations, with an optional base revision), which this session does not read. `session.run(command)` returns a `CommandOutcome`.
 
 The five steps of an accepted command, in order:
 
