@@ -5,7 +5,7 @@ import type { VideoLink } from "../../core/document/gallery.ts";
 import { brollPropKey } from "../../core/document/broll.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { transactSharedDocument } from "./document.ts";
-import { collabState } from "./state.ts";
+import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { insertSharedHtml } from "./text-import.ts";
 
 type ImportBag = Record<string, unknown>;
@@ -53,6 +53,7 @@ function unique(entries: readonly ImportBag[]): void {
 
 export function hydrateSharedDocument(handle: SharedDocumentHandle, source: ValidatedDocument): void {
   const state = collabState(handle);
+  assertSharedDocumentIdle(state);
   if (!state.fresh || Y.encodeStateAsUpdate(state.doc).length !== 2) throw new Error("Hydration requires a fresh empty shared document");
   const sections = records(source.sections);
   const tags = records(source.productionTags);

@@ -5,7 +5,7 @@ import { collabTextTarget } from "./text-target.ts";
 import { createSharedAnchor, resolveSharedTextAnchor } from "./anchors.ts";
 import { transactSharedDocument } from "./document.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState } from "./state.ts";
+import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { readSharedMarkRecord, sharedMarkContains, sharedMarkRecordKey } from "./mark-record.ts";
 import type { SharedMarkRecord, SharedMarkGroup, SharedMarkedCharacter } from "./mark-record.ts";
 
@@ -15,6 +15,7 @@ type LocatedMark = { record: SharedMarkRecord; reference: SharedContentRef; from
 function writingIdentity(handle: SharedDocumentHandle) { const state = collabState(handle); return state.hydrating ? "hydration" as const : state.doc.clientID; }
 
 export function initializeSharedMarkStore(handle: SharedDocumentHandle, target: SharedTextAddress): SharedMarkWriteResult {
+  assertSharedDocumentIdle(collabState(handle));
   const found = collabTextTarget(handle, target);
   if (!found) return { ok: false, reason: "missing-text" };
   const current: unknown = found.container.get(found.marksKey);
@@ -26,6 +27,7 @@ export function initializeSharedMarkStore(handle: SharedDocumentHandle, target: 
 }
 
 export function writeSharedMarkRecord(handle: SharedDocumentHandle, target: SharedTextAddress, key: string, raw: unknown): SharedMarkWriteResult {
+  assertSharedDocumentIdle(collabState(handle));
   const normalized = sharedMarkRecordKey(key, writingIdentity(handle)), record = normalized && readSharedMarkRecord(normalized, raw);
   if (!record) return { ok: false, reason: "invalid-record" };
   const found = collabTextTarget(handle, target);

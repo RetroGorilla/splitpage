@@ -7,16 +7,23 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
 import { createSharedPreparation, applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
+import { isStableSharedIdentity } from "./identity.ts";
 
 function sameTarget(a: SharedStatusEvent["target"], b: SharedStatusEvent["target"]): boolean {
   return a.scope === b.scope && a.record === b.record;
 }
 
+function stableEvent(event: SharedStatusEvent): boolean {
+  return isStableSharedIdentity(event.id) && isStableSharedIdentity(event.target.record)
+    && isStableSharedIdentity(event.by) && event.parents.every(isStableSharedIdentity);
+}
+
 function eventsFor(view: SharedPreparationView, target: SharedStatusEvent["target"]): Map<string, SharedStatusEvent> {
   const events = new Map<string, SharedStatusEvent>();
   for (const id of view.keys(["statusEvents"])) {
+    if (!isStableSharedIdentity(id)) continue;
     const event = readSharedStatusEvent(view.get(["statusEvents", id]));
-    if (event && id === event.id && sameTarget(event.target, target)) events.set(id, event);
+    if (event && stableEvent(event) && id === event.id && sameTarget(event.target, target)) events.set(id, event);
   }
   return events;
 }
@@ -36,8 +43,8 @@ function storedStatus(view: SharedPreparationView, target: SharedStatusEvent["ta
   return typeof value === "string" && (ids as readonly string[]).includes(value) ? value : ids[0];
 }
 
-function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["target"]): string {
-  const stored = storedStatus(view, target), events = eventsFor(view, target);
+function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["target"], events = eventsFor(view, target)): string {
+  const stored = storedStatus(view, target);
   const pending = new Map<string, number>(), children = new Map<string, string[]>(), ordered: string[] = [];
   for (const [id, event] of events) {
     const parents = new Set(event.parents.filter(parent => events.has(parent)));
@@ -114,6 +121,7 @@ export function readSharedStatusNotices(handle: SharedDocumentHandle, target: Sh
 
 export function prepareSharedStatusEvent(operation: SharedStatusEvent, view: SharedPreparationView): SharedPreparationResult {
   const event = readSharedStatusEvent(operation);
+  if (event && !stableEvent(event)) return { ok: false, reason: "unstable-identity" };
   if (!event || view.kind(targetPath(event.target)) !== "map") return { ok: false, reason: "missing-status-target" };
   const key = JSON.stringify([view.writer, event.id]);
   if (view.kind(["statusEvents", key]) !== "missing") return { ok: false, reason: "duplicate-status-event" };
@@ -132,7 +140,7 @@ export function prepareSharedStatusEvent(operation: SharedStatusEvent, view: Sha
     parents.push(candidates[0]);
   }
   if (JSON.stringify([...new Set(parents)].sort()) !== JSON.stringify(heads(events))) return { ok: false, reason: "stale-status-parents" };
-  const stored = readSharedStatusEvent({ ...event, id: key, parents, prior: resolveStatus(view, event.target) });
+  const stored = readSharedStatusEvent({ ...event, id: key, parents, prior: resolveStatus(view, event.target, events) });
   if (!stored) return { ok: false, reason: "invalid-status-event" };
   const writes: SharedPreparedWrite[] = [{ path: ["statusEvents", key], kind: "set", value: stored }];
   return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };

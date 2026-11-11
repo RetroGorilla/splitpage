@@ -20,6 +20,12 @@ structure handlers supply their own apply interpreter and corresponding effects.
 An apply exception escapes as a handler defect, never as a refusal: the library
 cannot roll back the partly written transaction. Prepare must have no external
 effects; returning a refusal or throwing leaves all live state unchanged.
+
+One guard per handle spans preparation, application and synchronous transaction
+observer delivery, and is cleared in `finally`. Nested execution and other adapter
+writes on that handle throw as caller defects before changing anything; only the
+entry's prepared apply phase may use the low-level write interpreter.
+
 Registration is per live handle and duplicate kinds are refused. Scalar/status
 handlers are built in; text and structure handlers register from their own files.
 No application caller imports the executor. Typing, undo and save paths are untouched.
@@ -62,13 +68,21 @@ is refused. Parents use stored identities; an unscoped operation-id alias is
 accepted only when unambiguous. Retired-event reads are retained for the future
 undo package, which alone will write retirements.
 
-Public reader snapshots use public wire encoding/decoding before validation. This gives
-raw map keys and stored ids identical normalization, including malformed clients'
-colliding strings, without accessing private library structures. Scalar records
-use declared output field order; nested opaque JSON keys use UTF-16 order.
-Command preparation reads and validates individual live values instead of
-encoding the document. Concurrent scalar writes use the library's deterministic
-client order, with identical results on every copy; this tie-break is assumed.
+Every stored adapter identity must be well formed UTF-16 and contain no U+FFFD;
+`isStableSharedIdentity` checks this without normalizing.
+A status event with an unstable key, id, parent, target or string writer (`by`) is
+absent to readers and preparation, and unstable authored identities are refused
+without rewriting or deleting anything.
+Mark and other record stores adopt this shared helper in their own pull requests.
+
+Scalar preparation reads target fields; its fixed-count test covers unrelated
+records. A status command enumerates the document's flat status-event root once,
+so collection and validation work is linear in the document's status-event count,
+followed by target ancestry resolution. Status commands are outside the typing
+path; a replica-local per-beat index arrives with incremental projection in package 6c.
+Scalar output uses declared field order and opaque JSON keys use UTF-16 order.
+Concurrent scalar writes use the library's deterministic client order, with
+identical results on every copy; this tie-break is assumed.
 
 ## Trace boundaries
 

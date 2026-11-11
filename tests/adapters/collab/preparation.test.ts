@@ -61,7 +61,7 @@ for (const order of deliveryOrders) test(`file-title pair stays atomic across hy
   } finally { run.close(); }
 });
 
-test("calls create no staging document, keep the live client set and use constant target access on a large fixture", () => {
+test("scalar calls create no staging document, keep the live client set and use constant reads with unrelated records", () => {
   const counts: number[] = [];
   for (const size of [0, 10000]) {
     const run = replicas();

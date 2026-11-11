@@ -22,6 +22,7 @@ export class CollabDocumentState {
   hydrating = false;
   readonly pendingTickets = new Map<object, Exclude<SharedTransactionOrigin, "cleanup">>();
   adapterBatch = false;
+  execution: { applying: boolean } | null = null;
 
   constructor() {
     this.doc.on("beforeObserverCalls", transaction => {
@@ -33,7 +34,16 @@ export class CollabDocumentState {
   }
 }
 
-export function transactCollabState(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void): void {
+export class SharedExecutionWriteError extends Error {
+  constructor() { super("Shared document writes cannot reenter operation execution"); }
+}
+
+export function assertSharedDocumentIdle(state: CollabDocumentState): void {
+  if (state.execution) throw new SharedExecutionWriteError();
+}
+
+export function transactCollabState(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void, execution?: object): void {
+  if (state.execution && state.execution !== execution) throw new SharedExecutionWriteError();
   const requested: unknown = origin;
   if (requested === "cleanup") throw new Error("Cleanup origin is assigned only to checked formatting maintenance");
   const ticket = {};

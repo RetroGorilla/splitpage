@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { createEncoder, toUint8Array, writeAny } from "lib0/encoding";
 import { createDecoder, readAny } from "lib0/decoding";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState } from "./state.ts";
+import { collabState, SharedExecutionWriteError } from "./state.ts";
 import { sharedJson } from "./snapshot.ts";
 
 export type SharedPreparedWrite = {
@@ -62,7 +62,7 @@ export function createSharedPreparation(handle: SharedDocumentHandle) {
     kind: (path: readonly string[]) => lookup(path).kind,
     keys: (path: readonly string[]): readonly string[] => {
       const item = lookup(path);
-      if (item.kind !== "map") return [];
+      if (item.kind !== "map") return Object.freeze([]);
       const keys = new Set(item.value instanceof Y.Map ? item.value.keys() : []);
       for (const write of overlay.values()) {
         if (write.path.length === path.length + 1 && path.every((key, index) => write.path[index] === key)) {
@@ -74,6 +74,7 @@ export function createSharedPreparation(handle: SharedDocumentHandle) {
     }
   });
   return { view, include: (writes: readonly SharedPreparedWrite[]): void => {
+    for (const write of writes) if (write.kind === "set" && write.value === undefined) throw new Error("Prepared set writes cannot contain undefined");
     for (const write of writes) {
       for (const [key, previous] of overlay) {
         if (previous.path.length > write.path.length && write.path.every((part, index) => previous.path[index] === part)) overlay.delete(key);
@@ -84,6 +85,7 @@ export function createSharedPreparation(handle: SharedDocumentHandle) {
 }
 
 export function applySharedMapWrites(handle: SharedDocumentHandle, writes: readonly SharedPreparedWrite[]): void {
+  if (!collabState(handle).execution?.applying) throw new SharedExecutionWriteError();
   for (const write of writes) {
     const parent = liveValue(handle, write.path.slice(0, -1)) as Y.Map<unknown>, key = write.path.at(-1) as string;
     if (write.kind === "delete") parent.delete(key);
