@@ -14,6 +14,7 @@ export interface SharedPreparationView {
   readonly writer: string;
   readonly base: number | null;
   readonly get: (path: readonly string[]) => unknown;
+  readonly has: (path: readonly string[]) => boolean;
   readonly kind: (path: readonly string[]) => "map" | "text" | "array" | "value" | "missing";
   readonly keys: (path: readonly string[]) => readonly string[];
   readonly text: (path: readonly string[]) => SharedPreparationText | null;
@@ -54,6 +55,16 @@ export function createSharedPreparation(handle: SharedDocumentHandle, base: numb
         : item.value instanceof Y.Array ? sharedPreparedValue(item.value.toArray()) : sharedPreparedValue(item.value);
     },
     kind: (path: readonly string[]) => { ensureOpen(); return lookup(path).kind; },
+    has: (path: readonly string[]): boolean => {
+      ensureOpen();
+      if (!path.length) return false;
+      const exact = overlay.get(JSON.stringify(path));
+      if (exact) return exact.kind !== "delete";
+      for (let length = path.length - 1; length > 0; length--) if (overlay.has(JSON.stringify(path.slice(0, length)))) return false;
+      if (path.length === 1) return Object.hasOwn(collabState(handle).roots, path[0] as string);
+      const parent = liveValue(handle, path.slice(0, -1));
+      return parent instanceof Y.Map && parent.has(path.at(-1) as string);
+    },
     keys: (path: readonly string[]): readonly string[] => {
       ensureOpen();
       const item = lookup(path);
