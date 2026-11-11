@@ -31,6 +31,7 @@ export function projectSharedCommentFields(fields: Readonly<Record<string, unkno
 export function projectSharedBeatFields(id: string, fields: Readonly<Record<string, unknown>>, status: string, gallery: readonly { readonly fields: Readonly<Record<string, unknown>> }[]): Record<string, unknown> {
   const out = sharedProjectionExtra(fields), stamp = bag(fields.stamp);
   out.id = id; out.status = status;
+  if (typeof fields.segment === "string" && !Object.hasOwn(out, "imageRef")) out.imageRef = null;
   for (const key of ["lengthSeconds", "paragraphStart"]) if (Object.hasOwn(fields, key)) out[key] = fields[key];
   if (Object.hasOwn(stamp, "at")) out.updatedAt = stamp.at;
   if (Object.hasOwn(stamp, "by")) out.updatedBy = stamp.by;
