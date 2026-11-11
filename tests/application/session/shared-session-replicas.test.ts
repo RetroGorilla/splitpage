@@ -6,9 +6,12 @@ import type { SessionChange } from "../../../src/application/session/change-set.
 import { applySharedUpdate, destroySharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { operation, ref } from "../../adapters/collab/executor-support.ts";
 import { createMonitoredSharedDocument, deliveryReplica, validatedFixture } from "../../adapters/collab/helpers.ts";
 import { recordReplicas } from "../../adapters/collab/record-support.ts";
@@ -144,6 +147,33 @@ test("local command: each kind of operation is one execute, one edit and the pre
     assert.deepEqual(w.a.h.session.read(doc => doc), expected);
     assert.deepEqual(w.b.h.session.read(doc => doc), expected);
     assert.deepEqual([w.a.updates(), w.b.updates()], [6, 6]);
+  } finally { w.close(); }
+});
+
+test("split: one transaction names the shortened cell and the inserted beat on both replicas; the test entry port rewrites the beat's writer-scoped id", () => {
+  const w = world();
+  try {
+    registerSharedSplitHandlers(w.a.handle);
+    registerSharedSplitHandlers(w.b.handle);
+    const target = { segment: ref("b:R1"), owner: ref("R1"), field: "audioText" as const };
+    const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "audioText" }], rowsInserted: ["structure1enterbeat"] };
+    const outcome = w.a.h.session.run(sharedCommand("split", [operation({ kind: "split", id: "enter", by: "A", target,
+      at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [flowBaseReference("R1", "audioText", 0, 3)],
+      boundary: "same-boundary", beat: "same-beat", fields: { status: "todo" } })]));
+    assert.deepEqual(outcome, { kind: "applied", generation: 1, changes });
+    w.run.queue.flush("D1");
+    assert.deepEqual(w.a.h.published, [{ kind: "edit", epoch: 1, generation: 1, changes }]);
+    assert.deepEqual(w.b.h.published, [{ kind: "remote", epoch: 1, generation: 0, changes }]);
+    untouched(w.b);
+    const rows = [
+      { id: "R1", status: "todo", visualText: "", audioText: "ab", imageRef: null, updatedAt: "", updatedBy: null },
+      { id: "structure1enterbeat", status: "todo", visualText: "", audioText: "Z", imageRef: null, updatedAt: "", updatedBy: null },
+      { id: "R2", status: "todo", visualText: "", audioText: "cd", imageRef: null, updatedAt: "", updatedBy: null }
+    ];
+    assert.deepEqual(w.a.h.session.read(doc => doc?.rows), rows);
+    assert.deepEqual(w.b.h.session.read(doc => doc?.rows), rows);
+    for (const made of [w.a, w.b]) assert.deepEqual(projectSharedDocument(made.handle).rows.map(row => row.id), ["R1", "[\"structure\",\"1\",\"enter\",\"beat\"]", "R2"]);
+    assert.deepEqual([w.a.updates(), w.b.updates()], [1, 1]);
   } finally { w.close(); }
 });
 

@@ -40,6 +40,14 @@ either side gives the whole document. The owner projects the whole document per
 transaction in one function, `projectionStep`, which the incremental projector (6c)
 replaces; the precise set is the contract.
 
+The held document is what the `entry` port returns for the projection, and the set
+is compared between two held documents. The tests use `migrateRows`, the only
+producer of a `ValidatedDocument`. It is not the identity on a projection: for a
+beat made by a split it fills the default fields and rewrites the writer-scoped id
+(`["structure","1","enter","beat"]` is held as `structure1enterbeat`), so a held beat
+id is not always the shared one. `shared-session-replicas.test.ts` pins this. Which
+entry the wiring supplies, and how a command names such a beat, is open for package 14.
+
 A `remote` change carries no `derive` names. Whoever needs derivations refreshed
 after another person's change subscribes and asks for them.
 

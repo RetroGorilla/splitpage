@@ -5,6 +5,7 @@ import type { SessionChange } from "../../../src/application/session/change-set.
 import type { Command, SessionCounters } from "../../../src/application/session/document-session.ts";
 import type { Capability } from "../../../src/application/session/ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
@@ -42,10 +43,14 @@ export function adapterReplica(handle: SharedDocumentHandle): ReplicaPort {
   };
 }
 
+export function enterProjection(raw: unknown): ValidatedDocument {
+  return migrateRows(raw, fakeMigration().ports);
+}
+
 export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = {}): SharedHarness {
   const log: string[] = [], published: SessionChange[] = [], refreshes: string[][] = [], reported: unknown[] = [];
   const undo: SharedHarness["undo"] = [], executed: SharedHarness["executed"] = [];
-  const clock = fakeClock(), migration = fakeMigration();
+  const clock = fakeClock();
   let denied: string | null = null;
   const session = createSharedSession({
     replica: {
@@ -54,7 +59,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
       execute: (operations, options) => { log.push("execute"); executed.push({ operations, base: options.base }); return replica.execute(operations, options); },
       observe: replica.observe
     },
-    entry: raw => migrateRows(raw, migration.ports),
+    entry: enterProjection,
     undo: { record: (changes, selection) => { log.push("undo.record"); undo.push({ changes, selection }); hooks.record?.(); } },
     effects: {
       dirty: change => { log.push("dirty:" + change.generation); hooks.effect?.("dirty"); },

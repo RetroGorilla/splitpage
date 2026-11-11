@@ -5,6 +5,7 @@ import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { destroySharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
@@ -15,10 +16,10 @@ import { createMonitoredSharedDocument, deliveryReplica } from "../../adapters/c
 import { recordReplicas } from "../../adapters/collab/record-support.ts";
 import { writesOutside } from "../session-fakes.ts";
 import { namesUnchanged } from "./change-set-checks.ts";
-import { adapterReplica, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { adapterReplica, enterProjection, sharedCommand, sharedHarness } from "./shared-session-support.ts";
 import type { SharedHarness } from "./shared-session-support.ts";
 
-const DECLARED_LIMITS: readonly { readonly name: string; readonly matches: (violation: string) => boolean }[] = [];
+const DECLARED_LIMITS: readonly { readonly name: string; readonly violation: RegExp }[] = [];
 
 const SOURCE = {
   title: "Title",
@@ -26,7 +27,7 @@ const SOURCE = {
   sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }]
 };
 
-const KINDS = ["length", "status", "type", "erase", "bold", "heading", "person", "rename", "dismiss", "pace"] as const;
+const KINDS = ["length", "status", "type", "erase", "bold", "split", "heading", "person", "rename", "dismiss", "pace"] as const;
 
 type Bag = Record<string, unknown>;
 
@@ -45,6 +46,7 @@ function snapshot(h: SharedHarness): Bag | null {
 
 function seat(name: string, handle: SharedDocumentHandle, violations: string[]): Seat {
   registerSharedTextOperationHandlers(handle);
+  registerSharedSplitHandlers(handle);
   const made: Seat = { name, handle, h: sharedHarness(adapterReplica(handle)), updates: 0, edits: 0, checked: 0 };
   collabState(handle).doc.on("update", () => { made.updates++; });
   let last = snapshot(made.h);
@@ -91,6 +93,12 @@ function build(kind: typeof KINDS[number], who: Seat, id: string, next: (below: 
   if (kind === "type") return insert(narration(row), ["x", "y", "z"][next(3)] ?? "x");
   if (kind === "erase") return ranged((target, observed) => ({ kind: "text-delete", id, by, target, observed: [observed] }));
   if (kind === "bold") return ranged((target, observed) => ({ kind: "mark", id, by, target, observed: [observed], mark: { kind: "b", value: true } }));
+  if (kind === "split") {
+    const target = narration(row), at = 1 + next(lengthOf(target) || 1);
+    const right = createSharedAnchor(handle, target, at, "after"), observed = captureSharedTextRange(handle, target, at - 1, at);
+    return right && observed && sharedCommand(kind, [operation({ kind: "split", id, by, target, at: { left: null, right, affinity: "before" }, observed: [observed],
+      boundary: "same-boundary", beat: "same-beat", fields: { status: "todo" } })]);
+  }
   if (kind === "heading") return insert({ segment: ref("h:H1"), owner: ref("H1"), field: "heading" }, "!");
   if (kind === "person") return sharedCommand(kind, [operation({ kind: "record-create", id, by, target: { collection: "people", record: `P${id}` }, fields: { id: `P${id}`, name: `Name ${id}` } })]);
   if (kind === "rename") return someone ? sharedCommand(kind, [operation({ kind: "record-set", id, by, target: { collection: "people", record: someone }, field: "name", value: `Renamed ${id}` })]) : null;
@@ -128,14 +136,19 @@ for (const [writers, order] of [[2, "D1"], [2, "rev"], [2, "dup"], [2, "late-C"]
       run.queue.flush(order === "late-C" ? "D1" : order);
       const all = joined ? [...seats, joined] : seats;
       for (const made of all) {
-        assert.deepEqual(made.h.session.read(doc => doc), projectSharedDocument(made.handle), `${made.name} holds its replica's projection`);
+        const held = snapshot(made.h);
+        assert.ok(held);
+        assert.deepEqual(held, JSON.parse(JSON.stringify(enterProjection(projectSharedDocument(made.handle)))), `${made.name} holds its replica's projection as the entry port returns it`);
+        const ids = (held.rows as Bag[]).map(row => row.id);
+        assert.equal(ids.length, new Set(ids).size, `${made.name} holds each beat id once`);
         assert.equal(made.h.published.length, made.updates, `${made.name}: one change per applied transaction`);
         assert.equal(made.checked, made.h.published.length);
         assert.deepEqual([made.h.undo.length, made.h.session.generation(), made.h.executed.length >= made.edits], [made.edits, made.edits, true], made.name);
         assert.deepEqual(made.h.reported, []);
       }
       agree("generated shared session projection", order, all.map(made => made.handle), projectSharedDocument);
-      assert.deepEqual(violations.filter(violation => !DECLARED_LIMITS.some(limit => limit.matches(violation))), []);
+      assert.deepEqual(violations.filter(violation => !DECLARED_LIMITS.some(limit => limit.violation.test(violation))), []);
+      assert.deepEqual(DECLARED_LIMITS.filter(limit => !violations.some(violation => limit.violation.test(violation))).map(limit => limit.name), [], "a declared limit no run reached");
       assert.deepEqual([...applied].sort(), [...KINDS].sort());
       assert.equal(commands, seats.reduce((sum, made) => sum + made.edits, 0));
       assert.ok(commands >= 60, `only ${commands} commands applied`);
