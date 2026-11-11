@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NOT_SHARED, REENTERED } from "../../../src/application/session/shared-session.ts";
+import { NOT_SHARED, ORIGIN_KINDS, REENTERED } from "../../../src/application/session/shared-session.ts";
+import type { ReplicaOrigin } from "../../../src/application/session/shared-session.ts";
 import { DISPOSED, NO_DOCUMENT } from "../../../src/application/session/document-session.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
@@ -49,7 +50,7 @@ test("each transaction that advances the replica becomes exactly one change, its
   replica.write("local-undo", script());
   replica.write("remote", script({ title: "Theirs" }));
   replica.write("cleanup", script({ title: "Theirs" }));
-  replica.write(null, script({ title: "Theirs", people: [{ id: "P1", name: "Ann" }] }));
+  replica.write("remote", script({ title: "Theirs", people: [{ id: "P1", name: "Ann" }] }));
   replica.echo("remote");
   replica.echo("local-command");
   replica.echo("hydration");
@@ -87,8 +88,50 @@ test("a remote change records no undo entry, runs no effect, arms no refresh, is
   assert.equal(h.session.generation(), 0);
 });
 
+test("the kind of every origin the port names is literal data; any other origin is reported and published as remote, with no undo entry or effect", () => {
+  assert.deepEqual(ORIGIN_KINDS, { "hydration": "adopt", "local-command": "edit", "local-undo": "replay", "remote": "remote", "cleanup": "remote" });
+  assert.ok(Object.isFrozen(ORIGIN_KINDS));
+  const replica = fakeReplica(script()), h = sharedHarness(replica.port);
+  replica.write(null, timed(7));
+  replica.write("presence" as ReplicaOrigin, timed(9));
+  replica.write("toString" as ReplicaOrigin, script());
+  assert.deepEqual(h.published, [
+    { kind: "remote", epoch: 1, generation: 0, changes: LENGTH_CELL },
+    { kind: "remote", epoch: 1, generation: 0, changes: LENGTH_CELL },
+    { kind: "remote", epoch: 1, generation: 0, changes: LENGTH_CELL }
+  ]);
+  assert.deepEqual(h.reported.map(error => (error as Error).message), [
+    "A shared transaction had an origin the session does not recognise: null",
+    "A shared transaction had an origin the session does not recognise: presence",
+    "A shared transaction had an origin the session does not recognise: toString"
+  ]);
+  assert.deepEqual(h.log, ["project", "project", "report", "publish:remote", "project", "report", "publish:remote", "project", "report", "publish:remote"]);
+  assert.deepEqual([h.undo, h.executed, h.session.generation(), h.clock.armed()], [[], [], 0, 0]);
+  const empty = fakeReplica(), first = sharedHarness(empty.port);
+  empty.write(null, script());
+  assert.deepEqual(first.published, [{ kind: "adopt", epoch: 1, generation: 0, changes: { ...NOTHING, whole: true } }]);
+  assert.deepEqual(first.log, ["project", "report", "publish:adopt"]);
+});
+
+test("a remote change to the title, the comments, the headings or a record names that document field and no cell", () => {
+  const replica = fakeReplica(script()), h = sharedHarness(replica.port);
+  const sections = [{ id: "H1", name: "Scene", firstSceneId: "R1" }], people = [{ id: "P1", name: "Ann" }];
+  replica.write("remote", script({ title: "Theirs" }));
+  replica.write("remote", script({ title: "Theirs", sections }));
+  replica.write("remote", script({ title: "Theirs", sections, people }));
+  replica.write("remote", script({ title: "Theirs", sections, people, comments: [{ id: "c1", rowId: "R1", field: "audioText", body: "Why", author: "Ann" }] }));
+  assert.deepEqual(h.published.map(change => [change.kind, change.changes]), [
+    ["remote", { ...NOTHING, docFields: ["title"] }],
+    ["remote", { ...NOTHING, docFields: ["sections"] }],
+    ["remote", { ...NOTHING, docFields: ["people"] }],
+    ["remote", { ...NOTHING, docFields: ["comments"] }]
+  ]);
+  assert.equal(h.session.read(doc => doc?.comments.length), 1);
+  assert.deepEqual(h.reported, []);
+});
+
 test("the first document to arrive is an adoption whatever its origin, and a hydration is one too", () => {
-  for (const origin of ["remote", "hydration", "local-command", null] as const) {
+  for (const origin of ["remote", "hydration", "local-command", "local-undo", "cleanup"] as const) {
     const replica = fakeReplica(), h = sharedHarness(replica.port);
     replica.write(origin, script());
     assert.deepEqual(h.published, [{ kind: "adopt", epoch: 1, generation: 0, changes: { ...NOTHING, whole: true } }], String(origin));
@@ -141,6 +184,18 @@ test("a command the replica refuses, on a stale base or by a handler, makes no c
   assert.deepEqual(h.log, ["execute", "execute"]);
   assert.deepEqual([h.session.generation(), h.session.revision(), h.clock.armed()], [0, 2, 0]);
   assert.equal(h.session.read(doc => doc?.rows[0]?.["lengthSeconds"]), 3);
+});
+
+test("a command whose plan has no shared part is rejected as not shared: its apply never runs and nothing reaches the replica, undo, effects or subscribers", () => {
+  const replica = fakeReplica(script()), h = sharedHarness(replica.port);
+  let applied = 0;
+  const plain: Command = { name: "plain", needs: "edit", plan: () => ({ changes: changeSet({ cells: [{ rowId: "R1", field: "lengthSeconds" }] }), apply: doc => { applied++; doc.title = "Written"; } }) };
+  assert.deepEqual(h.session.run(plain), { kind: "rejected", reason: "not shared" });
+  assert.equal(NOT_SHARED, "not shared");
+  assert.equal(applied, 0);
+  assert.deepEqual(h.log, ["project"]);
+  assert.deepEqual([h.published, h.undo, h.executed, h.reported], [[], [], [], []]);
+  assert.deepEqual([h.session.read(doc => doc?.title), h.session.generation(), h.session.revision()], ["Title", 0, 1]);
 });
 
 test("commands that never reach the replica: no plan, a refusal, no capability, a throw, no shared part, no operations", () => {

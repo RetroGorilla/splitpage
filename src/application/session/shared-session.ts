@@ -56,12 +56,19 @@ interface Running {
   lost: { readonly error: unknown } | null;
 }
 
-function kindOf(origin: ReplicaOrigin | null, first: boolean): TransactionKind {
-  if (first || origin === "hydration") return "adopt";
-  if (origin === "local-command") return "edit";
-  if (origin === "local-undo") return "replay";
-  return "remote";
+export const ORIGIN_KINDS: Readonly<Record<ReplicaOrigin, TransactionKind>> = Object.freeze({
+  "hydration": "adopt",
+  "local-command": "edit",
+  "local-undo": "replay",
+  "remote": "remote",
+  "cleanup": "remote"
+});
+
+function known(origin: unknown): origin is ReplicaOrigin {
+  return typeof origin === "string" && Object.hasOwn(ORIGIN_KINDS, origin);
 }
+
+export const UNRECOGNISED_ORIGIN = "A shared transaction had an origin the session does not recognise";
 
 export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSession {
   const scheduler = createEffectScheduler(ports.effects, ports.timers, ports.timing);
@@ -105,7 +112,9 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
       ports.report(error);
       return;
     }
-    const kind = kindOf(origin, document === null);
+    // why: An unrecognised origin still changed the document, so it is published as the kind that records and saves nothing.
+    const kind = document === null ? "adopt" : known(origin) ? ORIGIN_KINDS[origin] : "remote";
+    if (!known(origin)) ports.report(new Error(UNRECOGNISED_ORIGIN + ": " + String(origin)));
     document = step.document;
     revision = at;
     if (kind === "adopt") epoch++;
@@ -168,7 +177,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   }
 
   const stop = ports.replica.observe(receive);
-  if (ports.replica.revision() !== 0) receive(null);
+  if (ports.replica.revision() !== 0) receive("hydration");
 
   return {
     epoch: function () { return epoch; },

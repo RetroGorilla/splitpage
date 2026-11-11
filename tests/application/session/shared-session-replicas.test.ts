@@ -1,16 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { REENTERED } from "../../../src/application/session/shared-session.ts";
+import { ORIGIN_KINDS, REENTERED } from "../../../src/application/session/shared-session.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { SessionChange } from "../../../src/application/session/change-set.ts";
-import { applySharedUpdate, destroySharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import type { SharedDocumentHandle, SharedTransactionOrigin } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { operation, ref } from "../../adapters/collab/executor-support.ts";
 import { createMonitoredSharedDocument, deliveryReplica, validatedFixture } from "../../adapters/collab/helpers.ts";
@@ -174,6 +174,30 @@ test("split: one transaction names the shortened cell and the inserted beat on b
     assert.deepEqual(w.b.h.session.read(doc => doc?.rows), rows);
     for (const made of [w.a, w.b]) assert.deepEqual(projectSharedDocument(made.handle).rows.map(row => row.id), ["R1", "[\"structure\",\"1\",\"enter\",\"beat\"]", "R2"]);
     assert.deepEqual([w.a.updates(), w.b.updates()], [1, 1]);
+  } finally { w.close(); }
+});
+
+const ADAPTER_ORIGIN_KINDS: Record<SharedTransactionOrigin, string> = {
+  "hydration": "adopt",
+  "local-command": "edit",
+  "local-undo": "replay",
+  "remote": "remote",
+  "cleanup": "remote"
+};
+
+test("origins: the owner's table names every origin the adapter can emit; an adapter undo is a replay and a transaction the adapter cannot name is reported", () => {
+  assert.deepEqual(ORIGIN_KINDS, ADAPTER_ORIGIN_KINDS);
+  const w = world();
+  try {
+    transactSharedDocument(w.a.handle, "local-undo", () => { collabState(w.a.handle).doc.getMap("outside").set("k", 1); });
+    assert.deepEqual(w.a.h.published, [{ kind: "replay", epoch: 1, generation: 1, changes: NOTHING }]);
+    assert.deepEqual(w.a.h.undo, []);
+    assert.deepEqual(w.a.h.log, ["project", "project", "dirty:1", "draft:1", "save:1", "publish:replay"]);
+    assert.deepEqual(w.a.h.reported, []);
+    collabState(w.a.handle).doc.transact(() => { collabState(w.a.handle).doc.getMap("outside").set("k", 2); }, "someone else");
+    assert.deepEqual(w.a.h.published.slice(1), [{ kind: "remote", epoch: 1, generation: 1, changes: NOTHING }]);
+    assert.deepEqual(w.a.h.reported.map(error => (error as Error).message), ["A shared transaction had an origin the session does not recognise: null"]);
+    assert.deepEqual(w.a.h.undo, []);
   } finally { w.close(); }
 });
 
