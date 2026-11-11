@@ -1,7 +1,8 @@
+import { createMonitoredSharedDocument as createSharedDocument, createMonitoredNativeDocument, createLibraryControlDocument } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { createSharedDocument, applySharedUpdate, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, transactSharedDocument, observeSharedTransactions, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, transactSharedDocument, observeSharedTransactions, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
@@ -17,7 +18,7 @@ test("empty script hydrates all sixteen roots without inventing a beat", () => {
   hydrateSharedDocument(handle, validatedFixture({ title: "", rows: [] }));
   assert.deepEqual(readRoots(handle), {
     segments: {}, order: [], beats: {}, visuals: {}, gallery: {}, comments: {}, replies: {}, people: {}, tags: {}, shots: {},
-    meta: { capture: { rev: 0 }, docId: "d00000000000000000000000000000000", extra: "{}", fileTitle: {}, schema: 2, title: [], wordsPerMinute: 150 },
+    meta: { capture: { rev: 0 }, docId: "d00000000000000000000000000000000", extra: "{}", fileTitle: {}, schema: 2, title: [], titleMarks: [], wordsPerMinute: 150 },
     removalRecords: {}, retiredJoins: {}, statusEvents: {}, retiredStatus: {}, headings: {}
   });
   destroySharedDocument(handle);
@@ -36,11 +37,17 @@ test("hydration preserves headings, paragraphs, stored characters, marks, atoms 
   const { roots } = collabState(handle);
   assert.deepEqual(roots.order.toArray(), ["h:H1", "b:R1", "b:R2"]);
   assert.deepEqual(storedValue(roots.segments), {
-    "b:R1": { head: { b: "R1" }, text: [{ attributes: { b: true }, insert: "A" }, { insert: "\n" }, { attributes: { cue: true }, insert: "\u200bB" }] },
-    "b:R2": { head: { b: "R2" }, text: [{ attributes: { "l:b:R2:audioText:1": 'https://example.test/?x="y"' }, insert: "link" }, { attributes: { dir: true }, insert: "D" }] },
-    "h:H1": { head: { h: "H1" }, text: [{ insert: "Intro" }] }
+    "b:R1": { head: { b: "R1" }, markRecords: [
+      { type: "add", operation: '["hydrate","audioText","b:R1",0]', writer: "hydration", start: 0, end: 1, mark: { kind: "b", value: true }, born: null },
+      { type: "add", operation: '["hydrate","audioText","b:R1",1]', writer: "hydration", start: 2, end: 4, mark: { kind: "cue", value: true }, born: null }
+    ], text: [{ insert: "A\n\u200bB" }] },
+    "b:R2": { head: { b: "R2" }, markRecords: [
+      { type: "add", operation: '["hydrate","audioText","b:R2",0]', writer: "hydration", start: 0, end: 4, mark: { kind: "link", id: "b:R2:audioText:1", value: 'https://example.test/?x="y"' }, born: null },
+      { type: "add", operation: '["hydrate","audioText","b:R2",1]', writer: "hydration", start: 4, end: 5, mark: { kind: "dir", value: true }, born: null }
+    ], text: [{ insert: "linkD" }] },
+    "h:H1": { head: { h: "H1" }, markRecords: [], text: [{ insert: "Intro" }] }
   });
-  assert.deepEqual(storedValue(roots.visuals.get("R1")), { beat: "R1", rank: "0000000000", text: [{ insert: { w: "Jo" } }, { insert: { k: "S1", label: "B-roll:" } }] });
+  assert.deepEqual(storedValue(roots.visuals.get("R1")), { beat: "R1", markRecords: [], rank: "0000000000", text: [{ insert: { w: "Jo" } }, { insert: { k: "S1", label: "B-roll:" } }] });
   assert.deepEqual(storedValue(roots.beats.get("R1")), { extra: "{}", id: "R1", joins: {}, lengthSeconds: 7, paragraphStart: true, removals: {}, stamp: { at: "", by: null }, status: "shot" });
   assert.deepEqual(storedValue(roots.headings), { H1: { extra: "{}", id: "H1" } });
   destroySharedDocument(handle);
@@ -84,10 +91,10 @@ test("hydration keeps comments, replies, tags, gallery metadata, stamps and unkn
   const handle = createSharedDocument();
   hydrateSharedDocument(handle, source);
   const { roots } = collabState(handle);
-  assert.deepEqual(storedValue((roots.segments.get("b:R1") as Y.Map<unknown>).get("text")), [
-    { attributes: { "c:C1": true }, insert: "words" },
-    { attributes: { "t:b:R1:audioText:0000000001": "t_one" }, insert: "Cup" }
-  ]);
+  assert.deepEqual(storedValue(roots.segments.get("b:R1")), { head: { b: "R1" }, markRecords: [
+    { type: "add", operation: '["hydrate","audioText","b:R1",0]', writer: "hydration", start: 0, end: 5, mark: { kind: "comment", id: "C1", value: true }, born: null },
+    { type: "add", operation: '["hydrate","audioText","b:R1",1]', writer: "hydration", start: 5, end: 8, mark: { kind: "tag", id: "b:R1:audioText:0000000001", value: "t_one" }, born: null }
+  ], text: [{ insert: "wordsCup" }] });
   assert.deepEqual(storedValue(roots.comments.get("C1")), { anchorId: "C1", assignee: "Jo", author: "Jo", createdAt: "2026-01-01", extra: '{"future":5}', field: "audioText", id: "C1", kind: "anchor", quote: "words", rank: "0000000000", resolution: { resolved: true, resolvedAt: "2026-01-02", resolvedBy: "Jo" }, rowId: "R1", text: "Body", updatedAt: "2026-01-02" });
   assert.deepEqual(storedValue(roots.replies), { '["C1","RP1"]': { author: "Jo", commentId: "C1", createdAt: "2026-01-02", extra: '{"future":6}', id: "RP1", rank: "0000000000", text: "Reply" } });
   assert.deepEqual(storedValue(roots.people), { P1: { extra: '{"future":1}', id: "P1", name: "Jo", rank: "0000000000" } });
@@ -188,7 +195,7 @@ test("seeded truncated and random updates are refused without changing state or 
 });
 
 test(formattingLibraryControl("remote formatting cleanup has its own origin and releases the origin scope afterward"), () => {
-  const a = createSharedDocument(), b = createSharedDocument();
+  const a = createLibraryControlDocument(), b = createLibraryControlDocument();
   hydrateSharedDocument(a, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
   assert.deepEqual(applySharedUpdate(b, encodeSharedState(a)), { ok: true });
   for (const handle of [a, b]) {
@@ -209,7 +216,7 @@ test(formattingLibraryControl("remote formatting cleanup has its own origin and 
 
 test("zero-length decoded structs are refused in both orders without blocking pending valid dependencies", () => {
   const zeroLength = new Uint8Array([1, 1, 1, 0, 40, 1, 4, 109, 101, 116, 97, 1, 120, 0, 0]);
-  const writer = new Y.Doc();
+  const writer = createMonitoredNativeDocument();
   writer.clientID = 1;
   writer.getMap("meta").set("x", 1);
   const normal = Y.encodeStateAsUpdate(writer);

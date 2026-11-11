@@ -1,10 +1,11 @@
+import { createMonitoredSharedDocument as createSharedDocument } from "../helpers.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
-import { createSharedDocument, destroySharedDocument, encodeSharedState, applySharedUpdate, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
+import { destroySharedDocument, encodeSharedState, applySharedUpdate, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../../src/adapters/collab/state.ts";
-import { initializeSharedMarkStore, prepareSharedMarkRecord, writeSharedMarkRecord, readSharedMarkCharacters } from "../../../../src/adapters/collab/mark-store.ts";
+import { prepareSharedMarkRecord, writeSharedMarkRecord, readSharedMarkCharacters } from "../../../../src/adapters/collab/mark-store.ts";
 import { readSharedMarkRecord, sharedMarkRecordKey } from "../../../../src/adapters/collab/mark-record.ts";
 import { readSharedTextTarget } from "../../../../src/adapters/collab/text-target.ts";
 import { createSharedAnchor, resolveSharedTextAnchor, readSharedAnchor } from "../../../../src/adapters/collab/anchors.ts";
@@ -26,7 +27,6 @@ function address(field: "audioText" | "visualText" | "heading" | "title") {
 for (const field of ["audioText", "visualText", "heading", "title"] as const) test(`mark store and typed anchors support ${field} without formatting items`, () => {
   const handle = fixture(), target = address(field);
   try {
-    assert.deepEqual(initializeSharedMarkStore(handle, target), { ok: true });
     const ref = createSharedAnchor(handle, target, 1, "after"); assert.ok(ref);
     assert.equal((JSON.parse(ref) as { v: number }).v, field === "visualText" || field === "title" ? 2 : 1);
     assert.equal(resolveSharedTextAnchor(handle, ref, target), 1);
@@ -48,7 +48,6 @@ for (const field of ["audioText", "visualText", "heading", "title"] as const) te
 test("identified additions retain all payloads and an unobserved addition survives removal", () => {
   const handle = fixture(), target = address("audioText");
   try {
-    initializeSharedMarkStore(handle, target);
     for (const [operation, change] of [["A1", { type: "add", mark: { kind: "link", id: "L", value: "https://a" } }],
       ["B1", { type: "add", mark: { kind: "link", id: "L", value: "https://b" } }]] as const) {
       const record = prepareSharedMarkRecord(handle, target, operation, 1, 3, change); assert.ok(record);
@@ -84,7 +83,6 @@ test("independent model rejects the lost-mark defect even when every replica agr
 test("seeded malformed mark records and normalized ids read identically after encoded transfer", () => {
   const handle = fixture(), target = address("audioText"), peer = createSharedDocument(); monitorSharedFormatting(peer);
   try {
-    initializeSharedMarkStore(handle, target);
     const good = prepareSharedMarkRecord(handle, target, "op\ud800", 1, 3, { type: "add", mark: { kind: "tag", id: "T\ud800", value: "P\ud800" } }); assert.ok(good);
     assert.equal(writeSharedMarkRecord(handle, target, "op\ud800", good).ok, true);
     assert.equal(good.operation, "op�");

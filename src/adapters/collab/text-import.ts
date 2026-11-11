@@ -1,5 +1,8 @@
 import type * as Y from "yjs";
 import { defaultTagId } from "../../core/text/runs.ts";
+import type { SharedTextAddress } from "../../core/collab/operations.ts";
+import type { SharedDocumentHandle } from "./types.ts";
+import { prepareSharedMarkRecord, writeSharedMarkRecord } from "./mark-store.ts";
 
 type ImportDelta = { insert: string | Record<string, unknown>; attributes: Record<string, unknown> };
 
@@ -9,7 +12,7 @@ function unescape(value: string): string {
     if (name[0] !== "#") return entities[name.toLowerCase()] ?? whole;
     const point = name[1]?.toLowerCase() === "x" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
     return point <= 0x10ffff ? String.fromCodePoint(point) : "\ufffd";
-  });
+  }).replace(/\p{Cs}/gu, "\ufffd");
 }
 
 function attributes(token: string): Record<string, string> {
@@ -46,7 +49,7 @@ function htmlTokens(html: string): string[] {
   return result;
 }
 
-export function insertSharedHtml(text: Y.Text, html: string, tags: readonly Record<string, unknown>[], comments: readonly Record<string, unknown>[], scope: string): void {
+export function insertSharedHtml(handle: SharedDocumentHandle, target: SharedTextAddress, text: Y.Text, html: string, tags: readonly Record<string, unknown>[], comments: readonly Record<string, unknown>[], scope: string): void {
   const result: ImportDelta[] = [];
   const stack: { name: string; attrs: Record<string, unknown> }[] = [];
   let serial = 0;
@@ -101,5 +104,23 @@ export function insertSharedHtml(text: Y.Text, html: string, tags: readonly Reco
       };
     }
   }
-  text.applyDelta(result);
+  let offset = 0;
+  for (const entry of result) {
+    if (typeof entry.insert === "string") { text.insert(offset, entry.insert); offset += entry.insert.length; }
+    else { text.insertEmbed(offset, entry.insert); offset++; }
+  }
+  let from = 0, addition = 0;
+  for (const entry of result) {
+    const to = from + (typeof entry.insert === "string" ? entry.insert.length : 1);
+    if (to > from) for (const key of Object.keys(entry.attributes).sort()) {
+      const value = entry.attributes[key];
+      const mark = key.startsWith("c:") ? { kind: "comment", id: key.slice(2), value }
+        : key.startsWith("t:") ? { kind: "tag", id: key.slice(2), value }
+        : key.startsWith("l:") ? { kind: "link", id: key.slice(2), value } : { kind: key, value };
+      const operation = JSON.stringify(["hydrate", target.field, target.segment, addition++]);
+      const record = prepareSharedMarkRecord(handle, target, operation, from, to, { type: "add", mark });
+      if (!record || !writeSharedMarkRecord(handle, target, operation, record).ok) throw new Error("Cannot hydrate mark record");
+    }
+    from = to;
+  }
 }

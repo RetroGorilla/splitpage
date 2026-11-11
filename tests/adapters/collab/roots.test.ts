@@ -1,3 +1,4 @@
+import { createMonitoredNativeDocument, createLibraryControlNativeDocument } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
@@ -59,7 +60,7 @@ function seedRoots(doc: Y.Doc): void {
 }
 
 test("the root table declares every named root with its literal candidate B type", () => {
-  const doc = new Y.Doc();
+  const doc = createMonitoredNativeDocument();
   try {
     const roots = declareCollabRoots(doc);
     assertDeclared(doc);
@@ -73,7 +74,7 @@ test("the root table declares every named root with its literal candidate B type
 });
 
 test("declaration is idempotent and emits no document update", () => {
-  const doc = new Y.Doc();
+  const doc = createMonitoredNativeDocument();
   let updates = 0;
   doc.on("update", () => { updates++; });
   try {
@@ -88,8 +89,8 @@ test("declaration is idempotent and emits no document update", () => {
 
 for (const [name, kind] of expectedRoots) for (const mode of ["fresh", "hydrated", "late joiner"] as const) {
   test(`${name} ${mode}: a wrong typed read before declaration prevents initialization`, () => {
-    const doc = new Y.Doc();
-    const source = new Y.Doc();
+    const doc = createMonitoredNativeDocument();
+    const source = createMonitoredNativeDocument();
     const deliveries = queue();
     try {
       if (mode !== "fresh") seedRoots(source);
@@ -111,8 +112,8 @@ for (const [name, kind] of expectedRoots) for (const mode of ["fresh", "hydrated
 
 for (const mode of ["fresh", "hydrated", "late joiner"] as const) {
   test(`${mode}: declaring first fixes every root type before any read or update`, () => {
-    const source = new Y.Doc();
-    const target = new Y.Doc();
+    const source = createMonitoredNativeDocument();
+    const target = createMonitoredNativeDocument();
     const deliveries = queue();
     try {
       seedRoots(source);
@@ -163,11 +164,11 @@ for (const gc of [true, false]) for (const deleter of ["live", "late joiner", "r
   test(formattingLibraryControl(`T11: ${deleter} deletes original commented bc, leaving ad unmarked (gc=${gc})`), () => {
     const readings: ReplicaReading<unknown>[] = [];
     for (const order of ["D1", "dup", "rev", "late-C"] as const) {
-      const seed = new Y.Doc({ gc });
-      const alice = new Y.Doc({ gc });
-      const bob = new Y.Doc({ gc });
-      const carol = new Y.Doc({ gc });
-      const reloaded = new Y.Doc({ gc });
+      const seed = createLibraryControlNativeDocument({ gc });
+      const alice = createLibraryControlNativeDocument({ gc });
+      const bob = createLibraryControlNativeDocument({ gc });
+      const carol = createLibraryControlNativeDocument({ gc });
+      const reloaded = createLibraryControlNativeDocument({ gc });
       const deliveries = queue();
       try {
         seed.clientID = 10;

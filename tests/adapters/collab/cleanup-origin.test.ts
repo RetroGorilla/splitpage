@@ -1,7 +1,8 @@
+import { createMonitoredSharedDocument as createSharedDocument, createLibraryControlDocument } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, shouldDeliverSharedUpdate, transactSharedDocument, observeSharedTransactions } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, shouldDeliverSharedUpdate, transactSharedDocument, observeSharedTransactions } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -20,7 +21,7 @@ function textOf(handle: SharedDocumentHandle): Y.Text {
 }
 
 function history(seed: number, order: DeliveryOrder, literal = false) {
-  const a = createSharedDocument(), b = createSharedDocument(), c = createSharedDocument();
+  const a = createLibraryControlDocument(), b = createLibraryControlDocument(), c = createLibraryControlDocument();
   const writers = [a, b], queue = new DeliveryQueue<Uint8Array>(update => update.slice(), update => String(update.length));
   let joined = false, checkpoints = 0, sequential = 0, selective = 0;
   try {
@@ -31,7 +32,7 @@ function history(seed: number, order: DeliveryOrder, literal = false) {
     let state = seed;
     const pick = (limit: number) => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state % limit; };
     function checkpoint(): void {
-      const copy = createSharedDocument();
+      const copy = createLibraryControlDocument();
       try {
         assert.equal(applySharedUpdate(copy, encodeSharedState(a)).ok, true);
         assertReplicasAgree(`checkpoint ${seed}/${order}/${checkpoints}`, [
@@ -113,7 +114,7 @@ test(formattingLibraryControl("formatting cleanup literal: deleted italic abc ca
 });
 
 test(formattingLibraryControl("cleanup after a local command publishes a separate checked origin"), () => {
-  const handle = createSharedDocument(), peer = createSharedDocument();
+  const handle = createLibraryControlDocument(), peer = createLibraryControlDocument();
   try {
     hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
     assert.equal(applySharedUpdate(peer, encodeSharedState(handle)).ok, true);

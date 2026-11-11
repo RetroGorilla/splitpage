@@ -1,3 +1,4 @@
+import { createMonitoredSharedDocument as createSharedDocument } from "../helpers.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
@@ -5,9 +6,9 @@ import { DeliveryQueue, deliveryOrders } from "../../../collab/delivery.ts";
 import { assertReplicasAgree } from "../../../collab/agreement.ts";
 import { MarkTraceReplica } from "./replica.ts";
 import { collabState } from "../../../../src/adapters/collab/state.ts";
-import { createSharedDocument, destroySharedDocument, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
-import { initializeSharedMarkStore, prepareSharedMarkRecord, readSharedMarkCharacters, writeSharedMarkRecord } from "../../../../src/adapters/collab/mark-store.ts";
-import { readSharedTextTarget } from "../../../../src/adapters/collab/text-target.ts";
+import { destroySharedDocument, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
+import { prepareSharedMarkRecord, readSharedMarkCharacters, writeSharedMarkRecord } from "../../../../src/adapters/collab/mark-store.ts";
+import { readSharedTextTarget, createCollabText } from "../../../../src/adapters/collab/text-target.ts";
 import { monitorSharedFormatting } from "../helpers.ts";
 
 for (const removal of [false, true]) test(removal ? "colliding operation ids: removals and births name the observed writer's addition" : "colliding operation ids: bold a and italic d both survive with either client-id assignment", () => {
@@ -47,8 +48,7 @@ test("only an initial hydration transaction uses the deterministic hydration wri
     const target = readSharedTextTarget({ owner: "R1", segment: "b:R1", field: "audioText" }); assert.ok(target);
     try {
       transactSharedDocument(handle, "hydration", () => {
-        const segment = new Y.Map<unknown>(), text = new Y.Text(); collabState(handle).roots.segments.set("b:R1", segment); segment.set("text", text); text.insert(0, "a");
-        initializeSharedMarkStore(handle, target);
+        const segment = new Y.Map<unknown>(); collabState(handle).roots.segments.set("b:R1", segment); const text = createCollabText(handle, segment); text.insert(0, "a");
         const record = prepareSharedMarkRecord(handle, target, "seed", 0, 1, { type: "add", mark: { kind: "b", value: true } }); assert.ok(record);
         assert.equal(record.writer, "hydration"); assert.equal(writeSharedMarkRecord(handle, target, "seed", record).ok, true);
       });
