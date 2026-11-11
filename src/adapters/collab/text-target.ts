@@ -2,10 +2,11 @@ import * as Y from "yjs";
 import { readMarkChange } from "../../core/collab/read-operation.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState } from "./state.ts";
+import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { transactSharedDocument } from "./document.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
+  assertSharedDocumentIdle(collabState(handle));
   const textKey = title ? "title" : "text", marksKey = title ? "titleMarks" : "markRecords";
   if (container.doc !== collabState(handle).doc) throw new Error("New text requires an attached container in this document");
   if (container.has(textKey) || container.has(marksKey)) throw new Error("Cannot create text or marks for an existing text target");

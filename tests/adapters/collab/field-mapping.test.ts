@@ -13,8 +13,8 @@ type MappedValueProbe = readonly [root: string, path: readonly (string | number)
 
 const inventoryMapping: readonly [string, string, readonly MappedValueProbe[]][] = [
   ["`title`","meta.title plain Y.Text + meta.titleMarks",[["meta",["title",0,"insert"],"Document title sentinel"],["meta",["titleMarks"],[]]]],
-  ["`titleOrigin`", "meta.titleOrigin", [["meta",["titleOrigin"],"user"]]],
-  ["`titleVersion`", "meta.titleVersion", [["meta",["titleVersion"],"v37"]]],
+  ["`titleOrigin`", "meta.fileTitle.titleOrigin atomic group", [["meta",["fileTitle","titleOrigin"],"user"]]],
+  ["`titleVersion`", "meta.fileTitle.titleVersion atomic group", [["meta",["fileTitle","titleVersion"],"v37"]]],
   ["`docId`", "meta.docId (import identity retained)", [["meta",["docId"],"d00000000000000000000000000000077"]]],
   ["`rows`", "order + beats", [["order",[],["h:Hprobe","b:Rprobe"]]]],
   ["`comments`", "comments map + import rank", [["comments",["Cprobe","id"],"Cprobe"]]],

@@ -5,13 +5,13 @@ import type { VideoLink } from "../../core/document/gallery.ts";
 import { brollPropKey } from "../../core/document/broll.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { transactSharedDocument } from "./document.ts";
-import { collabState } from "./state.ts";
+import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { insertSharedHtml } from "./text-import.ts";
 import { createCollabText, readSharedTextTarget } from "./text-target.ts";
 
 type ImportBag = Record<string, unknown>;
 
-const metaFields = ["titleOrigin", "titleVersion", "docId", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "schema"];
+const metaFields = ["docId", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "schema"];
 const captureFields = ["rev", "lastEditedBy", "lastEditedAt", "personColors"];
 const beatFields = ["id", "status", "lengthSeconds", "paragraphStart"];
 const rowSpecial = ["audioText", "visualText", "updatedAt", "updatedBy", "imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"];
@@ -54,6 +54,7 @@ function unique(entries: readonly ImportBag[]): void {
 
 export function hydrateSharedDocument(handle: SharedDocumentHandle, source: ValidatedDocument): void {
   const state = collabState(handle);
+  assertSharedDocumentIdle(state);
   if (!state.fresh || Y.encodeStateAsUpdate(state.doc).length !== 2) throw new Error("Hydration requires a fresh empty shared document");
   const sections = records(source.sections);
   const tags = records(source.productionTags);
@@ -61,7 +62,8 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
   for (const comment of source.comments) unique(records(comment.replies));
   const roots = state.roots;
   transactSharedDocument(handle, "hydration", () => {
-    write(roots.meta, source, metaFields, ["title", "rows", "sections", "comments", "people", "productionTags", "brollShots", ...captureFields]);
+    write(roots.meta, source, metaFields, ["title", "titleOrigin", "titleVersion", "rows", "sections", "comments", "people", "productionTags", "brollShots", ...captureFields]);
+    roots.meta.set("fileTitle", selected(source, ["titleOrigin", "titleVersion"]));
     roots.meta.set("capture", selected(source, captureFields));
     const title = createCollabText(handle, roots.meta, true);
     title.insert(0, source.title.replace(/\p{Cs}/gu, "\ufffd"));

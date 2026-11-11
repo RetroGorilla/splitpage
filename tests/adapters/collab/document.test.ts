@@ -18,7 +18,7 @@ test("empty script hydrates all sixteen roots without inventing a beat", () => {
   hydrateSharedDocument(handle, validatedFixture({ title: "", rows: [] }));
   assert.deepEqual(readRoots(handle), {
     segments: {}, order: [], beats: {}, visuals: {}, gallery: {}, comments: {}, replies: {}, people: {}, tags: {}, shots: {},
-    meta: { capture: { rev: 0 }, docId: "d00000000000000000000000000000000", extra: "{}", schema: 2, title: [], titleMarks: [], wordsPerMinute: 150 },
+    meta: { capture: { rev: 0 }, docId: "d00000000000000000000000000000000", extra: "{}", fileTitle: {}, schema: 2, title: [], titleMarks: [], wordsPerMinute: 150 },
     removalRecords: {}, retiredJoins: {}, statusEvents: {}, retiredStatus: {}, headings: {}
   });
   destroySharedDocument(handle);

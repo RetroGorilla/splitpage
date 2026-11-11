@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { CollabDocumentState, collabState, transactCollabState } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState, assertSharedDocumentIdle } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
@@ -37,6 +37,7 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
 
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
   const state = collabState(handle);
+  assertSharedDocumentIdle(state);
   const trial = new CollabDocumentState();
   try {
     const decoded = Y.decodeUpdate(update);
@@ -53,5 +54,7 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
 }
 
 export function destroySharedDocument(handle: SharedDocumentHandle): void {
-  collabState(handle).doc.destroy();
+  const state = collabState(handle);
+  assertSharedDocumentIdle(state);
+  state.doc.destroy();
 }

@@ -3,6 +3,7 @@ import { defaultTagId } from "../../core/text/runs.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "./mark-store.ts";
+import { assertSharedDocumentIdle, collabState } from "./state.ts";
 
 type ImportDelta = { insert: string | Record<string, unknown>; attributes: Record<string, unknown> };
 
@@ -50,6 +51,7 @@ function htmlTokens(html: string): string[] {
 }
 
 export function insertSharedHtml(handle: SharedDocumentHandle, target: SharedTextAddress, text: Y.Text, html: string, tags: readonly Record<string, unknown>[], comments: readonly Record<string, unknown>[], scope: string): void {
+  assertSharedDocumentIdle(collabState(handle));
   const result: ImportDelta[] = [];
   const stack: { name: string; attrs: Record<string, unknown> }[] = [];
   let serial = 0;
