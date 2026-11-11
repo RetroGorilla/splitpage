@@ -10,6 +10,7 @@ import { DeliveryQueue } from "../../collab/delivery.ts";
 import { decodeBody } from "../../../src/adapters/richtext/decode.ts";
 import { jsdomParser } from "../richtext/jsdom.mjs";
 import { validatedFixture, storedValue, readRoots, deliveryReplica } from "./helpers.ts";
+import { formattingLibraryControl } from "./formatting-controls.ts";
 
 test("empty script hydrates all sixteen roots without inventing a beat", () => {
   const handle = createSharedDocument();
@@ -186,7 +187,7 @@ test("seeded truncated and random updates are refused without changing state or 
   destroySharedDocument(writer);
 });
 
-test("remote formatting cleanup has its own origin and releases the origin scope afterward", () => {
+test(formattingLibraryControl("remote formatting cleanup has its own origin and releases the origin scope afterward"), () => {
   const a = createSharedDocument(), b = createSharedDocument();
   hydrateSharedDocument(a, validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }] }));
   assert.deepEqual(applySharedUpdate(b, encodeSharedState(a)), { ok: true });

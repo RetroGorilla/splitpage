@@ -2,14 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { createSharedAnchor, readSharedAnchor, resolveSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
-import { createSharedDocument, applySharedUpdate, encodeSharedState, transactSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, encodeSharedState, transactSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
+import { initializeSharedMarkStore, prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import { DeliveryQueue } from "../../collab/delivery.ts";
-import { deliveryReplica, validatedFixture, readRoots } from "./helpers.ts";
+import { deliveryReplica, validatedFixture, readRoots, createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
 
 function textOf(handle: SharedDocumentHandle): Y.Text {
   const segment = collabState(handle).roots.segments.get("b:R1");
@@ -22,6 +24,8 @@ function textOf(handle: SharedDocumentHandle): Y.Text {
 function seeded(text = "abcd"): SharedDocumentHandle {
   const handle = createSharedDocument();
   hydrateSharedDocument(handle, validatedFixture({ rows: [{ id: "R1", audioText: text }] }));
+  const target = readSharedTextTarget({ owner: "R1", segment: "b:R1", field: "audioText" }); assert.ok(target);
+  assert.equal(initializeSharedMarkStore(handle, target).ok, true);
   return handle;
 }
 
@@ -208,7 +212,11 @@ test("seeded three-writer inserts, deletes, marks and malformed records agree at
       transactSharedDocument(handle, "local-command", () => {
         if (command === 0) text.insert(next() % (text.length + 1), String.fromCharCode(65 + next() % 26), {});
         if (command === 1 && text.length) text.delete(next() % text.length, 1);
-        if (command === 2 && text.length) text.format(next() % text.length, 1, { b: true });
+        if (command === 2 && text.length) {
+          const target = readSharedTextTarget({ owner: "R1", segment: "b:R1", field: "audioText" }); assert.ok(target);
+          const from = next() % text.length, record = prepareSharedMarkRecord(handle, target, `mark${step}`, from, from + 1, { type: "add", mark: { kind: "b", value: true } }); assert.ok(record);
+          assert.equal(writeSharedMarkRecord(handle, target, record.operation, record).ok, true);
+        }
         if (command === 3) collabState(handle).roots.people.set(`P${step}`, next() % 2 ? { id: "dangling", rank: [] } : null);
       });
       const checkpoint = createSharedDocument();

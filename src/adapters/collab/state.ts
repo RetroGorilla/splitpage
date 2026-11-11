@@ -18,6 +18,8 @@ export class CollabDocumentState {
   readonly roots = declareCollabRoots(this.doc);
   fresh = true;
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
+  readonly hydrationTransactions = new WeakSet<Y.Transaction>();
+  hydrating = false;
   readonly pendingTickets = new Map<object, Exclude<SharedTransactionOrigin, "cleanup">>();
   adapterBatch = false;
 
@@ -45,8 +47,12 @@ export function transactCollabState(state: CollabDocumentState, origin: Exclude<
       } else if (!state.adapterTransactions.has(transaction)) {
         throw new Error("Shared adapter calls cannot run inside an external transaction");
       }
+      // why: Early nested callbacks retain the first hydration identity; a later hydration label cannot claim it.
+      if (transaction.origin === "hydration" && state.fresh && Y.encodeStateAsUpdate(state.doc).length === 2) state.hydrationTransactions.add(transaction);
       state.fresh = false;
-      change();
+      const previous = state.hydrating;
+      state.hydrating = state.hydrationTransactions.has(transaction);
+      try { change(); } finally { state.hydrating = previous; }
     }, ticket);
   } finally { state.pendingTickets.delete(ticket); }
 }

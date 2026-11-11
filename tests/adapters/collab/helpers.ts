@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "../../../src/adapters/collab/types.ts";
-import { applySharedUpdate, shouldDeliverSharedUpdate } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, shouldDeliverSharedUpdate, createSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -55,4 +55,21 @@ export function deliveryReplica(handle: SharedDocumentHandle): DeliveryReplica<U
     },
     afterDelivery: () => { for (const publish of generated.splice(0)) publish(); }
   };
+}
+
+export function monitorSharedFormatting(handle: SharedDocumentHandle): () => void {
+  const { doc } = collabState(handle);
+  const check = (update: Uint8Array): void => {
+    if (Y.decodeUpdate(update).structs.some(item => item instanceof Y.Item && item.content instanceof Y.ContentFormat)) throw new Error("Shared text created a formatting item");
+  };
+  check(Y.encodeStateAsUpdate(doc));
+  const observe = (transaction: Y.Transaction): void => check(Y.encodeStateAsUpdate(doc, Y.encodeStateVector(transaction.beforeState)));
+  doc.on("beforeObserverCalls", observe);
+  return () => doc.off("beforeObserverCalls", observe);
+}
+
+export function createMonitoredSharedDocument(): SharedDocumentHandle {
+  const handle = createSharedDocument();
+  monitorSharedFormatting(handle);
+  return handle;
 }
