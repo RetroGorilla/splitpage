@@ -34,13 +34,14 @@ test("wire comments remain boolean while stored comments require stable anchor p
 
 test("one prepare translator derives occurrences and removes payload matches rather than native-id matches", () => {
   for (const kind of ["comment", "tag", "link"] as const) {
-    const wire = kind === "comment" ? { kind, id: ref("name"), value: true as const } : { kind, id: ref("name"), value: ref("other") };
+    const name = kind === "link" ? "https://name" : "name", other = kind === "link" ? "https://other" : "other";
+    const wire = kind === "comment" ? { kind, id: ref(name), value: true as const } : { kind, id: ref(name), value: ref(other) };
     const translated = prepareSharedMarkTranslation(wire, "1", "op", [2, 3]);
-    assert.deepEqual(translated, { type: "add", mark: { id: '["mark-occurrence","1","op",2,3]', kind, value: "name" } });
+    assert.deepEqual(translated, { type: "add", mark: { id: '["mark-occurrence","1","op",2,3]', kind, value: name } });
     assert.notDeepEqual(translated, prepareSharedMarkTranslation(wire, "2", "op", [2, 3]));
     assert.notDeepEqual(translated, prepareSharedMarkTranslation(wire, "1", "op", [2, 4]));
-    const records = [{ identity: ref("R4"), mark: { kind, id: ref("native2"), value: ref("name") } },
-      { identity: ref("R2"), mark: { kind, id: ref("name"), value: ref("other") } }, { identity: ref("R1"), mark: { kind, id: ref("native1"), value: ref("name") } }];
+    const records = [{ identity: ref("R4"), mark: { kind, id: ref("native2"), value: ref(name) } },
+      { identity: ref("R2"), mark: { kind, id: ref(name), value: ref(other) } }, { identity: ref("R1"), mark: { kind, id: ref("native1"), value: ref(name) } }];
     assert.deepEqual(prepareSharedMarkTranslation({ ...wire, value: null }, "1", "clear", [0], records), { type: "remove", observed: ["R1", "R4"] });
     assert.deepEqual(prepareSharedMarkTranslation({ ...wire, id: ref("absent"), value: null }, "1", "clear", [0], records), { type: "remove", observed: [] });
   }

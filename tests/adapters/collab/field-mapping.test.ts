@@ -1,13 +1,19 @@
 import { createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import ts from "typescript";
 import { STATE_FIELDS } from "../../../src/core/document/fields.ts";
 import { destroySharedDocument } from "../../../src/adapters/collab/document.ts";
-import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { hydrateWithDecodedLinkAudit as hydrateSharedDocument, readHydrationLinkAudit } from "./link-policy-support.ts";
 import { readRoots } from "./helpers.ts";
 import { fieldMappingSource, legacyMappingSource } from "./mapping-source.ts";
+
+after(() => {
+  const counts = readHydrationLinkAudit();
+  assert.deepEqual(counts, { documents: 96, fields: 192, linkRuns: 190, linkedUnits: 2470 });
+  console.info("mapping hydration link audit: " + JSON.stringify(counts));
+});
 
 type MappedValueProbe = readonly [root: string, path: readonly (string | number)[], expected: unknown, mode?: "absent"];
 

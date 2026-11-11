@@ -2,6 +2,7 @@ import type { SharedContentRef } from "../../core/collab/operations.ts";
 import type { FormatMark } from "../../core/text/runs.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { safeHref } from "../../core/document/text-policy.ts";
 
 export type SharedStoredMarkValue = { readonly kind: FormatMark | "dir" | "cue"; readonly value: true }
   | { readonly kind: "comment" | "tag"; readonly id: SharedContentRef; readonly value: SharedContentRef }
@@ -19,5 +20,6 @@ export function readSharedStoredMark(raw: unknown): SharedStoredMarkValue | null
     const payload = typeof value.value === "string" && isStableSharedIdentity(value.value) && readSharedContentRef(value.value);
     return payload ? { id, kind, value: payload } : null;
   }
-  return kind === "link" && typeof value.value === "string" ? { id, kind, value: value.value.replace(/\p{Cs}/gu, "\ufffd") } : null;
+  return kind === "link" && typeof value.value === "string" && safeHref(value.value) === value.value
+    ? { id, kind, value: value.value.replace(/\p{Cs}/gu, "\ufffd") } : null;
 }

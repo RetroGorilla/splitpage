@@ -1,9 +1,9 @@
 import { createMonitoredSharedDocument as createSharedDocument, createMonitoredNativeDocument, createLibraryControlDocument } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import * as Y from "yjs";
 import { applySharedUpdate, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, transactSharedDocument, observeSharedTransactions, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
-import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { hydrateWithDecodedLinkAudit as hydrateSharedDocument, readHydrationLinkAudit } from "./link-policy-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
@@ -12,6 +12,12 @@ import { decodeBody } from "../../../src/adapters/richtext/decode.ts";
 import { jsdomParser } from "../richtext/jsdom.mjs";
 import { validatedFixture, storedValue, readRoots, deliveryReplica } from "./helpers.ts";
 import { formattingLibraryControl } from "./formatting-controls.ts";
+
+after(() => {
+  const counts = readHydrationLinkAudit();
+  assert.deepEqual(counts, { documents: 21, fields: 40, linkRuns: 1, linkedUnits: 4 });
+  console.info("document hydration link audit: " + JSON.stringify(counts));
+});
 
 test("empty script hydrates all sixteen roots without inventing a beat", () => {
   const handle = createSharedDocument();
