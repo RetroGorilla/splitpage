@@ -38,6 +38,22 @@ test("gallery fold follows first nonempty metadata and link fill without mutatin
   assert.deepEqual(projectSharedGroupGallery(root, members, records.toReversed()), expected);
   assert.equal(JSON.stringify({ root, members, records }), before);
 });
+
+test("b-roll collisions compare cleaned identities while derivation retains the raw identity", () => {
+  const marker = (raw: string, clock: number): SharedProjectionUnit => {
+    const id = readSharedContentRef(raw); assert.ok(id);
+    return { value: { atom: "broll", id, text: "B-roll:" }, marks: [], identity: { client: 2, clock } };
+  };
+  const cells = freeze([{ key: "b", units: [marker("S1!", 9), marker("S1", 0), marker("S1!", 1)] }]);
+  const result = projectSharedBrollKeys(cells, ["broll_00530031_2_0!"]);
+  assert.deepEqual(result[0]?.units.map(unit => typeof unit.value !== "string" && unit.value.atom === "broll" ? unit.value.id : ""),
+    ["S1", "broll_00530031_2_0_", "broll_005300310021_2_1"]);
+  assert.deepEqual(projectSharedBrollKeys([{ key: "bad", units: [marker("!", 0), marker("!", 1)] }], [])[0]?.units.map(unit =>
+    typeof unit.value !== "string" && unit.value.atom === "broll" ? unit.value.id : ""), ["broll_0021_2_0", "broll_0021_2_1"]);
+  const markerOnly = projectSharedBrollKeys([{ key: "b", units: [marker("S1", 9), marker("S1", 0), marker("broll_00530031_2_0!", 1)] }], []);
+  assert.deepEqual(markerOnly[0]?.units.map(unit => typeof unit.value !== "string" && unit.value.atom === "broll" ? unit.value.id : ""),
+    ["S1", "broll_00530031_2_0_", "broll_00530031_2_0"]);
+});
 test("folded file links keep the first details and fill a missing location", () => {
   const imageRef = { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" }, root = { id: "R1", imageRef: null };
   const location = { kind: "bundled", name: "clip.mp4" } as const;
@@ -48,12 +64,29 @@ test("folded file links keep the first details and fill a missing location", () 
   assert.deepEqual(projectSharedGroupGallery(root, [root, { id: "R2" }], records), { row: { id: "R1", imageRef,
     imageLinks: [{ name: "clip.mp4", size: 7, duration: 3, location, poster: true }] }, overflow: [] });
 });
-test("pure duplicate-key callers without native items use their stable cell identity", () => {
+test("pure b-roll callers without stable atom identities are rejected before and after unrelated typing", () => {
   const id = readSharedContentRef("S1"); assert.ok(id);
   const unit: SharedProjectionUnit = freeze({ value: { atom: "broll", id, text: "B-roll:" }, marks: [] });
-  const cells = freeze([{ key: "R", units: [unit] }, { key: "S", units: [unit] }]);
-  assert.deepEqual(projectSharedBrollKeys(cells, []).map(cell => cell.units.map(item => typeof item.value === "string" ? item.value : item.value.atom === "broll" ? item.value.id : "")),
-    [["S1"], ["broll_00530031_0053_0"]]);
+  assert.throws(() => projectSharedBrollKeys([{ key: "b", units: [unit] }], []), { message: "B-roll atom requires a stable identity" });
+  for (const prefix of [[], [{ value: "unrelated typing", marks: [] }]]) {
+    const cells = freeze([{ key: "a", units: [unit] }, { key: "b", units: [...prefix, unit] }]);
+    const before = JSON.stringify(cells);
+    assert.throws(() => projectSharedBrollKeys(cells, []), { message: "B-roll atom requires a stable identity" });
+    assert.equal(JSON.stringify(cells), before);
+  }
+});
+
+test("gallery folding visits each of 10000 incoming links once", () => {
+  const root = { id: "R1", imageRef: null }, imageRef = { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" };
+  const records = Array.from({ length: 10000 }, (_, index) => ({ key: String(index).padStart(5, "0"), fields: { beat: "R1", picture: { imageRef },
+    links: [{ fields: { href: "https://example.test/" + index } }] } }));
+  const original = Map.prototype.get; let visits = 0;
+  Map.prototype.get = function (key: unknown) { if (typeof key === "string" && key.startsWith("u:")) visits++; return original.call(this, key) as unknown; };
+  try {
+    const result = projectSharedGroupGallery(root, [root], records);
+    assert.deepEqual(result, { row: { id: "R1", imageRef, imageLinks: Array.from({ length: 10000 }, (_, index) => ({ href: "https://example.test/" + index })) }, overflow: [] });
+    assert.equal(visits, 10000);
+  } finally { Map.prototype.get = original; }
 });
 for (const scenario of [
   { first: { client: 9, clock: 500 }, later: { client: 1, clock: 1 }, id: "broll_00530031_1_1" },

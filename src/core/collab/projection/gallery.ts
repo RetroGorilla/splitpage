@@ -1,4 +1,4 @@
-import { MAX_MORE, videoLinkKey } from "../../document/gallery.ts";
+import { MAX_MORE, readAnnotation, videoLinkKey } from "../../document/gallery.ts";
 import type { VideoLink } from "../../document/gallery.ts";
 import { projectSharedGalleryFields, projectSharedGallerySlots } from "./fields.ts";
 
@@ -13,9 +13,8 @@ function compareGallery(a: { readonly key: string; readonly fields: GalleryBag }
   const first = typeof a.fields.rank === "string" ? a.fields.rank : "", second = typeof b.fields.rank === "string" ? b.fields.rank : "";
   return first < second ? -1 : first > second ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }
-function fold(first: GalleryBag, later: GalleryBag): GalleryBag {
-  const kept = new Map<string, VideoLink>();
-  for (const link of [...links(first), ...links(later)]) {
+function foldLinks(kept: Map<string, VideoLink>, slot: GalleryBag): void {
+  for (const link of links(slot)) {
     const key = videoLinkKey(link), previous = kept.get(key);
     if (!previous) kept.set(key, { ...link });
     else {
@@ -23,28 +22,34 @@ function fold(first: GalleryBag, later: GalleryBag): GalleryBag {
       if (link.location && !previous.location) previous.location = link.location;
     }
   }
-  const slot = { ...first };
-  if (!slot.name && later.name) slot.name = later.name;
-  const annotation = slot.annotation as { readonly marks?: readonly unknown[] } | null | undefined;
-  const candidate = later.annotation as { readonly marks?: readonly unknown[] } | null | undefined;
-  if (!annotation?.marks?.length && candidate?.marks?.length) slot.annotation = later.annotation;
-  if (kept.size) slot.links = [...kept.values()];
-  return slot;
 }
 export function projectSharedGroupGallery(root: GalleryBag, members: readonly GalleryBag[],
   records: readonly { readonly key: string; readonly fields: GalleryBag }[]) {
-  const ordered = members.flatMap(member => records.filter(record => record.fields.beat === member.id).sort(compareGallery).map(record => {
+  const entries = members.flatMap(member => records.filter(record => record.fields.beat === member.id).sort(compareGallery).map(record => {
     const slot = projectSharedGallerySlots([record])[0];
     return { itemId: record.key, beat: String(member.id), slot: slot ?? {} };
-  })).filter(entry => !Object.keys(entry.slot).every(key => key === "imageRef") || !!entry.slot.imageRef);
-  const folded: SharedProjectionGalleryOverflow[] = [], pictures = new Map<string, number>();
-  let changed = false;
+  }));
+  const ordered = entries.filter(entry => !Object.keys(entry.slot).every(key => key === "imageRef") || !!entry.slot.imageRef);
+  const accumulators: { itemId: string; beat: string; slot: Record<string, unknown>; links: Map<string, VideoLink> }[] = [];
+  const pictures = new Map<string, number>();
+  let changed = entries.length !== ordered.length;
   for (const entry of ordered) {
+    const slot = { ...entry.slot };
+    if (Object.hasOwn(slot, "annotation") && !readAnnotation(slot.annotation)) { delete slot.annotation; changed = true; }
     const ref = entry.slot.imageRef as { readonly sha256?: string } | null | undefined;
-    const at = ref?.sha256 ? pictures.get(ref.sha256) : undefined, first = at === undefined ? undefined : folded[at];
-    if (first && at !== undefined) { folded[at] = { ...first, slot: fold(first.slot, entry.slot) }; changed = true; }
-    else { if (ref?.sha256) pictures.set(ref.sha256, folded.length); folded.push(entry); }
+    const at = ref?.sha256 ? pictures.get(ref.sha256) : undefined, first = at === undefined ? undefined : accumulators[at];
+    if (first && at !== undefined) {
+      if (!first.slot.name && slot.name) first.slot.name = slot.name;
+      if (!first.slot.annotation && slot.annotation) first.slot.annotation = slot.annotation;
+      foldLinks(first.links, slot); changed = true;
+    } else {
+      if (ref?.sha256) pictures.set(ref.sha256, accumulators.length);
+      const kept = new Map<string, VideoLink>(); foldLinks(kept, slot);
+      accumulators.push({ ...entry, slot, links: kept });
+    }
   }
+  const folded: SharedProjectionGalleryOverflow[] = accumulators.map(entry => ({ itemId: entry.itemId, beat: entry.beat,
+    slot: entry.links.size ? { ...entry.slot, links: [...entry.links.values()] } : entry.slot }));
   const overflow = folded.slice(MAX_MORE + 1);
   if (members.length === 1 && !changed && !overflow.length) return { row: { ...root }, overflow };
   const row = { ...root };

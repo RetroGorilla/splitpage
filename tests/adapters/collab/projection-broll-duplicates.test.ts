@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { recordProjectionReplicas, submitRecords, checkRecordProjection, plainRow } from "./projection-record-support.ts";
-import { literalMergedDocument } from "./projection-merged-support.ts";
+import { literalMergedDocument, readPureMergedProjection } from "./projection-merged-support.ts";
+import { createRecord } from "./record-support.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { ref } from "./executor-support.ts";
@@ -12,6 +13,27 @@ import { transactSharedDocument } from "../../../src/adapters/collab/document.ts
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 
 const cases = [{ owner: "R2", field: "visualText" }, { owner: "R2", field: "audioText" }, { owner: "R1", field: "audioText" }] as const;
+for (const order of ["D1", "rev", "dup"] as const) for (const reserveShot of [false, true]) for (const realMarker of reserveShot ? [false, true] : [true]) test(`b-roll reservations use cleaned marker and shot ids through reload: ${order} marker=${realMarker} shot=${reserveShot}`, () => {
+  const dirty = "broll_00530031_2_0!", clean = "broll_00530031_2_0";
+  const run = recordProjectionReplicas(3, { rows: [{ id: "R1", audioText: "", visualText: marker("S1") + " coast" }, { id: "R2", audioText: "" }, { id: "R3", audioText: "" }], brollShots: [shot("S1")] });
+  try {
+    if (reserveShot) submitRecords(run.a, [createRecord("shots", dirty, shot(dirty, "Reserved"))]);
+    submitRecords(run.b, [{ kind: "text-insert", id: "keys", by: "Writer", target: { owner: "R2", segment: "R2", field: "visualText" },
+      at: { left: null, right: flowBaseReference("R2", "visualText", 0), affinity: "before" },
+      content: [{ value: { atom: "broll", id: "S1", text: "B-roll:" }, marks: [] }, { value: " coast", marks: [] }] }]);
+    if (realMarker) submitRecords(run.b, [{ kind: "text-insert", id: "real", by: "Writer", target: { owner: "R3", segment: "R3", field: "visualText" },
+      at: { left: null, right: flowBaseReference("R3", "visualText", 0), affinity: "before" },
+      content: [{ value: { atom: "broll", id: dirty, text: "B-roll:" }, marks: [] }, { value: " Reserved", marks: [] }] }]);
+    const rows = [{ ...plainRow("R1", ""), visualText: marker("S1") + " coast" }, { ...plainRow("R2", ""), visualText: marker(clean + "_") + " coast" },
+      { ...plainRow("R3", ""), visualText: realMarker ? marker(clean) + " Reserved" : "" }];
+    checkRecordProjection(run, order, { ...literalMergedDocument(""), rows, brollShots: reserveShot ? [shot(clean, "Reserved"), shot("S1")] : [shot("S1")] });
+    const loaded = createFlowLoadRuntime().load(JSON.parse(readPureMergedProjection(run.a).save) as unknown);
+    assert.deepEqual(loaded.rows.map(row => row.visualText), rows.map(row => row.visualText));
+    assert.deepEqual(loaded.brollShots.map(value => value.id), reserveShot ? [clean, "S1", clean + "_"] : ["S1", clean + "_", clean]);
+    assert.equal(loaded.brollShots.find(value => value.id === clean)?.name, "Reserved");
+    assert.equal(loaded.brollShots.find(value => value.id === clean + "_")?.name, "coast");
+  } finally { run.close(); }
+});
 function marker(id: string) { return '<span class="broll-key" data-broll-id="' + id + '" contenteditable="false">B-roll:</span>'; }
 function shot(id: string, name = "coast") { return { id, name, desc: "", status: "shot", reshoot: false, notes: "", owner: "", audioRef: "", location: "", props: [], origin: "list" }; }
 function source(copies: number, scenario: typeof cases[number], collision: boolean) {
@@ -57,19 +79,25 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
   });
 
 test("seeded duplicate keys retain typed words, marks and shot records across every reading copy", t => {
-  let random = 0x6b54, checkpoints = 0, commands = 0;
-  const kinds = new Set<string>(), declaredLimits: readonly string[] = [];
+  let checkpoints = 0, commands = 0;
+  const seedChoices = [3,3,3,2,1,2,1,0,1,2,1,0,0,3,1,3,3,2,1,2,2,3,3,0];
+  const kinds = new Set<string>(), declaredLimits: readonly { history: string; reason: string }[] = [], violations: { history: string; reason: string }[] = [];
   for (let seed = 0; seed < 24; seed++) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) for (const scenario of cases) {
-    random = (Math.imul(random, 1664525) + 1013904223) >>> 0; const collision = !!(random & 1), italic = !!(random & 2);
+    let random = (Math.imul(seed + 1, 2654435761) ^ 0x6b54) >>> 0;
+    const next = () => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return random / 4294967296; };
+    const collision = next() < 0.5, italic = next() < 0.5;
+    assert.equal(Number(collision) * 2 + Number(italic), seedChoices[seed]);
     const run = recordProjectionReplicas(copies, source(copies, scenario, collision));
     try {
       const history = author(run, scenario, true, italic); history.forEach(kind => kinds.add(kind)); commands += history.length;
-      checkRecordProjection(run, order, expected(copies, scenario, collision, italic)); checkpoints++;
+      try { checkRecordProjection(run, order, expected(copies, scenario, collision, italic)); }
+      catch (error) { violations.push({ history: `${seed}/${copies}/${order}/${scenario.owner}/${scenario.field}`, reason: String(error) }); }
+      checkpoints++;
     } finally { run.close(); }
   }
   assert.deepEqual([...kinds].sort(), ["mark", "scalar", "status", "text-delete", "text-insert"]);
-  assert.equal(checkpoints, 432); assert.equal(commands, 2808); assert.deepEqual(declaredLimits, []);
-  t.diagnostic(JSON.stringify({ seeds: 24, checkpoints, commands, kinds: [...kinds].sort(), declaredLimits }));
+  assert.equal(checkpoints, 432); assert.equal(commands, 2808); assert.deepEqual(violations, declaredLimits);
+  t.diagnostic(JSON.stringify({ seeds: 24, checkpoints, commands, kinds: [...kinds].sort(), violations, declaredLimits }));
 });
 
 test("b-roll corpus audit: 0 of 291 reference documents have duplicate key ids", () => {

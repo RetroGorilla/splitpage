@@ -7,6 +7,28 @@ import { joinWithPrevious } from "../../../src/core/flow/flow.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 
 const runtime = createFlowLoadRuntime();
+for (const order of ["D1", "rev", "dup"] as const) for (const shape of ["hash-only", "empty-marks", "hash-only-then-valid"] as const)
+  test(`gallery annotation eligibility matches the standalone reader: ${shape} ${order}`, () => {
+    const run = recordProjectionReplicas(3, { rows: [{ id: "R1", audioText: "a" }, { id: "R2", audioText: "b" }] });
+    const invalid = shape === "empty-marks" ? { imageRef: annotationA.imageRef, marks: [] }
+      : { imageRef: { sha256: annotationA.imageRef.sha256 }, marks: annotationA.marks };
+    const valid = shape === "hash-only-then-valid";
+    try {
+      submitRecords(run.a, [createRecord("gallery", "first", { beat: "R1", rank: "0", picture: { imageRef: pictureA, annotation: invalid }, links: [] })]);
+      if (valid) submitRecords(run.b, [createRecord("gallery", "later", { beat: "R2", rank: "0", picture: { imageRef: pictureA, annotation: annotationA }, links: [] })]);
+      rawGalleryJoin(run.c);
+      const row = { ...plainRow("R1", "a b"), imageRef: pictureA, ...(valid ? { imageAnnotation: annotationA } : {}) };
+      const standalone = joinWithPrevious({ rows: [
+        { ...plainRow("R1", "a"), imageRef: pictureA, imageAnnotation: invalid },
+        { ...plainRow("R2", "b"), ...(valid ? { imageRef: pictureA, imageAnnotation: annotationA } : {}) }
+      ], comments: [] }, "R2", runtime.ports);
+      assert.ok(standalone && "rows" in standalone);
+      assert.deepEqual(standalone.rows[0]?.imageAnnotation, valid ? annotationA : undefined);
+      checkRecordProjection(run, order, { ...literalMergedDocument(""), rows: [row] });
+      assert.deepEqual(runtime.load({ ...literalMergedDocument(""), rows: [row] }).rows[0]?.imageAnnotation, valid ? annotationA : undefined);
+    } finally { run.close(); }
+  });
+
 for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) for (const removed of [false, true])
   test(`gallery folds duplicate pictures, first metadata and URL/file links like standalone: ${copies} ${order} removed=${removed}`, () => {
     const run = recordProjectionReplicas(copies, { rows: [{ id: "R1", audioText: "a" }, { id: "R2", audioText: "b" }] });

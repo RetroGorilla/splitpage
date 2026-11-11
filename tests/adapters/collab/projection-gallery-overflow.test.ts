@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRecord, setRecord, deleteRecord } from "./record-support.ts";
 import { recordProjectionReplicas, submitRecords, rawGalleryJoin, checkRecordProjection, plainRow } from "./projection-record-support.ts";
-import { literalMergedDocument } from "./projection-merged-support.ts";
+import { literalMergedDocument, readPureMergedProjection } from "./projection-merged-support.ts";
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 
 const firstHalf = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29];
 const secondHalf = [30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59];
@@ -40,19 +41,23 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
   });
 
 test("seeded gallery creation, update, deletion and ranking retains every overflow item across writers and reloads", t => {
-  let random = 0x6b61, checkpoints = 0, commands = 0;
-  const kinds = new Set<string>(), declaredLimits: readonly string[] = [];
+  let checkpoints = 0, commands = 0;
+  const seedChoices = [3,3,2,3,1,2,0,0,1,3,0,0,0,3,0,3,3,3,1,2,3,3,3,0];
+  const kinds = new Set<string>(), declaredLimits: readonly { history: string; reason: string }[] = [], violations: { history: string; reason: string }[] = [];
   for (let seed = 0; seed < 24; seed++) for (const copies of [2, 3]) for (const joined of [false, true]) for (const duplicate of [false, true]) for (const order of ["D1", "rev", "dup"] as const) {
-    random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+    let random = (Math.imul(seed + 1, 2654435761) ^ 0x6b61) >>> 0;
+    const next = () => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return random / 4294967296; };
+    const reversed = next() < 0.5, remove = next() < 0.5;
+    assert.equal(Number(reversed) * 2 + Number(remove), seedChoices[seed]);
     const run = recordProjectionReplicas(copies, source(joined));
     try {
-      const writers = random & 1 ? [...run.handles.keys()].reverse() : [...run.handles.keys()];
+      const writers = reversed ? [...run.handles.keys()].reverse() : [...run.handles.keys()];
       for (const writer of writers) {
         const handle = run.handles[writer]; assert.ok(handle);
         const list = add(handle, writer, joined, true, duplicate); commands += list.length;
         list.forEach(command => { assert.ok(command && typeof command === "object" && "kind" in command); kinds.add(String(command.kind)); });
       }
-      const removed = joined && !!(random & 2); if (joined) rawGalleryJoin(run.a, removed);
+      const removed = joined && remove; if (joined) rawGalleryJoin(run.a, removed);
       let result = expected(copies, joined, removed);
       if (duplicate) {
         const row = { ...plainRow("R1", joined ? "a b" : "a"), imageRef: picture(0),
@@ -61,12 +66,29 @@ test("seeded gallery creation, update, deletion and ranking retains every overfl
         result = { document: { ...literalMergedDocument(""), rows: removed ? [] : [row] },
           recovery: removed ? [{ kind: "removed-beat", row, members: ["R1", "R2"] }] : [] };
       }
-      checkRecordProjection(run, order, result.document, result.recovery); checkpoints++;
+      try { checkRecordProjection(run, order, result.document, result.recovery); }
+      catch (error) { violations.push({ history: `${seed}/${copies}/${joined}/${duplicate}/${order}`, reason: String(error) }); }
+      checkpoints++;
     } finally { run.close(); }
   }
   assert.deepEqual([...kinds].sort(), ["record-create", "record-delete", "record-set"]);
-  assert.equal(checkpoints, 576); assert.equal(commands, 9072); assert.deepEqual(declaredLimits, []);
-  t.diagnostic(JSON.stringify({ seeds: 24, checkpoints, commands, kinds: [...kinds].sort(), declaredLimits }));
+  assert.equal(checkpoints, 576); assert.equal(commands, 9072); assert.deepEqual(violations, declaredLimits);
+  t.diagnostic(JSON.stringify({ seeds: 24, checkpoints, commands, kinds: [...kinds].sort(), violations, declaredLimits }));
+});
+
+for (const order of ["D1", "rev", "dup"] as const) test(`61 concurrent pictures on a blank row survive the save and load boundary: ${order}`, () => {
+  const run = recordProjectionReplicas(3, { rows: [{ id: "R1", audioText: "" }] });
+  try {
+    for (let index = 0; index < 61; index++) {
+      const handle = run.handles[index % 3]; assert.ok(handle);
+      submitRecords(handle, [createRecord("gallery", "p" + index, { beat: "R1", rank: String(index).padStart(2, "0"), picture: slot(index), links: [] })]);
+    }
+    checkRecordProjection(run, order, { ...literalMergedDocument(""), rows: [{ ...plainRow("R1", ""), imageRef: picture(0), imageName: "Picture 0", moreImages: singleVisible.map(slot) }] });
+    const actual = readPureMergedProjection(run.a), loaded = createFlowLoadRuntime().load(JSON.parse(actual.save) as unknown);
+    assert.deepEqual(loaded.rows[0]?.imageRef, picture(0));
+    assert.deepEqual(loaded.rows[0]?.moreImages, singleVisible.map(slot));
+    assert.deepEqual(actual.view.recovery, []);
+  } finally { run.close(); }
 });
 
 for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) test(`gallery folds before counting the 61-item limit: ${copies} ${order}`, () => {

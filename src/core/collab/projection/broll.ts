@@ -1,5 +1,6 @@
 import type { SharedProjectionUnit } from "./units.ts";
 import { readSharedContentRef } from "../read-operation.ts";
+import { cleanId } from "../../document/text-policy.ts";
 
 function encoded(value: string): string {
   let result = "";
@@ -7,14 +8,22 @@ function encoded(value: string): string {
   return result;
 }
 export function projectSharedBrollKeys(cells: readonly { readonly key: string; readonly units: readonly SharedProjectionUnit[] }[], shotIds: readonly string[]) {
-  const reserved = new Set(shotIds), seen = new Set<string>();
-  for (const cell of cells) for (const unit of cell.units) if (typeof unit.value !== "string" && unit.value.atom === "broll") reserved.add(unit.value.id);
-  return cells.map(cell => ({ key: cell.key, units: cell.units.map((unit, index) => {
+  const reserved = new Set(shotIds.map(cleanId)), seen = new Set<string>();
+  for (const cell of cells) for (const unit of cell.units) if (typeof unit.value !== "string" && unit.value.atom === "broll") {
+    if (!unit.identity) throw new Error("B-roll atom requires a stable identity");
+    reserved.add(cleanId(unit.value.id));
+  }
+  return cells.map(cell => ({ key: cell.key, units: cell.units.map(unit => {
     const value = unit.value;
     if (typeof value === "string" || value.atom !== "broll") return unit;
-    if (!seen.has(value.id)) { seen.add(value.id); return unit; }
-    const identity = unit.identity ? unit.identity.client + "_" + unit.identity.clock : encoded(cell.key) + "_" + index;
-    let id = "broll_" + encoded(value.id) + "_" + identity;
+    let id = cleanId(value.id);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      const reference = readSharedContentRef(id); if (!reference) throw new Error("Invalid projected b-roll identity");
+      return id === value.id ? unit : { ...unit, value: { ...value, id: reference } };
+    }
+    const identity = unit.identity; if (!identity) throw new Error("B-roll atom requires a stable identity");
+    id = "broll_" + encoded(value.id) + "_" + identity.client + "_" + identity.clock;
     while (reserved.has(id)) id += "_";
     reserved.add(id);
     const reference = readSharedContentRef(id);
