@@ -5,9 +5,8 @@ export interface CompositionCell {
   readonly field: string;
 }
 
-export interface CompositionPorts<M> {
+export interface CompositionPorts<M> extends Readonly<Pick<CommonDocumentSession, "epoch">> {
   readonly cellOf: (target: EventTarget | null) => CompositionCell | null;
-  readonly epoch: CommonDocumentSession["epoch"];
   readonly mark: (cell: CompositionCell) => M;
   readonly dropEmptySince: (mark: M, cancelled: boolean) => boolean;
 }

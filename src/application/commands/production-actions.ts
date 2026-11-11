@@ -19,8 +19,7 @@ export interface RenameTagPorts extends ProductionActionPorts {
   readonly stamps: StampPorts;
 }
 
-export interface RemoveTagPorts extends RenameTagPorts {
-  readonly read: CommonDocumentSession["read"];
+export interface RemoveTagPorts extends RenameTagPorts, Readonly<Pick<CommonDocumentSession, "read">> {
   readonly mentions: (doc: DocumentView | null, tags: readonly TagRef[]) => number;
 }
 

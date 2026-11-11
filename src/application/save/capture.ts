@@ -5,8 +5,7 @@ import type { CommonDocumentSession, DocumentView } from "../session/document-se
 
 export type { ExportCaptureOptions, ExportDocument, ExportReadModels };
 
-export interface CapturePorts {
-  readonly read: CommonDocumentSession["read"];
+export interface CapturePorts extends Readonly<Pick<CommonDocumentSession, "read">> {
   readonly readModels: (doc: DocumentView) => ExportReadModels;
   readonly clock: Clock;
 }
