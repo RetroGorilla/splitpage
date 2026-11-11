@@ -93,6 +93,7 @@ test("a visual text is read through its own address and its identities resolve i
     assert.deepEqual(identities(painted), [0, 1, 2, 3].map(index => createSharedAnchor(handle, target, index, "after")));
     assert.deepEqual(identities(painted).map(identity => resolveSharedAnchor(handle, identity)), [0, 1, 2, 3].map(offset => ({ segment: "R1", offset })));
     assert.equal(String(painted.identity(0)).startsWith('{"v":2,"target":'), true);
+    assert.equal(readSharedPaintedText(handle, { ...target, owner: ref("R2") }), null);
   } finally { destroySharedDocument(handle); }
 });
 
