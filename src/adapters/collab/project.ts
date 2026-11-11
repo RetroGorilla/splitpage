@@ -8,10 +8,53 @@ import { readSharedStatus } from "./status.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionFields, readProjectionHead } from "./projection-reader.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import type { DocumentShape } from "../../core/document/validated.ts";
+import { projectSharedText, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
+import { readProjectionUnits } from "./projection-text-reader.ts";
 
 export interface SharedDocumentFieldProjection {
   readonly document: Readonly<Record<string, unknown>>;
   readonly sections: readonly { readonly id: string; readonly firstSceneId: string }[];
+}
+
+export function projectSharedDocument(handle: SharedDocumentHandle): DocumentShape {
+  return withSharedSnapshot(handle, state => {
+    const copy = state as unknown as SharedDocumentHandle, roots = state.roots;
+    const fields = readSharedDocumentFieldProjection(copy), out = { ...fields.document };
+    const tags = out.productionTags as Record<string, unknown>[], comments = out.comments as Record<string, unknown>[];
+    const title: unknown = roots.meta.get("title");
+    Object.assign(out, { title: title instanceof Y.Text ? title.toString() : "", docId: out.docId ?? "", schema: out.schema ?? 2, rev: out.rev ?? 0 });
+    const segments = new Map<string, Y.Map<unknown>>();
+    for (const key of roots.order.toArray()) {
+      if (typeof key !== "string" || !isStableSharedIdentity(key)) continue;
+      const segment: unknown = roots.segments.get(key);
+      if (!(segment instanceof Y.Map)) continue;
+      const head = readProjectionHead(segment.get("head"));
+      if (head && !segments.has(head.kind + head.id)) segments.set(head.kind + head.id, segment);
+    }
+    const visuals = readSharedRecords(copy, "visuals"), anchored = new Set<string>();
+    function cell(container: Y.Map<unknown>, rowId: string, field: "audioText" | "visualText"): string {
+      const units = readProjectionUnits(copy, container.get("text"), container.get("markRecords"));
+      projectSharedCommentAnchors(units, comments, rowId, field, anchored);
+      return projectSharedText(units, tags);
+    }
+    const rows = (out.rows as Record<string, unknown>[]).map(row => {
+      const id = String(row.id), segment = segments.get("b" + id);
+      const audioText = segment ? cell(segment, id, "audioText") : "";
+      const visualText = visuals.filter(visual => visual.fields.beat === id).map(visual => {
+        const container: unknown = roots.visuals.get(visual.key);
+        return container instanceof Y.Map ? cell(container, id, "visualText") : "";
+      }).filter(Boolean).join("<br>");
+      return { ...row, audioText, visualText };
+    });
+    const sections = fields.sections.flatMap(section => {
+      const segment = segments.get("h" + section.id), extra = readProjectionFields(roots.headings.get(section.id), "heading");
+      const text: unknown = segment?.get("text");
+      return text instanceof Y.Text && text.toString() ? [{ ...sharedProjectionExtra(extra ?? {}), ...section, name: text.toString() }] : [];
+    });
+    Object.assign(out, { rows }); if (sections.length) out.sections = sections;
+    return canonicalSharedProjection(out) as DocumentShape;
+  });
 }
 
 export function readSharedDocumentFieldProjection(handle: SharedDocumentHandle): SharedDocumentFieldProjection {

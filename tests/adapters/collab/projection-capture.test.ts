@@ -8,6 +8,7 @@ import { editStamp } from "../../../src/application/commands/save-stamps.ts";
 import type { ProjectFileServices } from "../../../src/application/formats/project-file-services.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { withProjectedFixture } from "./projection-support.ts";
+import { withFullProjectedFixture } from "./projection-roundtrip-support.ts";
 
 const services: ProjectFileServices = {
   migrateRows, migrateDocument: raw => migrateRows(raw), sanitizeHtml: html => html,
@@ -22,21 +23,23 @@ for (const [name, value] of [["null", null], ["number", 123], ["string", "2026-0
     const source = migrateRows({ rows: [{ id: "R1" }], lastEditedAt: value });
     const expected = save(source);
     assert.deepEqual(expected.lastEditedAt, value);
-    withProjectedFixture(source, projected => {
+    const check = (projected: Readonly<Record<string, unknown>>) => {
       assert.equal(Object.hasOwn(projected, "lastEditedAt"), true);
       assert.deepEqual(projected.lastEditedAt, expected.lastEditedAt);
       assert.deepEqual(save(migrateRows({ ...source, lastEditedAt: projected.lastEditedAt })).lastEditedAt, expected.lastEditedAt);
-    });
+    };
+    withProjectedFixture(source, check); withFullProjectedFixture(source, check);
   });
   test(`projection retains normalized ${name} row updatedAt and its editor as the app saves them`, () => {
     const source = migrateRows({ rows: [{ id: "R1", updatedAt: value, updatedBy: "Row editor" }] });
     const expected = (save(source).rows as Record<string, unknown>[])[0]; assert.ok(expected);
     assert.deepEqual(expected.updatedAt, value ?? "");
-    withProjectedFixture(source, projected => {
+    const check = (projected: Readonly<Record<string, unknown>>) => {
       const row = (projected.rows as Record<string, unknown>[])[0]; assert.ok(row);
       assert.equal(Object.hasOwn(row, "updatedAt"), true);
       assert.deepEqual(row.updatedAt, expected.updatedAt); assert.equal(row.updatedBy, expected.updatedBy);
-    });
+    };
+    withProjectedFixture(source, check); withFullProjectedFixture(source, check);
   });
 }
 test("projection attribution fields follow the app's explicit stamp assignment order", () => {
@@ -46,6 +49,7 @@ test("projection attribution fields follow the app's explicit stamp assignment o
   const attribution = (value: object) => Object.keys(value).filter(key => ["rev", "lastEditedBy", "lastEditedAt"].includes(key));
   assert.deepEqual(attribution(save(source)), ["rev", "lastEditedBy", "lastEditedAt"]);
   withProjectedFixture(source, projected => assert.deepEqual(attribution(projected), ["rev", "lastEditedBy", "lastEditedAt"]));
+  withFullProjectedFixture(source, projected => assert.deepEqual(attribution(projected), ["rev", "lastEditedBy", "lastEditedAt"]));
 });
 test("projection scalar and capture checks retain the app's normalized boundary values and absences", () => {
   for (const raw of [
