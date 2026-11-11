@@ -11,7 +11,7 @@ import { readPureMergedProjection, literalMergedDocument, mergedProjectionSave }
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import type { SharedStoredMarkValue } from "../../../src/adapters/collab/stored-mark.ts";
 
-function fragment(reason: string, owner: string, segment: string, from: number, to: number, html: string) {
+function fragment(reason: string, owner: string | null, segment: string, from: number, to: number, html: string) {
   return { kind: "unprojectable-fragment", reason, owner, segment, field: "audioText", from, to, html };
 }
 const second = { ...splitOriginal("v"), id: "R2" };
@@ -37,18 +37,40 @@ const scenarios = [
   { name: "nonexistent stored segment uses the first head", parts: [], record: "absent-segment", rows: [splitOriginal("a"), second],
     recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost")] },
   { name: "stored segment without its beat uses the first head", parts: [], record: "wrong-segment", rows: [splitOriginal("a"), second],
-    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost")] }
+    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost")] },
+  { name: "invalid head recovers its anonymous leading text", head: null, parts: [{ b: "N" }, "b"], record: "valid", rows: [newRow("b"), second],
+    recovery: [fragment("missing-boundary", null, "b:R1", 0, 1, "a")] },
+  { name: "self prefix without an earlier fragment stays in recovery", parts: [{ b: "N", before: "N" }, "b"], record: "valid", rows: [splitOriginal("a"), second],
+    recovery: [fragment("invalid-prefix", "N", "b:R1", 2, 3, "b")] },
+  { name: "dangling prefix cannot steal a later valid fragment", parts: [{ b: "N", before: "X" }, "b", { b: "X" }, "c"], record: "valid", otherBeat: true,
+    rows: [splitOriginal("a"), { ...newRow("c"), id: "X" }, second], recovery: [fragment("invalid-prefix", "X", "b:R1", 2, 3, "b")] },
+  { name: "prefix followed by the source boundary recovers the later source text", parts: [{ b: "N", before: "R1" }, { b: "R1" }, "b"], record: "valid",
+    rows: [newRow("a"), splitOriginal(""), second], recovery: [fragment("duplicate-boundary", "R1", "b:R1", 3, 4, "b")] },
+  { name: "unreadable embed separates repeated boundaries", parts: [{ b: "N" }, { unreadable: true }, { b: "N" }, "t"], record: "valid",
+    rows: [splitOriginal("a"), newRow(""), second], recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 5, "t")] },
+  { name: "edit-after-damage handoff: adjacent head boundary projects ab", start: "", parts: [{ b: "R1" }, "ab"], record: "missing",
+    rows: [splitOriginal("ab"), second], recovery: [] },
+  { name: "stored order overrides map insertion order for head ownership", parts: [], record: "second-head", order: ["S", "b:R2", "b:R1"],
+    rows: [splitOriginal("lost"), second], recovery: [fragment("foreign-segment", "R1", "b:R1", 0, 1, "a")] },
+  { name: "recovery offsets count surrogate pairs as two UTF-16 units", start: "a😀", parts: [{ b: "N" }, "😀b"], record: "missing",
+    rows: [splitOriginal("a😀"), second], recovery: [fragment("missing-beat", "N", "b:R1", 4, 7, "😀b")] }
 ];
 
 function author(handle: Parameters<typeof collabState>[0], scenario: typeof scenarios[number]): void {
   transactSharedDocument(handle, "local-command", () => {
     const roots = collabState(handle).roots, first = roots.segments.get("b:R1"); assert.ok(first instanceof Y.Map);
     const text = first.get("text"); assert.ok(text instanceof Y.Text);
+    if ("head" in scenario) first.set("head", scenario.head);
+    if ("start" in scenario) { text.delete(0, text.length); if (scenario.start) text.insert(0, scenario.start); }
     for (const part of scenario.parts) { if (typeof part === "string") text.insert(text.length, part); else text.insertEmbed(text.length, part); }
     if (scenario.record === "wrong") roots.beats.set("N", { id: "N" });
     if (scenario.record === "valid" || scenario.record === "unowned") {
       const record = new Y.Map<unknown>(); roots.beats.set("N", record); record.set("id", "N"); record.set("status", "shot"); record.set("lengthSeconds", 5);
       if (scenario.record === "valid") record.set("segment", "b:R1");
+    }
+    if ("otherBeat" in scenario) {
+      const record = new Y.Map<unknown>(); roots.beats.set("X", record); record.set("id", "X"); record.set("status", "shot");
+      record.set("segment", "b:R1"); record.set("lengthSeconds", 5);
     }
     const secondBeat = roots.beats.get("R2"); assert.ok(secondBeat instanceof Y.Map);
     if (scenario.record === "foreign") secondBeat.set("segment", "b:R2");
@@ -59,6 +81,11 @@ function author(handle: Parameters<typeof collabState>[0], scenario: typeof scen
       if (scenario.record === "explicit") beat.set("segment", "S");
       if (scenario.record === "absent-segment") beat.set("segment", "absent");
       if (scenario.record === "wrong-segment") beat.set("segment", "b:R2");
+    }
+    if ("order" in scenario) {
+      assert.deepEqual([...roots.segments.keys()], ["b:R1", "b:R2", "S"]);
+      roots.order.delete(0, roots.order.length); roots.order.push(scenario.order);
+      assert.deepEqual(roots.order.toArray(), ["S", "b:R2", "b:R1"]);
     }
   });
 }
@@ -113,7 +140,7 @@ test("seeded malformed boundaries cover each ruling across writers, delivery ord
       covered.add(scenario.name); checkpoints++;
     } finally { run.close(); }
   }
-  assert.equal(covered.size, 11); assert.equal(checkpoints, 792); assert.equal(commands, 2376); assert.deepEqual(declaredLimits, []);
+  assert.equal(covered.size, 19); assert.equal(checkpoints, 1368); assert.equal(commands, 4104); assert.deepEqual(declaredLimits, []);
   t.diagnostic(JSON.stringify({ seeds: 24, cases: covered.size, commands, checkpoints, declaredLimits }));
 });
 

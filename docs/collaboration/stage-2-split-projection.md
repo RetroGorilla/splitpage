@@ -36,8 +36,8 @@ state is not repaired by projection.
 
 | History | Seeded coverage | Declared limits |
 | --- | --- | --- |
-| Valid entry lists | 24 seeds, ordinary/prefix/blank creation, two and three writers, marking, typing, scalar and status changes, normal/reversed/duplicated delivery, encoded late joiner; 432 checkpoints, 5,400 commands | None |
-| Malformed boundaries | 24 seeds, eleven literal shapes, three writers with concurrent peer text and scalar changes, three delivery schedules, encoded late joiner; 792 checkpoints, 2,376 authoring actions | None |
+| Valid entry lists | 24 seeds, ordinary/prefix/blank creation, two and three writers, marking, typing, deletion, scalar and status changes, normal/reversed/duplicated delivery, encoded late joiner; 1,872 checkpoints, 9,000 commands | None for projection |
+| Malformed boundaries | 24 seeds, nineteen literal shapes, three writers with concurrent peer text and scalar changes, three delivery schedules, encoded late joiner; 1,368 checkpoints, 4,104 authoring actions | None for projection |
 
 Expected rows and recovery are literal data. Traced app splits also compare with
 the independent flow applier. Every copy compares canonical saved bytes, key
@@ -46,6 +46,27 @@ fragment retains its formatting, tag, link, comment, atom and source position.
 The legacy split fixture now explicitly records its native beat's segment, as
 the production executor does; its expected document is unchanged. An inline
 beat without ownership has its own literal recovery case.
+
+The valid generator also mixes prefix and ordinary splits, source typing at and
+beside a split, deletion across the split position, and blank creation with a
+split. Each has literal rows, two and three writers, both authoring orders and
+all three delivery schedules. With three writers the third changes the source
+beat's duration. Ownership tests explicitly give the order array and segment map
+different orders. A recovered surrogate-pair example pins native UTF-16 offsets.
+
+Additional damaged-state literals cover `missing-boundary`, `invalid-prefix`,
+`a{b:N,before:R1}{b:R1}b` (the final `b` recovers), and an unreadable embed between
+same-beat boundaries (it prevents coalescing). The two new defect entries remove
+the anonymous leading fragment or treat an invalid prefix as a row.
+
+## Declared edit-after-damage limit
+
+| Stored sequence | Projection | Entry limitation | Follow-up |
+| --- | --- | --- | --- |
+| Head R1, text `{b:R1}ab` | R1 = `ab`, empty recovery; literal test `edit-after-damage handoff: adjacent head boundary projects ab` | The current executor sees an empty R1 span: typing at 0 moves `ab` to recovery, typing at 1 or 2 is refused | Structure lane will share one span interpretation with the core interpreter |
+
+The handoff test pins projection only. It does not claim that editing this damaged
+state is supported; that entry limitation is separate from replica agreement.
 
 ## Assumed, for the product owner
 
