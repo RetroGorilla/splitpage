@@ -41,12 +41,14 @@ function accepted(writes: readonly SharedPreparedWrite[]): SharedPreparationResu
 function setValue(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], value: unknown): void {
   if (JSON.stringify(sharedJson(view.get(path))) !== JSON.stringify(sharedJson(value))) writes.push({ path, kind: "set", value });
 }
-function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], field: "links" | "props", value: unknown): boolean {
+function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], field: "links" | "props", value: unknown, visible: readonly { readonly key: string }[] = []): boolean {
   const entries = readSharedNestedInput(field, value);
   if (!entries) return false;
+  const visibleKeys = new Set(visible.map(entry => entry.key));
+  if (entries.some(([key]) => view.has([...path, key]) && !visibleKeys.has(key))) return false;
   if (view.kind(path) !== "map") writes.push({ path, kind: "map" });
   const retained = new Set(entries.map(([key]) => key));
-  for (const key of view.keys(path)) if (!retained.has(key)) writes.push({ path: [...path, key], kind: "delete" });
+  for (const key of visibleKeys) if (!retained.has(key)) writes.push({ path: [...path, key], kind: "delete" });
   entries.forEach(([key, fields], index) => {
     const entry = [...path, key];
     if (view.kind(entry) !== "map") writes.push({ path: entry, kind: "map" });
@@ -54,6 +56,7 @@ function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[]
     else {
       for (const name of view.keys(entry)) if (name !== "rank" && name !== "extra" && !Object.hasOwn(fields, name)) writes.push({ path: [...entry, name], kind: "delete" });
       for (const [name, value] of Object.entries(fields)) setValue(view, writes, [...entry, name], value);
+      if (!view.has([...entry, "extra"])) writes.push({ path: [...entry, "extra"], kind: "set", value: "{}" });
     }
     setValue(view, writes, [...entry, "rank"], String(index).padStart(10, "0"));
   });
@@ -63,7 +66,7 @@ function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[]
 function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationView): SharedPreparationResult {
   const { collection, record: key } = operation.target, path = [collection, key];
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
-  if (view.kind(path) !== "missing" || view.keys([collection]).includes(key)) return { ok: false, reason: "duplicate-record" };
+  if (view.has(path)) return { ok: false, reason: "duplicate-record" };
   const fields: Record<string, unknown> = { ...operation.fields };
   if (collection !== "gallery" && collection !== "visuals" && collection !== "replies") {
     if (fields.id !== undefined && fields.id !== key) return { ok: false, reason: "mismatched-record-id" };
@@ -101,7 +104,7 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
   const writes: SharedPreparedWrite[] = [];
   if (operation.clear) { if (view.keys(path).includes(field)) writes.push({ path: [...path, field], kind: "delete" }); }
   else if (isSharedRecordNestedField(collection, field)) {
-    if (!nestedWrites(view, writes, [...path, field], field, operation.value)) return { ok: false, reason: "invalid-record-field" };
+    if (!nestedWrites(view, writes, [...path, field], field, operation.value, value[field] as readonly { readonly key: string }[] | undefined)) return { ok: false, reason: "invalid-record-field" };
   } else {
     if (!sharedRecordFieldAccepted(collection, field, operation.value)) return { ok: false, reason: "invalid-record-field" };
     setValue(view, writes, [...path, field], operation.value);

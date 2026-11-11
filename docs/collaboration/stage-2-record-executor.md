@@ -10,7 +10,7 @@ the original operation, its index and a reason, without modifying encoded state.
 Other executors call `registerSharedOperationHandlers(handle, handlers)` from
 `operation-handlers.ts`. A handler maps a vocabulary kind to
 `(operation, view) => {ok:false, reason} | {ok:true, writes, apply}`. The read-only
-view has `get(path)`, `kind(path)`, `keys(path)`, `text(path)`, per-call `scratch`
+view has `get(path)`, `has(path)`, `kind(path)`, `keys(path)`, `text(path)`, per-call `scratch`
 and the live `writer` identity; ordinary read values are frozen. `writes` describes fixed path effects (`set`,
 `delete`, `map`, `text`, `array`) which the entry adds to its overlay. A later
 prepare sees those effects without a copy of the document. Each `apply(handle)`

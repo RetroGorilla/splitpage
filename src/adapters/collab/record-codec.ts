@@ -11,17 +11,24 @@ import { isStableSharedIdentity } from "./identity.ts";
 
 interface RecordFieldSource {
   readonly keys: () => readonly string[];
+  readonly kind: (field: string) => ReturnType<SharedPreparationView["kind"]>;
   readonly get: (field: string) => unknown;
   readonly child: (field: string) => RecordFieldSource | null;
 }
 function nativeSource(raw: unknown): RecordFieldSource | null {
   if (!(raw instanceof Y.Map)) return null;
   const source: Y.Map<unknown> = raw;
-  return { keys: () => [...source.keys()].sort(), get: field => source.get(field), child: field => nativeSource(source.get(field)) };
+  return { keys: () => [...source.keys()].sort(), kind: field => {
+    const value: unknown = source.get(field);
+    return value instanceof Y.Map ? "map" : value instanceof Y.Text ? "text" : value instanceof Y.Array ? "array" : value === undefined ? "missing" : "value";
+  }, get: field => source.get(field), child: field => nativeSource(source.get(field)) };
 }
 function preparedSource(view: Pick<SharedPreparationView, "get" | "kind" | "keys">, path: readonly string[]): RecordFieldSource | null {
   if (view.kind(path) !== "map") return null;
-  return { keys: () => view.keys(path), get: field => view.get([...path, field]), child: field => preparedSource(view, [...path, field]) };
+  return { keys: () => view.keys(path), kind: field => view.kind([...path, field]), get: field => view.get([...path, field]), child: field => preparedSource(view, [...path, field]) };
+}
+function jsonField(source: RecordFieldSource, field: string): unknown {
+  return source.kind(field) === "value" ? sharedJson(source.get(field)) : undefined;
 }
 
 export const sharedRecordFields = Object.freeze({
@@ -120,9 +127,9 @@ function nested(field: "links" | "props", raw: RecordFieldSource | null): unknow
     const source = raw.child(key);
     if (!source) continue;
     if (source.keys().some(field => !isStableSharedIdentity(field))) continue;
-    const rank: unknown = source.get("rank");
+    const rank = jsonField(source, "rank");
     if (typeof rank !== "string") continue;
-    const value = field === "props" ? sharedJson(source.get("value")) : sharedJson(Object.fromEntries(source.keys().filter(key => key !== "rank" && key !== "extra").map(key => [key, source.get(key)])));
+    const value = field === "props" ? jsonField(source, "value") : sharedJson(Object.fromEntries(source.keys().filter(key => key !== "rank" && key !== "extra").map(key => [key, jsonField(source, key)])));
     const validated = readSharedNestedInput(field, [value]);
     if (!validated || validated[0]?.[0] !== key) continue;
     const fields: [string, unknown][] = [];
@@ -131,7 +138,8 @@ function nested(field: "links" | "props", raw: RecordFieldSource | null): unknow
     }
     if (bag(value)) for (const name of Object.keys(value).sort()) if (!fields.some(([key]) => key === name)) fields.push([name, value[name]]);
     fields.push(["rank", rank]);
-    if (extra(source.get("extra"))) fields.push(["extra", source.get("extra")]);
+    const metadata = jsonField(source, "extra");
+    if (extra(metadata)) fields.push(["extra", metadata]);
     entries.push({ key, rank, fields: Object.fromEntries(fields) });
   }
   return entries.sort((a, b) => a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
@@ -145,7 +153,7 @@ function readRecordFields(kind: SharedRecordCollection, key: string, raw: Record
   for (const field of [...known, ...keys.filter(field => !known.includes(field) && !(kind === "visuals" && ["text", "html", "markRecords"].includes(field))).sort()]) {
     if (!keys.includes(field)) continue;
     const nestedField = isSharedRecordNestedField(kind, field);
-    const value = nestedField ? nested(field, raw.child(field)) : sharedJson(raw.get(field));
+    const value = nestedField ? nested(field, raw.child(field)) : jsonField(raw, field);
     if (nestedField ? value === null : !sharedRecordFieldAccepted(kind, field, value)) return null;
     output.push([field, value]);
   }

@@ -61,8 +61,8 @@ test("hydration round trip root by root retains fields and applies record and sc
         props: [{ key: "t_new", fields: { id: "t_new", name: "Mug", rank: "0000000000" } }], rank: "1", extra: "{}" },
       gallery: { beat: "R1", rank: "1", picture: { annotation: { imageRef: { height: 1, mime: "image/png", sha256: "b".repeat(64), width: 1 },
         marks: [{ color: "#e5383b", kind: "pen", points: [0, 0, 1, 1], width: 0.01 }] }, imageRef: { sha256: "a".repeat(64) }, name: "Mug" },
-        links: [{ key: "u:https://example.test/video", fields: { href: "https://example.test/video", duration: 2, poster: true, rank: "0000000000" } },
-          { key: "f:clip.mp4:7", fields: { name: "clip.mp4", size: 7, duration: 3, rank: "0000000001" } }], extra: "{}" },
+        links: [{ key: "u:https://example.test/video", fields: { href: "https://example.test/video", duration: 2, poster: true, rank: "0000000000", extra: "{}" } },
+          { key: "f:clip.mp4:7", fields: { name: "clip.mp4", size: 7, duration: 3, rank: "0000000001", extra: "{}" } }], extra: "{}" },
       visuals: { beat: "R1", rank: "1", extra: "{}" }
     };
     for (const kind of Object.keys(expected) as SharedRecordCollection[]) {
@@ -164,7 +164,7 @@ test("gallery links and shot props retain concurrent distinct additions through 
     execute(run.a, setRecord("gallery", "R1:slot:0", "links", [{ href: "https://a.test" }]), setRecord("shots", "S1", "props", [{ id: "t_1", name: "Cup" }]));
     execute(run.b, setRecord("gallery", "R1:slot:0", "links", [{ href: "https://b.test" }], "Bob"), setRecord("shots", "S1", "props", [{ id: "t_new", name: "Mug" }], "Bob")); run.queue.flush("rev");
     agree("concurrent links", "rev", [run.a, run.b], handle => readSharedRecords(handle, "gallery")[0]?.fields.links,
-      [{ key: "u:https://a.test", fields: { href: "https://a.test", rank: "0000000000" } }, { key: "u:https://b.test", fields: { href: "https://b.test", rank: "0000000000" } }]);
+      [{ key: "u:https://a.test", fields: { href: "https://a.test", rank: "0000000000", extra: "{}" } }, { key: "u:https://b.test", fields: { href: "https://b.test", rank: "0000000000", extra: "{}" } }]);
     agree("concurrent props", "rev", [run.a, run.b], handle => readSharedRecords(handle, "shots")[0]?.fields.props,
       [{ key: "t_1", fields: { id: "t_1", name: "Cup", rank: "0000000000" } }, { key: "t_new", fields: { id: "t_new", name: "Mug", rank: "0000000000" } }]);
   } finally { run.close(); }
