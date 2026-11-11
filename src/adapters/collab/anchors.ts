@@ -4,9 +4,10 @@ import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { hasLoneSurrogate } from "../../core/document/text-policy.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
-import { collabTextTarget, readSharedTextTarget } from "./text-target.ts";
+import { collabTextTarget, readSharedTextTarget, collabApplyingTextTarget } from "./text-target.ts";
 
 export type SharedAnchorResolution = { readonly segment: string; readonly offset: number } | "gone";
+export type SharedTextAnchorLocation = { readonly kind: "index" | "gap"; readonly index: number; readonly affinity: "before" | "after" } | { readonly kind: "gone" };
 type AnchorValue = { segment: string; target: SharedTextAddress | null; relative: Uint8Array };
 
 function readAnchorValue(raw: unknown): AnchorValue | null {
@@ -57,9 +58,32 @@ export function createSharedAnchor(handle: SharedDocumentHandle, address: string
   if (!segment || hasLoneSurrogate(segment) || !Number.isInteger(offset) || offset < 0) return null;
   const text = target ? collabTextTarget(handle, target)?.text : segmentText(collabState(handle).roots.segments.get(segment));
   if (!text || offset > text.length) return null;
-  const position = Y.createRelativePositionFromTypeIndex(text, offset, affinity === "before" ? -1 : 0);
-  const relative = [...Y.encodeRelativePosition(position)];
-  return readSharedAnchor(JSON.stringify(target && (target.field === "visualText" || target.field === "title") ? { v: 2, target, relative } : { v: 1, segment, relative }));
+  return readSharedAnchor(encodedAnchor(text, segment, target, offset, affinity));
+}
+
+function encodedAnchor(text: Y.Text, segment: string, target: SharedTextAddress | null, offset: number, affinity: "before" | "after"): SharedContentRef {
+  const relative = [...Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(text, offset, affinity === "before" ? -1 : 0))];
+  return JSON.stringify(target && (target.field === "visualText" || target.field === "title") ? { v: 2, target, relative } : { v: 1, segment, relative }) as SharedContentRef;
+}
+
+export function encodeCollabTextAnchor(text: Y.Text, target: SharedTextAddress, offset: number, affinity: "before" | "after"): SharedContentRef {
+  return encodedAnchor(text, target.segment, target, offset, affinity);
+}
+
+export function applySharedTextAnchor(handle: SharedDocumentHandle, description: { readonly target: SharedTextAddress; readonly index: number; readonly affinity: "before" | "after" }): SharedContentRef {
+  return encodeCollabTextAnchor(collabApplyingTextTarget(handle, description.target).text, description.target, description.index, description.affinity);
+}
+
+export function resolveCollabTextAnchor(handle: SharedDocumentHandle, raw: unknown, text: Y.Text): SharedTextAnchorLocation {
+  const value = readAnchorValue(raw);
+  if (!value) return { kind: "gone" };
+  const source = value.target ? collabTextTarget(handle, value.target)?.text : segmentText(collabState(handle).roots.segments.get(value.segment));
+  if (source !== text) return { kind: "gone" };
+  const position = Y.decodeRelativePosition(value.relative), absolute = Y.createAbsolutePositionFromRelativePosition(position, collabState(handle).doc);
+  if (absolute?.type !== text) return { kind: "gone" };
+  const offset = absolute.index + (position.assoc === -1 ? -1 : 0);
+  const current = offset >= 0 && offset < text.length ? Y.createRelativePositionFromTypeIndex(text, offset).item : null;
+  return { kind: current && position.item && current.client === position.item.client && current.clock === position.item.clock ? "index" : "gap", index: absolute.index, affinity: position.assoc === -1 ? "before" : "after" };
 }
 
 export function resolveSharedAnchor(handle: SharedDocumentHandle, raw: unknown): SharedAnchorResolution {

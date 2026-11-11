@@ -4,6 +4,7 @@ import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "./mark-store.ts";
 import { assertSharedDocumentIdle, collabState } from "./state.ts";
+import { editCollabText } from "./text-edit.ts";
 
 type ImportDelta = { insert: string | Record<string, unknown>; attributes: Record<string, unknown> };
 
@@ -108,8 +109,8 @@ export function insertSharedHtml(handle: SharedDocumentHandle, target: SharedTex
   }
   let offset = 0;
   for (const entry of result) {
-    if (typeof entry.insert === "string") { text.insert(offset, entry.insert); offset += entry.insert.length; }
-    else { text.insertEmbed(offset, entry.insert); offset++; }
+    if (typeof entry.insert === "string") { editCollabText(text, { type: "text", at: offset, value: entry.insert }); offset += entry.insert.length; }
+    else { editCollabText(text, { type: "atom", at: offset, value: entry.insert }); offset++; }
   }
   let from = 0, addition = 0;
   for (const entry of result) {

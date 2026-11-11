@@ -8,6 +8,7 @@ import { transactSharedDocument } from "./document.ts";
 import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { insertSharedHtml } from "./text-import.ts";
 import { createCollabText, readSharedTextTarget } from "./text-target.ts";
+import { editCollabText } from "./text-edit.ts";
 
 type ImportBag = Record<string, unknown>;
 
@@ -66,7 +67,7 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
     roots.meta.set("fileTitle", selected(source, ["titleOrigin", "titleVersion"]));
     roots.meta.set("capture", selected(source, captureFields));
     const title = createCollabText(handle, roots.meta, true);
-    title.insert(0, source.title.replace(/\p{Cs}/gu, "\ufffd"));
+    editCollabText(title, { type: "text", at: 0, value: source.title.replace(/\p{Cs}/gu, "\ufffd") });
     function textTarget(owner: string, segment: string, field: "audioText" | "heading" | "visualText" | "title") {
       const target = readSharedTextTarget({ owner, segment, field });
       if (!target) throw new Error("Cannot address hydrated text marks");
@@ -102,7 +103,7 @@ export function hydrateSharedDocument(handle: SharedDocumentHandle, source: Vali
       const text = createCollabText(handle, segment);
       roots.order.push([key]);
       const target = textTarget(id, key, kind === "h" ? "heading" : "audioText");
-      if (kind === "h") text.insert(0, html.replace(/\p{Cs}/gu, "\ufffd"));
+      if (kind === "h") editCollabText(text, { type: "text", at: 0, value: html.replace(/\p{Cs}/gu, "\ufffd") });
       else insertSharedHtml(handle, target, text, html, tags, source.comments, `${key}:audioText`);
     }
     for (const row of source.rows) {
