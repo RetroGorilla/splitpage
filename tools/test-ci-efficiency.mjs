@@ -37,7 +37,13 @@ const testSteps = ci.jobs.tests.steps;
 assert.equal(testSteps.find((s) => s.name === cache.name)?.run, cache.run);
 assert.ok(testSteps.find((s) => s.name === "Install Chromium")?.run.includes("--with-deps"));
 assert.ok(testSteps.findIndex((s) => s.name === "Install Chromium") < testSteps.findIndex((s) => s.run?.includes("npm run test:all")));
-for (const list of [steps, testSteps]) assert.match(list.find((s) => s.name === "Install Chromium").run, /chromium \|\| \{[\s\S]*?::warning::[\s\S]*?install chromium\n\s*\}/);
+const installWithFallback = /^npx --yes playwright@\$\{PLAYWRIGHT_VERSION\} install \$\{\{ runner\.environment == 'github-hosted' && '--with-deps' \|\| '' \}\} chromium \|\| \{\n(?: *#[^\n]*\n)* *echo "::warning::[^\n"]*"\n *npx --yes playwright@\$\{PLAYWRIGHT_VERSION\} install chromium\n\}\n/;
+for (const list of [steps, testSteps]) {
+  const install = list.find((s) => s.name === "Install Chromium").run;
+  assert.match(install, installWithFallback);
+  assert.doesNotMatch(install.replace("\n  npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium\n", "\n  echo install chromium\n"), installWithFallback);
+  assert.doesNotMatch("true || " + install, installWithFallback);
+}
 assert.equal(ci.jobs.tests.env.SPLITPAGE_CHROME_ARGS, ci.jobs.checks.env.SPLITPAGE_CHROME_ARGS);
 
 const gitPath = process.platform === "win32" ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim() : null;
