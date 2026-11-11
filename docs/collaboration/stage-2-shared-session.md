@@ -58,6 +58,20 @@ entry the wiring supplies, and how a command names such a beat, is open for pack
 A `remote` change carries no `derive` names. Whoever needs derivations refreshed
 after another person's change subscribes and asks for them.
 
+## The held document and its revision
+
+`readAt(select)` hands the selector the held document and the revision it was
+projected at, in one call. A painter records a base only when that revision equals
+the one the replica reports at that moment.
+
+The owner projects inside the replica's notification for the transaction, the same
+synchronous step that applied it, and sets the document and the revision together
+before it publishes. The pair is therefore behind the replica in two places only:
+for an observer the replica tells before the session, during that notification; and
+after a projection that threw, until the next one succeeds. In both, `readAt` gives
+the old document with the old revision, never the old document with the new one.
+A subscriber of the session reads the new pair.
+
 ## Commands
 
 `run(command)` plans against the held projection. A plan without `shared` is rejected
@@ -100,5 +114,5 @@ local person's. This owner answers for itself; the rest is named for its package
 
 ## Deliberate defects
 
-`tests/collab/shared-session-mutants.json` holds eight, each listed in
+`tests/collab/shared-session-mutants.json` holds nine, each listed in
 `tests/collab/mutants.md` with the test that fails.

@@ -265,9 +265,27 @@ test("re-entry: a command issued from undo recording, an effect or a handler ins
 test("a subscriber reads the new projection and revision during its notification", () => {
   const replica = fakeReplica(script()), h = sharedHarness(replica.port);
   const seen: unknown[] = [];
-  h.session.subscribe(() => { seen.push([h.session.revision(), h.session.read(doc => doc?.title)]); });
+  h.session.subscribe(() => { seen.push([h.session.revision(), h.session.read(doc => doc?.title), h.session.readAt((doc, revision) => [revision, doc?.title])]); });
   replica.write("remote", script({ title: "Theirs" }));
-  assert.deepEqual(seen, [[2, "Theirs"]]);
+  assert.deepEqual(seen, [[2, "Theirs", [2, "Theirs"]]]);
+});
+
+test("readAt gives the held document with the revision it was projected at, in one call: an observer told before the session still gets the old pair", () => {
+  const replica = fakeReplica();
+  const early: unknown[] = [];
+  let read: () => unknown = () => "no session";
+  replica.port.observe(() => { early.push([replica.port.revision(), read()]); });
+  const h = sharedHarness(replica.port);
+  read = () => h.session.readAt((doc, revision) => [revision, doc ? doc.title : null]);
+  assert.deepEqual(read(), [0, null]);
+  replica.write("hydration", script());
+  replica.write("remote", script({ title: "Theirs" }));
+  replica.echo("remote");
+  assert.deepEqual(early, [[1, [0, null]], [2, [1, "Title"]], [2, [2, "Theirs"]]]);
+  assert.deepEqual(read(), [2, "Theirs"]);
+  replica.fail(new Error("projection"));
+  replica.write("remote", script({ title: "Unseen" }));
+  assert.deepEqual([replica.port.revision(), read()], [3, [2, "Theirs"]]);
 });
 
 test("a throw in undo recording, an effect or a subscriber is reported once, the later steps still run and the command is committed", () => {

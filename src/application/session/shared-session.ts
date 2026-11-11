@@ -3,7 +3,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { WHOLE_DOCUMENT, changeSet } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
 import { DISPOSED, NO_DOCUMENT } from "./document-session.ts";
-import type { Command, CommandOutcome, CommandRefusal, CommonDocumentSession, Plan, SessionCounters, SessionListener } from "./document-session.ts";
+import type { Command, CommandOutcome, CommandRefusal, CommonDocumentSession, DocumentView, Plan, SessionCounters, SessionListener } from "./document-session.ts";
 import { attempt, createEffectScheduler } from "./effects.ts";
 import type { RefreshTiming } from "./effects.ts";
 import type { CapabilityPort, DocumentEntry, EffectPort, ReportPort, TimerPort, UndoPort } from "./ports.ts";
@@ -34,6 +34,7 @@ export interface SharedSessionPorts {
 
 export interface SharedDocumentSession extends CommonDocumentSession {
   revision: () => number;
+  readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
 }
 
 export const NOT_SHARED = "not shared";
@@ -184,6 +185,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     generation: function () { return generation; },
     revision: function () { return revision; },
     read: function (select) { return select(document); },
+    readAt: function (select) { return select(document, revision); },
     run: run,
     refresh: function (job) { scheduler.refresh(job); },
     cancelRefresh: function (jobs) { scheduler.cancelRefresh(jobs); },

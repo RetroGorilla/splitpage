@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { ORIGIN_KINDS, REENTERED } from "../../../src/application/session/shared-session.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { SessionChange } from "../../../src/application/session/change-set.ts";
-import { applySharedUpdate, destroySharedDocument, encodeSharedState, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSharedTransactions, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
@@ -175,6 +175,24 @@ test("split: one transaction names the shortened cell and the inserted beat on b
     for (const made of [w.a, w.b]) assert.deepEqual(projectSharedDocument(made.handle).rows.map(row => row.id), ["R1", "[\"structure\",\"1\",\"enter\",\"beat\"]", "R2"]);
     assert.deepEqual([w.a.updates(), w.b.updates()], [1, 1]);
   } finally { w.close(); }
+});
+
+test("paint-time base: an observer told of a received update before the owner still reads the old document with the old revision; once published, both have moved together", () => {
+  const run = recordReplicas(2, SOURCE);
+  const seen: unknown[] = [];
+  let pair: () => unknown = () => "no owner";
+  const stop = observeSharedTransactions(run.b, origin => { seen.push(["observer", origin, readSharedRevision(run.b), pair()]); });
+  const a = seat(run.a), b = seat(run.b);
+  pair = () => b.h.session.readAt((doc, revision) => [revision, doc?.rows[0]?.["lengthSeconds"] ?? null]);
+  b.h.session.subscribe(() => { seen.push(["subscriber", readSharedRevision(run.b), pair()]); });
+  try {
+    assert.deepEqual([readSharedRevision(run.b), pair()], [1, [1, null]]);
+    assert.deepEqual(a.h.session.run(length("A", "o1", 7)), { kind: "applied", generation: 1, changes: LENGTH });
+    assert.deepEqual(seen, []);
+    run.queue.flush("D1");
+    assert.deepEqual(seen, [["observer", "remote", 2, [1, null]], ["subscriber", 2, [2, 7]]]);
+    assert.deepEqual([readSharedRevision(run.b), pair()], [2, [2, 7]]);
+  } finally { stop(); a.h.session.dispose(); b.h.session.dispose(); run.close(); }
 });
 
 const ADAPTER_ORIGIN_KINDS: Record<SharedTransactionOrigin, string> = {
