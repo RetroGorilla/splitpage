@@ -4,7 +4,7 @@ import type { SharedPreparationView } from "./prepare.ts";
 import type { SharedMarkWritePlan } from "./mark-plan.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
-import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextRange, SharedTextPreparationError } from "./executor-text-plan.ts";
+import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextRange, requireSharedTextOwnership, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedPreparedTextInsert } from "./prepare-value.ts";
@@ -39,6 +39,7 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
     if (left && right && left.from > right.from || !left && !right && plan.units.length) throw new SharedTextPreparationError("invalid-reference");
     let offset = (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0;
     offset = sharedTextRange(plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join(""), offset, offset).from;
+    requireSharedTextOwnership(view, plan, offset, offset);
     const chunks = operation.content.map((chunk, chunkIndex) => {
       const value = sharedPreparedTextInsert(inline(chunk.value));
       if (typeof value !== "string" && (!value || typeof value !== "object" || Array.isArray(value))) throw new SharedTextPreparationError("invalid-content");
@@ -79,6 +80,7 @@ export function prepareSharedTextDeletion(operation: SharedTextDelete, view: Sha
       if (last?.to === index) last.to++;
       else ranges.push({ from: index, to: index + 1 });
     }
+    for (const range of ranges) requireSharedTextOwnership(view, plan, range.from, range.to);
     ranges.reverse();
     for (const range of ranges) spliceSharedTextPlan(plan, range.from, range.to, []);
     return preparedTextDescription(ranges.length ? [sharedTextOverlay(plan)] : [], ranges.map(range => ({ kind: "edit", write: { target: plan.target,
