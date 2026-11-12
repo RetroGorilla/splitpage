@@ -58,19 +58,44 @@ and the real `migrateRows` pipeline on every copy. A seeded tuple test checks
 unambiguous components and unchanged ids after load, including escaped separators,
 ambiguous decimal concatenations and refused stripped characters.
 
-The identity history model has this literal declared limit:
+A local reservation cannot observe an undelivered native creation. Rule 21
+therefore selects the first beat in merged document order for each cleaned id;
+later beats with that cleaned id go to recovery without renaming. The pinned
+native history shows Reserved, keeps Created in recovery, and a command planned
+from the loaded Reserved row edits Reserved. Text, scalar and status preparation
+resolve the displayed id to that same native record. The identity checkpoint
+model's literal declared-limit table is now empty; unmatched violations fail.
+It compares patched reservations with a fresh encoded-state index at every checkpoint.
 
-| Declared limit | Replacement rule in the span/address cut |
-| --- | --- |
-| same cleaned beat id created at the same moment: the load renames the later beat and a command addressed to the id reaches the other one | The first beat in merged document order keeps the cleaned id and is the row; later beats with that cleaned id go to recovery without renaming. Address resolution reaches the beat shown. |
+[Assumed rule 25](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6812501580):
+a beat whose stored id cleans to empty has no row or invented id; its text goes
+to recovery with reason `invalid-beat-id`. A literal native `[]` case checks this
+on three writers and an encoded late joiner, including unchanged-state refusal.
 
-A local reservation cannot observe an undelivered native creation. This case is
-not emitted by the app: each writer's generated ids carry its own writer component.
-The pinned native history currently loads Reserved under the shared Created id,
-renames Created, and a command planned for Reserved edits Created instead. The next
-cut must replace that literal outcome with the decided projection/address rule.
-The seeded checkpoint model collects violations and compares them with this table;
-it compares patched reservations with a fresh encoded-state index at every checkpoint.
+The core `projectSharedBlocks` interpreter owns both projection and write spans.
+Preparation assembles only candidate streams for the requested cleaned identity
+and the touched segment's boundaries. Its per-call planned heads, records and
+text units use the same interpreter. Adjacent boundaries naming the same raw beat
+coalesce; later occurrences, invalid records and foreign owners give no write span.
+Projected unit positions exclude structural and unreadable embeds. Flow offsets,
+painted identities and native anchors therefore address the visible fragment;
+an insertion before an adjacent head boundary clamps past it. A recovered fragment
+cannot be edited through a beat address.
+
+One text-location resolver serves preparation and native readers. It maps a created
+beat's flow-shaped visual address through `beats[id].visual`, and maps a displayed
+cleaned beat id to the selected native record and physical segment. Stored mark
+anchors remain physical, including in recovery; they never reroute to a competing
+beat. Hydration builds physical marks before publishing its beat records and
+before transaction observers run, so it bypasses logical resolution during that phase.
+
+The malformed-boundary model compares write spans and projected fragments at each
+of 1,368 seeded checkpoints over 19 shapes, on the writers and encoded late joins.
+Literal adjacent-head edits cover offsets 0, 1 and 2 with native and flow references.
+Measured prepare `get` calls with 0/10,000 unrelated records fall from 3/3 to 0/0
+for split, 12/12 to 1/1 for two ordered creations, and 10/10 to 0/0 for rich inline
+creation. These counters cover the preparation port, not text facade reads.
+Owner lookup separately asserts 0/0 native record reads and zero whole-order reads.
 
 A creation resolves logical neighbours to their current spans. Within a physical
 segment it inserts a beat boundary and reuses the existing text and mark store;

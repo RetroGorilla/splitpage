@@ -4,6 +4,9 @@ import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from "./state.ts";
 import { transactSharedDocument } from "./document.ts";
+import { resolveSharedTextLocation } from "./text-location.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
+import { resolveIndexedStructureOwner } from "./structure-plan.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
   assertSharedDocumentIdle(collabState(handle));
@@ -33,6 +36,24 @@ export function readSharedTextTarget(raw: unknown): SharedTextAddress | null {
 }
 
 export function collabTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+  const state = collabState(handle);
+  // why: Hydration writes text marks before publishing the beat record and the metadata observer runs at transaction end.
+  if (state.hydrating) return collabPhysicalTextTarget(handle, raw);
+  const index = observeSharedStructureIndex(handle);
+  const get = (path: readonly string[]): unknown => {
+    let value: unknown = state.roots[path[0] as keyof typeof state.roots];
+    for (const key of path.slice(1)) { if (!(value instanceof Y.Map)) return undefined; value = value.get(key); }
+    return value;
+  };
+  try {
+    const found = resolveSharedTextLocation({ get, kind: path => {
+      const value = get(path); return value instanceof Y.Map ? "map" : value instanceof Y.Text ? "text" : value instanceof Y.Array ? "array" : value === undefined ? "missing" : "value";
+    }, resolveOwner: (owner, field) => resolveIndexedStructureOwner(index, owner, field) }, raw);
+    return collabPhysicalTextTarget(handle, found.target);
+  } catch { return null; }
+}
+
+export function collabPhysicalTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
   const target = readSharedTextTarget(raw);
   if (!target) return null;
   const { roots } = collabState(handle);

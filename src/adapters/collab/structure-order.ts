@@ -3,7 +3,6 @@ import type { SharedPreparationView } from "./prepare.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
 import { SharedStructurePreparationError, sharedStructureReference } from "./structure-identity.ts";
 import type { SharedContentRef, SharedIdentityGap } from "../../core/collab/operations.ts";
-import { isStableSharedIdentity } from "./identity.ts";
 
 import type { SharedStructureOrderView } from "./structure-order-index.ts";
 import { sharedOrderPlan, readPlannedStructureIndex } from "./structure-order-index.ts";
@@ -11,12 +10,8 @@ import { sharedOrderPlan, readPlannedStructureIndex } from "./structure-order-in
 export function sharedStructureSegment(view: SharedPreparationView, raw: SharedContentRef): string {
   const reference = sharedStructureReference(view, raw);
   if (view.kind(["segments", reference]) === "map") return reference;
-  for (const [root, prefix] of [["beats", "b:"], ["headings", "h:"]] as const) {
-    if (view.kind([root, reference]) !== "map") continue;
-    const segment = view.get([root, reference, "segment"]);
-    if (segment !== undefined && (typeof segment !== "string" || !segment || !isStableSharedIdentity(segment))) throw new SharedStructurePreparationError("unstable-identity");
-    return typeof segment === "string" ? segment : prefix + reference;
-  }
+  const owner = view.resolveOwner(reference, "audioText") ?? view.resolveOwner(reference, "heading");
+  if (owner) return owner.segment;
   throw new SharedStructurePreparationError("missing-order-target");
 }
 

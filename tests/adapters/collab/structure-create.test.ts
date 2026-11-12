@@ -228,7 +228,7 @@ test("inline rich creation reads only touched records and freezes its descriptio
       } finally { whole.mock.restore(); }
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [10, 10]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, wholeOrderReads: 0 }));
+  assert.deepEqual(counts, [0, 0]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, wholeOrderReads: 0 }));
 });
 
 test("insertBeats initializes visual runs, marks, gallery records and following narration through the app list", () => {

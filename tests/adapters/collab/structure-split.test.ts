@@ -236,7 +236,7 @@ test("split reads only its touched segment and beat regardless of unrelated beat
       assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads);
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [3, 3]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts }));
+  assert.deepEqual(counts, [0, 0]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts }));
 });
 
 test("planned segment creation uses cached order positions with zero whole-order reads", t => {
@@ -261,7 +261,7 @@ test("planned segment creation uses cached order positions with zero whole-order
       assert.deepEqual(native.toArray().slice(0, 3), [structureIdentityFixture("1", "one", "segment"), structureIdentityFixture("1", "two", "segment"), "b:R1"]);
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [12, 12]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));
+  assert.deepEqual(counts, [1, 1]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));
 });
 
 for (const phase of ["idle", "prepare", "observer"] as const) test(`apply text creation refuses ${phase}`, () => {

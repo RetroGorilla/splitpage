@@ -9,21 +9,26 @@ import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrit
 import { sharedStructureReference } from "./structure-identity.ts";
 import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
+import { resolveIndexedStructureOwner } from "./structure-plan.ts";
 
 export function scalarTarget(handle: SharedDocumentHandle, target: SharedScalarSet["target"]): Y.Map<unknown> | null {
   const roots = collabState(handle).roots;
+  const owner = target.scope === "document" ? target.record : resolveIndexedStructureOwner(observeSharedStructureIndex(handle), target.record, target.scope === "beat" ? "audioText" : "heading")?.owner;
   const record = target.scope === "document" ? roots.meta.get("docId") === target.record ? roots.meta : null
-    : roots[target.scope === "beat" ? "beats" : "headings"].get(target.record);
+    : owner === undefined ? null : roots[target.scope === "beat" ? "beats" : "headings"].get(owner);
   return record instanceof Y.Map ? record : null;
 }
 
 
 function prepareScalar(operation: SharedScalarSet, view: SharedPreparationView): SharedPreparationResult {
   const { target } = operation;
-  const path = target.scope === "document" ? ["meta"] : [target.scope === "beat" ? "beats" : "headings", sharedStructureReference(view, target.record)];
+  const reference = sharedStructureReference(view, target.record), owner = target.scope === "document" ? reference : view.resolveOwner(reference, target.scope === "beat" ? "audioText" : "heading")?.owner;
+  if (!owner) return { ok: false, reason: "missing-target" };
+  const path = target.scope === "document" ? ["meta"] : [target.scope === "beat" ? "beats" : "headings", owner];
   if (view.kind(path) !== "map" || target.scope === "document" && view.get(["meta", "docId"]) !== target.record) return { ok: false, reason: "missing-target" };
   const value = operation.clear ? undefined : target.scope === "heading" && operation.field === "firstSceneId" && typeof operation.value === "string"
-    ? sharedStructureReference(view, operation.value) : operation.value;
+    ? view.resolveOwner(sharedStructureReference(view, operation.value), "audioText")?.owner : operation.value;
   if (!scalarFieldAllowed(target.scope, operation.field, value, operation.clear === true)) return { ok: false, reason: "unsupported-scalar-field" };
   if (target.scope === "heading" && operation.field === "firstSceneId" && (typeof value !== "string" || view.kind(["beats", value]) !== "map")) return { ok: false, reason: "missing-target" };
   const fieldPath = [...path, operation.field];

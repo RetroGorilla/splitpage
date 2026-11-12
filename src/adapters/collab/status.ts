@@ -1,4 +1,4 @@
-import type { SharedStatusEvent } from "../../core/collab/operations.ts";
+import type { SharedStatusEvent, SharedContentRef } from "../../core/collab/operations.ts";
 import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";
 import { ROW_STATUS_IDS } from "../../core/document/timing.ts";
 import { TAG_STATUS_IDS } from "../../core/document/tags.ts";
@@ -8,6 +8,7 @@ import { withSharedSnapshot } from "./snapshot.ts";
 import { createSharedPreparation, applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { sharedStructureReference } from "./structure-identity.ts";
 
 function sameTarget(a: SharedStatusEvent["target"], b: SharedStatusEvent["target"]): boolean {
   return a.scope === b.scope && a.record === b.record;
@@ -103,16 +104,24 @@ function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["t
 }
 
 export function readSharedStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string {
-  return withSharedSnapshot(handle, copy => resolveStatus(createSharedPreparation(copy as unknown as SharedDocumentHandle).view, target));
+  return withSharedSnapshot(handle, copy => {
+    const view = createSharedPreparation(copy as unknown as SharedDocumentHandle).view;
+    return resolveStatus(view, readStatusOwner(view, target));
+  });
+}
+
+function readStatusOwner(view: SharedPreparationView, target: SharedStatusEvent["target"]): SharedStatusEvent["target"] {
+  const owner = target.scope === "beat" ? view.resolveOwner(target.record, "audioText") : null;
+  return owner ? { scope: "beat", record: owner.owner as SharedContentRef } : target;
 }
 
 export function readSharedStatusHeads(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string[] {
-  return withSharedSnapshot(handle, copy => heads(eventsFor(createSharedPreparation(copy as unknown as SharedDocumentHandle).view, target)));
+  return withSharedSnapshot(handle, copy => { const view = createSharedPreparation(copy as unknown as SharedDocumentHandle).view; return heads(eventsFor(view, readStatusOwner(view, target))); });
 }
 
 export function readSharedStatusNotices(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string[] {
   return withSharedSnapshot(handle, copy => {
-    const events = [...eventsFor(createSharedPreparation(copy as unknown as SharedDocumentHandle).view, target).values()];
+    const view = createSharedPreparation(copy as unknown as SharedDocumentHandle).view, events = [...eventsFor(view, readStatusOwner(view, target)).values()];
     const conflicts = events.filter(event => events.some(other => other.value !== event.value
       && JSON.stringify([...new Set(event.parents)].sort()) === JSON.stringify([...new Set(other.parents)].sort())));
     return [...new Set(conflicts.map(event => `${event.by}: concurrent status change did not apply`))].sort();
@@ -120,8 +129,13 @@ export function readSharedStatusNotices(handle: SharedDocumentHandle, target: Sh
 }
 
 export function prepareSharedStatusEvent(operation: SharedStatusEvent, view: SharedPreparationView): SharedPreparationResult {
-  const event = readSharedStatusEvent(operation);
+  let event = readSharedStatusEvent(operation);
   if (event && !stableEvent(event)) return { ok: false, reason: "unstable-identity" };
+  if (event?.target.scope === "beat") {
+    const owner = view.resolveOwner(sharedStructureReference(view, event.target.record), "audioText");
+    if (!owner) return { ok: false, reason: "missing-status-target" };
+    event = readSharedStatusEvent({ ...event, target: { scope: "beat", record: owner.owner } });
+  }
   if (!event || view.kind(targetPath(event.target)) !== "map") return { ok: false, reason: "missing-status-target" };
   const key = JSON.stringify([view.writer, event.id]);
   if (view.kind(["statusEvents", key]) !== "missing") return { ok: false, reason: "duplicate-status-event" };

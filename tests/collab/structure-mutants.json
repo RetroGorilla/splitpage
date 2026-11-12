@@ -41,5 +41,29 @@
     "find": "const value = readSharedIdentityEmbeds(transaction, inspect);",
     "replace": "readSharedIdentityEmbeds(transaction, inspect); const value = readSharedIdentityEmbeds(transaction, inspect);",
     "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+  }, {
+    "label": "repeated head boundary included in write positions",
+    "file": "src/adapters/collab/structure-spans.ts",
+    "find": "return at; })",
+    "replace": "return at; }).map((at, index) => index === 0 ? block.from : at)",
+    "tests": ["tests/adapters/collab/projection-split-recovery.test.ts"]
+  }, {
+    "label": "later cleaned beat identity shown as a second row",
+    "file": "src/core/collab/projection/blocks.ts",
+    "find": "if (!block.reason && beats.has(cleanId(block.id)))",
+    "replace": "if (false && !block.reason && beats.has(cleanId(block.id)))",
+    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+  }, {
+    "label": "empty cleaned beat identity gets a row",
+    "file": "src/core/collab/projection/blocks.ts",
+    "find": "if (!block.reason && !cleanId(block.id))",
+    "replace": "if (false && !block.reason && !cleanId(block.id))",
+    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+  }, {
+    "label": "created visual address ignores its record pointer",
+    "file": "src/adapters/collab/text-location.ts",
+    "find": "view.get([\"beats\", owner, \"visual\"]) ?? owner",
+    "replace": "owner",
+    "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
   }]
 }

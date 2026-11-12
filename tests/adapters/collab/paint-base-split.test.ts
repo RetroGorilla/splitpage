@@ -23,6 +23,23 @@ const SOURCE: SharedTextAddress = { owner: ref("R1"), segment: ref("b:R1"), fiel
 const CREATED: SharedTextAddress = { owner: ref(NEW), segment: ref("b:R1"), field: "audioText" };
 const structurePorts = { cells: createFlowLoadRuntime().cells };
 
+test("created visual text has one flow-shaped address for painted reads and executor writes", () => {
+  const set = replicas(3, { rows: [{ id: "R1", audioText: "ab" }] });
+  try {
+    for (const handle of [set.a, set.b, set.c]) { registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle); }
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "segment-create", id: "enter", by: "Writer", beat: "new", segment: "new",
+      at: { left: "R1", right: null, affinity: "after" }, fields: { visualText: "<strong>Visual</strong>" } })], { base: readSharedRevision(set.a) }), { ok: true });
+    set.queue.flush("dup");
+    const target = { owner: ref(NEW), segment: ref(NEW), field: "visualText" as const };
+    agree("paint created visual", "dup", [set.a, set.b, set.c], handle => readSharedPaintedText(handle, target)?.text, "Visual");
+    const first = readSharedPaintedText(set.b, target)?.identity(0); assert.ok(first);
+    assert.deepEqual(executeSharedOperations(set.b, [operation({ kind: "text-insert", id: "visual-edit", by: "Writer", target,
+      at: { left: null, right: first, affinity: "before" }, content: [{ value: "!", marks: [] }] })], { base: readSharedRevision(set.b) }), { ok: true });
+    set.queue.flush("rev");
+    agree("edit created visual through painted identity", "rev", [set.a, set.b, set.c], handle => readSharedPaintedText(handle, target)?.text, "!Visual");
+  } finally { set.close(); }
+});
+
 function splitAtD(before: boolean) {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" + WHO + "cdef" }, { id: "R2", audioText: "gh" }] });
   for (const handle of [set.a, set.b]) { registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle); }

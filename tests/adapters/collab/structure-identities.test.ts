@@ -25,13 +25,16 @@ import { deliveryReplica, createMonitoredSharedDocument } from "./helpers.ts";
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
+import { readSharedStatus } from "../../../src/adapters/collab/status.ts";
+import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { ref } from "./executor-support.ts";
 
 const runtime = createFlowLoadRuntime(), ports = { cells: runtime.cells };
 const beat = "structure_1_0065006e007400650072_beat_0", segment = "structure_1_0065006e007400650072_segment_0";
 const visual = "structure_1_0065006e007400650072_visual_0", gallery = "structure_1_0065006e007400650072_gallery_0";
 const secondGallery = "structure_1_0065006e007400650072_gallery_1";
 const source = { rows: [{ id: "R1", audioText: "abcd" }] };
-const declaredLimits = ["same cleaned beat id created at the same moment: the load renames the later beat and a command addressed to the id reaches the other one"] as const;
+const declaredLimits: readonly string[] = [];
 const create = (id = "enter") => operation({ kind: "segment-create", id, by: "Writer", beat: "new", segment: "new",
   at: { left: "R1", right: null, affinity: "after" }, fields: { audioText: "<em>P</em>", visualText: '<strong><a href="https://example.com">V</a></strong>',
     imageRef: { sha256: "a".repeat(64) }, moreImages: [{ imageRef: { sha256: "b".repeat(64) } }] } });
@@ -126,7 +129,7 @@ test("cleaned stored identities reserve every creation role before and after reg
         roots[root].set(raw, record);
       });
       if (root === "beats") {
-        const projected = projectSharedDocument(set.a); assert.ok(projected.rows.some(row => row.id === raw));
+        const projected = projectSharedDocument(set.a); assert.ok(projected.rows.some(row => row.id === id));
         assert.ok(runtime.load(projected).rows.some(row => row.id === id));
       }
       set.queue.flush("D1"); registerSharedSplitHandlers(set.b, ports);
@@ -211,7 +214,7 @@ test("split, prefix, blank and rich paste IDs survive projection and app load on
   assert.equal(histories, 32); t.diagnostic(JSON.stringify({ fixedMatrixHistories: histories, kinds: ["split", "split-before", "blank", "paste"] }));
 });
 
-function concurrentCleanedCollision(order: DeliveryOrder): string {
+function concurrentCleanedCollision(order: DeliveryOrder): void {
   const set = replicas(2, source), raw = "[structure_1_0065006e007400650072_beat_0]";
   try {
     registerSharedSplitHandlers(set.a, ports); registerSharedTextOperationHandlers(set.a);
@@ -225,24 +228,65 @@ function concurrentCleanedCollision(order: DeliveryOrder): string {
     set.queue.flush(order);
     const read = (handle: SharedDocumentHandle) => { const projection = projectSharedDocumentWithRecovery(handle); return {
       rows: projection.document.rows.map(row => ({ id: row.id, text: row.audioText })), loaded: runtime.load(projection.document).rows.map(row => ({ id: row.id, text: row.audioText })), recovery: projection.recovery }; };
-    const rows = [{ id: raw, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: beat, text: "Created" }];
-    const loaded = [{ id: beat, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: "structure_1_0065006e007400650072_beat_0-1", text: "Created" }];
-    agree("declared cleaned-id collision before edit", order, [set.a, set.b], read, { rows, loaded, recovery: [] });
+    const rows = [{ id: beat, text: "Reserved" }, { id: "R1", text: "abcd" }];
+    const recovery = [{ kind: "unprojectable-fragment", reason: "duplicate-boundary", owner: beat, segment, field: "audioText", from: 0, to: 7, html: "Created" }] as const;
+    agree("same cleaned beat id keeps the first row", order, [set.a, set.b], read, { rows, loaded: rows, recovery });
+    const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a); let updates = 0;
+    const stop = deliveryReplica(set.a).onLocalUpdate(() => { updates++; });
+    const refused = executeSharedOperations(set.a, [
+      operation({ kind: "scalar", id: "before-hidden-edit", by: "Writer", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 8 }),
+      operation({ kind: "text-insert", id: "hidden-edit", by: "Writer", target: { owner: beat, segment, field: "audioText" },
+        at: { left: null, right: flowBaseReference(beat, "audioText", 0), affinity: "before" }, content: [{ value: "!", marks: [] }] })
+    ], { base: revision });
+    stop(); assert.ok(!refused.ok); assert.equal(refused.reason, "mismatched-target"); assert.equal(refused.index, 1);
+    assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision); assert.equal(updates, 0);
     const held = runtime.load(projectSharedDocument(set.a)), edit = typeWithMarks({ rows: held.rows, comments: [] }, beatPos(beat, 0), "!", {}, { ...runtime.ports, operations: { id: "held", by: "Writer" } });
     assert.ok(edit && "ops" in edit && edit.ops); assert.equal(edit.rows[0]?.audioText, "!Reserved");
     assert.deepEqual(executeSharedOperations(set.a, edit.ops, { base: readSharedRevision(set.a) }), { ok: true }); set.queue.flush(order);
-    agree("declared cleaned-id collision edits the other beat", order, [set.a, set.b], read, {
-      rows: [{ id: raw, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: beat, text: "!Created" }],
-      loaded: [{ id: beat, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: "structure_1_0065006e007400650072_beat_0-1", text: "!Created" }], recovery: []
+    agree("same cleaned beat id edits the shown row", order, [set.a, set.b], read, {
+      rows: [{ id: beat, text: "!Reserved" }, { id: "R1", text: "abcd" }],
+      loaded: [{ id: beat, text: "!Reserved" }, { id: "R1", text: "abcd" }], recovery
     });
-    return declaredLimits[0];
+    assert.deepEqual(executeSharedOperations(set.a, [
+      operation({ kind: "scalar", id: "visible-field", by: "Writer", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 9 }),
+      operation({ kind: "status", id: "visible-status", by: "Writer", target: { scope: "beat", record: beat }, parents: [], prior: "todo", value: "ready" })
+    ]), { ok: true }); set.queue.flush(order);
+    agree("cleaned beat fields resolve to the shown row", order, [set.a, set.b], handle => ({
+      status: readSharedStatus(handle, { scope: "beat", record: ref(beat) }), fields: readSharedScalars(handle, { scope: "beat", record: ref(beat) }),
+      shown: projectSharedDocument(handle).rows[0]?.lengthSeconds,
+      hidden: (collabState(handle).roots.beats.get(beat) as Y.Map<unknown>).get("lengthSeconds")
+    }), { status: "ready", fields: { lengthSeconds: 9 }, shown: 9, hidden: undefined });
   } finally { set.close(); }
 }
 
-test("declared limit: simultaneous cleaned beat identity collision renames the later beat and edits the other one", t => {
+test("simultaneous cleaned beat identity collision keeps and edits the first row and recovers the later text", t => {
   const violations = new Set<string>();
-  for (const order of ["D1", "dup", "rev", "late-C"] as const) violations.add(concurrentCleanedCollision(order));
+  for (const order of ["D1", "dup", "rev", "late-C"] as const) concurrentCleanedCollision(order);
   assert.deepEqual([...violations], declaredLimits); t.diagnostic(JSON.stringify({ histories: 4, declaredLimits, violations: [...violations] }));
+});
+
+test("an empty cleaned native beat id has no invented row id and keeps its text in recovery on every copy", () => {
+  for (const order of ["D1", "dup", "rev", "late-C"] as const) {
+    const set = replicas(3, source);
+    try {
+      transactSharedDocument(set.a, "local-command", () => {
+        const roots = collabState(set.a).roots, beat = new Y.Map<unknown>(), segment = new Y.Map<unknown>();
+        beat.set("id", "[]"); beat.set("segment", "empty"); roots.beats.set("[]", beat);
+        segment.set("head", { b: "[]" }); segment.set("text", new Y.Text("Kept")); segment.set("markRecords", new Y.Map<unknown>());
+        roots.segments.set("empty", segment); roots.order.insert(0, ["empty"]);
+      }); set.queue.flush(order);
+      agree("empty cleaned beat identity", order, [set.a, set.b, set.c], handle => {
+        const out = projectSharedDocumentWithRecovery(handle);
+        return { rows: out.document.rows.map(row => ({ id: row.id, text: row.audioText })), loaded: runtime.load(out.document).rows.map(row => row.id), recovery: out.recovery };
+      }, { rows: [{ id: "R1", text: "abcd" }], loaded: ["R1"], recovery: [{ kind: "unprojectable-fragment", reason: "invalid-beat-id", owner: "[]", segment: "empty", field: "audioText", from: 0, to: 4, html: "Kept" }] });
+      registerSharedTextOperationHandlers(set.b);
+      const bytes = encodeSharedState(set.b), vector = encodeSharedStateVector(set.b), revision = readSharedRevision(set.b);
+      const result = executeSharedOperations(set.b, [operation({ kind: "text-insert", id: "empty-edit", by: "Writer", target: { owner: "[]", segment: "empty", field: "audioText" },
+        at: { left: null, right: flowBaseReference("[]", "audioText", 0), affinity: "before" }, content: [{ value: "!", marks: [] }] })], { base: revision });
+      assert.ok(!result.ok); assert.equal(result.reason, "missing-target");
+      assert.deepEqual(encodeSharedState(set.b), bytes); assert.deepEqual(encodeSharedStateVector(set.b), vector); assert.equal(readSharedRevision(set.b), revision);
+    } finally { set.close(); }
+  }
 });
 
 test("seeded creation and native mutation checkpoints compare maintained reservations with encoded fresh indexes", t => {
@@ -301,7 +345,7 @@ test("seeded creation and native mutation checkpoints compare maintained reserva
       }); histories++;
     } finally { set.close(); }
   }
-  for (const order of ["D1", "dup", "rev", "late-C"] as const) { violations.add(concurrentCleanedCollision(order)); histories++; }
+  for (const order of ["D1", "dup", "rev", "late-C"] as const) { concurrentCleanedCollision(order); histories++; }
   assert.equal(covered.size, 12); assert.equal(histories, 68); assert.deepEqual({ checkpoints, copies, deliveries }, { checkpoints: 1542, copies: 4050, deliveries: 806 });
   assert.deepEqual([...violations].sort(), [...declaredLimits].sort());
   t.diagnostic(JSON.stringify({ seed: 0x14664, histories, checkpoints, copies, deliveries, covered: [...covered].sort(), declaredLimits, violations: [...violations] }));

@@ -20,6 +20,7 @@ import { applySharedTextEdit } from "./text-edit.ts";
 import { applySharedTextDescription } from "./text-description.ts";
 import { sharedStructureView, prepareSharedInitialContent, sharedCreatedAttachments } from "./structure-content.ts";
 import { prepareSharedInitialGallery } from "./structure-gallery.ts";
+import { planSharedStructureOwner, planSharedStructureHead } from "./structure-plan.ts";
 
 export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, view: SharedPreparationView, order: SharedStructureOrderView, ports: SharedStructureContentPorts, identities: SharedStructureIdentityReservations) {
   try {
@@ -54,12 +55,14 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
     writes.push({ kind: "set", path: [...beatPath, "extra"], value: JSON.stringify(Object.fromEntries(extra.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))) });
     writes.push(...prepareSharedInitialGallery(operation, view, beat, identities));
     const overlay = [...writes], texts: { readonly path: readonly string[]; readonly title: boolean }[] = [], content: SharedTextExecutionDescription[] = [];
+    planSharedStructureOwner(view, beat, segment);
     let boundary: SharedTextWritePlan | null = null;
     if (placement.kind === "inline") {
       const { plan, offset } = placement, value = { b: beat };
-      spliceSharedTextPlan(plan, offset, offset, [value]); addSharedTextSource(plan, beat, offset + 1, offset + 1, "audioText");
+      spliceSharedTextPlan(plan, offset, offset, [value]); addSharedTextSource(view, plan, beat, offset + 1, offset + 1, "audioText");
       boundary = { target: plan.target, edit: { type: "atom", at: offset, value }, marks: [] }; overlay.push(sharedTextOverlay(plan));
     } else {
+      planSharedStructureHead(view, segment, { b: beat });
       const text = prepareSharedTextCreation(sharedStructureView(view, overlay), path); if (!text.ok) return text;
       texts.push(text.description); overlay.push(...text.writes);
     }

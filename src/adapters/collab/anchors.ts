@@ -4,7 +4,7 @@ import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { hasLoneSurrogate } from "../../core/document/text-policy.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
-import { collabTextTarget, readSharedTextTarget, collabApplyingTextTarget } from "./text-target.ts";
+import { collabTextTarget, collabPhysicalTextTarget, readSharedTextTarget, collabApplyingTextTarget } from "./text-target.ts";
 
 export type SharedAnchorResolution = { readonly segment: string; readonly offset: number } | "gone";
 export type SharedTextAnchorLocation = { readonly kind: "index" | "gap"; readonly index: number; readonly affinity: "before" | "after" } | { readonly kind: "gone" };
@@ -64,11 +64,12 @@ export function sharedAnchorCharacterEnd(raw: unknown): SharedContentRef | null 
 export function createSharedAnchor(handle: SharedDocumentHandle, address: string | SharedTextAddress, offset: number, affinity: "before" | "after"): SharedContentRef | null {
   const target = typeof address === "string" ? null : readSharedTextTarget(address);
   if (typeof address !== "string" && !target) return null;
-  const segment = typeof address === "string" ? address : target?.segment ?? "";
+  const found = target ? collabTextTarget(handle, target) : null;
+  const segment = typeof address === "string" ? address : found?.target.segment ?? "";
   if (!segment || hasLoneSurrogate(segment) || !Number.isInteger(offset) || offset < 0) return null;
-  const text = target ? collabTextTarget(handle, target)?.text : segmentText(collabState(handle).roots.segments.get(segment));
+  const text = target ? found?.text : segmentText(collabState(handle).roots.segments.get(segment));
   if (!text || offset > text.length) return null;
-  return readSharedAnchor(encodedAnchor(text, segment, target, offset, affinity));
+  return readSharedAnchor(encodedAnchor(text, segment, found?.target ?? target, offset, affinity));
 }
 
 function encodedAnchor(text: Y.Text, segment: string, target: SharedTextAddress | null, offset: number, affinity: "before" | "after"): SharedContentRef {
@@ -87,7 +88,7 @@ export function applySharedTextAnchor(handle: SharedDocumentHandle, description:
 export function resolveCollabTextAnchor(handle: SharedDocumentHandle, raw: unknown, text: Y.Text): SharedTextAnchorLocation {
   const value = readAnchorValue(raw);
   if (!value) return { kind: "gone" };
-  const source = value.target ? collabTextTarget(handle, value.target)?.text : segmentText(collabState(handle).roots.segments.get(value.segment));
+  const source = value.target ? collabPhysicalTextTarget(handle, value.target)?.text : segmentText(collabState(handle).roots.segments.get(value.segment));
   if (source !== text) return { kind: "gone" };
   const position = Y.decodeRelativePosition(value.relative), absolute = Y.createAbsolutePositionFromRelativePosition(position, collabState(handle).doc);
   if (absolute?.type !== text) return { kind: "gone" };
@@ -100,7 +101,7 @@ export function resolveSharedAnchor(handle: SharedDocumentHandle, raw: unknown):
   const value = readAnchorValue(raw);
   if (!value) return "gone";
   const { roots, doc } = collabState(handle);
-  const text = value.target ? collabTextTarget(handle, value.target)?.text : segmentText(roots.segments.get(value.segment));
+  const text = value.target ? collabPhysicalTextTarget(handle, value.target)?.text : segmentText(roots.segments.get(value.segment));
   if (!text) return "gone";
   const absolute = Y.createAbsolutePositionFromRelativePosition(Y.decodeRelativePosition(value.relative), doc);
   return absolute?.type === text ? { segment: value.segment, offset: absolute.index } : "gone";
@@ -109,7 +110,7 @@ export function resolveSharedAnchor(handle: SharedDocumentHandle, raw: unknown):
 export function resolveSharedTextAnchor(handle: SharedDocumentHandle, raw: unknown, target: SharedTextAddress): number | null {
   const value = readAnchorValue(raw), text = collabTextTarget(handle, target)?.text;
   if (!value || !text) return null;
-  const source = value.target ? collabTextTarget(handle, value.target)?.text : segmentText(collabState(handle).roots.segments.get(value.segment));
+  const source = value.target ? collabPhysicalTextTarget(handle, value.target)?.text : segmentText(collabState(handle).roots.segments.get(value.segment));
   if (source !== text) return null;
   const absolute = Y.createAbsolutePositionFromRelativePosition(Y.decodeRelativePosition(value.relative), collabState(handle).doc);
   return absolute?.type === text ? absolute.index : null;
