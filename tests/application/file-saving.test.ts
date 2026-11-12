@@ -52,7 +52,7 @@ function harness(setup: Setup = {}) {
   };
   const ports: FileSavingPorts = {
     edits: { edit: (command) => {
-      const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
+      const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
       if (!plan || "refused" in plan) return false;
       plan.apply(doc);
       state.changes++;

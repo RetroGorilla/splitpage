@@ -11,8 +11,8 @@ import { captureExportDocument } from "./export-capture.ts";
 import { amendHome, currentHome, documentLocation, fileHome, setHome } from "./location-owner.ts";
 import { getEditorName, preferences } from "./preferences-owner.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "./save-owners.ts";
-import { runDocumentEdit, stampDocument } from "./session-owner.ts";
-import { documentReader } from "./ports/document.ts";
+import { runDocumentEdit } from "./session-owner.ts";
+import { documentReader, stamping } from "./ports/document.ts";
 import { notices } from "./ports/effects.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { clock, ids } from "./ports/identity.ts";
@@ -33,7 +33,7 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
     },
     ids,
     clock,
-    document: { current: documentReader.current, stamp: (stamp) => stampDocument(stamp) },
+    document: { current: documentReader.current, stamp: stamping.stamp },
     location: {
       home: () => currentHome(),
       fileHome: () => fileHome(),

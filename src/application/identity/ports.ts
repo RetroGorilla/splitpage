@@ -1,5 +1,6 @@
 import type { DocumentReader } from "../session/document-reader.ts";
-import type { LiveDocumentPort, IdentityPort } from "../transitions/ports.ts";
+import type { StandaloneDocumentSession } from "../session/document-session.ts";
+import type { IdentityPort } from "../transitions/ports.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { HistoryOwner } from "../recovery/history-ports.ts";
 import type { NoticePort } from "../effects/ports.ts";
@@ -14,7 +15,7 @@ export interface IdentityChannel {
 }
 
 export interface DocumentIdentityPorts {
-  readonly session: { readonly currentDocument: DocumentReader["current"]; readonly stampDocument: LiveDocumentPort["stamp"] };
+  readonly session: { readonly currentDocument: DocumentReader["current"]; readonly stampDocument: StandaloneDocumentSession["stamp"] };
   readonly location: Pick<DocumentLocation, "home" | "writtenOut" | "markWrittenOut">;
   readonly history: Pick<HistoryOwner, "copyHistory" | "historyDocumentChanged">;
   readonly effects: Pick<NoticePort, "show">;

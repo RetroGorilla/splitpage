@@ -96,7 +96,8 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
       refresh: function (jobs) { log.push("refresh"); refreshes.push(Array.from(jobs).sort()); }
     },
     capability: {
-      edit: function (): Capability { return denied === null ? { allowed: true } : { allowed: false, reason: denied }; }
+      edit: function (): Capability { return denied === null ? { allowed: true } : { allowed: false, reason: denied }; },
+      comment: function (): Capability { return { allowed: true }; }
     },
     reconcile: {
       anchors: function (doc) {
