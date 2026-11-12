@@ -1,5 +1,6 @@
 import type {
-  SharedContentRef, SharedFieldValue, SharedMarkValue, SharedOperation, SharedStatusEvent, SharedTextAddress
+  SharedContentRef, SharedFieldValue, SharedJsonFields, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
+  SharedTextAddress
 } from "../../core/collab/operations.ts";
 import type { SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
@@ -15,9 +16,12 @@ import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
+import { readSharedRecords } from "./record-reader.ts";
 import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
 
-export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired"]);
+export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
+  "record-create", "record-delete", "record-field"]);
+export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
 export interface SharedCommandDescription { readonly label: string; readonly selection: SharedUndoSelection | null; readonly typing: string | null }
@@ -90,6 +94,22 @@ function fieldNow(handle: SharedDocumentHandle, part: Extract<SharedUndoPart, { 
   return record.has(part.field) ? { value: sharedPreparedValue(record.get(part.field)) as Extract<SharedFieldValue, { clear?: false }>["value"] } : { clear: true };
 }
 
+function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress): SharedJsonFields | null {
+  const found = readSharedRecords(handle, target.collection).find(item => item.key === target.record);
+  return found ? sharedPreparedValue(found.fields) as SharedJsonFields : null;
+}
+
+function recordNow(handle: SharedDocumentHandle, part: { readonly kind: string; readonly target: SharedRecordAddress }): SharedJsonFields | null {
+  // why: gallery slots and visuals are parts of a beat, so their undo comes with the structure commands.
+  if (!SHARED_UNDO_RECORDS.includes(part.target.collection)) throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
+  return recordFields(handle, part.target);
+}
+
+function recordField(fields: SharedJsonFields, field: string): SharedFieldValue {
+  const value = fields[field];
+  return value === undefined ? { clear: true } : { value };
+}
+
 function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: SharedUndoWriter, operations: SharedOperation[]): Planned {
   const author = (): { id: string; by: string } => ({ id: writer.nextId(), by: writer.by });
   switch (part.kind) {
@@ -137,7 +157,7 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: after => {
         const now = command && after(part.target);
         return { effective: wanted.length > 0, part: { kind: "mark-add", target: part.target, mark: part.mark,
-          added: now && command ? occurrencesOf(now, command.id) : [], seen: [] } };
+          added: now && command ? occurrencesOf(now, command.id) : [] } };
       } };
     }
     case "scalar": {
@@ -156,6 +176,24 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       if (command) operations.push(operationOf({ kind: "status", ...command, target: part.target, value: part.value, parents: readSharedStatusHeads(handle, part.target) }));
       return { inverse: () => ({ effective: command !== null, part: { kind: "status", target: part.target, event: command ? eventKey(handle, command.id) : part.event, value: part.value } }) };
     }
+    case "record-create": {
+      const now = recordNow(handle, part), effective = now !== null && same(now, part.fields);
+      // why: undoing a creation removes the record only while it still holds what the creation wrote.
+      if (effective) operations.push(operationOf({ kind: "record-delete", ...author(), target: part.target }));
+      return { inverse: () => ({ effective, part: { ...part, kind: "record-delete" } }) };
+    }
+    case "record-delete": {
+      const effective = recordNow(handle, part) === null, wrote = part.fields.author;
+      // why: a comment or reply keeps its author, so it is put back in that person's name.
+      const by = (part.target.collection === "comments" || part.target.collection === "replies") && typeof wrote === "string" ? wrote : writer.by;
+      if (effective) operations.push(operationOf({ kind: "record-create", id: writer.nextId(), by, target: part.target, fields: part.fields }));
+      return { inverse: () => ({ effective, part: { ...part, kind: "record-create" } }) };
+    }
+    case "record-field": {
+      const now = recordNow(handle, part), effective = now !== null && same(recordField(now, part.field), part.written);
+      if (effective) operations.push(operationOf({ kind: "record-set", ...author(), target: part.target, field: part.field, ...part.prior }));
+      return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
+    }
     default: throw new SharedUndoRefusal("undo-unsupported:" + part.kind);
   }
 }
@@ -168,9 +206,16 @@ export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: Sh
 }
 
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
-  const operations: SharedOperation[] = [], planned: Planned[] = [];
+  const operations: SharedOperation[] = [], planned: Planned[] = [], merged: SharedUndoPart[] = [];
+  for (const part of record.parts) {
+    const last = merged.at(-1);
+    // why: keystrokes of one typing entry in one text are restored together, so they keep their order.
+    if (part.kind === "text" && last?.kind === "text" && same(last.target, part.target)) {
+      merged[merged.length - 1] = { ...last, inserted: [...last.inserted, ...part.inserted], deleted: [...last.deleted, ...part.deleted] };
+    } else merged.push(part);
+  }
   try {
-    for (const part of [...record.parts].reverse()) planned.unshift(planPart(handle, part, writer, operations));
+    for (const part of merged.reverse()) planned.unshift(planPart(handle, part, writer, operations));
   } catch (error) {
     if (error instanceof SharedUndoRefusal) return { ok: false, reason: error.message };
     throw error;
@@ -201,6 +246,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   options: { readonly base?: number }): SharedCommandExecution {
   const before = new Map<string, SharedTextHistory | null>(), priors = new Map<SharedOperation, SharedFieldValue>(), typed = new Map<string, ReadonlySet<string>>();
   const textKey = (target: SharedTextAddress): string => JSON.stringify([target.owner, target.segment, target.field]);
+  const records = new Map<string, SharedJsonFields | null>(), recorded = new Set<string>();
+  const recordKey = (target: SharedRecordAddress): string => JSON.stringify([target.collection, target.record]);
   const inserts = new Set(operations.flatMap(operation => operation.kind === "text-insert" ? [textKey(operation.target)] : []));
   for (const operation of operations) if (operation.kind === "text-delete" || operation.kind === "mark") inserts.delete(textKey(operation.target));
   for (const operation of operations) {
@@ -208,6 +255,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       const key = textKey(operation.target), visible = inserts.has(key) && !typed.has(key) ? readSharedVisibleUnits(handle, operation.target) : null;
       if (visible) typed.set(key, visible);
       else if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, operation.target));
+    } else if (operation.kind === "record-create" || operation.kind === "record-set" || operation.kind === "record-delete") {
+      if (!records.has(recordKey(operation.target))) records.set(recordKey(operation.target), recordFields(handle, operation.target));
     } else if (operation.kind === "scalar") {
       const record = scalarTarget(handle, operation.target);
       if (record) priors.set(operation, record.has(operation.field) ? { value: sharedPreparedValue(record.get(operation.field)) as Extract<SharedFieldValue, { clear?: false }>["value"] } : { clear: true });
@@ -235,7 +284,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (!was || !is) continue;
       if (operation.mark.value !== null) {
         const occurrences = occurrencesOf(is, operation.id);
-        if (occurrences.length) parts.push({ kind: "mark-add", target: operation.target, mark: operation.mark, added: occurrences, seen: [] });
+        if (occurrences.length) parts.push({ kind: "mark-add", target: operation.target, mark: operation.mark, added: occurrences });
         continue;
       }
       const observed = [...new Set(is.records.filter(item => item.record.type === "remove" && namedBy(item.record.operation, "range-mark", operation.id))
@@ -250,8 +299,18 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (prior && written && !same(prior, written)) parts.push({ kind: "scalar", target: operation.target, field: operation.field, prior, written });
     } else if (statusKinds(operation)) {
       parts.push({ kind: "status", target: operation.target, event: eventKey(handle, operation.id), value: operation.value });
-    } else if (operation.kind !== "record-create" && operation.kind !== "record-set" && operation.kind !== "record-delete"
-      && operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire") {
+    } else if (operation.kind === "record-create" || operation.kind === "record-set" || operation.kind === "record-delete") {
+      const key = recordKey(operation.target), was = records.get(key) ?? null, is = recordFields(handle, operation.target);
+      if (recorded.has(key)) continue;
+      recorded.add(key);
+      // why: one record is described once per command, by what it was before and what it is after.
+      if (!was && is) parts.push({ kind: "record-create", target: operation.target, fields: is });
+      else if (was && !is) parts.push({ kind: "record-delete", target: operation.target, fields: was });
+      else if (was && is) for (const field of [...new Set([...Object.keys(was), ...Object.keys(is)])].sort()) {
+        const prior = recordField(was, field), written = recordField(is, field);
+        if (!same(prior, written)) parts.push({ kind: "record-field", target: operation.target, field, prior, written });
+      }
+    } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }

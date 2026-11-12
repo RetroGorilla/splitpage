@@ -99,7 +99,8 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
       }
       return current;
     };
-    const order = (unit: SharedTextIdentity): number => places.get(key(root(unit))) ?? -1;
+    // why: a restored character is ordered by its own place, not by the place of the character it once restored.
+    const order = (unit: SharedTextIdentity): number => places.get(key(unit)) ?? -1;
     const inside = (record: SharedResolvedMarkRecord["record"], at: number): boolean => {
       const start = readSharedAnchorUnit(record.start), end = readSharedAnchorUnit(record.end);
       const from = start && !start.after ? places.get(key(start)) : undefined, to = end?.after ? places.get(key(end)) : undefined;
