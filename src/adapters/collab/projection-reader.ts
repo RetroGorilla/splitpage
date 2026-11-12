@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { scalarFieldAllowed } from "./scalar-executor.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import type { SharedProjectionBeatStructure } from "../../core/collab/projection/joins.ts";
@@ -9,6 +9,7 @@ import { readTextInsert } from "../../core/collab/read-operation.ts";
 import { readSharedStructureBoundary } from "./structure-boundary.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import type { SharedProjectionBoundary, SharedProjectionStream } from "../../core/collab/projection/blocks.ts";
+import { projectSharedJoinGlue, sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
 
 function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
@@ -87,7 +88,7 @@ export function readProjectionBlocks(order: Y.Array<string>, segments: Y.Map<unk
   return projectSharedBlocks(streams, records);
 }
 
-export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>): SharedProjectionBeatStructure {
+export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>, glueRegisters: Y.Map<unknown>): SharedProjectionBeatStructure {
   const joins: SharedProjectionBeatStructure["joins"][number][] = [];
   if (!(raw instanceof Y.Map) || readProjectionFields(raw, "beat")?.id !== id) return { id, joins, removed: false };
   const stored: unknown = raw.get("joins"), removals: unknown = raw.get("removals");
@@ -95,7 +96,7 @@ export function readProjectionBeatStructure(raw: unknown, id: string, retirement
     if (!key || !isStableSharedIdentity(key) || retirements.get(key) === true) continue;
     const value = bag(stored.get(key));
     if (typeof value.into === "string" && value.into.length > 0 && isStableSharedIdentity(value.into) && (value.glue === "" || value.glue === " "))
-      joins.push({ id: key, into: value.into, glue: value.glue });
+      joins.push({ id: key, into: value.into, glue: projectSharedJoinGlue(value.glue, glueRegisters.get(sharedJoinGlueRegisterField(key))) });
   }
   const removed = removals instanceof Y.Map && [...removals.keys()].some(key => key.length > 0 && isStableSharedIdentity(key) && removals.get(key) === true);
   return { id, joins, removed };

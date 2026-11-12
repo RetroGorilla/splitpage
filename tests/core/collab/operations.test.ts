@@ -7,7 +7,8 @@ import { operationExamples } from "./operation-examples.ts";
 const validators = [readers.readTextInsert, readers.readTextDelete, readers.readMarkChange, readers.readSegmentCreate,
   readers.readBeatSplit, readers.readBeatJoin, readers.readJoinGlue, readers.readSoftRemove, readers.readRestore,
   readers.readSegmentMove, readers.readHeadingCreate, readers.readHeadingFinalize, readers.readHeadingRemove,
-  readers.readRecordCreate, readers.readRecordSet, readers.readRecordDelete, readers.readScalarSet, readers.readSharedStatusEvent, readers.readBeatSplitBefore];
+  readers.readRecordCreate, readers.readRecordSet, readers.readRecordDelete, readers.readScalarSet, readers.readSharedStatusEvent, readers.readBeatSplitBefore,
+  readers.readTextRestore, readers.readMarkRetract, readers.readStatusRetire];
 
 for (const { fixture, operation } of operationExamples) {
   test(`${fixture}: accepts literal ${operation.kind} intent without positional indices`, () => {
@@ -133,7 +134,7 @@ test("seeded undeclared JSON fields always invalidate typed operation objects", 
       }
     }
   }
-  context.diagnostic(`${attempts} seeded undeclared-field rejections across 20 readers`);
+  context.diagnostic(`${attempts} seeded undeclared-field rejections across 23 readers`);
 });
 
 test("field clearing remains distinct from null; heading removal can retain or discard the name", () => {
@@ -213,5 +214,5 @@ test("seeded arbitrary values: every validator is total and agrees after a JSON 
     }
   }
   assert.ok(attempts > 30000);
-  context.diagnostic(`${attempts} JSON round-trip comparisons across 20 readers and four seeds`);
+  context.diagnostic(`${attempts} JSON round-trip comparisons across 23 readers and four seeds`);
 });

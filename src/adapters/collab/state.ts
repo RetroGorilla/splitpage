@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 import { declareCollabRoots } from "./roots.ts";
+import { CollabReadCaches } from "./read-cache.ts";
 
 function formattingCleanup(transaction: Y.Transaction): boolean {
   if (transaction.beforeState.size !== transaction.afterState.size) return false;
@@ -36,13 +37,18 @@ export class CollabDocumentState {
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
   readonly hydrationTransactions = new WeakSet<Y.Transaction>();
   hydrating = false;
+  activeOrigin: SharedTransactionOrigin | null = null;
   readonly pendingTickets = new Map<object, Exclude<SharedTransactionOrigin, "cleanup">>();
   adapterBatch = false;
   execution: { applying: boolean } | null = null;
   readonly ingress = new IngressGate();
 
+  readonly reads = new CollabReadCaches();
+
   constructor() {
+    this.doc.on("beforeTransaction", () => guardSharedCallback(this, () => { this.reads.begin(); }));
     this.doc.on("beforeObserverCalls", transaction => guardSharedCallback(this, () => {
+      this.reads.settle(transaction.changed);
       if (this.ingress.frames) this.ingress.holds.add("delivering");
       if (transaction.changed.size || transaction.deleteSet.clients.size || transaction.beforeState.size !== transaction.afterState.size
         || [...transaction.beforeState].some(([client, clock]) => transaction.afterState.get(client) !== clock)) this.revision++;
@@ -144,10 +150,12 @@ function runCollabTransaction(state: CollabDocumentState, origin: Exclude<Shared
       if (transaction.origin === "hydration" && state.fresh && Y.encodeStateAsUpdate(state.doc).length === 2) state.hydrationTransactions.add(transaction);
       state.fresh = false;
       const previous = state.hydrating;
+      const previousOrigin = state.activeOrigin;
       state.hydrating = state.hydrationTransactions.has(transaction);
+      state.activeOrigin = transaction.origin as SharedTransactionOrigin;
       try { change(); }
       catch (error) { recordFailure?.(error); throw error; }
-      finally { state.hydrating = previous; }
+      finally { state.hydrating = previous; state.activeOrigin = previousOrigin; }
     }, ticket);
   } finally { state.pendingTickets.delete(ticket); }
 }

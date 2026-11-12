@@ -13,7 +13,7 @@ export type SharedExecutionResult = { readonly ok: true } | {
   readonly ok: false; readonly index: number; readonly operation: SharedOperation; readonly reason: string;
 };
 
-export interface SharedExecutionOptions { readonly base: number }
+export interface SharedExecutionOptions { readonly base?: number; readonly origin?: "local-command" | "local-undo" }
 export type SharedBaseExecutionResult = SharedExecutionResult | { readonly ok: false; readonly reason: "stale-base" };
 
 export function executeSharedOperations(handle: SharedDocumentHandle, operations: readonly SharedOperation[]): SharedExecutionResult;
@@ -28,7 +28,7 @@ function runSharedExecution(state: CollabDocumentState, handle: SharedDocumentHa
   const execution = { applying: false };
   state.execution = execution;
   try {
-    if (options && options.base !== readSharedRevision(handle)) return { ok: false, reason: "stale-base" };
+    if (options?.base !== undefined && options.base !== readSharedRevision(handle)) return { ok: false, reason: "stale-base" };
     const handlers = { ...scalarHandlers, ...registeredSharedOperationHandlers(handle) };
     const preparation = createSharedPreparation(handle, options?.base ?? null), accepted: Extract<SharedPreparationResult, { ok: true }>[] = [];
     let index = 0;
@@ -46,7 +46,7 @@ function runSharedExecution(state: CollabDocumentState, handle: SharedDocumentHa
       preparation.include(prepared.writes); accepted.push(prepared);
       index++;
     } } finally { preparation.close(); }
-    if (accepted.length) transactCollabState(state, "local-command", () => {
+    if (accepted.length) transactCollabState(state, options?.origin ?? "local-command", () => {
       execution.applying = true;
       try { for (const prepared of accepted) prepared.apply(handle); }
       finally { execution.applying = false; }

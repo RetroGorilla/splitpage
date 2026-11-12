@@ -157,7 +157,7 @@ test("range mark preparation reads one cached text and no whole root", () => {
       } finally { reads.mock.restore(); gets.mock.restore(); restores.forEach(restore => restore()); }
     } finally { destroySharedDocument(handle); }
   }
-  assert.deepEqual(counts, [2, 2]);
+  assert.deepEqual(counts, [0, 0]);
 });
 
 for (const kind of ["comment", "tag", "link"] as const) test(`two writers give ${kind} additions distinct native occurrences and remove only observed additions`, () => {

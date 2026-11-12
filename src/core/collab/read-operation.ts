@@ -193,12 +193,24 @@ export function readRecordDelete(raw: unknown) {
   return readKind(raw, "record-delete", { target: recordAddress });
 }
 export function readScalarSet(raw: unknown) { return readField(raw, "scalar", scalarAddress); }
-export function readSharedStatusEvent(raw: unknown) {
-  const event = readKind(raw, "status", { target: value => fields(value, { scope: oneOf("beat", "tag", "shot"), record: ref }),
-    value: string, parents: list(ref) }, { prior: normalize });
+function statusTarget(raw: unknown): unknown { return fields(raw, { scope: oneOf("beat", "tag", "shot"), record: ref }); }
+function statusValue<Event extends { readonly target: { readonly scope: "beat" | "tag" | "shot" }; readonly value: string }>(event: Event | null): Event | null {
   if (!event) return null;
   const values: readonly string[] = event.target.scope === "beat" ? ROW_STATUS_IDS : event.target.scope === "tag" ? TAG_STATUS_IDS : BROLL_STATUS_IDS;
   return values.includes(event.value) ? event : null;
+}
+export function readSharedStatusEvent(raw: unknown) {
+  return statusValue(readKind(raw, "status", { target: statusTarget, value: string, parents: list(ref) }, { prior: normalize }));
+}
+export function readTextRestore(raw: unknown) {
+  return readKind(raw, "text-restore", { target: address,
+    units: list(unit => fields(unit, { unit: ref, left: nullableRef, value: inline, marks: list(ref) })) });
+}
+export function readMarkRetract(raw: unknown) {
+  return readKind(raw, "mark-retract", { target: address, occurrences: list(ref) });
+}
+export function readStatusRetire(raw: unknown) {
+  return statusValue(readKind(raw, "status-retire", { target: statusTarget, event: ref, value: string }));
 }
 
 export function readOperation(raw: unknown): SharedOperation | null {
@@ -225,6 +237,9 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "record-delete": return readRecordDelete(value);
       case "scalar": return readScalarSet(value);
       case "status": return readSharedStatusEvent(value);
+      case "text-restore": return readTextRestore(value);
+      case "mark-retract": return readMarkRetract(value);
+      case "status-retire": return readStatusRetire(value);
       default: return null;
     }
   } catch { return null; }

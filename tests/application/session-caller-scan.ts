@@ -181,3 +181,164 @@ export function untypedStandaloneAccesses(probe?: string): Record<string, string
   }
   return found;
 }
+
+export function typedStandaloneInventory(probes?: Readonly<Record<string, string>>) {
+  function modules(path: string): string[] {
+    return readdirSync(join(REPO, path), { withFileTypes: true }).flatMap(entry => {
+      const inner = path + "/" + entry.name;
+      if (entry.isDirectory()) return inner === SOURCE + "/test" ? [] : modules(inner);
+      return /\.(?:ts|js|mjs)$/.test(entry.name) && !/\.(?:test|d)\.(?:ts|js|mjs)$/.test(entry.name) ? [inner] : [];
+    });
+  }
+  const names = ["stamp", "amend", "noteEdit", "held"] as const;
+  const declarations = [
+    ["application/production/broll-records.ts", "RecordsReconcilerPorts", "held"],
+    ["application/editing/undo/undo.ts", "UndoPorts", "held"],
+    ["application/save/project-files.ts", "ProjectFilesPorts", "heldDocument"],
+    ["application/session/session-merge-ports.ts", "SessionMergeSession", "held"]
+  ] as const;
+  const paths = probes ? Object.keys(probes).sort() : modules(SOURCE).sort().map(path => path.slice(SOURCE.length + 1));
+  const absolute = (path: string): string => join(REPO, SOURCE, path);
+  const canonical = (path: string): string => ts.sys.useCaseSensitiveFileNames ? path.split("\\").join("/") : path.split("\\").join("/").toLowerCase();
+  const overrides = new Map(Object.entries(probes ?? {}).map(([path, source]) => [canonical(absolute(path)), source]));
+  const options: ts.CompilerOptions = {
+    allowJs: true, noEmit: true, strict: true, skipLibCheck: true, types: [], resolveJsonModule: true,
+    target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    allowImportingTsExtensions: true
+  };
+  const host = ts.createCompilerHost(options);
+  const read = host.readFile;
+  const exists = host.fileExists;
+  host.readFile = path => overrides.get(canonical(path)) ?? read(path);
+  host.fileExists = path => overrides.has(canonical(path)) || exists(path);
+  const roots = [...new Set([...paths, "application/session/document-session.ts", ...declarations.map(([path]) => path)])];
+  const program = ts.createProgram(roots.map(absolute), options, host);
+  const checker = program.getTypeChecker();
+  const contract = program.getSourceFile(absolute("application/session/document-session.ts"));
+  const standalone = contract?.statements.find((node): node is ts.InterfaceDeclaration => ts.isInterfaceDeclaration(node) && node.name.text === STANDALONE);
+  if (!standalone) throw new Error("Standalone session contract was not loaded");
+  const session = checker.getTypeAtLocation(standalone);
+  const symbols = new Set(checker.getPropertiesOfType(session));
+  const memberTypes = new Map([...symbols].map(symbol => [symbol.name, checker.getTypeOfSymbolAtLocation(symbol, standalone)]));
+  const carriedTypes = new Set(memberTypes.values());
+  const members: Record<string, Counts> = { stamp: {}, amend: {}, noteEdit: {}, held: {} };
+  const typePositions: Counts = {};
+  const dynamicAccesses: Counts = {};
+  function matches(type: ts.Type, seen = new Set<ts.Type>()): readonly string[] {
+    if (seen.has(type)) return [];
+    seen.add(type);
+    if (type.isUnionOrIntersection()) return [...new Set(type.types.flatMap(part => matches(part, seen)))];
+    return names.filter(name => memberTypes.get(name) === type);
+  }
+  function carries(type: ts.Type, seen = new Set<ts.Type>()): boolean {
+    if (seen.has(type)) return false;
+    seen.add(type);
+    if (type === session || carriedTypes.has(type)) return true;
+    if (type.isUnionOrIntersection()) return type.types.some(part => carries(part, seen));
+    return checker.getPropertiesOfType(type).some(symbol => checker.getRootSymbols(symbol).some(root => symbols.has(root)));
+  }
+  function literalName(node: ts.Node): string | null {
+    if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isComputedPropertyName(node) && ts.isStringLiteralLike(node.expression)) return node.expression.text;
+    return null;
+  }
+  function finiteKeys(type: ts.Type, seen = new Set<ts.Type>()): readonly string[] | null {
+    if (type.isStringLiteral()) return [type.value];
+    if (seen.has(type)) return null;
+    seen.add(type);
+    if (type.isUnion()) {
+      const keys: string[] = [];
+      for (const part of type.types) {
+        const found = finiteKeys(part, new Set(seen));
+        if (found === null) return null;
+        keys.push(...found);
+      }
+      return [...new Set(keys)];
+    }
+    const constraint = checker.getBaseConstraintOfType(type);
+    return constraint && constraint !== type ? finiteKeys(constraint, seen) : null;
+  }
+  function propertyNames(node: ts.Node): readonly string[] | null {
+    const name = literalName(node);
+    if (name !== null) return [name];
+    return ts.isComputedPropertyName(node) ? finiteKeys(checker.getTypeAtLocation(node.expression)) : null;
+  }
+  function standaloneReceiver(type: ts.Type, at: ts.Node): boolean {
+    if (carries(type)) return true;
+    if (type.isUnionOrIntersection()) return type.types.some(part => standaloneReceiver(part, at));
+    return checker.getPropertiesOfType(type).some(symbol => matches(checker.getTypeOfSymbolAtLocation(symbol, at)).length > 0);
+  }
+  for (const path of paths) {
+    const source = program.getSourceFile(absolute(path));
+    if (!source) throw new Error("Typed session caller was not loaded: " + path);
+    const count = (type: ts.Type): void => {
+      for (const name of matches(type)) {
+        const inventory = members[name];
+        if (inventory) inventory[path] = (inventory[path] ?? 0) + 1;
+      }
+    };
+    function dynamic(from: ts.Type, at: ts.Node): void {
+      if (standaloneReceiver(from, at)) dynamicAccesses[path] = (dynamicAccesses[path] ?? 0) + 1;
+    }
+    function property(from: ts.Type, name: string, at: ts.Node): ts.Type | null {
+      const symbol = checker.getPropertyOfType(checker.getNonNullableType(from), name);
+      if (!symbol) return null;
+      const type = checker.getTypeOfSymbolAtLocation(symbol, at);
+      count(type);
+      return type;
+    }
+    function binding(pattern: ts.ObjectBindingPattern, from: ts.Type): void {
+      for (const element of pattern.elements) {
+        if (element.dotDotDotToken) continue;
+        const names = propertyNames(element.propertyName ?? element.name);
+        if (names === null) {
+          if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) dynamic(from, element);
+          continue;
+        }
+        for (const name of names) {
+          const type = property(from, name, element) ?? checker.getTypeAtLocation(element.name);
+          if (!checker.getPropertyOfType(checker.getNonNullableType(from), name)) count(type);
+          if (type && ts.isObjectBindingPattern(element.name)) binding(element.name, type);
+        }
+      }
+    }
+    function assignment(pattern: ts.ObjectLiteralExpression, from: ts.Type): void {
+      for (const element of pattern.properties) {
+        if (!ts.isPropertyAssignment(element) && !ts.isShorthandPropertyAssignment(element)) continue;
+        const names = propertyNames(element.name);
+        if (names === null) {
+          if (ts.isComputedPropertyName(element.name)) dynamic(from, element);
+          continue;
+        }
+        for (const name of names) {
+          const type = property(from, name, element);
+          if (type && ts.isPropertyAssignment(element) && ts.isObjectLiteralExpression(element.initializer)) assignment(element.initializer, type);
+        }
+      }
+    }
+    const visit = (node: ts.Node): void => {
+      if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+        const from = checker.getTypeAtLocation(node.expression);
+        count(from);
+        const names = ts.isPropertyAccessExpression(node) ? [node.name.text] : finiteKeys(checker.getTypeAtLocation(node.argumentExpression));
+        if (names === null) dynamic(from, node);
+        else for (const name of names) property(from, name, node);
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) count(checker.getTypeAtLocation(node.expression));
+      if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isObjectBindingPattern(node.name)) binding(node.name, checker.getTypeAtLocation(node.initializer ?? node));
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isObjectLiteralExpression(node.left)) assignment(node.left, checker.getTypeAtLocation(node.right));
+      if (ts.isTypeNode(node) && carries(checker.getTypeFromTypeNode(node))) typePositions[path] = (typePositions[path] ?? 0) + 1;
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  const held = memberTypes.get("held");
+  const portMemberTypes: Record<string, boolean> = {};
+  for (const [path, owner, name] of declarations) {
+    const source = program.getSourceFile(absolute(path));
+    const declaration = source?.statements.find((node): node is ts.InterfaceDeclaration => ts.isInterfaceDeclaration(node) && node.name.text === owner);
+    const member = declaration?.members.find(node => ts.isPropertySignature(node) && literalName(node.name) === name);
+    portMemberTypes[path + "#" + owner + "." + name] = !!member && ts.isPropertySignature(member) && !!member.type && checker.getTypeFromTypeNode(member.type) === held;
+  }
+  return { members, typePositions, portMemberTypes, dynamicAccesses };
+}

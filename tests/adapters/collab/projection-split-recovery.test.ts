@@ -10,6 +10,12 @@ import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { readPureMergedProjection, literalMergedDocument, mergedProjectionSave } from "./projection-merged-support.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import type { SharedStoredMarkValue } from "../../../src/adapters/collab/stored-mark.ts";
+import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
+import { sharedStructureSpans } from "../../../src/adapters/collab/structure-spans.ts";
+import { readProjectionBlocks } from "../../../src/adapters/collab/projection-reader.ts";
+import { readProjectionUnits } from "../../../src/adapters/collab/projection-text-reader.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 
 function fragment(reason: string, owner: string | null, segment: string, from: number, to: number, html: string) {
   return { kind: "unprojectable-fragment", reason, owner, segment, field: "audioText", from, to, html };
@@ -94,8 +100,36 @@ function check(run: ReturnType<typeof splitReplicas>, scenario: typeof scenarios
   for (const handle of run.handles) {
     const actual = readPureMergedProjection(handle); assert.deepEqual(actual.view, { document, recovery: scenario.recovery }); assert.equal(actual.save, mergedProjectionSave(document));
   }
-  agree(scenario.name, order, run.handles, readPureMergedProjection);
+  agree(scenario.name, order, run.handles, handle => {
+    const roots = collabState(handle).roots, prep = createSharedPreparation(handle);
+    try {
+      prep.view.resolveOwner("R1", "audioText");
+      const expected = readProjectionBlocks(roots.order, roots.segments, roots.beats, container => readProjectionUnits(handle, container.get("text"), container.get("markRecords")))
+        .filter(block => block.kind === "b" && !block.reason).map(block => ({ owner: block.id, segment: block.segment, from: block.from, to: block.to, values: block.units.map(unit => unit.value) }));
+      const actual = roots.order.toArray().flatMap(segment => {
+        const text = prep.view.text(["segments", segment, "text"]); if (!text) return [];
+        return sharedStructureSpans(prep.view, segment, text.units).filter(span => span.field === "audioText")
+          .map(span => ({ owner: span.owner, segment, from: span.from, to: span.to, values: span.positions.map(position => text.units[position]?.value) }));
+      });
+      assert.deepEqual(actual, expected);
+      return readPureMergedProjection(handle);
+    } finally { prep.close(); }
+  });
 }
+
+for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) for (const native of [false, true]) for (const offset of [0, 1, 2])
+  test(`edit-after-damage handoff: adjacent head boundary projects ab; type at ${offset}, ${native ? "native" : "flow"}, ${copies} copies ${order}`, () => {
+    const run = splitReplicas(copies, { rows: [{ id: "R1", audioText: "" }, { id: "R2", audioText: "v" }] });
+    try {
+      const scenario = scenarios[16]; assert.ok(scenario); author(run.a, scenario); run.queue.flush(order);
+      const right = native ? createSharedAnchor(run.b, "b:R1", offset ? offset + 1 : 0, "after") : flowBaseReference("R1", "audioText", offset); assert.ok(right);
+      submitProjectionOperations(run.b, [{ kind: "text-insert", id: "damage-edit", by: "Writer", target: { owner: "R1", segment: "R1", field: "audioText" },
+        at: { left: null, right, affinity: "before" }, content: [{ value: "!", marks: [] }] }]);
+      const texts = ["!ab", "a!b", "ab!"], expected = texts[offset]; assert.ok(expected);
+      check(run, { ...scenario, rows: [splitOriginal(expected), second] }, order);
+      agree("paint after adjacent boundary", order, run.handles, handle => readSharedPaintedText(handle, { owner: ref("R1"), segment: ref("R1"), field: "audioText" })?.text, expected);
+    } finally { run.close(); }
+  });
 
 for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) test(`recovered duplicate fragment retains formatting, tag, link, comment and atom: ${copies} copies ${order}`, () => {
   const scenario = scenarios[5]; assert.ok(scenario);
@@ -109,9 +143,12 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
     const target = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
     const marks: readonly SharedStoredMarkValue[] = [{ kind: "b", value: true }, { kind: "comment", id: ref("c"), value: ref("C1") },
       { kind: "link", id: ref("l"), value: "https://example.test/" }, { kind: "tag", id: ref("t"), value: ref("t:prop:Box") }];
-    marks.forEach((mark, index) => {
-      const record = prepareSharedMarkRecord(run.a, target, "fragment" + index, 4, index === 3 ? 5 : 6, { type: "add", mark });
-      assert.ok(record); assert.deepEqual(writeSharedMarkRecord(run.a, target, "fragment" + index, record), { ok: true });
+    // why: Recovery projection must retain imported marks even though native editing cannot target the recovered text.
+    transactSharedDocument(run.a, "hydration", () => {
+      marks.forEach((mark, index) => {
+        const record = prepareSharedMarkRecord(run.a, target, "fragment" + index, 4, index === 3 ? 5 : 6, { type: "add", mark });
+        assert.ok(record); assert.deepEqual(writeSharedMarkRecord(run.a, target, "fragment" + index, record), { ok: true });
+      });
     });
     const html = '<span class="cmt-anchor" data-cmt="C1"><a href="https://example.test/" target="_blank" rel="noopener"><span class="tag-anchor" data-tag-cat="prop" data-tag-name="Box" contenteditable="false"><strong>t</strong></span><strong><span class="who-anchor" data-who="Ada" contenteditable="false">@Ada</span></strong></a></span>';
     check(run, { ...scenario, recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 6, html)] }, order);
