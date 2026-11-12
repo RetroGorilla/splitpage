@@ -7,6 +7,8 @@ import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { prepareSharedCreatedAttachment } from "./structure-content.ts";
+import { reserveSharedCommandIdentities } from "./structure-identity.ts";
 
 function candidate(view: SharedPreparationView, writes: readonly SharedPreparedWrite[]): Pick<SharedPreparationView, "get" | "kind" | "keys"> {
   const edits = new Map<string, SharedPreparedWrite>();
@@ -66,6 +68,7 @@ function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[]
 function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationView): SharedPreparationResult {
   const { collection, record: key } = operation.target, path = [collection, key];
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
+  const created = prepareSharedCreatedAttachment(operation, view); if (created) return created;
   if (view.has(path)) return { ok: false, reason: "duplicate-record" };
   const fields: Record<string, unknown> = { ...operation.fields };
   if (collection !== "gallery" && collection !== "visuals" && collection !== "replies") {
@@ -88,7 +91,8 @@ function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationVie
       writes.push({ path: [...path, field], kind: "set", value });
     }
   }
-  return readPreparedSharedRecord(collection, key, candidate(view, writes)) ? accepted(writes) : { ok: false, reason: "invalid-record-shape" };
+  if (!readPreparedSharedRecord(collection, key, candidate(view, writes))) return { ok: false, reason: "invalid-record-shape" };
+  return reserveSharedCommandIdentities(view, [key, ...(typeof fields.id === "string" ? [fields.id] : [])]) ? accepted(writes) : { ok: false, reason: "existing-identity" };
 }
 
 function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): SharedPreparationResult {

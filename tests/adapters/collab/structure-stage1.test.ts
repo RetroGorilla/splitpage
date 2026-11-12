@@ -1,3 +1,4 @@
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
@@ -12,6 +13,8 @@ import { IdentityBook, checkModel } from "../../collab/checker.ts";
 import type { CollabModel, CollabRow } from "../../collab/checker.ts";
 import { beatOracles } from "../../collab/oracles/structure-oracles.ts";
 
+const structurePorts = { cells: createFlowLoadRuntime().cells };
+
 for (const order of ["D1", "dup", "rev", "late-C"] as const) test(`Stage 1 T05 two splits retains literal identities and both carets: ${order}`, () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] }), book = new IdentityBook();
   try {
@@ -19,7 +22,7 @@ for (const order of ["D1", "dup", "rev", "late-C"] as const) test(`Stage 1 T05 t
     for (let index = 0; index < 4; index++) { const id = Y.createRelativePositionFromTypeIndex(initial, index).item; assert.ok(id); book.bind("s" + (index + 1), id); }
     const anchors: string[] = [];
     for (const handle of [set.a, set.b]) {
-      registerSharedSplitHandlers(handle);
+      registerSharedSplitHandlers(handle, structurePorts);
       const split = operation({ kind: "split", id: "enter", by: "Writer", target: { owner: "R1", segment: "b:R1", field: "audioText" },
         at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [flowBaseReference("R1", "audioText", 0, 4)],
         beat: "new", boundary: "new", fields: {} });
@@ -33,7 +36,8 @@ for (const order of ["D1", "dup", "rev", "late-C"] as const) test(`Stage 1 T05 t
       let offset = 0;
       for (const delta of text.toDelta() as { insert: unknown }[]) {
         if (typeof delta.insert !== "string") {
-          const writer = JSON.parse((delta.insert as { b: string }).b) as string[];
+          const writer = (delta.insert as { b: string }).b.split("_");
+          assert.equal(writer.length, 5); assert.ok(writer[1] === "1" || writer[1] === "2");
           rows.push({ id: writer[1] === "1" ? "Ra" : "Rb", characters: [] }); offset++;
           positions.push({ beat: rows.at(-1)?.id ?? "", offset: 0 }); continue;
         }

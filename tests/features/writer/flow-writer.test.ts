@@ -43,7 +43,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
       second.audioText = "Live narration";
       first.audioText = "Live Alpha";
     }
-    const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
+    const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
     if (!plan || "refused" in plan) return { kind: "noop" };
     recorded = plan.selection;
     plan.apply(doc);

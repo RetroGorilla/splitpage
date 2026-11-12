@@ -1,5 +1,5 @@
-import type { UndoEntry, UndoState } from "../../application/editing/undo/history.ts";
-import type { Step } from "../../core/text/steps.ts";
+import type { UndoEntry } from "../../application/editing/undo/history.ts";
+import type { Undo } from "../../application/editing/undo/undo.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
@@ -71,7 +71,7 @@ export interface GalleryOverlayMount {
 }
 
 interface UndoFold {
-  readonly fold: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
+  readonly fold: Undo["foldIntoEdit"];
 }
 
 export interface DroppedVideo {

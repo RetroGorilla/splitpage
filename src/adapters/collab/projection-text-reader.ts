@@ -19,13 +19,15 @@ export function readProjectionUnits(handle: SharedDocumentHandle, raw: unknown, 
     else { offset++; continue; }
     for (const value of values) {
       const marks: SharedProjectionUnit["marks"][number][] = [];
-      for (const group of characters[offset++]?.marks ?? []) {
+      const character = characters[offset++];
+      for (const group of character?.marks ?? []) {
         const payload = chooseSharedProjectionPayload(group.values);
         if (payload === undefined || group.id !== null && !isStableSharedIdentity(group.id)) continue;
         const mark = readSharedStoredMark({ kind: group.kind, ...(group.id === null ? {} : { id: group.id }), value: payload });
         if (mark) marks.push(mark);
       }
-      units.push({ value, marks });
+      units.push({ value, marks, ...(typeof value !== "string" && value.atom === "broll" && character
+        ? { identity: { client: character.identity.client, clock: character.identity.clock } } : {}) });
     }
   }
   return units;

@@ -14,7 +14,6 @@ export const NO_DESTINATION: DocumentDestination = Object.freeze({ kind: "none" 
 export interface LiveDocumentPort {
   readonly current: StandaloneDocumentSession["held"];
   readonly assign: (doc: NonNullable<ReturnType<StandaloneDocumentSession["adopt"]>>) => void;
-  readonly stamp: StandaloneDocumentSession["stamp"];
 }
 
 export interface DestinationPort<D> {

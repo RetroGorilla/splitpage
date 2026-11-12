@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { undoOwner, undoSessionPort } from "../bootstrap/wiring/undo.ts";
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
-import { liveSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { liveSession, standaloneSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { startTestSession } from "./_session.mjs";
 const flushEdits = () => undoOwner().flush();
@@ -141,7 +141,7 @@ const throughSession = {
     const out = session.run({ name: p.name, needs: "edit", plan: () => ({ changes: p.changes, apply: p.apply }) });
     assert.equal(out.kind, "applied", p.name);
   },
-  remote: (next) => { assert.equal(session.absorbDisk(next), next); }
+  remote: (next) => { assert.equal(standaloneSession().absorbDisk(next), next); }
 };
 
 test("differential: the session's commands through the undo adapter leave 12a's stacks and the document exactly as the legacy noteEdit path does (seeded)", async () => {

@@ -162,7 +162,7 @@ test("entry refuses duplicate, missing/wrong-record fields and foreign-owner bou
       assert.deepEqual(encodeSharedState(run.a), bytes); assert.deepEqual(encodeSharedStateVector(run.a), vector); assert.equal(readSharedRevision(run.a), revision);
     }
     submitProjectionOperations(run.a, [good]);
-    const record = collabState(run.a).roots.beats.get('["structure","1","cut","beat"]'); assert.ok(record instanceof Y.Map);
-    assert.equal(record.get("id"), '["structure","1","cut","beat"]'); assert.equal(record.get("segment"), "b:R1");
+    const record = collabState(run.a).roots.beats.get("structure_1_006300750074_beat_0"); assert.ok(record instanceof Y.Map);
+    assert.equal(record.get("id"), "structure_1_006300750074_beat_0"); assert.equal(record.get("segment"), "b:R1");
   } finally { run.close(); }
 });

@@ -4,6 +4,7 @@ import { clamp, clampRange, explode } from "../text/edits.ts";
 import { cellLength, normalizeCell, projection, tagStack } from "../text/runs.ts";
 import type { Run } from "../text/runs.ts";
 import type { DocumentScene } from "../document/scenes.ts";
+import { sceneForBeat } from "../document/scenes.ts";
 
 interface TraceRow {
   readonly id: string;
@@ -33,7 +34,8 @@ export class FlowOperationTrace {
   private readonly request: FlowOperationRequest;
   constructor(base: TraceDoc, ports: TracePorts, request: FlowOperationRequest) { this.base = base; this.ports = ports; this.request = request; }
   emit(payload: FlowOperationPayload): void {
-    this.ops.push({ ...payload, id: flowIdentity(this.request.id + ":" + this.ops.length), by: this.request.by } as SharedOperation);
+    const structural = ["split", "split-before", "segment-create", "join", "remove", "restore", "heading-create", "heading-finalize", "heading-remove", "move"].includes(payload.kind);
+    this.ops.push({ ...payload, id: flowIdentity(this.request.id + (structural ? "_o_" : ":") + this.ops.length), by: this.request.by } as SharedOperation);
   }
   target(owner: string, field: SharedTextAddress["field"] = "audioText"): SharedTextAddress {
     return { owner: flowIdentity(owner), segment: flowIdentity(owner), field };
@@ -104,12 +106,14 @@ export class FlowOperationTrace {
     this.offsets.set(JSON.stringify([fresh.id, "audioText"]), before ? units.slice(0, offset) : units.slice(offset));
     this.offsets.set(JSON.stringify([owner, field]), before ? units.slice(offset) : units.slice(0, offset));
   }
-  create(row: TraceRow, rows: readonly TraceRow[], index: number): void {
+  create(row: TraceRow, rows: readonly TraceRow[], index: number, sections: unknown): void {
     this.created.set(row.id, row);
     for (const field of ["audioText", "visualText"] as const) this.offsets.set(JSON.stringify([row.id, field]),
       Array.from({ length: cellLength(this.ports.cells(row[field] as string)) }, (_, offset) => ({ owner: row.id, field, offset })));
+    const right = rows[index + 1], doc = { rows, sections };
+    const affinity = right && sceneForBeat(doc, row.id)?.id === sceneForBeat(doc, right.id)?.id ? "before" : "after";
     this.emit({ kind: "segment-create", segment: flowIdentity(row.id), beat: flowIdentity(row.id),
-      at: { left: index ? flowIdentity((rows[index - 1] as TraceRow).id) : null, right: rows[index + 1] ? flowIdentity((rows[index + 1] as TraceRow).id) : null, affinity: "before" },
+      at: { left: index ? flowIdentity((rows[index - 1] as TraceRow).id) : null, right: right ? flowIdentity(right.id) : null, affinity },
       fields: Object.fromEntries(Object.entries(row).filter(([key]) => key !== "id")) as SharedJsonFields });
   }
   remove(doc: TraceDoc, row: TraceRow, removalKind: "beat" | "range" | "became-heading" = "beat"): void {

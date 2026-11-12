@@ -16,7 +16,7 @@ const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.ts");
 const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.ts");
-const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
+const { liveSession, standaloneSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
@@ -101,7 +101,7 @@ test("video: a retried thumbnail for a scene that was deleted while it loaded ch
   await held.gates.arrived("fetch");
   closeGalleryOverlay();
   currentDocument().rows.splice(0, 1);
-  liveSession().noteEdit();
+  standaloneSession().noteEdit();
   flushEdits();
   const before = undoSizes();
   const generation = liveSession().generation();

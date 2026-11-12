@@ -28,7 +28,7 @@ function harness(initial?: Parameters<typeof migrateRows>[0]) {
   let closes = 0;
   let commands = 0;
   const run = (command: Command): CommandOutcome => {
-    const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
+    const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
     if (!plan) return { kind: "noop" };
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     commands++;

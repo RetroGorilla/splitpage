@@ -1,3 +1,6 @@
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
+import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
@@ -20,6 +23,8 @@ import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segme
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { SharedBeatSplit, SharedTextAddress } from "../../../src/core/collab/operations.ts";
+
+const structurePorts = { cells: createFlowLoadRuntime().cells };
 
 const target: SharedTextAddress = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" };
 function split(id = "enter", before = false): SharedBeatSplit {
@@ -53,10 +58,10 @@ for (const before of [false, true]) test(`split${before ? " before" : ""} and su
   const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] });
   try {
     const handle = set.a, origins: unknown[] = [], updates: Uint8Array[] = [];
-    registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle);
+    registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
     const detach = observeSharedTransactions(handle, origin => origins.push(origin)), stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update));
     assert.deepEqual(executeSharedOperations(handle, [split("enter", before), type("typed", "same-beat", "X")], { base: readSharedRevision(handle) }), { ok: true });
-    const id = JSON.stringify(["structure", "1", "enter", "beat"]);
+    const id = structureIdentityFixture("1", "enter", "beat");
     assert.deepEqual(read(handle), { rows: before ? [{ id, text: "Xab" }, { id: "R1", text: "cd" }] : [{ id: "R1", text: "ab" }, { id, text: "Xcd" }], beats: ["R1", id].sort() });
     assert.equal((collabState(handle).roots.beats.get(id) as Y.Map<unknown>).get("splitBy"), "Writer");
     set.queue.flush("D1");
@@ -76,9 +81,9 @@ test("seeded two and three writer split, prefix split and blank creation histori
     const offset = seed % 5, clamped = text === "A😀B" ? [0, 1, 3, 3, 4][offset] as number : offset;
     const kind = sample % 3, set = replicas(writers, { rows: [{ id: "R1", audioText: text }] }), handles = [set.a, set.b, set.c].slice(0, writers);
     try {
-      const ids = handles.map((_, index) => JSON.stringify(["structure", String(index + 1), "enter", "beat"]));
+      const ids = handles.map((_, index) => structureIdentityFixture(String(index + 1), "enter", "beat"));
       for (const [index, handle] of handles.entries()) {
-        registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle);
+        registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
         const right = form === "native-anchor" ? createSharedAnchor(handle, "b:R1", offset, "after") : flowBaseReference("R1", "audioText", offset); assert.ok(right);
         const command = kind === 2 ? operation({ kind: "segment-create", id: "enter", by: "Writer", beat: "same-beat", segment: "same-segment", fields: { status: "todo", audioText: "" }, at: { left: null, right: "R1", affinity: "before" } })
           : operation({ ...split("enter", kind === 1), at: { left: null, right, affinity: "before" } });
@@ -100,10 +105,10 @@ test("seeded two and three writer split, prefix split and blank creation histori
 for (const before of [false, true]) for (const append of [false, true]) for (const order of ["D1", "rev"] as const) test(`native split${before ? " before" : ""} clamps inside an emoji; append=${append}; ${order}`, () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "A😀B" }] });
   try {
-    registerSharedSplitHandlers(set.a); registerSharedTextOperationHandlers(set.b);
+    registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.b);
     const anchor = createSharedAnchor(set.a, "b:R1", 2, "after"); assert.ok(anchor);
     assert.deepEqual(executeSharedOperations(set.a, [operation({ ...split("enter", before), at: { left: null, right: anchor, affinity: "before" } })], { base: readSharedRevision(set.a) }), { ok: true });
-    const id = JSON.stringify(["structure", "1", "enter", "beat"]);
+    const id = structureIdentityFixture("1", "enter", "beat");
     assert.deepEqual(read(set.a).rows, before ? [{ id, text: "A😀" }, { id: "R1", text: "B" }] : [{ id: "R1", text: "A😀" }, { id, text: "B" }]);
     if (append) {
       const end = createSharedAnchor(set.b, "b:R1", 4, "after"); assert.ok(end);
@@ -119,13 +124,13 @@ for (const before of [false, true]) for (const append of [false, true]) for (con
 for (const before of [false, true]) test(`split${before ? " before" : ""} clamps a position in text inserted earlier in the same list`, () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] });
   try {
-    registerSharedSplitHandlers(set.a); registerSharedTextOperationHandlers(set.a);
+    registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.a);
     const insertion = operation({ kind: "text-insert", id: "inserted", by: "Writer", target,
       at: { left: null, right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, content: [{ value: "😀", marks: [] }] });
     assert.deepEqual(executeSharedOperations(set.a, [insertion, operation({ ...split("enter", before),
       at: { left: null, right: flowBaseReference("inserted", "audioText", 1), affinity: "before" } })], { base: readSharedRevision(set.a) }), { ok: true });
     set.queue.flush("D1");
-    const id = JSON.stringify(["structure", "1", "enter", "beat"]);
+    const id = structureIdentityFixture("1", "enter", "beat");
     agree("insert then split", "D1", [set.a, set.b], read, { rows: before ? [{ id, text: "a😀" }, { id: "R1", text: "bcd" }] : [{ id: "R1", text: "a😀" }, { id, text: "bcd" }], beats: ["R1", id].sort() });
   } finally { set.close(); }
 });
@@ -134,7 +139,7 @@ for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"]
   const set = replicas(writers, { rows: [{ id: "R1", audioText: "abcd" }] }), handles = [set.a, set.b, set.c].slice(0, writers);
   try {
     for (const [index, handle] of handles.entries()) {
-      registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle);
+      registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
       assert.deepEqual(executeSharedOperations(handle, [split(), type("typed", "same-beat", String(index + 1))], { base: readSharedRevision(handle) }), { ok: true });
     }
     set.queue.flush(order);
@@ -143,7 +148,7 @@ for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"]
       const actual = read(handle);
       assert.equal(actual.rows.length, writers + 1); assert.equal(actual.beats.length, writers + 1);
       for (let index = 0; index < writers; index++) {
-        const row = actual.rows.find(row => row.id === JSON.stringify(["structure", String(index + 1), "enter", "beat"]));
+        const row = actual.rows.find(row => row.id === structureIdentityFixture(String(index + 1), "enter", "beat"));
         assert.ok(row?.text.startsWith(String(index + 1)));
       }
       assert.equal(actual.rows.map(row => row.text).join("").replace(/[123]/g, ""), "abcd");
@@ -154,7 +159,7 @@ for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"]
 test("split refuses the whole list without changing bytes, vector, revision or delivered updates", () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] }), handle = set.a;
   try {
-    registerSharedSplitHandlers(handle);
+    registerSharedSplitHandlers(handle, structurePorts);
     const before = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle), updates: Uint8Array[] = [];
     const stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update));
     for (const operations of [[split(), split()], [split(), operation({ ...split("bad"), target: { ...target, owner: "missing" } })]]) {
@@ -171,7 +176,7 @@ test("split adds one boundary and preserves the native identities and marks of e
   const set = replicas(2, { rows: [{ id: "R1", audioText: "<i>abcd</i>" }] });
   try {
     const before = createSharedPreparation(set.a), original = before.view.text(["segments", "b:R1", "text"])?.units; assert.ok(original); before.close();
-    registerSharedSplitHandlers(set.a);
+    registerSharedSplitHandlers(set.a, structurePorts);
     assert.deepEqual(executeSharedOperations(set.a, [split()], { base: readSharedRevision(set.a) }), { ok: true });
     const after = createSharedPreparation(set.a), units = after.view.text(["segments", "b:R1", "text"])?.units; assert.ok(units);
     assert.equal(units.length, 5); assert.deepEqual(units.filter(unit => typeof unit.value === "string"), original); after.close();
@@ -181,9 +186,9 @@ test("split adds one boundary and preserves the native identities and marks of e
 test("text and marks cannot address another beat's characters through a shared physical segment", () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] }), handle = set.a;
   try {
-    registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle);
+    registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
     assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true });
-    const id = JSON.stringify(["structure", "1", "enter", "beat"]), targetB = { ...target, owner: id }, observed = [flowBaseReference("R1", "audioText", 0, 1)];
+    const id = structureIdentityFixture("1", "enter", "beat"), targetB = { ...target, owner: id }, observed = [flowBaseReference("R1", "audioText", 0, 1)];
     const bytes = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle), updates: Uint8Array[] = [];
     const stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update));
     for (const bad of [
@@ -199,10 +204,10 @@ test("text and marks cannot address another beat's characters through a shared p
   } finally { set.close(); }
 });
 
-test("heading-bound creation and insertion beside partial segments refuse before writing", () => {
+test("heading prefixes refuse while heading-bound and inline narration creation succeed", () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }], sections: [{ id: "H1", name: "Heading", firstSceneId: "R1" }] }), handle = set.a;
   try {
-    registerSharedSplitHandlers(handle);
+    registerSharedSplitHandlers(handle, structurePorts);
     const create = (left: string | null, right: string | null) => operation({ kind: "segment-create", id: "create", by: "Writer", beat: "new", segment: "new", fields: {}, at: { left, right, affinity: "before" } });
     const refuse = (command: ReturnType<typeof operation>, reason: string) => {
       const bytes = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle);
@@ -210,9 +215,10 @@ test("heading-bound creation and insertion beside partial segments refuse before
       assert.deepEqual(encodeSharedState(handle), bytes); assert.deepEqual(encodeSharedStateVector(handle), vector); assert.equal(readSharedRevision(handle), revision);
     };
     refuse(operation({ ...split(), kind: "split-before", target: { owner: "H1", segment: "h:H1", field: "heading" } }), "invalid-split-target");
-    refuse(create(null, "R1"), "heading-placement-required");
+    assert.deepEqual(executeSharedOperations(handle, [create(null, "R1")], { base: readSharedRevision(handle) }), { ok: true });
     assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true });
-    refuse(create("R1", null), "partial-segment-gap");
+    assert.deepEqual(executeSharedOperations(handle, [operation({ ...create("R1", null), id: "inline", beat: "inline", segment: "inline" })], { base: readSharedRevision(handle) }), { ok: true });
+    assert.equal(collabState(handle).roots.order.length, 3);
   } finally { set.close(); }
 });
 
@@ -222,11 +228,11 @@ test("split reads only its touched segment and beat regardless of unrelated beat
     const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] }), handle = set.a;
     try {
       transactSharedDocument(handle, "local-command", () => { for (let index = 0; index < unrelated; index++) collabState(handle).roots.beats.set("unrelated" + index, { status: "todo" }); });
-      let reads = 0;
+      const identities = observeSharedStructureIdentities(handle); let reads = 0;
       registerSharedOperationHandlers(handle, { split: (op, view) => prepareSharedBeatSplit(op, { ...view,
         get: path => { reads++; assert.ok(path[0] === "beats" || path[0] === "segments"); return view.get(path); },
         keys: () => { throw new Error("whole root scan"); }
-      }) });
+      }, identities) });
       assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads);
     } finally { set.close(); }
   }
@@ -240,10 +246,10 @@ test("planned segment creation uses cached order positions with zero whole-order
     try {
       const native = collabState(handle).roots.order;
       transactSharedDocument(handle, "local-command", () => { for (let index = 0; index < unrelated; index++) native.push(["unrelated" + index]); });
-      const order = observeSharedStructureOrder(handle); let reads = 0;
+      const order = observeSharedStructureOrder(handle), identities = observeSharedStructureIdentities(handle); let reads = 0;
       registerSharedOperationHandlers(handle, { "segment-create": (op, view) => {
-        const result = prepareSharedSegmentCreation(op, { ...view, get: path => { reads++; return view.get(path); } }, order);
-        assert.ok(result.ok && Object.isFrozen(result.description) && Object.isFrozen(result.description.writes) && Object.isFrozen(result.description.text)); return result;
+        const result = prepareSharedSegmentCreation(op, { ...view, get: path => { reads++; return view.get(path); } }, order, structurePorts, identities);
+        assert.ok(result.ok && Object.isFrozen(result.description) && Object.isFrozen(result.description.writes) && Object.isFrozen(result.description.texts)); return result;
       } });
       const whole = mock.method(native, "toArray", () => { throw new Error("whole-order read during execution"); });
       try {
@@ -252,10 +258,10 @@ test("planned segment creation uses cached order positions with zero whole-order
         assert.deepEqual(executeSharedOperations(handle, [create("one", "one-beat", null, "R1"), create("two", "two-beat", "one-beat", "R1")]), { ok: true });
         counts.push(reads); assert.equal(whole.mock.callCount(), 0);
       } finally { whole.mock.restore(); }
-      assert.deepEqual(native.toArray().slice(0, 3), [JSON.stringify(["structure", "1", "one", "segment"]), JSON.stringify(["structure", "1", "two", "segment"]), "b:R1"]);
+      assert.deepEqual(native.toArray().slice(0, 3), [structureIdentityFixture("1", "one", "segment"), structureIdentityFixture("1", "two", "segment"), "b:R1"]);
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [9, 9]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));
+  assert.deepEqual(counts, [12, 12]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));
 });
 
 for (const phase of ["idle", "prepare", "observer"] as const) test(`apply text creation refuses ${phase}`, () => {

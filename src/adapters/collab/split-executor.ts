@@ -14,8 +14,11 @@ import { sharedStructureSpans } from "./structure-boundary.ts";
 import { scalarFieldAllowed } from "./scalar-executor.ts";
 import { observeSharedStructureOrder } from "./structure-order.ts";
 import { prepareSharedSegmentCreation } from "./segment-executor.ts";
+import type { SharedStructureContentPorts } from "./structure-content.ts";
+import { observeSharedStructureIdentities } from "./structure-reservations.ts";
+import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
 
-export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBefore, view: SharedPreparationView) {
+export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBefore, view: SharedPreparationView, identities: SharedStructureIdentityReservations) {
   try {
     if (operation.target.field !== "audioText" && operation.target.field !== "heading" || operation.kind === "split-before" && operation.target.field !== "audioText"
       || ![operation.by, operation.boundary].every(isStableSharedIdentity)) throw new SharedTextPreparationError("invalid-split-target");
@@ -27,7 +30,7 @@ export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSp
     const offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from);
     if (left && right && left.from > right.from || offset < span.from || offset > span.to) throw new SharedTextPreparationError("invalid-reference");
     for (const ref of operation.observed) resolveSharedTextReference(view, plan, ref, "range");
-    const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat), path = ["beats", beat];
+    const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat, identities), path = ["beats", beat];
     if (view.has(path)) throw new SharedTextPreparationError("existing-identity");
     const writes: SharedPreparedWrite[] = [{ kind: "map", path }, { kind: "set", path: [...path, "id"], value: beat },
       { kind: "set", path: [...path, "segment"], value: plan.target.segment }, { kind: "set", path: [...path, "splitBy"], value: operation.by },
@@ -48,8 +51,8 @@ export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSp
   } catch (error) { if (error instanceof SharedTextPreparationError || error instanceof SharedStructurePreparationError) return { ok: false as const, reason: error.message }; throw error; }
 }
 
-export function registerSharedSplitHandlers(handle: SharedDocumentHandle): void {
-  const order = observeSharedStructureOrder(handle);
-  registerSharedOperationHandlers(handle, { split: prepareSharedBeatSplit, "split-before": prepareSharedBeatSplit,
-    "segment-create": (operation, view) => prepareSharedSegmentCreation(operation, view, order) });
+export function registerSharedSplitHandlers(handle: SharedDocumentHandle, ports: SharedStructureContentPorts): void {
+  const order = observeSharedStructureOrder(handle), identities = observeSharedStructureIdentities(handle);
+  registerSharedOperationHandlers(handle, { split: (op, view) => prepareSharedBeatSplit(op, view, identities), "split-before": (op, view) => prepareSharedBeatSplit(op, view, identities),
+    "segment-create": (operation, view) => prepareSharedSegmentCreation(operation, view, order, ports, identities) });
 }

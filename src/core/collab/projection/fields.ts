@@ -1,3 +1,5 @@
+import { cleanId } from "../../document/text-policy.ts";
+
 function bag(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -13,6 +15,7 @@ function plain(fields: Readonly<Record<string, unknown>>, excluded: readonly str
 export function projectSharedRegistryFields(kind: "people" | "tags" | "shots", fields: Readonly<Record<string, unknown>>): Record<string, unknown> {
   if (kind !== "shots") return plain(fields);
   const out = plain(fields, ["props"]);
+  if (typeof out.id === "string") out.id = cleanId(out.id);
   if (Object.hasOwn(fields, "props")) out.props = list(fields.props).map(prop => plain(bag(prop.fields)));
   return out;
 }

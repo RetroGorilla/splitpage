@@ -19,7 +19,7 @@ type PlannedTextMarkChange = { readonly type: "add"; readonly mark: unknown; rea
   | { readonly type: "remove"; readonly observed: readonly string[] }
   | { readonly type: "birth"; readonly observed: readonly string[]; readonly born: "inserted" };
 
-function applyTextDescription(handle: SharedDocumentHandle, description: SharedTextExecutionDescription): void {
+export function applySharedTextDescription(handle: SharedDocumentHandle, description: SharedTextExecutionDescription): void {
   for (const step of description.steps) {
     if (step.kind === "edit") applySharedTextEdit(handle, step.write);
     else applySharedMarkWrite(handle, { target: step.target, plan: step.plan });
@@ -28,7 +28,7 @@ function applyTextDescription(handle: SharedDocumentHandle, description: SharedT
 
 export function preparedTextDescription(writes: readonly SharedPreparedWrite[], steps: readonly SharedTextExecutionStep[]): Extract<SharedTextOperationPreparation, { ok: true }> {
   const description = freezeSharedPreparedValue({ steps }), fixedWrites = freezeSharedPreparedValue(writes);
-  return { ok: true, writes: fixedWrites, description, apply: handle => applyTextDescription(handle, description) };
+  return { ok: true, writes: fixedWrites, description, apply: handle => applySharedTextDescription(handle, description) };
 }
 
 export function prepareTextMarkWrite(plan: SharedTextCommandPlan, view: SharedPreparationView, operation: string, from: number, to: number, change: PlannedTextMarkChange): SharedMarkWritePlan {

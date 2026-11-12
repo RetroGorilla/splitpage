@@ -1,3 +1,4 @@
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validatedFixture } from "./helpers.ts";
@@ -20,7 +21,7 @@ const open = '<span class="cmt-anchor" data-cmt="C1"><a href="https://example.te
 const close = '</strong></span></a></span>';
 function logicalRows(rows: readonly DocumentRow[], operations: readonly SharedOperation[]) {
   const aliases = new Map(operations.flatMap(op => op.kind === "split" || op.kind === "split-before" || op.kind === "segment-create"
-    ? [[JSON.stringify(["structure", "1", op.id, "beat"]), op.beat] as const] : []));
+    ? [[structureIdentityFixture("1", op.id, "beat"), op.beat] as const] : []));
   return rows.map(row => ({ ...row, id: aliases.get(row.id) ?? row.id }));
 }
 for (const kind of ["beat", "paragraph", "prefix", "blank"] as const) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
@@ -32,7 +33,7 @@ for (const kind of ["beat", "paragraph", "prefix", "blank"] as const) for (const
       : kind === "paragraph" ? startParagraph(doc, beatPos("R1", 2), ports) : startBeat(doc, beatPos("R1", kind === "blank" ? 4 : 2), ports);
     assert.ok(result && "rows" in result && result.ops);
     const independent = applyFlowOperations(doc, result.ops, runtime.cells);
-    const native = '["structure","1","trace:0","beat"]';
+    const native = "structure_1_00740072006100630065005f006f005f0030_beat_0";
     const added = { id: native, status: "todo", visualText: "", audioText: kind === "blank" ? "" : open + (kind === "prefix" ? "ab" : "cd") + close,
       imageRef: null, ...(kind === "paragraph" ? { paragraphStart: true as const } : {}) };
     const original = splitOriginal(open + (kind === "blank" ? "abcd" : kind === "prefix" ? "cd" : "ab") + close);
@@ -59,7 +60,7 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
   const doc = { rows: source.rows, sections: source.sections, comments: source.comments };
   const outcome = enterInHeading(doc, headingPos("H1", 2), { ...runtime.ports, newId: () => "fresh", operations: { id: "heading", by: "Writer" } });
   assert.ok(outcome && "rows" in outcome && outcome.ops);
-  const independent = applyFlowOperations(doc, outcome.ops, runtime.cells), native = '["structure","1","heading:0","beat"]';
+  const independent = applyFlowOperations(doc, outcome.ops, runtime.cells), native = "structure_1_00680065006100640069006e0067005f006f005f0030_beat_0";
   const rows = [{ id: native, status: "todo", visualText: "", audioText: "CD", imageRef: null }, { ...splitOriginal("Body"), paragraphStart: true as const }];
   assert.deepEqual(logicalRows(rows, outcome.ops), independent.rows);
   const run = splitReplicas(copies, source);
@@ -80,7 +81,7 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
   const outcome = startBeat(doc, beatPos("R1", 2), { ...runtime.ports, newId: () => "fresh", operations: { id: "joined", by: "Writer" } });
   assert.ok(outcome && "rows" in outcome && outcome.ops);
   const independent = applyFlowOperations(doc, outcome.ops, runtime.cells);
-  const run = splitReplicas(copies, source), native = '["structure","1","joined:0","beat"]';
+  const run = splitReplicas(copies, source), native = "structure_1_006a006f0069006e00650064005f006f005f0030_beat_0";
   try {
     submitProjectionOperations(run.a, outcome.ops); run.queue.flush(order);
     assert.deepEqual(logicalRows(readPureMergedProjection(run.a).view.document.rows, outcome.ops), independent.rows);
@@ -121,7 +122,7 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
     const doc = { rows: [splitOriginal("a" + who + broll + image + video + "bcd")], comments: [] };
     const result = startBeat(doc, beatPos("R1", 3), { ...runtime.ports, newId: () => "fresh", operations: { id: "atom-split", by: "Writer" } });
     assert.ok(result && "rows" in result && result.ops);
-    const independent = applyFlowOperations(doc, result.ops, runtime.cells), native = '["structure","1","atom-split:0","beat"]';
+    const independent = applyFlowOperations(doc, result.ops, runtime.cells), native = "structure_1_00610074006f006d002d00730070006c00690074005f006f005f0030_beat_0";
     const rows = [splitOriginal("a" + who + broll), { id: native, status: "todo", visualText: "", audioText: image + video + "bcd", imageRef: null }];
     assert.deepEqual(logicalRows(rows, result.ops), independent.rows);
     submitProjectionOperations(run.a, result.ops); run.queue.flush(order);

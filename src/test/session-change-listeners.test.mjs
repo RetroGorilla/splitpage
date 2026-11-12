@@ -30,7 +30,7 @@ bridge.onSessionChange(early);
 startTestSession(unwired.deps);
 
 test("a change listener registered before the session starts hears the first session's adoption and edits", () => {
-  bridge.liveSession().adopt(script("First"));
+  bridge.standaloneSession().adopt(script("First"));
   bridge.runCommand(beatLengthCommand("r1", 30, bridge.sessionStamps));
   assert.deepEqual(heard, [["early", "adopt", 0], ["early", "edit", 1]]);
 });

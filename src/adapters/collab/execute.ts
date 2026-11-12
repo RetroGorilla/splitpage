@@ -1,7 +1,8 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { assertSharedDocumentIdle, collabState, transactCollabState, SharedExecutionWriteError } from "./state.ts";
+import { assertSharedDocumentIdle, collabState, sharedWriteFrame, transactCollabState, SharedExecutionWriteError } from "./state.ts";
+import type { CollabDocumentState } from "./state.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import type { SharedPreparationResult, SharedPreparationView } from "./prepare.ts";
 import { registeredSharedOperationHandlers } from "./operation-handlers.ts";
@@ -20,6 +21,10 @@ export function executeSharedOperations(handle: SharedDocumentHandle, operations
 export function executeSharedOperations(handle: SharedDocumentHandle, operations: readonly SharedOperation[], options?: SharedExecutionOptions): SharedBaseExecutionResult {
   const state = collabState(handle);
   assertSharedDocumentIdle(state);
+  return sharedWriteFrame(state, () => runSharedExecution(state, handle, operations, options));
+}
+
+function runSharedExecution(state: CollabDocumentState, handle: SharedDocumentHandle, operations: readonly SharedOperation[], options?: SharedExecutionOptions): SharedBaseExecutionResult {
   const execution = { applying: false };
   state.execution = execution;
   try {

@@ -5,7 +5,7 @@ import "./_location-started.mjs";
 
 const bridge = await import("../bootstrap/wiring/transition-owners.ts");
 const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
-const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../bootstrap/wiring/session-owner.ts");
+const { currentDocument, liveDocumentPort, liveSession, standaloneSession, requestRefresh } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
@@ -24,7 +24,7 @@ test("before the transitions are started, every accessor throws instead of runni
 
 function startWith(log) {
   return bridge.startTransitions({
-    live: { current: liveDocumentPort.current, assign: (doc) => { log.push("assign"); liveDocumentPort.assign(doc); }, stamp: liveDocumentPort.stamp },
+    live: { current: liveDocumentPort.current, assign: (doc) => { log.push("assign"); liveDocumentPort.assign(doc); } },
     destination: { set: (d) => log.push("destination:" + d.kind), confirm: (doc, why) => log.push("baseline:" + why) },
     identity: { mint: () => "d" + "9".repeat(32), writtenOut: () => false, markWrittenOut: (out) => log.push("writtenOut:" + out) }
   });
@@ -62,7 +62,7 @@ test("a replacement through the API disposes the old document's session: its arm
     assert.equal(liveSession().epoch(), epoch + 1);
     t.mock.timers.tick(5000);
     assert.deepEqual(ran, [], "the old document's refresh did not run");
-    liveSession().noteEdit();
+    standaloneSession().noteEdit();
     assert.deepEqual(heard, [], "the old document's subscription heard nothing of the new one");
   } finally {
     stop();
