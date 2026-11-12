@@ -17,7 +17,7 @@ import type { MergeUndo } from "./merge-undo.ts";
 import type { DocumentIdentityOwner, IdentityEntry } from "../identity/ports.ts";
 import type { StandaloneDocumentSession } from "./document-session.ts";
 
-export type SessionMergePorts = Omit<DocumentMergePorts<OperationContext>, "view">;
+export type SessionMergePorts = Omit<DocumentMergePorts<OperationContext>, "view" | "capability">;
 
 export interface SnapshotRestoreRequest {
   readonly older?: boolean;

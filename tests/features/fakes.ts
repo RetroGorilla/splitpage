@@ -45,6 +45,7 @@ export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): Capab
     saveDestinations: allowed,
     autosave: allowed,
     merge: allowed,
+    reload: allowed,
     stash: allowed,
     drafts: allowed,
     history: allowed,

@@ -20,8 +20,10 @@ import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { currentDocument, mergeBase, sessionStamps } from "./session-owner.ts";
 import { nowIso } from "../../adapters/identity/ids.ts";
 import { dataUrlForSync, isDurableSync } from "../../adapters/storage/02c-blobs.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
 
 export interface LegacyRecoveryPorts {
+  readonly capability: Pick<CapabilityPort, "stash" | "merge">;
   readonly desktop: () => DesktopDraftBridge | null | undefined;
   readonly sessionStorage: () => KeyValueStorage | null | undefined;
   readonly localStorage: () => KeyValueStorage | null | undefined;
@@ -54,19 +56,21 @@ function running(): Started {
 
 export function startRecovery(ports: LegacyRecoveryPorts): () => void {
   if (started) throw new Error("The draft recovery is already started; stop it first");
-  const stash = createConflictStash({ storage: ports.sessionStorage, internImage: ports.internImage });
+  const stash = createConflictStash({ capability: ports.capability, storage: ports.sessionStorage, internImage: ports.internImage });
   const mine: Started = {
     ports: ports,
     desktop: createDesktopDraftStore({ bridge: ports.desktop }),
     resume: createDraftResume(),
     stash: stash,
     stashedWork: createStashedWork<ValidatedDocument, MergedStates>({
+      capability: ports.capability,
       stash: stash,
       markWrittenOut: function () { documentLocation().markWrittenOut(true); },
       copy: function (doc) { return migrateRows(cloneState(doc)); },
       merge: ports.merge
     }),
     stashLocal: createLocalWorkStash<ValidatedDocument>({
+      capability: ports.capability,
       stash: stash,
       current: currentDocument,
       base: mergeBase,
