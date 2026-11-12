@@ -45,17 +45,20 @@ test("a staged remove, restore and later scalar share aliases without copying an
   const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }] });
   try {
     registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, createFlowLoadRuntime());
-    const commands = [{ ...create, fields: { ...create.fields, visualText: "V", imageRef: { sha256: "a".repeat(64) }, moreImages: [{ imageRef: { sha256: "b".repeat(64) } }] } },
+    const commands = [{ ...create, fields: { ...create.fields, audioText: "<strong>abc</strong>", visualText: "<em>V</em>", imageRef: { sha256: "a".repeat(64) }, moreImages: [{ imageRef: { sha256: "b".repeat(64) } }] } },
       { ...remove, targets: ["new"], boundaries: ["new"], observed: [flowBaseReference("new", "audioText", 0, 3)] },
       { kind: "restore", id: "back", by: "Alice", removals: ["a"] }, { kind: "scalar", id: "length", by: "Alice", target: { scope: "beat", record: "new" }, field: "lengthSeconds", value: 9 }];
     assert.deepEqual(executeSharedOperations(set.a, commands.map(operation), { base: readSharedRevision(set.a) }), { ok: true });
-    const value = projectSharedDocumentWithRecovery(set.a); assert.deepEqual(value.recovery, []); assert.equal(value.document.rows.at(-1)?.audioText, "abc");
+    const value = projectSharedDocumentWithRecovery(set.a); assert.deepEqual(value.recovery, []); assert.equal(value.document.rows.at(-1)?.audioText, "<strong>abc</strong>");
     assert.equal(value.document.rows.at(-1)?.lengthSeconds, 9); assert.equal(collabState(set.a).roots.order.length, 2);
     const record = readSharedRemovalCommand("structure_1_0061_removal_0", collabState(set.a).roots.removalRecords.get("structure_1_0061_removal_0"));
     assert.ok(record?.kind === "remove"); assert.equal(record.comments, null); assert.equal(record.observed[0]?.identities.length, 3);
     assert.deepEqual(record.components, ["structure_1_007200310037_visual_0"]);
     assert.deepEqual(record.gallery, ["structure_1_007200310037_gallery_0", "structure_1_007200310037_gallery_1"]);
-    assert.equal(record.observed[1]?.identities.length, 1); assert.equal(value.document.rows.at(-1)?.visualText, "V");
+    assert.equal(record.observed[1]?.identities.length, 1); assert.equal(value.document.rows.at(-1)?.visualText, "<em>V</em>");
+    assert.deepEqual(value.document.rows.at(-1)?.imageRef, { sha256: "a".repeat(64) });
+    const images = value.document.rows.at(-1)?.moreImages; assert.ok(Array.isArray(images)); assert.equal(images.length, 1);
+    assert.deepEqual((images[0] as Record<string, unknown>).imageRef, { sha256: "b".repeat(64) });
   } finally { set.close(); }
 });
 

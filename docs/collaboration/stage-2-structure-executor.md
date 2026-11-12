@@ -297,7 +297,8 @@ prepared payload. There is one transaction and update, and no full-state encodin
 The copied T10 oracles check original and concurrent identities through removal
 and restore; the test reader supplies removal caret fallback, which is not a new
 production caret-placement claim. The seeded model has 72 histories, 900 operations,
-144 checkpoints and 504 live/fresh index comparisons, with literal declared limits
+144 checkpoints and 504 live/fresh index comparisons, including 36 restores before
+peer delivery, with literal declared limits
 `[]` for its beat-only cases. Complete app lists execute 30 operations in 15 calls,
 skip zero and defer 12 operations in three whole lists requiring `heading-remove`.
 Their declared limit is: "Removing across a scene boundary also removes a heading;

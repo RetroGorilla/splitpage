@@ -21,12 +21,12 @@ const identities = [
 const declaredLimits: readonly string[] = [];
 
 test("seeded removal checkpoints agree with a literal model and fresh ownership and attachment indexes", t => {
-  let seed = 0x5c33, histories = 0, checkpoints = 0, comparisons = 0, commands = 0;
+  let seed = 0x5c33, histories = 0, checkpoints = 0, comparisons = 0, commands = 0, earlyRestores = 0;
   const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n; };
   const runtime = createFlowLoadRuntime(), violations = new Set<string>();
   for (let sample = 0; sample < 12; sample++) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
     const set = replicas(copies, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }, { id: "R3", audioText: "ef" }] });
-    const handles = [set.a, set.b, set.c].slice(0, copies), offset = random(3), first = random(copies);
+    const handles = [set.a, set.b, set.c].slice(0, copies), offset = random(3), first = random(copies), early = random(2) === 0;
     const send = (handle: typeof set.a, ops: unknown[]) => { assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true }); commands += ops.length; };
     const text = (copies === 2 ? ["ABcd", "cABd", "cdAB"] : ["ABCcd", "cABCd", "cdABC"])[offset]; assert.ok(text);
     const original = [{ id: "R1", text: "ab" }, { id: "R2", text }, { id: "R3", text: "ef" }];
@@ -60,13 +60,15 @@ test("seeded removal checkpoints agree with a literal model and fresh ownership 
           { kind: "remove", id: "a", by: "Writer", removalKind: "beat", targets: ["R2"], observed: [flowBaseReference("R2", "audioText", 0, 2)], boundaries: ["R2"], components: [], gallery: [], at: 1 }
         ]);
       }
-      checkpoint(true);
-      for (let index = 0; index < copies; index++) { const handle = handles[index], ids = identities[index]; assert.ok(handle && ids);
-        send(handle, [{ kind: "restore", id: "back", by: "Writer", removals: [ids.a, ids.removal] }]); }
+      const restore = () => { for (let index = 0; index < copies; index++) { const handle = handles[index], ids = identities[index]; assert.ok(handle && ids);
+        send(handle, [{ kind: "restore", id: "back", by: "Writer", removals: [ids.a, ids.removal] }]); } };
+      if (early) { restore(); earlyRestores++; }
+      checkpoint(!early);
+      if (!early) restore();
       checkpoint(false);
       const roots = collabState(set.a).roots; assert.equal(roots.order.length, 3 + copies); histories++;
     } finally { set.close(); }
   }
-  assert.deepEqual([...violations], declaredLimits); assert.deepEqual({ histories, checkpoints, comparisons, commands }, { histories: 72, checkpoints: 144, comparisons: 504, commands: 900 });
-  t.diagnostic(JSON.stringify({ seed: "0x5c33", histories, checkpoints, comparisons, commands, declaredLimits }));
+  assert.deepEqual([...violations], declaredLimits); assert.deepEqual({ histories, checkpoints, comparisons, commands, earlyRestores }, { histories: 72, checkpoints: 144, comparisons: 504, commands: 900, earlyRestores: 36 });
+  t.diagnostic(JSON.stringify({ seed: "0x5c33", histories, checkpoints, comparisons, commands, earlyRestores, declaredLimits }));
 });
