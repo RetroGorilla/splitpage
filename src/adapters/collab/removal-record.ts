@@ -73,7 +73,7 @@ export function readSharedRemovalBufferSources(beats: Y.Map<unknown>, records: Y
   const sources = new Map<string, SharedRemovalBufferSource>();
   for (const beat of members) {
     const raw = caches.entry(beats, "removal-source-beat", beat, () => beats.get(beat));
-    const flags: unknown = raw instanceof Y.Map ? caches.entry(raw, "removal-source-map", "removals", () => raw.get("removals")) : null;
+    const flags: unknown = raw instanceof Y.Map ? caches.entry(raw, "removal-source-map", "removals", () => (raw as Y.Map<unknown>).get("removals")) : null;
     const keys = flags instanceof Y.Map ? caches.memo([flags], "removal-source-keys",
       () => [...flags.keys()].filter(key => readSharedRemovalState([[key, flags.get(key)]]).generation !== null)) : [];
     for (const key of keys) {
