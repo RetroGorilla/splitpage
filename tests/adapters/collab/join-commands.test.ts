@@ -144,6 +144,30 @@ test("join preparation rejects non-record containers without expanding their tex
   }
 });
 
+test("join value guards cover ids, separator registers and both retirement flags", () => {
+  for (const kind of ["join-glue", "join-retire"] as const) for (const slot of ["id", "register", "flag", "group"] as const) for (const type of ["text", "array"]) {
+    const set = replicas(2, source);
+    try {
+      registerSharedJoinHandlers(set.a); assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
+      const roots = collabState(set.a).roots, container = slot === "id" ? roots.beats.get("R2") : slot === "register" ? roots.meta : roots.retiredJoins;
+      assert.ok(container instanceof Y.Map);
+      const key = slot === "id" ? "id" : slot === "register" ? "joinGlue:" + first : slot === "flag" ? first : '["join-retirement","R2","R1"," ",0]';
+      const value = type === "text" ? new Y.Text("hidden") : new Y.Array<unknown>();
+      transactSharedDocument(set.a, "hydration", () => container.set(key, value));
+      const inspect = value instanceof Y.Text ? mock.method(value, "toDelta", () => { throw new Error("Unneeded text expansion"); })
+        : mock.method(value, "toArray", () => { throw new Error("Unneeded array expansion"); });
+      try {
+        const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
+        const result = executeSharedOperations(set.a, [change(kind, [first])]);
+        if (slot === "id") { assert.ok(!result.ok); assert.equal(result.reason, "missing-join");
+          assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
+        } else assert.deepEqual(result, { ok: true });
+        assert.equal(inspect.mock.callCount(), 0);
+      } finally { inspect.mock.restore(); }
+    } finally { set.close(); }
+  }
+});
+
 test("glue changes leave a selected competing target unchanged and an unselected target inert", () => {
   const set = replicas(2, source);
   try {
@@ -177,5 +201,5 @@ test("glue and retirement preparation reads stay constant with unrelated beats a
     }
     counts.push(measured);
   }
-  assert.deepEqual(counts, [[3, 3], [3, 3]]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], glue: counts[0], retirement: counts[1], wholeCollectionWalks: 0 }));
+  assert.deepEqual(counts, [[4, 4], [4, 4]]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], glue: counts[0], retirement: counts[1], wholeCollectionWalks: 0 }));
 });

@@ -13,8 +13,11 @@ import type { SharedJoinIndex } from "./join-index.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
 
 function staged(view: SharedPreparationView): Map<string, string> { return view.scratch("issued-joins", () => new Map<string, string>()); }
+function value(view: SharedPreparationView, path: readonly string[]) {
+  return view.kind(path) === "value" ? view.get(path) : undefined;
+}
 function entry(view: SharedPreparationView, path: readonly string[]) {
-  return view.kind(path) === "value" ? readSharedJoinEntry(view.get(path)) : null;
+  return readSharedJoinEntry(value(view, path));
 }
 function frozen(writes: readonly SharedPreparedWrite[]) {
   const description = freezeSharedPreparedValue(writes);
@@ -63,10 +66,10 @@ function prepareJoinChange(operation: SharedJoinGlue | SharedJoinRetire, view: S
       let found = false, active = false;
       for (const from of owners) {
         const known = entry(view, ["beats", from, "joins", join]);
-        if (!known || view.get(["beats", from, "id"]) !== from) continue;
+        if (!known || value(view, ["beats", from, "id"]) !== from) continue;
         found = true;
         const group = sharedJoinRetirementGroup(from, known);
-        const retired = view.get(["retiredJoins", join]) === true || view.get(["retiredJoins", group]) === true;
+        const retired = value(view, ["retiredJoins", join]) === true || value(view, ["retiredJoins", group]) === true;
         if (retired) { if (operation.kind === "join-glue") return { ok: false, reason: "retired-join" }; continue; }
         active = true;
         if (operation.kind === "join-retire") writes.push({ kind: "set", path: ["retiredJoins", group], value: true });
@@ -74,8 +77,8 @@ function prepareJoinChange(operation: SharedJoinGlue | SharedJoinRetire, view: S
       if (!found) return { ok: false, reason: "missing-join" };
       if (operation.kind === "join-glue") {
         const path = ["meta", sharedJoinGlueRegisterField(join)];
-        if (view.get(path) !== operation.glue) writes.push({ kind: "set", path, value: operation.glue });
-      } else if (active && view.get(["retiredJoins", join]) !== true) writes.push({ kind: "set", path: ["retiredJoins", join], value: true });
+        if (value(view, path) !== operation.glue) writes.push({ kind: "set", path, value: operation.glue });
+      } else if (active && value(view, ["retiredJoins", join]) !== true) writes.push({ kind: "set", path: ["retiredJoins", join], value: true });
     }
     return frozen(writes);
   });
