@@ -22,7 +22,7 @@ function checkAuthor(operation: { readonly id: string; readonly by: string }): v
   if (!isStableSharedIdentity(operation.id) || !isStableSharedIdentity(operation.by)) throw new SharedTextPreparationError("unstable-identity");
 }
 
-// why: readers look for retractions and copies only on a text that carries this marker, so it is written with the first one.
+// why: readers look for retractions and copies only on a text with this marker, so the first one writes it.
 function marker(view: SharedPreparationView, store: readonly string[]): SharedPreparedWrite[] {
   const path = [...store, SHARED_MARK_PROVENANCE_MARKER];
   return view.has(path) ? [] : [{ kind: "set", path, value: true }];

@@ -176,7 +176,9 @@ pins it. The generator fails on any violation the table does not carry.
 | pending-update | waits for the adapter executor | A limit of delivery into the shared document |
 | insert-after-deleted-run | carried, shared document only | Alice deletes `bc` of `abcd`, delivered. Bob types `X` where the gap between `b` and `c` was. Alice undoes: `abcXd`, where the model and Stage 1 give `abXcd` |
 
-`insert-after-deleted-run` comes from the forward insertion, not from the undo:
+`insert-after-deleted-run` is kept as a declared rule, assumed rule 30 on the
+tracking issue: text typed where a run was already deleted sits after that run
+if the deletion is undone. It comes from the forward insertion, not from the undo:
 `prepareSharedTextInsert` places text by a position among the visible
 characters, so text typed where a deleted run was sits after the whole run. The
 undo restores each character in its original order and cannot move the other
@@ -193,8 +195,9 @@ runs on the shared document, with the record parts.
 
 - `executeSharedCommand` runs a forward command through
   `executeSharedOperations` and builds its record from what the document shows
-  before and after: the units inserted and deleted, the occurrences a mark
-  created with what it had seen, the field values, the status event.
+  before and after its own transaction: the units inserted and deleted, the
+  occurrences a mark created with what it had seen, the field values, the
+  status event.
 - `reverseSharedUndoRecord` is the owner's `reverse` port. It plans every part
   from the document as it is now, runs the result as one
   `executeSharedOperations` call with the origin `local-undo`, and returns the
@@ -231,6 +234,46 @@ How the points left open by the model are met:
    later. This is the step beyond Stage 1 described above.
 5. **The origin.** `executeSharedOperations` takes `origin: "local-undo"`;
    without it a write is `local-command` as before.
+6. **Only the command's own writes.** Updates that arrive during a command's
+   notification are held and applied when its write ends. Both halves run
+   inside one write frame (`sharedWriteFrame`) and read the record, or the
+   inverse, before that frame ends, so no state they compare contains a held
+   update. `undo-held-updates.test.ts` runs every supported part kind with
+   another writer's change to the same target delivered during the
+   notification.
+7. **A value of two units.** The two halves of a character outside the basic
+   plane are deleted and restored as one value. Its birth record covers both
+   units; the history follows and traces each, and the inverse of a restore
+   names every unit the restore wrote (`undo-runs.test.ts`).
+
+### The provenance marker
+
+Retractions and copies are rare; typing is not. A text's mark store therefore
+carries the key `provenance` with the value `true` once it holds a retraction
+or a copy. The undo handlers write it in the transaction of the first one,
+through the operation entry, and never again; two first retractions made
+apart write the same constant. The key is not a record: the record validators
+refuse it and every reader of the store skips it, so a marker on a text
+without retractions changes no mark state, preparation, projection or late
+join (checked on the 291 reference documents in
+`undo-provenance-marker.test.ts`).
+
+`readSharedMarkProvenance` trusts the marker in one direction: absent means
+no scan. Cost of typing one character, counted by `sharedMarkProvenanceCost`:
+
+| Text | `executeSharedOperations` | `executeSharedCommand` |
+| --- | --- | --- |
+| no marker, 10 or 1,000 ordinary records | 0 scans, 0 visits | 0 scans, 0 visits |
+| marker, n records | 1 scan, n visits | 3 scans, about 3n visits |
+
+A typed command reads the mark state for its record once, after it has
+written; which characters were there before is read from the text alone.
+
+Declared limit: a text seeded by hand with a retraction and no marker reads
+that retraction as a plain removal. The occurrence it names is gone where the
+removal covers it, but the identical mark of another writer and copies on
+restored characters still show. Every copy holds the same state, so every copy
+reads the same. No scan is added to detect it; one literal test pins it.
 
 Not covered yet: comment and other record parts and the generator on the shared
 document (next cut), and structure commands, which the owner refuses by name.
