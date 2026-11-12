@@ -65,9 +65,17 @@ empty and end gaps. The commit-mapping slice therefore adds one anchor per beat,
 including empty beats. No extra read is made on the standalone keystroke path.
 
 Let U be the physical text's units and I its native items, including other beats
-that share that text after a split. The supplier scans U units for spans; each
-position or anchor can walk I items from the start. Its bound per non-empty beat
-is O(U + (L + 2)I), and per empty beat O(U + I), with O(U + L) temporary storage.
+that share that text after a split. Span discovery scans U units and can search
+backward through earlier spans at each `before` boundary, costing O(U²) in the
+worst case. Each position or anchor can walk I items from the start. The supplier's
+bound per non-empty beat is O(U² + (L + 2)I), and per empty beat O(U² + I), with
+O(U + L) temporary storage. Valid hand-seeded records headed by `{b:"R1"}`, then
+`{b:"B0"}`, `{b:"B1"}`, `{b:"P0",before:"R1"}`, `{b:"P1",before:"B0"}`, extended
+to 128 units, caused 4,096 backward span-predicate reads in review. No normal
+editing history producing that shape has been identified: the creation forms
+insert within the addressed owner's span. This is not a proof that concurrent
+editing cannot produce it; accepted shared records are covered by the worst-case
+bound regardless of their origin.
 A whole paint sums those bounds across painted beats; no shared latency bound is
 claimed. A historical throwaway probe read 300 freshly hydrated beats (75,600
 units, one item per beat) in 2 to 5 ms. It predates the gap captures; edited text
