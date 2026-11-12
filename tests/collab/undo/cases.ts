@@ -7,8 +7,8 @@ import {
   chainOracles, doubleDeleteOracles, endpointOracles, heldSelectionOracle, identicalTagOracles, insideRangeOracles, laterFormatOracles, longChainOracle,
   positionControlOracle, redoneAtGapOracle, redoOracles, statusOracles, statusRedoObserved, throwingUndoOracles
 } from "../oracles/undo-records/oracles.ts";
-import type { ModelReplica } from "./model-world.ts";
-import { BOLD, TAG_P, UNBOLD, UndoScenario } from "./scenario.ts";
+import { BOLD, MODEL_WORLD, TAG_P, UNBOLD, UndoScenario } from "./scenario.ts";
+import type { UndoReplica, UndoWorldKind } from "./scenario.ts";
 
 export type UndoWriter = "Alice" | "Bob";
 
@@ -19,12 +19,12 @@ function status(value: string, noticed = false): ScriptOracle {
   return { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}]], status: value }], carets: {}, recovery: [], ...(noticed ? { notices: NOTICES } : {}) };
 }
 
-function pair(s: UndoScenario, first: UndoWriter): [ModelReplica, ModelReplica] {
+function pair(s: UndoScenario, first: UndoWriter): [UndoReplica, UndoReplica] {
   return first === "Alice" ? [s.a, s.b] : [s.b, s.a];
 }
 
-export function runInsideRange(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runInsideRange(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.type(s.a, "R1", 2, "xyz", ["a1", "a2", "a3"]);
   s.deliver();
   s.type(s.b, "R1", 3, "Q", ["b1"]);
@@ -35,8 +35,8 @@ export function runInsideRange(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runPositionControl(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runPositionControl(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.type(s.a, "R1", 2, "xy", ["a1", "a2"]);
   s.type(s.b, "R1", 0, "Q", ["b1"]);
   s.deliver();
@@ -45,8 +45,8 @@ export function runPositionControl(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runDoubleDelete(order: DeliveryOrder, first: UndoWriter, concurrent: boolean): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order), [one, two] = pair(s, first);
+export function runDoubleDelete(order: DeliveryOrder, first: UndoWriter, concurrent: boolean, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind), [one, two] = pair(s, first);
   s.erase(s.a, "R1", 1, 3);
   s.erase(s.b, "R1", 2, 3);
   s.check("deleted", doubleDeleteOracles.deleted);
@@ -57,8 +57,8 @@ export function runDoubleDelete(order: DeliveryOrder, first: UndoWriter, concurr
   return s;
 }
 
-export function runRedoAfterRemote(order: DeliveryOrder, sameGap: boolean): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order);
+export function runRedoAfterRemote(order: DeliveryOrder, sameGap: boolean, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order, kind);
   s.type(s.a, "R1", 2, "xy", ["a1", "a2"]);
   s.check("typed", redoOracles.typed);
   s.effective(s.a.undo.undo());
@@ -70,8 +70,8 @@ export function runRedoAfterRemote(order: DeliveryOrder, sameGap: boolean): Undo
   return s;
 }
 
-export function runEmptyBeatInsert(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "" }], order);
+export function runEmptyBeatInsert(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "" }], order, kind);
   s.type(s.a, "R2", 0, "x", ["a1"]);
   s.check("empty beat typed", endpointOracles["empty beat typed"]);
   const caret = s.effective(s.a.undo.undo());
@@ -80,8 +80,8 @@ export function runEmptyBeatInsert(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runLongChain(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runLongChain(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.format(s.a, "R1", 1, 2, BOLD);
   for (let round = 0; round < 64; round++) {
     s.erase(s.a, "R1", 1, 2);
@@ -94,8 +94,8 @@ export function runLongChain(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runThrowingUndo(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runThrowingUndo(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.type(s.a, "R1", 2, "x", ["a1"]);
   s.a.failNextReversal = "the record cannot be resolved";
   assert.throws(() => s.a.undo.undo(), /the record cannot be resolved/);
@@ -106,16 +106,16 @@ export function runThrowingUndo(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runHeldSelection(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order), held = s.a.observe("R1", 1, 3).selection;
+export function runHeldSelection(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind), held = s.a.observe("R1", 1, 3).selection;
   s.erase(s.a, "R1", 1, 3);
   s.effective(s.a.undo.undo());
   s.check("held selection mapped", heldSelectionOracle, { carets: { A: held } });
   return s;
 }
 
-export function runLaterFormat(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order);
+export function runLaterFormat(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind);
   s.format(s.a, "R1", 0, 2, BOLD);
   s.deliver();
   s.format(s.b, "R1", 1, 3, UNBOLD);
@@ -126,8 +126,8 @@ export function runLaterFormat(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runRestoredChain(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runRestoredChain(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.type(s.b, "R1", 0, "Q", ["b1"]);
   s.deliver();
   s.type(s.a, "R1", 3, "x", ["a1"]);
@@ -145,8 +145,8 @@ export function runRestoredChain(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runIdenticalTag(order: DeliveryOrder, first: UndoWriter): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "the red mug" }, { id: "R2", text: "ok" }], order), [one, two] = pair(s, first);
+export function runIdenticalTag(order: DeliveryOrder, first: UndoWriter, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "the red mug" }, { id: "R2", text: "ok" }], order, kind), [one, two] = pair(s, first);
   s.type(s.a, "R2", 2, "?", ["a1"]);
   s.type(s.b, "R2", 0, "!", ["b1"]);
   s.deliver();
@@ -162,8 +162,8 @@ export function runIdenticalTag(order: DeliveryOrder, first: UndoWriter): UndoSc
   return s;
 }
 
-export function runSequentialStatus(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runSequentialStatus(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.a.status("R1", "ready");
   s.a.status("R1", "shot");
   s.check("shot", statusOracles.shot, { status: true });
@@ -174,8 +174,8 @@ export function runSequentialStatus(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runStatusRedo(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runStatusRedo(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.a.status("R1", "ready");
   s.b.status("R1", "shot");
   s.check("concurrent", statusRedoObserved.todo, { status: true });
@@ -186,8 +186,8 @@ export function runStatusRedo(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runConcurrentStatus(order: DeliveryOrder, same: boolean, first: UndoWriter): UndoScenario {
-  const s = new UndoScenario(AB, order), [one, two] = pair(s, first);
+export function runConcurrentStatus(order: DeliveryOrder, same: boolean, first: UndoWriter, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind), [one, two] = pair(s, first);
   s.a.status("R1", same ? "shot" : "ready");
   s.b.status("R1", "shot");
   s.check("concurrent", status(same ? "shot" : "todo", !same), { status: true });
@@ -204,8 +204,8 @@ export function runConcurrentStatus(order: DeliveryOrder, same: boolean, first: 
   return s;
 }
 
-export function runStatusPrior(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runStatusPrior(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.a.status("R1", "shot");
   s.b.status("R1", "shot");
   s.deliver();
@@ -218,8 +218,8 @@ export function runStatusPrior(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runStatusUsedUp(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runStatusUsedUp(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   const kept: ScriptOracle = { rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2", "b", {}], ["b1", "Z", {}]], status: "todo" }], carets: {}, recovery: [] };
   s.type(s.b, "R1", 2, "Z", ["b1"]);
   s.deliver();
@@ -235,8 +235,8 @@ export function runStatusUsedUp(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runSemanticStatus(order: DeliveryOrder, identical: boolean, undo: readonly UndoWriter[]): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runSemanticStatus(order: DeliveryOrder, identical: boolean, undo: readonly UndoWriter[], kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.a.status("R1", "ready");
   s.a.status("R1", "shot");
   s.b.status("R1", identical ? "ready" : "shot");
@@ -252,8 +252,8 @@ export function runSemanticStatus(order: DeliveryOrder, identical: boolean, undo
   return s;
 }
 
-export function runT21(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order), seen = s.a.observe("R1", 1, 3);
+export function runT21(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind), seen = s.a.observe("R1", 1, 3);
   s.type(s.b, "R1", 2, "X", ["b1"]);
   if (order === "D3") s.world.queue.deliverFrom("B", order);
   s.a.mark(seen, BOLD);
@@ -264,8 +264,8 @@ export function runT21(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runT21Scalar(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario(AB, order);
+export function runT21Scalar(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario(AB, order, kind);
   s.type(s.a, "R1", 2, "Z", ["a1"]);
   s.a.status("R1", "ready");
   s.b.status("R1", "shot");
@@ -277,8 +277,8 @@ export function runT21Scalar(order: DeliveryOrder): UndoScenario {
   return s;
 }
 
-export function runHonestDeletion(order: DeliveryOrder): UndoScenario {
-  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order), seen = s.a.observe("R1", 1, 3), caret = s.a.observe("R1", 1, 1).selection;
+export function runHonestDeletion(order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD): UndoScenario {
+  const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind), seen = s.a.observe("R1", 1, 3), caret = s.a.observe("R1", 1, 1).selection;
   s.type(s.b, "R1", 2, "X", ["b1"]);
   s.world.queue.deliverFrom("B", order);
   s.a.edit({ at: seen });

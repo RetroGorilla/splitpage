@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
-import type { SharedContentRef, SharedMarkValue } from "../../../src/core/collab/operations.ts";
+import type { SharedContentRef, SharedJsonValue, SharedMarkValue } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
-import type { SharedUndoOutcome } from "../../../src/application/editing/undo/shared-undo.ts";
+import type { SharedUndo, SharedUndoOutcome } from "../../../src/application/editing/undo/shared-undo.ts";
 import { checkModel } from "../checker.ts";
-import type { ScriptOracle } from "../checker.ts";
+import type { CollabModel, IdentityBook, ScriptOracle } from "../checker.ts";
 import { assertReplicasAgree } from "../agreement.ts";
 import type { DeliveryOrder, ReplicaName } from "../delivery.ts";
 import type { SeedBeat } from "../oracles/seed-beat.ts";
 import { ModelWorld } from "./model-world.ts";
-import type { ModelReplica } from "./model-world.ts";
+import type { ModelObservation, ModelSnapshot } from "./model-world.ts";
+import { AdapterWorld } from "./adapter-world.ts";
 
 export const BOLD: SharedMarkValue = { kind: "b", value: true };
 export const UNBOLD: SharedMarkValue = { kind: "b", value: null };
@@ -16,15 +17,52 @@ export const TAG_P: SharedMarkValue = { kind: "tag", id: "P" as SharedContentRef
 
 export interface ScenarioCheck { readonly carets?: Readonly<Record<string, SharedUndoSelection>>; readonly status?: boolean }
 
+export interface UndoReplica {
+  readonly name: ReplicaName;
+  readonly undo: SharedUndo;
+  readonly written: { readonly length: number };
+  typing: boolean;
+  failNextReversal: string | null;
+  readonly observe: (beat: string, from: number, to: number) => ModelObservation;
+  readonly caretAfter: (character: string) => SharedUndoSelection;
+  readonly edit: (input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[];
+    readonly caret?: ModelObservation; readonly command?: string }) => string[];
+  readonly mark: (observed: ModelObservation, mark: SharedMarkValue) => void;
+  readonly status: (beat: string, value: string) => void;
+  readonly scalar: (beat: string, field: string, value: SharedJsonValue | undefined) => void;
+  readonly snapshot: () => ModelSnapshot;
+}
+
+export interface UndoWorld {
+  readonly queue: { readonly flush: (order: DeliveryOrder) => void; readonly deliverFrom: (from: ReplicaName, order: DeliveryOrder) => void };
+  readonly replicas: ReadonlyMap<ReplicaName, UndoReplica>;
+  readonly book: IdentityBook;
+  readonly replica: (name: ReplicaName) => UndoReplica;
+  readonly join: (name: ReplicaName, source: ReplicaName) => UndoReplica;
+  readonly fresh: (source: ReplicaName) => UndoReplica;
+  readonly name: (ids: readonly string[], names: readonly string[]) => void;
+  readonly model: (replica: UndoReplica, options?: ScenarioCheck) => CollabModel;
+}
+
+export interface UndoWorldKind {
+  readonly suffix: string;
+  readonly make: (seed: readonly SeedBeat[], writers?: readonly ReplicaName[]) => UndoWorld;
+}
+
+// why: the same literal cases run on the model executor and on the adapter executor writing a shared document.
+export const MODEL_WORLD: UndoWorldKind = { suffix: "", make: (seed, writers) => new ModelWorld(seed, writers) };
+export const ADAPTER_WORLD: UndoWorldKind = { suffix: " (shared document)", make: (seed, writers) => new AdapterWorld(seed, writers) };
+export const UNDO_WORLDS: readonly UndoWorldKind[] = [MODEL_WORLD, ADAPTER_WORLD];
+
 export class UndoScenario {
-  readonly world: ModelWorld;
+  readonly world: UndoWorld;
   readonly order: DeliveryOrder;
-  readonly a: ModelReplica;
-  readonly b: ModelReplica;
+  readonly a: UndoReplica;
+  readonly b: UndoReplica;
   checks = 0;
 
-  constructor(seed: readonly SeedBeat[], order: DeliveryOrder) {
-    this.world = new ModelWorld(seed);
+  constructor(seed: readonly SeedBeat[], order: DeliveryOrder, kind: UndoWorldKind = MODEL_WORLD) {
+    this.world = kind.make(seed);
     this.order = order;
     this.a = this.world.replica("A");
     this.b = this.world.replica("B");
@@ -47,15 +85,15 @@ export class UndoScenario {
     this.checks++;
   }
 
-  type(replica: ModelReplica, beat: string, at: number, text: string, names: readonly string[]): void {
+  type(replica: UndoReplica, beat: string, at: number, text: string, names: readonly string[]): void {
     this.world.name(replica.edit({ at: replica.observe(beat, at, at), text }), names);
   }
 
-  erase(replica: ModelReplica, beat: string, from: number, to: number): void {
+  erase(replica: UndoReplica, beat: string, from: number, to: number): void {
     replica.edit({ at: replica.observe(beat, from, to) });
   }
 
-  format(replica: ModelReplica, beat: string, from: number, to: number, mark: SharedMarkValue): void {
+  format(replica: UndoReplica, beat: string, from: number, to: number, mark: SharedMarkValue): void {
     replica.mark(replica.observe(beat, from, to), mark);
   }
 
@@ -66,7 +104,7 @@ export class UndoScenario {
     return outcome.selection;
   }
 
-  usedUp(replica: ModelReplica): void {
+  usedUp(replica: UndoReplica): void {
     const before = replica.undo.sizes(), written = replica.written.length;
     this.effective(replica.undo.undo(), false);
     assert.deepEqual(replica.undo.sizes(), { ...before, undo: before.undo - 1 });
