@@ -16,6 +16,8 @@ import type { SharedProjectionGalleryOverflow } from "../../core/collab/projecti
 import { readSharedRemovalBufferSources } from "./removal-record.ts";
 import type { SharedRemovalBufferSource } from "./removal-record.ts";
 import { collabState } from "./state.ts";
+import { compareSharedProjections } from "../../core/collab/projection/changes.ts";
+import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
 
 export interface SharedDocumentFieldProjection {
   readonly document: Readonly<Record<string, unknown>>;
@@ -36,11 +38,20 @@ export interface SharedDocumentProjectionResult {
     | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null })[];
 }
 
-export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle): SharedDocumentProjectionResult {
-  return withSharedSnapshot(handle, state => assembleSharedDocument(new SharedProjectionSource(state as unknown as SharedDocumentHandle)));
+export interface SharedDocumentProjectionStep extends SharedDocumentProjectionResult {
+  readonly changes: SharedProjectionChanges;
 }
 
-export function assembleSharedDocument(source: SharedProjectionSource): SharedDocumentProjectionResult {
+export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle): SharedDocumentProjectionResult {
+  const { document, recovery } = projectSharedDocumentStep(handle, null);
+  return { document, recovery };
+}
+
+export function projectSharedDocumentStep(handle: SharedDocumentHandle, previous: DocumentShape | null): SharedDocumentProjectionStep {
+  return withSharedSnapshot(handle, state => assembleSharedDocument(new SharedProjectionSource(state as unknown as SharedDocumentHandle), previous));
+}
+
+export function assembleSharedDocument(source: SharedProjectionSource, previous: DocumentShape | null): SharedDocumentProjectionStep {
   source.begin();
   const cache = source.cache;
   const recovery: SharedDocumentProjectionResult["recovery"][number][] = [];
@@ -108,7 +119,9 @@ export function assembleSharedDocument(source: SharedProjectionSource): SharedDo
   const { sections, empty } = cache.read(["sections"], [...headings, ...visible], () => projectSharedSections(headings, new Set(visible)));
   recovery.push(...empty.map(entry => ({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId })));
   Object.assign(out, { rows }); if (sections.length) out.sections = sections; else delete out.sections;
-  const result = { document: cache.canonical(out) as DocumentShape, recovery };
+  const document = cache.canonical(out) as DocumentShape;
+  const changes = compareSharedProjections(previous, document, (kind, key) => cache.counted(kind === "row" ? "compare-row" : "compare-field", key));
+  const result = { document, recovery, changes };
   cache.end();
   return result;
 }

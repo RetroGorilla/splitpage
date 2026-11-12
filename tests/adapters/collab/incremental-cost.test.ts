@@ -24,7 +24,7 @@ test("incremental typing reads zero unrelated texts, mark entries and records wi
       assert.deepEqual(measured.totals, { texts: 5, markEntries: 19, records: 0, statusEntries: 0, orderEntries: 0 });
       assert.deepEqual(measured.unrelated, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
       assert.deepEqual(measured.result.counts, { texts: 1, identities: 70, markRecords: 1, markAnchors: 36, markChecks: beats === 300 ? 69 : 53, statusEvents: 0 });
-      assert.deepEqual(work, ["segment:b:R0", "group:R0", "cell:[\"R0\",\"audioText\"]"]);
+      assert.deepEqual(work, ["segment:b:R0", "group:R0", "cell:[\"R0\",\"audioText\"]", "compare-row:R0", "compare-field:comments"]);
       assert.equal(projector.read().document.rows[1], before);
       assertIncremental(run.a, projector);
       if (beats === 300) {
