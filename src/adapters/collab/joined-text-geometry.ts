@@ -22,7 +22,13 @@ export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owne
     names.push(...joins.neighbors(name));
     for (const item of planned.values()) if (item.from === name || item.entry.into === name) names.push(item.from, item.entry.into);
     const staged = resolveSharedRestorableBeat(view, name);
-    for (const key of new Set([...index.candidates(name, false), ...(staged ? [staged.segment] : [])])) if (!segments.has(key)) {
+    const keys = [...index.candidates(name, false), ...(staged ? [staged.segment] : [])];
+    for (const entry of joins.entries(name)) keys.push(...index.joinSegments(entry.id));
+    for (const [id, item] of planned) if (item.from === name) {
+      const pending = sharedPlannedJoinEnds(view).get(id); if (pending) keys.push(pending.target.segment, pending.source.segment);
+    }
+    for (const key of new Set(keys)) if (!segments.has(key)) {
+      for (const id of index.segmentJoins(key)) for (const source of joins.locations(id)) if (joins.entries(source).some(entry => entry.id === id)) names.push(source);
       segments.add(key); const stream = readSharedStructureStream(view, key); if (!stream) continue;
       const parts = interpretSharedStructure(view, [], stream, "restore-membership");
       blocks.push(...parts.filter(block => block.segment === key));

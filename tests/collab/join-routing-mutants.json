@@ -41,5 +41,11 @@
     "find": "sharedTextInsertionPosition(plan, fixed?.offset ?? (at.affinity === \"before\" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from)",
     "replace": "(fixed?.offset ?? (at.affinity === \"before\" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from)",
     "tests": ["tests/adapters/collab/join-routing-contract.test.ts"]
+  }, {
+    "label": "native binding neighborhood follows only issued beat targets",
+    "file": "src/adapters/collab/joined-text-geometry.ts",
+    "find": "for (const id of index.segmentJoins(key))",
+    "replace": "for (const id of [] as string[])",
+    "tests": ["tests/adapters/collab/join-binding-neighborhood.test.ts", "tests/adapters/collab/join-binding-model.test.ts"]
   }]
 }

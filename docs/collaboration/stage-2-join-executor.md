@@ -63,6 +63,10 @@ do not select joins or interpret retirement: the core interpreter owns those rul
 Map replacements and source deletion patch the same index through its existing
 guarded callback. The same index caches validated issued entries, so preparation
 reads neither unrelated records nor their join maps.
+The structure index also caches both directions of validated binding-to-segment
+links, maintained by one guarded metadata subscription. This keeps the native end
+reachable if an intervening issued join disappears or a binding is retargeted;
+preparation and painting query those cached links without scanning metadata.
 
 ## Joined narration routing
 
