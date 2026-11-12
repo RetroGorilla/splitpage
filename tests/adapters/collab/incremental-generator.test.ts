@@ -77,7 +77,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
           if (pick(2)) { const reverse = nativeMap(handle, "beats", "R1").get("joins"); assert.ok(reverse instanceof Y.Map); reverse.set(prefix + "cycle", { into: "R2", glue: " " }); }
         });
         raw("join-glue", () => {
-          roots.meta.set(sharedJoinGlueRegisterField(prefix), pick(2) ? " " : "");
+          roots.meta.set(sharedJoinGlueRegisterField('["join-retirement","R2","R1"," ",0]'), pick(2) ? " " : "");
         });
         raw("remove", () => {
           const removals = nativeMap(handle, "beats", "R4").get("removals"); assert.ok(removals instanceof Y.Map); removals.set(prefix, true);

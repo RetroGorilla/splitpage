@@ -24,8 +24,8 @@ searching the cached record list merely to decide a group's dependencies. The
 gallery rule still receives all validated gallery records and members in merged
 row order. The join reader remains the single place for issued joins and their
 separator register; the incremental reader does not decode separators itself.
-An index of the validated issued join ids maps register fields back to their beat
-readers. A `joinGlue:<id>` change invalidates those structures, leaving document
+An index of the group fields reported by `readProjectionBeatStructure` maps register
+fields back to their beat readers. A `joinGlue:<group>` change invalidates those structures, leaving document
 fields, the title, texts and unrelated groups cached. Register validation and
 fallback to the issued separator stay in `readProjectionBeatStructure`, with
 `roots.meta` passed by the shared source. The literal probe changes only metadata,

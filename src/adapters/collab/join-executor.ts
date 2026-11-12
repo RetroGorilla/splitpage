@@ -73,12 +73,13 @@ function prepareJoinChange(operation: SharedJoinGlue | SharedJoinRetire, view: S
         if (retired) { if (operation.kind === "join-glue") return { ok: false, reason: "retired-join" }; continue; }
         active = true;
         if (operation.kind === "join-retire") writes.push({ kind: "set", path: ["retiredJoins", group], value: true });
+        else {
+          const path = ["meta", sharedJoinGlueRegisterField(group)];
+          if (value(view, path) !== operation.glue) writes.push({ kind: "set", path, value: operation.glue });
+        }
       }
       if (!found) return { ok: false, reason: "missing-join" };
-      if (operation.kind === "join-glue") {
-        const path = ["meta", sharedJoinGlueRegisterField(join)];
-        if (value(view, path) !== operation.glue) writes.push({ kind: "set", path, value: operation.glue });
-      } else if (active && value(view, ["retiredJoins", join]) !== true) writes.push({ kind: "set", path: ["retiredJoins", join], value: true });
+      if (operation.kind === "join-retire" && active && value(view, ["retiredJoins", join]) !== true) writes.push({ kind: "set", path: ["retiredJoins", join], value: true });
     }
     return frozen(writes);
   });

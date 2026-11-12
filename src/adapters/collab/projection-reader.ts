@@ -94,15 +94,17 @@ export function readProjectionStream(key: string, segment: Y.Map<unknown>, inOrd
   return { segment: key, inOrder, head: readProjectionHead(segment.get("head")), parts };
 }
 
-export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>, glueRegisters: Y.Map<unknown>): SharedProjectionBeatStructure {
+export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>, glueRegisters: Y.Map<unknown>, registerRead?: (field: string) => void): SharedProjectionBeatStructure {
   const joins: SharedProjectionBeatStructure["joins"][number][] = [];
   if (!(raw instanceof Y.Map) || readProjectionFields(raw, "beat")?.id !== id) return { id, joins, removed: false };
   const stored: unknown = raw.get("joins"), removals: unknown = raw.get("removals");
   if (stored instanceof Y.Map) for (const key of [...stored.keys()].sort()) {
     if (!key || !isStableSharedIdentity(key) || retirements.get(key) === true) continue;
     const value = readSharedJoinEntry(stored.get(key));
-    if (value && retirements.get(sharedJoinRetirementGroup(id, value)) !== true)
-      joins.push({ id: key, into: value.into, glue: projectSharedJoinGlue(value.glue, glueRegisters.get(sharedJoinGlueRegisterField(key))) });
+    if (value && retirements.get(sharedJoinRetirementGroup(id, value)) !== true) {
+      const field = sharedJoinGlueRegisterField(sharedJoinRetirementGroup(id, value)); registerRead?.(field);
+      joins.push({ id: key, into: value.into, glue: projectSharedJoinGlue(value.glue, glueRegisters.get(field)) });
+    }
   }
   const removed = readSharedRemovalState(removals instanceof Y.Map ? removals : []).removed;
   return { id, joins, removed };

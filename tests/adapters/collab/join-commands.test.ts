@@ -151,7 +151,7 @@ test("join value guards cover ids, separator registers and both retirement flags
       registerSharedJoinHandlers(set.a); assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
       const roots = collabState(set.a).roots, container = slot === "id" ? roots.beats.get("R2") : slot === "register" ? roots.meta : roots.retiredJoins;
       assert.ok(container instanceof Y.Map);
-      const key = slot === "id" ? "id" : slot === "register" ? "joinGlue:" + first : slot === "flag" ? first : '["join-retirement","R2","R1"," ",0]';
+      const key = slot === "id" ? "id" : slot === "register" ? 'joinGlue:["join-retirement","R2","R1"," ",0]' : slot === "flag" ? first : '["join-retirement","R2","R1"," ",0]';
       const value = type === "text" ? new Y.Text("hidden") : new Y.Array<unknown>();
       transactSharedDocument(set.a, "hydration", () => container.set(key, value));
       const inspect = value instanceof Y.Text ? mock.method(value, "toDelta", () => { throw new Error("Unneeded text expansion"); })

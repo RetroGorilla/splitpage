@@ -19,7 +19,9 @@ function seed(copies: number, removed: boolean) {
   }); run.queue.flush("D1"); return run;
 }
 function set(handle: SharedDocumentHandle, value: unknown, join = "jA"): void {
-  transactSharedDocument(handle, "local-command", () => collabState(handle).roots.meta.set("joinGlue:" + join, value));
+  const field = join === "jA" ? 'joinGlue:["join-retirement","R2","R1"," ",0]'
+    : join === "jB" ? 'joinGlue:["join-retirement","R2","R3"," ",0]' : 'joinGlue:["join-retirement","missing","R1"," ",0]';
+  transactSharedDocument(handle, "local-command", () => collabState(handle).roots.meta.set(field, value));
 }
 function read(handle: SharedDocumentHandle) {
   const bytes = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle);
@@ -151,7 +153,7 @@ test("seeded join glue register checkpoints agree with literal values, the scala
   t.diagnostic(JSON.stringify({ seed: 0x28c5, histories, commands, checkpoints, covered: [...covered].sort(), declaredLimits, violations: [...violations] }));
 });
 
-for (const removed of [false, true]) test(`one native join id has one global glue register even when damaged beat maps reuse that id: recovery=${removed}`, () => {
+for (const removed of [false, true]) test(`different source groups have separate glue registers even when damaged maps reuse a join id: recovery=${removed}`, () => {
   const run = replicas(3, { rows: [{ id: "R1", audioText: "a" }, { id: "R2", audioText: "b" }, { id: "R3", audioText: "c" }] });
   try {
     transactSharedDocument(run.a, "local-command", () => {
@@ -163,7 +165,7 @@ for (const removed of [false, true]) test(`one native join id has one global glu
       const result = read(handle);
       return { rows: result.document.rows.map(row => ({ id: row.id, text: row.audioText })),
         recovery: result.recovery.map(entry => entry.kind === "removed-beat" ? { id: entry.row.id, text: entry.row.audioText, members: entry.members } : entry) };
-    }, removed ? { rows: [], recovery: [{ id: "R1", text: "abc", members: ["R1", "R2", "R3"] }] } : { rows: [{ id: "R1", text: "abc" }], recovery: [] });
+    }, removed ? { rows: [], recovery: [{ id: "R1", text: "ab c", members: ["R1", "R2", "R3"] }] } : { rows: [{ id: "R1", text: "ab c" }], recovery: [] });
   } finally { run.close(); }
 });
 

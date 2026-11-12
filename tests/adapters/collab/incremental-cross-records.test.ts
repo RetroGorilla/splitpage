@@ -22,7 +22,7 @@ test("incremental join separator register changes only its joined row after a me
     transactSharedDocument(run.a, "local-command", () => {
       const joins = nativeMap(run.a, "beats", "R2").get("joins"); assert.ok(joins instanceof Y.Map); joins.set("native-join", { into: "R1", glue: " " });
     });
-    const untouched = projector.read().document.rows[1], field = sharedJoinGlueRegisterField("native-join");
+    const untouched = projector.read().document.rows[1], field = 'joinGlue:["join-retirement","R2","R1"," ",0]';
     work.length = 0;
     const measured = measureLibraryReads(run.a, "R2", () => transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(field, "")), docs);
     assert.equal(projector.read().document.rows[0]?.audioText, "onetwo");

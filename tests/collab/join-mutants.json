@@ -62,6 +62,13 @@
     "find": "view.kind(path) === \"value\" ? view.get(path) : undefined",
     "replace": "view.get(path)",
     "tests": ["tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "separator register keyed by entry instead of identical join group",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "sharedJoinGlueRegisterField(group)",
+    "replace": "sharedJoinGlueRegisterField(join)",
+    "tests": ["tests/adapters/collab/join-identical-glue.test.ts"]
   }
   ]
 }

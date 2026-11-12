@@ -155,9 +155,10 @@ export class SharedProjectionSource {
 
   structure(id: string) {
     return this.cache.read(["beat-structure", id], [this.keyVersion("beats", id), this.version("retiredJoins"), this.version(JSON.stringify(["join-glue", id]))], () => {
-      const structure = readProjectionBeatStructure(this.inputRoots.beats.get(id), id, this.inputRoots.retiredJoins, this.inputRoots.meta);
+      const fields: string[] = [];
+      const structure = readProjectionBeatStructure(this.inputRoots.beats.get(id), id, this.inputRoots.retiredJoins, this.inputRoots.meta, field => fields.push(field));
       this.unindexJoins(id);
-      const fields = structure.joins.map(join => sharedJoinGlueRegisterField(join.id)); this.joinFields.set(id, fields);
+      this.joinFields.set(id, fields);
       for (const field of fields) { const readers = this.joinReaders.get(field) ?? new Set<string>(); readers.add(id); this.joinReaders.set(field, readers); }
       return structure;
     });

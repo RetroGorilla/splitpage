@@ -14,7 +14,8 @@ existing map, and refuses an identity already present anywhere in the join index
 Its operation id passes the same cleaning check as other structural commands.
 
 Glue commands resolve native join ids or aliases staged earlier in the same list.
-They write the existing `meta` register returned by `sharedJoinGlueRegisterField`,
+They write the existing `meta` register returned by `sharedJoinGlueRegisterField`
+for the identical-join retirement group, rather than the individual native id,
 mirroring `prepareScalar` in `scalar-executor.ts` through `applySharedMapWrites`.
 They change no issued entry, id or target. Causal sets replace earlier sets;
 concurrent sets retain the same winner as a conflicting scalar on every copy.
@@ -61,6 +62,10 @@ concurrent register sets, competing targets, joins meeting removal and typing,
 duplicates and encoded late joiners. Seeded checkpoints compare full/incremental
 projections and live/fresh indexes, including damaged entries and replaced maps;
 their literal declared-limit tables are empty for these command histories.
+The identical-separator model explicitly creates joins apart, changes the separator
+through different native entries before delivery, then makes causal changes through
+either entry. Literals also compare conflicting group sets with the scalar winner;
+encoded late joiners and incremental projection use the same group field.
 
 The app agreement test compares complete rows and sections through the app's own
 join and Backspace functions, the independent operation applier and the shared
