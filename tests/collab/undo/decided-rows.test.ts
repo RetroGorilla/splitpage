@@ -80,6 +80,24 @@ test("decided: cut and paste are two commands, also into the same beat in the sa
   }
 });
 
+test("different: deleting an earlier letter and typing it again keeps an entry; its undo brings the first letter back, so the older entry still reaches it", () => {
+  for (const order of deliveryOrders) {
+    const s = new UndoScenario([{ id: "R1", text: "ab" }], order);
+    s.format(s.a, "R1", 0, 1, BOLD);
+    s.erase(s.a, "R1", 0, 1);
+    s.a.typing = true;
+    s.type(s.a, "R1", 0, "a", ["a1"]);
+    s.a.typing = false;
+    assert.deepEqual(s.a.undo.sizes(), { undo: 2, redo: 0, dropped: 0 });
+    s.check("retyped", r1(["a1", "a", {}], ["s2", "b", {}]));
+    s.effective(s.a.undo.undo());
+    s.check("group undone", r1(["s1*", "a", { b: true }], ["s2", "b", {}]));
+    s.effective(s.a.undo.undo());
+    s.check("format undone", r1(["s1*", "a", {}], ["s2", "b", {}]));
+    assert.equal(s.checks, 3);
+  }
+});
+
 test("a remote change records nothing: the receiver's stacks, also its redo, are as they were, and its records still resolve", () => {
   for (const order of deliveryOrders) {
     const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order);

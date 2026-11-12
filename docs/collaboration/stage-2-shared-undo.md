@@ -45,7 +45,7 @@ makes the change and returns its record, or `null` when it changed nothing.
 | A second later, another text or a command that is not typing starts a new entry | kept: a second later, another cell, an explicit break or a command that is not typing starts a new entry |
 | A word begun after a space starts a new entry | kept: a word begun after a space starts a new entry; the space and a deletion stay in the group |
 | An undo or a redo ends the group | kept: an undo or a redo ends the typing group |
-| Typing that returns to where its group began leaves no entry | kept: typing that returns to where its group began leaves no entry |
+| A group that deletes all it typed leaves no entry | kept: a group that deletes all it typed leaves no entry |
 | 200 entries | kept: 200 entries; the oldest is dropped and only counted |
 | A hold stops undo and redo until its last release | kept: while held, undo and redo change nothing; the last release lets them through |
 
@@ -54,7 +54,9 @@ makes the change and returns its record, or `null` when it changed nothing.
 | Standalone | Shared | Test |
 | --- | --- | --- |
 | A new change after an undo parks the redo entries and brings them back when the text returns to the parked state | A new command clears redo | different: a new command clears redo; nothing is parked |
-| An undo that cannot apply is refused and stays | An entry whose change is already gone is used up: it is removed, adds no redo and the same key press reaches no older entry | top item: an entry whose change is already gone is used up, adds no redo and reaches no older entry |
+| An undo that cannot apply is refused and its entry is dropped | A refused undo keeps its entry, so it can be asked again | a refusal from the executor leaves both stacks as they were |
+| (no such outcome) | An entry whose change is already gone is used up: it is removed, adds no redo and the same key press reaches no older entry | top item: an entry whose change is already gone is used up, adds no redo and reaches no older entry |
+| A group whose text ends as it began leaves no entry, whatever was typed in between | A group that deletes earlier text and types the same letters again keeps its entry: the new letters are other characters, and the entry's undo brings the first ones back so that older entries still reach them | different: a group that deletes earlier text and types the same letter again keeps its entry, which names both characters; and in `decided-rows.test.ts`: different: deleting an earlier letter and typing it again keeps an entry; its undo brings the first letter back, so the older entry still reaches it |
 | An entry restores the cell's earlier content | An entry reverses its own parts; other people's changes to the same text stay | decided: undo covers only your own changes; the other writer's text and format stay, and there is nothing older to reach |
 | Groups single text changes of any origin | Groups only records marked as typing, so a cut and a paste are always two entries | decided: a cut and a paste into the same cell are two entries even in the same millisecond; undoing the paste leaves the cut |
 | An entry dropped at the bound comes back when later entries are discarded | A dropped entry is only counted | kept: 200 entries; the oldest is dropped and only counted |
@@ -95,19 +97,42 @@ receiver's stacks" in the generator.
 The model executor in `tests/collab/undo/model-world.ts` follows these, and the
 adapter executor has to meet the same fixtures and generator.
 
+Where the adapter on main already decides an outcome, the model reproduces it,
+and `tests/collab/undo/mirrored-rules.test.ts` runs the same history through
+`executeSharedOperations` and through the model against one literal result:
+
+- **A forward mark** mirrors `prepareSharedMarkChange` in
+  `src/adapters/collab/mark-executor.ts`: one occurrence over the whole range
+  the command was given, also where the mark already shows, and over what
+  arrives inside that range unseen. Text typed later with the occurrence in
+  view does not take it.
+- **A field** mirrors `prepareScalar` in `src/adapters/collab/scalar-executor.ts`
+  writing one key of a shared map: a set made after seeing another replaces it;
+  of two sets that did not see each other the one from the higher client id
+  stays; a clear removes only the value it saw, so an unseen set stays.
+
+Where a decided row decides an outcome, the model reproduces the Stage 1
+result: the same change made by two people who had not seen each other's is one
+change, which either can undo.
+
 - **Inserted text**: delete each inserted unit that is still there, following a
   unit to its restoration.
 - **Deleted text**: restore each unit as a new unit at the place of the deleted
   one, with the marks the deleted one would show now. Skip a unit someone has
   already restored, and a unit whose character is visible again.
-- **A mark added**: take the mark away from what the command's own occurrences
-  still cover. An occurrence by another person on exactly the same units, made
-  without seeing this one, counts as the same change and goes too. If none of
-  the command's occurrences shows anywhere, the entry is used up.
+- **A mark added**: take the command's own occurrences away. The cancellation
+  stays with the occurrence: an occurrence of the same mark over the same
+  range, made without either having seen the other, is cancelled with it,
+  also when it arrives after the undo. The other person's undo is then used
+  up. A mark over other words, or one made after seeing this one, is another
+  change and stays. If none of the command's occurrences shows anywhere, the
+  entry is used up.
 - **A mark removed**: put the mark back on the recorded units that are still
-  there and do not show it.
+  there and do not show it. This is the only place a mark is written
+  conditionally; a forward mark never is.
 - **A field**: write the earlier value only while the field still holds the
-  value the command wrote.
+  value the command wrote. The undo of a set that lost to an unseen set is used
+  up.
 - **A status**: retire the event, and the standing events with the same value,
   only while the beat shows that value and retiring changes it. A change that
   lost a conflict never applied, so its undo is used up.
@@ -139,3 +164,20 @@ pins it. The generator fails on any violation the table does not carry.
    `local-undo`.
 5. Who builds the record of a forward command: the executor knows the units and
    occurrences a command touched, so it is the natural place.
+6. The formatting of a restored character. The model lets a restored character
+   show the marks of the one it restores by following that ancestry when it
+   reads. The mark reader on main (`readCollabMarkState`) does not: it works
+   from anchored ranges and the exclusions written at a character's birth, and
+   a range whose two ends sit on one deleted character stays empty wherever the
+   restored character lands. The contract the adapter executor has to meet:
+   a restored character shows the occurrences its original showed when it was
+   deleted, except those taken away since over that place; the undo of the
+   command that made such an occurrence takes it from the restored character
+   too; and a later undo of the restoring undo's command still finds it. The
+   fixture that holds this is "insert, bold and delete one character; three
+   undos and three redos".
+7. An identical change that arrives after the undo. The mark records on main
+   keep no record of what an occurrence had seen, so the cancellation the undo
+   writes has to carry enough for a reader to cancel an identical occurrence it
+   has not received yet. The tests are the "Stage 1 result" ones in
+   `mirrored-rules.test.ts`.

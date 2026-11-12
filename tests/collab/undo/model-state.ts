@@ -4,12 +4,12 @@ export interface ModelCharacter {
   kind: "char"; id: string; beat: string; after: string | null; restores: string | null;
   value: string; clock: number; by: string; excluded: string[];
 }
-export interface ModelMark { kind: "mark"; id: string; key: string; value: string | true; from: string; to: string; by: string }
+export interface ModelMark { kind: "mark"; id: string; key: string; value: string | true; from: string; to: string; by: string; seen: string[] }
 export interface ModelStatus { kind: "status"; id: string; beat: string; value: string; parents: string[]; by: string }
-export type ModelOp = ModelCharacter | ModelMark | ModelStatus
+export interface ModelScalar { kind: "scalar"; id: string; beat: string; field: string; value: SharedJsonValue | null; clear: boolean; after: string | null }
+export type ModelOp = ModelCharacter | ModelMark | ModelStatus | ModelScalar
   | { kind: "delete"; id: string; char: string }
-  | { kind: "unmark"; id: string; occurrences: string[]; from: string; to: string }
-  | { kind: "scalar"; id: string; beat: string; field: string; value: SharedJsonValue | null; clear: boolean; clock: number }
+  | { kind: "unmark"; id: string; occurrences: string[]; from: string; to: string; identical: boolean }
   | { kind: "retire"; id: string; event: string };
 
 export function compareModelIds(a: string, b: string): number {
@@ -68,12 +68,13 @@ export class ModelView {
   readonly position = new Map<string, number>();
   readonly events = new Map<string, Map<string, ModelStatus>>();
   readonly retired = new Set<string>();
-  readonly scalars = new Map<string, Extract<ModelOp, { kind: "scalar" }>>();
+  readonly scalars = new Map<string, ModelScalar>();
   readonly stored: string;
+  private readonly marked = new Map<string, ModelMark>();
 
   constructor(ops: Iterable<ModelOp>, beats: readonly string[], stored: string) {
     this.stored = stored;
-    const right = new Map<string, ModelCharacter[]>(), left = new Map<string, ModelCharacter[]>();
+    const right = new Map<string, ModelCharacter[]>(), left = new Map<string, ModelCharacter[]>(), written = new Map<string, ModelScalar[]>();
     for (const op of ops) {
       if (op.kind === "char") {
         this.characters.set(op.id, op);
@@ -85,11 +86,20 @@ export class ModelView {
       else if (op.kind === "retire") this.retired.add(op.event);
       else if (op.kind === "status") this.events.set(op.beat, new Map([...this.events.get(op.beat) ?? [], [op.id, op]]));
       else {
-        const key = JSON.stringify([op.beat, op.field]), current = this.scalars.get(key);
-        if (!current || op.clock > current.clock || op.clock === current.clock && compareModelIds(op.id, current.id) > 0) this.scalars.set(key, op);
+        const key = JSON.stringify([op.beat, op.field]);
+        written.set(key, [...written.get(key) ?? [], op]);
       }
     }
+    for (const [key, all] of written) {
+      // why: prepareScalar writes a Y.Map key: of two unseen sets the higher client's stays,
+      // and a clear removes only the value it saw.
+      const sets = all.filter(op => !op.clear).sort((a, b) => compareModelIds(a.id, b.id));
+      let head = sets.filter(op => op.after === null).at(-1);
+      for (let next = head; next; next = sets.filter(op => op.after === head?.id).at(-1)) head = next;
+      if (head) this.scalars.set(key, all.some(op => op.clear && op.after === head.id) ? { ...head, value: null, clear: true } : head);
+    }
     this.marks.sort((a, b) => compareModelIds(a.id, b.id));
+    for (const mark of this.marks) this.marked.set(mark.id, mark);
     for (const [original, restored] of left) this.restorations.set(original, restored.map(op => op.id).sort(compareModelIds));
     const visit = (op: ModelCharacter, sequence: string[]): void => {
       for (const id of this.restorations.get(op.id) ?? []) { const restored = this.characters.get(id); if (restored) visit(restored, sequence); }
@@ -136,8 +146,17 @@ export class ModelView {
     if (!character) return [];
     const inherited = character.restores === null ? [] : this.occurrences(character.restores);
     return this.marks.filter(mark => (inherited.includes(mark) || this.covers(mark, id) && !character.excluded.includes(mark.id))
-      && !this.unmarks.some(unmark => unmark.occurrences.includes(mark.id) && this.covers(unmark, id)));
+      && !this.unmarks.some(unmark => this.covers(unmark, id) && (unmark.occurrences.includes(mark.id)
+        || unmark.identical && unmark.occurrences.some(other => this.identical(mark, this.marked.get(other))))));
   }
+
+  // why: decided row: the same change made by two people who had not seen each other's is one change.
+  private identical(mark: ModelMark, other: ModelMark | undefined): boolean {
+    return other !== undefined && mark.key === other.key && mark.value === other.value && mark.from === other.from && mark.to === other.to
+      && !mark.seen.includes(other.id) && !other.seen.includes(mark.id);
+  }
+
+  scalarHead(beat: string, field: string): string | null { return this.scalars.get(JSON.stringify([beat, field]))?.id ?? null; }
 
   applied(occurrence: string): string[] {
     const mark = this.marks.find(candidate => candidate.id === occurrence), beat = mark && this.characters.get(mark.from)?.beat;

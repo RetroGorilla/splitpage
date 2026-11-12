@@ -127,7 +127,7 @@ test("kept: an undo or a redo ends the typing group", () => {
   assert.equal(undo.sizes().undo, 2);
 });
 
-test("kept: typing that returns to where its group began leaves no entry", () => {
+test("kept: a group that deletes all it typed leaves no entry", () => {
   const { undo, run } = harness();
   run(typed("R2", "b1"));
   run(typed("R1", "a1", "a2"));
@@ -137,6 +137,18 @@ test("kept: typing that returns to where its group began leaves no entry", () =>
   assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
   run(typed("R1", "a3"));
   assert.equal(undo.sizes().undo, 2);
+});
+
+test("different: a group that deletes earlier text and types the same letter again keeps its entry, which names both characters", () => {
+  const { undo, run, state } = harness();
+  run(erased("R1", "s1"));
+  run(typed("R1", "a1"));
+  assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
+  assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "typing", selection: null });
+  assert.deepEqual(state.reversed.map(asked => asked.record.parts), [[
+    { kind: "text", target: cell("R1"), inserted: [], deleted: [{ identity: "s1", value: "s1", marks: [] }] },
+    { kind: "text", target: cell("R1"), inserted: ["a1"], deleted: [] }
+  ]]);
 });
 
 test("kept: 200 entries; the oldest is dropped and only counted", () => {

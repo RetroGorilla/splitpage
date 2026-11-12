@@ -87,7 +87,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
   private ready(op: ModelOp): boolean {
     const [client = 0, serial = 0] = op.id.split(":").map(Number);
     const named = op.kind === "char" ? [op.after, op.restores, ...op.excluded] : op.kind === "delete" ? [op.char] : op.kind === "mark" ? [op.from, op.to]
-      : op.kind === "unmark" ? [op.from, op.to, ...op.occurrences] : op.kind === "status" ? op.parents : op.kind === "retire" ? [op.event] : [];
+      : op.kind === "unmark" ? [op.from, op.to, ...op.occurrences] : op.kind === "status" ? op.parents : op.kind === "retire" ? [op.event] : [op.after];
     return serial === (this.heads.get(client) ?? 0) + 1 && named.every(id => id === null || this.ops.has(id));
   }
 
@@ -95,7 +95,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
     const [client = 0, serial = 0] = op.id.split(":").map(Number);
     this.ops.set(op.id, op);
     this.heads.set(client, serial);
-    if (op.kind === "char" || op.kind === "scalar") this.clock = Math.max(this.clock, op.clock);
+    if (op.kind === "char") this.clock = Math.max(this.clock, op.clock);
     this.cached = null;
   }
 
@@ -144,7 +144,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
   private insert(beat: string, after: string | null, restores: string | null, value: string, marks: readonly SharedMarkValue[]): string {
     const id = this.id();
     this.emit({ kind: "char", id, beat, after, restores, value, clock: ++this.clock, by: modelWriters[this.name].by, excluded: this.view.marks.map(mark => mark.id) });
-    for (const mark of marks) this.emit({ kind: "mark", id: this.id(), ...markKey(mark), from: id, to: id, by: modelWriters[this.name].by });
+    for (const mark of marks) this.writeMark(markKey(mark).key, markKey(mark).value, id, id);
     if (restores !== null) this.world.nameRestoration(id, restores);
     return id;
   }
@@ -183,29 +183,37 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
           .map(candidate => ({ occurrence: ref(candidate.id), units: live.filter(id => this.view.occurrences(id).includes(candidate)).map(ref) }))
           .filter(entry => entry.units.length);
         if (!removed.length) return null;
-        this.emit({ kind: "unmark", id: this.id(), occurrences: removed.map(entry => entry.occurrence), from: first, to: last });
+        this.emit({ kind: "unmark", id: this.id(), occurrences: removed.map(entry => entry.occurrence), from: first, to: last, identical: false });
         return { label: "format", selection: observed.selection, typing: null, parts: [{ kind: "mark-remove", target: address(observed.beat), mark, removed }] };
       }
-      const seen = this.view.marks.filter(candidate => candidate.key === key && candidate.value === value).map(candidate => ref(candidate.id));
-      const added = this.addMarks(observed.beat, key, value, new Set(live));
-      return added.length ? { label: "format", selection: observed.selection, typing: null, parts: [{ kind: "mark-add", target: address(observed.beat), mark, added, seen }] } : null;
+      if (!live.length) return null;
+      const seen = this.known(key, value).map(ref);
+      // why: prepareSharedMarkChange writes one occurrence over the whole range, also where the mark already shows.
+      const added = [{ occurrence: ref(this.writeMark(key, value, first, last)), units: live.map(ref) }];
+      return { label: "format", selection: observed.selection, typing: null, parts: [{ kind: "mark-add", target: address(observed.beat), mark, added, seen }] };
     });
   }
 
-  private addMarks(beat: string, key: string, value: string | true, wanted: ReadonlySet<string>): SharedUndoMarkOccurrence[] {
+  private known(key: string, value: string | true): string[] {
+    return this.view.marks.filter(candidate => candidate.key === key && candidate.value === value).map(candidate => candidate.id);
+  }
+
+  private writeMark(key: string, value: string | true, from: string, to: string): string {
+    const mark: ModelMark = { kind: "mark", id: this.id(), key, value, from, to, by: modelWriters[this.name].by, seen: this.known(key, value) };
+    this.emit(mark);
+    return mark.id;
+  }
+
+  private restoreMarks(beat: string, key: string, value: string | true, wanted: ReadonlySet<string>): SharedUndoMarkOccurrence[] {
     const view = this.view, runs: string[][] = [];
     let open: string[] | null = null;
     for (const id of view.visible(beat)) {
-      // why: a mark changes only characters that do not show it yet; its undo then leaves other writers' marks.
+      // why: putting a mark back touches only the recorded characters that do not show it; the rest is other people's.
       if (!wanted.has(id) || view.occurrences(id).some(mark => mark.key === key && mark.value === value)) { open = null; continue; }
       if (!open) { open = []; runs.push(open); }
       open.push(id);
     }
-    return runs.map(run => {
-      const mark: ModelMark = { kind: "mark", id: this.id(), key, value, from: run[0] ?? "", to: run.at(-1) ?? "", by: modelWriters[this.name].by };
-      this.emit(mark);
-      return { occurrence: ref(mark.id), units: run.map(ref) };
-    });
+    return runs.map(run => ({ occurrence: ref(this.writeMark(key, value, run[0] ?? "", run.at(-1) ?? "")), units: run.map(ref) }));
   }
 
   status(beat: string, value: string): void {
@@ -228,7 +236,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
   }
 
   private writeScalar(beat: string, field: string, value: SharedFieldValue): void {
-    this.emit({ kind: "scalar", id: this.id(), beat, field, value: value.clear ? null : value.value, clear: value.clear === true, clock: ++this.clock });
+    this.emit({ kind: "scalar", id: this.id(), beat, field, value: value.clear ? null : value.value, clear: value.clear === true, after: this.view.scalarHead(beat, field) });
   }
 
   private reverse(record: SharedUndoRecord): SharedUndoReversal {
@@ -269,23 +277,20 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
       }
       case "mark-add": {
         const mine = part.added.map(entry => entry.occurrence as string), removed: SharedUndoMarkOccurrence[] = [];
-        const targets = mine.filter(id => this.view.shown(id).length).map(id => this.view.applied(id));
-        const { key, value } = markKey(part.mark);
-        const identical = this.view.marks.filter(mark => mark.key === key && mark.value === value && !mine.includes(mark.id)
-          && !part.seen.includes(ref(mark.id)) && targets.some(units => sameValue(units, this.view.applied(mark.id))));
-        for (const mark of [...this.view.marks.filter(candidate => mine.includes(candidate.id)), ...identical]) {
+        for (const mark of this.view.marks.filter(candidate => mine.includes(candidate.id))) {
           const units = this.view.shown(mark.id);
           if (!units.length) continue;
-          this.emit({ kind: "unmark", id: this.id(), occurrences: [mark.id], from: mark.from, to: mark.to });
+          // why: the cancellation is kept with the occurrence, so an identical change that arrives later is cancelled too.
+          this.emit({ kind: "unmark", id: this.id(), occurrences: [mark.id], from: mark.from, to: mark.to, identical: true });
           removed.push({ occurrence: ref(mark.id), units: units.map(ref) });
         }
         return { effective: removed.length > 0, inverse: { kind: "mark-remove", target: part.target, mark: part.mark, removed } };
       }
       case "mark-remove": {
         const { key, value } = markKey(part.mark), view = this.view;
-        const seen = view.marks.filter(candidate => candidate.key === key && candidate.value === value).map(candidate => ref(candidate.id));
+        const seen = this.known(key, value).map(ref);
         const wanted = new Set(part.removed.flatMap(entry => entry.units.map(unit => view.follow(unit))));
-        const added = this.addMarks(String(part.target.owner), key, value, wanted);
+        const added = this.restoreMarks(String(part.target.owner), key, value, wanted);
         return { effective: added.length > 0, inverse: { kind: "mark-add", target: part.target, mark: part.mark, added, seen } };
       }
       case "scalar": {

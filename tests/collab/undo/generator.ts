@@ -42,7 +42,7 @@ function pick<T>(items: readonly T[], r: number): T {
 }
 
 export function generateUndoHistory(seed: number, writers: 2 | 3, length = 40): UndoHistory {
-  const next = random(seed * 2 + writers), three = (): [number, number, number] => [next(), next(), next()].map(value => Math.floor(value * 1000) / 1000) as [number, number, number];
+  const next = random(seed * 2 + writers), three = (): [number, number, number] => [next(), next(), next()];
   const steps: UndoStep[] = [];
   for (let index = 0; index < length; index++) {
     const previous = steps.at(-1);
@@ -55,6 +55,11 @@ export function generateUndoHistory(seed: number, writers: 2 | 3, length = 40): 
 }
 
 interface Ledger { characters: Set<string>; marks: { mark: string; ends: string[] }[]; statuses: Set<string>; scalars: Set<string> }
+interface Format {
+  writer: ReplicaName; adds: boolean; mark: string; from: string; to: string; written: string[]; saw: Set<Format>;
+  state: "applied" | "undone" | "gone"; fresh: boolean; undone: boolean;
+}
+interface Entry { format: Format | null }
 
 function multiset(items: readonly string[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -72,10 +77,17 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
   const violations: UndoViolation[] = [], counts: Record<string, number> = {};
   const ledgers = new Map(NAMES.map((name): [ReplicaName, Ledger] => [name, { characters: new Set(), marks: [], statuses: new Set(), scalars: new Set() }]));
   const count = (name: string): void => { counts[name] = (counts[name] ?? 0) + 1; };
+  const stacks = new Map(NAMES.map((name): [ReplicaName, { undo: Entry[]; redo: Entry[] }] => [name, { undo: [], redo: [] }]));
+  const formats: Format[] = [];
   let at = 0;
   const violate = (check: string, detail: string): void => { violations.push({ check, detail, step: at }); };
+  const stack = (name: ReplicaName): { undo: Entry[]; redo: Entry[] } => {
+    const found = stacks.get(name);
+    if (!found) throw new Error("No stack for " + name);
+    return found;
+  };
 
-  const foreign = (name: ReplicaName, replica: ModelReplica, before: ModelSnapshot, after: ModelSnapshot): void => {
+  const foreign = (name: ReplicaName, replica: ModelReplica, before: ModelSnapshot, after: ModelSnapshot, undoing: boolean): void => {
     const ledger = ledgers.get(name), place = replica.view.position;
     if (!ledger) throw new Error("No ledger for " + name);
     // why: a mark reaches every character inside the range it was given, also one typed there at the same moment.
@@ -101,7 +113,11 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
       }
       if (row.status !== next.status && !ledger.statuses.has(row.id)) violate("changed another writer's status", `${name} ${row.id}`);
       for (const field of new Set([...Object.keys(row.scalars), ...Object.keys(next.scalars)])) {
-        if (row.scalars[field] !== next.scalars[field] && !ledger.scalars.has(row.id + "|" + field)) violate("changed another writer's field", `${name} ${row.id} ${field}`);
+        const held = row.scalars[field];
+        if (held === next.scalars[field]) continue;
+        if (!ledger.scalars.has(row.id + "|" + field)) violate("changed another writer's field", `${name} ${row.id} ${field}`);
+        // why: every writer sets values of its own ten, so the value an undo replaces shows whose it was.
+        if (undoing && held !== undefined && Math.floor(Number(held) / 10) !== NAMES.indexOf(name)) violate("overwrote another writer's current value", `${name} ${row.id} ${field} ${held}`);
       }
     });
   };
@@ -117,6 +133,12 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
       return false;
     }
     if (now[direction] !== sizes[direction] - 1) violate("a reversal did not use up exactly its entry", `${name} ${direction}`);
+    const entry = stack(name)[direction].pop(), format = entry?.format;
+    if (entry && outcome.effective) stack(name)[other].push(entry);
+    if (format) {
+      if (outcome.effective) { format.state = direction === "undo" ? "undone" : "applied"; format.fresh = false; format.undone ||= direction === "undo" && format.adds; }
+      else if (direction === "undo" && format.adds) format.state = "gone";
+    }
     if (!outcome.effective) {
       count("used up " + direction);
       if (now[other] !== sizes[other] || replica.written.length !== written) violate("a used-up reversal wrote or kept something", `${name} ${direction}`);
@@ -126,7 +148,7 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
     count("effective " + direction);
     if (now[other] !== sizes[other] + 1) violate("an effective reversal left no way back", `${name} ${direction}`);
     if (replica.written.length !== written + 1) violate("an effective reversal did not write exactly one update", `${name} ${direction}`);
-    foreign(name, replica, before, replica.snapshot());
+    foreign(name, replica, before, replica.snapshot(), direction === "undo");
     return true;
   };
 
@@ -137,6 +159,7 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
     const from = Math.floor(r1 * (length + 1)), start = Math.min(Math.max(0, length - 1), Math.floor(r1 * length));
     const range = replica.observe(beat, start, Math.min(length, start + 1 + Math.floor(r2 * 3)));
     const sizes = replica.undo.sizes(), serial = replica.undo.serial();
+    let format: Format | null = null;
     const roots = (): void => { for (const id of range.ids) ledger.characters.add(replica.view.root(id)); };
     const typed = (text: string, removing: boolean): void => {
       if (removing) roots();
@@ -155,16 +178,34 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
         if (replica.undo.sizes().undo !== Math.min(200, sizes.undo + 1)) violate("typing did not form one entry", `${name} ${beat}`);
         break;
       }
-      case "bold": case "unbold": case "tag": case "untag":
+      case "bold": case "unbold": case "tag": case "untag": {
         if (range.ids.length) ledger.marks.push({ mark: MARK_KEYS[step.op], ends: [range.ids[0] ?? "", range.ids.at(-1) ?? ""].flatMap(id => [id, replica.view.root(id)]) });
+        // why: which earlier formatting had arrived here is a fact of delivery, not of what the undo model made of it.
+        const saw = new Set(formats.filter(other => other.written.some(id => replica.ops.has(id)))), updates = replica.written.length;
         replica.mark(range, MARKS[step.op]);
+        if (replica.written.length > updates) {
+          format = { writer: name, adds: step.op === "bold" || step.op === "tag", mark: MARK_KEYS[step.op], from: range.ids[0] ?? "", to: range.ids.at(-1) ?? "",
+            written: (replica.written.at(-1) ?? []).filter(op => op.kind === "mark").map(op => op.id), saw, state: "applied", fresh: true, undone: false };
+          formats.push(format);
+        }
         break;
+      }
       case "status": ledger.statuses.add(beat); replica.status(beat, pick(STATUSES, r1)); break;
-      case "scalar": ledger.scalars.add(beat + "|lengthSeconds"); replica.scalar(beat, "lengthSeconds", pick([1, 2, null], r1) ?? undefined); break;
+      case "scalar": {
+        const value = pick([1, 2, null], r1);
+        ledger.scalars.add(beat + "|lengthSeconds");
+        replica.scalar(beat, "lengthSeconds", value === null ? undefined : value + 10 * NAMES.indexOf(name));
+        break;
+      }
       default: throw new Error("Not a command: " + step.op);
     }
     count(replica.undo.serial() === serial ? "command changed nothing" : "command");
     if (replica.undo.serial() !== serial && replica.undo.sizes().redo !== 0) violate("a command kept the redo stack", name);
+    if (replica.undo.serial() !== serial) {
+      stack(name).redo.length = 0;
+      if (replica.undo.sizes().undo > sizes.undo) stack(name).undo.push({ format });
+    }
+    if (stack(name).undo.length !== replica.undo.sizes().undo) violate("the entries are not one per command", name);
   };
 
   const deliver = (step: UndoStep): void => {
@@ -208,6 +249,24 @@ export function runUndoHistory(history: UndoHistory): UndoRun {
   for (const row of copies[0]?.rows ?? []) {
     for (const [root, held] of multiset(row.characters.map(character => character.root))) if (held > 1) violate("restored twice", `${row.id} ${root} x${held}`);
     if (new Set(row.characters.map(character => character.id)).size !== row.characters.length) violate("one identity twice", row.id);
+  }
+  const place = world.replica("A").view.position;
+  const covers = (format: Format, id: string): boolean => {
+    const from = place.get(format.from), to = place.get(format.to), spot = place.get(id);
+    return from !== undefined && to !== undefined && spot !== undefined && from <= spot && spot <= to;
+  };
+  // why: decided row: the same change by two people who had not seen each other's is one; undoing either undoes it.
+  const cancelled = (format: Format): boolean => format.fresh && formats.some(other => other !== format && other.undone && other.adds && other.mark === format.mark
+    && other.from === format.from && other.to === format.to && !format.saw.has(other) && !other.saw.has(format));
+  for (const format of formats) if (format.adds && format.state === "applied" && cancelled(format)) count("identical change cancelled");
+  for (const row of copies[0]?.rows ?? []) for (const character of row.characters) {
+    // why: a character from before the run that was never deleted has no formatting but what a command of the run gave it.
+    if (character.id !== character.root || !character.id.startsWith("10:")) continue;
+    for (const mark of character.marks) {
+      const source = formats.some(format => format.mark === mark && covers(format, character.id)
+        && (format.adds ? format.state === "applied" && !cancelled(format) : format.state === "undone"));
+      if (!source) violate("kept formatting whose every command was undone", `${row.id} ${character.id} ${mark}`);
+    }
   }
   return { violations, counts, copies };
 }
