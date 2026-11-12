@@ -49,16 +49,16 @@ export const undoLimits: readonly UndoLimit[] = [
     shown: "not yet: undo of remove is refused by name, asks the executor nothing and keeps the stack"
   },
   {
-    id: "redone-mark-reversed", state: "waits",
-    title: "A redone tag is lost when the writer's undo and redo updates arrive in reverse",
-    history: "R1 ab. Alice tags ab while Bob bolds a. Alice undoes and redoes; her two updates arrive in reverse. A limit of formatting inside the shared library, so it is examined on the adapter executor.",
-    shown: "waiting limits name the cut that examines them"
+    id: "redone-mark-reversed", state: "resolved",
+    title: "A redone tag was lost when the writer's undo and redo updates arrived in reverse",
+    history: "R1 ab. Alice tags ab while Bob bolds a. Alice undoes and redoes; her two updates arrive in reverse. Marks are records of the adapter, not formatting of the library: the tag stays.",
+    shown: "former limit redone-mark-reversed: a redone tag stays when the writer's undo and redo arrive in reverse"
   },
   {
-    id: "pending-update", state: "waits",
-    title: "A copy holding a writer's later update before the earlier one cannot be read until the earlier one arrives",
-    history: "Three writers; one writer's second update is delivered to a copy before the first. A limit of delivery into the shared document, so it is examined on the adapter executor.",
-    shown: "waiting limits name the cut that examines them"
+    id: "pending-update", state: "resolved",
+    title: "A copy holding a writer's later update before the earlier one could not be read until the earlier one arrived",
+    history: "Three writers; one writer's second update is delivered to a copy before the first. The copy reads as it was, takes commands, and reads both once the earlier one arrives.",
+    shown: "former limit pending-update: a copy given a writer's later update first reads as it was, and reads both once the earlier one arrives"
   },
   {
     id: "insert-after-deleted-run", state: "carried",

@@ -4,7 +4,7 @@ export interface ModelCharacter {
   kind: "char"; id: string; beat: string; after: string | null; restores: string | null;
   value: string; clock: number; by: string; excluded: string[];
 }
-export interface ModelMark { kind: "mark"; id: string; key: string; value: string | true; from: string; to: string; by: string; seen: string[] }
+export interface ModelMark { kind: "mark"; id: string; key: string; value: string | true; from: string; to: string; by: string; generation: number }
 export interface ModelStatus { kind: "status"; id: string; beat: string; value: string; parents: string[]; by: string }
 export interface ModelScalar { kind: "scalar"; id: string; beat: string; field: string; value: SharedJsonValue | null; clear: boolean; after: string | null }
 export type ModelOp = ModelCharacter | ModelMark | ModelStatus | ModelScalar
@@ -151,9 +151,10 @@ export class ModelView {
   }
 
   // why: decided row: the same change made by two people who had not seen each other's is one change.
+  // Assumed rule 32: a mark made after seeing the same mark over the same range carries the next number.
   private identical(mark: ModelMark, other: ModelMark | undefined): boolean {
     return other !== undefined && mark.key === other.key && mark.value === other.value && mark.from === other.from && mark.to === other.to
-      && !mark.seen.includes(other.id) && !other.seen.includes(mark.id);
+      && mark.generation === other.generation;
   }
 
   scalarHead(beat: string, field: string): string | null { return this.scalars.get(JSON.stringify([beat, field]))?.id ?? null; }

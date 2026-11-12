@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runBufferTrace } from "./buffer-cases.ts";
 import { ADAPTER_BUFFER_LIMIT_RUNS, undoLimits } from "./limits.ts";
-import { ADAPTER_WORLD, MODEL_WORLD } from "./scenario.ts";
+import { ADAPTER_WORLD, BOLD, MODEL_WORLD, TAG_P } from "./scenario.ts";
+import type { UndoReplica } from "./scenario.ts";
 
 const TESTS = ["stage1-records.test.ts", "limits.test.ts", "../../application/editing/undo/shared-undo.test.ts"]
   .map(file => readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
@@ -15,8 +16,8 @@ test("the declared limits are Stage 1's seven and one of the shared document, ea
     ["sequential-status", "resolved"],
     ["status-redo-conflict", "resolved"],
     ["redone-recovery", "waits"],
-    ["redone-mark-reversed", "waits"],
-    ["pending-update", "waits"],
+    ["redone-mark-reversed", "resolved"],
+    ["pending-update", "resolved"],
     ["insert-after-deleted-run", "carried"]
   ]);
 });
@@ -65,7 +66,43 @@ test("carried limit insert-after-deleted-run: the smallest history ends equal on
 });
 
 test("waiting limits name the cut that examines them", () => {
-  assert.deepEqual(undoLimits.filter(limit => limit.state === "waits").map(limit => [limit.id, /removal|adapter executor/.exec(limit.history)?.[0]]), [
-    ["redone-recovery", "removal"], ["redone-mark-reversed", "adapter executor"], ["pending-update", "adapter executor"]
-  ]);
+  assert.deepEqual(undoLimits.filter(limit => limit.state === "waits").map(limit => [limit.id, /removal/.exec(limit.history)?.[0]]), [["redone-recovery", "removal"]]);
+});
+
+function marks(replica: UndoReplica): string {
+  return replica.snapshot().rows.map(row => row.characters.map(character => character.value + "[" + character.marks.join(",") + "]").join(" ")).join("|");
+}
+
+test("former limit redone-mark-reversed: a redone tag stays when the writer's undo and redo arrive in reverse", () => {
+  for (const kind of [ADAPTER_WORLD, MODEL_WORLD]) {
+    const world = kind.make([{ id: "R1", text: "ab" }]), a = world.replica("A"), b = world.replica("B");
+    a.mark(a.observe("R1", 0, 2), TAG_P);
+    b.mark(b.observe("R1", 0, 1), BOLD);
+    world.queue.flush("D1");
+    const undone = a.undo.undo(), redone = a.undo.redo();
+    assert.equal(undone.ok && undone.effective && redone.ok && redone.effective, true);
+    const waiting = world.queue.pending.filter(message => message.to === "B").map(message => message.id);
+    assert.equal(waiting.length, 2);
+    for (const id of waiting.reverse()) world.queue.deliver(id);
+    assert.deepEqual([a, b, world.fresh("A"), world.fresh("B")].map(marks),
+      ["a[b:true,tag:P] b[tag:P]", "a[b:true,tag:P] b[tag:P]", "a[b:true,tag:P] b[tag:P]", "a[b:true,tag:P] b[tag:P]"], kind.suffix);
+  }
+});
+
+test("former limit pending-update: a copy given a writer's later update first reads as it was, and reads both once the earlier one arrives", () => {
+  const world = ADAPTER_WORLD.make([{ id: "R1", text: "ab" }], ["A", "B", "C"]), b = world.replica("B"), c = world.replica("C");
+  b.edit({ at: b.observe("R1", 2, 2), text: "X", command: "paste" });
+  b.edit({ at: b.observe("R1", 3, 3), text: "Y", command: "paste" });
+  const waiting = world.queue.pending.filter(message => message.to === "C").map(message => message.id);
+  assert.equal(waiting.length, 2);
+  world.queue.deliver(waiting[1] ?? "");
+  const sizes = c.undo.sizes();
+  assert.equal(marks(c), "a[] b[]");
+  c.edit({ at: c.observe("R1", 0, 0), text: "Z", command: "paste" });
+  assert.equal(marks(c), "Z[] a[] b[]");
+  world.queue.deliver(waiting[0] ?? "");
+  assert.equal(marks(c), "Z[] a[] b[] X[] Y[]");
+  assert.deepEqual(c.undo.sizes(), { ...sizes, undo: sizes.undo + 1 });
+  world.queue.flush("D1");
+  assert.deepEqual([world.replica("A"), b, c, world.fresh("A")].map(marks), ["Z[] a[] b[] X[] Y[]", "Z[] a[] b[] X[] Y[]", "Z[] a[] b[] X[] Y[]", "Z[] a[] b[] X[] Y[]"]);
 });

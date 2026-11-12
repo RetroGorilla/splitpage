@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { SharedContentRef, SharedJsonValue, SharedMarkValue, SharedOperation, SharedTextAddress } from "../../../src/core/collab/operations.ts";
+import type { SharedContentRef, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordCollection, SharedTextAddress } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoRecord, SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import type { SharedUndo, SharedUndoReversal } from "../../../src/application/editing/undo/shared-undo.ts";
@@ -9,7 +9,10 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState } from "../
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
-import { executeSharedCommand, reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
+import { executeSharedCommand, reverseSharedUndoRecord, SHARED_UNDO_RECORDS, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
+import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
+import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
+import type { UndoRecordAction } from "./scenario.ts";
 import { readSharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
 import type { SharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
 import { readSharedTextRestoreOperation } from "../../../src/adapters/collab/mark-provenance.ts";
@@ -32,7 +35,12 @@ const SCALARS = ["lengthSeconds", "paragraphStart"] as const;
 
 function address(beat: string): SharedTextAddress { return { owner: ref(beat), segment: ref("b:" + beat), field: "audioText" }; }
 function unitKey(unit: { readonly client: number; readonly clock: number }): string { return unit.client + ":" + unit.clock; }
-function identityOf(id: string): { client: number; clock: number } { const [client = 0, clock = 0] = id.split(":").map(Number); return { client, clock }; }
+function identityOf(id: string): { client: number; clock: number } {
+  const named = id.startsWith("{") ? readSharedAnchorUnit(id) : null;
+  if (named) return { client: named.client, clock: named.clock };
+  const [client = 0, clock = 0] = id.split(":").map(Number);
+  return { client, clock };
+}
 
 export class AdapterReplica {
   readonly name: ReplicaName;
@@ -54,6 +62,7 @@ export class AdapterReplica {
     if (state) assert.equal(applySharedUpdate(this.handle, state).ok, true);
     registerSharedTextOperationHandlers(this.handle);
     registerSharedUndoOperationHandlers(this.handle);
+    registerSharedRecordHandlers(this.handle);
     deliveryReplica(this.handle).onLocalUpdate(update => { this.written.push(update); });
     this.undo = createSharedUndo({ now: () => world.now, supports: supportsSharedUndoPart, reverse: record => this.reverse(record) });
   }
@@ -117,10 +126,35 @@ export class AdapterReplica {
     });
   }
 
-  mark(observed: ModelObservation, mark: SharedMarkValue): void {
+  length(beat: string): number { return this.history(beat).units.length; }
+
+  private placed(id: string): { readonly history: SharedTextHistory; readonly index: number } | null {
+    for (const [index, beat] of this.world.beats.entries()) {
+      const history = this.history(beat);
+      if (history.known(identityOf(id))) return { history, index };
+    }
+    return null;
+  }
+
+  rootOf(id: string): string {
+    const found = this.placed(id);
+    return found ? unitKey(found.history.root(identityOf(id))) : id;
+  }
+
+  spot(id: string): number | undefined {
+    const found = this.placed(id);
+    return found ? found.index * 1000000 + found.history.order(identityOf(id)) : undefined;
+  }
+
+  knows(mark: string): boolean {
+    return this.world.beats.some(beat => this.history(beat).records.some(item => item.identity === mark));
+  }
+
+  mark(observed: ModelObservation, mark: SharedMarkValue): string[] {
     const span = this.spans.get(observed);
-    this.command(span ? [operation({ kind: "mark", ...this.author(), target: address(observed.beat), observed: [span], mark })] : [],
+    const record = this.command(span ? [operation({ kind: "mark", ...this.author(), target: address(observed.beat), observed: [span], mark })] : [],
       { label: "format", selection: observed.selection, typing: null });
+    return (record?.parts ?? []).flatMap(part => part.kind === "mark-add" ? part.added.map(entry => entry.occurrence) : []);
   }
 
   status(beat: string, value: string): void {
@@ -132,6 +166,26 @@ export class AdapterReplica {
   scalar(beat: string, field: string, value: SharedJsonValue | undefined): void {
     this.command([operation({ kind: "scalar", ...this.author(), target: { scope: "beat", record: ref(beat) }, field, ...(value === undefined ? { clear: true } : { value }) })],
       { label: "field", selection: null, typing: null });
+  }
+
+  record(action: UndoRecordAction, collection: SharedRecordCollection, key: string, value: string): string | null {
+    const target = { collection, record: key }, main = collection === "comments" || collection === "replies" ? "text" : "name";
+    const [commentId, id] = collection === "replies" ? JSON.parse(key) as [string, string] : ["", ""];
+    const fields: Record<SharedRecordCollection, Record<string, unknown>> = {
+      comments: { createdAt: 0, text: value, rowId: this.world.beats[0], field: "audioText" },
+      replies: { id, commentId, createdAt: 0, text: value },
+      people: { name: value }, tags: { cat: "prop", name: value }, shots: { name: value, origin: "list" }, gallery: {}, visuals: {}
+    };
+    const made = action === "create" ? { kind: "record-create", ...this.author(), target, fields: fields[collection] }
+      : action === "set" ? { kind: "record-set", ...this.author(), target, field: main, value } : { kind: "record-delete", ...this.author(), target };
+    let reason: string | null = null;
+    this.world.now += 2000;
+    this.undo.perform(() => {
+      const execution = executeSharedCommand(this.handle, [operation(made)], { label: "record", selection: null, typing: null });
+      if (!execution.result.ok) reason = execution.result.reason;
+      return execution.record;
+    });
+    return reason;
   }
 
   private reverse(record: SharedUndoRecord): SharedUndoReversal {
@@ -161,7 +215,12 @@ export class AdapterReplica {
   }
 
   snapshot(): ModelSnapshot {
-    return { rows: this.world.beats.map(beat => {
+    const records: Record<string, string> = {};
+    for (const collection of SHARED_UNDO_RECORDS) for (const item of readSharedRecords(this.handle, collection)) {
+      const fields = item.fields as Record<string, unknown>;
+      records[collection + "|" + item.key] = JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
+    }
+    return { records, rows: this.world.beats.map(beat => {
       const history = this.history(beat), record = scalarTarget(this.handle, { scope: "beat", record: ref(beat) });
       return { id: beat, status: readSharedStatus(this.handle, { scope: "beat", record: ref(beat) }),
         scalars: Object.fromEntries(SCALARS.filter(field => record?.has(field)).map(field => [field, JSON.stringify(record?.get(field))] as const)),
@@ -218,6 +277,11 @@ export class AdapterWorld {
 
   fresh(source: ReplicaName): AdapterReplica {
     return new AdapterReplica(this, "C", encodeSharedState(this.replica(source).handle));
+  }
+
+  sync(): void {
+    const present = [...this.replicas.values()];
+    for (const source of present) for (const target of present) if (source !== target) assert.equal(applySharedUpdate(target.handle, encodeSharedState(source.handle)).ok, true);
   }
 
   name(ids: readonly string[], names: readonly string[]): void {

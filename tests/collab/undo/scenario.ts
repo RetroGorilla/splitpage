@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { SharedContentRef, SharedJsonValue, SharedMarkValue } from "../../../src/core/collab/operations.ts";
+import type { SharedContentRef, SharedJsonValue, SharedMarkValue, SharedRecordCollection } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
 import type { SharedUndo, SharedUndoOutcome } from "../../../src/application/editing/undo/shared-undo.ts";
 import { checkModel } from "../checker.ts";
@@ -27,14 +27,24 @@ export interface UndoReplica {
   readonly caretAfter: (character: string) => SharedUndoSelection;
   readonly edit: (input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[];
     readonly caret?: ModelObservation; readonly command?: string }) => string[];
-  readonly mark: (observed: ModelObservation, mark: SharedMarkValue) => void;
+  readonly mark: (observed: ModelObservation, mark: SharedMarkValue) => readonly string[];
+  readonly length: (beat: string) => number;
+  readonly rootOf: (id: string) => string;
+  readonly spot: (id: string) => number | undefined;
+  readonly knows: (mark: string) => boolean;
   readonly status: (beat: string, value: string) => void;
   readonly scalar: (beat: string, field: string, value: SharedJsonValue | undefined) => void;
   readonly snapshot: () => ModelSnapshot;
+  readonly record?: (action: UndoRecordAction, collection: SharedRecordCollection, key: string, value: string) => string | null;
 }
 
+export type UndoRecordAction = "create" | "set" | "delete";
+
 export interface UndoWorld {
-  readonly queue: { readonly flush: (order: DeliveryOrder) => void; readonly deliverFrom: (from: ReplicaName, order: DeliveryOrder) => void };
+  readonly queue: { readonly flush: (order: DeliveryOrder) => void; readonly deliverFrom: (from: ReplicaName, order: DeliveryOrder) => void;
+    readonly pending: readonly { readonly id: string; readonly to: ReplicaName }[]; readonly deliver: (id: string, copies?: number) => void };
+  readonly beats: readonly string[];
+  readonly sync: () => void;
   readonly replicas: ReadonlyMap<ReplicaName, UndoReplica>;
   readonly book: IdentityBook;
   readonly replica: (name: ReplicaName) => UndoReplica;

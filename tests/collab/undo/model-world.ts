@@ -21,7 +21,10 @@ export interface ModelObservation {
 }
 
 export interface ModelSnapshotCharacter { id: string; root: string; value: string; marks: string[] }
-export interface ModelSnapshot { rows: { id: string; characters: ModelSnapshotCharacter[]; status: string; scalars: Record<string, string> }[] }
+export interface ModelSnapshot {
+  rows: { id: string; characters: ModelSnapshotCharacter[]; status: string; scalars: Record<string, string> }[];
+  records?: Record<string, string>;
+}
 
 function ref(value: string): SharedContentRef { return value as SharedContentRef; }
 function identityOf(id: string): CollabIdentity { const [client = 0, clock = 0] = id.split(":").map(Number); return { client, clock }; }
@@ -173,7 +176,18 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
     return created;
   }
 
-  mark(observed: ModelObservation, mark: SharedMarkValue): void {
+  length(beat: string): number { return this.view.visible(beat).length; }
+  rootOf(id: string): string { return this.view.root(id); }
+  spot(id: string): number | undefined { return this.view.position.get(id); }
+  knows(mark: string): boolean { return this.ops.has(mark); }
+
+  mark(observed: ModelObservation, mark: SharedMarkValue): string[] {
+    const updates = this.written.length;
+    this.markCommand(observed, mark);
+    return this.written.length > updates ? (this.written.at(-1) ?? []).filter(op => op.kind === "mark").map(op => op.id) : [];
+  }
+
+  private markCommand(observed: ModelObservation, mark: SharedMarkValue): void {
     this.command(() => {
       const first = observed.ids[0], last = observed.ids.at(-1), view = this.view, { key, value } = markKey(mark);
       if (first === undefined || last === undefined) return null;
@@ -189,19 +203,16 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
         return { label: "format", selection: observed.selection, typing: null, parts: [{ kind: "mark-remove", target: address(observed.beat), mark, removed }] };
       }
       if (!live.length) return null;
-      const seen = this.known(key, value).map(ref);
       // why: prepareSharedMarkChange writes one occurrence over the whole range, also where the mark already shows.
       const added = [{ occurrence: ref(this.writeMark(key, value, first, last)), units: live.map(ref) }];
-      return { label: "format", selection: observed.selection, typing: null, parts: [{ kind: "mark-add", target: address(observed.beat), mark, added, seen }] };
+      return { label: "format", selection: observed.selection, typing: null, parts: [{ kind: "mark-add", target: address(observed.beat), mark, added }] };
     });
   }
 
-  private known(key: string, value: string | true): string[] {
-    return this.view.marks.filter(candidate => candidate.key === key && candidate.value === value).map(candidate => candidate.id);
-  }
-
   private writeMark(key: string, value: string | true, from: string, to: string): string {
-    const mark: ModelMark = { kind: "mark", id: this.id(), key, value, from, to, by: modelWriters[this.name].by, seen: this.known(key, value) };
+    const known = this.view.marks.filter(other => other.key === key && other.value === value && other.from === from && other.to === to);
+    const generation = 1 + Math.max(0, ...known.map(other => other.generation));
+    const mark: ModelMark = { kind: "mark", id: this.id(), key, value, from, to, by: modelWriters[this.name].by, generation };
     this.emit(mark);
     return mark.id;
   }
@@ -290,10 +301,9 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
       }
       case "mark-remove": {
         const { key, value } = markKey(part.mark), view = this.view;
-        const seen = this.known(key, value).map(ref);
         const wanted = new Set(part.removed.flatMap(entry => entry.units.map(unit => view.follow(unit))));
         const added = this.restoreMarks(String(part.target.owner), key, value, wanted);
-        return { effective: added.length > 0, inverse: { kind: "mark-add", target: part.target, mark: part.mark, added, seen } };
+        return { effective: added.length > 0, inverse: { kind: "mark-add", target: part.target, mark: part.mark, added } };
       }
       case "scalar": {
         const beat = String(part.target.record), current = this.view.scalar(beat, part.field);
@@ -403,6 +413,11 @@ export class ModelWorld {
     const replica = new ModelReplica(this, "C");
     replica.apply(this.replica(source).state());
     return replica;
+  }
+
+  sync(): void {
+    const present = [...this.replicas.values()];
+    for (const source of present) for (const target of present) if (source !== target) target.apply(source.state());
   }
 
   name(ids: readonly string[], names: readonly string[]): void {
