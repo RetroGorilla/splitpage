@@ -47,6 +47,7 @@ import {
 import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { beatLengthCommand } from "../../src/application/commands/beat-length.ts";
+import { addCommentCommand, addReplyCommand, unwrapCommentAnchorCommand } from "../../src/application/commands/comments.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
@@ -656,6 +657,30 @@ test("the standalone session allows commenting whatever its edit effect answers,
   assert.deepEqual(asked, []);
   assert.deepEqual(ports.capability.edit(), { allowed: false, reason: "review" });
   assert.deepEqual(asked, ["edit"]);
+});
+
+test("a session built by wireApp answers yes when the comment commands ask, even while its edit effect refuses", () => {
+  const f = fakes();
+  const wiring = wireApp({
+    ...f.deps,
+    undo: undefined,
+    effects: { dirty: () => {}, draft: () => {}, save: () => {}, edit: () => ({ allowed: false, reason: "review" }), attribute: () => null }
+  });
+  try {
+    liveDocumentPort.assign(migrateRows({
+      title: "Asked",
+      rows: [{ id: "r1", visualText: "", audioText: "Every morning.", status: "todo" }],
+      comments: [{ id: "c1", rowId: "r1", field: "audioText", body: "Tighter", replies: [] }]
+    }));
+    assert.deepEqual(runCommand(beatLengthCommand("r1", 30, sessionStamps)), { kind: "rejected", reason: "review" });
+    assert.equal(runCommand(addCommentCommand({ id: "c2", rowId: "r1", field: "audioText", body: "Why?", replies: [] })).kind, "applied");
+    assert.equal(runCommand(addReplyCommand("c1", { id: "x1", body: "Done" }, sessionStamps.clock)).kind, "applied");
+    const unwrapped = runCommand(unwrapCommentAnchorCommand(() => [{ rowId: "r1", field: "audioText", html: "Every morning!" }]));
+    assert.equal(unwrapped.kind, "applied");
+  } finally {
+    wiring.dispose();
+  }
+  assert.deepEqual(started(), NOTHING);
 });
 
 test("a session built by wireApp runs exactly the effects it was handed: a probe counts one call of each per edit", () => {
