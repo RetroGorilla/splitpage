@@ -7,6 +7,7 @@ export const capabilities: CapabilityPort = {
   saveDestinations: () => currentCapabilities().saveDestinations(),
   autosave: () => currentCapabilities().autosave(),
   merge: () => currentCapabilities().merge(),
+  reload: () => currentCapabilities().reload(),
   stash: () => currentCapabilities().stash(),
   drafts: () => currentCapabilities().drafts(),
   history: () => currentCapabilities().history(),

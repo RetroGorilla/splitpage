@@ -37,6 +37,13 @@ function startLocalFiles(ports: LocalFilesOwnerPorts) {
   const runningOnDesktop = ports.desktop.running;
   const desktopPort = function () { return ports.desktop; };
   const makeDesktopHandle = ports.files.desktopHandle;
+  const unconditional = function () { return true; };
+  function reloadPermitted(): boolean {
+    const can = ports.capability.reload();
+    if (can.allowed) return true;
+    showToast(can.reason, "warn");
+    return false;
+  }
 function projectFileSource(): ReturnType<LocalFilesOwner["projectFileSource"]> {
   return {
     id: "project-file",
@@ -49,11 +56,12 @@ function projectFileSource(): ReturnType<LocalFilesOwner["projectFileSource"]> {
   };
 }
 
-async function openProjectFile(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions | null) {
+async function openProjectFile(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions | null, permitted: () => boolean = unconditional) {
   opts = opts || {};
   const parsed = await parseProjectFileState(file);
   if (!active) return false;
-  if (!parsed) return loadFileIntoEditor(file, handle);
+  if (!permitted()) return false;
+  if (!parsed) return loadFileIntoEditor(file, handle, undefined, permitted);
   if (parsed.error === "unreadable") {
     showToast("Could not read " + (file as LocalFileData).name + ".", "error");
     return false;
@@ -118,7 +126,7 @@ async function resumeFromHandle(handle: LocalFileReference | null | undefined) {
   }
 }
 
-async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions) {
+async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions, permitted: () => boolean = unconditional) {
   if (!active) return;
   opts = opts || {};
   let kind = fileKindFromName((file as LocalFileData).name);
@@ -162,6 +170,7 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
   }
 
   if (!active) return;
+  if (!permitted()) return;
   if (!newRows || !newRows.length) { showToast("No beats found in that file.", "warn"); return; }
 
 
@@ -249,6 +258,7 @@ async function openLocalFile() {
 }
 
 async function reloadFileFromDisk() {
+  if (!reloadPermitted()) return;
   fileConflicts().close();
   const imported = importHome();
   if (!imported || !imported.handle) return;
@@ -256,20 +266,23 @@ async function reloadFileFromDisk() {
     keepSnapshot("Before reloading " + imported.name + " from disk");
     const importedFile = await ports.files.read(imported.handle);
     if (!active) return;
-    await loadFileIntoEditor(importedFile, imported.handle, { reload: true });
+    if (!reloadPermitted()) return;
+    await loadFileIntoEditor(importedFile, imported.handle, { reload: true }, reloadPermitted);
   } catch (e) {
     if (active) showToast("Could not re-read that file.", "error");
   }
 }
 
 async function reloadProjectFromDisk() {
+  if (!reloadPermitted()) return;
   fileConflicts().close();
   const file = fileHome();
   if (!file || !file.handle) return;
   try {
     const projectFile = await ports.files.read(file.handle);
     if (!active) return;
-    await openProjectFile(projectFile, file.handle);
+    if (!reloadPermitted()) return;
+    await openProjectFile(projectFile, file.handle, null, reloadPermitted);
   } catch (e) {
     if (active) showToast("Could not re-read that file.", "error");
   }

@@ -1,11 +1,15 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 const bridge = await import("../bootstrap/wiring/recovery-owners.ts");
 
 function ports(over) {
-  return Object.assign({ desktop: () => null, sessionStorage: () => null, localStorage: () => null, internImage: () => {} }, over);
+  return Object.assign({
+    capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
+    desktop: () => null, sessionStorage: () => null, localStorage: () => null, internImage: () => {}
+  }, over);
 }
 
 test("before the draft recovery is started, every accessor throws instead of running on a default", () => {

@@ -595,3 +595,45 @@ test("each start owns its own writer state, timing and counts, and an old mount'
     drafts.dispose();
   }
 });
+
+for (const answer of ["merged", "refused"] as const) {
+  test("a file draft whose merge is " + answer + (answer === "refused" ? " for a reason stays kept for the next launch" : " reports merged and marks the written-out state"), async () => {
+    const h = harness();
+    const docId = "d0123456789abcdef0123456789abcdef";
+    const version = (title: string) => migrateRows({ title, docId, rows: [] }, fakeMigration().ports);
+    const disk = version("Disk");
+    const asked: unknown[] = [];
+    const ports: DraftsPorts = {
+      ...h.ports,
+      files: {
+        handle: () => ({ getFile: () => Promise.resolve({ name: "pilot.splitpage", lastModified: 4 }) }),
+        parse: () => Promise.resolve({ state: disk, kind: "splitpage", docIdEmbedded: true })
+      },
+      recovery: {
+        ...h.ports.recovery,
+        applyStashedWork: (state, _override, options) => {
+          asked.push(options?.recovery);
+          return Promise.resolve(answer === "refused"
+            ? { state, report: null, snapshot: null, reason: "Local merge is not available in a shared session." }
+            : { state, report: null, snapshot: null });
+        }
+      }
+    };
+    const drafts = mount(ports);
+    try {
+      const outcome = await drafts.applyTaken({
+        header: { origin: { kind: "file" }, docIdWrittenOut: true },
+        file: { id: "f1", name: "pilot.splitpage" },
+        stateJson: JSON.stringify(version("Mine")),
+        baseJson: JSON.stringify(version("Base"))
+      });
+      assert.deepEqual(asked, [true]);
+      assert.equal(outcome, answer === "refused" ? "kept" : "merged");
+      assert.deepEqual(h.log.filter(entry => entry.startsWith("writtenOut:")), answer === "refused" ? [] : ["writtenOut:true"]);
+      assert.deepEqual(h.toasts.map(toast => /kept for the next launch/.test(toast.message)), answer === "refused" ? [true] : []);
+      assert.deepEqual(h.restoreDone, [outcome]);
+    } finally {
+      drafts.dispose();
+    }
+  });
+}

@@ -1,4 +1,5 @@
 import type { MergeUndoRecord } from "../../application/session/apply-merge.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
 
 export interface MergeReportStats {
   readonly rowsFromMe?: number;
@@ -21,6 +22,7 @@ export interface RestoreRequest {
 }
 
 export interface MergeBannerPorts {
+  readonly capability: Pick<CapabilityPort, "merge">;
   readonly lastUndo: () => MergeUndoRecord | null;
   readonly sameDocument: (docId: string | null | undefined) => boolean;
   readonly restore: (id: string, request: RestoreRequest) => PromiseLike<RestoreAnswer>;
@@ -99,6 +101,7 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
 
   function show(result: MergeReport, opts?: ShowOptions): boolean {
     if (!open) return false;
+    if (!ports.capability.merge().allowed) return false;
     const summary = mergeSummary(result);
     if (summary === null) return false;
     const offerUndo = opts?.undo !== false && !!ports.lastUndo();
@@ -119,6 +122,8 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
 
   function undoMerge(): void {
     if (!open) return;
+    const can = ports.capability.merge();
+    if (!can.allowed) { disarm(); ports.warn(can.reason); return; }
     const undo = ports.lastUndo();
     if (!undo) { ports.warn("No merge snapshot to undo."); return; }
     if (!ports.sameDocument(undo.docId)) {
