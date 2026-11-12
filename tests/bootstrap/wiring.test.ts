@@ -139,6 +139,7 @@ function transitionPorts(): TransitionDeps {
 
 function mergePorts(): LegacyMergePorts {
   return {
+    capability: MAY_EDIT,
     states: (_base, _mine, theirs) => ({ merged: theirs, conflicts: [], stats: { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 } }),
     entry: (raw) => migrateRows(raw),
     isDocument: (raw) => !!raw && typeof raw === "object",
@@ -237,6 +238,7 @@ function fakes(): Fakes {
     recovery: () => {
       note("recovery");
       return {
+        capability: MAY_EDIT,
         desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
         drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }
@@ -532,7 +534,12 @@ test("failed partial startup: an actions, exporters, merge or recovery factory t
     ...recoveryMethods.flatMap((method): Spoilt[] => [
       ["recovery " + method, (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), method) }), "recovery", "the recovery dependency returned no " + method + " function"],
       ["recovery " + method + " not a function", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), [method]: 7 }) }), "recovery", "the recovery dependency returned no " + method + " function"]
-    ])
+    ]),
+    ["recovery capability nothing", (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), "capability") }), "recovery", "the recovery dependency returned no capability port"],
+    ["recovery capability stash", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), capability: { merge: MAY_EDIT.merge } }) }), "recovery", "the recovery dependency's capability port has no stash function"],
+    ["recovery capability merge", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), capability: { stash: MAY_EDIT.stash } }) }), "recovery", "the recovery dependency's capability port has no merge function"],
+    ["merge capability nothing", (f) => ({ ...f.deps, merge: () => without(f.deps.merge(), "capability") }), "merge", "the merge dependency returned no capability port"],
+    ["merge capability merge", (f) => ({ ...f.deps, merge: () => ({ ...f.deps.merge(), capability: {} }) }), "merge", "the merge dependency's capability port has no merge function"]
   ];
   for (const [what, spoil, step, message] of cases) {
     const f = fakes();
@@ -661,10 +668,11 @@ test("the standalone session allows commenting whatever its edit effect answers,
       attribute: () => { asked.push("attribute"); return null; }
     }
   });
-  assert.deepEqual(Object.keys(ports.capability).sort(), ["autosave", "bundles", "comment", "drafts", "edit", "folders", "history", "merge", "saveDestinations", "stash"]);
+  assert.deepEqual(Object.keys(ports.capability).sort(), ["autosave", "bundles", "comment", "drafts", "edit", "folders", "history", "merge", "reload", "saveDestinations", "stash"]);
   assert.deepEqual(ports.capability.saveDestinations(), { allowed: true });
   assert.deepEqual(ports.capability.autosave(), { allowed: true });
   assert.deepEqual(ports.capability.merge(), { allowed: true });
+  assert.deepEqual(ports.capability.reload(), { allowed: true });
   assert.deepEqual(ports.capability.stash(), { allowed: true });
   assert.deepEqual(ports.capability.drafts(), { allowed: true });
   assert.deepEqual(ports.capability.history(), { allowed: true });

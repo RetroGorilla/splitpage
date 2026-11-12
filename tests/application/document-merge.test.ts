@@ -7,6 +7,7 @@ import type { MergeKind } from "../../src/application/session/apply-merge.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { MergedStates } from "../../src/core/merge-states.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 interface World {
   readonly ports: DocumentMergePorts<number>;
@@ -24,6 +25,7 @@ function world(): World {
     seen: seen,
     held: doc("held"),
     ports: {
+      capability: MAY_EDIT,
       states: (base, mine, theirs): MergedStates => {
         seen.push("states " + (base ? base.title : "-") + " " + mine.title + " " + theirs.title);
         return { merged: doc("merged"), conflicts: [], stats: { rowsFromThem: 1, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 } };

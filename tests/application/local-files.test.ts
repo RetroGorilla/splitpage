@@ -7,6 +7,7 @@ import { createDocumentLocation } from "../../src/application/location/document-
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { fakeNotices } from "../features/fakes.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 function harness() {
   const log: string[] = [];
@@ -17,6 +18,7 @@ function harness() {
   const state = { permission: "granted", dirty: false };
   const owner: LocalFilesOwner = createLocalFilesOwner();
   const ports: LocalFilesOwnerPorts = {
+    capability: MAY_EDIT,
     document: { current: () => doc },
     session: { noteAbsorbedDirty: (kind) => { log.push("dirty:" + kind); }, noteReload: () => { log.push("reload"); } },
     transitions: { open: (opening) => {
@@ -52,13 +54,84 @@ function harness() {
     },
     chooseFallback: () => { log.push("fallback"); }
   };
-  return { owner, ports, log, file, state, doc, location };
+  return { owner, ports, log, file, state, doc, location, notices };
 }
 
 function deferred<T>() {
   let resolve: (value: T) => void = () => {};
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
+}
+
+const LATE_ROW = { id: "r-late", visualText: "", audioText: "late", imageRef: null };
+const RELOAD_REFUSED = ["Reloading a local file is not available in a shared session.", "warn"];
+const RELOAD_STAGES = {
+  "read": {
+    refused: ["closeConflict", "read"],
+    kept: ["closeConflict", "read", "parse", "closePanel", "resetPanel", "open:Before opening import.txt:true", "confirm", "remember"],
+    said: ["Opened A script — 0 rows", "ok"]
+  },
+  "parse": {
+    refused: ["closeConflict", "read", "parse"],
+    kept: ["closeConflict", "read", "parse", "closePanel", "resetPanel", "open:Before opening import.txt:true", "confirm", "remember"],
+    said: ["Opened A script — 0 rows", "ok"]
+  },
+  "fallback text": {
+    refused: ["closeConflict", "read", "parse", "beginBusy", "text", "endBusy"],
+    kept: ["closeConflict", "read", "parse", "beginBusy", "text", "endBusy", "stamp", "resetPanel", "open:Before opening import.txt:false", "dirty:adopt", "closePanel", "identity"],
+    said: ["Opened import.txt — 1 row — as a new document", "ok"]
+  },
+  "docx": {
+    refused: ["closeConflict", "Before reloading import.docx from disk", "read", "beginBusy", "docx", "endBusy"],
+    kept: ["closeConflict", "Before reloading import.docx from disk", "read", "beginBusy", "docx", "endBusy", "stamp", "flush", "reload", "dirty:reload", "closePanel", "identity"],
+    said: ["Reloaded import.docx — 1 row", "ok"]
+  },
+  "text": {
+    refused: ["closeConflict", "Before reloading import.txt from disk", "read", "beginBusy", "text", "endBusy"],
+    kept: ["closeConflict", "Before reloading import.txt from disk", "read", "beginBusy", "text", "endBusy", "stamp", "flush", "reload", "dirty:reload", "closePanel", "identity"],
+    said: ["Reloaded import.txt — 1 row", "ok"]
+  }
+} as const;
+
+for (const stage of ["read", "parse", "text", "docx", "fallback text"] as const) {
+  for (const replacement of ["shared", "standalone"] as const) test("a reload whose session becomes " + replacement + " during " + stage + (replacement === "shared" ? " adopts nothing from the completed local read" : " lands as before"), async t => {
+    const h = harness();
+    const entered = deferred<undefined>();
+    const gate = deferred<undefined>();
+    let allowed = true;
+    const held = async () => { entered.resolve(undefined); await gate.promise; };
+    const file = { ...h.file, name: stage === "docx" ? "import.docx" : "import.txt" };
+    const project = stage === "read" || stage === "parse" || stage === "fallback text";
+    let ports: LocalFilesOwnerPorts = {
+      ...h.ports,
+      imports: { ...h.ports.imports, normalizeImportedRows: () => [{ ...LATE_ROW }] },
+      capability: { reload: () => allowed ? { allowed: true } : { allowed: false, reason: "Reloading a local file is not available in a shared session." } },
+      files: { ...h.ports.files,
+        read: async () => { h.log.push("read"); if (stage === "read") await held(); return file; },
+        text: async () => { h.log.push("text"); await held(); return "late local contents"; }
+      }
+    };
+    if (stage === "parse") {
+      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: async () => {
+        h.log.push("parse"); await held(); return { state: h.doc, kind: "splitpage", docIdEmbedded: true };
+      } } };
+    } else if (stage === "fallback text") {
+      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: async () => { h.log.push("parse"); return null; } } };
+    } else if (stage === "docx") {
+      ports = { ...ports, imports: { ...ports.imports, docxToRows: async () => {
+        h.log.push("docx"); await held(); return { title: "late", rows: [{ ...LATE_ROW }], looseText: "" };
+      } } };
+    }
+    h.location.setHome(project ? "file" : "import", { name: file.name, handle: {}, format: stage === "docx" ? "docx" : "txt" });
+    t.after(h.owner.startLocalFiles(ports));
+    const pending = project ? h.owner.reloadProjectFromDisk() : h.owner.reloadFileFromDisk();
+    await entered.promise;
+    allowed = replacement === "standalone";
+    gate.resolve(undefined);
+    await pending;
+    assert.deepEqual(h.log, RELOAD_STAGES[stage][replacement === "shared" ? "refused" : "kept"]);
+    assert.deepEqual(h.notices.shown.map(({ message, kind }) => [message, kind]), [replacement === "shared" ? RELOAD_REFUSED : RELOAD_STAGES[stage].said]);
+  });
 }
 
 for (const stage of ["parse", "last handle", "permission", "read", "dialog", "route", "picker", "text", "docx", "reload import", "reload project"]) {

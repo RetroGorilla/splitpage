@@ -13,6 +13,7 @@ import type { Run } from "../../../src/core/text/runs.ts";
 import { mergeStates } from "../../../src/core/merge-states.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
+import { fakeCapabilities, fakeNotices } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -72,6 +73,8 @@ function setup(opts: Setup) {
     closed: 0
   };
   const ports: MergeReviewPorts = {
+    capability: fakeCapabilities(),
+    notices: fakeNotices().notices,
     document: { current: () => opts.mine },
     session: { mergeBase: () => (opts.mergeBase === undefined ? null : opts.mergeBase) },
     place: { fileHome: () => (opts.fileHome === undefined ? null : opts.fileHome) },

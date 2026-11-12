@@ -47,6 +47,7 @@ export interface MergeOutcome<D = unknown> {
   readonly result: MergedStates | null;
   readonly snapshot: UndoPointTicket | null;
   readonly replaced?: true;
+  readonly reason?: string;
 }
 
 export interface MergeView {
