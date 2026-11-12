@@ -46,6 +46,24 @@ test("carried limit double-restore: the literal history fails in the declared wa
   assert.throws(limit.literal.run, error => error instanceof Error && limit.literal !== undefined && limit.literal.failure.test(error.message));
 });
 
+test("carried limit insert-after-deleted-run: the smallest history ends equal on every copy, with nothing typed lost or twice", () => {
+  const read = (kind: typeof ADAPTER_WORLD): string[] => {
+    const world = kind.make([{ id: "R1", text: "abcd" }]), a = world.replica("A"), b = world.replica("B");
+    const held = b.observe("R1", 2, 2);
+    a.edit({ at: a.observe("R1", 1, 3), command: "cut" });
+    world.queue.flush("D1");
+    b.edit({ at: held, text: "X" });
+    world.queue.flush("D1");
+    const typed = [a, b, world.fresh("A")].map(replica => replica.snapshot().rows.map(row => row.characters.map(character => character.value).join("")).join("|"));
+    const undone = a.undo.undo();
+    assert.equal(undone.ok && undone.effective, true);
+    world.queue.flush("D1");
+    return [...typed, ...[a, b, world.fresh("A")].map(replica => replica.snapshot().rows.map(row => row.characters.map(character => character.value).join("")).join("|"))];
+  };
+  assert.deepEqual(read(ADAPTER_WORLD), ["aXd", "aXd", "aXd", "abcXd", "abcXd", "abcXd"]);
+  assert.deepEqual(read(MODEL_WORLD), ["aXd", "aXd", "aXd", "abXcd", "abXcd", "abXcd"]);
+});
+
 test("waiting limits name the cut that examines them", () => {
   assert.deepEqual(undoLimits.filter(limit => limit.state === "waits").map(limit => [limit.id, /removal|adapter executor/.exec(limit.history)?.[0]]), [
     ["redone-recovery", "removal"], ["redone-mark-reversed", "adapter executor"], ["pending-update", "adapter executor"]
