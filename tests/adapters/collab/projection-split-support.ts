@@ -11,7 +11,7 @@ import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 
 const structurePorts = { cells: createFlowLoadRuntime().cells };
 
-export const splitIdentities = ['["structure","1","cut","beat"]', '["structure","2","cut","beat"]', '["structure","3","cut","beat"]'] as const;
+export const splitIdentities = ["structure_1_006300750074_beat_0", "structure_2_006300750074_beat_0", "structure_3_006300750074_beat_0"] as const;
 export const splitInputFields = [
   { status: "ready", lengthSeconds: 11, paragraphStart: true, stamp: { at: "t1", by: "P1" } },
   { status: "shot", lengthSeconds: 22, stamp: { at: "t2", by: "P2" } },

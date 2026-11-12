@@ -7,6 +7,7 @@ import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextInsertionPosition, requireSharedTextOwnership, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { reserveSharedCommandIdentities } from "./structure-identity.ts";
 import { sharedPreparedTextInsert } from "./prepare-value.ts";
 import { prepareSharedMarkTranslation } from "./mark-translation.ts";
 
@@ -40,6 +41,7 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
     let offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0);
     requireSharedTextOwnership(view, plan, offset, offset);
     const chunks = operation.content.map((chunk, chunkIndex) => {
+      if (typeof chunk.value !== "string" && chunk.value.atom === "broll" && !reserveSharedCommandIdentities(view, [chunk.value.id])) throw new SharedTextPreparationError("existing-identity");
       const value = sharedPreparedTextInsert(inline(chunk.value));
       if (typeof value !== "string" && (!value || typeof value !== "object" || Array.isArray(value))) throw new SharedTextPreparationError("invalid-content");
       const marks = chunk.marks.map((mark, markIndex) => {

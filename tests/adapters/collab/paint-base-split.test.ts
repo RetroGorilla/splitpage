@@ -1,3 +1,4 @@
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
@@ -17,7 +18,7 @@ import { agree, operation, ref, replicas } from "./executor-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 
 const WHO = '<span class="who-anchor" data-who="Sam">@Sam</span>';
-const NEW = JSON.stringify(["structure", "1", "enter", "beat"]);
+const NEW = structureIdentityFixture("1", "enter", "beat");
 const SOURCE: SharedTextAddress = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" };
 const CREATED: SharedTextAddress = { owner: ref(NEW), segment: ref("b:R1"), field: "audioText" };
 const structurePorts = { cells: createFlowLoadRuntime().cells };

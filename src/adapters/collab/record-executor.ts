@@ -8,6 +8,7 @@ import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResul
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedCreatedAttachment } from "./structure-content.ts";
+import { reserveSharedCommandIdentities } from "./structure-identity.ts";
 
 function candidate(view: SharedPreparationView, writes: readonly SharedPreparedWrite[]): Pick<SharedPreparationView, "get" | "kind" | "keys"> {
   const edits = new Map<string, SharedPreparedWrite>();
@@ -90,7 +91,8 @@ function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationVie
       writes.push({ path: [...path, field], kind: "set", value });
     }
   }
-  return readPreparedSharedRecord(collection, key, candidate(view, writes)) ? accepted(writes) : { ok: false, reason: "invalid-record-shape" };
+  if (!readPreparedSharedRecord(collection, key, candidate(view, writes))) return { ok: false, reason: "invalid-record-shape" };
+  return reserveSharedCommandIdentities(view, [key, ...(typeof fields.id === "string" ? [fields.id] : [])]) ? accepted(writes) : { ok: false, reason: "existing-identity" };
 }
 
 function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): SharedPreparationResult {
