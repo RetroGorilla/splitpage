@@ -8,10 +8,11 @@ import { registerSharedTextOperationHandlers } from "../../../src/adapters/colla
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
-import { startBeat, typeWithMarks, replaceRange, beatPos, joinWithPrevious } from "../../../src/core/flow/flow.ts";
+import { startBeat, typeWithMarks, replaceRange, beatPos, joinWithPrevious, setMarkAcross } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
+import { explode } from "../../../src/core/text/edits.ts";
 import { captureIncrementalReplica, assertIncremental, incrementalReports } from "./incremental-support.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
@@ -113,4 +114,67 @@ for (const order of ["D1", "rev", "dup"] as const) test("seen destination split 
       return { rows: actual.rows, sections: actual.sections };
     });
   } finally { set.close(); }
+});
+
+test("seeded joined rows agree with app formatting across the join point while another writer types", t => {
+  const declaredLimits = ["separator-keeps-no-inline-format"], violations = new Set<string>(), runtime = createFlowLoadRuntime();
+  let seed = 0x5c3603, histories = 0, commands = 0, compared = 0, covering = 0;
+  const choose = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 16) % n; };
+  const plain = (html: string) => html.replace(/<[^>]*>/g, "");
+  for (let sample = 0; sample < 4; sample++) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
+    const source = validatedFixture({ rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }, { id: "R3", audioText: "gh" }] });
+    const set = replicas(copies, source), handles = [set.a, set.b, set.c].slice(0, copies), incremental = handles.map(handle => captureIncrementalReplica(handle));
+    const check = () => handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); });
+    const ports = (id: string, by: string) => ({ ...runtime.ports, operations: { id, by } });
+    try {
+      handles.forEach(handle => { registerSharedJoinHandlers(handle); registerSharedSplitHandlers(handle, runtime); registerSharedTextOperationHandlers(handle); });
+      assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "join", id: "join", by: "Alice", from: "R2", into: "R1", glue: " " })]), { ok: true }); commands++;
+      if (copies === 3) {
+        assert.deepEqual(executeSharedOperations(set.c, [operation({ kind: "split", id: "apart", by: "Carol", target: { owner: "R1", segment: "R1", field: "audioText" },
+          at: { left: null, right: flowBaseReference("R1", "audioText", choose(4)), affinity: "before" }, observed: [], beat: "apart_beat", boundary: "apart_beat", fields: {} })],
+          { base: readSharedRevision(set.c) }), { ok: true }); commands++;
+      }
+      set.queue.flush(order); check();
+      const current = (handle = set.b) => { const document = projectSharedDocumentWithRecovery(handle).document; return { document, doc: { rows: document.rows, sections: document.sections, comments: [] } as FlowDoc }; };
+      const owner = current().document.rows.find(row => row.audioText?.includes(" ef"))?.id; assert.ok(owner);
+      const text = () => plain(current().document.rows.find(row => row.id === owner)?.audioText ?? "");
+      const mark = choose(2) ? "i" as const : "b" as const, from = choose(text().length), to = from + 1 + choose(text().length - from);
+      const marked = setMarkAcross(current().doc, { anchor: beatPos(owner, from), head: beatPos(owner, to) }, mark, ports("mark", "Bob"));
+      const typedAt = choose(text().length + 1), typed = typeWithMarks(current(set.a).doc, beatPos(owner, typedAt), "X", {}, ports("typed", "Alice"));
+      assert.ok(marked && "rows" in marked && marked.ops && typed && "rows" in typed && typed.ops);
+      assert.deepEqual(executeSharedOperations(set.b, marked.ops, { base: readSharedRevision(set.b) }), { ok: true });
+      assert.deepEqual(executeSharedOperations(set.a, typed.ops, { base: readSharedRevision(set.a) }), { ok: true }); commands += 2;
+      check(); set.queue.flush(order); check();
+      agree("concurrent joined mark and typing", order, handles, handle => {
+        const result = projectSharedDocumentWithRecovery(handle);
+        if (result.document.rows.map(row => plain(row.audioText ?? "")).join("").replaceAll(" ", "").replace("X", "") !== "abcdefgh") violations.add("reading-order");
+        if (result.recovery.length) violations.add("unexpected-recovery");
+        return result;
+      });
+      for (const step of ["again", "toggle"] as const) {
+        const { document, doc } = current(), length = text().length, start = choose(length), end = start + 1 + choose(length - start);
+        const result = setMarkAcross(doc, { anchor: beatPos(owner, start), head: beatPos(owner, end) }, mark, ports(step, "Bob"));
+        assert.ok(result && "rows" in result && result.ops);
+        const expected = applyFlowOperations(doc, result.ops, runtime.cells); assert.deepEqual(expected.rows, result.rows);
+        assert.deepEqual(executeSharedOperations(set.b, result.ops, { base: readSharedRevision(set.b) }), { ok: true }); commands++;
+        set.queue.flush(order); check();
+        const separator = text().indexOf(" "), loaded = runtime.load({ ...document, rows: expected.rows, sections: expected.sections });
+        if (separator >= start && separator < end) covering++;
+        agree("app formatting on a joined row " + step, order, handles, handle => {
+          const actual = runtime.load(projectSharedDocumentWithRecovery(handle).document);
+          if (JSON.stringify(actual.rows) !== JSON.stringify(loaded.rows)) {
+            const apart = (rows: typeof actual.rows) => rows.map(row => ({ ...row,
+              audioText: explode(runtime.cells(row.audioText ?? "")).map((char, index) => row.id === owner && index === separator ? null : char) }));
+            violations.add(separator >= start && separator < end && JSON.stringify(apart(actual.rows)) === JSON.stringify(apart(loaded.rows)) ? "separator-keeps-no-inline-format" : "app-formatting");
+          }
+          return actual.rows;
+        }); compared++;
+      }
+      histories++;
+    } finally { incremental.forEach(value => value.projector.dispose()); set.close(); }
+  }
+  assert.deepEqual([...violations], declaredLimits);
+  const measured = { seed: 0x5c3603, histories, commands, compared, covering, declaredLimits };
+  assert.deepEqual(measured, { seed: 6043139, histories: 24, commands: 132, compared: 48, covering: 18, declaredLimits: ["separator-keeps-no-inline-format"] });
+  t.diagnostic(JSON.stringify(measured));
 });

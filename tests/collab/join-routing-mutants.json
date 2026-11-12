@@ -47,5 +47,17 @@
     "find": "for (const id of index.segmentJoins(key))",
     "replace": "for (const id of [] as string[])",
     "tests": ["tests/adapters/collab/join-binding-neighborhood.test.ts", "tests/adapters/collab/join-binding-model.test.ts"]
+  }, {
+    "label": "joined mark covers only its first fragment",
+    "file": "src/adapters/collab/mark-executor.ts",
+    "find": "sharedJoinedSelected(view, row, operation.observed).physical)",
+    "replace": "sharedJoinedSelected(view, row, operation.observed).physical.slice(0, 1))",
+    "tests": ["tests/adapters/collab/join-marks.test.ts"]
+  }, {
+    "label": "joined mark writes every fragment into the first text",
+    "file": "src/adapters/collab/mark-executor.ts",
+    "find": "markSteps(operation, view, part.plan, unitRanges(view, part.plan, part.units)",
+    "replace": "markSteps(operation, view, row.plans[0] ?? part.plan, unitRanges(view, part.plan, part.units)",
+    "tests": ["tests/adapters/collab/join-marks.test.ts"]
   }]
 }
