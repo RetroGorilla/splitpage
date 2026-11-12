@@ -40,7 +40,7 @@ export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle):
   return withSharedSnapshot(handle, state => {
     const recovery: SharedDocumentProjectionResult["recovery"][number][] = [];
     const copy = state as unknown as SharedDocumentHandle, roots = state.roots;
-    const fields = readSharedDocumentFieldProjection(copy), out = { ...fields.document };
+    const fields = readNativeDocumentFieldProjection(copy), out = { ...fields.document };
     const tags = out.productionTags as Record<string, unknown>[], comments = out.comments as Record<string, unknown>[];
     const title: unknown = roots.meta.get("title");
     Object.assign(out, { title: title instanceof Y.Text ? title.toString() : "", docId: out.docId ?? "", schema: out.schema ?? 2, rev: out.rev ?? 0 });
@@ -98,6 +98,11 @@ export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle):
 }
 
 export function readSharedDocumentFieldProjection(handle: SharedDocumentHandle): SharedDocumentFieldProjection {
+  const fields = readNativeDocumentFieldProjection(handle);
+  return { document: canonicalSharedProjection(fields.document) as Record<string, unknown>, sections: canonicalSharedProjection(fields.sections, "section") as typeof fields.sections };
+}
+
+function readNativeDocumentFieldProjection(handle: SharedDocumentHandle): SharedDocumentFieldProjection {
   return withSharedSnapshot(handle, state => {
     const copy = state as unknown as SharedDocumentHandle, roots = state.roots;
     const meta = readProjectionFields(roots.meta, "document") ?? {}, out = sharedProjectionExtra(meta);
@@ -125,6 +130,6 @@ export function readSharedDocumentFieldProjection(handle: SharedDocumentHandle):
       if (heading) { sections.push({ id: heading, firstSceneId: head.id }); heading = null; }
     }
     Object.assign(out, { rows, comments, people, productionTags: tags, brollShots: shots });
-    return { document: canonicalSharedProjection(out) as Record<string, unknown>, sections };
+    return { document: out, sections };
   });
 }

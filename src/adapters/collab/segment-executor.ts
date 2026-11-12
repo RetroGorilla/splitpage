@@ -1,7 +1,7 @@
 import type { SharedSegmentCreate, SharedContentRef } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedPreparationView, SharedPreparedWrite } from "./prepare.ts";
-import type { SharedStructureOrderView } from "./structure-order.ts";
+import type { SharedStructureOrderView } from "./structure-order-index.ts";
 import type { SharedStructureContentPorts } from "./structure-content.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import type { SharedTextExecutionDescription } from "./text-description.ts";
@@ -14,12 +14,13 @@ import { applySharedMapWrites } from "./prepare.ts";
 import { applySharedTextCreation } from "./text-target.ts";
 import { prepareSharedTextCreation } from "./text-creation.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
-import { scalarFieldAllowed } from "./scalar-executor.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { spliceSharedTextPlan, addSharedTextSource, sharedTextOverlay, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { applySharedTextEdit } from "./text-edit.ts";
 import { applySharedTextDescription } from "./text-description.ts";
 import { sharedStructureView, prepareSharedInitialContent, sharedCreatedAttachments } from "./structure-content.ts";
 import { prepareSharedInitialGallery } from "./structure-gallery.ts";
+import { planSharedStructureOwner, planSharedStructureHead } from "./structure-plan.ts";
 
 export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, view: SharedPreparationView, order: SharedStructureOrderView, ports: SharedStructureContentPorts, identities: SharedStructureIdentityReservations) {
   try {
@@ -54,12 +55,14 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
     writes.push({ kind: "set", path: [...beatPath, "extra"], value: JSON.stringify(Object.fromEntries(extra.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))) });
     writes.push(...prepareSharedInitialGallery(operation, view, beat, identities));
     const overlay = [...writes], texts: { readonly path: readonly string[]; readonly title: boolean }[] = [], content: SharedTextExecutionDescription[] = [];
+    planSharedStructureOwner(view, beat, segment);
     let boundary: SharedTextWritePlan | null = null;
     if (placement.kind === "inline") {
       const { plan, offset } = placement, value = { b: beat };
-      spliceSharedTextPlan(plan, offset, offset, [value]); addSharedTextSource(plan, beat, offset + 1, offset + 1, "audioText");
+      spliceSharedTextPlan(plan, offset, offset, [value]); addSharedTextSource(view, plan, beat, offset + 1, offset + 1, "audioText");
       boundary = { target: plan.target, edit: { type: "atom", at: offset, value }, marks: [] }; overlay.push(sharedTextOverlay(plan));
     } else {
+      planSharedStructureHead(view, segment, { b: beat });
       const text = prepareSharedTextCreation(sharedStructureView(view, overlay), path); if (!text.ok) return text;
       texts.push(text.description); overlay.push(...text.writes);
     }

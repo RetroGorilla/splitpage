@@ -1,5 +1,7 @@
 export type SharedProjectionKind = "document" | "row" | "comment" | "reply" | "person" | "tag" | "shot" | "prop" | "section" | "gallery" | "link" | "image" | "annotation" | "mark" | "unknown";
 
+import { cleanId } from "../../document/text-policy.ts";
+
 function fieldOrder(kind: SharedProjectionKind): readonly string[] {
   const orders: Record<SharedProjectionKind, readonly string[]> = {
     document: ["schema", "title", "docId", "rows", "comments", "people", "productionTags", "brollShots", "wordsPerMinute", "rev", "lastEditedBy", "lastEditedAt"],
@@ -34,5 +36,8 @@ export function canonicalSharedProjection(value: unknown, kind: SharedProjection
   if (value === null || typeof value !== "object") return value;
   const source = value as Record<string, unknown>, known = fieldOrder(kind);
   const keys = [...known.filter(key => Object.hasOwn(source, key)), ...Object.keys(source).filter(key => !known.includes(key)).sort()];
-  return Object.fromEntries(keys.map(key => [key, canonicalSharedProjection(source[key], child(kind, key))]));
+  return Object.fromEntries(keys.map(key => {
+    const value = source[key], beatId = kind === "row" && key === "id" || kind === "section" && key === "firstSceneId" || kind === "comment" && key === "rowId";
+    return [key, canonicalSharedProjection(beatId && typeof value === "string" ? cleanId(value) : value, child(kind, key))];
+  }));
 }

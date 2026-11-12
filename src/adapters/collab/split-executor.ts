@@ -10,9 +10,10 @@ import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, addShar
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { prepareStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { sharedStructureSpans } from "./structure-boundary.ts";
-import { scalarFieldAllowed } from "./scalar-executor.ts";
-import { observeSharedStructureOrder } from "./structure-order.ts";
+import { sharedStructureSpans } from "./structure-spans.ts";
+import { planSharedStructureOwner } from "./structure-plan.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
+import { observeSharedStructureOrder } from "./structure-order-index.ts";
 import { prepareSharedSegmentCreation } from "./segment-executor.ts";
 import type { SharedStructureContentPorts } from "./structure-content.ts";
 import { observeSharedStructureIdentities } from "./structure-reservations.ts";
@@ -25,9 +26,9 @@ export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSp
     const plan = sharedTextCommandPlan(view, operation.target), { at } = operation;
     const left = at.left === null ? null : resolveSharedTextReference(view, plan, at.left, "left");
     const right = at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
-    const span = sharedStructureSpans(view.get([...plan.path.slice(0, -1), "head"]), plan.units).find(span => span.owner === plan.target.owner);
+    const span = sharedStructureSpans(view, plan.target.segment, plan.units).find(span => span.owner === plan.target.owner);
     if (!span) throw new SharedTextPreparationError("missing-target");
-    const offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from);
+    const offset = Math.max(span.positions[0] ?? span.to, sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from));
     if (left && right && left.from > right.from || offset < span.from || offset > span.to) throw new SharedTextPreparationError("invalid-reference");
     for (const ref of operation.observed) resolveSharedTextReference(view, plan, ref, "range");
     const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat, identities), path = ["beats", beat];
@@ -43,7 +44,8 @@ export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSp
     const value = operation.kind === "split-before" ? { b: beat, before: plan.target.owner } : { b: beat };
     const edit: SharedTextWritePlan = { target: plan.target, edit: { type: "atom", at: offset, value }, marks: [] };
     spliceSharedTextPlan(plan, offset, offset, [value]);
-    addSharedTextSource(plan, beat, operation.kind === "split-before" ? span.from : offset + 1, operation.kind === "split-before" ? offset : span.to + 1, "audioText");
+    planSharedStructureOwner(view, beat, plan.target.segment);
+    addSharedTextSource(view, plan, beat, operation.kind === "split-before" ? span.from : offset + 1, operation.kind === "split-before" ? offset : span.to + 1, "audioText");
     const description = freezeSharedPreparedValue({ writes, edit }), overlay = freezeSharedPreparedValue([...writes, sharedTextOverlay(plan)]);
     return { ok: true as const, description, writes: overlay, apply: (handle: SharedDocumentHandle) => {
       applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit);
