@@ -3,18 +3,19 @@ import type { Command, DocumentView, Plan } from "../../src/application/session/
 import type { CapabilityPort } from "../../src/application/session/ports.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migratedThenSet } from "../core/migrate-ports.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 
 type Bag = Record<string, unknown>;
 
-export const MAY_EDIT: CapabilityPort = {
+export const MAY_EDIT: CapabilityPort = createSessionCapabilities("standalone", {
   edit: function () { return { allowed: true }; },
   comment: function () { return { allowed: true }; }
-};
+});
 
-export const REVIEW_ONLY: CapabilityPort = {
+export const REVIEW_ONLY: CapabilityPort = createSessionCapabilities("standalone", {
   edit: function () { return { allowed: false, reason: "review" }; },
   comment: function () { return { allowed: true }; }
-};
+});
 
 export function rowsOf(ids: readonly string[], extra: Bag = {}): Bag[] {
   return ids.map(function (id) { return { id: id, visualText: "", audioText: "", status: "todo", ...extra }; });

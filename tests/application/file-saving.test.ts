@@ -1,4 +1,5 @@
 import type { FileSaveCheck } from "../../src/application/files/local-file-access.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountFileSaving, obsoleteSaveText } from "../../src/application/save/file-saving.ts";
@@ -52,7 +53,7 @@ function harness(setup: Setup = {}) {
   };
   const ports: FileSavingPorts = {
     edits: { edit: (command) => {
-      const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+      const plan = command.plan(doc, createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }));
       if (!plan || "refused" in plan) return false;
       plan.apply(doc);
       state.changes++;

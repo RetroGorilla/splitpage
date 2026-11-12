@@ -34,6 +34,15 @@ import { createEditorSelection } from "../../src/application/editing/selection.t
 import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
 import type { PdfPrinter } from "../../src/application/export/pdf-printer.ts";
 import type { ExportDocument } from "../../src/core/document/export-document.ts";
+import type { CapabilityPort } from "../../src/application/session/ports.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
+
+export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): CapabilityPort {
+  return {
+    ...createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
+    ...overrides
+  };
+}
 
 export function fakePrintDialog() {
   const pages: string[] = [];

@@ -1,5 +1,6 @@
 import { swapBeatsCommand } from "../../../src/application/commands/rows.ts";
 import "../../../src/test/_dom.mjs";
+import { fakeCapabilities } from "../fakes.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
@@ -43,7 +44,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
       second.audioText = "Live narration";
       first.audioText = "Live Alpha";
     }
-    const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+    const plan = command.plan(doc, fakeCapabilities());
     if (!plan || "refused" in plan) return { kind: "noop" };
     recorded = plan.selection;
     plan.apply(doc);
