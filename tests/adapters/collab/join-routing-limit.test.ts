@@ -10,7 +10,7 @@ import { readSharedRevision, encodeSharedState, encodeSharedStateVector } from "
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 
 test("declared join routing limit: the painted reader and whole-row offsets still address one physical text", () => {
-  const declaredLimits = ["Joined narration paints only its first physical text and refuses a whole-row offset beyond that text; multi-segment routing is the next join cut."];
+  const declaredLimits = ["Joined narration paints only its first physical fragment and refuses whole-row offsets beyond it; joined-text routing is the next join cut."];
   const violations: string[] = [], set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] });
   try {
     registerSharedJoinHandlers(set.a); registerSharedTextOperationHandlers(set.a);
@@ -18,7 +18,7 @@ test("declared join routing limit: the painted reader and whole-row offsets stil
     assert.equal(projectSharedDocument(set.a).rows[0]?.audioText, "ab cd");
     const painted = readSharedPaintedText(set.a, { owner: ref("R1"), segment: ref("R1"), field: "audioText" }); assert.ok(painted);
     assert.equal(painted.text, "ab");
-    if (painted.text.length !== 5) violations.push("Joined narration paints only its first physical text and refuses a whole-row offset beyond that text; multi-segment routing is the next join cut.");
+    if (painted.text.length !== 5) violations.push("Joined narration paints only its first physical fragment and refuses whole-row offsets beyond it; joined-text routing is the next join cut.");
     const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
     const result = executeSharedOperations(set.a, [operation({ kind: "text-insert", id: "typed", by: "Writer", target: { owner: "R1", segment: "R1", field: "audioText" },
       at: { left: null, right: flowBaseReference("R1", "audioText", 4), affinity: "before" }, content: [{ value: "X", marks: [] }] })], { base: revision });

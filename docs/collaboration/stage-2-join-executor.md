@@ -72,7 +72,7 @@ separate work.
 
 The single-physical-text preparation and painted reader require a following join
 routing cut. Its pinned literal declared limit is: "Joined narration paints only
-its first physical text and refuses a whole-row offset beyond that text;
-multi-segment routing is the next join cut." The reproduction projects `ab cd`,
+its first physical fragment and refuses whole-row offsets beyond it;
+joined-text routing is the next join cut." The reproduction projects `ab cd`,
 paints `ab`, and refuses insertion at offset four with `invalid-reference`, leaving
 bytes, vector and revision unchanged. `paint-base.ts` has no change in this cut.

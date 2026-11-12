@@ -11,6 +11,9 @@ import { encodeSharedState, encodeSharedStateVector, readSharedRevision, transac
 import { deliveryReplica } from "./helpers.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import { trapSharedCollectionWalks } from "./collection-guards.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 
 const source = { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }, { id: "R3", audioText: "ef" }] };
 const first = "structure_1_006a006f0069006e_join_0", second = "structure_2_006a006f0069006e_join_0";
@@ -70,6 +73,19 @@ test("staged join aliases support a register set and retirement in one transacti
       assert.deepEqual(read(set.a), [["R1", "ab"], ["R2", "cd"], ["R3", "ef"]]);
       assert.deepEqual(entries(set.a), { [first]: { into: "R1", glue: " ", by: "Alice", operation: "join", generation: 0 } });
     } finally { stop(); collabState(set.a).doc.off("afterTransaction", observe); }
+  } finally { set.close(); }
+});
+
+test("join preparation resolves a beat created by an earlier split in the same list", () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }] });
+  try {
+    registerSharedSplitHandlers(set.a, createFlowLoadRuntime()); registerSharedJoinHandlers(set.a);
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "split", id: "split", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
+      at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [], boundary: "fresh", beat: "fresh", fields: {} }),
+      operation({ kind: "join", id: "join", by: "Alice", from: "fresh", into: "R1", glue: "" })], { base: readSharedRevision(set.a) }), { ok: true });
+    set.queue.flush("dup"); agree("staged beat joined", "dup", [set.a, set.b], read, [["R1", "abcd"]]);
+    const beat = collabState(set.a).roots.beats.get("structure_1_00730070006c00690074_beat_0"); assert.ok(beat instanceof Y.Map);
+    assert.deepEqual((beat.get("joins") as Y.Map<unknown>).get(first), { into: "R1", glue: "", by: "Alice", operation: "join", generation: 0 });
   } finally { set.close(); }
 });
 
