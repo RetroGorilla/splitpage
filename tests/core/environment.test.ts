@@ -14,6 +14,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "collab/operations.ts": await import("../../src/core/collab/operations.ts"),
   "collab/removal-state.ts": await import("../../src/core/collab/removal-state.ts"),
   "collab/projection/canonical.ts": await import("../../src/core/collab/projection/canonical.ts"),
+  "collab/projection/changes.ts": await import("../../src/core/collab/projection/changes.ts"),
   "collab/projection/blocks.ts": await import("../../src/core/collab/projection/blocks.ts"),
   "collab/projection/fields.ts": await import("../../src/core/collab/projection/fields.ts"),
   "collab/projection/join-glue.ts": await import("../../src/core/collab/projection/join-glue.ts"),
