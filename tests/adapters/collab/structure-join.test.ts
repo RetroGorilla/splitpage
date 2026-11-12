@@ -4,7 +4,7 @@ import type * as Y from "yjs";
 import { replicas, agree, operation } from "./executor-support.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
 import { prepareSharedBeatJoin } from "../../../src/adapters/collab/join-executor.ts";
-import { observeSharedJoinIndex } from "../../../src/adapters/collab/join-index.ts";
+import { observeSharedStructureIndex } from "../../../src/adapters/collab/structure-index.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
@@ -52,7 +52,7 @@ test("join freezes its fixed writes and emits one transaction/update without rea
     const stop = deliveryReplica(set.a).onLocalUpdate(() => { updates++; });
     const state = collabState(set.a);
     const observe = () => { transactions++; }; state.doc.on("afterTransaction", observe);
-    const index = observeSharedJoinIndex(set.a);
+    const index = observeSharedStructureIndex(set.a).joins();
     registerSharedOperationHandlers(set.a, { join: (op, view) => {
       const result = prepareSharedBeatJoin(op, { ...view, text: () => { throw new Error("Join read text"); } }, index);
       if (result.ok) assert.ok(Object.isFrozen(result.writes) && Object.isFrozen(result.writes[0]?.value)); return result;

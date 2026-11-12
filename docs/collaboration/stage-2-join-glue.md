@@ -32,5 +32,6 @@ R1/R2/R3 competing-target counterexample. Projection reads preserve bytes, vecto
 revision and update count. The seeded checkpoint model compares literal outcomes,
 scalar outcomes and encoded copies with a literal empty declared-limit table.
 
-This cut reads stored registers. The join-glue command handler and its scalar-style
-reversal belong to the following join cut. No standalone flow result changes.
+The command handler is described in [the join executor](stage-2-join-executor.md).
+Its compensating value uses the same register path; structural undo integration
+remains with its owner. No standalone flow result changes.

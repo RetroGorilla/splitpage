@@ -1,22 +1,23 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { replicas, agree, operation } from "./executor-support.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
-import { observeSharedJoinIndex } from "../../../src/adapters/collab/join-index.ts";
+import { observeSharedStructureIndex } from "../../../src/adapters/collab/structure-index.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { encodeSharedState, encodeSharedStateVector, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { deliveryReplica } from "./helpers.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
+import { trapSharedCollectionWalks } from "./collection-guards.ts";
 
 const source = { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }, { id: "R3", audioText: "ef" }] };
 const first = "structure_1_006a006f0069006e_join_0", second = "structure_2_006a006f0069006e_join_0";
 const join = () => operation({ kind: "join", id: "join", by: "Alice", from: "R2", into: "R1", glue: " " });
 const change = (kind: "join-glue" | "join-retire", joins: string[], glue = "") => operation({ kind, id: "change", by: "Writer", joins, ...(kind === "join-glue" ? { glue } : {}) });
 const read = (handle: Parameters<typeof collabState>[0]) => projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.id, row.audioText]);
-const entries = (handle: Parameters<typeof collabState>[0]) => ((collabState(handle).roots.beats.get("R2") as Y.Map<unknown>).get("joins") as Y.Map<unknown>).toJSON();
+const entries = (handle: Parameters<typeof collabState>[0]) => Object.fromEntries([...((collabState(handle).roots.beats.get("R2") as Y.Map<unknown>).get("joins") as Y.Map<unknown>)].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
 
 test("join retirement has an explicit validated operation instead of changing issued entries", () => {
   assert.deepEqual(readOperation({ kind: "join-retire", id: "undo", by: "Alice", joins: [first] }), { kind: "join-retire", id: "undo", by: "Alice", joins: [first] });
@@ -77,7 +78,10 @@ test("late join refusals preserve the whole list and all document counters", () 
     { operation: { kind: "join", id: "join", by: "Alice", from: "missing", into: "R1", glue: " " }, reason: "missing-join-target" },
     { operation: { kind: "join-glue", id: "bad", by: "Alice", joins: ["missing"], glue: "" }, reason: "missing-join" },
     { operation: { kind: "join-retire", id: "bad", by: "Alice", joins: ["missing"] }, reason: "missing-join" },
-    { operation: { kind: "join", id: "bad:operation", by: "Alice", from: "R2", into: "R1", glue: " " }, reason: "invalid-structure-operation-id" }
+    { operation: { kind: "join", id: "bad:operation", by: "Alice", from: "R2", into: "R1", glue: " " }, reason: "invalid-structure-operation-id" },
+    { operation: { kind: "join-glue", id: "bad:operation", by: "Alice", joins: ["join"], glue: "" }, reason: "invalid-structure-operation-id" },
+    { operation: { kind: "join-retire", id: "bad:operation", by: "Alice", joins: ["join"] }, reason: "invalid-structure-operation-id" },
+    { operation: { kind: "join", id: "join", by: "Alice", from: "R3", into: "R1", glue: " " }, reason: "existing-join" }
   ];
   for (const sample of cases) {
     const set = replicas(2, source);
@@ -86,7 +90,7 @@ test("late join refusals preserve the whole list and all document counters", () 
       let updates = 0, transactions = 0; const stop = deliveryReplica(set.a).onLocalUpdate(() => updates++), observe = () => { transactions++; };
       collabState(set.a).doc.on("afterTransaction", observe);
       try {
-        const result = executeSharedOperations(set.a, [join(), operation(sample.operation)], { base: revision }); assert.ok(!result.ok);
+        const result = executeSharedOperations(set.a, [join(), operation(sample.operation)], { base: revision }); assert.ok(!result.ok && "index" in result);
         assert.equal(result.reason, sample.reason); assert.equal(result.index, 1);
         assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision); assert.deepEqual([updates, transactions], [0, 0]);
       } finally { stop(); collabState(set.a).doc.off("afterTransaction", observe); }
@@ -97,10 +101,46 @@ test("late join refusals preserve the whole list and all document counters", () 
 test("join lookup patches map replacements and split entry changes without scanning unrelated beats", () => {
   const set = replicas(2, source);
   try {
-    const index = observeSharedJoinIndex(set.a), root = collabState(set.a).roots.beats;
+    const index = observeSharedStructureIndex(set.a).joins(), root = collabState(set.a).roots.beats;
     const joins = (root.get("R2") as Y.Map<unknown>).get("joins"); assert.ok(joins instanceof Y.Map);
     transactSharedDocument(set.a, "hydration", () => joins.set("native", { into: "R1", glue: "" })); assert.deepEqual(index.locations("native"), ["R2"]);
     transactSharedDocument(set.a, "hydration", () => (root.get("R2") as Y.Map<unknown>).set("joins", new Y.Map())); assert.deepEqual(index.locations("native"), []);
     transactSharedDocument(set.a, "hydration", () => root.delete("R2")); assert.deepEqual(index.locations("native"), []);
   } finally { set.close(); }
+});
+
+test("glue changes leave a selected competing target unchanged and an unselected target inert", () => {
+  const set = replicas(2, source);
+  try {
+    [set.a, set.b].forEach(registerSharedJoinHandlers);
+    assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
+    assert.deepEqual(executeSharedOperations(set.b, [operation({ ...join(), into: "R3" })]), { ok: true }); set.queue.flush("dup");
+    const issued = entries(set.a);
+    assert.deepEqual(executeSharedOperations(set.b, [change("join-glue", [second])]), { ok: true }); set.queue.flush("rev");
+    agree("unselected glue is inert", "rev", [set.a, set.b], read, [["R1", "ab cd"], ["R3", "ef"]]);
+    assert.deepEqual(executeSharedOperations(set.b, [change("join-glue", [first])]), { ok: true }); set.queue.flush("dup");
+    agree("selected target unchanged", "dup", [set.a, set.b], read, [["R1", "abcd"], ["R3", "ef"]]);
+    agree("original join entries retained", "dup", [set.a, set.b], entries, issued);
+  } finally { set.close(); }
+});
+
+test("glue and retirement preparation reads stay constant with unrelated beats and order entries", t => {
+  const counts: number[][] = [];
+  for (const kind of ["join-glue", "join-retire"] as const) {
+    const measured: number[] = [];
+    for (const unrelated of [0, 10000]) {
+      const set = replicas(2, source);
+      try {
+        const roots = collabState(set.a).roots;
+        transactSharedDocument(set.a, "hydration", () => { for (let index = 0; index < unrelated; index++) { roots.beats.set("unrelated" + index, {}); roots.order.push(["unrelated" + index]); } });
+        registerSharedJoinHandlers(set.a); assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
+        let reads = 0; const get = roots.beats.get.bind(roots.beats), inspect = mock.method(roots.beats, "get", (key: string) => { reads++; return get(key); });
+        const restore = trapSharedCollectionWalks(roots.beats, roots.segments, roots.headings, roots.order);
+        try { assert.deepEqual(executeSharedOperations(set.a, [change(kind, [first])]), { ok: true }); measured.push(reads); }
+        finally { inspect.mock.restore(); restore(); }
+      } finally { set.close(); }
+    }
+    counts.push(measured);
+  }
+  assert.deepEqual(counts, [[2, 2], [2, 2]]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], glue: counts[0], retirement: counts[1], wholeCollectionWalks: 0 }));
 });

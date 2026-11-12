@@ -4,17 +4,21 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { applySharedMapWrites } from "./prepare.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { sharedStructureIdentity, sharedStructureReference, prepareStructureAlias, SharedStructurePreparationError } from "./structure-identity.ts";
+import { sharedStructureIdentity, sharedStructureReference, prepareStructureAlias, requireSharedStructureOperationId, SharedStructurePreparationError } from "./structure-identity.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
-import { observeSharedJoinIndex } from "./join-index.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
 import type { SharedJoinIndex } from "./join-index.ts";
+import { collabState, SharedExecutionWriteError } from "./state.ts";
 
-function staged(view: SharedPreparationView): Map<string, string> { return view.scratch("issued-joins", () => new Map()); }
+function staged(view: SharedPreparationView): Map<string, string> { return view.scratch("issued-joins", () => new Map<string, string>()); }
 function frozen(writes: readonly SharedPreparedWrite[]) {
   const description = freezeSharedPreparedValue(writes);
-  return { ok: true as const, writes: description, apply: (handle: SharedDocumentHandle) => applySharedMapWrites(handle, description) };
+  return { ok: true as const, writes: description, apply: (handle: SharedDocumentHandle) => {
+    if (!collabState(handle).execution?.applying) throw new SharedExecutionWriteError();
+    applySharedMapWrites(handle, description);
+  } };
 }
 
 function guard(run: () => SharedPreparationResult): SharedPreparationResult {
@@ -48,6 +52,7 @@ export function prepareSharedBeatJoin(operation: SharedBeatJoin, view: SharedPre
 function prepareJoinChange(operation: SharedJoinGlue | SharedJoinRetire, view: SharedPreparationView, index: SharedJoinIndex): SharedPreparationResult {
   return guard(() => {
     if (![operation.id, operation.by, ...operation.joins].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
+    requireSharedStructureOperationId(operation.id);
     const writes: SharedPreparedWrite[] = [];
     for (const reference of new Set(operation.joins)) {
       const join = sharedStructureReference(view, reference), source = staged(view).get(join);
@@ -74,7 +79,7 @@ function prepareJoinChange(operation: SharedJoinGlue | SharedJoinRetire, view: S
 }
 
 export function registerSharedJoinHandlers(handle: SharedDocumentHandle): void {
-  const index = observeSharedJoinIndex(handle);
+  const index = observeSharedStructureIndex(handle).joins();
   registerSharedOperationHandlers(handle, { join: (operation, view) => prepareSharedBeatJoin(operation, view, index),
     "join-glue": (operation, view) => prepareJoinChange(operation, view, index),
     "join-retire": (operation, view) => prepareJoinChange(operation, view, index) });
