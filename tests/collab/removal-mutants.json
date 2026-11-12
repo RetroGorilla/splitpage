@@ -47,5 +47,11 @@
     "find": "const raw = caches.entry(beats,",
     "replace": "beats.get(beat); const raw = caches.entry(beats,",
     "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "removal omits pending record attachment membership",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "...sharedPendingAttachmentKeys(view, collection),",
+    "replace": "",
+    "tests": ["tests/adapters/collab/removal-pending-records.test.ts"]
   }]
 }

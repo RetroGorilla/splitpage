@@ -10,7 +10,7 @@ import { sharedStructureIdentity, sharedStructureReference, prepareStructureAlia
 import { observeSharedStructureIdentities } from "./structure-reservations.ts";
 import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
 import type { SharedAttachmentOwnership } from "./structure-index.ts";
-import { sharedCreatedAttachments } from "./structure-content.ts";
+import { sharedCreatedAttachments, sharedPendingAttachmentKeys } from "./structure-content.ts";
 import { readPreparedSharedRecord } from "./record-codec.ts";
 import { sharedTextCommandPlan, SharedTextPreparationError } from "./executor-text-plan.ts";
 import type { SharedTextCommandPlan } from "./executor-text-plan.ts";
@@ -47,7 +47,8 @@ function prepared(id: SharedContentRef, record: SharedStoredRemovalCommand, writ
 }
 
 function attachments(view: SharedPreparationView, index: SharedAttachmentOwnership, collection: "visuals" | "gallery", beat: string) {
-  return [...new Set([...index.keys(collection, beat), ...sharedCreatedAttachments(view).filter(item => item.collection === collection && item.beat === beat).map(item => item.record)])]
+  return [...new Set([...index.keys(collection, beat), ...sharedPendingAttachmentKeys(view, collection),
+    ...sharedCreatedAttachments(view).filter(item => item.collection === collection && item.beat === beat).map(item => item.record)])]
     .sort().filter(key => readPreparedSharedRecord(collection, key, view)?.beat === beat);
 }
 

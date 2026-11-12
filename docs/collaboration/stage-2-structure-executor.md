@@ -287,7 +287,10 @@ metadata-only corruption and membership deletion are compared with fresh snapsho
 Typing with zero or 299 unrelated recovery beats performs zero unrelated native
 reads, with seven text and two mark-entry reads in either case.
 Visual and gallery membership is derived from validated records, including all
-staged gallery records. Caller component ids are checked observations, not authority;
+staged gallery records and ordinary record creates or ownership changes earlier in
+the list. Accepted record writes add their touched keys to the per-call scratch
+plan; removal validates their current overlaid ownership, excluding deleted records
+and those reassigned away. It scans neither attachment root. Caller component ids are checked observations, not authority;
 empty observations and the flow emitter's logical attachment names are accepted.
 The executor creates no undo entry; rule 29 is submitted without one by its caller.
 
