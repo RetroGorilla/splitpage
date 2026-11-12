@@ -13,6 +13,7 @@ import { collabState } from "./state.ts";
 import { SharedProjectionCache } from "./projection-cache.ts";
 import type { CollabRoots } from "./roots.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { sharedJoinEndpointField, sharedJoinEndpointOffset } from "./join-endpoint.ts";
 
 export class SharedProjectionSource {
   readonly cache: SharedProjectionCache;
@@ -23,6 +24,7 @@ export class SharedProjectionSource {
   private readonly keyVersions = new Map<string, number>();
   private readonly joinFields = new Map<string, readonly string[]>();
   private readonly joinReaders = new Map<string, Set<string>>();
+  private readonly joinSegments = new Map<string, readonly string[]>();
   private ownership = "";
   readonly handle: SharedDocumentHandle;
 
@@ -51,7 +53,7 @@ export class SharedProjectionSource {
           for (const id of this.joinReaders.get(key) ?? []) {
             const scope = JSON.stringify(["join-glue", id]); this.versions.set(scope, this.version(scope) + 1);
           }
-          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")))
+          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !key.startsWith(sharedJoinEndpointField("")))
             this.versions.set("meta-fields", this.version("meta-fields") + 1);
         }
       }
@@ -154,11 +156,17 @@ export class SharedProjectionSource {
   }
 
   structure(id: string) {
-    return this.cache.read(["beat-structure", id], [this.keyVersion("beats", id), this.version("retiredJoins"), this.version(JSON.stringify(["join-glue", id]))], () => {
-      const fields: string[] = [];
-      const structure = readProjectionBeatStructure(this.inputRoots.beats.get(id), id, this.inputRoots.retiredJoins, this.inputRoots.meta, field => fields.push(field));
+    return this.cache.read(["beat-structure", id], [this.keyVersion("beats", id), this.version("retiredJoins"), this.version(JSON.stringify(["join-glue", id])), this.ownership,
+      ...(this.joinSegments.get(id) ?? []).map(segment => this.keyVersion("segments", segment))], () => {
+      const fields: string[] = [], segments = new Set<string>();
+      const structure = readProjectionBeatStructure(this.inputRoots.beats.get(id), id, this.inputRoots.retiredJoins, this.inputRoots.meta, field => fields.push(field), position => {
+        segments.add(position.segment);
+        const raw = this.inputRoots.segments.get(position.segment), offset = sharedJoinEndpointOffset(position, collabState(this.input).doc, raw instanceof Y.Map ? raw.get("text") : null);
+        return offset;
+      });
       this.unindexJoins(id);
       this.joinFields.set(id, fields);
+      this.joinSegments.set(id, [...segments]);
       for (const field of fields) { const readers = this.joinReaders.get(field) ?? new Set<string>(); readers.add(id); this.joinReaders.set(field, readers); }
       return structure;
     });

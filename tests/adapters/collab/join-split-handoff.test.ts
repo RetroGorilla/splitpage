@@ -5,15 +5,17 @@ import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-ex
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
-import { encodeSharedState, encodeSharedStateVector, readSharedRevision } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { startBeat, beatPos } from "../../../src/core/flow/flow.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
+import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
 
-for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) for (const concurrent of [false, true]) test(`joined split handoff distinguishes a seen join from a concurrent join: ${copies}/${order}/${concurrent}`, () => {
+for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) for (const concurrent of [false, true]) test(`rule 36: a seen and unseen join follow the destination end through a split: ${copies}/${order}/${concurrent}`, () => {
   const set = replicas(copies, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] });
   const runtime = createFlowLoadRuntime(), handles = [set.a, set.b, set.c].slice(0, copies);
-  const declaredLimits = concurrent ? [] : ["Enter after a visible join is refused with invalid-reference; extending joined-row routing requires the split/projection rule."];
+  const incremental = handles.map(handle => captureIncrementalReplica(handle));
+  const declaredLimits: readonly string[] = [];
   const violations: string[] = [];
   try {
     handles.forEach(handle => { registerSharedJoinHandlers(handle); registerSharedSplitHandlers(handle, runtime); });
@@ -26,16 +28,10 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
     const independent = applyFlowOperations(doc, split.ops, runtime.cells);
     assert.deepEqual(independent.rows, split.rows); assert.deepEqual(independent.sections, split.sections);
     assert.deepEqual(split.rows.map(row => row.audioText), concurrent ? ["a", "b", "cd"] : ["a", "b cd"]);
-    const bytes = encodeSharedState(set.b), vector = encodeSharedStateVector(set.b), revision = readSharedRevision(set.b);
-    const result = executeSharedOperations(set.b, split.ops, { base: revision });
-    if (concurrent) assert.deepEqual(result, { ok: true });
-    else {
-      assert.ok(!result.ok); assert.equal(result.reason, "invalid-reference");
-      assert.deepEqual(encodeSharedState(set.b), bytes); assert.deepEqual(encodeSharedStateVector(set.b), vector); assert.equal(readSharedRevision(set.b), revision);
-      violations.push("Enter after a visible join is refused with invalid-reference; extending joined-row routing requires the split/projection rule.");
-    }
+    assert.deepEqual(executeSharedOperations(set.b, split.ops, { base: readSharedRevision(set.b) }), { ok: true });
     set.queue.flush(order);
-    agree("joined split handoff", order, handles, handle => projectSharedDocument(handle).rows.map(row => row.audioText), concurrent ? ["a cd", "b"] : ["ab cd"]);
+    agree("joined split handoff", order, handles, handle => projectSharedDocument(handle).rows.map(row => row.audioText), ["a", "b cd"]);
+    handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); });
     assert.deepEqual(violations, declaredLimits);
-  } finally { set.close(); }
+  } finally { incremental.forEach(value => value.projector.dispose()); set.close(); }
 });

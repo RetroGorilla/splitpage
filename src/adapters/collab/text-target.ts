@@ -6,7 +6,12 @@ import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from
 import { transactSharedDocument } from "./document.ts";
 import { resolveSharedTextLocation } from "./text-location.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
-import { resolveIndexedStructureOwner, readIndexedStructureSpans } from "./structure-plan.ts";
+import { bindSharedStructurePlan, resolveSharedStructureOwner, readIndexedStructureSpans } from "./structure-plan.ts";
+import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
+import type { SharedStructureReadView } from "./structure-read-view.ts";
+import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
+import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
+import { readSharedJoinGroup } from "./join-record.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
   assertSharedDocumentIdle(collabState(handle));
@@ -35,7 +40,7 @@ export function readSharedTextTarget(raw: unknown): SharedTextAddress | null {
   return readMarkChange({ kind: "mark", id: "target", by: "", target: raw, observed: [], mark: { kind: "b", value: true } })?.target ?? null;
 }
 
-export function collabProjectedTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+function nativeStructureView(handle: SharedDocumentHandle) {
   const state = collabState(handle);
   const index = observeSharedStructureIndex(handle);
   const get = (path: readonly string[]): unknown => {
@@ -43,16 +48,42 @@ export function collabProjectedTextTarget(handle: SharedDocumentHandle, raw: Sha
     for (const key of path.slice(1)) { if (!(value instanceof Y.Map)) return undefined; value = value.get(key); }
     return value;
   };
-  try {
-    const found = resolveSharedTextLocation({ get, kind: path => {
+  const held = new Map<string, unknown>();
+    const view: SharedStructureReadView = { get, has: path => {
+      const parent = get(path.slice(0, -1)); return parent instanceof Y.Map && parent.has(path.at(-1) as string);
+    }, scratch: <T>(key: string, create: () => T): T => { if (!held.has(key)) held.set(key, create()); return held.get(key) as T; }, kind: path => {
       const value = get(path); return value instanceof Y.Map ? "map" : value instanceof Y.Text ? "text" : value instanceof Y.Array ? "array" : value === undefined ? "missing" : "value";
-    }, resolveOwner: (owner, field) => resolveIndexedStructureOwner(index, owner, field) }, raw);
+    } };
+  bindSharedStructurePlan(view, index);
+  return { index, get, view };
+}
+
+export function collabProjectedTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+  try {
+    const { index, get, view } = nativeStructureView(handle);
+    const resolveOwner = (owner: string, field: "audioText" | "heading") => resolveSharedStructureOwner(view, owner, field);
+    if (raw.field === "audioText") {
+      const owner = resolveOwner(raw.owner, "audioText"); if (!owner) return null;
+      const geometry = readSharedJoinedTextGeometry(view, owner.owner); if (!geometry || geometry.removed) return null;
+      const fragments = raw.segment === raw.owner ? geometry.root === owner.owner ? geometry.parts : geometry.parts.filter(part => part.owner === owner.owner)
+        : geometry.parts.filter(part => part.segment === raw.segment && (geometry.root === owner.owner || part.owner === owner.owner));
+      const parts = fragments.map(fragment => {
+        const physical = physicalTextTarget(handle, { owner: fragment.owner as SharedTextAddress["owner"], segment: fragment.segment as SharedTextAddress["segment"], field: "audioText" });
+        return physical && physical.container.get(physical.marksKey) instanceof Y.Map ? { ...physical, from: fragment.from, to: fragment.to, glue: fragment.glue,
+          group: fragment.group, cyclic: geometry.cyclic, ...(fragment.glueSet ? { glueSet: true as const } : {}) } : null;
+      });
+      const first = parts[0]; if (!first || parts.some(part => part === null)) return null;
+      return { ...first, parts: parts.filter((part): part is NonNullable<typeof part> => part !== null) };
+    }
+    const found = resolveSharedTextLocation({ get, kind: view.kind, resolveOwner }, raw);
     const physical = physicalTextTarget(handle, found.target);
     if (!physical) return null;
-    const span = found.target.field === "audioText" || found.target.field === "heading"
+    const span = found.target.field === "heading"
       ? readIndexedStructureSpans(index, found.target.segment).find(block => block.id === found.target.owner && block.kind === (found.target.field === "heading" ? "h" : "b"))
       : { from: 0, to: physical.text.length };
-    return span ? { ...physical, from: span.from, to: span.to } : null;
+    if (!span) return null;
+    const part = { ...physical, from: span.from, to: span.to, glue: "" as const, group: null, cyclic: false };
+    return { ...part, parts: [part] };
   } catch { return null; }
 }
 
@@ -70,6 +101,46 @@ export function collabPurposeTextTarget(handle: SharedDocumentHandle, raw: Share
 
 export function collabWritingTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
   return collabState(handle).activeOrigin === "hydration" ? collabPurposeTextTarget(handle, raw, "hydration-write") : collabTextTarget(handle, raw);
+}
+
+function projectedParts(found: NonNullable<ReturnType<typeof collabWritingTextTarget>>): found is NonNullable<ReturnType<typeof collabProjectedTextTarget>> {
+  return "parts" in found;
+}
+
+export function collabWritingTextPosition(handle: SharedDocumentHandle, raw: SharedTextAddress, offset: number) {
+  const found = collabWritingTextTarget(handle, raw);
+  if (!found || !Number.isInteger(offset) || offset < 0) return null;
+  if (raw.segment !== raw.owner || !projectedParts(found)) return offset >= found.from && offset <= found.to ? { ...found, offset } : null;
+  let value = "";
+  for (const [index, part] of found.parts.entries()) {
+    const reading = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!reading) return null;
+    const glue = projectSharedJoinSeparator(value, reading.text, part.glue, index, part.cyclic, "glueSet" in part && part.glueSet === true);
+    value += glue; const start = value.length;
+    if (offset >= start && offset <= start + reading.positions.length) return { ...part, offset: reading.positions[offset - start] ?? part.to };
+    value += reading.text;
+  }
+  return null;
+}
+
+export function collabStoredJoinGluePosition(handle: SharedDocumentHandle, group: string, after: boolean) {
+  const parsed = readSharedJoinGroup(group); if (!parsed) return null;
+  const { view } = nativeStructureView(handle), geometry = readSharedJoinedTextGeometry(view, parsed.from);
+  const index = geometry?.parts.findIndex(part => part.group === group) ?? -1;
+  const part = geometry?.parts[after ? index : index - 1]; if (index < 1 || !part) return null;
+  const found = physicalTextTarget(handle, { owner: part.owner as SharedTextAddress["owner"], segment: part.segment as SharedTextAddress["segment"], field: "audioText" });
+  return found ? { ...found, offset: after ? part.from : part.to } : null;
+}
+
+export function collabProjectedTextOffset(handle: SharedDocumentHandle, raw: SharedTextAddress, segment: string, offset: number): number | null {
+  const found = collabProjectedTextTarget(handle, raw); if (!found) return null;
+  let value = "";
+  for (const [index, part] of found.parts.entries()) {
+    const reading = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!reading) return null;
+    value += projectSharedJoinSeparator(value, reading.text, part.glue, index, part.cyclic, "glueSet" in part && part.glueSet === true);
+    if (part.target.segment === segment && offset >= part.from && offset <= part.to) return value.length + reading.positions.filter(position => position < offset).length;
+    value += reading.text;
+  }
+  return null;
 }
 
 export function collabProjectedSegmentAnchorTarget(handle: SharedDocumentHandle, segment: string, offset: number) {

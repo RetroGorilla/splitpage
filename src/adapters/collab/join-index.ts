@@ -5,12 +5,15 @@ import { isStableSharedIdentity } from "./identity.ts";
 export interface SharedJoinIndex {
   readonly locations: (join: string) => readonly string[];
   readonly neighbors: (beat: string) => readonly string[];
+  readonly entries: (beat: string) => readonly { readonly id: string; readonly into: string; readonly glue: "" | " "; readonly generation: number }[];
 }
 export function createSharedJoinIndex(beats: Y.Map<unknown>) {
   const members = new Map<string, Set<string>>(), held = new Map<string, Set<string>>();
   const outgoing = new Map<string, Map<string, string>>(), incoming = new Map<string, Map<string, number>>();
+  const entries = new Map<string, Map<string, { readonly id: string; readonly into: string; readonly glue: "" | " "; readonly generation: number }>>();
   const patch = (beat: string, join: string, present: boolean, raw?: unknown) => {
     const edges = outgoing.get(beat), previous = edges?.get(join);
+    entries.get(beat)?.delete(join);
     if (previous !== undefined) {
       edges?.delete(join); if (!edges?.size) outgoing.delete(beat);
       const owners = incoming.get(previous), count = (owners?.get(beat) ?? 0) - 1;
@@ -23,6 +26,8 @@ export function createSharedJoinIndex(beats: Y.Map<unknown>) {
     else { own.delete(join); owners.delete(beat); if (!owners.size) members.delete(join); }
     const entry = present && beat && join && [beat, join].every(isStableSharedIdentity) ? readSharedJoinEntry(raw) : null;
     if (entry) {
+      let values = entries.get(beat); if (!values) { values = new Map(); entries.set(beat, values); }
+      values.set(join, Object.freeze({ id: join, into: entry.into, glue: entry.glue, generation: entry.generation }));
       let edges = outgoing.get(beat); if (!edges) { edges = new Map(); outgoing.set(beat, edges); }
       let sources = incoming.get(entry.into); if (!sources) { sources = new Map(); incoming.set(entry.into, sources); }
       edges.set(join, entry.into); sources.set(beat, (sources.get(beat) ?? 0) + 1);
@@ -47,7 +52,8 @@ export function createSharedJoinIndex(beats: Y.Map<unknown>) {
   };
   const index: SharedJoinIndex = Object.freeze({
     locations: (join: string) => Object.freeze([...(members.get(join) ?? [])].sort()),
-    neighbors: (beat: string) => Object.freeze([...new Set([...(outgoing.get(beat)?.values() ?? []), ...(incoming.get(beat)?.keys() ?? [])])].filter(id => id !== beat).sort())
+    neighbors: (beat: string) => Object.freeze([...new Set([...(outgoing.get(beat)?.values() ?? []), ...(incoming.get(beat)?.keys() ?? [])])].filter(id => id !== beat).sort()),
+    entries: (beat: string) => Object.freeze([...(entries.get(beat)?.values() ?? [])].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   });
   return { index, changed };
 }

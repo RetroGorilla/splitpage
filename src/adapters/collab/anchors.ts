@@ -4,7 +4,8 @@ import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { hasLoneSurrogate } from "../../core/document/text-policy.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
-import { collabTextTarget, collabWritingTextTarget, collabPurposeTextTarget, collabProjectedSegmentAnchorTarget, readSharedTextTarget, collabPreparedOperationTextTarget } from "./text-target.ts";
+import { collabTextTarget, collabWritingTextPosition, collabPurposeTextTarget, collabProjectedSegmentAnchorTarget, readSharedTextTarget, collabPreparedOperationTextTarget, collabStoredJoinGluePosition, collabProjectedTextOffset } from "./text-target.ts";
+import { readSharedJoinGlueReference } from "./join-glue-reference.ts";
 
 export type SharedAnchorResolution = { readonly segment: string; readonly offset: number } | "gone";
 export type SharedTextAnchorLocation = { readonly kind: "index" | "gap"; readonly index: number; readonly affinity: "before" | "after" } | { readonly kind: "gone" };
@@ -71,12 +72,13 @@ export function readSharedAnchorUnit(raw: unknown): { readonly client: number; r
 export function createSharedAnchor(handle: SharedDocumentHandle, address: string | SharedTextAddress, offset: number, affinity: "before" | "after"): SharedContentRef | null {
   const target = typeof address === "string" ? null : readSharedTextTarget(address);
   if (typeof address !== "string" && !target) return null;
-  const found = target ? collabWritingTextTarget(handle, target) : collabProjectedSegmentAnchorTarget(handle, address as string, offset);
+  const found = target ? collabWritingTextPosition(handle, target, offset) : collabProjectedSegmentAnchorTarget(handle, address as string, offset);
   const segment = typeof address === "string" ? address : found?.target.segment ?? "";
   if (!segment || hasLoneSurrogate(segment) || !Number.isInteger(offset) || offset < 0) return null;
   const text = found?.text;
-  if (!text || offset < found.from || offset > found.to) return null;
-  return readSharedAnchor(encodedAnchor(text, segment, found?.target ?? target, offset, affinity));
+  const actual = found && "offset" in found ? found.offset as number : offset;
+  if (!text || actual < found.from || actual > found.to) return null;
+  return readSharedAnchor(encodedAnchor(text, segment, found?.target ?? target, actual, affinity));
 }
 
 function encodedAnchor(text: Y.Text, segment: string, target: SharedTextAddress | null, offset: number, affinity: "before" | "after"): SharedContentRef {
@@ -105,6 +107,11 @@ export function resolveCollabTextAnchor(handle: SharedDocumentHandle, raw: unkno
 }
 
 export function resolveSharedAnchor(handle: SharedDocumentHandle, raw: unknown): SharedAnchorResolution {
+  const glue = readSharedJoinGlueReference(raw);
+  if (glue) {
+    const point = collabStoredJoinGluePosition(handle, glue.group, glue.after);
+    return point ? { segment: point.target.segment, offset: point.offset } : "gone";
+  }
   const value = readAnchorValue(raw);
   if (!value) return "gone";
   const { roots, doc } = collabState(handle);
@@ -115,6 +122,10 @@ export function resolveSharedAnchor(handle: SharedDocumentHandle, raw: unknown):
 }
 
 export function resolveSharedTextAnchor(handle: SharedDocumentHandle, raw: unknown, target: SharedTextAddress): number | null {
+  if (target.field === "audioText" && target.segment === target.owner) {
+    const resolved = resolveSharedAnchor(handle, raw);
+    return resolved === "gone" ? null : collabProjectedTextOffset(handle, target, resolved.segment, resolved.offset);
+  }
   const value = readAnchorValue(raw), stored = value?.target;
   const physical = target.segment !== target.owner || stored?.owner === target.owner && stored.segment === target.segment && stored.field === target.field;
   const text = (physical ? collabPurposeTextTarget(handle, target, "stored-anchor-read") : collabTextTarget(handle, target))?.text;
