@@ -111,9 +111,30 @@ and `tests/collab/undo/mirrored-rules.test.ts` runs the same history through
   of two sets that did not see each other the one from the higher client id
   stays; a clear removes only the value it saw, so an unseen set stays.
 
-Where a decided row decides an outcome, the model reproduces the Stage 1
-result: the same change made by two people who had not seen each other's is one
-change, which either can undo.
+Where a decided row decides an outcome, the model follows the row: the same
+change made by two people who had not seen each other's is one change, which
+either can undo. When the other person's change has arrived before the undo,
+this is the Stage 1 result and the Stage 1 record fixtures hold it.
+
+When the undo comes before the other person's change arrives, the model goes
+beyond Stage 1 on purpose (assumed rule 24 on issue #1414):
+
+- **The history**: the text is `ab` and tag P is registered. Alice and Bob each
+  tag both letters with P without seeing the other's tag. Alice undoes before
+  anything is delivered, then everything is delivered.
+- **Stage 1**: both prototype copies keep P, under forward, duplicate and
+  reverse delivery. Alice's undo removes only what her copy held, and Bob's
+  tag arrives afterwards as a new one.
+  `prototypes/collab/test/undo-records/identical-tag-late.test.ts` records
+  this in "identical tag, Alice undoes before Bob's tag arrives: both prototype
+  copies keep the tag", and the opposite order of events beside it.
+- **The model**: no copy shows P, and Bob's undo is used up.
+  `tests/collab/undo/mirrored-rules.test.ts` holds this in the three tests
+  whose names start "Beyond Stage 1".
+- **Why**: the decided row "identical changes count as one change either
+  person can undo" must not depend on the order of delivery. In Stage 1 the
+  same two tags and the same undo give no tag when Bob's tag arrives first and
+  a tag when it arrives second.
 
 - **Inserted text**: delete each inserted unit that is still there, following a
   unit to its restoration.
@@ -179,5 +200,6 @@ pins it. The generator fails on any violation the table does not carry.
 7. An identical change that arrives after the undo. The mark records on main
    keep no record of what an occurrence had seen, so the cancellation the undo
    writes has to carry enough for a reader to cancel an identical occurrence it
-   has not received yet. The tests are the "Stage 1 result" ones in
+   has not received yet. Stage 1 does not do this; see "the model goes beyond
+   Stage 1" above. The tests are the "Beyond Stage 1" ones in
    `mirrored-rules.test.ts`.

@@ -69,7 +69,7 @@ const TAGGED = r1(["s1", "a", { tag: "P" }], ["s2", "b", { tag: "P" }]);
 const UNTAGGED = r1(["s1", "a", {}], ["s2", "b", {}]);
 
 for (const first of ["Alice", "Bob"] as const) {
-  test(`Stage 1 result: the same tag by two writers, ${first} undoes before the other's tag arrives: untagged on every copy, the other's undo is used up`, () => {
+  test(`Beyond Stage 1: the same tag by two writers, ${first} undoes before the other's tag arrives: untagged on every copy, the other's undo is used up`, () => {
     for (const order of deliveryOrders) {
       const s = new UndoScenario(AB, order), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
       s.format(s.a, "R1", 0, 2, TAG_P);
@@ -84,7 +84,7 @@ for (const first of ["Alice", "Bob"] as const) {
       assert.equal(s.checks, 3);
     }
   });
-  test(`Stage 1 result: the same tag by two writers, both undo before anything arrives, ${first} first: untagged on every copy`, () => {
+  test(`Beyond Stage 1: the same tag by two writers, both undo before anything arrives, ${first} first: untagged on every copy`, () => {
     for (const order of deliveryOrders) {
       const s = new UndoScenario(AB, order), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
       s.format(s.a, "R1", 0, 2, TAG_P);
@@ -97,7 +97,7 @@ for (const first of ["Alice", "Bob"] as const) {
   });
 }
 
-test("Stage 1 result: the same tag by three writers, one undoes before the others' arrive: untagged on every copy and both other undos are used up", () => {
+test("Beyond Stage 1: the same tag by three writers, one undoes before the others' arrive: untagged on every copy and both other undos are used up", () => {
   for (const order of ["D1", "dup", "rev"] as const) for (const undoer of ["A", "B", "C"] as const) {
     const world = new ModelWorld(AB, ["A", "B", "C"]), all = (["A", "B", "C"] as const).map(name => world.replica(name));
     for (const replica of all) replica.mark(replica.observe("R1", 0, 2), TAG_P);
