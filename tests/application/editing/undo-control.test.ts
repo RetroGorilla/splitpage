@@ -8,7 +8,7 @@ import type { UndoControl } from "../../../src/application/editing/undo-control.
 
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { undoOwner, undoPorts, startUndo, undoSessionPort, routeUndoReplays } from "../../../src/bootstrap/wiring/undo.ts";
-import { heldDocument, liveSession, startSessionBridge } from "../../../src/bootstrap/wiring/session-owner.ts";
+import { heldDocument, standaloneSession, startSessionBridge } from "../../../src/bootstrap/wiring/session-owner.ts";
 const lastUndoEntry = () => undoOwner().last();
 const noteEdit = () => undoOwner().noteEdit();
 const undoSizes = () => undoOwner().sizes();
@@ -30,7 +30,7 @@ function open(t: TestContext) {
     timers: { now: () => 1000, start: () => 0, stop: () => {} }
   });
   t.after(stop);
-  liveSession().adopt({
+  standaloneSession().adopt({
     title: "Undo control",
     rows: [{ id: "r1", visualText: "", audioText: "a", updatedAt: "" }]
   });
