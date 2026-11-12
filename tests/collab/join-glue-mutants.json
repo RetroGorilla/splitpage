@@ -12,10 +12,10 @@
     "replace": "return typeof register === \"string\" ? register as \"\" | \" \" : issued;",
     "tests": ["tests/core/collab/projection-join-glue.test.ts"]
   }, {
-    "label": "glue register scoped to beat instead of native join",
+    "label": "glue register scoped to beat instead of the join group",
     "file": "src/adapters/collab/projection-reader.ts",
-    "find": "glueRegisters.get(sharedJoinGlueRegisterField(key))",
-    "replace": "raw.get(sharedJoinGlueRegisterField(key))",
+    "find": "glueRegisters.get(field)",
+    "replace": "raw.get(field)",
     "tests": ["tests/adapters/collab/projection-join-glue.test.ts"]
   }]
 }

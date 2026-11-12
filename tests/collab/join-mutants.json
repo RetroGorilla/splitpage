@@ -1,0 +1,74 @@
+{
+  "mutants": [
+  {
+    "label": "join copies characters with fresh native identities",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "applySharedMapWrites(handle, description);",
+    "replace": "applySharedMapWrites(handle, description); for (const write of description) if (write.path[0] === \"beats\" && write.path[2] === \"joins\") { const roots = collabState(handle).roots; const beat = roots.beats.get(write.path[1]) as import(\"yjs\").Map<unknown>; const segment = roots.segments.get(beat.get(\"segment\") as string) as import(\"yjs\").Map<unknown>; const text = segment.get(\"text\") as import(\"yjs\").Text; const value = text.toString(); text.delete(0, text.length); text.insert(0, value); }",
+    "tests": ["tests/adapters/collab/join-stage1.test.ts"]
+  },
+  {
+    "label": "join overwrites another issued entry",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "return frozen([{ kind: \"set\", path: [...path, identity],",
+    "replace": "return frozen([{ kind: \"set\", path: [...path, view.keys(path)[0] ?? identity],",
+    "tests": ["tests/adapters/collab/structure-join-model.test.ts"]
+  },
+  {
+    "label": "glue command rewrites issued join instead of setting its register",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "writes.push({ kind: \"set\", path, value: operation.glue });",
+    "replace": "writes.push({ kind: \"set\", path: [\"beats\", owners[0], \"joins\", join], value: { ...view.get([\"beats\", owners[0], \"joins\", join]) as object, glue: operation.glue } });",
+    "tests": ["tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "retirement ignores an identical join not yet delivered",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "if (operation.kind === \"join-retire\") writes.push",
+    "replace": "if (false && operation.kind === \"join-retire\") writes.push",
+    "tests": ["tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "old retirement cancels a fresh join generation",
+    "file": "src/adapters/collab/join-record.ts",
+    "find": "entry.glue, entry.generation]);",
+    "replace": "entry.glue, 0]);",
+    "tests": ["tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "join index skips replacement of its nested map",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "event.keysChanged.has(\"joins\"))",
+    "replace": "event.keysChanged.has(\"joins\") && false)",
+    "tests": ["tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "join lookup walks unrelated beat values",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "locations: (join: string) => Object.freeze([...(members.get(join) ?? [])].sort())",
+    "replace": "locations: (join: string) => { for (const value of beats.values()) { void value; } return Object.freeze([...(members.get(join) ?? [])].sort()); }",
+    "tests": ["tests/adapters/collab/structure-join.test.ts","tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "join lookup walks unrelated order entries",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "locations: (join: string) => Object.freeze([...(members.get(join) ?? [])].sort())",
+    "replace": "locations: (join: string) => { beats.doc.getArray(\"order\").forEach(() => {}); return Object.freeze([...(members.get(join) ?? [])].sort()); }",
+    "tests": ["tests/adapters/collab/structure-join.test.ts","tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "join expands a rejected native container",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "view.kind(path) === \"value\" ? view.get(path) : undefined",
+    "replace": "view.get(path)",
+    "tests": ["tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "separator register keyed by entry instead of identical join group",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "sharedJoinGlueRegisterField(group)",
+    "replace": "sharedJoinGlueRegisterField(join)",
+    "tests": ["tests/adapters/collab/join-identical-glue.test.ts"]
+  }
+  ]
+}
