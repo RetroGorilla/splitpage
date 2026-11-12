@@ -9,12 +9,13 @@ import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { createSharedIncrementalProjector } from "../../../src/adapters/collab/incremental-project.ts";
 import { destroySharedDocument, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { assertIncremental } from "./incremental-support.ts";
+import { assertIncremental, incrementalReports } from "./incremental-support.ts";
 
 after(() => { dom.window.close(); });
 
 test("all 291 reference documents agree incrementally after hydration and scripted edits at every publication", t => {
   let fixtures = 0, checkpoints = 0, texts = 0;
+  const reported = incrementalReports.compared;
   for (const fixture of projectionReferences) {
     const handle = createMonitoredSharedDocument(), projector = createSharedIncrementalProjector(handle);
     const stop = projector.observe(() => { assertIncremental(handle, projector); checkpoints++; });
@@ -40,5 +41,6 @@ test("all 291 reference documents agree incrementally after hydration and script
     } finally { stop(); projector.dispose(); destroySharedDocument(handle); }
   }
   assert.equal(fixtures, 291); assert.equal(texts, 291); assert.equal(checkpoints, 1455);
+  assert.equal(incrementalReports.compared - reported, 1455);
   t.diagnostic(JSON.stringify({ fixtures, checkpoints, texts }));
 });
