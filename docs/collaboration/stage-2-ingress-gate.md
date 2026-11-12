@@ -119,4 +119,4 @@ and one at the end of its write. No transaction is added and nothing is queued.
 `ingress-gate-generator.test.ts` places arrivals at random at the top, inside
 notifications and inside the drain, with callbacks that throw, and checks each announced
 revision against the same arrivals applied one by one. `tests/collab/ingress-gate-mutants.json`
-holds eight deliberate defects, listed in `tests/collab/mutants.md`.
+holds nine deliberate defects, listed in `tests/collab/mutants.md`.
