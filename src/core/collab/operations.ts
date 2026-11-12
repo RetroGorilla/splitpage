@@ -158,10 +158,30 @@ export type SharedStatusEvent = SharedOperationAuthor & {
   | { readonly target: { readonly scope: "tag"; readonly record: SharedContentRef }; readonly value: TagStatusId }
   | { readonly target: { readonly scope: "shot"; readonly record: SharedContentRef }; readonly value: BrollStatusId }
 );
+export interface SharedRestoredUnit {
+  readonly unit: SharedContentRef;
+  readonly left: SharedContentRef | null;
+  readonly value: SharedInlineValue;
+  readonly marks: readonly SharedContentRef[];
+}
+export interface SharedTextRestore extends SharedOperationAuthor {
+  readonly kind: "text-restore";
+  readonly target: SharedTextAddress;
+  readonly units: readonly SharedRestoredUnit[];
+}
+export interface SharedMarkRetract extends SharedOperationAuthor {
+  readonly kind: "mark-retract";
+  readonly target: SharedTextAddress;
+  readonly occurrences: readonly SharedContentRef[];
+}
+export type SharedStatusRetire = SharedOperationAuthor & {
+  readonly kind: "status-retire";
+  readonly event: SharedContentRef;
+} & Pick<SharedStatusEvent, "target" | "value">;
 export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedBeatSplitBefore
   | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
-  | SharedRecordDelete | SharedScalarSet | SharedStatusEvent;
+  | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire;
 
 export function replaceObservedText(
   deletion: SharedTextDelete, insertion: SharedTextInsert

@@ -5,7 +5,7 @@ import { deliveryOrders } from "../delivery.ts";
 import { doubleDeleteOracles } from "../oracles/undo-records/oracles.ts";
 import { runConcurrentStatus, runDoubleDelete, runIdenticalTag } from "./cases.ts";
 import type { UndoWriter } from "./cases.ts";
-import { BOLD, UndoScenario } from "./scenario.ts";
+import { BOLD, UNDO_WORLDS, UndoScenario } from "./scenario.ts";
 
 const WRITERS: readonly UndoWriter[] = ["Alice", "Bob"];
 
@@ -14,8 +14,8 @@ function r1(...characters: OracleCharacter[]): ScriptOracle {
 }
 
 test("decided: undo covers only your own changes; the other writer's text and format stay, and there is nothing older to reach", () => {
-  for (const order of deliveryOrders) {
-    const s = new UndoScenario([{ id: "R1", text: "ab" }], order);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders){
+    const s = new UndoScenario([{ id: "R1", text: "ab" }], order, kind);
     s.type(s.a, "R1", 2, "x", ["a1"]);
     s.type(s.b, "R1", 0, "Q", ["b1"]);
     s.deliver();
@@ -36,14 +36,14 @@ test("decided: undo covers only your own changes; the other writer's text and fo
 
 for (const first of WRITERS) {
   test(`decided: the same tag on the same words by two writers is one change; ${first} undoes it and the other's undo is used up`, () => {
-    for (const order of deliveryOrders) assert.equal(runIdenticalTag(order, first).checks, 4);
+    for (const kind of UNDO_WORLDS) for (const order of deliveryOrders)assert.equal(runIdenticalTag(order, first, kind).checks, 4);
   });
   test(`decided: the same status by two writers is one change; ${first} undoes it and the other's undo is used up`, () => {
-    for (const order of deliveryOrders) assert.equal(runConcurrentStatus(order, true, first).checks, 3);
+    for (const kind of UNDO_WORLDS) for (const order of deliveryOrders)assert.equal(runConcurrentStatus(order, true, first, kind).checks, 3);
   });
   test(`decided: the same deletion by two writers is one change; ${first} undoes it and the other's undo is used up`, () => {
-    for (const order of deliveryOrders) {
-      const s = new UndoScenario([{ id: "R1", text: "abcd" }], order), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
+    for (const kind of UNDO_WORLDS) for (const order of deliveryOrders){
+      const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
       s.erase(s.a, "R1", 1, 3);
       s.erase(s.b, "R1", 1, 3);
       s.check("deleted", doubleDeleteOracles.deleted);
@@ -56,13 +56,13 @@ for (const first of WRITERS) {
     }
   });
   test(`decided: a deletion the other writer made in part; ${first} undoes first and each character comes back once`, () => {
-    for (const order of deliveryOrders) assert.equal(runDoubleDelete(order, first, false).checks, 2);
+    for (const kind of UNDO_WORLDS) for (const order of deliveryOrders)assert.equal(runDoubleDelete(order, first, false, kind).checks, 2);
   });
 }
 
 test("decided: cut and paste are two commands, also into the same beat in the same millisecond", () => {
-  for (const order of deliveryOrders) {
-    const s = new UndoScenario([{ id: "R1", text: "abcd" }], order);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders){
+    const s = new UndoScenario([{ id: "R1", text: "abcd" }], order, kind);
     s.a.typing = true;
     s.a.edit({ at: s.a.observe("R1", 1, 3), command: "cut" });
     s.world.name(s.a.edit({ at: s.a.observe("R1", 2, 2), text: "bc", command: "paste" }), ["a1", "a2"]);
@@ -81,8 +81,8 @@ test("decided: cut and paste are two commands, also into the same beat in the sa
 });
 
 test("different: deleting an earlier letter and typing it again keeps an entry; its undo brings the first letter back, so the older entry still reaches it", () => {
-  for (const order of deliveryOrders) {
-    const s = new UndoScenario([{ id: "R1", text: "ab" }], order);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders){
+    const s = new UndoScenario([{ id: "R1", text: "ab" }], order, kind);
     s.format(s.a, "R1", 0, 1, BOLD);
     s.erase(s.a, "R1", 0, 1);
     s.a.typing = true;
@@ -99,8 +99,8 @@ test("different: deleting an earlier letter and typing it again keeps an entry; 
 });
 
 test("a remote change records nothing: the receiver's stacks, also its redo, are as they were, and its records still resolve", () => {
-  for (const order of deliveryOrders) {
-    const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders){
+    const s = new UndoScenario([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], order, kind);
     s.type(s.a, "R1", 2, "x", ["a1"]);
     s.type(s.a, "R2", 2, "y", ["a2"]);
     s.effective(s.a.undo.undo());
