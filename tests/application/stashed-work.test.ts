@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createLocalWorkStash, createStashedWork } from "../../src/application/recovery/stashed-work.ts";
 import type { StashMerged } from "../../src/application/recovery/stashed-work.ts";
 import type { ConflictStash, StashedWork } from "../../src/application/recovery/conflict-stash.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 interface Doc {
   docId: string;
@@ -33,6 +34,7 @@ function world(stashed: StashedWork | null, options: { merged?: (request: Readon
     dropReloadGuard: () => { calls.push("dropReloadGuard"); }
   };
   const apply = createStashedWork<Doc, string>({
+    capability: MAY_EDIT,
     stash: stash,
     markWrittenOut: () => { calls.push("markWrittenOut"); },
     copy: (d) => ({ ...d, title: d.title + " (copy)" }),
@@ -109,6 +111,7 @@ function localStash(mine: Record<string, unknown> | null, base: Record<string, u
     dropReloadGuard: () => {}
   };
   const stashLocal = createLocalWorkStash<Record<string, unknown>>({
+    capability: MAY_EDIT,
     stash: stash,
     current: () => mine,
     base: () => base,

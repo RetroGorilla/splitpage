@@ -43,6 +43,7 @@ import { exportScriptWithFiles } from "../gallery.ts";
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
   return {
+    capability: capabilities,
     document: documentReader,
     session: { noteAbsorbedDirty, noteReload: (content) => { noteReload(content as Parameters<typeof noteReload>[0]); } },
     transitions,

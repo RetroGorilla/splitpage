@@ -9,6 +9,7 @@ import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
 import { createCellEditing } from "../../application/editing/cell-editing.ts";
 import { wholeFieldText } from "./ports/editing.ts";
+import { capabilities } from "./ports/capabilities.ts";
 import { caretTextOffset, placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { createCellPage, isDraftBox, isScriptCell } from "../../features/editing/cell-page.ts";
 import { mountComposition } from "../../features/editing/composition.ts";
@@ -364,6 +365,7 @@ export function mountMergeBannerFeature(): ReturnType<typeof mountMergeBanner> {
     return mountMergeBanner({
       window: window,
       ports: {
+        capability: capabilities,
         lastUndo: function () { return mergeUndo().last(); },
         sameDocument: function (docId) {
           const doc = liveDocument.current();

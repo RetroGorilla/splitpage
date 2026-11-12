@@ -1,12 +1,14 @@
 import { refsIn } from "../../../shared/blob-policy.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import type { ConflictStash, StashedWork } from "./conflict-stash.ts";
+import type { CapabilityPort } from "../session/ports.ts";
 
 export interface StashMerged<D, R> {
   readonly state: D | null;
   readonly result?: R | null | undefined;
   readonly snapshot?: unknown;
   readonly replaced?: boolean | undefined;
+  readonly reason?: string | undefined;
 }
 
 export type StashMergeRequest<D> = Readonly<Record<string, unknown>> & { readonly theirs: D };
@@ -14,6 +16,7 @@ export type StashMergeRequest<D> = Readonly<Record<string, unknown>> & { readonl
 export type StashMerge<D, R> = (request: StashMergeRequest<D>) => StashMerged<D, R> | PromiseLike<StashMerged<D, R>>;
 
 export interface StashedWorkPorts<D, R> {
+  readonly capability: Pick<CapabilityPort, "stash" | "merge">;
   readonly stash: ConflictStash;
   readonly markWrittenOut: () => void;
   readonly copy: (doc: D) => D;
@@ -25,6 +28,7 @@ export interface StashApplied<D, R> {
   readonly report: R | null | undefined;
   readonly snapshot: unknown;
   readonly replaced?: boolean;
+  readonly reason?: string;
 }
 
 export type ApplyStashedWork<D, R> = (
@@ -43,6 +47,9 @@ function docIdOf(doc: unknown): unknown {
 
 export function createStashedWork<D extends { docId: string }, R>(ports: StashedWorkPorts<D, R>): ApplyStashedWork<D, R> {
   return function applyStashedWork(loaded, override, apply) {
+    const stashing = ports.capability.stash();
+    const can = stashing.allowed ? ports.capability.merge() : stashing;
+    if (!can.allowed) return { state: loaded, report: null, snapshot: null, reason: can.reason };
     const stash = override || ports.stash.read();
     if (!override) ports.stash.dropReloadGuard();
     if (!stash || !stash.mine || !Array.isArray(rowsOf(stash.mine))) return { state: loaded, report: null, snapshot: null };
@@ -57,6 +64,7 @@ export function createStashedWork<D extends { docId: string }, R>(ports: Stashed
     }
 
     function answer(out: StashMerged<D, R>): StashApplied<D, R> {
+      if (out.reason !== undefined) return { state: loaded, report: null, snapshot: null, reason: out.reason };
       return { state: out.state, report: out.result, snapshot: out.snapshot, replaced: !!out.replaced };
     }
 
@@ -78,6 +86,7 @@ export function createStashedWork<D extends { docId: string }, R>(ports: Stashed
 }
 
 export interface LocalWorkPorts<D> {
+  readonly capability: Pick<CapabilityPort, "stash">;
   readonly stash: ConflictStash;
   readonly current: () => D | null;
   readonly base: () => D | null;
@@ -106,6 +115,7 @@ export function createLocalWorkStash<D>(ports: LocalWorkPorts<D>): () => boolean
   }
 
   return function stashLocalWork() {
+    if (!ports.capability.stash().allowed) return false;
     const mine = ports.current();
     if (!mine) return false;
     const base = ports.base();

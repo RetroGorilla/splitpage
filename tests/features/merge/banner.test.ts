@@ -4,6 +4,7 @@ import { ARM_MS, mergeSummary, mountMergeBanner } from "../../../src/features/me
 import type { MergeBanner, MergeReport, RestoreAnswer, RestoreRequest } from "../../../src/features/merge/banner.ts";
 import type { MergeUndoRecord } from "../../../src/application/session/apply-merge.ts";
 import { jsdomWindow } from "../editing/jsdom.mjs";
+import { fakeCapabilities } from "../fakes.ts";
 
 type Realm = Window & typeof globalThis;
 
@@ -33,6 +34,7 @@ function mount(win: Realm, opts: { undo?: MergeUndoRecord | null; docId?: string
   const banner = mountMergeBanner({
     window: win,
     ports: {
+      capability: fakeCapabilities(),
       lastUndo: () => state.undo,
       sameDocument: (docId) => state.docId !== null && docId === state.docId,
       restore: (id, request) => new Promise<RestoreAnswer>((resolve, reject) => { held.push({ id, request, answer: resolve, fail: reject }); }),
