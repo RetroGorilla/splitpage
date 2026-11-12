@@ -110,3 +110,7 @@ created visual address ignores its record pointer | src/adapters/collab/text-loc
 fallback when projected resolution fails | src/adapters/collab/text-target.ts: native writes retry unprojected physical text | tests/adapters/collab/native-text-purpose.test.ts: native writes refuse a nonprojected target without a physical fallback | tests/collab/structure-mutants.json
 
 painted end gap escapes its projected split fragment | src/adapters/collab/paint-base.ts: uses the physical text end | tests/adapters/collab/paint-base-split.test.ts: after a split each half holds its own units; an empty inline split half paints its own gap | tests/collab/structure-mutants.json
+
+join glue register ignored | src/core/collab/projection/join-glue.ts: always returns issued glue | tests/adapters/collab/projection-join-glue.test.ts: join glue with no register falls back; valid sets leave the issued entry immutable | tests/collab/join-glue-mutants.json
+invalid glue register accepted | src/core/collab/projection/join-glue.ts: accepts any string | tests/core/collab/projection-join-glue.test.ts: join glue registers accept exactly the vocabulary values and preserve the issued fallback | tests/collab/join-glue-mutants.json
+glue register scoped to beat instead of native join | src/adapters/collab/projection-reader.ts: reads a beat-local cell | tests/adapters/collab/projection-join-glue.test.ts: one native join id has one global glue register even when damaged beat maps reuse that id | tests/collab/join-glue-mutants.json
