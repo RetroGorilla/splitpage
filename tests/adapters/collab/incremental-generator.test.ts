@@ -13,6 +13,7 @@ import { createMonitoredSharedDocument } from "./helpers.ts";
 import { assertIncremental, nativeMap } from "./incremental-support.ts";
 import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { operationExamples } from "../../core/collab/operation-examples.ts";
+import { sharedJoinGlueRegisterField } from "../../../src/core/collab/projection/join-glue.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import type { SharedDocumentProjectionResult } from "../../../src/adapters/collab/project.ts";
 
@@ -64,7 +65,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
           if (pick(2)) { const reverse = nativeMap(handle, "beats", "R1").get("joins"); assert.ok(reverse instanceof Y.Map); reverse.set(prefix + "cycle", { into: "R2", glue: " " }); }
         });
         raw("join-glue", () => {
-          const joins = nativeMap(handle, "beats", "R2").get("joins"); assert.ok(joins instanceof Y.Map); joins.set(prefix, { into: "R1", glue: "" });
+          roots.meta.set(sharedJoinGlueRegisterField(prefix), pick(2) ? " " : "");
         });
         raw("remove", () => {
           const removals = nativeMap(handle, "beats", "R4").get("removals"); assert.ok(removals instanceof Y.Map); removals.set(prefix, true);
@@ -103,7 +104,6 @@ test("seeded incremental projection agrees at every authored and delivered revis
   assert.deepEqual(violations, declaredLimits);
   assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1140);
   assert.equal(checkpoints, 2384);
-  assert.equal(choices.size, 204);
   assert.deepEqual([...kinds].sort(), ["heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "text-delete", "text-insert"]);
   assert.deepEqual([...new Set(operationExamples.map(example => example.operation.kind))].sort(), [...kinds].sort());

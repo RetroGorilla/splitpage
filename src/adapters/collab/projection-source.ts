@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import type { SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
+import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
@@ -18,6 +19,8 @@ export class SharedProjectionSource {
   readonly roots: CollabRoots;
   private readonly versions = new Map<string, number>();
   private readonly keyVersions = new Map<string, number>();
+  private readonly joinFields = new Map<string, readonly string[]>();
+  private readonly joinReaders = new Map<string, Set<string>>();
   private ownership = "";
   readonly handle: SharedDocumentHandle;
 
@@ -37,6 +40,14 @@ export class SharedProjectionSource {
       for (const key of keys) {
         const slot = JSON.stringify([name, key]);
         this.keyVersions.set(slot, (this.keyVersions.get(slot) ?? 0) + 1);
+        if (name === "beats") this.unindexJoins(key);
+        if (name === "meta") {
+          for (const id of this.joinReaders.get(key) ?? []) {
+            const scope = JSON.stringify(["join-glue", id]); this.versions.set(scope, this.version(scope) + 1);
+          }
+          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")))
+            this.versions.set("meta-fields", this.version("meta-fields") + 1);
+        }
       }
       if (!path.length && event instanceof Y.YMapEvent && [...event.changes.keys.values()].some(change => change.action !== "update")) {
         const slot = name + ":keys";
@@ -54,12 +65,12 @@ export class SharedProjectionSource {
 
   fields(scope: "document" | "beat" | "heading", key = ""): Record<string, unknown> | null {
     const name = scope === "document" ? "meta" : scope === "beat" ? "beats" : "headings";
-    return this.cache.read(["fields", name, key], [scope === "document" ? this.version(name) : this.keyVersion(name, key)],
+    return this.cache.read(["fields", name, key], [scope === "document" ? this.version("meta-fields") : this.keyVersion(name, key)],
       () => readProjectionFields(scope === "document" ? this.roots.meta : this.roots[name].get(key), scope));
   }
 
   title(): string {
-    return this.cache.read(["title"], [this.version("meta")], () => {
+    return this.cache.read(["title"], [this.keyVersion("meta", "title")], () => {
       const title: unknown = this.roots.meta.get("title");
       return title instanceof Y.Text ? title.toString() : "";
     });
@@ -137,7 +148,19 @@ export class SharedProjectionSource {
   }
 
   structure(id: string) {
-    return this.cache.read(["beat-structure", id], [this.keyVersion("beats", id), this.version("retiredJoins")],
-      () => readProjectionBeatStructure(this.roots.beats.get(id), id, this.roots.retiredJoins));
+    return this.cache.read(["beat-structure", id], [this.keyVersion("beats", id), this.version("retiredJoins"), this.version(JSON.stringify(["join-glue", id]))], () => {
+      const structure = readProjectionBeatStructure(this.roots.beats.get(id), id, this.roots.retiredJoins, this.roots.meta);
+      this.unindexJoins(id);
+      const fields = structure.joins.map(join => sharedJoinGlueRegisterField(join.id)); this.joinFields.set(id, fields);
+      for (const field of fields) { const readers = this.joinReaders.get(field) ?? new Set<string>(); readers.add(id); this.joinReaders.set(field, readers); }
+      return structure;
+    });
+  }
+
+  private unindexJoins(id: string): void {
+    for (const field of this.joinFields.get(id) ?? []) {
+      const readers = this.joinReaders.get(field); readers?.delete(id); if (!readers?.size) this.joinReaders.delete(field);
+    }
+    this.joinFields.delete(id);
   }
 }
