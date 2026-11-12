@@ -1,6 +1,6 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import * as Y from "yjs";
+import type * as Y from "yjs";
 import { replicas, agree, operation } from "./executor-support.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
 import { prepareSharedBeatJoin } from "../../../src/adapters/collab/join-executor.ts";
@@ -15,6 +15,9 @@ import { deliveryReplica } from "./helpers.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
 import { joinWithPrevious } from "../../../src/core/flow/flow.ts";
+import { projectSharedJoinGroups } from "../../../src/core/collab/projection/joins.ts";
+import { transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { trapSharedCollectionWalks } from "./collection-guards.ts";
 
 const ids = ["structure_1_006a006f0069006e_join_0", "structure_2_006a006f0069006e_join_0", "structure_3_006a006f0069006e_join_0"];
 const command = () => operation({ kind: "join", id: "join", by: "Writer", from: "R2", into: "R1", glue: " " });
@@ -91,4 +94,46 @@ test("complete app join list agrees with the independent flow applier", () => {
     assert.deepEqual(executeSharedOperations(set.a, result.ops, { base: readSharedRevision(set.a) }), { ok: true });
     assert.deepEqual(read(set.a), { rows: [{ id: "R1", text: "ab cd" }], recovery: [] });
   } finally { set.close(); }
+});
+
+test("join preparation reads stay constant with zero or ten thousand unrelated records", t => {
+  const reads: number[] = [];
+  for (const unrelated of [0, 10000]) {
+    const set = replicas(2, source);
+    try {
+      const roots = collabState(set.a).roots;
+      transactSharedDocument(set.a, "local-command", () => {
+        for (let index = 0; index < unrelated; index++) { roots.beats.set("unrelated" + index, { id: "unrelated" + index }); roots.order.push(["unrelated" + index]); }
+      });
+      registerSharedJoinHandlers(set.a); let count = 0;
+      const getters = [roots.beats, roots.segments, roots.headings].map(root => {
+        const get = root.get.bind(root); return mock.method(root, "get", (key: string) => { count++; return get(key); });
+      });
+      const restore = trapSharedCollectionWalks(roots.beats, roots.segments, roots.headings, roots.order);
+      try { assert.deepEqual(executeSharedOperations(set.a, [command()]), { ok: true }); reads.push(count); }
+      finally { for (const getter of getters) getter.mock.restore(); restore(); }
+    } finally { set.close(); }
+  }
+  assert.deepEqual(reads, [4, 4]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], nativeRecordReads: reads, wholeCollectionWalks: 0 }));
+});
+
+test("retiring and replacing a join to clear its glue can change the selected competing target", () => {
+  const first = projectSharedJoinGroups([
+    { id: "R1", removed: false, joins: [] },
+    { id: "R2", removed: false, joins: [{ id: "jA", into: "R1", glue: " " }, { id: "jB", into: "R3", glue: " " }] },
+    { id: "R3", removed: false, joins: [] }
+  ]);
+  assert.deepEqual(first, [
+    { root: "R1", removed: false, cyclic: false, members: [{ id: "R1", glue: "" }, { id: "R2", glue: " " }] },
+    { root: "R3", removed: false, cyclic: false, members: [{ id: "R3", glue: "" }] }
+  ]);
+  const replacement = projectSharedJoinGroups([
+    { id: "R1", removed: false, joins: [] },
+    { id: "R2", removed: false, joins: [{ id: "jB", into: "R3", glue: " " }, { id: "jC", into: "R1", glue: "" }] },
+    { id: "R3", removed: false, joins: [] }
+  ]);
+  assert.deepEqual(replacement, [
+    { root: "R1", removed: false, cyclic: false, members: [{ id: "R1", glue: "" }] },
+    { root: "R3", removed: false, cyclic: false, members: [{ id: "R3", glue: "" }, { id: "R2", glue: " " }] }
+  ]);
 });
