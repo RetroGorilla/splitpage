@@ -9,6 +9,8 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import type { TextMergeContext, textMergeContext } from "../../core/merge/text-field.ts";
 import type { DraftParsedFile } from "../../application/recovery/drafts-ports.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
+import type { NoticePort } from "../../application/effects/ports.ts";
 
 type MergeParsedFile = Pick<Extract<DraftParsedFile, { state: ValidatedDocument }>, "state" | "error"> & Partial<Pick<Extract<DraftParsedFile, { state: ValidatedDocument }>, "docIdEmbedded">> | Exclude<DraftParsedFile, { state: ValidatedDocument }>;
 
@@ -17,6 +19,8 @@ export interface MergeFileOptions {
 }
 
 export interface MergeReviewPorts {
+  readonly capability: Pick<CapabilityPort, "merge">;
+  readonly notices: Pick<NoticePort, "show">;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: { readonly mergeBase: DocumentReader["current"] };
   readonly place: Pick<DocumentPlace, "fileHome">;

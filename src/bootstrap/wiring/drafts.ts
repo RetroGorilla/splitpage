@@ -22,6 +22,7 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
 import { transitions as portTransitions } from "./ports/transitions.ts";
+import { capabilities as portCapabilities } from "./ports/capabilities.ts";
 
 const drafts = owned<DraftsMount>();
 
@@ -103,6 +104,7 @@ export function draftsTesting(): DraftsMount["testing"] | undefined {
 
 export function draftRecoveryPorts() {
   return {
+    capability: portCapabilities,
     desktop: desktopPort,
     sessionStorage: function () { return sessionStorage; },
     localStorage: function () { return localStorage; },

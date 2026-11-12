@@ -1,9 +1,33 @@
 import type { BufferedCommit } from "./buffer.ts";
 import type { SharedContentRef, SharedOperation, SharedTextAddress } from "./operations.ts";
+import { flowBaseReference } from "./base-reference.ts";
 import { FlowOperationTrace } from "../flow/operations.ts";
 import { explode, implode } from "../text/edits.ts";
 import { OBJ } from "../text/runs.ts";
 import type { Run } from "../text/runs.ts";
+
+export interface BufferedRecoverySnapshot {
+  readonly owner: string;
+  readonly base: number;
+  readonly html: string;
+  readonly units: number;
+}
+
+export function bufferedRecoveryOperations(
+  snapshot: BufferedRecoverySnapshot,
+  author: { readonly id: string; readonly by: string },
+  observed: { readonly rows: number; readonly visual: string }
+): readonly SharedOperation[] {
+  const id = author.id as SharedContentRef, beat = ("draft_" + author.id) as SharedContentRef;
+  return [
+    { kind: "segment-create", id, by: author.by, segment: ("draft_segment_" + author.id) as SharedContentRef, beat,
+      at: { left: null, right: null, affinity: "after" },
+      fields: { audioText: snapshot.html, bufferSourceOwner: snapshot.owner, bufferPaintedBase: snapshot.base } },
+    { kind: "remove", id: (author.id + "_remove") as SharedContentRef, by: author.by, removalKind: "beat", targets: [beat],
+      observed: snapshot.units ? [flowBaseReference(beat, "audioText", 0, snapshot.units)] : [],
+      boundaries: [beat], components: [observed.visual as SharedContentRef], gallery: [], comments: [], at: observed.rows }
+  ];
+}
 
 export function bufferedTextOperations(
   commit: BufferedCommit,

@@ -117,7 +117,9 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     const errors: unknown[] = failure ? [failure.error] : [];
     const told = listeners.slice(), toldRows = rowListeners.slice();
     const change: SessionChange = Object.freeze({ kind: kind, epoch: epoch, generation: generation, changes: changes });
-    if (kind === "edit") attempt(errors, function () { ports.undo.record(changes, mine?.plan.selection); });
+    // why: assumed rule 29 on #1414: undoing a recovery entry would throw the kept typing away.
+    const recorded = mine?.plan.shared?.undo !== false;
+    if (kind === "edit") attempt(errors, function () { if (recorded) ports.undo.record(changes, mine?.plan.selection); });
     if (kind === "edit" || kind === "replay") scheduler.pass(change).forEach(function (error) { errors.push(error); });
     told.forEach(function (listener) {
       attempt(errors, function () { listener(change); });

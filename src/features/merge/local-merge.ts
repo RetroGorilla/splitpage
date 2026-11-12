@@ -37,6 +37,16 @@ let ports: MergeReviewPorts | null = null;
 let mergeCandidate: MergeCandidate | null = null;
 let mergeProbeToken = 0;
 
+function mergeAllowed() { return (ports as MergeReviewPorts).capability.merge().allowed; }
+
+function mergePermitted(): boolean {
+  const current = ports as MergeReviewPorts;
+  const can = current.capability.merge();
+  if (can.allowed) return true;
+  current.notices.show(can.reason, "warn");
+  return false;
+}
+
 function currentDocument() { return (ports as MergeReviewPorts).document.current(); }
 function mergeBase() { return (ports as MergeReviewPorts).session.mergeBase(); }
 function fileHome() { return (ports as MergeReviewPorts).place.fileHome(); }
@@ -66,7 +76,7 @@ function resetMergeOffer() {
 async function offerFileMerge(currentFile: Parameters<MergeReviewControl["offer"]>[0], home: Parameters<MergeReviewControl["offer"]>[1]) {
   resetMergeOffer();
   const token = mergeProbeToken;
-  if (!currentFile || !currentDocument()) return;
+  if (!currentFile || !mergeAllowed() || !currentDocument()) return;
   let parsed;
   try {
     parsed = await parseProjectFileState(currentFile, { noAsk: true });
@@ -74,6 +84,7 @@ async function offerFileMerge(currentFile: Parameters<MergeReviewControl["offer"
     parsed = null;
   }
   if (token !== mergeProbeToken) return;
+  if (!mergeAllowed()) return;
   if (!parsed || parsed.error || !parsed.state) return;
 
   const theirs = parsed.state;
@@ -260,6 +271,7 @@ function mergeGroupHtml(g: ReturnType<typeof mergeDiffModel>[number]) {
 }
 
 function openMergeReview() {
+  if (!mergePermitted()) return;
   if (!mergeCandidate || !currentDocument()) return;
   const groups = mergeDiffModel(mergeCandidate.base, currentDocument(), mergeCandidate.theirs);
   const count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
@@ -282,10 +294,11 @@ function openMergeReview() {
 function cancelMergeReview() {
   (document.getElementById("merge-review-modal") as HTMLElement).hidden = true;
   (document.getElementById("merge-review-list") as HTMLElement).innerHTML = "";
-  if (mergeCandidate) (document.getElementById("file-conflict-modal") as HTMLElement).hidden = false;
+  if (mergeCandidate && mergeAllowed()) (document.getElementById("file-conflict-modal") as HTMLElement).hidden = false;
 }
 
 function confirmFileMerge() {
+  if (!mergePermitted()) { cancelMergeReview(); return; }
   const cand = mergeCandidate;
   if (!cand || !currentDocument()) { cancelMergeReview(); return; }
   (document.getElementById("merge-review-modal") as HTMLElement).hidden = true;

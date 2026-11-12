@@ -53,6 +53,7 @@ import { captureOperation, documentSources, startTransitions, stillOwns } from "
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "./wiring/transition-owners.ts";
 import { routeUndoReplays, startUndo, undoOwner, undoPorts, undoSessionPort } from "./wiring/undo.ts";
 import { exposeTestHook } from "../features/common/test-hooks.ts";
+import { capabilities } from "./wiring/ports/capabilities.ts";
 
 export interface WiringDeps {
   readonly entry: DocumentEntry;
@@ -237,6 +238,8 @@ function checkedMerge(ports: LegacyMergePorts | null | undefined): LegacyMergePo
   if (!ports || !present(ports, "object")) throw new WiringError("merge", "Wiring: the merge dependency returned no merge ports");
   const missing = lacking(ports, MERGE_METHODS);
   if (missing) throw new WiringError("merge", "Wiring: the merge dependency returned no " + missing + " function");
+  if (!present(ports.capability, "object")) throw new WiringError("merge", "Wiring: the merge dependency returned no capability port");
+  if (!present(ports.capability.merge, "function")) throw new WiringError("merge", "Wiring: the merge dependency's capability port has no merge function");
   return ports;
 }
 
@@ -247,6 +250,12 @@ function checkedRecovery(ports: LegacyRecoveryPorts | null | undefined): LegacyR
   if (!present(ports.drafts, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no draft ports");
   const draft = lacking(ports.drafts, DRAFT_METHODS);
   if (draft) throw new WiringError("recovery", "Wiring: the recovery dependency's draft ports have no " + draft + " function");
+  if (!present(ports.capability, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no capability port");
+  for (const method of ["stash", "merge"] as const) {
+    if (!present(ports.capability[method], "function")) {
+      throw new WiringError("recovery", "Wiring: the recovery dependency's capability port has no " + method + " function");
+    }
+  }
   return ports;
 }
 
@@ -368,7 +377,7 @@ export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFile
   return wireApp({
     ...deps,
     transitions: { destination: documentDestinationPort, history: documentHistoryPort, identity: documentIdentityPort },
-    merge: sessionMergePorts,
+    merge: () => ({ ...sessionMergePorts(), capability: capabilities }),
     effects: sessionEffects(),
     refresh: tags.refresh,
     bulkTags: { cell: tags.bulkCell, stamp: stampRow },

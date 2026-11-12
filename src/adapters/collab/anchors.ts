@@ -5,7 +5,7 @@ import { hasLoneSurrogate } from "../../core/document/text-policy.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
 import { collabTextTarget, collabWritingTextPosition, collabPurposeTextTarget, collabProjectedSegmentAnchorTarget, readSharedTextTarget, collabPreparedOperationTextTarget, collabStoredJoinGluePosition, collabProjectedTextOffset } from "./text-target.ts";
-import { readSharedJoinGlueReference } from "./join-glue-reference.ts";
+import { readSharedJoinGlueReference, sharedJoinGlueReference } from "./join-glue-reference.ts";
 
 export type SharedAnchorResolution = { readonly segment: string; readonly offset: number } | "gone";
 export type SharedTextAnchorLocation = { readonly kind: "index" | "gap"; readonly index: number; readonly affinity: "before" | "after" } | { readonly kind: "gone" };
@@ -53,6 +53,8 @@ export function readSharedAnchor(raw: unknown): SharedContentRef | null {
 }
 
 export function sharedAnchorCharacterEnd(raw: unknown): SharedContentRef | null {
+  const glue = readSharedJoinGlueReference(raw);
+  if (glue) return glue.after ? null : sharedJoinGlueReference(glue.group, true);
   const value = readAnchorValue(raw);
   if (!value) return null;
   const position = Y.decodeRelativePosition(value.relative);

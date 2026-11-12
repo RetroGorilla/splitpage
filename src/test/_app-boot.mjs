@@ -103,6 +103,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/project-files.ts")
   ]);
   const entry = await import("../bootstrap/startup/document-entry.ts");
+  const { capabilities } = await import("../bootstrap/wiring/ports/capabilities.ts");
   const html = await import("../adapters/page/standalone-html.ts");
   const fileSaving = exporting.wireFileSaving({ copyHistory: (...args) => docId.documentIdentityOwner().copyDocHistorySafe(...args), syncIdentity: (...args) => docId.documentIdentityOwner().syncDocIdentity(...args), setBaseline: sync.setBaseState });
   return {
@@ -116,7 +117,7 @@ export async function appWiringDeps() {
     destinations: () => [fileSaving.destination(), files.importSaveDestination()],
     transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort, history: sync.documentHistoryPort },
     sources: () => [files.projectFileSource(), imports.importDocumentSource()],
-    merge: sync.sessionMergePorts,
+    merge: () => ({ ...sync.sessionMergePorts(), capability: capabilities }),
     recovery: drafts.draftRecoveryPorts,
     projectFiles: () => formats.wireProjectFiles({
       prepareDocument: entry.migrateDocument,

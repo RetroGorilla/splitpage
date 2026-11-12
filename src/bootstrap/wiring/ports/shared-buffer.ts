@@ -6,7 +6,7 @@ import type { PaintedTextSource } from "../../../application/editing/ports.ts";
 import type { WriterBufferPorts } from "../../../features/writer/flow-buffer.ts";
 
 export function sharedWriterBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
-  effects: Pick<WriterBufferPorts, "missingBase" | "report"> & { readonly author: () => { readonly id: string; readonly by: string } }
+  effects: Pick<WriterBufferPorts, "missingBase" | "recovered" | "report"> & { readonly author: () => { readonly id: string; readonly by: string } }
 ): { readonly paintedText: PaintedTextSource; readonly bufferedText: WriterBufferPorts } {
   const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author });
   return {
@@ -14,6 +14,6 @@ export function sharedWriterBufferPorts(handle: SharedDocumentHandle, session: P
       documentRevision: () => session.readAt((_doc, revision) => revision),
       read: (rowId, field) => field === "audioText" ? readSharedPaintedText(handle, sharedBufferedTarget(handle, rowId)) : null
     },
-    bufferedText: { open: commit.open, beforeCommand: session.beforeCommand, missingBase: effects.missingBase, report: effects.report }
+    bufferedText: { open: commit.open, beforeCommand: session.beforeCommand, missingBase: effects.missingBase, recovered: effects.recovered, report: effects.report }
   };
 }

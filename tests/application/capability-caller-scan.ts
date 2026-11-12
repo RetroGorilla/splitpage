@@ -14,7 +14,7 @@ function modules(path = ""): string[] {
   });
 }
 
-export function capabilityPortCallers(targets: readonly string[], probe?: { readonly path: string; readonly source: string }) {
+export function capabilityPortCallers(targets: readonly string[], probe?: { readonly path: string; readonly source: string }, mode: { readonly references?: boolean } = {}) {
   const paths = modules().sort();
   if (probe && !paths.includes(probe.path)) paths.push(probe.path);
   const absolute = (path: string): string => join(REPO, "src", path);
@@ -67,6 +67,9 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
     if (!path.startsWith(prefix)) return null;
     const file = path.slice(prefix.length);
     if (ts.isFunctionDeclaration(node) && node.name) return file + "#" + node.name.text;
+    if (mode.references && ts.isArrowFunction(node) && ts.isVariableDeclaration(node.parent)) return point(node.parent);
+    if (mode.references && ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && ts.isArrowFunction(node.initializer)
+      && ts.isSourceFile(node.parent.parent.parent)) return file + "#" + node.name.text;
     if (ts.isFunctionTypeNode(node)) return point(node.parent);
     if (ts.isTypeAliasDeclaration(node)) return file + "#" + node.name.text;
     if (!ts.isPropertySignature(node) && !ts.isMethodSignature(node)) return null;
@@ -96,8 +99,12 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
     function property(from: ts.Type, name: string, at: ts.Node): ts.Type | null {
       const symbol = checker.getPropertyOfType(checker.getNonNullableType(from), name);
       if (!symbol) return null;
-      note(checker.getRootSymbols(symbol).flatMap(root => root.declarations ?? []));
-      return checker.getTypeOfSymbolAtLocation(symbol, at);
+      const type = checker.getTypeOfSymbolAtLocation(symbol, at);
+      note([
+        ...checker.getRootSymbols(symbol).flatMap(root => root.declarations ?? []),
+        ...checker.getSignaturesOfType(type, ts.SignatureKind.Call).flatMap(signature => signature.declaration ? [signature.declaration] : [])
+      ]);
+      return type;
     }
     function binding(pattern: ts.ObjectBindingPattern, from: ts.Type): void {
       for (const element of pattern.elements) {
@@ -118,6 +125,13 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
         }
       }
     }
+    function transported(node: ts.Identifier): boolean {
+      const parent = node.parent;
+      if (ts.isFunctionDeclaration(parent) || ts.isVariableDeclaration(parent) && parent.name === node || ts.isImportSpecifier(parent) || ts.isImportClause(parent) || ts.isExportSpecifier(parent)) return false;
+      if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+      if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+      return true;
+    }
     const visit = (node: ts.Node): void => {
       const key = point(node);
       if (key) declared.add(key);
@@ -130,6 +144,12 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
         const signature = checker.getResolvedSignature(node);
         if (signature?.declaration) note([signature.declaration]);
+      }
+      if (mode.references && ts.isIdentifier(node) && transported(node)) {
+        const named = ts.isShorthandPropertyAssignment(node.parent) ? checker.getShorthandAssignmentValueSymbol(node.parent) : checker.getSymbolAtLocation(node);
+        const symbol = named && named.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(named) : named;
+        const called = ts.isCallExpression(node.parent) && node.parent.expression === node;
+        note((symbol?.declarations ?? []).filter(found => !called && ts.isFunctionDeclaration(found) || ts.isVariableDeclaration(found)));
       }
       if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isObjectBindingPattern(node.name)) binding(node.name, checker.getTypeAtLocation(node.initializer ?? node));
       if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isObjectLiteralExpression(node.left)) assignment(node.left, checker.getTypeAtLocation(node.right));
