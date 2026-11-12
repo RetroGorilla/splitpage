@@ -13,24 +13,37 @@ import { execute, operation, ref, replicas } from "./executor-support.ts";
 import { validatedFixture } from "./helpers.ts";
 import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 
-for (const phase of ["preparation", "application"] as const) {
-  for (const reasons of [[], ["delivering"], ["buffer"], ["delivering", "buffer"]] as const) {
-    for (const action of ["arrival", "buffer acquisition"] as const) {
-      test(`${phase}, reasons ${reasons.join("+") || "none"}: ${action} is refused independently of gate reasons`, () => {
-        const run = replicas(), state = collabState(run.a);
-        try {
-          execute(run.b, { kind: "scalar", id: "incoming", by: "Bob", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 99 });
-          const incoming = encodeSharedState(run.b), before = encodeSharedState(run.a), vector = encodeSharedStateVector(run.a);
-          for (const reason of reasons) state.ingress.holds.add(reason);
-          state.execution = { applying: phase === "application" };
-          assert.throws(() => action === "arrival" ? applySharedUpdate(run.a, incoming) : holdSharedBuffer(run.a), SharedExecutionWriteError);
-          assert.deepEqual(encodeSharedState(run.a), before);
-          assert.deepEqual(encodeSharedStateVector(run.a), vector);
-          assert.equal(state.ingress.held.length, 0);
-        } finally { state.execution = null; state.ingress.holds.clear(); run.close(); }
-      });
-    }
-  }
+for (const [phase, reasons, action, refusal] of [
+  ["preparation", [], "arrival", SharedExecutionWriteError],
+  ["preparation", [], "buffer acquisition", SharedExecutionWriteError],
+  ["preparation", ["delivering"], "arrival", SharedExecutionWriteError],
+  ["preparation", ["delivering"], "buffer acquisition", SharedExecutionWriteError],
+  ["preparation", ["buffer"], "arrival", SharedExecutionWriteError],
+  ["preparation", ["buffer"], "buffer acquisition", SharedExecutionWriteError],
+  ["preparation", ["delivering", "buffer"], "arrival", SharedExecutionWriteError],
+  ["preparation", ["delivering", "buffer"], "buffer acquisition", SharedExecutionWriteError],
+  ["application", [], "arrival", SharedExecutionWriteError],
+  ["application", [], "buffer acquisition", SharedExecutionWriteError],
+  ["application", ["delivering"], "arrival", SharedExecutionWriteError],
+  ["application", ["delivering"], "buffer acquisition", SharedExecutionWriteError],
+  ["application", ["buffer"], "arrival", SharedExecutionWriteError],
+  ["application", ["buffer"], "buffer acquisition", SharedExecutionWriteError],
+  ["application", ["delivering", "buffer"], "arrival", SharedExecutionWriteError],
+  ["application", ["delivering", "buffer"], "buffer acquisition", SharedExecutionWriteError]
+] as const) {
+  test(`${phase}, reasons ${reasons.join("+") || "none"}: ${action} is refused independently of gate reasons`, () => {
+    const run = replicas(), state = collabState(run.a);
+    try {
+      execute(run.b, { kind: "scalar", id: "incoming", by: "Bob", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 99 });
+      const incoming = encodeSharedState(run.b), before = encodeSharedState(run.a), vector = encodeSharedStateVector(run.a);
+      for (const reason of reasons) state.ingress.holds.add(reason);
+      state.execution = { applying: phase === "application" };
+      assert.throws(() => action === "arrival" ? applySharedUpdate(run.a, incoming) : holdSharedBuffer(run.a), refusal);
+      assert.deepEqual(encodeSharedState(run.a), before);
+      assert.deepEqual(encodeSharedStateVector(run.a), vector);
+      assert.equal(state.ingress.held.length, 0);
+    } finally { state.execution = null; state.ingress.holds.clear(); run.close(); }
+  });
 }
 
 for (const buffered of [false, true]) for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "html-import", "mark-write", "destroy", "buffer"] as const) {

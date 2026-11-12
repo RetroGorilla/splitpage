@@ -26,9 +26,10 @@ export function typeInto(root: HTMLElement, beat: HTMLElement, text: string): vo
   root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
 }
 
-export function writerFor(source?: PaintedTextSource) {
+export function writerFor(source?: PaintedTextSource, rowCount = 2) {
   const root = writerPage();
-  const doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }] }, fakeMigration().ports);
+  const doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" },
+    ...Array.from({ length: rowCount - 2 }, (_, index) => ({ id: "r" + index, audioText: "Charlie" }))] }, fakeMigration().ports);
   const text = { cells: fromHtml, clock: { nowIso: () => "2026-11-11T12:00:00.000Z" }, editor: { name: () => "Editor" } };
   const run = (command: Command): CommandOutcome => {
     const plan = command.plan(doc, fakeCapabilities());
@@ -60,5 +61,5 @@ export function writerFor(source?: PaintedTextSource) {
     writer.repaint();
     return doc.rows.map(row => row.id + "=" + (row.audioText ?? ""));
   }
-  return { writer, session };
+  return { writer, session, doc, root };
 }

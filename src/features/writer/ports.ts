@@ -21,6 +21,7 @@ import type { SurfacePorts } from "./flow-surface.ts";
 import type { WriterFindAccess } from "../common/writer-find.ts";
 
 export interface FlowWriter {
+  readonly settle?: () => boolean;
   readonly find: WriterFindAccess;
   readonly openVisual: (rowId: string, highlight?: { from: number; to: number }) => void;
   readonly isCurrent: () => boolean;
@@ -54,6 +55,7 @@ export interface FlowWriterPorts {
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
   readonly paintedText?: PaintedTextSource;
+  readonly bufferedText?: SurfacePorts["bufferedText"];
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;

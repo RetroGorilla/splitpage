@@ -1,6 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSharedTextBuffer, exceedsBufferQueue, sharedBufferQueueBytes } from "../../../src/core/collab/buffer.ts";
+import { bufferedNativeReplacement, createSharedTextBuffer, exceedsBufferQueue, sharedBufferQueueBytes } from "../../../src/core/collab/buffer.ts";
+
+for (const [before, after, expected] of [
+  ["ab", "abQ", { from: 2, to: 2, insert: "Q" }],
+  ["ab", "a", { from: 1, to: 2, insert: "" }],
+  ["ab", "aQ", { from: 1, to: 2, insert: "Q" }],
+  ["a😀b", "a😃b", { from: 1, to: 3, insert: "😃" }],
+  ["a😀b", "a😀Qb", { from: 3, to: 3, insert: "Q" }],
+  ["ab", "ab", null]
+] as const) test(`unreported native replacement: ${before} to ${after}`, () => {
+  assert.deepEqual(bufferedNativeReplacement(before, after), expected);
+});
 
 test("dirty: native evidence retains the original revision across several edits", () => {
   const buffer = createSharedTextBuffer(7, "abcd");

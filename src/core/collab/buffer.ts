@@ -9,6 +9,15 @@ export interface BufferedSplice {
   readonly insert: string;
 }
 
+export function bufferedNativeReplacement(before: string, after: string): BufferedSplice | null {
+  if (before === after) return null;
+  const left = Array.from(before), right = Array.from(after);
+  let from = 0, prefix = 0, leftEnd = left.length, rightEnd = right.length;
+  while (prefix < leftEnd && prefix < rightEnd && left[prefix] === right[prefix]) { from += (left[prefix] as string).length; prefix++; }
+  while (leftEnd > prefix && rightEnd > prefix && left[leftEnd - 1] === right[rightEnd - 1]) { leftEnd--; rightEnd--; }
+  return { from, to: from + left.slice(prefix, leftEnd).join("").length, insert: right.slice(prefix, rightEnd).join("") };
+}
+
 export interface BufferedCommit {
   readonly base: number;
   readonly text: string;
