@@ -154,13 +154,13 @@ test("incremental normalized inputs retain untouched groups and stay fresh after
     transactSharedDocument(run.a, "local-command", () => nativeText(run.a, "b:R1").insert(1, "\udc00"));
     assert.equal(projector.read().document.rows[0]?.audioText, "\ud800\udc00");
     assert.equal(projector.read().document.rows[1], untouched);
-    assert.deepEqual(work, ["snapshot:normalized-input", "segment:b:R1", "group:R1", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
+    assert.deepEqual(work, ["snapshot:normalized-input", "segment:b:R1", "group:R1", "broll-scan:[\"R1\",\"audioText\"]", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
     const target = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
     const mark = prepareSharedMarkRecord(run.a, target, "unicode-bold", 0, 2, { type: "add", mark: { kind: "b", value: true } }); assert.ok(mark);
     work.length = 0;
     assert.deepEqual(writeSharedMarkRecord(run.a, target, "unicode-bold", mark), { ok: true });
     assert.equal(projector.read().document.rows[0]?.audioText, "<strong>\ud800\udc00</strong>");
-    assert.deepEqual(work, ["snapshot:normalized-input", "segment:b:R1", "group:R1", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
+    assert.deepEqual(work, ["snapshot:normalized-input", "segment:b:R1", "group:R1", "broll-scan:[\"R1\",\"audioText\"]", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
     const marked = projector.read().document.rows[0]; work.length = 0;
     execute(run.a, { kind: "scalar", id: "other-length", by: "Writer", target: { scope: "beat", record: "R2" }, field: "lengthSeconds", value: 12 });
     assert.equal(projector.read().document.rows[0], marked);

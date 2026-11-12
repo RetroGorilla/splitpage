@@ -146,9 +146,22 @@ anchors are revisited. Status commands still visit their target events plus
 pending changed keys, without a scan of unrelated events after initialization.
 
 Global pure work remains explicit. The block interpreter revisits cached boundary
-metadata to decide ownership and recovery. The b-roll rule scans all visible units
-twice, using every stored shot id and visual-before-narration document order;
-marker, order, removal or shot-id changes can rewrite an otherwise unchanged cell.
+metadata to decide ownership and recovery. The b-roll rule reads each cell's
+markers once (`readSharedBrollAtoms`, memoized by the cell's unit list and counted
+as `broll-scan` with the units it reads), then assigns keys over the markers alone,
+using every stored shot id and visual-before-narration document order
+(`assignSharedBrollKeys`). In the 300-beat document of `incremental-cost.test.ts`, a
+typed character scans the 70 units of its own cell, where the earlier rule visited
+every visible unit twice (60,550 units; a fresh full assembly scans the 30,275 once).
+In `incremental-broll.test.ts` a typed character or an inserted marker scans one
+cell. A rebuilt join group's equal narration keeps its earlier list, so its scan and
+cell stay cached. The assignment still visits every marker and shot id on each
+publication, and the check that a cell's unit list is the one kept from before still
+compares every visible unit by identity (30,205 comparisons for that typed character
+at 300 beats, 934,041 at 10,001; the earlier rule made the same comparisons). Marker, order, removal or shot-id changes can rewrite an otherwise
+unchanged cell without scanning it; a rewritten cell is memoized by its units and
+its replacement ids. A seeded history in `incremental-broll.test.ts` compares the
+incremental and fresh full projections at every publication across these changes.
 Comment first-occurrence anchoring also uses rendered order. Tag registry changes
 invalidate text interpretation. A dirty gallery group still costs member beats
 times supplied gallery records. These are cached-input scans, not unrelated
