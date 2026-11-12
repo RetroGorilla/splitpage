@@ -12,6 +12,7 @@ import { sharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.t
 import { prepareSharedMarkWrite } from "./mark-plan.ts";
 import type { SharedMarkWritePlan, SharedMarkWriteChangeInput } from "./mark-plan.ts";
 import type { SharedMarkBirth } from "./mark-record.ts";
+import { readSharedMarkProvenance } from "./mark-provenance.ts";
 
 export type SharedMarkWriteResult = { readonly ok: true } | { readonly ok: false; readonly reason: "missing-text" | "missing-store" | "invalid-record" | "existing-record" };
 export interface SharedResolvedMarkRecord { readonly identity: SharedContentRef; readonly record: SharedMarkRecord; readonly from: number | null; readonly to: number | null }
@@ -78,14 +79,17 @@ export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, 
     if (reference && from !== null && to !== null && to > from) located.push({ record, reference, from, to });
   }
   const value = text.toDelta().map((delta: { insert: unknown }) => typeof delta.insert === "string" ? sharedPreparedTextInsert(delta.insert) as string : "\ufffc").join("");
-  const result: SharedMarkedCharacter[] = [];
+  const result: SharedMarkedCharacter[] = [], provenance = readSharedMarkProvenance(records);
   for (let offset = 0; offset < value.length; offset++) {
     const identity = Y.createRelativePositionFromTypeIndex(text, offset).item;
     if (!identity) throw new Error("Shared text character has no identity");
     const relevant = located.filter(item => item.from <= offset && item.to > offset && sharedMarkContains(item.record.type === "remove" ? null : item.record.born, identity));
     const excluded = new Set(relevant.flatMap(item => item.record.type === "add" ? [] : item.record.observed));
     const groups = new Map<string, { kind: SharedMarkGroup["kind"]; id: SharedContentRef | null; additions: { record: SharedContentRef; operation: SharedContentRef; value: true | string }[] }>();
+    // why: a copy on a restored character stands for its source, so what takes the source away here takes the copy too.
+    const taken = provenance ? new Set(relevant.flatMap(item => item.record.type === "remove" ? item.record.observed.map(provenance.source) : [])) : null;
     for (const { record, reference } of relevant) if (record.type === "add" && !excluded.has(reference) && record.mark.value !== null) {
+      if (provenance && (taken?.has(provenance.source(reference)) || provenance.cancelled.has(provenance.source(reference)))) continue;
       const mark = record.mark;
       if (mark.value === null) continue;
       const id = "id" in mark ? mark.id : null, key = JSON.stringify([mark.kind, id]);
