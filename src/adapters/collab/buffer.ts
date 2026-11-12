@@ -95,10 +95,10 @@ export function createSharedBufferedText(
             return error instanceof SharedStructurePreparationError ? { kind: "rejected", reason: error.message } : { kind: "failed", error };
           }
           if (outcome.kind !== "applied" && outcome.kind !== "committed") return outcome;
-          open = false; stranded = false; buffer.cancel();
-          try { release(); } catch (error) {
+          // why: a paint during the drain must still read the kept native text here, so the field is reset, not adopted.
+          open = false; stranded = false; try { release(); } catch (error) {
             return { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
-          }
+          } finally { buffer.cancel(); }
           return outcome;
         },
         cancel: () => { if (open) { open = false; buffer.cancel(); release(); } }

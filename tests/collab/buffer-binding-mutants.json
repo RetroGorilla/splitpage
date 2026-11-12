@@ -119,9 +119,15 @@
   }, {
     "label": "recovered edit stays open over its released hold",
     "file": "src/adapters/collab/buffer.ts",
-    "find": "open = false; stranded = false; buffer.cancel();",
-    "replace": "stranded = false; buffer.cancel();",
+    "find": "open = false; stranded = false; try",
+    "replace": "stranded = false; try",
     "tests": ["tests/collab/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovered edit forgets its native text before its hold drains",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "stranded = false; try { release(); }",
+    "replace": "stranded = false; buffer.cancel(); try { release(); }",
+    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {
     "label": "recovery entry loses its painted base",
     "file": "src/core/collab/buffer-operations.ts",

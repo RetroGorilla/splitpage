@@ -71,6 +71,29 @@ test("rule 29: a composition that cannot be committed is kept in recovery once, 
   } finally { page.close(); }
 });
 
+test("rule 29: a paint during the drain of a successful recovery write resets the field and reports nothing", () => {
+  const page = recovering("abcd");
+  try {
+    let paints = 0;
+    const stop = page.a.session.subscribe(() => { paints++; page.surface.paint(); });
+    page.start(1, 3); page.native(1, 3, "Z", undefined, "insertCompositionText");
+    const remote = collabState(page.h.b).roots.beats.get("R2"); assert.ok(remote instanceof Y.Map);
+    transactSharedDocument(page.h.b, "local-command", () => { remote.set("lengthSeconds", 9); });
+    page.h.queue.deliverFrom("B", "D1");
+    assert.equal(collabState(page.h.a).ingress.held.length, 1);
+    stale(page);
+    const before = paints;
+    try { page.end("Z"); } finally { stop(); }
+    assert.ok(paints - before >= 2);
+    assert.deepEqual([page.recovered, page.reports], [["R1"], []]);
+    assert.deepEqual([page.text(), page.beat().textContent], ["abcd", "abcd"]);
+    assert.deepEqual([[...collabState(page.h.a).ingress.holds], collabState(page.h.a).ingress.held.length], [[], 0]);
+    assert.deepEqual(read(page.h.a).recovery.map(entry => entry.text), ["aZd"]);
+    assert.equal(page.native(4, 4, "Q"), true);
+    assert.deepEqual([page.text(), page.recovered, page.reports], ["abcdQ", ["R1"], []]);
+  } finally { page.close(); }
+});
+
 test("rule 29: ordinary typing refused on a stale base is kept in recovery at its input event, and the caret is clamped to the repainted field", () => {
   const page = recovering("ab");
   try {

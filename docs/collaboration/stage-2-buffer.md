@@ -182,7 +182,9 @@ native field as stored HTML, with its formatting and inline markers; an emptied
 field writes an empty entry and observes nothing. The component is the creation's
 own visual id for this writer and operation, supplied as a checked observation.
 
-A successful write closes the edit and releases the hold: no new row is visible,
+A successful write closes the edit and releases the hold before it forgets the
+native text, so a paint during the drain finds a closed edit whose text is still
+the field's and resets the field instead of adopting it. No new row is visible,
 recovery holds exactly one removed beat with the field and the source owner and
 painted base, on the typist, the other copy and a late joiner. A refused write
 changes nothing and keeps the edit and its hold. `tests/collab/buffer-recovery.test.ts`
