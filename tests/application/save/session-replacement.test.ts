@@ -18,6 +18,7 @@ import { startUndo, undoPorts, undoOwner, undoSessionPort, routeUndoReplays } fr
 import { captureOperation, documentTransitions, startTransitions, stillOwns } from "../../../src/bootstrap/wiring/transition-owners.ts";
 import { capabilities } from "../../../src/bootstrap/wiring/ports/capabilities.ts";
 import { autoSavePolicy, confirmBaseline, confirmSavedNow, fileConflicts, noteSaveChange, requestSave, saveChanges, saveDestinations, startSaves } from "../../../src/bootstrap/wiring/save-owners.ts";
+import { startEffects } from "../../../src/bootstrap/wiring/effects-owner.ts";
 
 const STANDALONE = createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
 const SHARED = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
@@ -35,12 +36,14 @@ function harness(t: TestContext, mode: "assets" | "picker" | "bundle" | "failure
   const obsolete: unknown[][] = [];
   const remembered: string[] = [];
   const captured: string[] = [];
+  const notices = fakeNotices();
   const gate = deferred<undefined>();
   const entered = deferred<undefined>();
   let replacement = false;
   let nextCapability = source;
   const doc = (text: string, id: string) => migrateRows({ docId: id, title: "Pilot", rows: [{ id: "r1", audioText: text, visualText: "" }] }, fakeMigration().ports);
   t.after(startDocumentGuard(false, error => { throw error; }));
+  t.after(startEffects({ notices: notices.notices, menuItems: { setLabel: () => {}, setReason: () => {} }, clipboard: { copyText: async () => false } }));
   t.after(startLocation());
   t.after(startUndo(undoPorts()));
   t.after(startSessionBridge({
@@ -60,7 +63,6 @@ function harness(t: TestContext, mode: "assets" | "picker" | "bundle" | "failure
   const touch = (name: string) => { if (replacement) effects.push(name); };
   const original = { name: "old.splitpage" };
   const copy = { name: "copy.splitpage" };
-  const notices = fakeNotices();
   const ports: FileSavingPorts = {
     capability: capabilities,
     edits: { edit: () => { touch("edit"); return false; } },
@@ -108,16 +110,90 @@ function harness(t: TestContext, mode: "assets" | "picker" | "bundle" | "failure
   documentTransitions().open({ from: { document: doc("Captured standalone text.", "d11111111111111111111111111111111") }, reason: "initial", destination: { kind: "file", fields: { handle: original, format: "splitpage", name: original.name } }, writtenOut: true });
   noteSaveChange();
   return {
-    entered: entered.promise, release: () => { gate.resolve(undefined); }, effects, writes, obsolete, remembered, captured, location, clock, registered,
-    replace: (retainHome = false) => {
-      nextCapability = SHARED;
+    entered: entered.promise, release: () => { gate.resolve(undefined); }, effects, writes, obsolete, remembered, captured, location, clock, registered, notices,
+    replace: (retainHome = false, mode: "shared" | "standalone" = "shared") => {
+      nextCapability = mode === "shared" ? SHARED : STANDALONE;
       const previousEpoch = liveSession().epoch();
-      if (retainHome) documentTransitions().restore({ from: { document: doc("Shared replacement text.", "d22222222222222222222222222222222") } });
-      else documentTransitions().open({ from: { document: doc("Shared replacement text.", "d22222222222222222222222222222222") }, reason: "replacement", destination: { kind: "none" }, writtenOut: false });
+      const text = mode === "shared" ? "Shared replacement text." : "Standalone replacement text.";
+      if (retainHome) documentTransitions().restore({ from: { document: doc(text, "d22222222222222222222222222222222") } });
+      else documentTransitions().open({ from: { document: doc(text, "d22222222222222222222222222222222") }, reason: "replacement", destination: { kind: "none" }, writtenOut: false });
       assert.equal(liveSession().epoch(), previousEpoch + 1);
       replacement = true;
     }
   };
+}
+
+for (const mode of ["standalone", "shared"] as const) {
+  test(mode + " replacement: a late manual conflict remains visible without offering shared file actions", async t => {
+    const h = harness(t, "conflict");
+    const saving = requestSave({ kind: "save" });
+    await h.entered;
+    h.replace(false, mode);
+    h.release();
+    assert.deepEqual(await saving, { kind: "refused", reason: "The file changed on disk since it was opened", conflict: { fileName: "old.splitpage", current: null, kind: "project" } });
+    assert.deepEqual(fileConflicts().current(), mode === "standalone" ? { fileName: "old.splitpage", current: null, kind: "project" } : null);
+    assert.deepEqual(h.notices.shown.map(({ message, kind }) => [message, kind]), mode === "standalone" ? [] : [["The file changed on disk since it was opened", "warn"]]);
+    assert.deepEqual(h.notices.shown.map(({ label, action }) => [label, action]), mode === "standalone" ? [] : [[undefined, undefined]]);
+    assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.effects, []);
+    assert.deepEqual(h.location.home(), { kind: "none" });
+    assert.equal(h.clock.armed(), 0);
+  });
+
+  test(mode + " replacement: a completed captured Save As remembers its handle only when the current session permits it", async t => {
+    const h = harness(t);
+    const saving = requestSave({ kind: "saveAs" });
+    await h.entered;
+    const home = h.location.home();
+    h.replace(true, mode);
+    h.release();
+    assert.deepEqual(await saving, { kind: "obsolete", here: true });
+    assert.deepEqual(h.writes, [["copy.splitpage", "Captured standalone text."]]);
+    assert.deepEqual(h.remembered, mode === "standalone" ? ["copy.splitpage"] : []);
+    assert.deepEqual(h.effects, mode === "standalone" ? ["remember"] : []);
+    assert.equal(h.location.home(), home);
+    assert.deepEqual(h.notices.shown.map(({ message, kind }) => [message, kind]), mode === "standalone"
+      ? [["Saved a new copy: copy.splitpage", "ok"]]
+      : [["Save destinations are not available in a shared session.", "warn"], ["Saved a new copy: copy.splitpage", "ok"]]);
+    assert.equal(h.clock.armed(), 0);
+  });
+
+  test(mode + " replacement: a failed captured Save As rolls back its target only when the current session permits it", async t => {
+    const h = harness(t, "failure");
+    const previousHome = h.location.home();
+    const saving = requestSave({ kind: "saveAs" });
+    await h.entered;
+    const home = h.location.home();
+    h.replace(true, mode);
+    h.release();
+    assert.deepEqual(await saving, { kind: "failed", error: new Error("write failed") });
+    assert.equal(h.location.home(), mode === "standalone" ? previousHome : home);
+    assert.deepEqual(h.writes, [["copy.splitpage", "Captured standalone text."]]);
+    assert.deepEqual(h.remembered, []);
+    assert.deepEqual(h.effects, mode === "standalone" ? ["restore home"] : []);
+    assert.deepEqual(h.notices.shown.map(({ message, kind }) => [message, kind]), mode === "standalone"
+      ? [["Could not save — write failed.", "error"]]
+      : [["Could not save — write failed.", "error"], ["Save destinations are not available in a shared session.", "warn"]]);
+    assert.equal(h.clock.armed(), 0);
+  });
+
+  test(mode + " replacement: an uncaptured Save As leaving bundle drain asks the current session before capture", async t => {
+    const h = harness(t, "bundle");
+    const saving = requestSave({ kind: "saveAs" });
+    await h.entered;
+    h.replace(false, mode);
+    h.release();
+    assert.deepEqual(await saving, mode === "standalone" ? { kind: "obsolete", here: false } : { kind: "cancelled" });
+    assert.deepEqual(h.captured, mode === "standalone" ? ["Standalone replacement text."] : []);
+    assert.deepEqual(h.writes, mode === "standalone" ? [["copy.splitpage", "Standalone replacement text."]] : []);
+    assert.deepEqual(h.effects, mode === "standalone" ? ["hold", "current document", "current document"] : []);
+    assert.deepEqual(h.remembered, []);
+    assert.deepEqual(h.location.home(), { kind: "none" });
+    assert.deepEqual(h.notices.shown.map(({ message, kind }) => [message, kind]), mode === "standalone"
+      ? [["Saved a new copy: copy.splitpage", "ok"]]
+      : [["Save destinations are not available in a shared session.", "warn"]]);
+    assert.equal(h.clock.armed(), 0);
+  });
 }
 
 for (const kind of ["save", "force", "auto", "autosave", "saveAs"] as const) {

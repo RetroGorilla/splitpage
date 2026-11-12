@@ -15,6 +15,7 @@ import type { ImportSavingPorts } from "../../../src/application/save/import-sav
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { EffectPorts } from "../../../src/application/effects/ports.ts";
 import { startEffects } from "../../../src/bootstrap/wiring/effects-owner.ts";
+import { fakeNotices } from "../../features/fakes.ts";
 import { autoSavePolicy, autoSaveTarget, flushAutoSave, queueAutoSave, requestSave, saveDoc, scheduleAutoSave, setAutoSaveEnabled, startSaves, toggleAutoSave } from "../../../src/bootstrap/wiring/save-owners.ts";
 
 const SHARED = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
@@ -132,7 +133,7 @@ function job(kind: string, calls: string[]): SaveJob<{ kind: string }> {
   };
 }
 
-function guardedFilePorts(capability: FileSavingPorts["capability"], calls: string[], bundles?: FileSavingPorts["bundles"], saves?: FileSavingPorts["saves"]): FileSavingPorts {
+function guardedFilePorts(capability: FileSavingPorts["capability"], calls: string[], bundles?: FileSavingPorts["bundles"], saves?: FileSavingPorts["saves"], notices?: FileSavingPorts["notices"]): FileSavingPorts {
   const unexpected = (name: string): never => { calls.push(name); throw new Error("unexpected file port"); };
   return {
     capability,
@@ -150,7 +151,7 @@ function guardedFilePorts(capability: FileSavingPorts["capability"], calls: stri
     get files() { return unexpected("files"); },
     get delivery() { return unexpected("delivery"); },
     get saves() { return saves ?? unexpected("saves"); },
-    get notices() { return unexpected("notices"); },
+    get notices() { return notices ?? unexpected("notices"); },
     get preferences() { return unexpected("preferences"); },
     get page() { return unexpected("page"); },
     get bundles() { return bundles ?? unexpected("bundles"); }
@@ -194,12 +195,13 @@ test("automatic requests ask autosave before planning even when manual destinati
   assert.deepEqual(calls, []);
 });
 
-test("Save As waiting for bundle copies stops before holding undo or capturing when replacement loses ownership", async t => {
-  let owns = true;
+test("Save As waiting for bundle copies asks the current session before holding undo or capturing", async t => {
+  let capability = STANDALONE;
+  const notices = fakeNotices();
   let drained: (ready: boolean) => void = () => { throw new Error("drain was not started"); };
   const waiting = new Promise<boolean>(resolve => { drained = resolve; });
   const calls: string[] = [];
-  const ports = guardedFilePorts(STANDALONE, calls, {
+  const ports = guardedFilePorts({ saveDestinations: () => capability.saveDestinations(), autosave: () => capability.autosave() }, calls, {
     beginSave: () => {
       calls.push("bundle.begin");
       return { drained: waiting, ask: async () => [], end: () => { calls.push("bundle.end"); } };
@@ -210,15 +212,16 @@ test("Save As waiting for bundle copies stops before holding undo or capturing w
     confirmSavedNow: () => { throw new Error("unexpected confirm"); },
     halt: () => { throw new Error("unexpected halt"); },
     changes: () => { throw new Error("unexpected changes"); }
-  });
+  }, { ...notices.notices, imagesLeftOut: () => { throw new Error("unexpected image notice"); } });
   const saving = mountFileSaving(ports);
   t.after(saving.dispose);
-  const pending = saving.destination().write({ ...job("saveAs", calls), owns: () => { calls.push("owns"); return owns; } });
+  const pending = saving.destination().write(job("saveAs", calls));
   assert.deepEqual(calls, ["resume", "owns", "bundle.begin"]);
-  owns = false;
+  capability = SHARED;
   drained(true);
   assert.deepEqual(await pending, { kind: "cancelled" });
-  assert.deepEqual(calls, ["resume", "owns", "bundle.begin", "owns", "bundle.end"]);
+  assert.deepEqual(calls, ["resume", "owns", "bundle.begin", "bundle.end"]);
+  assert.deepEqual(notices.shown.map(({ message, kind }) => [message, kind]), [["Save destinations are not available in a shared session.", "warn"]]);
 });
 
 test("shared save requests stop before destination, ownership, writer and conflict ports", async t => {

@@ -12,27 +12,44 @@ throughout that session's life. Common `edit` and `comment` answers remain live.
 Replacing the session through `adoptReplacement` can install another captured
 capability port. Mutating a supplied port cannot change the mode of a live session.
 
-A save takes its mode answers at entry. Later checks inside that save use those
-answers, including the Save As path after waiting for bundle copies. Import
-write-back and conflict-copy continuations retain their entry permission and
-their existing ownership checks. They do not consult the replacement's mode.
+A save takes its write permission at entry. Once captured, its write uses those
+answers across awaits and does not ask the replacement for write permission.
+Import write-back and conflict-copy continuations retain their entry permission
+and their existing ownership checks.
 
 Replacement does not wait for saving. An already captured standalone file save
 finishes with its captured document, selected target and registered writer.
 The coordinator judges its landing obsolete through ownership and epoch. The
-replacement does not receive the old save's stamps, baseline, target or handle
-reminder. Retarget rollback also requires ownership. A Save As replaced while
-bundle copies drain has not captured yet: it cancels before holding undo or
-capturing the replacement document. An existing undo hold releases according to
-the undo owner's original document and epoch, as on standalone replacement.
+replacement does not receive the old save's stamps or baseline. An existing undo
+hold releases according to the undo owner's original document and epoch.
 
-Late conflict presentation checks the session epoch, not the destination captured
-when the request queued: Save As can move a queued Save to its new target without
-replacing the session. That queued Save still presents its own conflict.
+Effects on the current session ask its current `saveDestinations` capability:
+conflict presentation, remembering a picked handle and rolling back a failed
+retarget. They keep main's conditions and outcomes when the current session is
+standalone, even after replacement. A shared current session refuses the effect
+and shows a plain warning, with no write action.
+
+A Save As returning from bundle drain has not captured yet. It asks the current
+session before holding undo or capturing: standalone replacement B is captured
+and written as on main, with an obsolete landing; shared replacement cancels
+without capture and shows the declared refusal. Already captured writes continue
+to their own target in either case.
+
+An old file conflict remains presented after standalone replacement. After shared
+replacement its existing reason, "The file changed on disk since it was opened",
+is shown through the existing warning toast instead of the conflict dialog. It
+offers no write action. A queued Save following Save As still presents its own
+conflict after its destination moves.
+
+Main's existing conflict-action behavior is preserved: overwrite and copy start
+a fresh save of the current document B, rather than writing document A's capture
+whose late conflict was presented. This package does not redirect those actions.
 
 `save/session-replacement.test.ts` exercises the real `documentTransitions().open`
 and `adoptReplacement` path for save, force, auto, autosave, Save As, a late picker
-and a pending bundle drain. The session-answer test pins the immutable public
+and a pending bundle drain. Eight additional paired cases pin main's standalone
+replacement outcomes and shared refusals for the four current-session effects.
+The session-answer test pins the immutable public
 surface. Switching a live session's mode answers during `ensureBytes` is therefore
 not reachable through that surface. Replacement during `ensureBytes` is supported
 and finishes the captured write; it does not drop that write on a capability recheck.
@@ -52,8 +69,10 @@ the previous local destination and cancels its pending autosave scheduling.
 
 Keep the existing transition and save ownership rules: no new settlement step,
 no asynchronous mode-transition requirement, and no cancellation of a file write
-that has already captured. Old save completion cannot adopt a target, remember a
-handle or update the new shared session. New shared save attempts refuse before
+that has already captured. Current-session effects and a capture not yet taken
+ask the current session's capability; they retain main's standalone behavior.
+Old save completion cannot adopt a target, remember a handle or change a home on
+the new shared session. New shared save attempts refuse before
 capture, destination selection, timers, standalone undo or file access.
 
 ## Inventory and limits

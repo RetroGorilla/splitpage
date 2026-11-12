@@ -51,7 +51,6 @@ type Coordinator = SaveCoordinator<LegacySaveRequest, unknown>;
 
 interface Started {
   readonly capability: LegacySavePorts["capability"];
-  readonly ownership: Operations;
   readonly coordinator: Coordinator;
   readonly autosave: AutoSavePolicy;
   readonly destinations: LegacySaveDestinations;
@@ -139,7 +138,6 @@ export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "star
   const destinations = createSaveDestinations<LegacySaveRequest, unknown>(ports.capability);
   const mine: Started = Object.freeze({
     capability: ports.capability,
-    ownership: ports.ownership,
     coordinator: createSaveCoordinator<LegacySaveRequest, unknown>({
       ownership: ports.ownership,
       destination: { current: ports.destination, keyOf: ports.keyOf },
@@ -184,10 +182,13 @@ export function requestSave(request: LegacySaveRequest): Promise<SaveOutcome> {
     const can = now.capability.autosave();
     if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
   }
-  const epoch = now.ownership.capture().epoch;
   return now.coordinator.request(Object.freeze(request.target === undefined ? { kind: request.kind } : { kind: request.kind, target: request.target }))
     .then(function (outcome) {
-      if (outcome.kind === "refused" && outcome.conflict && started === now && now.ownership.capture().epoch === epoch) now.conflicts.show(outcome.conflict);
+      if (outcome.kind === "refused" && outcome.conflict && started === now) {
+        const current = now.capability.saveDestinations();
+        if (current.allowed) now.conflicts.show(outcome.conflict);
+        else showToast(outcome.reason, "warn");
+      }
       return outcome;
     });
 }
