@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { Stage1ExecutorHarness } from "../adapters/collab/stage1-executor-support.ts";
-import { adapterReplica, sharedHarness } from "../application/session/shared-session-support.ts";
+import { adapterReplica, sharedCommand, sharedHarness } from "../application/session/shared-session-support.ts";
 import { createSharedBufferedText } from "../../src/adapters/collab/buffer.ts";
 import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { readSharedRevision, observeSharedTransactions, transactSharedDocument } from "../../src/adapters/collab/document.ts";
@@ -62,7 +62,7 @@ for (const order of ["D1", "rev", "dup", "late-C"] as const) {
   }
 }
 
-test("commit moment inside delivery retains the dirty edit, issues no command and succeeds on explicit retry", () => {
+test("commit moment inside unchanged-revision delivery retains the dirty edit and succeeds on explicit retry", () => {
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }]), a = editing(h);
   try {
     a.edit.replace(2, 2, "Z");
@@ -74,6 +74,24 @@ test("commit moment inside delivery retains the dirty edit, issues no command an
     assert.deepEqual([a.executed.length, a.edit.text(), [...collabState(h.a).ingress.holds]], [0, "abZ", ["buffer"]]);
     assert.equal(a.edit.commit([{ text: "abZ", marks: {} }]).kind, "applied");
     assert.equal(h.characters(h.a, "R1").map(char => char.value).join(""), "abZ");
+  } finally { a.session.dispose(); h.destroy(); }
+});
+
+test("a revision-changing local notification makes retry stale: the bare adapter retains text and hold", () => {
+  const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }]), a = editing(h);
+  try {
+    a.edit.replace(2, 2, "Z");
+    const outcomes: unknown[] = [];
+    const stop = observeSharedTransactions(h.a, () => { outcomes.push(a.edit.commit([{ text: "abZ", marks: {} }])); });
+    const scalar = h.command("A", { kind: "scalar", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 7 });
+    assert.equal(a.session.run(sharedCommand("length", [scalar])).kind, "applied");
+    stop();
+    assert.deepEqual(outcomes, [{ kind: "rejected", reason: "buffer-delivery" }]);
+    assert.deepEqual(a.edit.commit([{ text: "abZ", marks: {} }]), { kind: "rejected", reason: "stale-base" });
+    assert.deepEqual([a.edit.text(), [...collabState(h.a).ingress.holds]], ["abZ", ["buffer"]]);
+    assert.equal(h.characters(h.a, "R1").map(char => char.value).join(""), "ab");
+    assert.equal(a.session.read(doc => doc?.rows[0]?.lengthSeconds), 7);
+    a.edit.cancel();
   } finally { a.session.dispose(); h.destroy(); }
 });
 

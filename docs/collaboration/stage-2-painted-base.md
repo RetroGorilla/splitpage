@@ -58,10 +58,19 @@ headings, the visual box and the title are a later package.
 ## Cost
 
 A paint makes one read per painted beat, and the Writer paints every row, so
-each paint reads the whole document. The supplier creates a position for each
-unit, and each creation walks the text's items from the start, so one beat
-costs its units times its items. A throwaway probe, not a test, read 300 freshly
-hydrated beats (75,600 units, one item per beat) in 2 to 5 ms; edited text has
-more items and was not measured. One option for the buffer package: record only
-revision and text at paint, and capture identities when a buffer opens on a
-beat, valid only while the revision still equals the painted one.
+each paint reads the whole document. For a non-empty beat with L painted units,
+`readSharedPaintedText` constructs L native unit positions, one framing anchor and
+one end-gap anchor. An empty beat constructs one anchor, reused for both its
+empty and end gaps. The commit-mapping slice therefore adds one anchor per beat,
+including empty beats. No extra read is made on the standalone keystroke path.
+
+Let U be the physical text's units and I its native items, including other beats
+that share that text after a split. The supplier scans U units for spans; each
+position or anchor can walk I items from the start. Its bound per non-empty beat
+is O(U + (L + 2)I), and per empty beat O(U + I), with O(U + L) temporary storage.
+A whole paint sums those bounds across painted beats; no shared latency bound is
+claimed. A historical throwaway probe read 300 freshly hydrated beats (75,600
+units, one item per beat) in 2 to 5 ms. It predates the gap captures; edited text
+was not measured and no timing rerun is claimed here. Capturing identities only
+when a buffer opens remains an option, provided its revision still equals the
+painted one.

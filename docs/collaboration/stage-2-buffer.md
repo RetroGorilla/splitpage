@@ -15,10 +15,29 @@ queue; the handle's ingress gate owns the only queue and drain.
 The adapter refuses to open against a different revision. If a commit moment
 falls inside delivery, it returns `buffer-delivery` before calling the session,
 retains the native edit and hold, and requires an explicit retry after delivery.
-A stale-base refusal or failed command also retains the edit for retry or cancel.
+That retry succeeds only when the revision has not advanced. A revision-changing
+local command makes the bare adapter's retry `stale-base`; text and hold remain
+until its caller handles that result. The regression named "a revision-changing
+local notification makes retry stale" pins this boundary. A failed command also
+retains the edit for explicit handling or cancel.
 Cancel discards local native intent and releases held arrivals. Destruction clears
 the gate without applying held updates. Crash recovery is outside this in-memory
 package; no durable continuation is claimed.
+
+The Writer binding must make that local-command history unreachable: it commits
+dirty native typing before another local command enters the session, including
+status, scalar and structural commands. Any remaining stale-base outcome has the
+stated end in assumed rule 29 on #1414: a fresh soft-removed recovery beat keeps
+the whole native field and source owner/base metadata, through existing shared
+operations and the existing recovery reader, with no undo entry. Successful
+recovery releases the hold; refused recovery retains it and reports through the
+counted port. Rule 29 is implemented in the Writer binding slice, not this mapper.
+
+Mapping normalizes the supplied native runs once, then slices the prepared units
+only for insertions. With N native units, S splices and C changed units, text
+traversal is O(N + S + C); mark policy and encoding each changed unit's painted
+identity have their own costs. The mapper's work-bound tests count supplied text reads for
+100 separated replacements and deletions; the rescan mutant fails those tests.
 
 `tests/collab/buffer-commit.test.ts` covers same-beat and next-beat edits, native
 identical-text replacement, marks, empty and end gaps, and delivery re-entry.

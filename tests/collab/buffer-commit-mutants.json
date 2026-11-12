@@ -5,5 +5,11 @@
     "file": "src/core/collab/buffer-operations.ts",
     "find": "observed: Array.from({ length: splice.to - splice.from }, (_, offset) => identity(splice.from + offset))",
     "replace": "observed: [JSON.stringify([\"flow-base\", target.owner, target.field, splice.from, splice.to]) as SharedContentRef]"
+  }, {
+    "label": "buffer mapper rescans supplied runs per splice",
+    "file": "src/core/collab/buffer-operations.ts",
+    "find": "const piece = implode(units.slice(from, to));",
+    "replace": "const piece = implode(explode(runs).slice(from, to));",
+    "tests": ["tests/core/collab/buffer-operations.test.ts"]
   }]
 }
