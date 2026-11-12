@@ -7,9 +7,11 @@ wherever that now is. It never restores earlier bytes.
 The owner is `createSharedUndo` in `src/application/editing/undo/shared-undo.ts`.
 The record it keeps is `SharedUndoRecord` in `src/core/collab/undo-record.ts`.
 Nothing wires the owner, so the running app creates none and standalone undo is
-unchanged. The executor that applies an undo to the shared document is a later
-cut; the tests in `tests/collab/undo/` run the owner against a model executor
-that follows the rules below.
+unchanged. The tests in `tests/collab/undo/` run the owner against a model
+executor that follows the rules below, and against the executor for the shared
+document in `src/adapters/collab/undo-executor.ts`, described under "The adapter
+executor". That executor covers text, marks, fields and status; records and
+structure commands are later cuts.
 
 ## The record
 
@@ -172,34 +174,64 @@ pins it. The generator fails on any violation the table does not carry.
 | redone-recovery | waits for removal | Needs a removed beat |
 | redone-mark-reversed | waits for the adapter executor | A limit of formatting inside the shared library |
 | pending-update | waits for the adapter executor | A limit of delivery into the shared document |
+| insert-after-deleted-run | carried, shared document only | Alice deletes `bc` of `abcd`, delivered. Bob types `X` where the gap between `b` and `c` was. Alice undoes: `abcXd`, where the model and Stage 1 give `abXcd` |
 
-## Open for the adapter executor
+`insert-after-deleted-run` comes from the forward insertion, not from the undo:
+`prepareSharedTextInsert` places text by a position among the visible
+characters, so text typed where a deleted run was sits after the whole run. The
+undo restores each character in its original order and cannot move the other
+person's text. The two Stage 1 runs that reach it (T01 and T01 composition
+with a late joiner) are listed in `ADAPTER_BUFFER_LIMIT_RUNS` and fail in the
+declared way in `limits.test.ts`; the model passes both.
 
-1. Nothing on main retires a status event, so undoing a status needs an
-   operation that writes `retiredStatus`.
-2. There is no shared record of which unit restores which. Undo of a deletion
-   needs one, written with the restored text.
-3. A `mark` operation with a null value removes every occurrence of that mark in
-   the range. Undo of one person's mark needs to take away one occurrence.
-4. `executeSharedOperations` labels every write `local-command`; an undo is
-   `local-undo`.
-5. Who builds the record of a forward command: the executor knows the units and
-   occurrences a command touched, so it is the natural place.
-6. The formatting of a restored character. The model lets a restored character
-   show the marks of the one it restores by following that ancestry when it
-   reads. The mark reader on main (`readCollabMarkState`) does not: it works
-   from anchored ranges and the exclusions written at a character's birth, and
-   a range whose two ends sit on one deleted character stays empty wherever the
-   restored character lands. The contract the adapter executor has to meet:
-   a restored character shows the occurrences its original showed when it was
-   deleted, except those taken away since over that place; the undo of the
-   command that made such an occurrence takes it from the restored character
-   too; and a later undo of the restoring undo's command still finds it. The
-   fixture that holds this is "insert, bold and delete one character; three
-   undos and three redos".
-7. An identical change that arrives after the undo. The mark records on main
-   keep no record of what an occurrence had seen, so the cancellation the undo
-   writes has to carry enough for a reader to cancel an identical occurrence it
-   has not received yet. Stage 1 does not do this; see "the model goes beyond
-   Stage 1" above. The tests are the "Beyond Stage 1" ones in
-   `mirrored-rules.test.ts`.
+`redone-mark-reversed` and `pending-update` are examined when the generator
+runs on the shared document, with the record parts.
+
+## The adapter executor
+
+`src/adapters/collab/undo-executor.ts` has the two halves:
+
+- `executeSharedCommand` runs a forward command through
+  `executeSharedOperations` and builds its record from what the document shows
+  before and after: the units inserted and deleted, the occurrences a mark
+  created with what it had seen, the field values, the status event.
+- `reverseSharedUndoRecord` is the owner's `reverse` port. It plans every part
+  from the document as it is now, runs the result as one
+  `executeSharedOperations` call with the origin `local-undo`, and returns the
+  inverse record. `supportsSharedUndoPart` is the owner's `supports` port.
+
+An undo needs three operations a forward command never writes. Each is read by
+`readOperation` like any other and has a handler registered by
+`registerSharedUndoOperationHandlers`:
+
+| Operation | What it writes |
+| --- | --- |
+| `text-restore` | each deleted unit as a new character after its left neighbour, with a birth record that names the unit it restores and a copy of each mark it is given |
+| `mark-retract` | a removal that names one occurrence |
+| `status-retire` | `retiredStatus` for the standing events of one value, only while the beat shows that value and retiring changes it |
+
+How the points left open by the model are met:
+
+1. **Which unit restores which.** The birth record of a restored character
+   carries the identity of the unit it restores, in its operation name. No new
+   root is added. `readSharedTextHistory` in `text-history.ts` reads the full
+   order of a text with its deleted units and follows a unit to its
+   restoration. A unit someone has already restored, or one that is visible
+   again, is skipped.
+2. **Marks on a restored character.** The restoring operation writes one copy
+   per occurrence the original showed. A copy stands for its source: what takes
+   the source away over that place, and the undo of the command that made it,
+   take the copy too (`mark-provenance.ts`, read in `readCollabMarkState`).
+3. **One occurrence, not every mark in the range.** `mark-retract` names the
+   occurrence, so another person's mark over the same words stays.
+4. **An identical change that arrives after the undo.** A forward mark now
+   names, in its operation, the same marks over the same range it had seen.
+   A retraction cancels the occurrence and every addition of the same mark over
+   the same range where neither had seen the other, also one that arrives
+   later. This is the step beyond Stage 1 described above.
+5. **The origin.** `executeSharedOperations` takes `origin: "local-undo"`;
+   without it a write is `local-command` as before.
+
+Not covered yet: comment and other record parts and the generator on the shared
+document (next cut), and structure commands, which the owner refuses by name.
+The adapter tests are in `tests/adapters/collab/undo-operations.test.ts`.

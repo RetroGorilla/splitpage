@@ -136,6 +136,8 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
     return { beat, left, ids, selection: first !== undefined && last !== undefined ? { anchor: point(first, "before"), focus: point(last, "after") } : { anchor: caret, focus: caret } };
   }
 
+  caretAfter(character: string): SharedUndoSelection { return caretAfter(character); }
+
   private marksOf(id: string): SharedMarkValue[] {
     return this.view.occurrences(id).map((mark): SharedMarkValue => mark.key === "tag"
       ? { kind: "tag", id: ref(String(mark.value)), value: ref(String(mark.value)) } : { kind: "b", value: true });
@@ -412,7 +414,8 @@ export class ModelWorld {
     this.book.bind(this.book.notation(identityOf(original)) + "*" + "'".repeat((this.restored.get(original) ?? 1) - 1), identityOf(id));
   }
 
-  model(replica: ModelReplica, options: { readonly carets?: Readonly<Record<string, SharedUndoSelection>>; readonly status?: boolean } = {}): CollabModel {
+  model(replica: { readonly name: ReplicaName }, options: { readonly carets?: Readonly<Record<string, SharedUndoSelection>>; readonly status?: boolean } = {}): CollabModel {
+    if (!(replica instanceof ModelReplica)) throw new Error("Not a replica of the model world");
     const view = replica.view;
     const rows = this.beats.map((beat): CollabRow => ({
       id: beat,

@@ -7,7 +7,7 @@ import { ref } from "../../adapters/collab/executor-support.ts";
 import { scalarTarget } from "../../../src/adapters/collab/scalar-executor.ts";
 import { ModelWorld } from "./model-world.ts";
 import type { ModelReplica } from "./model-world.ts";
-import { BOLD, TAG_P, UndoScenario } from "./scenario.ts";
+import { BOLD, TAG_P, UNDO_WORLDS, UndoScenario } from "./scenario.ts";
 
 const ABC = [{ id: "R1", text: "abc" }];
 const AB = [{ id: "R1", text: "ab" }];
@@ -49,8 +49,8 @@ test("mirrors prepareSharedMarkChange: a later bold over text that is partly bol
 });
 
 test("Alice bolds ab, Bob then bolds bc: Alice's undo leaves bc bold, and Bob's undo then leaves none", () => {
-  for (const order of deliveryOrders) {
-    const s = new UndoScenario(ABC, order);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders) {
+    const s = new UndoScenario(ABC, order, kind);
     s.format(s.a, "R1", 0, 2, BOLD);
     s.deliver();
     s.format(s.b, "R1", 1, 3, BOLD);
@@ -70,8 +70,8 @@ const UNTAGGED = r1(["s1", "a", {}], ["s2", "b", {}]);
 
 for (const first of ["Alice", "Bob"] as const) {
   test(`Beyond Stage 1: the same tag by two writers, ${first} undoes before the other's tag arrives: untagged on every copy, the other's undo is used up`, () => {
-    for (const order of deliveryOrders) {
-      const s = new UndoScenario(AB, order), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
+    for (const kind of UNDO_WORLDS) for (const order of deliveryOrders) {
+      const s = new UndoScenario(AB, order, kind), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
       s.format(s.a, "R1", 0, 2, TAG_P);
       s.format(s.b, "R1", 0, 2, TAG_P);
       s.effective(one.undo.undo());
@@ -85,8 +85,8 @@ for (const first of ["Alice", "Bob"] as const) {
     }
   });
   test(`Beyond Stage 1: the same tag by two writers, both undo before anything arrives, ${first} first: untagged on every copy`, () => {
-    for (const order of deliveryOrders) {
-      const s = new UndoScenario(AB, order), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
+    for (const kind of UNDO_WORLDS) for (const order of deliveryOrders) {
+      const s = new UndoScenario(AB, order, kind), [one, two] = first === "Alice" ? [s.a, s.b] : [s.b, s.a];
       s.format(s.a, "R1", 0, 2, TAG_P);
       s.format(s.b, "R1", 0, 2, TAG_P);
       s.effective(one.undo.undo());
@@ -98,8 +98,8 @@ for (const first of ["Alice", "Bob"] as const) {
 }
 
 test("Beyond Stage 1: the same tag by three writers, one undoes before the others' arrive: untagged on every copy and both other undos are used up", () => {
-  for (const order of ["D1", "dup", "rev"] as const) for (const undoer of ["A", "B", "C"] as const) {
-    const world = new ModelWorld(AB, ["A", "B", "C"]), all = (["A", "B", "C"] as const).map(name => world.replica(name));
+  for (const kind of UNDO_WORLDS) for (const order of ["D1", "dup", "rev"] as const) for (const undoer of ["A", "B", "C"] as const) {
+    const world = kind.make(AB, ["A", "B", "C"]), all = (["A", "B", "C"] as const).map(name => world.replica(name));
     for (const replica of all) replica.mark(replica.observe("R1", 0, 2), TAG_P);
     const outcome = world.replica(undoer).undo.undo();
     assert.deepEqual(outcome.ok && outcome.effective, true);
@@ -116,13 +116,13 @@ test("Beyond Stage 1: the same tag by three writers, one undoes before the other
 });
 
 test("a tag over other words, or one made after seeing the first, is another change and stays when the first is undone", () => {
-  for (const order of deliveryOrders) {
-    const wider = new UndoScenario(ABC, order);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders) {
+    const wider = new UndoScenario(ABC, order, kind);
     wider.format(wider.a, "R1", 0, 2, TAG_P);
     wider.format(wider.b, "R1", 0, 3, TAG_P);
     wider.effective(wider.a.undo.undo());
     wider.check("wider tag stays", r1(["s1", "a", { tag: "P" }], ["s2", "b", { tag: "P" }], ["s3", "c", { tag: "P" }]));
-    const later = new UndoScenario(AB, order);
+    const later = new UndoScenario(AB, order, kind);
     later.format(later.a, "R1", 0, 2, TAG_P);
     later.deliver();
     later.format(later.b, "R1", 0, 2, TAG_P);
@@ -169,8 +169,8 @@ for (const scalar of SCALARS) test(`mirrors prepareScalar on a Y.Map key: ${scal
 });
 
 test("unseen sets of one field: the undo of the set that lost is used up and the other's value stays; the winner's undo clears it", () => {
-  for (const order of deliveryOrders) {
-    const s = new UndoScenario(AB, order), fields = (): (string | undefined)[] => [s.a, s.b].map(replica => replica.snapshot().rows[0]?.scalars.lengthSeconds);
+  for (const kind of UNDO_WORLDS) for (const order of deliveryOrders) {
+    const s = new UndoScenario(AB, order, kind), fields = (): (string | undefined)[] => [s.a, s.b].map(replica => replica.snapshot().rows[0]?.scalars.lengthSeconds);
     s.type(s.a, "R1", 2, "xyz", ["a1", "a2", "a3"]);
     s.a.scalar("R1", "lengthSeconds", 1);
     s.b.scalar("R1", "lengthSeconds", 2);
