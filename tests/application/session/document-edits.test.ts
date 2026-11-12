@@ -42,7 +42,7 @@ function start(editor: string, record: () => void = () => {}) {
       save: () => { log.push("save"); },
       refresh: () => { log.push("refresh"); }
     },
-    capability: { edit: () => reason === null ? { allowed: true } : { allowed: false, reason } },
+    capability: { edit: () => reason === null ? { allowed: true } : { allowed: false, reason }, comment: () => ({ allowed: true }) },
     editor: { name: () => editor },
     records: () => null,
     attribution: { attribute: () => null },
