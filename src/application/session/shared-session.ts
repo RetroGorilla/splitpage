@@ -1,4 +1,5 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
+import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { WHOLE_DOCUMENT, changeSet } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
@@ -11,13 +12,16 @@ import { changesBetween } from "./projection-changes.ts";
 
 export type ReplicaOrigin = "local-command" | "local-undo" | "hydration" | "remote" | "cleanup";
 
+export interface ReplicaFailure { readonly error: unknown }
+
 export type ReplicaExecution = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export interface ReplicaPort {
   readonly revision: () => number;
   readonly project: () => unknown;
+  readonly changes: () => SharedProjectionChanges;
   readonly execute: (operations: readonly SharedOperation[], options: { readonly base: number }) => ReplicaExecution;
-  readonly observe: (listener: (origin: ReplicaOrigin | null) => void) => () => void;
+  readonly observe: (listener: (origin: ReplicaOrigin | null, failure?: ReplicaFailure) => void) => () => void;
 }
 
 export interface SharedSessionPorts {
@@ -36,7 +40,19 @@ export interface SharedDocumentSession extends CommonDocumentSession {
   revision: () => number;
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
   beforeCommand: (listener: () => boolean) => () => void;
+  subscribeRows: (listener: ChangedRowsListener) => () => void;
 }
+
+export type ChangedRowsListener = (rows: SharedProjectionChanges, change: SessionChange) => void;
+
+export const WHOLE_PROJECTION: SharedProjectionChanges = Object.freeze({
+  whole: true,
+  added: Object.freeze([]),
+  removed: Object.freeze([]),
+  moved: Object.freeze([]),
+  changed: Object.freeze([]),
+  fields: Object.freeze([])
+});
 
 export const NOT_SHARED = "not shared";
 
@@ -45,6 +61,7 @@ export const REENTERED = "reentered";
 interface ProjectionStep {
   readonly document: ValidatedDocument;
   readonly changes: ChangeSet;
+  readonly rows: SharedProjectionChanges;
 }
 
 interface Landed {
@@ -76,7 +93,9 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   const scheduler = createEffectScheduler(ports.effects, ports.timers, ports.timing);
   const listeners: SessionListener[] = [];
   const admissions: (() => boolean)[] = [];
+  const rowListeners: ChangedRowsListener[] = [];
   let admitting = false;
+  let missed = false;
   let document: ValidatedDocument | null = null;
   let revision = 0;
   let epoch = ports.after ? ports.after.epoch : 0;
@@ -86,39 +105,53 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   let running: Running | null = null;
   let entered = false;
 
-  // why: The whole document is projected and compared per transaction until the incremental projector replaces this step.
+  // why: The entry rewrites what it is given, so the change set is compared between held documents; the replica's
+  // report names rows by the projection's own ids and covers one publication, so a missed one makes it whole.
   function projectionStep(previous: ValidatedDocument | null): ProjectionStep {
     const next = ports.entry(ports.replica.project());
-    return { document: next, changes: previous ? changesBetween(previous, next) : WHOLE_DOCUMENT };
+    const rows = previous && !missed ? ports.replica.changes() : WHOLE_PROJECTION;
+    return { document: next, changes: previous ? changesBetween(previous, next) : WHOLE_DOCUMENT, rows: rows };
   }
 
-  function deliver(kind: TransactionKind, changes: ChangeSet, mine: Running | null): Landed {
-    const errors: unknown[] = [];
+  function deliver(kind: TransactionKind, changes: ChangeSet, rows: SharedProjectionChanges, mine: Running | null, failure: ReplicaFailure | undefined): Landed {
+    const errors: unknown[] = failure ? [failure.error] : [];
+    const told = listeners.slice(), toldRows = rowListeners.slice();
     const change: SessionChange = Object.freeze({ kind: kind, epoch: epoch, generation: generation, changes: changes });
     // why: assumed rule 29 on #1414: undoing a recovery entry would throw the kept typing away.
     const recorded = mine?.plan.shared?.undo !== false;
     if (kind === "edit") attempt(errors, function () { if (recorded) ports.undo.record(changes, mine?.plan.selection); });
     if (kind === "edit" || kind === "replay") scheduler.pass(change).forEach(function (error) { errors.push(error); });
-    listeners.slice().forEach(function (listener) {
+    told.forEach(function (listener) {
       attempt(errors, function () { listener(change); });
+    });
+    toldRows.forEach(function (listener) {
+      attempt(errors, function () { listener(rows, change); });
     });
     errors.forEach(function (error) { ports.report(error); });
     return { change: change, errors: errors };
   }
 
-  function receive(origin: ReplicaOrigin | null): void {
+  function receive(origin: ReplicaOrigin | null, failure?: ReplicaFailure): void {
     if (disposed) return;
+    // why: A failed publication is retried at once below; its rows are reported whole rather than trusting the retry.
+    if (failure) missed = true;
     const at = ports.replica.revision();
-    if (at === revision) return;
+    if (at === revision) {
+      if (failure) ports.report(failure.error);
+      return;
+    }
     const mine = origin === "local-command" && running && !running.landed && !running.lost ? running : null;
     let step: ProjectionStep;
     try {
       step = projectionStep(document);
     } catch (error) {
       if (mine) mine.lost = { error: error };
+      missed = true;
+      if (failure) ports.report(failure.error);
       ports.report(error);
       return;
     }
+    missed = false;
     // why: An unrecognised origin still changed the document; remote is the kind that records and saves nothing.
     const kind = document === null ? "adopt" : known(origin) ? ORIGIN_KINDS[origin] : "remote";
     if (!known(origin)) ports.report(new Error(UNRECOGNISED_ORIGIN + ": " + String(origin)));
@@ -132,7 +165,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     const outer = delivering;
     delivering = true;
     try {
-      const landed = deliver(kind, changes, mine);
+      const landed = deliver(kind, changes, kind === "adopt" ? WHOLE_PROJECTION : step.rows, mine, failure);
       if (mine) mine.landed = landed;
     } finally {
       delivering = outer;
@@ -225,12 +258,21 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
         if (at !== -1) listeners.splice(at, 1);
       };
     },
+    subscribeRows: function (listener) {
+      if (disposed) return function () {};
+      rowListeners.push(listener);
+      return function () {
+        const at = rowListeners.indexOf(listener);
+        if (at !== -1) rowListeners.splice(at, 1);
+      };
+    },
     dispose: function () {
       if (disposed) return;
       disposed = true;
       stop();
       scheduler.dispose();
       listeners.length = 0;
+      rowListeners.length = 0;
       admissions.length = 0;
       document = null;
     }
