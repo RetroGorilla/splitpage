@@ -17,8 +17,10 @@ import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { holdMergeBase, mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 startRecovery({
+  capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
   desktop: () => null,
   sessionStorage: () => sessionStorage, localStorage: () => localStorage, internImage: internDataUrl
 });

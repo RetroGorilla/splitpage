@@ -423,7 +423,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
         sticky: true
       }
     });
-    if (merged && merged.replaced) return keptForNextLaunch();
+    if (merged && (merged.replaced || merged.reason !== undefined)) return keptForNextLaunch();
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
     return "merged";
   }

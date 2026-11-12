@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createConflictStash } from "../../src/application/recovery/conflict-stash.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 import type { KeyValueStorage, StashedWork } from "../../src/application/recovery/conflict-stash.ts";
 
 const SHA = "a".repeat(64);
@@ -22,7 +23,7 @@ function failingStorage(): KeyValueStorage {
 }
 
 function stashWith(storage: KeyValueStorage | null, interned: string[] = []) {
-  return createConflictStash({ storage: () => storage, internImage: (dataUrl: string) => { interned.push(dataUrl); } });
+  return createConflictStash({ capability: MAY_EDIT, storage: () => storage, internImage: (dataUrl: string) => { interned.push(dataUrl); } });
 }
 
 test("a saved stash reads back as written, under the conflict-stash key in session storage, until it is cleared", () => {
@@ -53,7 +54,7 @@ test("a stash that is not JSON, or storage that is missing or throws, reads as n
     assert.doesNotThrow(() => stash.clear());
     assert.doesNotThrow(() => stash.dropReloadGuard());
   }
-  const throwing = createConflictStash({ storage: () => { throw new Error("no access"); }, internImage: () => {} });
+  const throwing = createConflictStash({ capability: MAY_EDIT, storage: () => { throw new Error("no access"); }, internImage: () => {} });
   assert.equal(throwing.save({}), false, "a storage getter that throws is a failed write");
   assert.equal(throwing.read(), null);
 });

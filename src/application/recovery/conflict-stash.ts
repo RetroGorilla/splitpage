@@ -1,5 +1,6 @@
 import { isSha256Hex } from "../../../shared/blob-policy.ts";
 import { byId } from "../../core/merge/rows.ts";
+import type { CapabilityPort } from "../session/ports.ts";
 
 const STASH_KEY = "splitpage-conflict-stash";
 const RELOAD_GUARD_KEY = "splitpage-conflict-reloaded";
@@ -12,6 +13,7 @@ export interface KeyValueStorage {
 }
 
 export interface ConflictStashPorts {
+  readonly capability: Pick<CapabilityPort, "stash">;
   readonly storage: () => KeyValueStorage | null | undefined;
   readonly internImage: (dataUrl: string) => void;
 }
@@ -44,6 +46,10 @@ function rowsOf(doc: unknown): unknown[] | null {
 }
 
 export function createConflictStash(ports: ConflictStashPorts): ConflictStash {
+  function refused(): boolean {
+    return !ports.capability.stash().allowed;
+  }
+
   function storage(): KeyValueStorage {
     const found = ports.storage();
     if (!found) throw new Error("no session storage");
@@ -77,21 +83,25 @@ export function createConflictStash(ports: ConflictStashPorts): ConflictStash {
 
   return Object.freeze({
     save: function (payload: StashedWork): boolean {
+      if (refused()) return false;
       try {
         storage().setItem(STASH_KEY, JSON.stringify(payload));
         return true;
       } catch (e) { return false; }
     },
     read: function (): StashedWork | null {
+      if (refused()) return null;
       try {
         const raw = storage().getItem(STASH_KEY);
         return raw ? JSON.parse(raw) as StashedWork : null;
       } catch (e) { return null; }
     },
     clear: function (): void {
+      if (refused()) return;
       try { storage().removeItem(STASH_KEY); } catch (e) {}
     },
     accept: function <T>(stash: T, theirs: unknown): T {
+      if (refused()) return stash;
       if (!stash || typeof stash !== "object") return stash;
       const work = stash as StashedWork;
       internBlobs(work.blobs);
@@ -99,6 +109,7 @@ export function createConflictStash(ports: ConflictStashPorts): ConflictStash {
       return stash;
     },
     dropReloadGuard: function (): void {
+      if (refused()) return;
       try { storage().removeItem(RELOAD_GUARD_KEY); } catch (e) {}
     }
   });
