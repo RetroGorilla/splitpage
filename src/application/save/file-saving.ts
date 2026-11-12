@@ -15,6 +15,7 @@ import type { NoticeKind } from "../effects/ports.ts";
 import type { DeliverOptions } from "../files/file-delivery.ts";
 import type { Home, HomeFields } from "../location/document-location.ts";
 import type { DocumentView } from "../session/document-session.ts";
+import type { Capability } from "../session/ports.ts";
 import type { Operations } from "../session/operation.ts";
 import type { AutoSaveChange } from "./autosave.ts";
 import type { DestinationKey, SaveJob, SaveLanding, WriterResult } from "./coordinator.ts";
@@ -70,6 +71,12 @@ function haltAutoSave(reason: string): void { return mountedPorts().saves.halt(r
 function resumeAutoSave(): void { return mountedPorts().saves.resume(); }
 function saveChanges(): number { return mountedPorts().saves.changes(); }
 function showToast(message: string, kind?: NoticeKind, sticky?: boolean): unknown { return mountedPorts().notices.show(message, kind, sticky); }
+function currentSavePermitted(): boolean {
+  const can = mountedPorts().capability.saveDestinations();
+  if (can.allowed) return true;
+  showToast(can.reason, "warn");
+  return false;
+}
 function warnImagesLeftOut(count: number, name: string): void { return mountedPorts().notices.imagesLeftOut(count, name); }
 function getEditorName(): string { return mountedPorts().preferences.editorName(); }
 function preferences(): FileSavingPorts["preferences"] { return mountedPorts().preferences; }
@@ -92,6 +99,10 @@ function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, pub
 }
 
 async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<FileSaveRequest>): Promise<WriterResult> {
+  const can = mountedPorts().capability.saveDestinations();
+  if (!can.allowed) return { kind: "refused", reason: can.reason };
+  const canAuto = opts?.auto ? mountedPorts().capability.autosave() : null;
+  if (canAuto && !canAuto.allowed) return { kind: "refused", reason: canAuto.reason };
   opts = opts || {};
   let saveAs = !!opts.saveAs;
   const auto = !!opts.auto;
@@ -103,15 +114,16 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
   }
 
-  if (!saveAs || !job.owns()) return writeCaptured(opts, job, saveAs, auto, null);
+  if (!saveAs || !job.owns()) return writeCaptured(opts, job, saveAs, auto, null, can, canAuto);
   const bundles = mountedPorts().bundles.beginSave();
   try {
     // why: no copy into the old folder may still be running once the bytes that carry the folder along are captured
     if (bundles.drained && !(await bundles.drained)) return CANCELLED;
+    if (!currentSavePermitted()) return CANCELLED;
     // why: the save clears undo history at its commit, so an undo before then would land in a history about to go
     const release = mountedPorts().history.hold();
     try {
-      return await writeCaptured(opts, job, saveAs, auto, bundles);
+      return await writeCaptured(opts, job, saveAs, auto, bundles, can, canAuto);
     } finally {
       release();
     }
@@ -120,7 +132,9 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   }
 }
 
-async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, saveAs: boolean, auto: boolean, bundles: BundleSaveWindow | null): Promise<WriterResult> {
+async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, saveAs: boolean, auto: boolean, bundles: BundleSaveWindow | null, can: Capability, canAuto: Capability | null): Promise<WriterResult> {
+  if (!can.allowed) return { kind: "refused", reason: can.reason };
+  if (canAuto && !canAuto.allowed) return { kind: "refused", reason: canAuto.reason };
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
@@ -148,7 +162,7 @@ async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, 
     job.moved();
   }
   function undoRetarget(): void {
-    if (retarget && !wrote && currentHome() === retarget) {
+    if (retarget && !wrote && currentHome() === retarget && currentSavePermitted()) {
       documentLocation().restoreHome(prevHome as Home);
     }
     retarget = null;
@@ -212,7 +226,7 @@ async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, 
         const landedHome = fileHome() && (fileHome() as Home).handle === handle ? currentHome() : null;
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
       }, naming, links.length ? links : null, saveAs && retarget !== null));
-      if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
+      if (pickedFor && currentHome() === pickedFor && currentSavePermitted()) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
       written = SAVED;
@@ -302,6 +316,7 @@ export function obsoleteSaveText(title: string | null | undefined): string {
 
 function savePorts(ownership: Operations): FileSavePorts {
   return {
+    capability: mountedPorts().capability,
     destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,

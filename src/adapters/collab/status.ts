@@ -106,10 +106,12 @@ function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["t
 }
 
 export function readSharedStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string {
-  return withSharedSnapshot(handle, copy => {
-    const view = createSharedPreparation(copy as unknown as SharedDocumentHandle).view;
-    return resolveStatus(view, readStatusOwner(view, target));
-  });
+  return withSharedSnapshot(handle, copy => readNativeSharedStatus(copy as unknown as SharedDocumentHandle, target));
+}
+
+export function readNativeSharedStatus(handle: SharedDocumentHandle, target: SharedStatusEvent["target"]): string {
+  const view = createSharedPreparation(handle).view;
+  return resolveStatus(view, readStatusOwner(view, target));
 }
 
 function readStatusOwner(view: SharedPreparationView, target: SharedStatusEvent["target"]): SharedStatusEvent["target"] {

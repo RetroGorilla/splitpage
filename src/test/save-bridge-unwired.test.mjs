@@ -1,6 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 const bridge = await import("../bootstrap/wiring/save-owners.ts");
 
@@ -15,6 +16,7 @@ function probe(log, target = "file") {
 
 function ports(log) {
   return {
+    capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
     destination: () => "here",
     keyOf: (identity) => ({ owner: identity, name: "" }),
     obsolete: () => log.push("obsolete"),

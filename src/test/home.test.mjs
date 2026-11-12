@@ -4,8 +4,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { setHome } from "../bootstrap/wiring/location-owner.ts";
 import "./_location-started.mjs";
+import { startTestSession, unwiredSessionDeps } from "./_session.mjs";
 
-test("autoSaveTarget answers file or null off the home", async () => {
+test("autoSaveTarget answers file or null off the home", async (t) => {
+  t.after(startTestSession(unwiredSessionDeps().deps));
   await import("./_dom.mjs");
   const { autoSaveTarget, saveDestinations, startSaves } = await import("../bootstrap/wiring/save-owners.ts");
   const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");

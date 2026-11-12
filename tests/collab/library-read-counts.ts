@@ -5,7 +5,7 @@ import { collabState } from "../../src/adapters/collab/state.ts";
 interface LibraryReadTotals { texts: number; markEntries: number; records: number; statusEntries: number; orderEntries: number }
 type NativeMethod = (this: object, ...args: unknown[]) => unknown;
 
-export function measureLibraryReads<T>(handle: SharedDocumentHandle, beat: string, read: () => T) {
+export function measureLibraryReads<T>(handle: SharedDocumentHandle, beat: string, read: () => T, related: readonly Y.Doc[] = []) {
   const roots = collabState(handle).roots, own = new Set<object>();
   const collections = ["beats", "headings", "visuals", "gallery", "comments", "replies", "people", "tags", "shots"];
   const originalGet = Y.Map.prototype.get;
@@ -17,6 +17,15 @@ export function measureLibraryReads<T>(handle: SharedDocumentHandle, beat: strin
   add(roots.beats.get(beat)); add(roots.segments.get("b:" + beat));
   for (const name of ["visuals", "gallery"] as const) for (const value of roots[name].values()) {
     if (value instanceof Y.Map && value.get("beat") === beat) add(value);
+  }
+  for (const doc of related) {
+    for (const [name, key] of [["beats", beat], ["segments", "b:" + beat]] as const) {
+      const root = doc.share.get(name); if (root instanceof Y.Map) add(root.get(key));
+    }
+    for (const name of ["visuals", "gallery"]) {
+      const root = doc.share.get(name);
+      if (root instanceof Y.Map) for (const value of root.values()) if (value instanceof Y.Map && value.get("beat") === beat) add(value);
+    }
   }
   const totals: LibraryReadTotals = { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 };
   const unrelated: LibraryReadTotals = { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 };

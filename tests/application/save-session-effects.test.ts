@@ -10,6 +10,7 @@ import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { rawScript } from "./session-fakes.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 interface Given {
   home?: Home;
@@ -25,6 +26,7 @@ function fakes(given: Given = {}) {
     color: given.color ?? ""
   };
   const ports: SessionEffectPorts = {
+    capability: MAY_EDIT,
     saves: { dueNow: () => { log.push(["dueNow"]); } },
     changes: {
       noteChange: () => { log.push(["noteChange"]); },

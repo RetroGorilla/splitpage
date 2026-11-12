@@ -134,6 +134,7 @@ function world(): World {
   });
   let minted = 0;
   const ports: FileSavingPorts = {
+    capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
     edits: { edit: () => { throw new Error("unexpected title change"); } },
     history: {
       amendRows: () => { throw new Error("unexpected link change"); },

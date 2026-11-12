@@ -36,12 +36,14 @@ import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 startTestSession(appSessionDeps());
 mountTagPanelsFeature();
 
 freezeClockAndRandom(0x70726f64);
 startSaves({
+  capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
   destination: () => null,
   keyOf: () => ({ owner: null, name: "none" }),
   obsolete: () => {},

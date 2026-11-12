@@ -12,6 +12,7 @@ import { readSharedRemovalCommand } from "../../../src/adapters/collab/removal-r
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
+import { createSharedIncrementalProjector } from "../../../src/adapters/collab/incremental-project.ts";
 
 const BEAT = "structure_1_007200310037_beat_0", VISUAL = "structure_1_007200310037_visual_0";
 const REMOVE = "structure_1_007200310037005f00720065006d006f00760065_removal_0";
@@ -22,8 +23,7 @@ const recoveryList = [
     boundaries: ["draft_17"], components: [VISUAL], gallery: [], comments: [], at: 2 }
 ].map(operation);
 
-function read(handle: SharedDocumentHandle) {
-  const value = projectSharedDocumentWithRecovery(handle);
+function read(handle: SharedDocumentHandle, value = projectSharedDocumentWithRecovery(handle)) {
   for (const row of value.document.rows) {
     assert.equal(Object.hasOwn(row, "bufferSourceOwner"), false); assert.equal(Object.hasOwn(row, "bufferPaintedBase"), false);
   }
@@ -38,6 +38,8 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
   test(`rule 29 literal: create and remove a staged alias in one command: ${copies}/${order}`, () => {
     const run = replicas(copies, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] });
     const handles = [run.a, run.b, run.c].slice(0, copies), runtime = createFlowLoadRuntime();
+    const projectors = handles.map(handle => createSharedIncrementalProjector(handle));
+    const compare = () => handles.forEach((handle, index) => { const projector = projectors[index]; assert.ok(projector); assert.deepEqual(read(handle, projector.read()), read(handle)); });
     const undo = handles.map(() => createSharedUndo({ now: () => 0, supports: () => false, reverse: () => { throw new Error("Recovery must not create an undo entry"); } }));
     try {
       registerSharedSplitHandlers(run.a, runtime); registerSharedRemovalHandlers(run.a);
@@ -51,6 +53,7 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
       agree("buffer recovery literal", order, handles, read, { rows: [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }], recovery: [{
         id: BEAT, text: "aZd", members: [BEAT], buffer: [{ beat: BEAT, metadata: { bufferSourceOwner: "R1", bufferPaintedBase: 7 } }]
       }] });
+      compare();
       for (const owner of undo) assert.deepEqual(owner.sizes(), { undo: 0, redo: 0, dropped: 0 });
       const record = readSharedRemovalCommand(REMOVE, collabState(run.a).roots.removalRecords.get(REMOVE));
       assert.ok(record?.kind === "remove"); assert.deepEqual(record.boundaries, [BEAT]); assert.deepEqual(record.components, [VISUAL]);
@@ -59,10 +62,11 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
       assert.deepEqual(executeSharedOperations(run.a, [operation({ kind: "restore", id: "back", by: "Alice", removals: [REMOVE] })], { base: readSharedRevision(run.a) }), { ok: true });
       run.queue.flush(order);
       agree("restored recovery has no exported bookkeeping", order, handles, read, { rows: [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }, { id: BEAT, text: "aZd" }], recovery: [] });
+      compare();
       const loaded = runtime.load(projectSharedDocumentWithRecovery(run.a).document);
       assert.equal(loaded.rows.at(-1)?.id, BEAT); assert.equal(loaded.rows.at(-1)?.audioText, "aZd");
       assert.equal(Object.hasOwn(loaded.rows.at(-1) ?? {}, "bufferSourceOwner"), false);
-    } finally { run.close(); }
+    } finally { for (const projector of projectors) projector.dispose(); run.close(); }
   });
 
 for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)

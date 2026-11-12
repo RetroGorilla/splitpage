@@ -19,11 +19,13 @@ import { clock, ids } from "./ports/identity.ts";
 import { pictures } from "./ports/pictures.ts";
 import { beginBundleSave } from "./gallery.ts";
 import { undoOwner } from "./undo.ts";
+import { capabilities } from "./ports/capabilities.ts";
 
 let started: FileSavingMount | null = null;
 
 function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
   return {
+    capability: capabilities,
     deferred,
     edits: { edit: runDocumentEdit },
     history: {

@@ -7,8 +7,10 @@ import { mountFileSavingFeature, stopFileSavingFeature, updateAutoSaveMenu, wire
 import { autoSaveTarget, saveDestinations, setAutoSaveEnabled, startSaves } from "../../src/bootstrap/wiring/save-owners.ts";
 import { setHome } from "../../src/bootstrap/wiring/location-owner.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
+import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 
-test("the file saving wiring fills the owner's ports from the live bridges and keeps the autosave menu in step", () => {
+test("the file saving wiring fills the owner's ports from the live bridges and keeps the autosave menu in step", (t) => {
+  t.after(startTestSession(unwiredSessionDeps().deps));
   document.body.innerHTML = '<button id="menu-autosave"></button>';
   const item = document.getElementById("menu-autosave") as HTMLElement;
   updateAutoSaveMenu();

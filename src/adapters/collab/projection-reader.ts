@@ -72,21 +72,25 @@ export function readProjectionBlocks(order: Y.Array<string>, segments: Y.Map<unk
   for (const key of new Set([...ordered, ...[...segments.keys()].sort()])) {
     if (typeof key !== "string" || !isStableSharedIdentity(key)) continue;
     const segment: unknown = segments.get(key); if (!(segment instanceof Y.Map)) continue;
-    const all = readUnits?.(segment) ?? [], parts: SharedProjectionStream["parts"][number][] = []; let cursor = 0, offset = 0;
-    const text: unknown = segment.get("text");
-    for (const delta of text instanceof Y.Text ? text.toDelta() as { insert: unknown }[] : []) {
-      const boundary = readProjectionHead(delta.insert), value = boundary ? null : readProjectionInlineValue(delta.insert);
-      const size = typeof value === "string" ? value.length : value ? 1 : 0, length = typeof delta.insert === "string" ? delta.insert.length : 1;
-      parts.push({ boundary, units: all.slice(cursor, cursor + size), from: offset, to: offset + length });
-      cursor += size; offset += length;
-    }
-    streams.push({ segment: key, inOrder: ordered.has(key), head: readProjectionHead(segment.get("head")), parts });
+    streams.push(readProjectionStream(key, segment, ordered.has(key), readUnits?.(segment) ?? []));
   }
   const records = [...beats.keys()].sort().map(id => {
     const fields = readProjectionFields(beats.get(id), "beat");
     return { id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null };
   });
   return projectSharedBlocks(streams, records);
+}
+
+export function readProjectionStream(key: string, segment: Y.Map<unknown>, inOrder: boolean, all: readonly SharedProjectionUnit[]): SharedProjectionStream {
+  const parts: SharedProjectionStream["parts"][number][] = []; let cursor = 0, offset = 0;
+  const text: unknown = segment.get("text");
+  for (const delta of text instanceof Y.Text ? text.toDelta() as { insert: unknown }[] : []) {
+    const boundary = readProjectionHead(delta.insert), value = boundary ? null : readProjectionInlineValue(delta.insert);
+    const size = typeof value === "string" ? value.length : value ? 1 : 0, length = typeof delta.insert === "string" ? delta.insert.length : 1;
+    parts.push({ boundary, units: all.slice(cursor, cursor + size), from: offset, to: offset + length });
+    cursor += size; offset += length;
+  }
+  return { segment: key, inOrder, head: readProjectionHead(segment.get("head")), parts };
 }
 
 export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>, glueRegisters: Y.Map<unknown>): SharedProjectionBeatStructure {

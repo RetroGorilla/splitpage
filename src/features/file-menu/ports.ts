@@ -6,6 +6,7 @@ import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { SaveConfirmation, SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { DocumentDestination, HistoryPort } from "../../application/transitions/ports.ts";
@@ -135,6 +136,8 @@ export interface FileMenuDropdownPorts {
 }
 
 export interface FileMenuActionPorts {
+  readonly capability: Pick<CapabilityPort, "saveDestinations">;
+  readonly notices: Pick<NoticePort, "show">;
   readonly createBundle: () => Promise<void>;
   readonly canCreateBundle: () => boolean;
   readonly screen: () => ScreenState;
@@ -146,6 +149,8 @@ export interface FileMenuActionPorts {
 }
 
 export interface AutosaveActionPorts {
+  readonly capability: Pick<CapabilityPort, "autosave">;
+  readonly notices: Pick<NoticePort, "show">;
   readonly screen: () => ScreenState;
   readonly autosave: { readonly on: () => boolean; readonly toggle: () => void };
 }

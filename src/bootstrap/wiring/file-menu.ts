@@ -10,6 +10,7 @@ import { autoSavePolicy, saveDoc, savesStarted, toggleAutoSave } from "./save-ow
 import { documentReader } from "./ports/document.ts";
 import { recents } from "./ports/desktop.ts";
 import { notices } from "./ports/effects.ts";
+import { capabilities } from "./ports/capabilities.ts";
 import { ids } from "./ports/identity.ts";
 import { place } from "./ports/location.ts";
 import { panelControl } from "./ports/panels.ts";
@@ -55,6 +56,8 @@ export const stopFileMenuDropdownFeature = fileMenu.stop;
 
 export function fileMenuActions(): ActionDefinition[] {
   return definitions(fileMenu.owner, {
+    capability: capabilities,
+    notices,
     createBundle,
     canCreateBundle: () => presence.running() && currentHome().kind === "file" && !!currentHome().handle,
     screen,
@@ -68,6 +71,8 @@ export function fileMenuActions(): ActionDefinition[] {
 
 export function autosaveActions(): ActionDefinition[] {
   return autosaveDefinitions({
+    capability: capabilities,
+    notices,
     screen,
     autosave: { on: () => savesStarted() && autoSavePolicy().enabled(), toggle: () => { toggleAutoSave(); } }
   });

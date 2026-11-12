@@ -1,0 +1,4 @@
+{"mutants":[
+  {"label":"save planned despite a refused capability","file":"src/bootstrap/wiring/save-owners.ts","find":"export function requestSave(request: LegacySaveRequest): Promise<SaveOutcome> {\n  const now = live();\n  const can = now.capability.saveDestinations();\n  if (!can.allowed) return Promise.resolve({ kind: \"refused\", reason: can.reason });","replace":"export function requestSave(request: LegacySaveRequest): Promise<SaveOutcome> {\n  const now = live();","tests":["tests/application/save/shared-detach.test.ts"]},
+  {"label":"autosave scheduled in a shared session","file":"src/application/save/autosave.ts","find":"    schedule: function (target: AutoSaveTarget) {\n      const can = ports.capability.autosave();\n      if (!can.allowed) return can;\n      if (stopped || !may(target)) return;","replace":"    schedule: function (target: AutoSaveTarget) {\n      if (stopped) return;","tests":["tests/application/save/shared-detach.test.ts"]}
+]}

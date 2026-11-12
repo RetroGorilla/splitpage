@@ -24,10 +24,16 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "store keep write disk",
-      availability: () => current() ? firstRefusal(
-        availableUnless(["loading", "dialog", "launcher"], ports.screen()),
-        ports.saves.busy() ? { enabled: false, reason: "" } : { enabled: true }) : UNMOUNTED,
+      availability: () => {
+        const can = ports.capability.saveDestinations();
+        if (!can.allowed) return { enabled: false, reason: can.reason };
+        return current() ? firstRefusal(
+          availableUnless(["loading", "dialog", "launcher"], ports.screen()),
+          ports.saves.busy() ? { enabled: false, reason: "" } : { enabled: true }) : UNMOUNTED;
+      },
       run: () => {
+        const can = ports.capability.saveDestinations();
+        if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
         const owner = current();
         if (!owner) return;
         closeFileMenu(owner);
@@ -43,8 +49,14 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "save as duplicate copy another file",
-      availability: () => current() ? availableUnless(["loading", "dialog", "launcher"], ports.screen()) : UNMOUNTED,
+      availability: () => {
+        const can = ports.capability.saveDestinations();
+        if (!can.allowed) return { enabled: false, reason: can.reason };
+        return current() ? availableUnless(["loading", "dialog", "launcher"], ports.screen()) : UNMOUNTED;
+      },
       run: () => {
+        const can = ports.capability.saveDestinations();
+        if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
         const owner = current();
         if (!owner) return;
         closeFileMenu(owner);
@@ -165,8 +177,16 @@ export function autosaveActions(ports: AutosaveActionPorts): ActionDefinition[] 
       group: "File",
       icon: "i-autosave",
       words: "automatic save saving",
-      availability: () => ({ ...firstRefusal(availableUnless(["loading"], ports.screen()), { enabled: true }), checked: ports.autosave.on() }),
-      run: () => { ports.autosave.toggle(); }
+      availability: () => {
+        const can = ports.capability.autosave();
+        if (!can.allowed) return { enabled: false, reason: can.reason, checked: false };
+        return { ...firstRefusal(availableUnless(["loading"], ports.screen()), { enabled: true }), checked: ports.autosave.on() };
+      },
+      run: () => {
+        const can = ports.capability.autosave();
+        if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
+        ports.autosave.toggle();
+      }
     }
   ];
 }
