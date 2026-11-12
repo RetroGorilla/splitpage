@@ -40,12 +40,17 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
         return { id, characters: native.toString().split("").map((value, offset) => { const identity = Y.createRelativePositionFromTypeIndex(native, offset).item; assert.ok(identity);
           return { identity: { client: identity.client, clock: identity.clock }, notation: book.notation(identity), value, marks: {}, beat: id }; }) };
       };
-      const resolved = resolveSharedAnchor(handle, anchor); assert.notEqual(resolved, "gone");
+      const resolved = resolveSharedAnchor(handle, anchor); assert.ok(resolved !== "gone");
+      const storedOrder = roots.order.toArray(), source = (roots.segments.get(resolved.segment) as Y.Map<unknown>).get("head") as { b: string };
+      const visible = new Set(projected.document.rows.map(row => row.id));
+      const next = storedOrder.slice(storedOrder.indexOf(resolved.segment) + 1).map(segment => ((roots.segments.get(segment) as Y.Map<unknown>).get("head") as { b: string }).b).find(id => visible.has(id));
+      const caret = visible.has(source.b) ? { beat: source.b, offset: resolved.offset } : { beat: next, offset: 0 }; assert.ok(typeof caret.beat === "string");
       const removal = readSharedRemovalCommand("structure_1_0061_removal_0", roots.removalRecords.get("structure_1_0061_removal_0")); assert.ok(removal?.kind === "remove");
       const observed = new Set(removal.observed.flatMap(value => value.identities.map(id => id.client + ":" + id.clock)));
       const model: CollabModel = { rows: projected.document.rows.map(value => row(value.id)),
-        carets: { A: restored ? { beat: "R2", offset: resolved === "gone" ? -1 : resolved.offset } : { beat: "R3", offset: 0 } },
-        recovery: projected.recovery.map(entry => { assert.equal(entry.kind, "removed-beat"); const recovered = row("R2"); return { row: recovered, by: removal.by,
+        carets: { A: { beat: caret.beat, offset: caret.offset } },
+        recovery: projected.recovery.map(entry => { assert.ok(entry.kind === "removed-beat"); const recovered = row(String(entry.row.id));
+          assert.equal(entry.row.audioText, recovered.characters.map(char => char.value).join("")); return { row: recovered, by: removal.by,
           edited: recovered.characters.filter(char => char.identity && !observed.has(char.identity.client + ":" + char.identity.clock)).map(char => char.notation) }; }) };
       checkModel(model, restored ? restorationOracle : removedOracle, book, order); return model;
     };

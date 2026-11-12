@@ -29,5 +29,11 @@
     "find": "const path = [\"beats\", beat, \"removals\"];",
     "replace": "view.keys([\"gallery\"]); const path = [\"beats\", beat, \"removals\"];",
     "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "staged gallery membership omits later records",
+    "file": "src/adapters/collab/structure-gallery.ts",
+    "find": "sharedCreatedAttachments(view).push({ collection: \"gallery\", beat, html: null, record });",
+    "replace": "if (index === 0) sharedCreatedAttachments(view).push({ collection: \"gallery\", beat, html: null, record });",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
   }]
 }
