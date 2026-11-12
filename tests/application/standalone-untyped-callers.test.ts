@@ -27,3 +27,38 @@ test("the untyped inventory follows imported and returned aliases and computed m
     "src/test/session-caller-probe.mjs": ["absorbDisk", "adopt", "noteEdit", "settle", "stamp"]
   });
 });
+
+for (const [name, source] of [
+  ["computed literal binding names", 'const { ["noteEdit"]: edit } = liveSession();'],
+  ["destructuring assignment", 'let edit; ({ noteEdit: edit } = liveSession());'],
+  ["nested binding patterns", 'const { session: { noteEdit: edit } } = { session: liveSession() };']
+]) {
+  test("the untyped inventory detects " + name, () => {
+    assert.deepEqual(untypedStandaloneAccesses(`
+      import { liveSession } from "../bootstrap/wiring/session-owner.ts";
+      ${source}
+    `), { "src/test/session-caller-probe.mjs": ["noteEdit"] });
+  });
+}
+
+test("a rest binding called held is not a read of the standalone held member", () => {
+  assert.deepEqual(untypedStandaloneAccesses(`
+    import { liveSession } from "../bootstrap/wiring/session-owner.ts";
+    const { ...held } = liveSession();
+    held.generation();
+  `), {});
+});
+
+const UNSEEN_COMPUTED_KEYS = [
+  { name: "a non-literal key held in a variable", source: 'const key = "noteEdit"; liveSession()[key]();' },
+  { name: "a non-literal key built by concatenation", source: 'liveSession()["note" + "Edit"]();' }
+];
+
+for (const limit of UNSEEN_COMPUTED_KEYS) {
+  test("declared scan limit: " + limit.name, () => {
+    assert.deepEqual(untypedStandaloneAccesses(`
+      import { liveSession } from "../bootstrap/wiring/session-owner.ts";
+      ${limit.source}
+    `), {});
+  });
+}

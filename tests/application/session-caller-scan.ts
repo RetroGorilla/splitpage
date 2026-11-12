@@ -122,6 +122,39 @@ export function untypedStandaloneAccesses(probe?: string): Record<string, string
   if (!common || !standalone) throw new Error("Session interfaces were not loaded");
   const commonType = checker.getTypeAtLocation(common);
   const members = new Set(checker.getPropertiesOfType(checker.getTypeAtLocation(standalone)).map((member) => member.name));
+  function literalName(node: ts.Node): string | null {
+    if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isComputedPropertyName(node) && ts.isStringLiteralLike(node.expression)) return node.expression.text;
+    return null;
+  }
+  function nestedType(from: ts.Type, name: string, at: ts.Node): ts.Type | null {
+    const property = checker.getPropertyOfType(from, name);
+    return property ? checker.getTypeOfSymbolAtLocation(property, at) : null;
+  }
+  function binding(pattern: ts.ObjectBindingPattern, from: ts.Type, accesses: string[]): void {
+    for (const element of pattern.elements) {
+      if (element.dotDotDotToken) continue;
+      const name = literalName(element.propertyName ?? element.name);
+      if (name === null) continue;
+      if (from === commonType && members.has(name)) accesses.push(name);
+      if (ts.isObjectBindingPattern(element.name)) {
+        const type = nestedType(from, name, element);
+        if (type) binding(element.name, type, accesses);
+      }
+    }
+  }
+  function assignment(pattern: ts.ObjectLiteralExpression, from: ts.Type, accesses: string[]): void {
+    for (const property of pattern.properties) {
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) continue;
+      const name = literalName(property.name);
+      if (name === null) continue;
+      if (from === commonType && members.has(name)) accesses.push(name);
+      if (ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer)) {
+        const type = nestedType(from, name, property);
+        if (type) assignment(property.initializer, type, accesses);
+      }
+    }
+  }
   const found: Record<string, string[]> = {};
   for (const path of roots) {
     if (probe !== undefined && path !== probePath) continue;
@@ -134,12 +167,12 @@ export function untypedStandaloneAccesses(probe?: string): Record<string, string
           : ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
         if (key && members.has(key) && checker.getTypeAtLocation(node.expression) === commonType) accesses.push(key);
       }
-      if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer &&
-          checker.getTypeAtLocation(node.initializer) === commonType) {
-        for (const element of node.name.elements) {
-          const key = element.propertyName ?? element.name;
-          if ((ts.isIdentifier(key) || ts.isStringLiteral(key)) && members.has(key.text)) accesses.push(key.text);
-        }
+      if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer) {
+        binding(node.name, checker.getTypeAtLocation(node.initializer), accesses);
+      }
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isObjectLiteralExpression(node.left)) {
+        assignment(node.left, checker.getTypeAtLocation(node.right), accesses);
       }
       ts.forEachChild(node, visit);
     };
