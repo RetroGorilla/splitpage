@@ -1,7 +1,7 @@
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { DocumentReader } from "../../../application/session/document-reader.ts";
 import type { CommonDocumentSession, StandaloneDocumentSession } from "../../../application/session/document-session.ts";
-import { cancelRefresh, currentDocument, documentNumbering, liveSession, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../session-owner.ts";
+import { cancelRefresh, currentDocument, documentNumbering, liveSession, noteSessionEdit, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../session-owner.ts";
 
 export const documentReader: DocumentReader<ValidatedDocument> = {
   numbering: documentNumbering,
@@ -17,3 +17,5 @@ export const refresh: { readonly request: CommonDocumentSession["refresh"]; read
 export const documentLifetime: Pick<CommonDocumentSession, "epoch"> = { epoch: () => liveSession().epoch() };
 
 export const stamping: Pick<StandaloneDocumentSession, "stamp"> = { stamp: stampDocument };
+
+export const legacyEdit: Pick<StandaloneDocumentSession, "noteEdit"> = { noteEdit: noteSessionEdit };

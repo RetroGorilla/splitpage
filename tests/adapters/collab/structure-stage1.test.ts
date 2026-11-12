@@ -36,7 +36,8 @@ for (const order of ["D1", "dup", "rev", "late-C"] as const) test(`Stage 1 T05 t
       let offset = 0;
       for (const delta of text.toDelta() as { insert: unknown }[]) {
         if (typeof delta.insert !== "string") {
-          const writer = JSON.parse((delta.insert as { b: string }).b) as string[];
+          const writer = (delta.insert as { b: string }).b.split("_");
+          assert.equal(writer.length, 5); assert.ok(writer[1] === "1" || writer[1] === "2");
           rows.push({ id: writer[1] === "1" ? "Ra" : "Rb", characters: [] }); offset++;
           positions.push({ beat: rows.at(-1)?.id ?? "", offset: 0 }); continue;
         }

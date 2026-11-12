@@ -42,6 +42,7 @@ import {
   runCommand,
   sessionStamps,
   sessionStarted,
+  standaloneSession,
   startSessionBridge
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
@@ -707,7 +708,7 @@ test("a session built by wireApp runs exactly the effects it was handed: a probe
     liveDocumentPort.assign(doc);
     Object.assign(must(doc.rows[0]), { audioText: "typed" });
     calls.clear();
-    liveSession().noteEdit();
+    standaloneSession().noteEdit();
     assert.deepEqual(counted(), { dirty: 1, draft: 1, records: 1, save: 1 }, "a legacy edit to the held document reconciles its records and runs each change effect once");
     calls.clear();
     const outcome = runCommand(beatLengthCommand("r1", 30, sessionStamps));

@@ -19,7 +19,7 @@ for (const before of [false, true]) test(`executed ${before ? "prefix" : "ordina
     registerSharedSplitHandlers(run.a, structurePorts);
     assert.deepEqual(executeSharedOperations(run.a, [operation({ kind: before ? "split-before" : "split", id: "cut", by: "Writer", target: { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" },
       at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [], boundary: "B", beat: "new", fields: { status: "todo" } })], { base: readSharedRevision(run.a) }), { ok: true });
-    const id = '["structure","1","cut","beat"]';
+    const id = "structure_1_006300750074_beat_0";
     const original = literalMergedDocument(before ? "cd" : "ab").rows[0]; assert.ok(original);
     const added = { id, status: "todo", visualText: "", audioText: before ? "ab" : "cd", imageRef: null };
     assert.deepEqual(readPureMergedProjection(run.a).view, { document: { ...literalMergedDocument(""), rows: before ? [added, original] : [original, added] }, recovery: [] });

@@ -6,7 +6,8 @@ import type { SharedStructureContentPorts } from "./structure-content.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import type { SharedTextExecutionDescription } from "./text-description.ts";
 import { applySharedOrderInsertion } from "./structure-order.ts";
-import { prepareStructureIdentity, prepareStructureAlias, SharedStructurePreparationError } from "./structure-identity.ts";
+import { prepareStructureIdentity, prepareStructureAlias, sharedStructureIdentity, reserveSharedStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
+import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
 import { prepareSharedBeatPlacement } from "./structure-placement.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { applySharedMapWrites } from "./prepare.ts";
@@ -20,14 +21,16 @@ import { applySharedTextDescription } from "./text-description.ts";
 import { sharedStructureView, prepareSharedInitialContent, sharedCreatedAttachments } from "./structure-content.ts";
 import { prepareSharedInitialGallery } from "./structure-gallery.ts";
 
-export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, view: SharedPreparationView, order: SharedStructureOrderView, ports: SharedStructureContentPorts) {
+export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, view: SharedPreparationView, order: SharedStructureOrderView, ports: SharedStructureContentPorts, identities: SharedStructureIdentityReservations) {
   try {
     if (!isStableSharedIdentity(operation.by) || !isStableSharedIdentity(operation.segment)) return { ok: false as const, reason: "unstable-identity" };
-    const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat), createdSegment = JSON.stringify(["structure", view.writer, operation.id, "segment"]);
+    const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat, identities), createdSegment = sharedStructureIdentity(view.writer, operation.id, "segment");
     const placement = prepareSharedBeatPlacement(view, order, operation.at, createdSegment);
+    if (placement.kind === "order") reserveSharedStructureIdentity(view, createdSegment, identities);
     const segment = placement.kind === "inline" ? placement.plan.target.segment : createdSegment;
     if (operation.segment !== operation.beat) prepareStructureAlias(view, operation.segment, segment as SharedContentRef);
-    const path = ["segments", segment], beatPath = ["beats", beat], visual = JSON.stringify(["structure", view.writer, operation.id, "visual"]) as SharedContentRef;
+    const path = ["segments", segment], beatPath = ["beats", beat], visual = sharedStructureIdentity(view.writer, operation.id, "visual");
+    reserveSharedStructureIdentity(view, visual, identities);
     if (placement.kind === "order" && view.has(path) || view.has(beatPath) || view.has(["visuals", visual])) return { ok: false as const, reason: "existing-identity" };
     const writes: SharedPreparedWrite[] = [...(placement.kind === "order" ? [{ kind: "map" as const, path }, { kind: "set" as const, path: [...path, "head"], value: { b: beat } }] : []),
       { kind: "map", path: beatPath }, { kind: "set", path: [...beatPath, "id"], value: beat }, { kind: "set", path: [...beatPath, "segment"], value: segment },
@@ -49,7 +52,7 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
     if (Object.hasOwn(stamp, "at") && Object.hasOwn(stamp, "by")) writes.push({ kind: "set", path: [...beatPath, "stamp"], value: stamp });
     else for (const [key, value] of Object.entries(stamp)) extra.push([key === "at" ? "updatedAt" : "updatedBy", value]);
     writes.push({ kind: "set", path: [...beatPath, "extra"], value: JSON.stringify(Object.fromEntries(extra.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))) });
-    writes.push(...prepareSharedInitialGallery(operation, view, beat));
+    writes.push(...prepareSharedInitialGallery(operation, view, beat, identities));
     const overlay = [...writes], texts: { readonly path: readonly string[]; readonly title: boolean }[] = [], content: SharedTextExecutionDescription[] = [];
     let boundary: SharedTextWritePlan | null = null;
     if (placement.kind === "inline") {
