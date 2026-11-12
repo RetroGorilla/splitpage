@@ -190,6 +190,21 @@ test("a local command is one execute at the held revision, one transaction and o
   assert.deepEqual(h.refreshes, [["production"]]);
 });
 
+test("a plan that declares no undo entry is one edit with its effect pass; the undo port is not told, and the next ordinary command is", () => {
+  const replica = fakeReplica(script()), h = sharedHarness(replica.port);
+  replica.script(() => { replica.write("local-command", timed(7)); return { ok: true }; });
+  const kept: Command = { name: "kept", needs: "edit", plan: () => ({
+    changes: changeSet({}), apply: () => { throw new Error("A shared session applied a standalone plan"); }, shared: { operations: [LENGTH], undo: false }
+  }) };
+  assert.deepEqual(h.session.run(kept), { kind: "applied", generation: 1, changes: LENGTH_CELL });
+  assert.deepEqual(h.published, [{ kind: "edit", epoch: 1, generation: 1, changes: LENGTH_CELL }]);
+  assert.deepEqual(h.undo, []);
+  assert.deepEqual(h.log, ["project", "execute", "project", "dirty:1", "draft:1", "save:1", "publish:edit"]);
+  replica.script(() => { replica.write("local-command", timed(8)); return { ok: true }; });
+  assert.equal(h.session.run(sharedCommand("length", [LENGTH])).kind, "applied");
+  assert.deepEqual(h.undo, [{ changes: LENGTH_CELL, selection: undefined }]);
+});
+
 test("a command the replica refuses, on a stale base or by a handler, makes no change and calls no subscriber, undo or effect", () => {
   const replica = fakeReplica(script()), h = sharedHarness(replica.port);
   replica.write("remote", timed(3));

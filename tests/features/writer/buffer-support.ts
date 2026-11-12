@@ -18,12 +18,16 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     h?: Stage1ExecutorHarness;
     open?: (open: BufferedTextCommit["open"]) => BufferedTextCommit["open"];
     key?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
+    author?: (serial: number) => string;
   } = {}) {
   const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }]), a = sharedHarness(adapterReplica(h.a));
-  const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing } = fakeWriterBufferEffects();
+  const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
-  const shared = sharedWriterBufferPorts(h.a, a.session, { ...effects, author: () => ({ id: (options.h ? "other_native:" : "native:") + ++serial, by: "Alice" }) });
+  const shared = sharedWriterBufferPorts(h.a, a.session, { ...effects, author: () => {
+    const next = ++serial;
+    return { id: options.author?.(next) ?? (options.h ? "other_native:" : "native:") + next, by: "Alice" };
+  } });
   const edits: BufferedTextEdit[] = [];
   const outcomes: ReturnType<BufferedTextEdit["commit"]>[] = [];
   const open = options.open?.(shared.bufferedText.open) ?? shared.bufferedText.open;
@@ -64,7 +68,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     if (reportInput) root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data: insert }));
     return true;
   }
-  return { h, a, root, surface, native, beat, reports, missing, notices, edits, outcomes, reads: () => reads, ready: () => { ready = true; },
+  return { h, a, root, surface, native, beat, reports, missing, recovered, notices, edits, outcomes, reads: () => reads, ready: () => { ready = true; },
     start: (from: number, to = from) => { surface.place({ anchor: beatPos("R1", from), head: beatPos("R1", to) }); root.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true })); },
     end: (data: string) => { root.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data })); },
     text: () => a.session.read(doc => doc?.rows.find(row => row.id === "R1")?.audioText),
