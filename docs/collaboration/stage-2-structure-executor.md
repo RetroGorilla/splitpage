@@ -5,12 +5,48 @@ segment creation through the operation entry. `cells` is the app's cell decoder,
 called during preparation only. No application caller registers these handlers.
 The executor entry, preparation view and execution guard are unchanged.
 
-New beat, segment, visual and gallery keys are JSON arrays containing `structure`,
-the live writer, the command id and the role (and the gallery slot index).
+New beat, segment, visual and gallery keys use
+`structure_<writer>_<operation-as-four-digit-UTF-16-hex>_<role>_<slot>`.
+The writer is canonical decimal, the role is fixed and the slot is a nonnegative
+integer (zero except for later gallery slots). Encoding the raw operation preserves
+its identity while escaping separators. The approach matches b-roll projection:
+derive from raw identity, reserve and compare on the app's `cleanId` result.
+An operation id that `cleanId` would change refuses with
+`invalid-structure-operation-id`; it is never rewritten. Structural operations
+emitted by flow use `_o_` before their ordinal. Native text and mark operation ids,
+mark-record keys and mark-occurrence ids retain their existing forms.
 Supplied beat, segment and boundary names never become
 new shared text keys. A per-call alias table translates later operations in the
 same list, including scalar repairs. Reusing an occupied identity refuses the
-whole list. Stable-identity validation does not normalize identifiers.
+whole list. No compatibility translation or second generated-id parser is added.
+
+An idle registration indexes cleaned keys and record ids in the beat, segment,
+heading, visual, gallery and registry roots, plus stored order names and inline
+b-roll ids. Native updates refresh only changed records. Text events inspect native
+items without reading the event delta, which would open another transaction;
+embedded-value edits refresh that touched container. Ordinary string insertions
+do not rebuild its reservations. Reference counts remove deleted reservations, so
+an encoded late joiner has the same index. Prepare uses only cached lookups and a
+per-call reservation set. Record creation and b-roll insertion also contribute to
+that set, in either order around structural creation. A cleaned collision refuses
+the complete list with `existing-identity`.
+
+| App load path | Identity rule |
+| --- | --- |
+| rows, comments, replies, people and b-roll records | `migrateRows` applies `cleanId`; the new format is unchanged |
+| comment row/anchor references and HTML comment/b-roll attributes | `cleanId` or `safeId`, with the same result |
+| scene ids and first-beat anchors | scene ids accept the same ASCII alphabet; anchors remain exact row ids |
+| gallery picture and link data | hashes and URL/file keys are retained by their existing codecs; visual/gallery container keys stay native |
+| tag registry and b-roll prop tag references | the narrower `t_` grammar stays with the tag owner; this executor mints no tag ids |
+| document id | its separate document-id policy is unchanged; this executor mints no document id |
+
+Literal tests run every created key through ordinary record, reference, HTML and
+scene load paths. They check segment ids in block projection and visual/gallery
+keys in native record projection; these container keys are not plain-document id
+fields today. All four structural forms also pass through `projectSharedDocument`
+and the real `migrateRows` pipeline on every copy. A seeded tuple test checks
+unambiguous components and unchanged ids after load, including escaped separators,
+ambiguous decimal concatenations and refused stripped characters.
 
 A creation resolves logical neighbours to their current spans. Within a physical
 segment it inserts a beat boundary and reuses the existing text and mark store;

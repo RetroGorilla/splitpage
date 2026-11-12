@@ -23,5 +23,11 @@
     "find": "const locate = (reference: SharedContentRef | null) => {",
     "replace": "gap = { ...gap, affinity: \"before\" }; const locate = (reference: SharedContentRef | null) => {",
     "tests": ["tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "cleaned stored identity collision ignored",
+    "file": "src/adapters/collab/structure-identity.ts",
+    "find": "reserved.has(identity) || ",
+    "replace": "",
+    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
   }]
 }
