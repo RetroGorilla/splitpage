@@ -11,6 +11,7 @@ import { registerSharedTextOperationHandlers } from "../../src/adapters/collab/t
 import type { SharedDocumentHandle } from "../../src/adapters/collab/types.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
+import { createFlowLoadRuntime } from "../core/flow/load.ts";
 
 export interface BenchmarkDocumentOptions {
   readonly beats: number;
@@ -24,7 +25,9 @@ const words = ["the", "camera", "holds", "on", "a", "quiet", "street", "while", 
 export function benchmarkRowId(index: number): string { return "R" + index; }
 
 export function registerBenchmarkHandlers(handle: SharedDocumentHandle): void {
-  registerSharedTextOperationHandlers(handle); registerSharedSplitHandlers(handle); registerSharedRecordHandlers(handle);
+  registerSharedTextOperationHandlers(handle);
+  registerSharedSplitHandlers(handle, { cells: createFlowLoadRuntime().cells });
+  registerSharedRecordHandlers(handle);
 }
 
 export function submitBenchmarkOperations(handle: SharedDocumentHandle, commands: readonly unknown[]): void {
@@ -37,11 +40,14 @@ export function typeBenchmarkCharacter(handle: SharedDocumentHandle, row: string
     at: { left: null, right: flowBaseReference(row, "audioText", offset), affinity: "before" }, content: [{ value, marks: [] }] }]);
 }
 
-// why: one deterministic edited script serves the read counters and the coordinator's timing runs; nothing in it reads a clock.
+// why: the same deterministic edited script serves read counters and later timing runs without reading a clock.
 export function buildBenchmarkDocument(options: BenchmarkDocumentOptions) {
   const rounds = options.rounds ?? 8, edited = Math.min(options.editedBeats ?? options.beats, options.beats);
   let state = options.seed ?? 0x5eed6c;
-  const pick = (limit: number): number => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return limit > 0 ? state % limit : 0; };
+  const pick = (limit: number): number => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return Math.floor(state / 4294967296 * limit);
+  };
   const lengths: number[] = [];
   const rows = Array.from({ length: options.beats }, (_, index) => {
     const plain = Array.from({ length: 12 + index % 9 }, (__, word) => words[(index * 7 + word * 3) % words.length]).join(" ");

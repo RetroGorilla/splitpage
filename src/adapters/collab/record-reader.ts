@@ -2,7 +2,6 @@ import type { SharedRecordCollection } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
 import { readStoredSharedRecord } from "./record-codec.ts";
-import { countSharedRead } from "./read-counts.ts";
 
 export interface SharedRecordReading { readonly key: string; readonly fields: Readonly<Record<string, unknown>> }
 
@@ -27,7 +26,6 @@ export function readSharedRecords(handle: SharedDocumentHandle, collection: Shar
   return withSharedSnapshot(handle, copy => {
     const root = copy.roots[collection], result: SharedRecordReading[] = [];
     for (const key of [...root.keys()].sort()) {
-      countSharedRead("records");
       const fields = readStoredSharedRecord(collection, key, root.get(key));
       if (fields) result.push({ key, fields });
     }

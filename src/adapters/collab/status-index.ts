@@ -16,7 +16,12 @@ function refreshed(handle: SharedDocumentHandle): StatusIndex | null {
   // why: only the keys a transaction changed are read again, so one status change costs one event, not every event.
   for (const key of caches.drain(root, "status-index") ?? root.keys()) {
     const previous = index.targetOf.get(key);
-    if (previous !== undefined) { index.byTarget.get(previous)?.delete(key); index.targetOf.delete(key); }
+    if (previous !== undefined) {
+      const keys = index.byTarget.get(previous);
+      keys?.delete(key);
+      if (!keys?.size) index.byTarget.delete(previous);
+      index.targetOf.delete(key);
+    }
     if (!root.has(key)) continue;
     countSharedRead("statusEvents");
     const event = readSharedStatusEvent(sharedPreparedValue(root.get(key)));

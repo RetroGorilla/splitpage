@@ -6,7 +6,7 @@ import { resolveSharedTextAnchor, resolveCollabTextAnchor, encodeCollabTextAncho
 import { transactSharedDocument } from "./document.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, assertSharedDocumentIdle } from "./state.ts";
-import { readSharedMarkRecord, sharedMarkContains, sharedMarkRecordKey } from "./mark-record.ts";
+import { readSharedMarkRecord, readSharedMarkRecordIdentity, sharedMarkContains, sharedMarkRecordKey } from "./mark-record.ts";
 import type { SharedMarkRecord, SharedMarkGroup, SharedMarkedCharacter } from "./mark-record.ts";
 import { sharedPreparedValue, sharedPreparedTextInsert, freezeSharedPreparedValue } from "./prepare-value.ts";
 import { prepareSharedMarkWrite } from "./mark-plan.ts";
@@ -67,7 +67,11 @@ export function readSharedMarkCharacters(handle: SharedDocumentHandle, target: S
   return [...readCollabMarkState(handle, found.text, found.container.get(found.marksKey)).characters];
 }
 
-export interface SharedMarkStateReading { readonly records: readonly SharedResolvedMarkRecord[]; readonly characters: readonly SharedMarkedCharacter[] }
+export interface SharedMarkStateReading {
+  readonly records: readonly SharedResolvedMarkRecord[];
+  readonly recordKeys: readonly string[];
+  readonly characters: readonly SharedMarkedCharacter[];
+}
 
 // why: a reading stays valid until its text or its record store changes; anchors move only when their own text does.
 export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, store: unknown): SharedMarkStateReading {
@@ -76,7 +80,8 @@ export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, 
 
 function markState(handle: SharedDocumentHandle, text: Y.Text, store: unknown): SharedMarkStateReading {
   const located: LocatedMark[] = [], records: SharedResolvedMarkRecord[] = [], caches = collabState(handle).reads;
-  if (store instanceof Y.Map) for (const key of [...store.keys()].sort()) {
+  const keys = store instanceof Y.Map ? [...store.keys()].sort() : [];
+  if (store instanceof Y.Map) for (const key of keys) {
     const record = caches.entry(store, "mark-record", key, () => {
       countSharedRead("markRecords");
       return readSharedMarkRecord(key, sharedPreparedValue(store.get(key)));
@@ -121,5 +126,5 @@ function markState(handle: SharedDocumentHandle, text: Y.Text, store: unknown): 
     });
     result.push({ offset, identity: { client: identity.client, clock: identity.clock }, value: value.charAt(offset), marks });
   }
-  return { records, characters: result };
+  return { records, recordKeys: keys.filter(key => readSharedMarkRecordIdentity(key) !== null), characters: result };
 }
