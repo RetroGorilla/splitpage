@@ -1,6 +1,6 @@
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedPreparationView } from "./prepare.ts";
-import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from "./state.ts";
+import { collabState, assertNoSharedExecution, guardSharedCallback, SharedExecutionWriteError } from "./state.ts";
 import { SharedStructurePreparationError, sharedStructureReference } from "./structure-identity.ts";
 import type { SharedContentRef, SharedIdentityGap } from "../../core/collab/operations.ts";
 import { isStableSharedIdentity } from "./identity.ts";
@@ -14,13 +14,13 @@ export interface SharedStructureOrderView {
 let orderViews: WeakMap<SharedDocumentHandle, SharedStructureOrderView> | null = null;
 
 export function observeSharedStructureOrder(handle: SharedDocumentHandle): SharedStructureOrderView {
-  const state = collabState(handle); assertSharedDocumentIdle(state);
+  const state = collabState(handle); assertNoSharedExecution(state);
   orderViews ??= new WeakMap();
   const previous = orderViews.get(handle); if (previous) return previous;
   const order = state.roots.order, values = order.toArray(), positions = new Map<string, number>();
   const rebuild = () => { positions.clear(); values.forEach((value, index) => { if (!positions.has(value)) positions.set(value, index); }); };
   rebuild();
-  const observe: Parameters<typeof order.observe>[0] = event => {
+  const observe: Parameters<typeof order.observe>[0] = event => guardSharedCallback(state, () => {
     let offset = 0;
     for (const change of event.delta) {
       if (change.retain) offset += change.retain;
@@ -32,8 +32,8 @@ export function observeSharedStructureOrder(handle: SharedDocumentHandle): Share
       }
     }
     rebuild();
-  };
-  order.observe(observe); state.doc.once("destroy", () => order.unobserve(observe));
+  });
+  order.observe(observe); state.doc.once("destroy", () => guardSharedCallback(state, () => order.unobserve(observe)));
   const view = Object.freeze({ length: () => values.length, index: (segment: string) => positions.get(segment) ?? -1, at: (index: number) => values[index] });
   orderViews.set(handle, view); return view;
 }

@@ -13,6 +13,8 @@ import { execute, operation, ref, replicas } from "./executor-support.ts";
 import { validatedFixture } from "./helpers.ts";
 
 for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "html-import", "mark-write", "destroy"] as const) {
+  // why: A received update that arrives in a command's notifications is held, not refused; ingress-gate.test.ts pins it.
+  if (phase === "observer" && writer === "update") continue;
   test(`${writer} cannot reenter from ${phase}, and the guard clears after the error`, () => {
     const run = replicas();
     try {
