@@ -29,8 +29,12 @@ export function readSharedRecords(handle: SharedDocumentHandle, collection: Shar
       const fields = readStoredSharedRecord(collection, key, root.get(key));
       if (fields) result.push({ key, fields });
     }
+    return sortSharedRecordReadings(collection, result);
+  });
+}
+
+export function sortSharedRecordReadings(collection: SharedRecordCollection, result: SharedRecordReading[]): SharedRecordReading[] {
     return result.sort((a, b) => collection === "replies"
       ? time(a.fields.createdAt) - time(b.fields.createdAt) || compare(String(a.fields.id), String(b.fields.id)) || compare(a.key, b.key)
       : compare(typeof a.fields.rank === "string" ? a.fields.rank : "", typeof b.fields.rank === "string" ? b.fields.rank : "") || compare(a.key, b.key));
-  });
 }
