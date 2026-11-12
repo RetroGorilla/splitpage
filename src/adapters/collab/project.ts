@@ -16,6 +16,8 @@ import { readProjectionUnits } from "./projection-text-reader.ts";
 import type { SharedProjectionFragmentReason } from "../../core/collab/projection/blocks.ts";
 import { projectSharedBrollKeys } from "../../core/collab/projection/broll.ts";
 import type { SharedProjectionGalleryOverflow } from "../../core/collab/projection/gallery.ts";
+import { readSharedRemovalBufferSources } from "./removal-record.ts";
+import type { SharedRemovalBufferSource } from "./removal-record.ts";
 
 export interface SharedDocumentFieldProjection {
   readonly document: Readonly<Record<string, unknown>>;
@@ -30,7 +32,7 @@ export interface SharedDocumentProjectionResult {
   readonly document: DocumentShape;
   readonly recovery: readonly ((SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
     | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
-    | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[] }
+    | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly buffer?: readonly SharedRemovalBufferSource[] }
     | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
       readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
     | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null })[];
@@ -82,7 +84,10 @@ export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle):
       const audioText = cell(broll.get(audio.key) ?? audio.units, group.root, "audioText", !group.removed);
       const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", !group.removed)).filter(Boolean).join("<br>");
       Object.assign(row, { audioText, visualText });
-      if (group.removed) recovery.push({ kind: "removed-beat", row: canonicalSharedProjection(row, "row") as Record<string, unknown>, members });
+      if (group.removed) {
+        const buffer = readSharedRemovalBufferSources(roots.beats, roots.removalRecords, members);
+        recovery.push({ kind: "removed-beat", row: canonicalSharedProjection(row, "row") as Record<string, unknown>, members, ...(buffer.length ? { buffer } : {}) });
+      }
       else rows.push(row);
     }
     const headings = blocks.flatMap<Parameters<typeof projectSharedSections>[0][number]>(block => {

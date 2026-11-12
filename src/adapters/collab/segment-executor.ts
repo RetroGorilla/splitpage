@@ -21,6 +21,7 @@ import { applySharedTextDescription } from "./text-description.ts";
 import { sharedStructureView, prepareSharedInitialContent, sharedCreatedAttachments } from "./structure-content.ts";
 import { prepareSharedInitialGallery } from "./structure-gallery.ts";
 import { planSharedStructureOwner, planSharedStructureHead } from "./structure-plan.ts";
+import { readSharedBufferRecoveryMetadata } from "../../core/collab/removal-state.ts";
 
 export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, view: SharedPreparationView, order: SharedStructureOrderView, ports: SharedStructureContentPorts, identities: SharedStructureIdentityReservations) {
   try {
@@ -38,7 +39,13 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
       { kind: "set", path: [...beatPath, "visual"], value: visual }, { kind: "map", path: [...beatPath, "joins"] }, { kind: "map", path: [...beatPath, "removals"] },
       { kind: "map", path: ["visuals", visual] }, { kind: "set", path: ["visuals", visual, "beat"], value: beat }, { kind: "set", path: ["visuals", visual, "rank"], value: "0000000000" }];
     const extra: [string, unknown][] = [], stamp: Record<string, unknown> = {};
+    if (Object.hasOwn(operation.fields, "bufferSourceOwner") || Object.hasOwn(operation.fields, "bufferPaintedBase")) {
+      const metadata = readSharedBufferRecoveryMetadata(operation.fields);
+      if (!metadata) throw new SharedStructurePreparationError("invalid-buffer-recovery-metadata");
+      writes.push({ kind: "set", path: [...beatPath, "bufferRecovery"], value: metadata });
+    }
     for (const [field, value] of Object.entries(operation.fields)) {
+      if (field === "bufferSourceOwner" || field === "bufferPaintedBase") continue;
       if (["audioText", "visualText"].includes(field)) { if (typeof value !== "string" && value !== null) throw new SharedStructurePreparationError("unsupported-beat-field"); continue; }
       if (["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"].includes(field)) continue;
       if (field === "updatedAt" || field === "updatedBy") {

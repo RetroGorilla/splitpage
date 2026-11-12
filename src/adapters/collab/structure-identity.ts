@@ -11,7 +11,7 @@ function identityPlan(view: SharedPreparationView) {
   return view.scratch("structure-identity-plan", () => ({ minted: new Set<string>(), records: new Set<string>() }));
 }
 
-export function sharedStructureIdentity(writer: string, operation: string, role: "beat" | "segment" | "visual" | "gallery", slot = 0): SharedContentRef {
+export function sharedStructureIdentity(writer: string, operation: string, role: "beat" | "segment" | "visual" | "gallery" | "removal" | "restore", slot = 0): SharedContentRef {
   if (!operation || cleanId(operation) !== operation || !isStableSharedIdentity(operation)) throw new SharedStructurePreparationError("invalid-structure-operation-id");
   if (!/^(0|[1-9][0-9]*)$/.test(writer) || !Number.isSafeInteger(slot) || slot < 0) throw new SharedStructurePreparationError("unstable-identity");
   const encoded = operation.split("").map(unit => unit.charCodeAt(0).toString(16).padStart(4, "0")).join("");
