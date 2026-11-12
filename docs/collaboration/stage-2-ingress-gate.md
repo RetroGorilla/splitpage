@@ -61,6 +61,10 @@ where a throw aborts the cleanup.
   A listener set directly on the library object is outside the contract.
   `tests/adapters/collab/guarded-subscriptions.test.ts` holds this rule for `src/`:
   library subscriptions stay inside the adapter and their callbacks use `guardSharedCallback`.
+- The scan cannot see computed calls such as `doc["on"](...)`, bound or destructured
+  subscription methods, receivers typed `any` or `Pick<Y.Doc, "on">`, or an untyped nested
+  `.get(...).observe(...)`. It does not read JSX or TSX files. Its guard check matches
+  the name `guardSharedCallback`, not its binding.
 - A transaction started on the library itself, outside every adapter write, is not
   gated. Nothing in `src` starts one. A raw write from an observer stays visible as a
   transaction with no origin: see [adapter-origins.md](adapter-origins.md).
