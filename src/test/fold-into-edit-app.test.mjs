@@ -21,7 +21,7 @@ const undoSizes = () => undoOwner().sizes();
 const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
 const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
-const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
+const { liveSession, standaloneSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
@@ -79,7 +79,7 @@ function edit(fn) {
   clock += 5_000;
   const before = lastUndoEntry();
   fn(currentDocument());
-  liveSession().noteEdit();
+  standaloneSession().noteEdit();
   flushEdits();
   const entry = lastUndoEntry();
   assert.notEqual(entry, before, "the edit made an undo entry");

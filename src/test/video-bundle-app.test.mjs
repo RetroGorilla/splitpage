@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { confirmSavedNow, saveDoc, setAutoSaveEnabled, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import * as homeModule from "../bootstrap/wiring/location-owner.ts";
-import { currentDocument, liveSession } from "../bootstrap/wiring/session-owner.ts";
+import { currentDocument, standaloneSession } from "../bootstrap/wiring/session-owner.ts";
 
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
@@ -436,7 +436,7 @@ test("Don't copy: the document adopts main's links with the save, so in-place sa
 test("every Save As to a new file clears undo history without a word, so no undo or redo brings back a name the new folder lacks", async () => {
   setAutoSaveEnabled(false);
   const OLD = { name: "old.mp4", size: 3, location: { kind: "bundled", name: "old.mp4" } };
-  const edit = (change) => { change(currentDocument().rows[0]); liveSession().noteEdit(); undoOwner().flush(); undoOwner().breakCoalescing(); };
+  const edit = (change) => { change(currentDocument().rows[0]); standaloneSession().noteEdit(); undoOwner().flush(); undoOwner().breakCoalescing(); };
   const bundledNow = () => bundledNamesInProject(buildSplitpageFile(exportDocumentOf(currentDocument())));
   const host = document.getElementById("toast-host");
   for (const way of ["link", "copy", "none", "same", "unlinked"]) {
