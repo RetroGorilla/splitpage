@@ -10,8 +10,8 @@ Nothing wires the owner, so the running app creates none and standalone undo is
 unchanged. The tests in `tests/collab/undo/` run the owner against a model
 executor that follows the rules below, and against the executor for the shared
 document in `src/adapters/collab/undo-executor.ts`, described under "The adapter
-executor". That executor covers text, marks, fields and status; records and
-structure commands are later cuts.
+executor". That executor covers text, marks, fields, status and records;
+structure commands are a later cut.
 
 ## The record
 
@@ -21,7 +21,7 @@ names what the command changed by identity, never by offset.
 | Part | Holds |
 | --- | --- |
 | `text` | the identities it inserted and, for each unit it deleted, the identity, the value and its marks |
-| `mark-add` | the mark, each occurrence it created with the units it covered, and the occurrences of that mark it had seen |
+| `mark-add` | the mark and each occurrence it created with the units it covered |
 | `mark-remove` | the mark and, for each occurrence it took away, the units that lost it |
 | `scalar`, `record-field` | the field, the value before and the value written |
 | `status`, `status-retired` | the beat, the status event and its value |
@@ -172,9 +172,10 @@ pins it. The generator fails on any violation the table does not carry.
 | sequential-status | resolved | Alice sets ready, then shot. Two undos give ready, then todo |
 | status-redo-conflict | resolved | Alice's status lost a conflict. Her undo is used up, so there is nothing to redo |
 | redone-recovery | waits for removal | Needs a removed beat |
-| redone-mark-reversed | waits for the adapter executor | A limit of formatting inside the shared library |
-| pending-update | waits for the adapter executor | A limit of delivery into the shared document |
+| redone-mark-reversed | resolved | Alice tags `ab` while Bob bolds `a`. Alice undoes and redoes; her two updates arrive in reverse. The tag stays on every copy |
+| pending-update | carried | `ab`, three writers. Bob types `X` at the end, then pastes `Y` over `a`. Carol receives the second update first and reads `b`, a text no copy ever had; when the first arrives she reads `YbX` |
 | insert-after-deleted-run | carried, shared document only | Alice deletes `bc` of `abcd`, delivered. Bob types `X` where the gap between `b` and `c` was. Alice undoes: `abcXd`, where the model and Stage 1 give `abXcd` |
+| typed-beside-restored | carried, shared document only | `ab`. Bob deletes `b` and undoes, neither delivered. Alice types `X` after `b`. Delivered: `aXb` on every copy, where the model gives `abX` |
 
 `insert-after-deleted-run` is kept as a declared rule, assumed rule 30 on the
 tracking issue: text typed where a run was already deleted sits after that run
@@ -186,8 +187,27 @@ person's text. The two Stage 1 runs that reach it (T01 and T01 composition
 with a late joiner) are listed in `ADAPTER_BUFFER_LIMIT_RUNS` and fail in the
 declared way in `limits.test.ts`; the model passes both.
 
-`redone-mark-reversed` and `pending-update` are examined when the generator
-runs on the shared document, with the record parts.
+`typed-beside-restored` is the one case left of a restored character changing
+place. A restored character is written directly after the deleted one it
+restores. Text another writer types directly after that same character, without
+having seen the deletion, is written after it too, and the shared library
+orders two such writes by writer number, not by meaning. When the typist has
+the lower number the typed text ends before the restored character. Every copy
+agrees and nothing is lost or doubled. The generator tells this apart from a
+defect: an order a writer saw and its own command changed fails the run; an
+order changed by what arrived from a writer who had not seen it is this limit.
+
+`redone-mark-reversed` was a limit of the Stage 1 prototype, where formatting
+belonged to the shared library. Here a mark is a record the adapter writes. It
+has one literal test in `limits.test.ts`, on the shared document.
+
+`pending-update` is carried. An update that arrives before the one it depends
+on is held whole only when it inserts and nothing else. A deletion in it names
+characters the copy already has, so the library applies the deletion at once
+and holds the insertions: until the earlier update arrives the copy shows the
+later update's deletions without its insertions. The copy takes commands
+meanwhile and every copy agrees once both have arrived. Two literal tests in
+`limits.test.ts` pin the two halves.
 
 ## The adapter executor
 
@@ -196,8 +216,8 @@ runs on the shared document, with the record parts.
 - `executeSharedCommand` runs a forward command through
   `executeSharedOperations` and builds its record from what the document shows
   before and after its own transaction: the units inserted and deleted, the
-  occurrences a mark created with what it had seen, the field values, the
-  status event.
+  occurrences a mark created, the field values, the status event, and each
+  record as it was before and is after.
 - `reverseSharedUndoRecord` is the owner's `reverse` port. It plans every part
   from the document as it is now, runs the result as one
   `executeSharedOperations` call with the origin `local-undo`, and returns the
@@ -209,7 +229,7 @@ An undo needs three operations a forward command never writes. Each is read by
 
 | Operation | What it writes |
 | --- | --- |
-| `text-restore` | each deleted unit as a new character after its left neighbour, with a birth record that names the unit it restores and a copy of each mark it is given |
+| `text-restore` | each deleted unit as a new character directly after the deleted unit, with a birth record that names the unit it restores and a copy of each mark it is given |
 | `mark-retract` | a removal that names one occurrence |
 | `status-retire` | `retiredStatus` for the standing events of one value, only while the beat shows that value and retiring changes it |
 
@@ -220,7 +240,24 @@ How the points left open by the model are met:
    root is added. `readSharedTextHistory` in `text-history.ts` reads the full
    order of a text with its deleted units and follows a unit to its
    restoration. A unit someone has already restored, or one that is visible
-   again, is skipped.
+   again, is skipped. The keystrokes of one typing entry in one text are
+   reversed as one part, so they keep their order.
+
+   **Where a restored character is written.** Directly after the deleted unit
+   it restores (`insertBeside` in `text-edit.ts`), not by a position among the
+   visible characters. A write by position lands behind every deleted
+   character at that place, so a restored character jumped over the deleted
+   ones after it; restoring those later put them in front of it (`abcdef`, cut
+   `de`, cut `bc`, undo, undo gave `adebcf`). Written beside the unit it
+   restores, a restored character has the same place among all other
+   characters, deleted or not, as that unit had. By induction the order of any
+   two characters a writer has seen together never changes through that
+   writer's undo or redo, whatever was deleted, restored or redone in between.
+   `restore-order.test.ts` pins the single-writer and two-writer cases as
+   literals on the model and on the shared document, and the generator checks
+   the order after every undo and redo. The write uses the shared library's
+   item constructor, since its text type has no insertion beside a deleted
+   character; the library version is pinned in `package.json`.
 2. **Marks on a restored character.** The restoring operation writes one copy
    per occurrence the original showed. A copy stands for its source: what takes
    the source away over that place, and the undo of the command that made it,
@@ -234,13 +271,15 @@ How the points left open by the model are met:
    another carries the next. The name never contains another mark's name, so
    its size does not grow with the history: 200 rounds of bold and undo leave
    the longest stored key at 37 characters and add 481 to 497 bytes to the
-   encoded document per round (`undo-mark-growth.test.ts`). On the shared
-   document the record's `seen` list stays empty.
+   encoded document per round (`undo-mark-growth.test.ts`). The undo record
+   holds no list of marks seen.
    A retraction cancels the occurrence and every addition of the same mark over
    the same range with the same number, also one that arrives later. This is
-   the step beyond Stage 1 described above. One case the decided rows do not
-   settle: a mark made apart from another, but after seeing a third identical
-   one, carries the next number and is its own change.
+   the step beyond Stage 1 described above. Assumed rule 32 on the tracking
+   issue settles the case the decided rows leave open: a mark made apart from
+   another, but after seeing a third identical one, carries the next number and
+   is its own change. The model executor and the generator's check follow the
+   same rule.
 5. **The origin.** `executeSharedOperations` takes `origin: "local-undo"`;
    without it a write is `local-command` as before.
 6. **Only the command's own writes.** Updates that arrive during a command's
@@ -294,6 +333,86 @@ removal covers it, but the identical mark of another writer and copies on
 restored characters still show. Every copy holds the same state, so every copy
 reads the same. No scan is added to detect it; one literal test pins it.
 
-Not covered yet: comment and other record parts and the generator on the shared
-document (next cut), and structure commands, which the owner refuses by name.
-The adapter tests are in `tests/adapters/collab/undo-operations.test.ts`.
+### Records
+
+Comments, replies, people, tags and shots (`SHARED_UNDO_RECORDS`). A command is
+described once per record, by what the record was before and what it is after:
+a creation, a removal, or one `record-field` part per field that changed. A
+command that creates a record and sets its field is one creation.
+
+| Part | Its undo | Used up when |
+| --- | --- | --- |
+| `record-create` | removes the record | the record is gone, or no longer holds exactly the fields the command wrote |
+| `record-delete` | creates the record with the fields it had | the record is there |
+| `record-field` | writes the earlier value, or clears the field | the record is gone, or the field no longer holds what the command wrote |
+
+The inverse of each is the opposite part, so redo follows the same table. The
+choices made here are assumed rule 39 on the tracking issue:
+
+- The undo of a creation is used up as soon as anyone changed the record. It
+  never removes another person's change with it.
+- A comment or reply keeps its author. Undoing your removal of another
+  person's comment puts it back in that person's name.
+
+Two things a record holds are not plain fields, and the record part carries
+both in the form a command writes:
+
+- **The status of a tag or shot** is set by status events beside the record.
+  The part holds the status the record shows, so the undo of a creation is
+  used up once another person set the status, and a removed tag or shot comes
+  back with the status it had. A status change itself is a `status` part, as
+  for a beat.
+- **The props of a shot** are read as `{ key, rank, fields }` and written as
+  `{ id, name }`. The part holds the written form, so a shot with props is
+  restored, re-created and changed back like any other.
+
+Declared, not changed here:
+
+- Undoing your removal of another person's comment restores its text as it
+  was when you removed it. An edit its author made at the same moment as your
+  removal is not in it.
+- A gallery slot and a visual are parts of a beat. Their undo comes with the
+  structure commands; until then a record of one is refused by name
+  (`undo-unsupported:record-create:gallery`) and nothing is written. The
+  refused entry stays on top of the stack and blocks the entries below it
+  until the wiring decides what to do with a refused entry.
+
+### The generator on the shared document
+
+`tests/collab/undo/generator.test.ts` runs 300 seeded histories of 40 steps
+with two writers and 300 with three writers and a late joiner, on the shared
+document. A history draws every text, mark, field and status command, four
+record commands on the five kinds of record (create, change, remove, and a
+status on a tag or shot; a shot is created with props and half of its changes
+change the props), undo, redo, and delivery in order, duplicated and
+reversed. At the end every copy and a new joiner must hold the same script
+and the same records.
+
+After each undo and redo the run checks, against its own account and not the
+document's:
+
+- Only this writer's work changed.
+- What came back is what the entry had taken away: the same characters, in
+  the order they were taken. The run keeps the entry's characters from the
+  snapshots before and after the command, and names the origin of each
+  restored character itself; a copy that names another origin fails.
+- No two characters this writer had seen together changed order. The run
+  keeps, per writer, every pair it has shown that writer.
+- A record that was as the command left it is afterwards exactly as it was
+  before the command: every field, the author, the status and the props.
+- An undo that replaces or removes a name, text or status another writer
+  gave a record is a violation.
+
+| Writers | Commands | Record commands accepted | Effective undo | Effective redo | Used up | Declared limit reached |
+| --- | --- | --- | --- | --- | --- | --- |
+| two | 5,581 | 2,060 | 1,300 | 506 | 24 | double-restore, 3 seeds; typed-beside-restored, 9 seeds |
+| three, late joiner | 5,097 | 1,859 | 1,118 | 422 | 19 | double-restore, 7 seeds; typed-beside-restored, 12 seeds |
+
+No other violation is reached. A record command the document refuses (a
+second creation of a record that is there, a change to a record that is not,
+a status for a tag or shot that is not there, another person's comment text)
+is counted by its reason and changes nothing.
+
+Not covered yet: structure commands, which the owner refuses by name.
+The adapter tests are in `tests/adapters/collab/undo-operations.test.ts` and
+`undo-records.test.ts`.

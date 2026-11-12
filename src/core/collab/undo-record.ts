@@ -32,7 +32,6 @@ export type SharedUndoPart =
     readonly target: SharedTextAddress;
     readonly mark: SharedMarkValue;
     readonly added: readonly SharedUndoMarkOccurrence[];
-    readonly seen: readonly SharedContentRef[];
   }
   | {
     readonly kind: "mark-remove";
