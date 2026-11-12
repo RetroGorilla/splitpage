@@ -89,5 +89,11 @@
     "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
     "replace": "ensureOpen(); collabState(handle).roots.order.forEach(() => {}); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
     "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "fallback when projected resolution fails",
+    "file": "src/adapters/collab/text-target.ts",
+    "find": "raw.field === \"title\" ? collabPurposeTextTarget(handle, raw, \"opaque-title-label\") : collabProjectedTextTarget(handle, raw)",
+    "replace": "collabProjectedTextTarget(handle, raw) ?? collabPurposeTextTarget(handle, raw, \"stored-anchor-read\")",
+    "tests": ["tests/adapters/collab/native-text-purpose.test.ts"]
   }]
 }

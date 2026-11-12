@@ -143,9 +143,12 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
     const target = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
     const marks: readonly SharedStoredMarkValue[] = [{ kind: "b", value: true }, { kind: "comment", id: ref("c"), value: ref("C1") },
       { kind: "link", id: ref("l"), value: "https://example.test/" }, { kind: "tag", id: ref("t"), value: ref("t:prop:Box") }];
-    marks.forEach((mark, index) => {
-      const record = prepareSharedMarkRecord(run.a, target, "fragment" + index, 4, index === 3 ? 5 : 6, { type: "add", mark });
-      assert.ok(record); assert.deepEqual(writeSharedMarkRecord(run.a, target, "fragment" + index, record), { ok: true });
+    // why: Recovery projection must retain imported marks even though native editing cannot target the recovered text.
+    transactSharedDocument(run.a, "hydration", () => {
+      marks.forEach((mark, index) => {
+        const record = prepareSharedMarkRecord(run.a, target, "fragment" + index, 4, index === 3 ? 5 : 6, { type: "add", mark });
+        assert.ok(record); assert.deepEqual(writeSharedMarkRecord(run.a, target, "fragment" + index, record), { ok: true });
+      });
     });
     const html = '<span class="cmt-anchor" data-cmt="C1"><a href="https://example.test/" target="_blank" rel="noopener"><span class="tag-anchor" data-tag-cat="prop" data-tag-name="Box" contenteditable="false"><strong>t</strong></span><strong><span class="who-anchor" data-who="Ada" contenteditable="false">@Ada</span></strong></a></span>';
     check(run, { ...scenario, recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 6, html)] }, order);

@@ -92,10 +92,30 @@ One text-location resolver serves preparation and projected/painted readers. It 
 beat's flow-shaped visual address through `beats[id].visual`, and maps a displayed
 cleaned beat id to the selected native record and physical segment. Stored mark
 anchors remain physical, including in recovery; they never reroute to a competing
-beat. Native mark and anchor APIs use the same resolution for projected addresses
-and retain direct physical storage access for opaque title labels and a staged
-native segment without beat/head/order metadata. The three native-mark fixtures
-are unchanged. The app's `titleCommand` changes standalone document fields; no
+beat. Native mark preparation, mark write and typed anchor creation resolve projected
+addresses by default. Failure never grants physical access. The closed exceptions are:
+
+- (a) resolving an anchor that is already stored (reading);
+- (b) writes made under the hydration origin;
+- (c) opaque title labels;
+- (d) text staged earlier in the same operation list.
+
+`collabPurposeTextTarget` requires an explicit purpose and checks hydration against
+the active outer adapter origin. The deterministic hydration writer remains limited
+to the first hydration transaction; a later hydration-origin write uses its native
+writer. Declaring the title field selects the opaque title-label exception, without
+granting another field access. `collabPreparedOperationTextTarget` accepts only the
+entry's applying phase, after preparation has validated its frozen target; it also
+addresses text created earlier in that list before observers publish the new row.
+Stored-anchor readers explicitly request the reading purpose. Native ranges and
+anchor positions stay within the fragment the core interpreter projects, using the
+cached boundary spans rather than reading the text delta again. Native nullable
+preparation/creation APIs refuse with null; a missing native write target returns
+`missing-text`, and a range outside the visible fragment returns `invalid-record`.
+Refusal leaves bytes, vector, revision and delivered-update count unchanged.
+
+The three original native-mark fixtures are byte-identical to main. The app's
+`titleCommand` changes standalone document fields; no
 shared title-address emitter exists yet, so there is no app-side title agreement
 proof authorizing rejection of those native labels. `FlowOperationTrace.target`
 and `marks` describe beat/heading addresses from the flow document; the text and

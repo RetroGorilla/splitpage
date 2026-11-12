@@ -57,8 +57,17 @@ export function resolveSharedStructureOwner(view: StructurePlanScratch, owner: s
   return block?.id && (!heading || index.heading(block.id)) ? Object.freeze({ owner: block.id, segment: block.segment }) : null;
 }
 
-export function resolveIndexedStructureOwner(index: SharedStructureIndex, owner: string, field: "audioText" | "heading") {
+function indexedStructureView(index: SharedStructureIndex) {
   const values = new Map<string, unknown>();
   const view: StructurePlanScratch = { scratch: <T>(key: string, create: () => T): T => { if (!values.has(key)) values.set(key, create()); return values.get(key) as T; } };
-  bindSharedStructurePlan(view, index); return resolveSharedStructureOwner(view, owner, field);
+  bindSharedStructurePlan(view, index); return view;
+}
+
+export function resolveIndexedStructureOwner(index: SharedStructureIndex, owner: string, field: "audioText" | "heading") {
+  return resolveSharedStructureOwner(indexedStructureView(index), owner, field);
+}
+
+export function readIndexedStructureSpans(index: SharedStructureIndex, segment: string) {
+  const view = indexedStructureView(index), stream = readSharedStructureStream(view, segment);
+  return stream ? interpretSharedStructure(view, [], stream).filter(block => block.segment === segment && !block.reason && block.id !== null) : [];
 }

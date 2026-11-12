@@ -6,7 +6,7 @@ import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from
 import { transactSharedDocument } from "./document.ts";
 import { resolveSharedTextLocation } from "./text-location.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
-import { resolveIndexedStructureOwner } from "./structure-plan.ts";
+import { resolveIndexedStructureOwner, readIndexedStructureSpans } from "./structure-plan.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
   assertSharedDocumentIdle(collabState(handle));
@@ -47,15 +47,37 @@ export function collabProjectedTextTarget(handle: SharedDocumentHandle, raw: Sha
     const found = resolveSharedTextLocation({ get, kind: path => {
       const value = get(path); return value instanceof Y.Map ? "map" : value instanceof Y.Text ? "text" : value instanceof Y.Array ? "array" : value === undefined ? "missing" : "value";
     }, resolveOwner: (owner, field) => resolveIndexedStructureOwner(index, owner, field) }, raw);
-    return collabPhysicalTextTarget(handle, found.target);
+    const physical = physicalTextTarget(handle, found.target);
+    if (!physical) return null;
+    const span = found.target.field === "audioText" || found.target.field === "heading"
+      ? readIndexedStructureSpans(index, found.target.segment).find(block => block.id === found.target.owner && block.kind === (found.target.field === "heading" ? "h" : "b"))
+      : { from: 0, to: physical.text.length };
+    return span ? { ...physical, from: span.from, to: span.to } : null;
   } catch { return null; }
 }
 
 export function collabTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
-  return collabProjectedTextTarget(handle, raw) ?? collabPhysicalTextTarget(handle, raw);
+  return raw.field === "title" ? collabPurposeTextTarget(handle, raw, "opaque-title-label") : collabProjectedTextTarget(handle, raw);
 }
 
-export function collabPhysicalTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+export function collabPurposeTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress, purpose: "stored-anchor-read" | "hydration-write" | "opaque-title-label") {
+  const allowed = purpose === "stored-anchor-read" || purpose === "hydration-write" && collabState(handle).activeOrigin === "hydration"
+    || purpose === "opaque-title-label" && raw.field === "title";
+  if (!allowed) return null;
+  const found = physicalTextTarget(handle, raw);
+  return found ? { ...found, from: 0, to: found.text.length } : null;
+}
+
+export function collabWritingTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+  return collabState(handle).activeOrigin === "hydration" ? collabPurposeTextTarget(handle, raw, "hydration-write") : collabTextTarget(handle, raw);
+}
+
+export function collabProjectedSegmentAnchorTarget(handle: SharedDocumentHandle, segment: string, offset: number) {
+  const index = observeSharedStructureIndex(handle), span = readIndexedStructureSpans(index, segment).find(block => block.from <= offset && block.to >= offset);
+  return span?.id ? collabWritingTextTarget(handle, { owner: span.id as SharedTextAddress["owner"], segment: segment as SharedTextAddress["segment"], field: span.kind === "h" ? "heading" : "audioText" }) : null;
+}
+
+function physicalTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
   const target = readSharedTextTarget(raw);
   if (!target) return null;
   const { roots } = collabState(handle);
@@ -65,7 +87,7 @@ export function collabPhysicalTextTarget(handle: SharedDocumentHandle, raw: Shar
   return text instanceof Y.Text ? { target, container, text, marksKey: target.field === "title" ? "titleMarks" : "markRecords" } : null;
 }
 
-export function collabApplyingTextTarget(handle: SharedDocumentHandle, target: SharedTextAddress) {
+export function collabPreparedOperationTextTarget(handle: SharedDocumentHandle, target: SharedTextAddress) {
   const state = collabState(handle);
   if (!state.execution?.applying) throw new SharedExecutionWriteError();
   const container = (target.field === "title" ? state.roots.meta : target.field === "visualText" ? state.roots.visuals.get(target.segment) : state.roots.segments.get(target.segment)) as Y.Map<unknown>;

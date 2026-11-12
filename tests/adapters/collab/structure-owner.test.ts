@@ -42,7 +42,7 @@ test("native title labels and an unattached native segment are not projected ope
       { owner: ref("orphan"), segment: ref("b:orphan"), field: "audioText" as const, reason: "missing-target" }
     ];
     for (const { reason, ...target } of cases) {
-      assert.ok(collabTextTarget(set.a, target)); assert.equal(collabProjectedTextTarget(set.a, target), null);
+      assert.equal(collabTextTarget(set.a, target) !== null, target.field === "title"); assert.equal(collabProjectedTextTarget(set.a, target), null);
       const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
       const result = executeSharedOperations(set.a, [operation({ kind: "text-insert", id: "invalid-address", by: "Writer", target,
         at: { left: null, right: flowBaseReference(target.owner, target.field, 0), affinity: "before" }, content: [{ value: "!", marks: [] }] })], { base: revision });
