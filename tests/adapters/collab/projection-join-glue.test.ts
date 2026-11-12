@@ -42,6 +42,10 @@ function expected(text: string, removed: boolean, lengthSeconds?: number) {
   recovery: removed ? [{ kind: "removed-beat" as const, row, members: ["R1", "R2"] }] : [] };
 }
 function scalar(handle: SharedDocumentHandle, value: number): void {
+  const removals = beat(handle, "R1").get("removals");
+  if (removals instanceof Y.Map && removals.get("removal") === true) {
+    transactSharedDocument(handle, "hydration", () => beat(handle, "R1").set("lengthSeconds", value)); return;
+  }
   execute(handle, { kind: "scalar", id: "scalar" + value, by: "Writer", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value });
 }
 

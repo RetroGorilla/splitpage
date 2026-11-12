@@ -23,7 +23,8 @@ test("wrong-shaped removal flags and malformed identities cannot hide or cancel 
     { generation: Infinity, removed: true }, { generation: 0, removed: "false" }]) {
     assert.deepEqual(projectSharedRemovalState([["invalid", value]]), { generation: null, removed: false });
   }
-  assert.deepEqual(projectSharedRemovalState([["", true], ["\ud800", true], ["\ufffd", true], undefined, [, true]]), { generation: null, removed: false });
+  const hole = new Array<unknown>(2); hole[1] = true;
+  assert.deepEqual(projectSharedRemovalState([["", true], ["\ud800", true], ["\ufffd", true], undefined, hole]), { generation: null, removed: false });
   assert.deepEqual(projectSharedRemovalState([["A", true], ["bad", { generation: 99, removed: "false" }]]), { generation: 0, removed: true });
 });
 

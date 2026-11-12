@@ -10,6 +10,10 @@ import { sharedEmbedChangeReader } from "./embed-changes.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
 
+export interface SharedAttachmentOwnership {
+  readonly keys: (collection: "visuals" | "gallery", beat: string) => readonly string[];
+}
+
 export interface SharedStructureIndex {
   readonly segment: (id: string) => SharedProjectionStream | undefined;
   readonly records: (name: string) => readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null }[];
@@ -17,6 +21,7 @@ export interface SharedStructureIndex {
   readonly candidates: (name: string, heading: boolean) => readonly string[];
   readonly order: ReturnType<typeof observeSharedStructureOrder>;
   readonly removed: (id: string) => boolean;
+  readonly attachments: SharedAttachmentOwnership;
 }
 type IndexedStructureSegment = { head: SharedProjectionBoundary | null; text: Y.Text | null;
   boundaries: Map<string, { identity: { client: number; clock: number }; boundary: SharedProjectionBoundary }> };
@@ -28,6 +33,21 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const order = observeSharedStructureOrder(handle), segments = new Map<string, IndexedStructureSegment>(), embeds = sharedEmbedChangeReader(handle);
   const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>();
   const removed = new Set<string>();
+  const attachments = { visuals: new Map<string, Set<string>>(), gallery: new Map<string, Set<string>>() };
+  const attachmentUpdater = (collection: "visuals" | "gallery") => {
+    const owners = new Map<string, string>(), groups = attachments[collection];
+    const update = (key: string) => {
+      const previous = owners.get(key); if (previous) { const keys = groups.get(previous); keys?.delete(key); if (!keys?.size) groups.delete(previous); }
+      owners.delete(key);
+      const raw = state.roots[collection].get(key), beat: unknown = raw instanceof Y.Map ? raw.get("beat") : null;
+      if (!key || !isStableSharedIdentity(key) || typeof beat !== "string" || !beat || !isStableSharedIdentity(beat)) return;
+      let keys = groups.get(beat); if (!keys) { keys = new Set(); groups.set(beat, keys); }
+      keys.add(key); owners.set(key, beat);
+    };
+    for (const key of state.roots[collection].keys()) update(key);
+    return update;
+  };
+  const updateVisual = attachmentUpdater("visuals"), updateGallery = attachmentUpdater("gallery");
   const names = new Map<string, Set<string>>(), headingNames = new Map<string, Set<string>>(), recordNames = new Map<string, Set<string>>();
   const member = (map: Map<string, Set<string>>, name: string, key: string, add: boolean) => {
     let values = map.get(name); if (add && !values) { values = new Set(); map.set(name, values); }
@@ -89,9 +109,11 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   for (const key of state.roots.segments.keys()) updateSegment(key);
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
-  const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment", "removals"]), observe(state.roots.headings, updateHeading, ["id"])];
+  const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment", "removals"]),
+    observe(state.roots.headings, updateHeading, ["id"]), observe(state.roots.visuals, updateVisual, ["beat"]), observe(state.roots.gallery, updateGallery, ["beat"])];
   state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
   const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), removed: (id: string) => removed.has(id),
+    attachments: Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) }),
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),
     candidates: (name: string, heading: boolean) => Object.freeze([...(heading ? headingNames.get(name) : names.get(cleanId(name))) ?? []]),
     segment: (key: string) => {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
-import { replicas, operation } from "./executor-support.ts";
+import { replicas, operation, agree } from "./executor-support.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
@@ -88,5 +88,56 @@ test("removal preparation reads only touched records with zero and many unrelate
       } finally { prep.close(); }
     } finally { set.close(); }
   }
-  assert.deepEqual(counts[0], counts[1]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts }));
+  assert.deepEqual(counts, [{ texts: 4, markEntries: 0, records: 57, statusEntries: 0, orderEntries: 0 }, { texts: 4, markEntries: 0, records: 57, statusEntries: 0, orderEntries: 0 }]);
+  t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, requiredIdentityAbsenceReads: 4 }));
+});
+
+for (const kind of ["split", "split-before"] as const) test(`restore an inline ${kind} half without inserting a duplicate boundary`, () => {
+  const set = replicas(3, { rows: [{ id: "R1", audioText: "abcd" }] });
+  try {
+    registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, createFlowLoadRuntime());
+    const split = { kind, id: "enter", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
+      at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [flowBaseReference("R1", "audioText", 0, 4)], beat: "new", boundary: "new", fields: {} };
+    assert.deepEqual(executeSharedOperations(set.a, [split, { ...remove, targets: ["new"], boundaries: ["new"], observed: [] },
+      { kind: "restore", id: "back", by: "Alice", removals: ["a"] }].map(operation), { base: readSharedRevision(set.a) }), { ok: true });
+    set.queue.flush("dup");
+    for (const handle of [set.a, set.b, set.c]) {
+      const value = projectSharedDocumentWithRecovery(handle); assert.deepEqual(value.recovery, []);
+      assert.deepEqual(value.document.rows.map(row => ({ id: row.id, text: row.audioText })), kind === "split" ? [
+        { id: "R1", text: "ab" }, { id: "structure_1_0065006e007400650072_beat_0", text: "cd" }
+      ] : [{ id: "structure_1_0065006e007400650072_beat_0", text: "ab" }, { id: "R1", text: "cd" }]);
+      assert.equal(collabState(handle).roots.order.length, 1);
+    }
+  } finally { set.close(); }
+});
+
+test("seeded malformed removal records have one validated result on writing, receiving and encoded copies", () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }] }), key = "structure_1_0061_removal_0";
+  const valid = { kind: "remove", writer: "1", operation: "a", by: "Alice", targets: [{ beat: "R1", segment: "b:R1", generation: 0 }], removalKind: "beat", at: 0,
+    observed: [], references: [], boundaries: ["R1"], components: [], gallery: [], comments: null, buffer: [] };
+  let seed = 0x5c44;
+  const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 8) % n; };
+  const atom = (): unknown => [undefined, null, true, 0, "", "R1", [], {}, new Y.Map<unknown>()][random(9)];
+  try {
+    for (let index = 0; index < 128; index++) {
+      const field = ["kind", "writer", "operation", "by", "targets", "removalKind", "observed", "buffer", "comments"][random(9)]; assert.ok(field);
+      const raw = index % 7 === 0 ? valid : { ...valid, [field]: random(2) ? atom() : [atom()] };
+      transactSharedDocument(set.a, "local-command", () => collabState(set.a).roots.removalRecords.set(key, raw)); set.queue.flush("dup");
+      agree("record grammar " + index, "dup", [set.a, set.b], handle => readSharedRemovalCommand(key, collabState(handle).roots.removalRecords.get(key)));
+    }
+    assert.equal(readSharedRemovalCommand(key, { ...valid, removalKind: ["beat"] }), null);
+    assert.equal(readSharedRemovalCommand(key, { ...valid, targets: [...valid.targets, ...valid.targets] }), null);
+  } finally { set.close(); }
+});
+
+test("removal generation overflow is a named whole-list refusal", () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }] });
+  try {
+    registerSharedRemovalHandlers(set.a);
+    transactSharedDocument(set.a, "local-command", () => ((collabState(set.a).roots.beats.get("R1") as Y.Map<unknown>).get("removals") as Y.Map<unknown>)
+      .set("old", { generation: Number.MAX_SAFE_INTEGER, removed: false }));
+    const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
+    const result = executeSharedOperations(set.a, [operation(remove)], { base: revision }); assert.ok(!result.ok); assert.equal(result.reason, "removal-generation-limit");
+    assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
+  } finally { set.close(); }
 });

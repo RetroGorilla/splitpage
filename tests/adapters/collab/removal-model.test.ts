@@ -9,7 +9,7 @@ import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts
 import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
-import { observeSharedAttachmentOwnership } from "../../../src/adapters/collab/structure-attachments.ts";
+import { observeSharedStructureIndex } from "../../../src/adapters/collab/structure-index.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 
@@ -34,7 +34,7 @@ test("seeded removal checkpoints agree with a literal model and fresh ownership 
     const checkpoint = (removed: boolean) => {
       set.queue.flush(order); checkpoints++;
       agree("seed=" + seed, order, handles, handle => {
-        const value = projectSharedDocumentWithRecovery(handle), prep = createSharedPreparation(handle), index = observeSharedAttachmentOwnership(handle);
+        const value = projectSharedDocumentWithRecovery(handle), prep = createSharedPreparation(handle), index = observeSharedStructureIndex(handle).attachments;
         try {
           const targets = ["R1", "R2", "R3", ...created.map(row => row.id)];
           const result = { rows: value.document.rows.map(row => ({ id: row.id, text: row.audioText })), recovery: value.recovery.map(entry => {

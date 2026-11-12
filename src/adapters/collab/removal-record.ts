@@ -7,6 +7,7 @@ import type { SharedTextIdentity } from "./mark-record.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { sharedStructureIdentity } from "./structure-identity.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { readSharedRemovalState } from "./removal-state.ts";
 
 export interface SharedRemovalTarget { readonly beat: string; readonly segment: string; readonly generation: number }
 export interface SharedRemovalObservation { readonly target: SharedTextAddress; readonly identities: readonly SharedTextIdentity[] }
@@ -42,7 +43,7 @@ export function readSharedRemovalCommand(key: string, raw: unknown): SharedStore
   }
   const common = { writer: value.writer, operation: value.operation, by: value.by, targets };
   if (value.kind === "restore") return refs(value.removals) ? { kind: "restore", ...common, removals: value.removals } : null;
-  if (!["beat", "range", "header", "became-heading"].includes(String(value.removalKind)) || typeof value.at !== "number" || !Number.isFinite(value.at)
+  if (typeof value.removalKind !== "string" || !["beat", "range", "header", "became-heading"].includes(value.removalKind) || typeof value.at !== "number" || !Number.isFinite(value.at)
     || !refs(value.references) || !refs(value.boundaries) || !refs(value.components) || !refs(value.gallery) || value.comments !== null && !refs(value.comments)
     || !Array.isArray(value.observed) || !Array.isArray(value.buffer)) return null;
   const observed: SharedRemovalObservation[] = [], buffer: SharedRemovalBufferSource[] = [];
@@ -73,6 +74,7 @@ export function readSharedRemovalBufferSources(beats: Y.Map<unknown>, records: Y
     const raw = beats.get(beat), flags: unknown = raw instanceof Y.Map ? raw.get("removals") : null;
     if (!(flags instanceof Y.Map)) continue;
     for (const key of flags.keys()) {
+      if (readSharedRemovalState([[key, flags.get(key)]]).generation === null) continue;
       const record = readSharedRemovalCommand(key, records.get(key));
       if (record?.kind !== "remove") continue;
       for (const source of record.buffer) if (source.beat === beat) sources.set(JSON.stringify([beat, source.metadata.bufferSourceOwner, source.metadata.bufferPaintedBase]), source);

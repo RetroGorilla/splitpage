@@ -9,8 +9,7 @@ import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import { sharedStructureIdentity, sharedStructureReference, prepareStructureAlias, reserveSharedStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
 import { observeSharedStructureIdentities } from "./structure-reservations.ts";
 import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
-import { observeSharedAttachmentOwnership } from "./structure-attachments.ts";
-import type { SharedAttachmentOwnership } from "./structure-attachments.ts";
+import type { SharedAttachmentOwnership } from "./structure-index.ts";
 import { sharedCreatedAttachments } from "./structure-content.ts";
 import { readPreparedSharedRecord } from "./record-codec.ts";
 import { sharedTextCommandPlan, SharedTextPreparationError } from "./executor-text-plan.ts";
@@ -113,7 +112,7 @@ function restore(operation: SharedRestore, view: SharedPreparationView, identiti
 }
 
 export function registerSharedRemovalHandlers(handle: SharedDocumentHandle): void {
-  const index = observeSharedAttachmentOwnership(handle), identities = observeSharedStructureIdentities(handle), structure = observeSharedStructureIndex(handle);
+  const structure = observeSharedStructureIndex(handle), index = structure.attachments, identities = observeSharedStructureIdentities(handle);
   const guard = (run: () => SharedPreparationResult): SharedPreparationResult => {
     try { return run(); } catch (error) {
       if (error instanceof SharedStructurePreparationError || error instanceof SharedTextPreparationError) return { ok: false, reason: error.message };
