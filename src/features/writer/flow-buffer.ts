@@ -96,6 +96,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     for (const beat of surface.root.querySelectorAll<HTMLElement>(".wr-beat")) {
       if (active?.beat === beat && active.edit.isOpen()) continue;
       const rowId = beat.dataset.id ?? "", shown = surface.painted(rowId), next = projection(surface.runs(beat));
+      if (active?.beat === beat && !active.edit.isOpen() && next === active.edit.text()) { surface.reset(rowId); continue; }
       if (next === shown) continue;
       if (active?.edit.isOpen()) { refuse(event, "buffer-pending"); surface.reset(rowId); ok = false; continue; }
       const pos = { kind: "beat" as const, rowId, offset: next.length };
@@ -180,7 +181,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
       return true;
     },
     input: () => {
-      if (!active) return;
+      if (!active || !active.edit.isOpen()) return;
       reconcile();
       if (target && !active.fault && projection(surface.runs(active.beat)) === active.edit.text()) {
         const [from, to] = target;
@@ -202,6 +203,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
       if (!active) return;
       if (!event.data) {
         const held = active; active = null; target = null;
+        surface.reset(held.rowId);
         try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
         surface.repaint(held.rowId); surface.restore(held.rowId, undefined);
       } else finish();

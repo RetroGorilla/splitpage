@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { bufferedWriter } from "./buffer-support.ts";
 import { beatPos } from "../../../src/core/flow/flow.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { applySharedUpdate, encodeSharedState, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, encodeSharedState, observeSharedTransactions, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
+import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 
 type Page = ReturnType<typeof bufferedWriter>;
 
@@ -15,6 +16,15 @@ function owns(page: Page): void {
     if (element.textContent?.replaceAll("\u200B", "") !== painted) {
       assert.equal(page.edits.some(edit => edit.isOpen()), true, "A differing surface must own an open edit");
     }
+  }
+}
+
+function copies(page: Page, text: string): void {
+  page.h.queue.flush("dup"); page.h.join();
+  for (const handle of [page.h.a, page.h.b, page.h.c]) {
+    const result = projectSharedDocumentWithRecovery(handle);
+    assert.deepEqual(result.document.rows.map(row => row.audioText), [text, "next"]);
+    assert.deepEqual(result.recovery, []);
   }
 }
 
@@ -52,6 +62,7 @@ for (const [type, text] of [["insertText", "abQ"], ["deleteContentBackward", "a"
           page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0), "X")], ["remote"]);
           page.h.queue.flush("dup"); page.surface.repaint(); owns(page);
           assert.equal(page.beat().textContent, "X" + text);
+          copies(page, "X" + text);
         } else {
           assert.deepEqual([page.text(), page.beat().textContent], ["ab", "ab"]);
           assert.equal(page.a.executed.length, 0);
@@ -71,6 +82,7 @@ for (const [type, text] of [["insertText", "abnQ"], ["deleteContentBackward", "a
       assert.deepEqual([page.text(), page.beat().textContent, page.edits.length], ["ab", text, 1]);
       page.end("finished"); owns(page);
       assert.deepEqual([page.text(), page.beat().textContent], [text, text]);
+      copies(page, text);
     } finally { page.close(); }
   });
 }
@@ -134,6 +146,7 @@ for (const [name, request] of requests) {
       page.native(2, 3, "你", undefined, "insertCompositionText"); owns(page); page.end("你"); owns(page);
       assert.deepEqual([page.text(), page.beat().textContent], ["ab你", "ab你"]);
       assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+      copies(page, "ab你");
     } finally { page.close(); }
   });
 }
@@ -155,6 +168,7 @@ for (const type of ["copy", "cut", "paste"] as const) {
       assert.deepEqual([page.text(), page.beat().textContent, page.a.executed.length], ["ab", "abn", 0]);
       page.native(2, 3, "你", undefined, "insertCompositionText"); page.end("你"); owns(page);
       assert.deepEqual([page.text(), page.beat().textContent], ["ab你", "ab你"]);
+      copies(page, "ab你");
     } finally { page.close(); }
   });
 }
@@ -165,11 +179,27 @@ test("ownership invariant: another field is repainted with refusal while the own
     page.start(2); page.native(2, 2, "n", undefined, "insertCompositionText");
     page.beat("R2").textContent = "nextQ";
     page.root.dispatchEvent(new window.InputEvent("input", { inputType: "insertText", data: "Q", bubbles: true })); owns(page);
-    assert.deepEqual([page.text(), page.beat().textContent, page.beat("R2").textContent], ["ab", "abn", "next"]);
+    assert.deepEqual([page.text(), page.beat().textContent, page.beat("R2").textContent?.replaceAll("\u200B", "")], ["ab", "abn", "next"]);
     assert.deepEqual(page.reports, [{ kind: "rejected", reason: "buffer-pending" }]);
     page.native(2, 3, "你", undefined, "insertCompositionText"); page.end("你"); owns(page);
-    assert.deepEqual([page.text(), page.beat("R2").textContent], ["ab你", "next"]);
+    assert.deepEqual([page.text(), page.beat("R2").textContent?.replaceAll("\u200B", "")], ["ab你", "next"]);
   } finally { page.close(); }
+});
+
+for (const ending of ["Q", ""] as const) test(`ownership invariant: repaint during the completed edit's drain does not adopt retired DOM, ending ${ending}`, () => {
+  const page = bufferedWriter();
+  let stop = () => {};
+  try {
+    page.start(2); page.native(2, 2, "Q", undefined, "insertCompositionText");
+    page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0), "X")], ["remote"]);
+    page.h.queue.flush("dup");
+    stop = observeSharedTransactions(page.h.a, () => { page.surface.repaint(); });
+    page.end(ending); stop(); owns(page);
+    assert.deepEqual([page.text(), page.beat().textContent, page.reports], ending ? ["XabQ", "XabQ", []] : ["Xab", "Xab", []]);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+    page.native(ending ? 4 : 3, ending ? 4 : 3, "Y"); owns(page);
+    assert.equal(page.text(), ending ? "XabQY" : "XabY");
+  } finally { stop(); page.close(); }
 });
 
 test("composition without end after blur stays held through focus return until compositionend or cancellation", () => {

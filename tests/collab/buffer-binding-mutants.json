@@ -47,9 +47,9 @@
     "replace": "buffered?.dispose();"
   }, {
     "label": "cancel trusts the old render cache",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "const el = beatEl(rowId); if (el) rendered.delete(el);",
-    "replace": "void rowId;"
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (!event.data) {",
+    "replace": "if (!event.data) { const closed = active; active = null; target = null; closed.edit.cancel(); return;"
   }, {
     "label": "shared native input uses whole-field synchronization",
     "file": "src/features/writer/flow-surface.ts",
