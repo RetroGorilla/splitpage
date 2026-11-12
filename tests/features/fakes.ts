@@ -79,11 +79,11 @@ export function fakePdfPrinter() {
 }
 
 export function fakeWriterBufferEffects() {
-  const reports: CommandOutcome[] = [], missing: string[] = [];
-  const effects: Pick<WriterBufferPorts, "missingBase" | "report"> = {
-    missingBase: rowId => { missing.push(rowId); }, report: outcome => { reports.push(outcome); }
+  const reports: CommandOutcome[] = [], missing: string[] = [], recovered: string[] = [];
+  const effects: Pick<WriterBufferPorts, "missingBase" | "recovered" | "report"> = {
+    missingBase: rowId => { missing.push(rowId); }, recovered: rowId => { recovered.push(rowId); }, report: outcome => { reports.push(outcome); }
   };
-  return { effects, reports, missing };
+  return { effects, reports, missing, recovered };
 }
 
 export function fakeWriterPorts(initial: DocumentView) {

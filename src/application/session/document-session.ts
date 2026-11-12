@@ -19,6 +19,7 @@ export type DocumentView = DeepReadonly<ValidatedDocument>;
 export interface SharedPlan {
   readonly operations: readonly SharedOperation[];
   readonly base?: number;
+  readonly undo?: false;
 }
 
 export interface Plan {

@@ -91,6 +91,22 @@ Three more cases sit under entries whose class is determined:
 - The same comment anchor in both columns of one beat. A normal script places the
   comment in the visual column; the shared derivation must do the same.
 
+## The recovery write
+
+One writer is an operation that no command stated. When the document refuses
+buffered typing, the buffer writes the field to recovery as a list of its own: a
+beat created and removed in the same list ([the rule 29 recovery write](stage-2-buffer.md#the-rule-29-recovery-write)).
+`recovery-write` names it, class operation. It has two sites in `ENGINES`:
+
+| Site | What it does |
+| --- | --- |
+| `createSharedBufferedText` in `adapters/collab/buffer.ts` | Provides a second shared list beside the commit's; its plan declares `undo: false` |
+| `createSharedSession` in `application/session/shared-session.ts` | Reads that declaration when it delivers the change, and does not tell the undo port |
+
+The list goes through the session's one `execute` like any other, by the copy whose
+typing was refused; receiving it writes nothing. With it the table holds 30 writers:
+6 derivations, 11 operations, 9 not applicable and 4 undetermined.
+
 ## Stamp on undo
 
 Settled as assumed rule 35: in a shared session undo leaves the stamp as it is. The
