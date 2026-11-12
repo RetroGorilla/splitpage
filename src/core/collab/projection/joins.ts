@@ -6,15 +6,16 @@ import { projectSharedGroupGallery } from "./gallery.ts";
 export interface SharedProjectionBeatStructure {
   readonly id: string;
   readonly removed: boolean;
-  readonly joins: readonly { readonly id: string; readonly into: string; readonly glue: "" | " " }[];
+  readonly joins: readonly { readonly id: string; readonly into: string | null; readonly glue: "" | " "; readonly glueSet?: true;
+    readonly binding?: { readonly end: { readonly segment: string; readonly offset: number }; readonly start: { readonly segment: string; readonly offset: number }; readonly stop: { readonly segment: string; readonly offset: number } } | null }[];
 }
 
-export function projectSharedJoinGroups(beats: readonly SharedProjectionBeatStructure[]) {
+export function projectSharedJoinForest(beats: readonly SharedProjectionBeatStructure[]) {
   const ids = [...new Set(beats.map(beat => beat.id))], available = new Set(ids);
   const removed = new Set(beats.filter(beat => beat.removed).map(beat => beat.id));
   const joins = new Map(beats.map(beat => [beat.id, [...beat.joins].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0]]));
-  const edges = new Map<string, string>(), cycleRoots = new Set<string>();
-  for (const id of ids) { const into = joins.get(id)?.into; if (into !== undefined && available.has(into)) edges.set(id, into); }
+  const edges = new Map<string, string>(), cycleRoots = new Set<string>(), cycleEnds = new Map<string, string>();
+  for (const id of ids) { const entry = joins.get(id), into = entry?.into; if (typeof into === "string" && entry?.binding !== null && available.has(into)) edges.set(id, into); }
   const done = new Set<string>(), rank = new Map(ids.map((id, index) => [id, index]));
   for (const start of ids) {
     const path: string[] = [], positions = new Map<string, number>(); let id: string | undefined = start;
@@ -26,6 +27,8 @@ export function projectSharedJoinGroups(beats: readonly SharedProjectionBeatStru
       const live = cycle.filter(member => !removed.has(member));
       const root = live[0] ?? cycle[0];
       if (root !== undefined) {
+        const predecessor = cycle.find(member => edges.get(member) === root);
+        if (predecessor !== undefined) cycleEnds.set(root, predecessor);
         if (live.length) for (const member of cycle) {
           if (removed.has(member) || member === root) edges.delete(member);
           else edges.set(member, root);
@@ -44,6 +47,11 @@ export function projectSharedJoinGroups(beats: readonly SharedProjectionBeatStru
     for (const member of path.reverse()) { removal ||= removed.has(member); affected.set(member, removal); }
   }
   for (const [id, parent] of edges) if (removed.has(id) && !affected.get(parent)) edges.delete(id);
+  return { ids, removed, joins, edges, cycleRoots, cycleEnds };
+}
+
+export function projectSharedJoinGroups(beats: readonly SharedProjectionBeatStructure[]) {
+  const { ids, removed, joins, edges, cycleRoots } = projectSharedJoinForest(beats);
   const roots = new Map<string, string>();
   for (const start of ids) {
     const path: string[] = []; let id = start;
@@ -65,16 +73,20 @@ export function projectSharedJoinGroups(beats: readonly SharedProjectionBeatStru
       if (parent !== undefined) stack.push(...[...children.get(parent) ?? []].reverse());
     }
     return { root, removed: removed.has(root), cyclic,
-      members: members.map(id => ({ id, glue: id === root ? "" as const : joins.get(id)?.glue ?? "" })) };
+      members: members.map(id => ({ id, glue: id === root ? "" as const : joins.get(id)?.glue ?? "", ...(id !== root && joins.get(id)?.glueSet ? { glueSet: true as const } : {}) })) };
   });
 }
 
-export function projectSharedJoinedUnits(parts: readonly { readonly units: readonly SharedProjectionUnit[]; readonly glue: "" | " " }[],
+export function projectSharedJoinSeparator(left: string, right: string, glue: "" | " ", index: number, cyclic: boolean, override = false): "" | " " {
+  return index === 0 ? "" : cyclic && !override ? left && right && !/\s$/.test(left) ? " " : "" : glue;
+}
+
+export function projectSharedJoinedUnits(parts: readonly { readonly units: readonly SharedProjectionUnit[]; readonly glue: "" | " "; readonly glueSet?: true }[],
   tags: readonly Readonly<Record<string, unknown>>[], cyclic: boolean): SharedProjectionUnit[] {
   const units: SharedProjectionUnit[] = [];
   for (const [index, part] of parts.entries()) {
     const left = projectSharedTextResult(units, tags).runs, right = projectSharedTextResult(part.units, tags).runs;
-    const glue = index === 0 ? "" : cyclic ? projection(left) && projection(right) && !/\s$/.test(projection(left)) ? " " : "" : part.glue;
+    const glue = projectSharedJoinSeparator(projection(left), projection(right), part.glue, index, cyclic, part.glueSet);
     if (glue) {
       const last = left.at(-1), first = right[0], marks: SharedProjectionUnit["marks"][number][] = [];
       if (last && first) {

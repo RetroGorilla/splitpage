@@ -3,7 +3,8 @@ import { sharedProjectionExtra, projectSharedRegistryFields, projectSharedCommen
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
 import type { SharedRecordCollection } from "../../core/collab/operations.ts";
-import { projectSharedJoinGroups, projectSharedJoinedUnits, projectSharedJoinedFields, projectSharedSections } from "../../core/collab/projection/joins.ts";
+import { projectSharedJoinedUnits, projectSharedJoinedFields, projectSharedSections } from "../../core/collab/projection/joins.ts";
+import { projectSharedJoinedLayout } from "../../core/collab/projection/join-layout.ts";
 import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
@@ -74,22 +75,22 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     owner: fragment.id, segment: fragment.segment, field: fragment.kind === "h" ? "heading" : "audioText", from: fragment.from, to: fragment.to,
     html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", false, JSON.stringify([fragment.segment, fragment.from, fragment.to])) });
   const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
-  const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinGroups(order.map(id => source.structure(id)));
+  const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinedLayout(blocks.filter(block => block.kind === "b"), order.map(id => source.structure(id)));
   const ranks = new Map(order.map((id, index) => [id, index]));
   const rows: Record<string, unknown>[] = [], plans = groups.flatMap(group => {
     const root = byId.get(group.root); if (!root) return [];
-    const members = group.members.map(member => member.id), inOrder = [...members].sort((a, b) => (ranks.get(a) ?? 0) - (ranks.get(b) ?? 0));
+    const members = group.members.map(member => member.id), inOrder = [...group.fields].sort((a, b) => (ranks.get(a) ?? 0) - (ranks.get(b) ?? 0));
     const memberRows = inOrder.flatMap(id => { const row = byId.get(id); return row ? [row] : []; });
     const memberUnits = group.members.map(member => narrationByBeat.get(member.id));
-    const memberVisuals = members.flatMap(id => visuals.get(id) ?? []);
+    const memberVisuals = group.fields.flatMap(id => visuals.get(id) ?? []);
     const visualCells = memberVisuals.map(visual => {
       return { key: JSON.stringify([group.root, "visualText", visual.key]), units: source.units("visuals", visual.key) };
     });
-    const relevantGallery = members.flatMap(id => galleryGroups.get(id) ?? []);
+    const relevantGallery = group.fields.flatMap(id => galleryGroups.get(id) ?? []);
     return [cache.read(["group", group.root], [JSON.stringify(group), root, tags, ...memberRows, ...memberUnits,
       ...memberVisuals, ...visualCells.map(cell => cell.units), ...relevantGallery], () => {
       const projected = projectSharedJoinedFields(root, memberRows, gallery);
-      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue })), tags, group.cyclic);
+      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue, ...(member.glueSet ? { glueSet: true as const } : {}) })), tags, group.cyclic);
       return { group, members, ...projected, audio: { key: JSON.stringify([group.root, "audioText"]), units: narration }, visualCells };
     }, "group")];
   });
