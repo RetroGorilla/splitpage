@@ -1,4 +1,4 @@
-import type { SharedStatusEvent } from "../../core/collab/operations.ts";
+import type { SharedStatusEvent, SharedStatusRetire } from "../../core/collab/operations.ts";
 import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";
 import { ROW_STATUS_IDS } from "../../core/document/timing.ts";
 import { TAG_STATUS_IDS } from "../../core/document/tags.ts";
@@ -43,7 +43,8 @@ function storedStatus(view: SharedPreparationView, target: SharedStatusEvent["ta
   return typeof value === "string" && (ids as readonly string[]).includes(value) ? value : ids[0];
 }
 
-function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["target"], events = eventsFor(view, target)): string {
+function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["target"], events = eventsFor(view, target),
+  retired = (id: string): boolean => view.kind(["retiredStatus", id]) !== "missing"): string {
   const stored = storedStatus(view, target);
   const pending = new Map<string, number>(), children = new Map<string, string[]>(), ordered: string[] = [];
   for (const [id, event] of events) {
@@ -96,8 +97,7 @@ function resolveStatus(view: SharedPreparationView, target: SharedStatusEvent["t
   };
   for (const id of ordered) {
     const event = events.get(id);
-    if (event) resolved.set(id, view.kind(["retiredStatus", id]) !== "missing"
-      ? resolve(event.parents.filter(parent => events.has(parent))) : event.value);
+    if (event) resolved.set(id, retired(id) ? resolve(event.parents.filter(parent => events.has(parent))) : event.value);
   }
   return resolve(heads(events));
 }
@@ -117,6 +117,20 @@ export function readSharedStatusNotices(handle: SharedDocumentHandle, target: Sh
       && JSON.stringify([...new Set(event.parents)].sort()) === JSON.stringify([...new Set(other.parents)].sort())));
     return [...new Set(conflicts.map(event => `${event.by}: concurrent status change did not apply`))].sort();
   });
+}
+
+export function prepareSharedStatusRetire(operation: SharedStatusRetire, view: SharedPreparationView): SharedPreparationResult {
+  const { target } = operation;
+  if (![operation.id, operation.by, operation.event, target.record].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
+  if (view.kind(targetPath(target)) !== "map") return { ok: false, reason: "missing-status-target" };
+  const events = eventsFor(view, target), retired = (id: string): boolean => view.kind(["retiredStatus", id]) !== "missing";
+  const superseded = (id: string): boolean => [...events].some(([child, event]) => event.parents.some(parent => parent === id) && (!retired(child) || superseded(child)));
+  const standing = [...events.keys()].filter(id => !retired(id) && !superseded(id)), now = resolveStatus(view, target, events);
+  // why: T21 scalar: a status that lost a conflict never applied, so retiring it changes nothing and writes nothing.
+  const retire = now === operation.value && standing.includes(operation.event) ? standing.filter(id => events.get(id)?.value === operation.value).sort() : [];
+  const changes = retire.length > 0 && resolveStatus(view, target, events, id => retire.includes(id) || retired(id)) !== now;
+  const writes: SharedPreparedWrite[] = changes ? retire.map(id => ({ path: ["retiredStatus", id], kind: "set", value: true })) : [];
+  return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }
 
 export function prepareSharedStatusEvent(operation: SharedStatusEvent, view: SharedPreparationView): SharedPreparationResult {
