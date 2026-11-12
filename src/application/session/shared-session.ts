@@ -35,6 +35,7 @@ export interface SharedSessionPorts {
 export interface SharedDocumentSession extends CommonDocumentSession {
   revision: () => number;
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
+  beforeCommand: (listener: () => boolean) => () => void;
 }
 
 export const NOT_SHARED = "not shared";
@@ -74,6 +75,8 @@ export const UNRECOGNISED_ORIGIN = "A shared transaction had an origin the sessi
 export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSession {
   const scheduler = createEffectScheduler(ports.effects, ports.timers, ports.timing);
   const listeners: SessionListener[] = [];
+  const admissions: (() => boolean)[] = [];
+  let admitting = false;
   let document: ValidatedDocument | null = null;
   let revision = 0;
   let epoch = ports.after ? ports.after.epoch : 0;
@@ -158,6 +161,14 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   function run(command: Command): CommandOutcome {
     if (disposed) return { kind: "rejected", reason: DISPOSED };
     if (entered || delivering) return { kind: "rejected", reason: REENTERED };
+    if (!admitting) {
+      admitting = true;
+      try {
+        for (const listener of admissions.slice()) if (!listener()) return { kind: "rejected", reason: "buffer-pending" };
+      } catch (error) { return { kind: "failed", error }; }
+      finally { admitting = false; }
+      if (disposed) return { kind: "rejected", reason: DISPOSED };
+    }
     entered = true;
     try {
       return decide(command);
@@ -197,6 +208,11 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     read: function (select) { return select(document); },
     readAt: function (select) { return select(document, revision); },
     run: run,
+    beforeCommand: listener => {
+      if (disposed) return () => {};
+      admissions.push(listener);
+      return () => { const at = admissions.indexOf(listener); if (at !== -1) admissions.splice(at, 1); };
+    },
     refresh: function (job) { scheduler.refresh(job); },
     cancelRefresh: function (jobs) { scheduler.cancelRefresh(jobs); },
     subscribe: function (listener) {
@@ -213,6 +229,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
       stop();
       scheduler.dispose();
       listeners.length = 0;
+      admissions.length = 0;
       document = null;
     }
   };

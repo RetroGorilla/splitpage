@@ -64,7 +64,7 @@ export function drawWriter() {
 export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
   const doc = (document.getElementById("writer-doc") as HTMLElement);
   if (flowWriter && !flowWriter.isCurrent()) {
-    detachFlowWriter();
+    if (!detachFlowWriter()) return;
     attachFlowWriter();
     writerUndoMark = (undoMark as WriterFeaturePorts["undo"]["mark"])();
     reopenOnRedo = null;
@@ -222,7 +222,8 @@ function attachFlowWriter() {
 }
 
 function detachFlowWriter() {
-  if (!flowWriter) return;
+  if (!flowWriter) return true;
+  if (flowWriter.settle && !flowWriter.settle()) return false;
   stopWriterLinks?.();
   stopWriterLinks = null;
   flowWriter.dispose();
@@ -235,6 +236,7 @@ function detachFlowWriter() {
   root.removeAttribute("spellcheck");
   root.removeAttribute("tabindex");
   root.textContent = "";
+  return true;
 }
 
 export function connectFlowUndo(step: ((dir: UndoDirection) => void) | null) {
@@ -255,6 +257,7 @@ export function closeWriter() {
   const el = (document.getElementById("writer") as HTMLElement);
   if (el.hidden) return;
   const flow = flowWriter;
+  if (flow?.settle && !flow.settle()) return;
   const wasStale = flowMaker?.splitReady() === false;
   const at = flow?.finish()?.head;
   detachFlowWriter();
@@ -281,6 +284,7 @@ export function closeWriter() {
 
 export function writerUndoStep(dir: string) {
   if ((viewFlags as WriterFeaturePorts["view"])().writerOpen()) {
+    if (flowWriter?.settle && !flowWriter.settle()) return true;
     flowWriter?.beforeReplay(dir as UndoDirection);
     if (dir === "redo") {
       const next = (nextRedoEntry as WriterFeaturePorts["undo"]["nextRedo"])();
@@ -410,6 +414,7 @@ export function startWriter(given: WriterFeaturePorts) {
     connectFlowUndo, writerReplayed, writerFlowControl,
     dispose: function () {
       if (disposed) return;
+      if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return;
       disposed = true;
       if (activeWriter !== mine) return;
       activeWriter = null;

@@ -1,0 +1,95 @@
+{
+  "tests": ["tests/features/writer/buffer-binding.test.ts", "tests/features/writer/buffer-review.test.ts", "tests/features/writer/buffer-invariants.test.ts"],
+  "mutants": [{
+    "label": "local command admitted before dirty native typing",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "const stopAdmission = ports.beforeCommand(() => committing || finish());",
+    "replace": "const stopAdmission = () => {};"
+  }, {
+    "label": "native cut and drag bypass delegated refusal",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "type === \"deleteByCut\" || type === \"deleteByDrag\" || ",
+    "replace": ""
+  }, {
+    "label": "ordinary cross-beat input never reaches its command port",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "&& intended.anchor.rowId !== intended.head.rowId)",
+    "replace": "&& false)"
+  }, {
+    "label": "refused cross-beat composition permits native mutation",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) { refuse(event, \"buffer-unsupported-target\"); return true; }",
+    "replace": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) return true;"
+  }, {
+    "label": "native boundary deletion never reaches its structural command",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (type === \"deleteContentBackward\" && at === 0 || type === \"deleteContentForward\" && at === length)",
+    "replace": "if (false)"
+  }, {
+    "label": "mounted clipboard captures selection before settling typing",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "ports.clipboard?.mount(clipboardHandlers)",
+    "replace": "ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste })"
+  }, {
+    "label": "native input accepted without a painted base",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "event.preventDefault(); ports.missingBase(rowId);",
+    "replace": "ports.missingBase(rowId);"
+  }, {
+    "label": "dirty paint replaces native DOM from the model",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "paint: buffered ? () => { if (buffered.canPaint()) paint(); } : paint,",
+    "replace": "paint: buffered ? () => { const held = composing; composing = false; for (const beat of root.querySelectorAll(\".wr-beat\")) rendered.delete(beat as HTMLElement); paint(); composing = held; } : paint,"
+  }, {
+    "label": "disposal unmounts a refused native buffer",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (buffered && !buffered.dispose()) return;",
+    "replace": "buffered?.dispose();"
+  }, {
+    "label": "cancel trusts the old render cache",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (!event.data) {",
+    "replace": "if (!event.data) { const closed = active; active = null; target = null; closed.edit.cancel(); return;"
+  }, {
+    "label": "shared native input uses whole-field synchronization",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "      buffered.input();",
+    "replace": "      onInput(event);"
+  }, {
+    "label": "standalone keystroke gains a row walk",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "function onInput(event: Event): void {",
+    "replace": "function onInput(event: Event): void { ports.doc().rows.forEach(row => row.id);",
+    "tests": ["tests/features/writer/buffer-cost.test.ts"]
+  }, {
+    "label": "native caret is pinned to its original owner after a split",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "selection: restored",
+    "replace": "selection: { anchor: { ...restored.anchor, rowId }, head: { ...restored.head, rowId } }"
+  }, {
+    "label": "composing keys settle and enter Writer commands",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "      if (composing || key.isComposing || key.keyCode === 229) {",
+    "replace": "      composing = false; if (false) {"
+  }, {
+    "label": "failed acquisition leaves native mutation allowed",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "catch (error) { event.preventDefault(); ports.report({ kind: \"failed\", error }); return false; }",
+    "replace": "catch (error) { ports.report({ kind: \"failed\", error }); return false; }"
+  }, {
+    "label": "drain failure leaves the surface attached to its closed edit",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (held.edit.isOpen()) { ports.report(outcome); return false; }",
+    "replace": "if (held.edit.isOpen() || outcome.kind === \"failed\") { ports.report(outcome); return false; }"
+  }, {
+    "label": "input entry skips the ownership invariant",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "native: (event, dispatch) => {",
+    "replace": "native: (event, dispatch) => { if (event.type === \"input\") { dispatch(); return; }"
+  }, {
+    "label": "settlement caller clears composition before the gate",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "return checked.ok && settle();",
+    "replace": "surface.composition(false); return checked.ok && settle();"
+  }]
+}

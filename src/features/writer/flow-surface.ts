@@ -15,6 +15,8 @@ import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import { createPaintedBeats } from "./flow-painted-base.ts";
+import { createWriterBuffer } from "./flow-buffer.ts";
+import type { WriterBufferPorts } from "./flow-buffer.ts";
 import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
@@ -32,6 +34,7 @@ export interface SurfacePorts {
     readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
   };
   readonly paintedText?: PaintedTextSource;
+  readonly bufferedText?: WriterBufferPorts;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
@@ -66,6 +69,7 @@ export interface SurfaceSettings {
 }
 
 export interface Surface {
+  readonly settle?: () => boolean;
   readonly finish: () => FlowRange | null;
   readonly paint: () => void;
   readonly repaint: () => void;
@@ -110,7 +114,8 @@ function beatHtml(runs: readonly Run[]): string {
   return /<br\s*\/?>$/.test(html) ? html + ZWSP : html;
 }
 
-export function createSurface(ports: SurfacePorts): Surface {
+export function createSurface(inputPorts: SurfacePorts): Surface {
+  const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: () => {} } : inputPorts;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
@@ -1254,31 +1259,110 @@ export function createSurface(ports: SurfacePorts): Surface {
     return problems;
   }
 
+  const buffered = ports.bufferedText ? createWriterBuffer(ports.bufferedText, {
+    root, base: rowId => paintedBeats?.base(rowId) ?? null,
+    painted: rowId => paintedBeats?.text(rowId),
+    normalize: () => {
+      const focus = elementOf(window.getSelection()?.focusNode ?? null);
+      repairOrphans(focus?.closest<HTMLElement>(".wr-beat") ?? null);
+    },
+    reset: rowId => {
+      const el = beatEl(rowId), row = ports.doc().rows.find(row => row.id === rowId);
+      if (!el) return;
+      if (!row) { el.remove(); return; }
+      const runs = cellOf(row), html = beatHtml(runs);
+      el.innerHTML = html; rendered.set(el, html);
+      decorate(el, row, el.getAttribute("data-num") ?? "");
+      paintedBeats?.field(rowId, projection(runs));
+    },
+    runs: beat => ports.decode(ports.storedHtml(beat.innerHTML.replace(ZWSP_ALL, ""))),
+    selection: () => selection(true), repaint: rowId => {
+      const el = beatEl(rowId); if (el) rendered.delete(el);
+      repaint();
+    },
+    composition: value => { if (value !== undefined) composing = value; return composing; },
+    restore: (rowId, offsets) => {
+      const exists = ports.doc().rows.some(row => row.id === rowId);
+      if (offsets) place(offsets);
+      else if (!exists) {
+        const first = ports.doc().rows[0];
+        if (first) place(caretAt(beatPos(first.id, 0)));
+      }
+    },
+    changed: ports.changed
+  }) : null;
+  const ready = (event: Event): boolean => {
+    if (!buffered || buffered.finish()) return true;
+    event.preventDefault(); return false;
+  };
+  const clipboardActions = {
+    copy: buffered ? (event: ClipboardEvent) => {
+      if (composing) {
+        const range = selection(true), selected = range && domRange(range);
+        if (selected && event.clipboardData) { event.preventDefault(); event.clipboardData.setData("text/plain", selected.toString()); }
+      } else if (ready(event)) onCopy(event);
+    } : onCopy,
+    cut: buffered ? (event: ClipboardEvent) => { if (ready(event)) onCut(event); } : onCut,
+    paste: buffered ? (event: ClipboardEvent) => { if (ready(event)) onPaste(event); } : onPaste
+  };
   const listeners: [EventTarget, string, EventListener][] = [
-    [root, "beforeinput", onBeforeInput],
-    [root, "input", onInput],
-    [root, "keydown", onKeydown as EventListener],
+    [root, "beforeinput", buffered ? event => {
+      const input = event as InputEvent, native = typeof input.getTargetRanges === "function" ? range0(input) : null;
+      if (!buffered.beforeInput(input, selection(true), native)) onBeforeInput(event);
+    } : onBeforeInput],
+    [root, "input", buffered ? event => {
+      buffered.input();
+      const input = event as InputEvent;
+      if (!buffered.dirty() && input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
+      if (!buffered.dirty()) noteSelection();
+    } : onInput],
+    [root, "keydown", buffered ? event => {
+      const key = event as KeyboardEvent;
+      if (composing || key.isComposing || key.keyCode === 229) {
+        const range = selection(true), at = range?.head;
+        const beat = at?.kind === "beat" ? beatEl(at.rowId) : null;
+        const boundary = at?.kind === "beat" && (key.key === "Backspace" && at.offset === 0
+          || key.key === "Delete" && beat !== null && at.offset === domKeys(beat).length);
+        const command = key.key === "Tab" || key.key === "Enter" && !key.isComposing && key.keyCode !== 229
+          || (key.ctrlKey || key.metaKey) && /^[zybiuvx]$/i.test(key.key)
+          || key.altKey && ["ArrowUp", "ArrowDown", "Backspace"].includes(key.key) || boundary;
+        if (composing && command) ready(event);
+        return;
+      }
+      buffered.keydown(key);
+      if (ready(event)) onKeydown(key);
+    } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
-      [root, "copy", onCopy as EventListener] as [EventTarget, string, EventListener],
-      [root, "cut", onCut as EventListener] as [EventTarget, string, EventListener],
-      [root, "paste", onPaste as EventListener] as [EventTarget, string, EventListener]
+      [root, "copy", clipboardActions.copy as EventListener] as [EventTarget, string, EventListener],
+      [root, "cut", clipboardActions.cut as EventListener] as [EventTarget, string, EventListener],
+      [root, "paste", clipboardActions.paste as EventListener] as [EventTarget, string, EventListener]
     ],
-    [root, "compositionstart", onCompositionStart],
-    [root, "compositionend", onCompositionEnd],
+    [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
+    [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
     [root, "mousedown", onMouseDown],
-    [root, "focusout", onHostBlur],
+    [root, "focusout", buffered ? event => { if (!composing && ready(event)) onHostBlur(event); } : onHostBlur],
+    ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
+      [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
     [window, "mouseup", onMouseUp],
-    [document, "selectionchange", onSelectionChange]
+    [document, "selectionchange", buffered ? () => { if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
   ];
-  listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
-  const stopClipboard = ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste });
+  const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
+    [target, name, event => { buffered.native(event, () => handler(event)); }]) : listeners;
+  guarded.forEach(([target, name, handler]) => target.addEventListener(name, handler));
+  const clipboardHandlers = buffered ? {
+    copy: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.copy(event)); },
+    cut: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.cut(event)); },
+    paste: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.paste(event)); }
+  } : clipboardActions;
+  const stopClipboard = ports.clipboard?.mount(clipboardHandlers);
 
   return {
-    finish,
-    paint,
-    repaint,
+    ...(buffered ? { settle: buffered.finish } : {}),
+    finish: buffered ? () => buffered.finish() ? finish() : selection(true) : finish,
+    paint: buffered ? () => { if (buffered.canPaint()) paint(); } : paint,
+    repaint: buffered ? () => { if (buffered.canPaint()) repaint(); } : repaint,
     refreshBeat: rowId => {
-      if (composing || syncingComposition) { repaintOwed = true; return; }
+      if (composing || syncingComposition || buffered && !buffered.canPaint()) { repaintOwed = true; return; }
       const el = beatEl(rowId);
       const row = ports.doc().rows.find(beat => beat.id === rowId);
       if (el && row) decorate(el, row, el.getAttribute("data-num") ?? "");
@@ -1295,21 +1379,22 @@ export function createSurface(ports: SurfacePorts): Surface {
       place(range, true);
     },
     prepareVisual,
-    format,
+    format: buffered ? mark => { if (buffered.finish()) format(mark); } : format,
     pendingMarks: () => pending ? pending.marks : null,
-    apply,
+    apply: buffered ? (name, operation, before) => buffered.finish() ? apply(name, operation, before) : null : apply,
     toOwnBeat,
     domRange,
     domCheck,
-    paintedBase: rowId => paintedBeats ? paintedBeats.base(rowId) : null,
+    paintedBase: rowId => buffered?.base(rowId) ?? (paintedBeats ? paintedBeats.base(rowId) : null),
     dispose: () => {
+      if (buffered && !buffered.dispose()) return;
       stopClipboard?.();
       beatMenu.dispose();
       paintedBeats?.clear();
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       queuedPastes.length = 0;
-      listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
+      guarded.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
     }
   };
 }

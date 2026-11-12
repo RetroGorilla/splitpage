@@ -25,6 +25,7 @@ import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts"
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
+import type { WriterBufferPorts } from "../../src/features/writer/flow-buffer.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
 import type { PaintedTextSource } from "../../src/application/editing/ports.ts";
@@ -74,6 +75,14 @@ export function fakePdfPrinter() {
   const pdf = new Uint8Array([37, 80, 68, 70]);
   const pdfPrinter: PdfPrinter = { print: async (html, doc) => { pages.push({ html, doc }); return pdf; } };
   return { pdfPrinter, pages, pdf };
+}
+
+export function fakeWriterBufferEffects() {
+  const reports: CommandOutcome[] = [], missing: string[] = [];
+  const effects: Pick<WriterBufferPorts, "missingBase" | "report"> = {
+    missingBase: rowId => { missing.push(rowId); }, report: outcome => { reports.push(outcome); }
+  };
+  return { effects, reports, missing };
 }
 
 export function fakeWriterPorts(initial: DocumentView) {
