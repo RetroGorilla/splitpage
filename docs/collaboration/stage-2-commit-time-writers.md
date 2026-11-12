@@ -81,6 +81,20 @@ Four entries are undetermined. Each lists what a person would see.
 | A tag's owner following `@Name` on a line | (a) The editing copy sets or clears the owner when its edit adds or removes the pairing. Two different pairings made at once leave one owner by the fixed rule while the text shows both. (b) The shown owner is derived from the text whenever a pairing exists, and the stored owner is used only when none does; the owner picker then has no effect while a pairing exists. |
 | Sentence paragraphs on first opening the Writer | (a) The first copy that opens the Writer writes them, once, as a command nobody typed. (b) They are derived until someone makes the first paragraph edit, which then writes them all; until then they follow the text as it changes. |
 
+For the tag owner, a standalone script today behaves as follows. A person pairs a
+tag with `@Sam` on a line, so Sam owns the tag. They pick Ann in the owner picker,
+which writes only the tag's owner and leaves the text alone. Then they type elsewhere
+in the beat. The tag still shows Ann, while the line still says `@Sam`. Owner sync
+(`planOwnerSync` in `src/core/production/owners.ts`) acts only when the count of a
+pairing changes: typing that keeps the pairing plans nothing, and typing in the
+narration column is not read at all. The owner changes again only when a new
+occurrence of a pairing is typed (it assigns that person) or the last one is
+deleted (it clears the owner, unless the owner was changed since).
+`tests/core/production/owners.test.ts` pins this at the planner level, in "owner
+sync: an edit that keeps the pair leaves a panel change alone" and "owner sync:
+deleting the chip keeps an owner the Production panel changed since". No test
+runs the whole sequence through the picker command and the session.
+
 Three more cases sit under entries whose class is determined:
 
 - Two people change one beat at the same moment. The stamp is one value, so one
@@ -89,7 +103,11 @@ Three more cases sit under entries whose class is determined:
 - A B-roll line is deleted. The shot keeps the name stored when it was created or
   last renamed by hand, not the last words of the line.
 - The same comment anchor in both columns of one beat. A normal script places the
-  comment in the visual column; the shared derivation must do the same.
+  comment in the visual column, and so does the shared assembly: within a beat it
+  places comments from the visual cells before the narration, beat by beat in
+  script order. `tests/adapters/collab/comment-anchor-columns.test.ts` holds this
+  for the full projection on every copy and for the incremental projection
+  against a fresh full one.
 
 ## The recovery write
 

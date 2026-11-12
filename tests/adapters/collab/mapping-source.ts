@@ -42,7 +42,7 @@ export function fieldMappingSource(): ValidatedDocument {
       }]
     }],
     comments: [{
-      id: "Cprobe", rowId: "Rprobe", field: "audioText", anchorId: "Canchor", quotedText: "Quoted sentinel",
+      id: "Cprobe", rowId: "Rprobe", field: "visualText", anchorId: "Canchor", quotedText: "Quoted sentinel",
       body: "Comment body sentinel", author: "Author sentinel", createdAt: "2026-01-02T03:04:05Z", updatedAt: "2026-02-03T04:05:06Z",
       resolved: true, resolvedBy: "Resolver sentinel", resolvedAt: "2026-02-04T04:05:06Z", assignee: "Assignee sentinel", kind: "conflict",
       conflictField: "audioText", emptyValue: true, titleValue: "Title conflict sentinel", futureComment: "comment extra sentinel",

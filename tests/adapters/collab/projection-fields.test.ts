@@ -58,7 +58,7 @@ const probes: readonly [string, Readonly<Record<string, unknown>>][] = [
   ["`sections[].firstSceneId`", { "sections.0.firstSceneId": "Rprobe" }],
   ["`id`", { "comments.0.id": "Cprobe" }],
   ["`rowId`", { "comments.0.rowId": "Rprobe" }],
-  ["`field`", { "comments.0.field": "audioText" }],
+  ["`field`", { "comments.0.field": "visualText" }],
   ["`anchorId`", { "comments.0.anchorId": "Canchor" }],
   ["`quotedText`", { "comments.0.quotedText": "Quoted sentinel" }],
   ["`author`", { "comments.0.author": "Author sentinel" }],
