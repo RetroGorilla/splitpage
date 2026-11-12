@@ -13,6 +13,9 @@ import type { SharedJoinIndex } from "./join-index.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
 
 function staged(view: SharedPreparationView): Map<string, string> { return view.scratch("issued-joins", () => new Map<string, string>()); }
+function entry(view: SharedPreparationView, path: readonly string[]) {
+  return view.kind(path) === "value" ? readSharedJoinEntry(view.get(path)) : null;
+}
 function frozen(writes: readonly SharedPreparedWrite[]) {
   const description = freezeSharedPreparedValue(writes);
   return { ok: true as const, writes: description, apply: (handle: SharedDocumentHandle) => {
@@ -39,8 +42,8 @@ export function prepareSharedBeatJoin(operation: SharedBeatJoin, view: SharedPre
     if (index.locations(identity).length || staged(view).has(identity) || view.has([...path, identity])) return { ok: false, reason: "existing-join" };
     let generation = -1;
     for (const key of view.keys(path)) {
-      const entry = readSharedJoinEntry(view.get([...path, key]));
-      if (entry?.into === into.owner && entry.glue === operation.glue) generation = Math.max(generation, entry.generation);
+      const known = entry(view, [...path, key]);
+      if (known?.into === into.owner && known.glue === operation.glue) generation = Math.max(generation, known.generation);
     }
     if (generation === Number.MAX_SAFE_INTEGER) return { ok: false, reason: "join-generation-limit" };
     prepareStructureAlias(view, operation.id, identity); staged(view).set(identity, from.owner);
@@ -59,10 +62,10 @@ function prepareJoinChange(operation: SharedJoinGlue | SharedJoinRetire, view: S
       const owners = [...new Set([...index.locations(join), ...(source ? [source] : [])])];
       let found = false, active = false;
       for (const from of owners) {
-        const entry = readSharedJoinEntry(view.get(["beats", from, "joins", join]));
-        if (!entry || view.get(["beats", from, "id"]) !== from) continue;
+        const known = entry(view, ["beats", from, "joins", join]);
+        if (!known || view.get(["beats", from, "id"]) !== from) continue;
         found = true;
-        const group = sharedJoinRetirementGroup(from, entry);
+        const group = sharedJoinRetirementGroup(from, known);
         const retired = view.get(["retiredJoins", join]) === true || view.get(["retiredJoins", group]) === true;
         if (retired) { if (operation.kind === "join-glue") return { ok: false, reason: "retired-join" }; continue; }
         active = true;

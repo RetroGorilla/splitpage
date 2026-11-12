@@ -55,6 +55,13 @@
     "find": "locations: (join: string) => Object.freeze([...(members.get(join) ?? [])].sort())",
     "replace": "locations: (join: string) => { beats.doc.getArray(\"order\").forEach(() => {}); return Object.freeze([...(members.get(join) ?? [])].sort()); }",
     "tests": ["tests/adapters/collab/structure-join.test.ts","tests/adapters/collab/join-commands.test.ts"]
+  },
+  {
+    "label": "join expands a rejected native container",
+    "file": "src/adapters/collab/join-executor.ts",
+    "find": "view.kind(path) === \"value\" ? readSharedJoinEntry(view.get(path)) : null",
+    "replace": "readSharedJoinEntry(view.get(path))",
+    "tests": ["tests/adapters/collab/join-commands.test.ts"]
   }
   ]
 }

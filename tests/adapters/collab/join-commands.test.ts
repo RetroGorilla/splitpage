@@ -125,6 +125,25 @@ test("join lookup patches map replacements and split entry changes without scann
   } finally { set.close(); }
 });
 
+test("join preparation rejects non-record containers without expanding their text or array", () => {
+  for (const value of [new Y.Text("hidden"), new Y.Array<unknown>()]) {
+    const set = replicas(2, source);
+    try {
+      const joins = (collabState(set.a).roots.beats.get("R2") as Y.Map<unknown>).get("joins"); assert.ok(joins instanceof Y.Map);
+      transactSharedDocument(set.a, "hydration", () => joins.set("bad", value)); registerSharedJoinHandlers(set.a);
+      const inspect = value instanceof Y.Text ? mock.method(value, "toDelta", () => { throw new Error("Unneeded text expansion"); })
+        : mock.method(value, "toArray", () => { throw new Error("Unneeded array expansion"); });
+      try {
+        assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
+        const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
+        const result = executeSharedOperations(set.a, [change("join-glue", ["bad"])]); assert.ok(!result.ok);
+        assert.equal(result.reason, "missing-join"); assert.equal(inspect.mock.callCount(), 0);
+        assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
+      } finally { inspect.mock.restore(); }
+    } finally { set.close(); }
+  }
+});
+
 test("glue changes leave a selected competing target unchanged and an unselected target inert", () => {
   const set = replicas(2, source);
   try {
@@ -158,5 +177,5 @@ test("glue and retirement preparation reads stay constant with unrelated beats a
     }
     counts.push(measured);
   }
-  assert.deepEqual(counts, [[2, 2], [2, 2]]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], glue: counts[0], retirement: counts[1], wholeCollectionWalks: 0 }));
+  assert.deepEqual(counts, [[3, 3], [3, 3]]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], glue: counts[0], retirement: counts[1], wholeCollectionWalks: 0 }));
 });
