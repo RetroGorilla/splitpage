@@ -36,12 +36,23 @@ export interface SharedTextHistory {
 
 function key(unit: SharedTextIdentity): string { return unit.client + ":" + unit.clock; }
 
+// why: typing needs only which characters were there before it, so that is read without the mark state.
+export function readSharedVisibleUnits(handle: SharedDocumentHandle, target: SharedTextAddress): ReadonlySet<string> | null {
+  const found = collabTextTarget(handle, target);
+  if (!found) return null;
+  const visible = new Set<string>();
+  for (let item = found.text._start; item; item = item.right) {
+    if (!item.deleted && item.countable) for (let unit = 0; unit < item.length; unit++) visible.add(key({ client: item.id.client, clock: item.id.clock + unit }));
+  }
+  return visible;
+}
+
 export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedTextAddress): SharedTextHistory | null {
   const prep = createSharedPreparation(handle);
   try {
     const plan = sharedTextCommandPlan(prep.view, raw), target = plan.target, facade = prep.view.text(plan.path), found = collabTextTarget(handle, target);
     if (!facade || !found) return null;
-    const records = facade.records, provenance = readSharedMarkProvenance(records);
+    const records = facade.records, provenance = readSharedMarkProvenance(records, found.container.get(found.marksKey));
     const source = (identity: SharedContentRef): SharedContentRef => provenance?.source(identity) ?? identity;
     // why: a deleted character keeps its place in the shared text; only that order says where it and its marks belong.
     const places = new Map<string, number>();
@@ -61,9 +72,12 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
     for (const { record } of records) {
       const original = record.type === "birth" ? readSharedTextRestoreOperation(record.operation) : null;
       if (!original || record.type !== "birth") continue;
-      const restored = { client: record.born.client, clock: record.born.clock };
-      restorations.set(key(original), [...restorations.get(key(original)) ?? [], restored].sort((a, b) => a.client - b.client || a.clock - b.clock));
-      originals.set(key(restored), original);
+      // why: a restored value of two units stands for two original units, each followed and traced on its own.
+      for (let unit = 0; unit < record.born.length; unit++) {
+        const restored = { client: record.born.client, clock: record.born.clock + unit }, from = { client: original.client, clock: original.clock + unit };
+        restorations.set(key(from), [...restorations.get(key(from)) ?? [], restored].sort((a, b) => a.client - b.client || a.clock - b.clock));
+        originals.set(key(restored), from);
+      }
     }
     const follow = (unit: SharedTextIdentity): SharedTextIdentity => {
       let current = unit;

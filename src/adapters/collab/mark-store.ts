@@ -79,7 +79,7 @@ export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, 
     if (reference && from !== null && to !== null && to > from) located.push({ record, reference, from, to });
   }
   const value = text.toDelta().map((delta: { insert: unknown }) => typeof delta.insert === "string" ? sharedPreparedTextInsert(delta.insert) as string : "\ufffc").join("");
-  const result: SharedMarkedCharacter[] = [], provenance = readSharedMarkProvenance(records);
+  const result: SharedMarkedCharacter[] = [], provenance = readSharedMarkProvenance(records, store);
   for (let offset = 0; offset < value.length; offset++) {
     const identity = Y.createRelativePositionFromTypeIndex(text, offset).item;
     if (!identity) throw new Error("Shared text character has no identity");

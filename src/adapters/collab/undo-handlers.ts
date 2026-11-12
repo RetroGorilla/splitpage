@@ -1,10 +1,11 @@
 import type { SharedContentRef, SharedMarkRetract, SharedTextRestore } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import type { SharedPreparationView } from "./prepare.ts";
+import type { SharedPreparationView, SharedPreparedWrite } from "./prepare.ts";
 import type { SharedMarkWritePlan } from "./mark-plan.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import type { SharedTextExecutionStep, SharedTextOperationPreparation } from "./text-description.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
+import { applySharedMapWrites } from "./prepare.ts";
 import { preparedTextDescription, preparedTextOperation, prepareTextMarkWrite } from "./text-description.ts";
 import {
   sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, sharedTextInsertionPosition, requireSharedTextOwnership, SharedTextPreparationError
@@ -15,10 +16,21 @@ import { sharedPreparedTextInsert } from "./prepare-value.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedStatusRetire } from "./status.ts";
-import { readSharedTextRestoreOperation, sharedMarkCopyOperation, sharedMarkRetractOperation, sharedTextRestoreOperation } from "./mark-provenance.ts";
+import { SHARED_MARK_PROVENANCE_MARKER, readSharedTextRestoreOperation, sharedMarkCopyOperation, sharedMarkRetractOperation, sharedTextRestoreOperation } from "./mark-provenance.ts";
 
 function checkAuthor(operation: { readonly id: string; readonly by: string }): void {
   if (!isStableSharedIdentity(operation.id) || !isStableSharedIdentity(operation.by)) throw new SharedTextPreparationError("unstable-identity");
+}
+
+// why: readers look for retractions and copies only on a text that carries this marker, so it is written with the first one.
+function marker(view: SharedPreparationView, store: readonly string[]): SharedPreparedWrite[] {
+  const path = [...store, SHARED_MARK_PROVENANCE_MARKER];
+  return view.has(path) ? [] : [{ kind: "set", path, value: true }];
+}
+
+function marked(writes: readonly SharedPreparedWrite[], steps: readonly SharedTextExecutionStep[], extra: readonly SharedPreparedWrite[]): SharedTextOperationPreparation {
+  const prepared = preparedTextDescription([...writes, ...extra], steps);
+  return extra.length ? { ...prepared, apply: handle => { prepared.apply(handle); applySharedMapWrites(handle, extra); } } : prepared;
 }
 
 export function prepareSharedTextRestore(operation: SharedTextRestore, view: SharedPreparationView): SharedTextOperationPreparation {
@@ -66,8 +78,9 @@ export function prepareSharedTextRestore(operation: SharedTextRestore, view: Sha
       edits.push({ target: plan.target, edit: typeof content === "string" ? { type: "text", at: offset, value: content } : { type: "atom", at: offset, value: content }, marks });
       previous = { left: unit.left, end: offset + length };
     });
-    return preparedTextDescription(edits.length ? [sharedTextOverlay(plan), ...records.map(record => ({ kind: "set" as const, path: [...plan.storePath, record.identity], value: record }))] : [],
-      edits.map(write => ({ kind: "edit", write })));
+    const copied = records.length > edits.length;
+    return marked(edits.length ? [sharedTextOverlay(plan), ...records.map(record => ({ kind: "set" as const, path: [...plan.storePath, record.identity], value: record }))] : [],
+      edits.map(write => ({ kind: "edit", write })), copied ? marker(view, plan.storePath) : []);
   });
 }
 
@@ -83,10 +96,10 @@ export function prepareSharedMarkRetract(operation: SharedMarkRetract, view: Sha
       if (record.kind !== "record") throw new SharedTextPreparationError("invalid-mark-plan");
       return { kind: "mark", target: plan.target, plan: record };
     });
-    return preparedTextDescription(steps.map(step => {
+    return marked(steps.map(step => {
       if (step.kind !== "mark") throw new SharedTextPreparationError("invalid-mark-plan");
       return { kind: "set", path: [...plan.storePath, step.plan.identity], value: step.plan };
-    }), steps);
+    }), steps, steps.length ? marker(view, plan.storePath) : []);
   });
 }
 

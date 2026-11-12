@@ -9,12 +9,12 @@ import type { SharedBaseExecutionResult } from "./execute.ts";
 import type { SharedMarkGroup } from "./mark-record.ts";
 import type { SharedHistoryUnit, SharedTextHistory } from "./text-history.ts";
 import { executeSharedOperations } from "./execute.ts";
-import { collabState } from "./state.ts";
+import { collabState, sharedWriteFrame } from "./state.ts";
 import { scalarTarget } from "./scalar-executor.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
-import { readSharedTextHistory } from "./text-history.ts";
+import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedMarkSeen, readSharedTextRestoreOperation } from "./mark-provenance.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired"]);
@@ -53,12 +53,15 @@ function added(mark: SharedMarkValue): SharedMarkValue {
 
 function undoUnits(units: readonly SharedHistoryUnit[]): SharedUndoUnit[] {
   const result: SharedUndoUnit[] = [];
+  let first: SharedHistoryUnit | null = null;
   for (const unit of units) {
     const last = result.at(-1), value = unit.value;
     // why: the two halves of one character outside the basic plane are deleted and restored together.
-    if (last && typeof value === "string" && typeof last.value === "string" && /^[\ud800-\udbff]$/.test(last.value) && /^[\udc00-\udfff]$/.test(value)) {
+    if (last && first && typeof value === "string" && typeof last.value === "string" && /^[\ud800-\udbff]$/.test(last.value) && /^[\udc00-\udfff]$/.test(value)
+      && first.unit.client === unit.unit.client && first.unit.clock + 1 === unit.unit.clock) {
       result[result.length - 1] = { ...last, value: last.value + value };
     } else result.push({ identity: unit.identity, value, marks: markValues(unit.marks) });
+    first = unit;
   }
   return result;
 }
@@ -111,9 +114,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       if (removed.length) operations.push(operationOf({ kind: "text-delete", ...author(), target: history.target, observed: removed.map(unit => unit.identity) }));
       return { inverse: after => {
         const now = after(part.target), inserted = restore && now ? now.records.flatMap(item => {
-          const live = item.record.type === "birth" && namedBy(item.record.operation, "text-restore", restore.id) && readSharedTextRestoreOperation(item.record.operation)
-            ? now.live({ client: item.record.born.client, clock: item.record.born.clock }) : null;
-          return live ? [live] : [];
+          if (item.record.type !== "birth" || !namedBy(item.record.operation, "text-restore", restore.id) || !readSharedTextRestoreOperation(item.record.operation)) return [];
+          // why: one restored value can be two units; the inverse names every unit the restore wrote.
+          const { client, clock, length } = item.record.born;
+          return Array.from({ length }, (_, unit) => now.live({ client, clock: clock + unit })).filter(unit => unit !== null);
         }).sort((a, b) => a.index - b.index).map(unit => unit.identity) : [];
         removed.sort((a, b) => a.index - b.index);
         return { effective: removed.length + inserted.length > 0, part: { kind: "text", target: part.target, inserted, deleted: undoUnits(removed) } };
@@ -160,7 +164,14 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
   }
 }
 
+// why: a record holds only what its own command wrote, so it is read before the updates held meanwhile are applied.
+function beforeHeldUpdates<T>(handle: SharedDocumentHandle, run: () => T): T { return sharedWriteFrame(collabState(handle), run); }
+
 export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
+  return beforeHeldUpdates(handle, () => reverseRecord(handle, record, writer));
+}
+
+function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
   const operations: SharedOperation[] = [], planned: Planned[] = [];
   try {
     for (const part of [...record.parts].reverse()) planned.unshift(planPart(handle, part, writer, operations));
@@ -187,11 +198,20 @@ function statusKinds(operation: SharedOperation): operation is SharedStatusEvent
 
 export function executeSharedCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
   options: { readonly base?: number } = {}): SharedCommandExecution {
-  const before = new Map<string, SharedTextHistory | null>(), priors = new Map<SharedOperation, SharedFieldValue>();
+  return beforeHeldUpdates(handle, () => executeCommand(handle, operations, description, options));
+}
+
+function executeCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
+  options: { readonly base?: number }): SharedCommandExecution {
+  const before = new Map<string, SharedTextHistory | null>(), priors = new Map<SharedOperation, SharedFieldValue>(), typed = new Map<string, ReadonlySet<string>>();
   const textKey = (target: SharedTextAddress): string => JSON.stringify([target.owner, target.segment, target.field]);
+  const inserts = new Set(operations.flatMap(operation => operation.kind === "text-insert" ? [textKey(operation.target)] : []));
+  for (const operation of operations) if (operation.kind === "text-delete" || operation.kind === "mark") inserts.delete(textKey(operation.target));
   for (const operation of operations) {
     if (operation.kind === "text-insert" || operation.kind === "text-delete" || operation.kind === "mark") {
-      if (!before.has(textKey(operation.target))) before.set(textKey(operation.target), readSharedTextHistory(handle, operation.target));
+      const key = textKey(operation.target), visible = inserts.has(key) && !typed.has(key) ? readSharedVisibleUnits(handle, operation.target) : null;
+      if (visible) typed.set(key, visible);
+      else if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, operation.target));
     } else if (operation.kind === "scalar") {
       const record = scalarTarget(handle, operation.target);
       if (record) priors.set(operation, record.has(operation.field) ? { value: sharedPreparedValue(record.get(operation.field)) as Extract<SharedFieldValue, { clear?: false }>["value"] } : { clear: true });
@@ -206,10 +226,13 @@ export function executeSharedCommand(handle: SharedDocumentHandle, operations: r
   };
   for (const operation of operations) {
     if (operation.kind === "text-insert" || operation.kind === "text-delete") {
-      const key = textKey(operation.target), was = before.get(key), is = now(operation.target);
-      if (described.has(key) || !was || !is) continue;
+      const key = textKey(operation.target), was = before.get(key), visible = typed.get(key);
+      if (described.has(key) || !was && !visible) continue;
+      const is = now(operation.target);
+      if (!is) continue;
       described.add(key);
-      const inserted = is.units.filter(unit => !was.live(unit.unit)).map(unit => unit.identity), deleted = undoUnits(was.units.filter(unit => !is.live(unit.unit)));
+      const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
+      const deleted = was ? undoUnits(was.units.filter(unit => !is.live(unit.unit))) : [];
       if (inserted.length || deleted.length) parts.push({ kind: "text", target: operation.target, inserted, deleted });
     } else if (operation.kind === "mark") {
       const was = before.get(textKey(operation.target)), is = now(operation.target);
