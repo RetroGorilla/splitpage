@@ -32,8 +32,11 @@ and deleted embeds from the transaction's before/after clocks and deletion range
 Both ranges use the package entry's `iterateDeletedStructs`, with a `createDeleteSet`
 for additions; no store lookup or binary-search helper is used. Yjs 13.6.33 offers
 no event carrying removed embed values without reading the full text delta. One
-guarded function owns the remaining struct representation dependency; its named
+guarded function owns the embed-reader struct representation dependency; its named
 contract test pins the version, returned values and observer-before-GC order.
+The existing `state.ts` formatting-cleanup classifier is a second representation
+site: it reads `Item.content` only to distinguish `ContentFormat` cleanup deletes,
+not to extract embed values. Both sites depend on Yjs 13.6.33.
 They inspect neither the existing text item chain nor a text delta. Ordinary string
 insertions do not rebuild reservations. Reference counts remove deleted reservations, so
 an encoded late joiner has the same index. Prepare uses only cached lookups and a
@@ -63,7 +66,7 @@ therefore selects the first beat in merged document order for each cleaned id;
 later beats with that cleaned id go to recovery without renaming. The pinned
 native history shows Reserved, keeps Created in recovery, and a command planned
 from the loaded Reserved row edits Reserved. Text, scalar and status preparation
-resolve the displayed id to that same native record. The identity checkpoint
+resolve the id shown on the author's copy to that native record. The identity checkpoint
 model's literal declared-limit table is now empty; unmatched violations fail.
 It compares patched reservations with a fresh encoded-state index at every checkpoint.
 
@@ -79,15 +82,34 @@ text units use the same interpreter. Adjacent boundaries naming the same raw bea
 coalesce; later occurrences, invalid records and foreign owners give no write span.
 Projected unit positions exclude structural and unreadable embeds. Flow offsets,
 painted identities and native anchors therefore address the visible fragment;
-an insertion before an adjacent head boundary clamps past it. A recovered fragment
-cannot be edited through a beat address.
+an insertion before an adjacent head boundary clamps past it. A fragment already
+in recovery on the author's copy is refused through a projected beat address.
+A command accepted before a competing beat arrives stays on its original native
+beat when that beat later enters recovery. The in-flight literal keeps its text,
+duration and status; deleting the winning record reveals all three edits again.
 
-One text-location resolver serves preparation and native readers. It maps a created
+One text-location resolver serves preparation and projected/painted readers. It maps a created
 beat's flow-shaped visual address through `beats[id].visual`, and maps a displayed
 cleaned beat id to the selected native record and physical segment. Stored mark
 anchors remain physical, including in recovery; they never reroute to a competing
-beat. Hydration builds physical marks before publishing its beat records and
-before transaction observers run, so it bypasses logical resolution during that phase.
+beat. Native mark and anchor APIs use the same resolution for projected addresses
+and retain direct physical storage access for opaque title labels and a staged
+native segment without beat/head/order metadata. The three native-mark fixtures
+are unchanged. The app's `titleCommand` changes standalone document fields; no
+shared title-address emitter exists yet, so there is no app-side title agreement
+proof authorizing rejection of those native labels. `FlowOperationTrace.target`
+and `marks` describe beat/heading addresses from the flow document; the text and
+mark flow-agreement tests cover those emitted addresses. The title cases in text
+and mark operation tests are adapter contract tests, not an app emitter proof.
+Literal entry refusals declare both opaque title labels and an unattached segment
+invalid projected operation addresses, all with `missing-target`.
+
+Head-only refreshes reuse boundary metadata and still consume the transaction's
+added/deleted embeds; a genuinely rescanned text skips that patch. Ownership records
+refresh only for identity/segment changes, not duration or other scalar fields.
+The mixed head/embed model covers 48 histories, 288 commands, 336 checkpoints and
+840 live-versus-encoded index comparisons with no declared limits. Each inspection
+consumer is guarded separately, so its error is surfaced after index publication.
 
 The malformed-boundary model compares write spans and projected fragments at each
 of 1,368 seeded checkpoints over 19 shapes, on the writers and encoded late joins.
@@ -96,6 +118,9 @@ Measured prepare `get` calls with 0/10,000 unrelated records fall from 3/3 to 0/
 for split, 12/12 to 1/1 for two ordered creations, and 10/10 to 0/0 for rich inline
 creation. These counters cover the preparation port, not text facade reads.
 Owner lookup separately asserts 0/0 native record reads and zero whole-order reads.
+The cost guards trap values, keys, entries, forEach, toArray and iteration wherever
+the native collection exposes them; unrelated beats and order entries are populated.
+The existing scalar preparation test remains unchanged at 4/4 map reads.
 
 A creation resolves logical neighbours to their current spans. Within a physical
 segment it inserts a beat boundary and reuses the existing text and mark store;

@@ -289,6 +289,40 @@ test("an empty cleaned native beat id has no invented row id and keeps its text 
   }
 });
 
+for (const order of ["D1", "rev", "dup"] as const) test(`an in-flight edit stays on the beat shown to its author even when it later enters recovery: ${order}`, () => {
+  const set = replicas(3, source);
+  try {
+    registerSharedTextOperationHandlers(set.a);
+    transactSharedDocument(set.b, "local-command", () => {
+      const roots = collabState(set.b).roots, beat = new Y.Map<unknown>(), segment = new Y.Map<unknown>();
+      beat.set("id", "[R1]"); beat.set("segment", "earlier"); roots.beats.set("[R1]", beat);
+      segment.set("head", { b: "[R1]" }); segment.set("text", new Y.Text("Reserved")); segment.set("markRecords", new Y.Map<unknown>());
+      roots.segments.set("earlier", segment); roots.order.insert(0, ["earlier"]);
+    });
+    assert.deepEqual(executeSharedOperations(set.a, [
+      operation({ kind: "text-insert", id: "in-flight", by: "Writer", target: { owner: "R1", segment: "R1", field: "audioText" },
+        at: { left: null, right: flowBaseReference("R1", "audioText", 0), affinity: "before" }, content: [{ value: "!", marks: [] }] }),
+      operation({ kind: "scalar", id: "in-flight-field", by: "Writer", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 9 }),
+      operation({ kind: "status", id: "in-flight-status", by: "Writer", target: { scope: "beat", record: "R1" }, parents: [], value: "ready" })
+    ], { base: readSharedRevision(set.a) }), { ok: true });
+    const read = (handle: SharedDocumentHandle) => {
+      const projected = projectSharedDocumentWithRecovery(handle);
+      return { rows: projected.document.rows.map(row => ({ id: row.id, text: row.audioText, status: row.status, length: row.lengthSeconds ?? null })), recovery: projected.recovery };
+    };
+    assert.deepEqual(read(set.a), { rows: [{ id: "R1", text: "!abcd", status: "ready", length: 9 }], recovery: [] });
+    set.queue.flush(order);
+    agree("accepted edit enters recovery", order, [set.a, set.b, set.c], read, {
+      rows: [{ id: "R1", text: "Reserved", status: "todo", length: null }],
+      recovery: [{ kind: "unprojectable-fragment", reason: "duplicate-boundary", owner: "R1", segment: "b:R1", field: "audioText", from: 0, to: 5, html: "!abcd" }]
+    });
+    transactSharedDocument(set.b, "local-command", () => { collabState(set.b).roots.beats.delete("[R1]"); }); set.queue.flush(order);
+    agree("deleting the winner reveals the accepted edits", order, [set.a, set.b, set.c], read, {
+      rows: [{ id: "R1", text: "!abcd", status: "ready", length: 9 }],
+      recovery: [{ kind: "unprojectable-fragment", reason: "missing-beat", owner: "[R1]", segment: "earlier", field: "audioText", from: 0, to: 8, html: "Reserved" }]
+    });
+  } finally { set.close(); }
+});
+
 test("seeded creation and native mutation checkpoints compare maintained reservations with encoded fresh indexes", t => {
   let seed = 0x14664, histories = 0, checkpoints = 0, copies = 0, deliveries = 0;
   const random = (limit: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % limit; };

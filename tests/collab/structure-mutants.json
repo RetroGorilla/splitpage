@@ -65,5 +65,29 @@
     "find": "view.get([\"beats\", owner, \"visual\"]) ?? owner",
     "replace": "owner",
     "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
+  }, {
+    "label": "refreshed head skips reused boundary changes",
+    "file": "src/adapters/collab/structure-index.ts",
+    "find": "rescanned.has(change.text)",
+    "replace": "changed.has(key)",
+    "tests": ["tests/adapters/collab/structure-index.test.ts"]
+  }, {
+    "label": "inspection consumer aborts metadata publication",
+    "file": "src/adapters/collab/embed-changes.ts",
+    "find": "guardSharedCallback(state, observer)",
+    "replace": "observer()",
+    "tests": ["tests/adapters/collab/structure-index.test.ts"]
+  }, {
+    "label": "owner resolution walks every beat",
+    "file": "src/adapters/collab/prepare.ts",
+    "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "replace": "ensureOpen(); for (const value of collabState(handle).roots.beats.values()) void value; bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "owner resolution walks the whole order",
+    "file": "src/adapters/collab/prepare.ts",
+    "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "replace": "ensureOpen(); collabState(handle).roots.order.forEach(() => {}); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
   }]
 }

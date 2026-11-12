@@ -7,10 +7,10 @@ import { encodeCollabTextAnchor, readSharedAnchor } from "./anchors.ts";
 import { readSharedRevision } from "./document.ts";
 import { sharedStructureSpans } from "./structure-spans.ts";
 import { createSharedPreparation } from "./prepare.ts";
-import { collabTextTarget } from "./text-target.ts";
+import { collabProjectedTextTarget } from "./text-target.ts";
 
 export function readSharedPaintedText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {
-  const found = collabTextTarget(handle, address);
+  const found = collabProjectedTextTarget(handle, address);
   if (!found) return null;
   const { target } = found, revision = readSharedRevision(handle);
   let whole = "";

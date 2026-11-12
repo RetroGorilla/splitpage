@@ -38,7 +38,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   };
   const updateSegment = (key: string) => {
     const previous = segments.get(key); if (previous) membership(key, previous, false); segments.delete(key);
-    const raw = state.roots.segments.get(key); if (!(raw instanceof Y.Map) || !isStableSharedIdentity(key)) return;
+    const raw = state.roots.segments.get(key); if (!(raw instanceof Y.Map) || !isStableSharedIdentity(key)) return null;
     const text: unknown = raw.get("text"), boundaries = previous && previous.text === text ? previous.boundaries : new Map<string, { identity: { client: number; clock: number }; boundary: SharedProjectionBoundary }>();
     if (text instanceof Y.Text && previous?.text !== text) {
       let offset = 0;
@@ -51,6 +51,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     }
     const value = { head: readProjectionHead(sharedPreparedValue(raw.get("head"))), text: text instanceof Y.Text ? text : null, boundaries };
     segments.set(key, value); membership(key, value, true);
+    return text instanceof Y.Text && previous?.text !== text ? text : null;
   };
   const updateRecord = (key: string) => {
     records.delete(key); member(recordNames, cleanId(key), key, false); if (!state.roots.beats.has(key)) return;
@@ -59,18 +60,18 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     member(recordNames, cleanId(key), key, true);
   };
   const updateHeading = (key: string) => { headings.delete(key); if (readProjectionFields(state.roots.headings.get(key), "heading")) headings.add(key); };
-  const observe = (root: Y.Map<unknown>, update: (key: string) => void, textChanges = false) => {
+  const observe = (root: Y.Map<unknown>, update: (key: string) => unknown, fields: readonly string[], textChanges = false) => {
     const listener: Parameters<typeof root.observeDeep>[0] = (events, transaction) => guardSharedCallback(state, () => {
-      const changed = new Set<string>(), texts = new Map<Y.Text, string>();
+      const changed = new Set<string>(), texts = new Map<Y.Text, string>(), rescanned = new Set<Y.Text>();
       for (const event of events) {
         if (!event.path.length && event instanceof Y.YMapEvent) for (const key of event.keysChanged) { if (typeof key === "string") changed.add(key); }
         else if (textChanges && event.path.length === 2 && event.path[1] === "text" && event.target instanceof Y.Text) texts.set(event.target, String(event.path[0]));
-        else if (event.path.length === 1 || !textChanges && event.path.length) changed.add(String(event.path[0]));
+        else if (event.path.length === 1 && event instanceof Y.YMapEvent && [...event.keysChanged].some(key => fields.includes(key as string))) changed.add(String(event.path[0]));
       }
-      for (const key of changed) update(key);
+      for (const key of changed) { const text = update(key); if (text instanceof Y.Text) rescanned.add(text); }
       if (texts.size) for (const change of embeds.read(transaction)) {
         const key = texts.get(change.text), value = key === undefined ? undefined : segments.get(key);
-        if (key === undefined || changed.has(key) || value?.text !== change.text) continue;
+        if (key === undefined || rescanned.has(change.text) || value?.text !== change.text) continue;
         const boundary = readProjectionHead(sharedPreparedTextInsert(change.value)); if (!boundary) continue;
         membership(key, value, false);
         const identity = change.identity, id = identity.client + ":" + identity.clock;
@@ -83,7 +84,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   for (const key of state.roots.segments.keys()) updateSegment(key);
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
-  const stops = [observe(state.roots.segments, updateSegment, true), observe(state.roots.beats, updateRecord), observe(state.roots.headings, updateHeading)];
+  const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment"]), observe(state.roots.headings, updateHeading, ["id"])];
   state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
   const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id),
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),

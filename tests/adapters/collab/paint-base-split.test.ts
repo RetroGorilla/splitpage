@@ -11,6 +11,7 @@ import { createSharedAnchor, sharedAnchorCharacterEnd } from "../../../src/adapt
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
+import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { SharedContentRef, SharedOperation, SharedTextAddress } from "../../../src/core/collab/operations.ts";
 import type { PaintedText } from "../../../src/application/editing/ports.ts";
@@ -32,6 +33,8 @@ test("created visual text has one flow-shaped address for painted reads and exec
     set.queue.flush("dup");
     const target = { owner: ref(NEW), segment: ref(NEW), field: "visualText" as const };
     agree("paint created visual", "dup", [set.a, set.b, set.c], handle => readSharedPaintedText(handle, target)?.text, "Visual");
+    agree("native reader resolves created visual", "dup", [set.a, set.b, set.c], handle => readSharedMarkCharacters(handle, target)?.map(char => char.value).join(""), "Visual");
+    assert.ok(createSharedAnchor(set.b, target, 0, "after"));
     const first = readSharedPaintedText(set.b, target)?.identity(0); assert.ok(first);
     assert.deepEqual(executeSharedOperations(set.b, [operation({ kind: "text-insert", id: "visual-edit", by: "Writer", target,
       at: { left: null, right: first, affinity: "before" }, content: [{ value: "!", marks: [] }] })], { base: readSharedRevision(set.b) }), { ok: true });

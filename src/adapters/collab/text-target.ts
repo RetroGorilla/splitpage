@@ -35,10 +35,8 @@ export function readSharedTextTarget(raw: unknown): SharedTextAddress | null {
   return readMarkChange({ kind: "mark", id: "target", by: "", target: raw, observed: [], mark: { kind: "b", value: true } })?.target ?? null;
 }
 
-export function collabTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+export function collabProjectedTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
   const state = collabState(handle);
-  // why: Hydration writes text marks before publishing the beat record and the metadata observer runs at transaction end.
-  if (state.hydrating) return collabPhysicalTextTarget(handle, raw);
   const index = observeSharedStructureIndex(handle);
   const get = (path: readonly string[]): unknown => {
     let value: unknown = state.roots[path[0] as keyof typeof state.roots];
@@ -51,6 +49,10 @@ export function collabTextTarget(handle: SharedDocumentHandle, raw: SharedTextAd
     }, resolveOwner: (owner, field) => resolveIndexedStructureOwner(index, owner, field) }, raw);
     return collabPhysicalTextTarget(handle, found.target);
   } catch { return null; }
+}
+
+export function collabTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+  return collabProjectedTextTarget(handle, raw) ?? collabPhysicalTextTarget(handle, raw);
 }
 
 export function collabPhysicalTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {

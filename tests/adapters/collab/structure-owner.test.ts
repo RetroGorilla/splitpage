@@ -8,6 +8,12 @@ import { encodeSharedState, encodeSharedStateVector, readSharedRevision, transac
 import { planSharedStructureHead, planSharedStructureOwner } from "../../../src/adapters/collab/structure-plan.ts";
 import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
 import { prepareSharedOrderInsertion } from "../../../src/adapters/collab/structure-order.ts";
+import { trapSharedCollectionWalks } from "./collection-guards.ts";
+import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
+import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
+import { collabTextTarget, collabProjectedTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { operation } from "./executor-support.ts";
+import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 
 test("preparation owner lookup is frozen, read-only and closes with its view", () => {
   const set = replicas(2);
@@ -19,6 +25,30 @@ test("preparation owner lookup is frozen, read-only and closes with its view", (
     assert.equal(prep.view.resolveOwner("R1", "heading"), null); assert.equal(prep.view.resolveOwner("missing", "audioText"), null);
     const resolve = prep.view.resolveOwner; prep.close(); assert.throws(() => resolve("R1", "audioText"), /Preparation has ended/);
     assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
+  } finally { set.close(); }
+});
+
+test("native title labels and an unattached native segment are not projected operation addresses", () => {
+  const set = replicas(2);
+  try {
+    transactSharedDocument(set.a, "local-command", () => {
+      const segment = new Y.Map<unknown>(); segment.set("text", new Y.Text("a")); segment.set("markRecords", new Y.Map<unknown>());
+      collabState(set.a).roots.segments.set("b:orphan", segment);
+    });
+    registerSharedTextOperationHandlers(set.a);
+    const cases = [
+      { owner: ref("document"), segment: ref("document"), field: "title" as const, reason: "missing-target" },
+      { owner: ref("R1"), segment: ref("R1"), field: "title" as const, reason: "missing-target" },
+      { owner: ref("orphan"), segment: ref("b:orphan"), field: "audioText" as const, reason: "missing-target" }
+    ];
+    for (const { reason, ...target } of cases) {
+      assert.ok(collabTextTarget(set.a, target)); assert.equal(collabProjectedTextTarget(set.a, target), null);
+      const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
+      const result = executeSharedOperations(set.a, [operation({ kind: "text-insert", id: "invalid-address", by: "Writer", target,
+        at: { left: null, right: flowBaseReference(target.owner, target.field, 0), affinity: "before" }, content: [{ value: "!", marks: [] }] })], { base: revision });
+      assert.ok(!result.ok); assert.equal(result.reason, reason);
+      assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
+    }
   } finally { set.close(); }
 });
 
@@ -63,13 +93,13 @@ test("owner preparation reads no native record or order collection with zero or 
     const set = replicas(2);
     try {
       const roots = collabState(set.a).roots;
-      transactSharedDocument(set.a, "local-command", () => { for (let index = 0; index < unrelated; index++) roots.beats.set("unrelated" + index, { status: "todo" }); });
+      transactSharedDocument(set.a, "local-command", () => { for (let index = 0; index < unrelated; index++) { roots.beats.set("unrelated" + index, { status: "todo" }); roots.order.push(["unrelated" + index]); } });
       let count = 0;
       const getters = [roots.beats, roots.segments, roots.headings].map(root => mock.method(root, "get", () => { count++; throw new Error("Uncached owner record read"); }));
-      const order = mock.method(roots.order, "toArray", () => { throw new Error("Whole order read in preparation"); });
+      const restore = trapSharedCollectionWalks(roots.beats, roots.segments, roots.headings, roots.order);
       try {
         const prep = createSharedPreparation(set.a); assert.deepEqual(prep.view.resolveOwner("R1", "audioText"), { owner: "R1", segment: "b:R1" }); prep.close(); reads.push(count);
-      } finally { for (const getter of getters) getter.mock.restore(); order.mock.restore(); }
+      } finally { for (const getter of getters) getter.mock.restore(); restore(); }
     } finally { set.close(); }
   }
   assert.deepEqual(reads, [0, 0]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], nativeRecordReads: reads, wholeOrderReads: 0 }));

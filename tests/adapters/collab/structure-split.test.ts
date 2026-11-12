@@ -1,4 +1,5 @@
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
+import { trapSharedCollectionWalks } from "./collection-guards.ts";
 import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import test, { mock } from "node:test";
@@ -233,7 +234,9 @@ test("split reads only its touched segment and beat regardless of unrelated beat
         get: path => { reads++; assert.ok(path[0] === "beats" || path[0] === "segments"); return view.get(path); },
         keys: () => { throw new Error("whole root scan"); }
       }, identities) });
-      assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads);
+      const roots = collabState(handle).roots, restore = trapSharedCollectionWalks(roots.beats, roots.segments, roots.headings, roots.order);
+      try { assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads); }
+      finally { restore(); }
     } finally { set.close(); }
   }
   assert.deepEqual(counts, [0, 0]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts }));
