@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import { startActions, stopActions } from "../../src/bootstrap/actions.ts";
 import { wireRegistries } from "../../src/test/_registries.mjs";
+import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 
 wireRegistries();
 
@@ -30,7 +31,8 @@ function probeKey(): Event {
   return event;
 }
 
-test("the app's actions start, stop and start again with one key listener and nothing left behind", () => {
+test("the app's actions start, stop and start again with one key listener and nothing left behind", t => {
+  t.after(startTestSession(unwiredSessionDeps().deps));
   const registry = createActionRegistry();
   const target = new CountingTarget();
   let probed = 0;

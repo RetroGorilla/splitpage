@@ -7,13 +7,14 @@ const DESTINATIONS = {
   "application/save/destinations.ts#SaveDestinations.register": { "bootstrap/wiring.ts": 1 },
   "application/save/destinations.ts#SaveDestinations.taking": { "bootstrap/wiring/save-owners.ts": 2 },
   "application/save/destinations.ts#SaveDestination.write": {
-    "application/save/destinations.ts": 2,
+    "application/save/destinations.ts": 3,
     "application/save/import-saving.ts": 1,
     "bootstrap/wiring/save-owners.ts": 2
   },
   "application/save/coordinator.ts#SaveCoordinator.request": { "bootstrap/wiring/save-owners.ts": 1 },
   "application/save/file-saving-ports.ts#FileSaveTargets.pick": { "application/save/file-saving.ts": 1 },
   "application/save/file-saving-ports.ts#FileSaveTargets.write": { "application/save/file-saving.ts": 1 },
+  "application/save/file-saving-ports.ts#FileSavingPorts.files": { "application/save/file-saving.ts": 6 },
   "application/save/file-saving-ports.ts#FileSaveTargets.checkConflict": { "application/save/file-saving.ts": 1 },
   "application/save/file-saving.ts#writeDoc": { "application/save/file-saving.ts": 1 },
   "application/save/file-saving.ts#writeCaptured": { "application/save/file-saving.ts": 2 },
@@ -88,9 +89,14 @@ const IMPORTS = `import type { FileSavingPorts } from "../application/save/file-
 for (const [name, source, count] of [
   ["a renamed receiver", 'function save(renamed: FileSavingPorts) { renamed.files.write(null!, "body"); }', 1],
   ["a literal element key", 'function save(renamed: FileSavingPorts) { renamed.files["write"](null!, "body"); }', 1],
+  ["a constant key", 'function save(renamed: FileSavingPorts) { const key = "write"; renamed.files[key](null!, "body"); }', 1],
+  ["a union key", 'function save(renamed: FileSavingPorts, key: "write" | "checkConflict") { renamed.files[key](null!, "body"); }', 1],
+  ["an unbounded key", 'function save(renamed: FileSavingPorts, key: string) { renamed.files[key](null!, "body"); }', 1],
   ["an ignored capability answer", 'function save(renamed: FileSavingPorts) { renamed.capability.saveDestinations(); renamed.files.write(null!, "body"); }', 1],
   ["a nested binding", 'function save(renamed: FileSavingPorts) { const { files: { write: send } } = renamed; send(null!, "body"); }', 2],
   ["a computed literal binding", 'function save(renamed: FileSavingPorts) { const { ["write"]: send } = renamed.files; send(null!, "body"); }', 2],
+  ["a constant computed binding", 'function save(renamed: FileSavingPorts) { const key = "write"; const { [key]: send } = renamed.files; void send; }', 1],
+  ["an unbounded computed binding", 'function save(renamed: FileSavingPorts, key: string) { const { [key]: send } = renamed.files; void send; }', 1],
   ["a parameter binding", 'function save({ write: send }: FileSavingPorts["files"]) { send(null!, "body"); }', 2],
   ["a loop binding", 'function save(renamed: FileSavingPorts) { for (const { write: send } of [renamed.files]) send(null!, "body"); }', 2],
   ["an assignment binding", 'function save(renamed: FileSavingPorts) { let send; ({ write: send } = renamed.files); }', 1],
@@ -115,4 +121,13 @@ test("save caller scan self-test: a missing declaration cannot silently erase a 
   assert.throws(() => capabilityPortCallers(["application/save/file-saving-ports.ts#FileSaveTargets.missing"], {
     path: "starters/save-capability-probe.ts", source: IMPORTS
   }), { message: "Capability inventory names a missing declaration: application/save/file-saving-ports.ts#FileSaveTargets.missing" });
+});
+
+test("save caller scan self-test: a namespace function access uses the computed key's type", () => {
+  const point = "adapters/files/file-target.ts#writeToHandle";
+  assert.deepEqual(capabilityPortCallers([point], { path: "starters/save-capability-probe.ts", source: `
+    import * as files from "../adapters/files/file-target.ts";
+    const key = "writeToHandle";
+    files[key](null!, "body");
+  ` }), { [point]: { "starters/save-capability-probe.ts": 1 } });
 });

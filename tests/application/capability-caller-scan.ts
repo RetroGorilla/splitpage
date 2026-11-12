@@ -37,6 +37,30 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
     if (ts.isComputedPropertyName(node) && ts.isStringLiteralLike(node.expression)) return node.expression.text;
     return null;
   }
+  function finiteKeys(type: ts.Type, seen = new Set<ts.Type>()): readonly string[] | null {
+    if (type.isStringLiteral()) return [type.value];
+    if (seen.has(type)) return null;
+    seen.add(type);
+    if (type.isUnion()) {
+      const keys: string[] = [];
+      for (const part of type.types) {
+        const found = finiteKeys(part, new Set(seen));
+        if (found === null) return null;
+        keys.push(...found);
+      }
+      return [...new Set(keys)];
+    }
+    const constraint = checker.getBaseConstraintOfType(type);
+    return constraint && constraint !== type ? finiteKeys(constraint, seen) : null;
+  }
+  function keys(from: ts.Type, expression: ts.Expression): readonly string[] {
+    return finiteKeys(checker.getTypeAtLocation(expression)) ?? checker.getPropertiesOfType(checker.getNonNullableType(from)).map(symbol => symbol.name);
+  }
+  function bindingNames(from: ts.Type, name: ts.Node): readonly string[] {
+    const literal = literalName(name);
+    if (literal !== null) return [literal];
+    return ts.isComputedPropertyName(name) ? keys(from, name.expression) : [];
+  }
   function point(node: ts.Node): string | null {
     const path = canonical(node.getSourceFile().fileName);
     const prefix = canonical(join(REPO, "src")) + "/";
@@ -78,20 +102,20 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
     function binding(pattern: ts.ObjectBindingPattern, from: ts.Type): void {
       for (const element of pattern.elements) {
         if (element.dotDotDotToken) continue;
-        const name = literalName(element.propertyName ?? element.name);
-        if (name === null) continue;
-        const type = property(from, name, element) ?? checker.getTypeAtLocation(element.name);
-        if (!checker.getPropertyOfType(checker.getNonNullableType(from), name)) note(checker.getSignaturesOfType(type, ts.SignatureKind.Call).flatMap(signature => signature.declaration ? [signature.declaration] : []));
-        if (type && ts.isObjectBindingPattern(element.name)) binding(element.name, type);
+        for (const name of bindingNames(from, element.propertyName ?? element.name)) {
+          const type = property(from, name, element) ?? checker.getTypeAtLocation(element.name);
+          if (!checker.getPropertyOfType(checker.getNonNullableType(from), name)) note(checker.getSignaturesOfType(type, ts.SignatureKind.Call).flatMap(signature => signature.declaration ? [signature.declaration] : []));
+          if (type && ts.isObjectBindingPattern(element.name)) binding(element.name, type);
+        }
       }
     }
     function assignment(pattern: ts.ObjectLiteralExpression, from: ts.Type): void {
       for (const element of pattern.properties) {
         if (!ts.isPropertyAssignment(element) && !ts.isShorthandPropertyAssignment(element)) continue;
-        const name = literalName(element.name);
-        if (name === null) continue;
-        const type = property(from, name, element);
-        if (type && ts.isPropertyAssignment(element) && ts.isObjectLiteralExpression(element.initializer)) assignment(element.initializer, type);
+        for (const name of bindingNames(from, element.name)) {
+          const type = property(from, name, element);
+          if (type && ts.isPropertyAssignment(element) && ts.isObjectLiteralExpression(element.initializer)) assignment(element.initializer, type);
+        }
       }
     }
     const visit = (node: ts.Node): void => {
@@ -99,10 +123,9 @@ export function capabilityPortCallers(targets: readonly string[], probe?: { read
       if (key) declared.add(key);
       if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
         const type = checker.getTypeAtLocation(node.expression);
-        const name = ts.isPropertyAccessExpression(node) ? node.name.text
-          : ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
-        if (name !== null) property(type, name, node);
-        if (name === "call" || name === "apply" || name === "bind") note(checker.getSignaturesOfType(type, ts.SignatureKind.Call).flatMap(signature => signature.declaration ? [signature.declaration] : []));
+        const names = ts.isPropertyAccessExpression(node) ? [node.name.text] : keys(type, node.argumentExpression);
+        for (const name of names) property(type, name, node);
+        if (names.some(name => name === "call" || name === "apply" || name === "bind")) note(checker.getSignaturesOfType(type, ts.SignatureKind.Call).flatMap(signature => signature.declaration ? [signature.declaration] : []));
       }
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
         const signature = checker.getResolvedSignature(node);
