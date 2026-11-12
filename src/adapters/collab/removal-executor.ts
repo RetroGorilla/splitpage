@@ -112,7 +112,7 @@ function restore(operation: SharedRestore, view: SharedPreparationView, identiti
 }
 
 export function registerSharedRemovalHandlers(handle: SharedDocumentHandle): void {
-  const structure = observeSharedStructureIndex(handle), index = structure.attachments, identities = observeSharedStructureIdentities(handle);
+  const structure = observeSharedStructureIndex(handle), index = structure.attachments(), identities = observeSharedStructureIdentities(handle);
   const guard = (run: () => SharedPreparationResult): SharedPreparationResult => {
     try { return run(); } catch (error) {
       if (error instanceof SharedStructurePreparationError || error instanceof SharedTextPreparationError) return { ok: false, reason: error.message };

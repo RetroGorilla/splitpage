@@ -15,6 +15,7 @@ import { projectSharedBrollKeys } from "../../core/collab/projection/broll.ts";
 import type { SharedProjectionGalleryOverflow } from "../../core/collab/projection/gallery.ts";
 import { readSharedRemovalBufferSources } from "./removal-record.ts";
 import type { SharedRemovalBufferSource } from "./removal-record.ts";
+import { collabState } from "./state.ts";
 
 export interface SharedDocumentFieldProjection {
   readonly document: Readonly<Record<string, unknown>>;
@@ -92,7 +93,7 @@ export function assembleSharedDocument(source: SharedProjectionSource): SharedDo
     const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", !group.removed, value.key)).filter(Boolean).join("<br>");
     const painted = cache.read(["painted-row", group.root], [row, audioText, visualText], () => ({ ...row, audioText, visualText }));
     if (group.removed) {
-      const buffer = readSharedRemovalBufferSources(source.roots.beats, source.roots.removalRecords, members);
+      const buffer = readSharedRemovalBufferSources(source.roots.beats, source.roots.removalRecords, members, collabState(source.handle).reads);
       recovery.push({ kind: "removed-beat", row: cache.canonical(painted, "row") as Record<string, unknown>, members, ...(buffer.length ? { buffer } : {}) });
     }
     else rows.push(painted);

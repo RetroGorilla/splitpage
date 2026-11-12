@@ -21,7 +21,7 @@ export interface SharedStructureIndex {
   readonly candidates: (name: string, heading: boolean) => readonly string[];
   readonly order: ReturnType<typeof observeSharedStructureOrder>;
   readonly removed: (id: string) => boolean;
-  readonly attachments: SharedAttachmentOwnership;
+  readonly attachments: () => SharedAttachmentOwnership;
 }
 type IndexedStructureSegment = { head: SharedProjectionBoundary | null; text: Y.Text | null;
   boundaries: Map<string, { identity: { client: number; clock: number }; boundary: SharedProjectionBoundary }> };
@@ -33,6 +33,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const order = observeSharedStructureOrder(handle), segments = new Map<string, IndexedStructureSegment>(), embeds = sharedEmbedChangeReader(handle);
   const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>();
   const removed = new Set<string>();
+  let attachmentsReady = false;
   const attachments = { visuals: new Map<string, Set<string>>(), gallery: new Map<string, Set<string>>() };
   const attachmentUpdater = (collection: "visuals" | "gallery") => {
     const owners = new Map<string, string>(), groups = attachments[collection];
@@ -44,7 +45,6 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       let keys = groups.get(beat); if (!keys) { keys = new Set(); groups.set(beat, keys); }
       keys.add(key); owners.set(key, beat);
     };
-    for (const key of state.roots[collection].keys()) update(key);
     return update;
   };
   const updateVisual = attachmentUpdater("visuals"), updateGallery = attachmentUpdater("gallery");
@@ -77,8 +77,9 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     return text instanceof Y.Text && previous?.text !== text ? text : null;
   };
   const updateRecord = (key: string) => {
-    records.delete(key); removed.delete(key); member(recordNames, cleanId(key), key, false); if (!state.roots.beats.has(key)) return;
-    const beat = state.roots.beats.get(key), fields = readProjectionFields(beat, "beat"), flags: unknown = beat instanceof Y.Map ? beat.get("removals") : null;
+    records.delete(key); removed.delete(key); member(recordNames, cleanId(key), key, false);
+    const beat = state.roots.beats.get(key); if (beat === undefined && !state.roots.beats.has(key)) return;
+    const fields = readProjectionFields(beat, "beat"), flags: unknown = beat instanceof Y.Map ? beat.get("removals") : null;
     if (readSharedRemovalState(flags instanceof Y.Map ? flags : []).removed) removed.add(key);
     records.set(key, Object.freeze({ id: key, valid: fields?.id === key, segment: typeof fields?.segment === "string" ? fields.segment : null }));
     member(recordNames, cleanId(key), key, true);
@@ -110,10 +111,16 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
   const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment", "removals"]),
-    observe(state.roots.headings, updateHeading, ["id"]), observe(state.roots.visuals, updateVisual, ["beat"]), observe(state.roots.gallery, updateGallery, ["beat"])];
+    observe(state.roots.headings, updateHeading, ["id"]), observe(state.roots.visuals, key => { if (attachmentsReady) updateVisual(key); }, ["beat"]),
+    observe(state.roots.gallery, key => { if (attachmentsReady) updateGallery(key); }, ["beat"])];
   state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
+  const attachmentIndex: SharedAttachmentOwnership = Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) });
   const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), removed: (id: string) => removed.has(id),
-    attachments: Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) }),
+    attachments: () => { assertSharedDocumentIdle(state); if (!attachmentsReady) {
+      for (const key of state.roots.visuals.keys()) updateVisual(key);
+      for (const key of state.roots.gallery.keys()) updateGallery(key);
+      attachmentsReady = true;
+    } return attachmentIndex; },
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),
     candidates: (name: string, heading: boolean) => Object.freeze([...(heading ? headingNames.get(name) : names.get(cleanId(name))) ?? []]),
     segment: (key: string) => {

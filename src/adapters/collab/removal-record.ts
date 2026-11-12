@@ -8,6 +8,7 @@ import { sharedPreparedValue } from "./prepare-value.ts";
 import { sharedStructureIdentity } from "./structure-identity.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
+import type { CollabReadCaches } from "./read-cache.ts";
 
 export interface SharedRemovalTarget { readonly beat: string; readonly segment: string; readonly generation: number }
 export interface SharedRemovalObservation { readonly target: SharedTextAddress; readonly identities: readonly SharedTextIdentity[] }
@@ -68,14 +69,15 @@ export function readSharedRemovalCommand(key: string, raw: unknown): SharedStore
   return { kind: "remove", ...common, removalKind: value.removalKind as SharedSoftRemove["removalKind"], at: value.at, observed,
     references: value.references, boundaries: value.boundaries, components: value.components, gallery: value.gallery, comments: value.comments, buffer };
 }
-export function readSharedRemovalBufferSources(beats: Y.Map<unknown>, records: Y.Map<unknown>, members: readonly string[]): SharedRemovalBufferSource[] {
+export function readSharedRemovalBufferSources(beats: Y.Map<unknown>, records: Y.Map<unknown>, members: readonly string[], caches: CollabReadCaches): SharedRemovalBufferSource[] {
   const sources = new Map<string, SharedRemovalBufferSource>();
   for (const beat of members) {
-    const raw = beats.get(beat), flags: unknown = raw instanceof Y.Map ? raw.get("removals") : null;
-    if (!(flags instanceof Y.Map)) continue;
-    for (const key of flags.keys()) {
-      if (readSharedRemovalState([[key, flags.get(key)]]).generation === null) continue;
-      const record = readSharedRemovalCommand(key, records.get(key));
+    const raw = caches.entry(beats, "removal-source-beat", beat, () => beats.get(beat));
+    const flags: unknown = raw instanceof Y.Map ? caches.entry(raw, "removal-source-map", "removals", () => raw.get("removals")) : null;
+    const keys = flags instanceof Y.Map ? caches.memo([flags], "removal-source-keys",
+      () => [...flags.keys()].filter(key => readSharedRemovalState([[key, flags.get(key)]]).generation !== null)) : [];
+    for (const key of keys) {
+      const record = caches.entry(records, "removal-source-record", key, () => readSharedRemovalCommand(key, records.get(key)));
       if (record?.kind !== "remove") continue;
       for (const source of record.buffer) if (source.beat === beat) sources.set(JSON.stringify([beat, source.metadata.bufferSourceOwner, source.metadata.bufferPaintedBase]), source);
     }

@@ -15,6 +15,8 @@ import { measureLibraryReads } from "../../collab/library-read-counts.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { readSharedRemovalCommand } from "../../../src/adapters/collab/removal-record.ts";
+import { assertIncremental, captureIncrementalReplica } from "./incremental-support.ts";
+import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 
 const remove = { kind: "remove", id: "a", by: "Alice", removalKind: "beat", targets: ["R1"], observed: [flowBaseReference("R1", "audioText", 0, 2)], boundaries: ["R1"], components: [], gallery: [], at: 0 };
 const create = { kind: "segment-create", id: "r17", by: "Alice", beat: "new", segment: "segment", at: { left: null, right: null, affinity: "after" }, fields: { audioText: "abc" } };
@@ -121,20 +123,35 @@ for (const kind of ["split", "split-before"] as const) test(`restore an inline $
 test("seeded malformed removal records have one validated result on writing, receiving and encoded copies", () => {
   const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }] }), key = "structure_1_0061_removal_0";
   const valid = { kind: "remove", writer: "1", operation: "a", by: "Alice", targets: [{ beat: "R1", segment: "b:R1", generation: 0 }], removalKind: "beat", at: 0,
-    observed: [], references: [], boundaries: ["R1"], components: [], gallery: [], comments: null, buffer: [] };
+    observed: [], references: [], boundaries: ["R1"], components: [], gallery: [], comments: null, buffer: [{ beat: "R1", metadata: { bufferSourceOwner: "R1", bufferPaintedBase: 7 } }] };
   let seed = 0x5c44;
   const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 8) % n; };
   const atom = (): unknown => [undefined, null, true, 0, "", "R1", [], {}, new Y.Map<unknown>()][random(9)];
+  transactSharedDocument(set.a, "local-command", () => { const flags = (collabState(set.a).roots.beats.get("R1") as Y.Map<unknown>).get("removals") as Y.Map<unknown>;
+    flags.set(key, true); flags.set("old", true); }); set.queue.flush("dup");
+  const { projector } = captureIncrementalReplica(set.a);
   try {
     for (let index = 0; index < 128; index++) {
       const field = ["kind", "writer", "operation", "by", "targets", "removalKind", "observed", "buffer", "comments"][random(9)]; assert.ok(field);
       const raw = index % 7 === 0 ? valid : { ...valid, [field]: random(2) ? atom() : [atom()] };
-      transactSharedDocument(set.a, "local-command", () => collabState(set.a).roots.removalRecords.set(key, raw)); set.queue.flush("dup");
-      agree("record grammar " + index, "dup", [set.a, set.b], handle => readSharedRemovalCommand(key, collabState(handle).roots.removalRecords.get(key)));
+      transactSharedDocument(set.a, "local-command", () => {
+        collabState(set.a).roots.removalRecords.set(key, raw);
+        ((collabState(set.a).roots.beats.get("R1") as Y.Map<unknown>).get("removals") as Y.Map<unknown>).set(key, index % 2 ? atom() : { generation: 0, removed: true });
+      }); set.queue.flush("dup");
+      agree("record grammar " + index, "dup", [set.a, set.b], handle => ({ command: readSharedRemovalCommand(key, collabState(handle).roots.removalRecords.get(key)), projection: projectSharedDocumentWithRecovery(handle) }));
+      assertIncremental(set.a, projector);
     }
     assert.equal(readSharedRemovalCommand(key, { ...valid, removalKind: ["beat"] }), null);
     assert.equal(readSharedRemovalCommand(key, { ...valid, targets: [...valid.targets, ...valid.targets] }), null);
-  } finally { set.close(); }
+    transactSharedDocument(set.a, "local-command", () => { collabState(set.a).roots.removalRecords.set(key, valid);
+      ((collabState(set.a).roots.beats.get("R1") as Y.Map<unknown>).get("removals") as Y.Map<unknown>).set(key, true); });
+    assertIncremental(set.a, projector);
+    const recovered = projector.read().recovery[0]; assert.ok(recovered?.kind === "removed-beat");
+    assert.deepEqual(recovered.buffer, [{ beat: "R1", metadata: { bufferSourceOwner: "R1", bufferPaintedBase: 7 } }]);
+    transactSharedDocument(set.a, "local-command", () => ((collabState(set.a).roots.beats.get("R1") as Y.Map<unknown>).get("removals") as Y.Map<unknown>).delete(key));
+    assertIncremental(set.a, projector);
+    const without = projector.read().recovery[0]; assert.ok(without?.kind === "removed-beat"); assert.equal(Object.hasOwn(without, "buffer"), false);
+  } finally { projector.dispose(); set.close(); }
 });
 
 test("removal generation overflow is a named whole-list refusal", () => {
@@ -147,4 +164,27 @@ test("removal generation overflow is a named whole-list refusal", () => {
     const result = executeSharedOperations(set.a, [operation(remove)], { base: revision }); assert.ok(!result.ok); assert.equal(result.reason, "removal-generation-limit");
     assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
   } finally { set.close(); }
+});
+
+test("incremental typing reads zero unrelated removed records with zero and many recovery beats", t => {
+  const readings: unknown[] = [];
+  for (const unrelated of [0, 299]) {
+    const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }, ...Array.from({ length: unrelated }, (_, index) => ({ id: "other" + index, audioText: "cd" }))] });
+    try {
+      transactSharedDocument(set.a, "local-command", () => { for (let index = 0; index < unrelated; index++) {
+        ((collabState(set.a).roots.beats.get("other" + index) as Y.Map<unknown>).get("removals") as Y.Map<unknown>).set("old", true);
+      } });
+      registerSharedTextOperationHandlers(set.a); const { projector, docs } = captureIncrementalReplica(set.a);
+      try {
+        const measured = measureLibraryReads(set.a, "R1", () => executeSharedOperations(set.a, [operation({ kind: "text-insert", id: "typed", by: "Alice",
+          target: { owner: "R1", segment: "R1", field: "audioText" }, at: { left: null, right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, content: [{ value: "X", marks: [] }] })], { base: readSharedRevision(set.a) }), docs);
+        assert.deepEqual(measured.result, { ok: true });
+        assert.deepEqual(measured.totals, { texts: 7, markEntries: 2, records: 0, statusEntries: 0, orderEntries: 0 });
+        assert.deepEqual(measured.unrelated, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
+        assert.equal(projector.read().document.rows[0]?.audioText, "aXb"); assert.equal(projector.read().recovery.length, unrelated);
+        assertIncremental(set.a, projector); readings.push({ unrelated, totals: measured.totals, unrelatedReads: measured.unrelated });
+      } finally { projector.dispose(); }
+    } finally { set.close(); }
+  }
+  t.diagnostic(JSON.stringify(readings));
 });

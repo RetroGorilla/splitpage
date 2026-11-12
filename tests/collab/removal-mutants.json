@@ -35,5 +35,17 @@
     "find": "sharedCreatedAttachments(view).push({ collection: \"gallery\", beat, html: null, record });",
     "replace": "if (index === 0) sharedCreatedAttachments(view).push({ collection: \"gallery\", beat, html: null, record });",
     "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "incremental provenance cache never invalidates changed records",
+    "file": "src/adapters/collab/removal-record.ts",
+    "find": "caches.entry(records, \"removal-source-record\", key, () =>",
+    "replace": "caches.keep(records, \"removal-source-record:\" + key, () =>",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "incremental provenance rereads unrelated recovered beats",
+    "file": "src/adapters/collab/removal-record.ts",
+    "find": "const raw = caches.entry(beats,",
+    "replace": "beats.get(beat); const raw = caches.entry(beats,",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
   }]
 }

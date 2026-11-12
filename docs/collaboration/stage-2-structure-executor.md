@@ -281,12 +281,18 @@ transferred to the removal record when removed, never row extras. Recovery expos
 all validated sources in an optional `buffer` array beside the row. Neither the
 visible projection nor a restored row or export receives those fields. The base
 is historical provenance, not a replacement for the entry's current painted base.
+Full and incremental projection share this assembly. Provenance caches track each
+beat's membership and each referenced record through the existing keyed read cache;
+metadata-only corruption and membership deletion are compared with fresh snapshots.
+Typing with zero or 299 unrelated recovery beats performs zero unrelated native
+reads, with seven text and two mark-entry reads in either case.
 Visual and gallery membership is derived from validated records, including all
 staged gallery records. Caller component ids are checked observations, not authority;
 empty observations and the flow emitter's logical attachment names are accepted.
 The executor creates no undo entry; rule 29 is submitted without one by its caller.
 
-The attachment index is initialized while idle and patches changed ownership only.
+The attachment index is activated while idle by handler registration and patches
+changed ownership only; a full snapshot does not warm unused attachment ownership.
 Preparation inspects touched beats, segments and attachments, never whole roots or
 the order array. The count test measures 57 record reads and four text reads with
 both zero and 10,000 unrelated beats and gallery entries, including four required

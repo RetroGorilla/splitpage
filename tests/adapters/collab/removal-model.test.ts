@@ -34,7 +34,7 @@ test("seeded removal checkpoints agree with a literal model and fresh ownership 
     const checkpoint = (removed: boolean) => {
       set.queue.flush(order); checkpoints++;
       agree("seed=" + seed, order, handles, handle => {
-        const value = projectSharedDocumentWithRecovery(handle), prep = createSharedPreparation(handle), index = observeSharedStructureIndex(handle).attachments;
+        const value = projectSharedDocumentWithRecovery(handle), prep = createSharedPreparation(handle), index = observeSharedStructureIndex(handle).attachments();
         try {
           const targets = ["R1", "R2", "R3", ...created.map(row => row.id)];
           const result = { rows: value.document.rows.map(row => ({ id: row.id, text: row.audioText })), recovery: value.recovery.map(entry => {
