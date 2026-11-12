@@ -71,7 +71,9 @@ A subscriber of the session reads the new pair.
 A revision's projection holds that revision's change and no later one. That is the
 adapter's promise, kept by its ingress gate: see
 [stage-2-ingress-gate.md](stage-2-ingress-gate.md). A received update that arrives
-during a notification is held and announced afterwards as its own revision. A command
+during a notification is held. There is one notification per transaction; the revision
+advances only when the document changed. The owner publishes one change per
+revision-advancing transaction. A command
 issued in that interval is rejected by this owner as `reentered` when the owner is the
 one running or delivering; issued from an observer the replica tells before the owner,
 it fails, because the adapter refuses the write.
@@ -82,11 +84,10 @@ The tests use `migrateRows`, the only producer of a `ValidatedDocument`. It was
 written for files, and it is not the identity on a projection. What it does today
 to a projected document:
 
-- Beat ids lose punctuation, so the writer-scoped id of a beat made by a split,
-  `["structure","1","enter","beat"]`, is held as `structure1enterbeat`; missing beat
-  fields get defaults.
-- Writer-scoped heading ids fail scene normalization and the heading disappears; a
-  heading anchored to a rewritten beat can be orphaned.
+- The adapter's writer-scoped structural ids survive unchanged, as pinned by the
+  split literal. Legacy beat ids can lose punctuation; missing beat fields get defaults.
+- A heading whose id fails scene normalization disappears; a heading anchored to a
+  rewritten beat can be orphaned.
 - People, comment, reply and shot ids pass through id cleaning; comment references
   are cleaned and owner references can be cleared.
 - Invalid tag ids are minted again.
@@ -96,9 +97,9 @@ to a projected document:
   `bs-load-...` id, and the change names `brollShots`.
 
 Change sets are keyed by the held ids. A later command aimed at a rewritten id
-would not find it in the replica. Two tests in `shared-session-replicas.test.ts` pin
-the split id and the minted shot as declared limits; the other entries are as found
-in the review of this owner and have no test here.
+would not find it in the replica. `shared-session-replicas.test.ts` pins the preserved
+split id and the minted shot, the latter as a declared limit; the other entries are
+as found in the review of this owner and have no test here.
 
 Prerequisite for package 14: an entry that is safe for shared state. It creates no
 record from text and rewrites no id. This owner is the same whichever entry it is

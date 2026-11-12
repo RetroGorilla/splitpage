@@ -149,13 +149,13 @@ test("local command: each kind of operation is one execute, one edit and the pre
   } finally { w.close(); }
 });
 
-test("split: one transaction names the shortened cell and the inserted beat on both replicas; the test entry port rewrites the beat's writer-scoped id", () => {
+test("split: one transaction names the shortened cell and the inserted beat on both replicas; the test entry port preserves the beat's writer-scoped id", () => {
   const w = world();
   try {
     registerSplits(w.a.handle);
     registerSplits(w.b.handle);
     const target = { segment: ref("b:R1"), owner: ref("R1"), field: "audioText" as const };
-    const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "audioText" }], rowsInserted: ["structure1enterbeat"] };
+    const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "audioText" }], rowsInserted: ["structure_1_0065006e007400650072_beat_0"] };
     const outcome = w.a.h.session.run(sharedCommand("split", [operation({ kind: "split", id: "enter", by: "A", target,
       at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [flowBaseReference("R1", "audioText", 0, 3)],
       boundary: "same-boundary", beat: "same-beat", fields: { status: "todo" } })]));
@@ -166,12 +166,12 @@ test("split: one transaction names the shortened cell and the inserted beat on b
     untouched(w.b);
     const rows = [
       { id: "R1", status: "todo", visualText: "", audioText: "ab", imageRef: null, updatedAt: "", updatedBy: null },
-      { id: "structure1enterbeat", status: "todo", visualText: "", audioText: "Z", imageRef: null, updatedAt: "", updatedBy: null },
+      { id: "structure_1_0065006e007400650072_beat_0", status: "todo", visualText: "", audioText: "Z", imageRef: null, updatedAt: "", updatedBy: null },
       { id: "R2", status: "todo", visualText: "", audioText: "cd", imageRef: null, updatedAt: "", updatedBy: null }
     ];
     assert.deepEqual(w.a.h.session.read(doc => doc?.rows), rows);
     assert.deepEqual(w.b.h.session.read(doc => doc?.rows), rows);
-    for (const made of [w.a, w.b]) assert.deepEqual(projectSharedDocument(made.handle).rows.map(row => row.id), ["R1", "[\"structure\",\"1\",\"enter\",\"beat\"]", "R2"]);
+    for (const made of [w.a, w.b]) assert.deepEqual(projectSharedDocument(made.handle).rows.map(row => row.id), ["R1", "structure_1_0065006e007400650072_beat_0", "R2"]);
     assert.deepEqual([w.a.updates(), w.b.updates()], [1, 1]);
   } finally { w.close(); }
 });
