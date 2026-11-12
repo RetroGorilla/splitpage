@@ -1,7 +1,7 @@
 import type { BufferedTextCommit } from "../../application/editing/ports.ts";
 import type { CommonDocumentSession, CommandOutcome } from "../../application/session/document-session.ts";
 import { cellEdit } from "../../application/session/change-set.ts";
-import { SharedTextBuffer } from "../../core/collab/buffer.ts";
+import { createSharedTextBuffer } from "../../core/collab/buffer.ts";
 import { bufferedTextOperations } from "../../core/collab/buffer-operations.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
@@ -16,7 +16,7 @@ export function createSharedBufferedText(
   return {
     open: (rowId, painted) => {
       if (sharedBufferDeliveryBusy(handle) || readSharedRevision(handle) !== painted.revision) return null;
-      const target = ports.target(rowId), epoch = session.epoch(), buffer = new SharedTextBuffer(painted.revision, painted.text);
+      const target = ports.target(rowId), epoch = session.epoch(), buffer = createSharedTextBuffer(painted.revision, painted.text);
       const release = holdSharedBuffer(handle);
       let open = true;
       buffer.begin();

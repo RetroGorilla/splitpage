@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SharedTextBuffer } from "../../../src/core/collab/buffer.ts";
+import { createSharedTextBuffer } from "../../../src/core/collab/buffer.ts";
 import { bufferedTextOperations } from "../../../src/core/collab/buffer-operations.ts";
 import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
 
@@ -8,7 +8,7 @@ const ref = (value: string) => value as SharedContentRef;
 const target = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
 
 test("literal native replacement operations use painted occurrence identities even when all letters match", () => {
-  const buffer = new SharedTextBuffer(9, "aaa"); buffer.replace(1, 2, "a");
+  const buffer = createSharedTextBuffer(9, "aaa"); buffer.replace(1, 2, "a");
   const painted = { revision: 9, text: "aaa", identity: (index: number) => [ref("first"), ref("selected"), ref("last")][index] ?? null };
   assert.deepEqual(bufferedTextOperations(buffer.plan(), painted, target,
     [{ text: "a", marks: {} }, { text: "a", marks: { b: true } }, { text: "a", marks: {} }], { id: "native", by: "Alice" }), [
@@ -18,7 +18,7 @@ test("literal native replacement operations use painted occurrence identities ev
 });
 
 test("empty input needs a painted native gap; a different revision and unproved DOM text are refused", () => {
-  const buffer = new SharedTextBuffer(1, ""); buffer.replace(0, 0, "Z");
+  const buffer = createSharedTextBuffer(1, ""); buffer.replace(0, 0, "Z");
   const painted = { revision: 1, text: "", identity: () => null };
   assert.throws(() => bufferedTextOperations(buffer.plan(), painted, target, [{ text: "Z", marks: {} }], { id: "native", by: "Alice" }), /empty gap/);
   assert.throws(() => bufferedTextOperations(buffer.plan(), { ...painted, revision: 2 }, target, [{ text: "Z", marks: {} }], { id: "native", by: "Alice" }), /native evidence/);
