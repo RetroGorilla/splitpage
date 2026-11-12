@@ -33,8 +33,9 @@ export function createSaveDestinations<R, P = unknown>(capability: Pick<Capabili
       if (typeof destination[name] !== "function") refuse("the " + destination.id + " destination has no " + name + " function");
     }
     if (registered.some(function (d) { return d.id === destination.id; })) refuse("a destination called " + destination.id + " is already registered");
-    const write = destination.write;
-    const held: SaveDestination<R, P> = Object.freeze({ ...destination, write: function (job: SaveJob<R>): Promise<WriterResult> {
+    const snapshot: SaveDestination<R, P> = { ...destination };
+    const write = snapshot.write;
+    const held: SaveDestination<R, P> = Object.freeze({ ...snapshot, write: function (job: SaveJob<R>): Promise<WriterResult> {
       const can = capability.saveDestinations();
       if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
       return write.call(held, job);

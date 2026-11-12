@@ -61,6 +61,25 @@ test("standalone destinations retain the registered writer and frozen receiver w
   assert.deepEqual(calls, ["original:file"]);
 });
 
+test("standalone registration reads a writer getter only for validation and its frozen copy", async () => {
+  let reads = 0;
+  const calls: number[] = [];
+  const destinations = createSaveDestinations<{ kind: string }>(STANDALONE);
+  destinations.register({
+    id: "file", takes: () => true, autoSaveTarget: () => null,
+    get write() {
+      const read = ++reads;
+      return async () => { calls.push(read); return { kind: "saved" as const }; };
+    }
+  });
+  assert.equal(reads, 2);
+  const destination = destinations.taking({ kind: "save" }, null);
+  assert.ok(destination);
+  assert.deepEqual(await destination.write(job("save", [])), { kind: "saved" });
+  assert.equal(reads, 2);
+  assert.deepEqual(calls, [2]);
+});
+
 test("shared autosave schedules no timer, reads no preference, changes no setting and never calls due", () => {
   const calls: unknown[][] = [];
   const policy = createAutoSavePolicy({
@@ -110,7 +129,7 @@ function job(kind: string, calls: string[]): SaveJob<{ kind: string }> {
   };
 }
 
-function guardedFilePorts(capability: FileSavingPorts["capability"], calls: string[], bundles?: FileSavingPorts["bundles"]): FileSavingPorts {
+function guardedFilePorts(capability: FileSavingPorts["capability"], calls: string[], bundles?: FileSavingPorts["bundles"], saves?: FileSavingPorts["saves"]): FileSavingPorts {
   const unexpected = (name: string): never => { calls.push(name); throw new Error("unexpected file port"); };
   return {
     capability,
@@ -127,7 +146,7 @@ function guardedFilePorts(capability: FileSavingPorts["capability"], calls: stri
     get formats() { return unexpected("formats"); },
     get files() { return unexpected("files"); },
     get delivery() { return unexpected("delivery"); },
-    get saves() { return unexpected("saves"); },
+    get saves() { return saves ?? unexpected("saves"); },
     get notices() { return unexpected("notices"); },
     get preferences() { return unexpected("preferences"); },
     get page() { return unexpected("page"); },
@@ -182,15 +201,21 @@ test("Save As waiting for bundle copies rechecks before holding standalone undo 
       calls.push("bundle.begin");
       return { drained: waiting, ask: async () => [], end: () => { calls.push("bundle.end"); } };
     }
+  }, {
+    resume: () => { calls.push("resume"); },
+    policy: () => { throw new Error("unexpected policy"); },
+    confirmSavedNow: () => { throw new Error("unexpected confirm"); },
+    halt: () => { throw new Error("unexpected halt"); },
+    changes: () => { throw new Error("unexpected changes"); }
   });
   const saving = mountFileSaving(ports);
   t.after(saving.dispose);
   const pending = saving.destination().write(job("saveAs", calls));
-  assert.deepEqual(calls, ["owns", "bundle.begin"]);
+  assert.deepEqual(calls, ["resume", "owns", "bundle.begin"]);
   capability = SHARED;
   drained(true);
   assert.deepEqual(await pending, { kind: "refused", reason: "Save destinations are not available in a shared session." });
-  assert.deepEqual(calls, ["owns", "bundle.begin", "bundle.end"]);
+  assert.deepEqual(calls, ["resume", "owns", "bundle.begin", "bundle.end"]);
 });
 
 test("shared save requests stop before destination, ownership, writer and conflict ports", async t => {
