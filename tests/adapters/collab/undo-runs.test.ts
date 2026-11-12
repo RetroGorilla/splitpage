@@ -48,6 +48,26 @@ const RUNS = [
   { name: "a run with an emoji typed in two commands", seed: "abZ", type: [[1, "x\u{1f600}"], [4, "\u{1f601}q"]], from: 2, to: 6, whole: "ax\u{1f600}\u{1f601}qbZ", without: "axqbZ" }
 ] as const;
 
+test("the undo of typing an emoji removes both of its units after a cut of it was undone", () => {
+  const run = replicas(2, fixture("abZ"));
+  try {
+    for (const handle of [run.a, run.b]) { registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle); }
+    let serial = 0;
+    const writer = { by: "Alice", nextId: () => "undo:" + ++serial };
+    const typing = commanded(run.a, [typed(run.a, "typed", 1, "\u{1f600}")]), cutting = commanded(run.a, [cut(run.a, 1, 3)]);
+    assert.equal(shown(run.a), "abZ");
+    assert.ok(reverseSharedUndoRecord(run.a, cutting, writer).ok);
+    assert.equal(shown(run.a), "a\u{1f600}bZ");
+    const undone = reverseSharedUndoRecord(run.a, typing, writer);
+    assert.ok(undone.ok && undone.effective);
+    run.queue.flush("D1");
+    assert.deepEqual([shown(run.a), shown(run.b)], ["abZ", "abZ"]);
+    assert.ok(reverseSharedUndoRecord(run.a, undone.inverse, writer).ok);
+    run.queue.flush("D1");
+    assert.deepEqual([shown(run.a), shown(run.b)], ["a\u{1f600}bZ", "a\u{1f600}bZ"]);
+  } finally { run.close(); }
+});
+
 for (const item of RUNS) {
   test(`five rounds of undo and redo on a cut of ${item.name} return the exact string on every copy each time`, () => {
     const run = replicas(2, fixture(item.seed));
