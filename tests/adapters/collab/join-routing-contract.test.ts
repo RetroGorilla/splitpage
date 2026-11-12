@@ -63,10 +63,12 @@ test("declared prefix-extraction limit refuses before changing either joined fra
     registerSharedJoinHandlers(set.a); registerSharedSplitHandlers(set.a, runtime);
     assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
     const before = [encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)];
+    let updates = 0; const stop = deliveryReplica(set.a).onLocalUpdate(() => updates++);
     const result = executeSharedOperations(set.a, [operation({ kind: "split-before", id: "prefix", by: "Writer", target,
       at: { left: null, right: flowBaseReference("R1", "audioText", 4), affinity: "before" }, observed: [], beat: "fresh", boundary: "fresh", fields: {} })], { base: readSharedRevision(set.a) });
     assert.ok(!result.ok); assert.equal(result.reason, "partial-joined-prefix");
     assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], before);
+    stop(); assert.equal(updates, 0);
   } finally { set.close(); }
 });
 

@@ -10,15 +10,12 @@ import { holdSharedBuffer, sharedBufferDeliveryBusy } from "./ingress.ts";
 import { readSharedPaintedText } from "./paint-base.ts";
 import { resolveSharedBufferedSelection } from "./buffer-selection.ts";
 import { sharedAnchorCharacterEnd } from "./anchors.ts";
-import { readProjectionFields } from "./projection-reader.ts";
-import { collabState } from "./state.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 
-export function sharedBufferedTarget(handle: SharedDocumentHandle, rowId: string): SharedTextAddress {
-  const fields = readProjectionFields(collabState(handle).roots.beats.get(rowId), "beat");
-  const owner = readSharedContentRef(rowId), segment = readSharedContentRef(fields?.segment ?? "b:" + rowId);
-  if (!owner || !segment) throw new Error("Invalid buffered beat address");
-  return { owner, segment, field: "audioText" };
+export function sharedBufferedTarget(_handle: SharedDocumentHandle, rowId: string): SharedTextAddress {
+  const owner = readSharedContentRef(rowId);
+  if (!owner) throw new Error("Invalid buffered beat address");
+  return { owner, segment: owner, field: "audioText" };
 }
 
 export function createSharedBufferedText(

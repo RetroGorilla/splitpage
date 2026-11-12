@@ -143,6 +143,16 @@ export function collabProjectedTextOffset(handle: SharedDocumentHandle, raw: Sha
   return null;
 }
 
+export function collabProjectedNarrationPoint(handle: SharedDocumentHandle, segment: string, offset: number) {
+  const { index, view } = nativeStructureView(handle);
+  const span = readIndexedStructureSpans(index, segment).find(block => block.kind === "b" && block.from <= offset && offset <= block.to);
+  const geometry = span?.id ? readSharedJoinedTextGeometry(view, span.id) : null;
+  if (!geometry || geometry.removed) return null;
+  const owner = geometry.root as SharedTextAddress["owner"];
+  const projected = collabProjectedTextOffset(handle, { owner, segment: owner, field: "audioText" }, segment, offset);
+  return projected === null ? null : { owner, offset: projected };
+}
+
 export function collabProjectedSegmentAnchorTarget(handle: SharedDocumentHandle, segment: string, offset: number) {
   const index = observeSharedStructureIndex(handle), span = readIndexedStructureSpans(index, segment).find(block => block.from <= offset && block.to >= offset);
   return span?.id ? collabWritingTextTarget(handle, { owner: span.id as SharedTextAddress["owner"], segment: segment as SharedTextAddress["segment"], field: span.kind === "h" ? "heading" : "audioText" }) : null;
