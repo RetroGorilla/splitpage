@@ -8,7 +8,7 @@ import { registerSharedTextOperationHandlers } from "../../../src/adapters/colla
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
-import { startBeat, typeWithMarks, replaceRange, beatPos } from "../../../src/core/flow/flow.ts";
+import { startBeat, typeWithMarks, replaceRange, beatPos, joinWithPrevious } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
@@ -55,6 +55,7 @@ test("seeded joined rows agree with app typing and Enter after joins and splits 
         const result = projectSharedDocumentWithRecovery(handle);
         if (result.document.rows.map(row => row.audioText).join("").replaceAll(" ", "") !== "abcdefgh") violations.push("reading-order");
         if (result.recovery.length) violations.push("unexpected-recovery");
+        if (result.document.rows.find(row => row.id === "R1")?.visualText !== "<strong>Left</strong><br><em>Right</em>") violations.push("retained-fields");
         return result;
       }); late++;
       let editedOwner: string | null = null;
@@ -86,4 +87,30 @@ test("seeded joined rows agree with app typing and Enter after joins and splits 
   const measured = { seed: 0x5c3601, histories, commands, operations, checkpoints, late, reports: incrementalReports.compared - reports, skipped: 0, deferred: 0, declaredLimits };
   assert.deepEqual(measured, { seed: 6043137, histories: 72, commands: 324, operations: 360, checkpoints: 396, late: 612, reports: 828, skipped: 0, deferred: 0, declaredLimits: [] });
   t.diagnostic(JSON.stringify(measured));
+});
+
+for (const order of ["D1", "rev", "dup"] as const) test("seen destination split retains complete app fields and headings: " + order, () => {
+  const runtime = createFlowLoadRuntime(), source = validatedFixture({ rows: [
+    { id: "R1", audioText: "ab", visualText: "<b>Left</b>", status: "todo", lengthSeconds: 7, imageRef: { sha256: "1".repeat(64) }, imageName: "first" },
+    { id: "R2", audioText: "cd", visualText: "<em>Right</em>", status: "ready", lengthSeconds: 19, imageRef: { sha256: "2".repeat(64) }, imageName: "second" },
+    { id: "R3", audioText: "end" }
+  ], sections: [{ id: "H1", name: "Before", firstSceneId: "R1" }, { id: "H2", name: "After", firstSceneId: "R3" }] });
+  const set = replicas(3, source), handles = [set.a, set.b, set.c];
+  try {
+    handles.forEach(handle => { registerSharedJoinHandlers(handle); registerSharedSplitHandlers(handle, runtime); });
+    const joined = joinWithPrevious({ rows: source.rows, sections: source.sections, comments: [] }, "R2", { ...runtime.ports, operations: { id: "join", by: "Alice" } });
+    assert.ok(joined && "rows" in joined && joined.ops);
+    assert.deepEqual(executeSharedOperations(set.a, joined.ops), { ok: true }); set.queue.flush(order);
+    const doc = { rows: joined.rows, sections: joined.sections, comments: [] };
+    const result = startBeat(doc, beatPos("R1", 1), { ...runtime.ports, newId: () => "structure_2_0065006e007400650072005f006f005f0030_beat_0", operations: { id: "enter", by: "Bob" } });
+    assert.ok(result && "rows" in result && result.ops);
+    const independent = applyFlowOperations(doc, result.ops, runtime.cells); assert.deepEqual(independent.rows, result.rows); assert.deepEqual(independent.sections, result.sections);
+    assert.deepEqual(executeSharedOperations(set.b, result.ops, { base: readSharedRevision(set.b) }), { ok: true }); set.queue.flush(order);
+    const expected = runtime.load({ ...source, rows: independent.rows, sections: independent.sections });
+    agree("seen split full fields", order, handles, handle => {
+      const actual = runtime.load(projectSharedDocumentWithRecovery(handle).document);
+      assert.deepEqual(actual.rows, expected.rows); assert.deepEqual(actual.sections, expected.sections);
+      return { rows: actual.rows, sections: actual.sections };
+    });
+  } finally { set.close(); }
 });

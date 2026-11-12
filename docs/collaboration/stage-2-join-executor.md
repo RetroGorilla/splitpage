@@ -50,7 +50,7 @@ The per-handle join index is built while idle and patches changed keys, map
 replacements and beat deletion through the structure index's existing guarded
 subscription. It adds no subscription or gate exemption. Preparing a command
 does not scan a root, encode state, read a text delta or open a transaction. All
-decisions live in prepare; the frozen apply payload only writes fixed map paths.
+decisions live in prepare; the frozen apply payload writes fixed map paths and translates fixed text positions.
 A nonempty list uses one transaction and one delivered update. Refusals leave bytes,
 state vector, revision and delivered-update count unchanged.
 
@@ -61,19 +61,74 @@ Missing destinations remain candidates, self-links add no neighboring beat, and
 invalid entries still reserve their native keys but add no edge. These candidates
 do not select joins or interpret retirement: the core interpreter owns those rules.
 Map replacements and source deletion patch the same index through its existing
-guarded callback. The routing command and painted readers are not changed by this
-metadata preparation step.
+guarded callback. The same index caches validated issued entries, so preparation
+reads neither unrelated records nor their join maps.
 
-The split handoff distinguishes two histories before routing changes projection.
-After seeing `ab cd` joined under R1, the app and independent applier split at one
-into `a` / `b cd`; the current entry refuses `invalid-reference`, unchanged. Its
-literal declared limit is: "Enter after a visible join is refused with
-invalid-reference; extending joined-row routing requires the split/projection rule."
-A split made apart from the join is accepted and the existing literal-target
-interpreter shows `a cd` / `b`. Following the destination's original end through
-both splits would change that latter result too. The handoff pins both with two
-and three copies, reordered/duplicated delivery and an encoded late joiner; it
-does not select a new concurrent interpretation or add endpoint metadata.
+## Joined narration routing
+
+Assumed rule 36: a join follows the text it was joined to, not the beat id. Both a
+seen join and a join made apart from splitting `ab` at one produce `a` / `b cd`.
+The byte-copied Stage 1 oracles contain no contradictory combined split/join result;
+the 49 oracle-copy checks remain unchanged. The old first-fragment painting and
+seen-Enter refusals are positive tests now.
+
+Each new join also writes its own `meta` cell `joinEnd:<native join id>`. Its
+validated `{end, start, stop}` holds native relative positions: the destination's
+logical end and the source's physical start and end at issue. Positions contain
+only the segment, native type/item identities and association; no text is copied.
+The source start stays left of new units, and the two ends follow new units. The
+single `readSharedJoinEndpoint` validator rejects malformed or unresolved bindings
+without selecting a later competing join. Native entries with no binding use their
+issued destination and current source fragment. Issued entries remain immutable.
+
+`projectSharedJoinForest` retains the existing selection, cycle and removal policy.
+`projectSharedJoinedLayout` then follows native ends and retains boundaries inside
+the source's issued interval. Full, recovery, incremental and write-side geometry
+share that layout. Field membership remains attached to the retained destination,
+so splitting its narration does not move its visuals, gallery, status or duration
+to the new row. The existing root-first visual order of a cycle is unchanged.
+
+The native reading of the additionally requested cases is pinned literally:
+
+- Splitting exactly after `ab` gives `ab` / ` cd`, seen or made apart; the separator
+  stays immediately before its joined source on the new row.
+- Deleting the final `b` apart from the join and split gives `a` / ` cd`; deleting
+  both destination characters gives an empty first row / ` cd`.
+- Splitting seen `ab c|d` gives `ab c` / `d`. The issued relationship still covers
+  the source interval, with its new internal boundary retained; retirement unfolds
+  the source rather than rewriting that relationship.
+- Removing R1 apart from the split keeps `b cd` visible and R1's `a` in recovery.
+  Retiring the join apart from the split gives `a` / `b` / `cd`.
+
+Typed whole-row anchors, painted character identities and captured ranges resolve
+to their actual physical fragment. The separator has one canonical virtual identity
+for its identical-join group; deleting it sets the existing glue register. Insert,
+delete and ordinary Enter prepare all physical positions before apply, including
+units and beats staged earlier in the list. All creation/boundary points still pass
+the shared surrogate policy. Painted reads use compressed native identity runs,
+without building a preparation or an object for each character.
+
+Preparation reads the connected join neighborhood and its touched physical texts.
+Joined insertion costs 15 native record reads with zero and 10,000 unrelated beats,
+with every root iteration method trapped. The existing four-read join and split
+cost assertions keep their original meaning. The native binding writer requires
+the entry's apply phase, opens no transaction, and receives a deeply frozen payload.
+Late refusal tests include a staged join and edits in both physical fragments and
+leave bytes, vector, revision and delivered-update count unchanged.
+
+The seeded joined-row model has 72 histories, 324 accepted commands, 360 emitted
+operations, 396 checkpoints, 612 encoded comparisons and 828 incremental change
+reports compared with the slow checker. It executes complete app typing,
+replacement and Enter lists after two/three writers split and join apart, compares
+complete rows and sections with the independent applier, skips zero and defers zero.
+Its literal declared-limit table is `[]` for those commands. Prefix extraction
+inside a joined source remains a whole-list `partial-joined-prefix` refusal: it
+requires moving the logical retained id across physical fragments, unlike Enter.
+Range-mark routing across the virtual separator is not part of this typing/Enter cut.
+The separate seeded malformed-binding model compares 192 checkpoints with three
+writers, reordered/duplicate delivery and encoded state; its declared-limit table
+is also `[]`. Rich typing literals retain the inserted birth marks and both native
+mark stores through Enter.
 
 The unchanged copied T06 narration oracle and T12 join/undo oracles check original
 native identities, concurrent typing, marks and caret positions through a test
@@ -95,10 +150,3 @@ The input matrix also pins Backspace's unchanged cursor-only move from a blank
 previous beat with a visual; it emits no operation. Heading and movement commands,
 their Stage 1 traces, structural undo UI and production caret placement remain
 separate work.
-
-The single-physical-text preparation and painted reader require a following join
-routing cut. Its pinned literal declared limit is: "Joined narration paints only
-its first physical fragment and refuses whole-row offsets beyond it;
-joined-text routing is the next join cut." The reproduction projects `ab cd`,
-paints `ab`, and refuses insertion at offset four with `invalid-reference`, leaving
-bytes, vector and revision unchanged. `paint-base.ts` has no change in this cut.

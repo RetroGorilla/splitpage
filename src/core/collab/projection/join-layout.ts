@@ -46,24 +46,23 @@ export function projectSharedJoinedLayout(blocks: readonly SharedJoinLayoutBlock
   }
   for (const list of children.values()) list.sort((a, b) => (ranks.get(a.id) ?? 0) - (ranks.get(b.id) ?? 0));
   const rows: { root: string; removed: boolean; cyclic: boolean; members: SharedJoinLayoutPart[]; fields: string[] }[] = [];
-  const emitted = new Set<string>(), active = new Set<string>();
+  const emitted = new Set<string>();
   const render = (parts: readonly SharedJoinLayoutBlock[], fold: boolean, source?: NonNullable<ReturnType<typeof sources.get>>, inheritedRemoved = false) => {
-    if (source && active.has(source.id)) return;
-    if (source) active.add(source.id);
-    let first = true;
-    for (const block of parts) {
-      if (emitted.has(block.id) || source && ownership.get(block.id) !== source.id) continue;
+    const stack = [{ parts, fold, source, inheritedRemoved, first: true, next: 0 }];
+    while (stack.length) {
+      const frame = stack.at(-1); if (!frame) break;
+      const block = frame.parts[frame.next++]; if (!block) { stack.pop(); continue; }
+      if (emitted.has(block.id) || frame.source && ownership.get(block.id) !== frame.source.id) continue;
       emitted.add(block.id);
-      const removed = inheritedRemoved || forest.removed.has(block.id);
-      let row = fold && first && rows.at(-1)?.removed === removed ? rows.at(-1) : undefined;
+      const removed = frame.inheritedRemoved || forest.removed.has(block.id);
+      let row = frame.fold && frame.first && rows.at(-1)?.removed === removed ? rows.at(-1) : undefined;
       if (!row) { row = { root: block.id, removed, cyclic: false, members: [], fields: [] }; rows.push(row); }
-      row.cyclic ||= source?.cyclic ?? false;
-      row.members.push({ ...block, glue: first && fold ? source?.entry.glue ?? "" : "", join: first && fold ? source?.entry.id ?? null : null,
-        ...(first && fold && source?.entry.glueSet ? { glueSet: true as const } : {}) });
-      first = false;
-      for (const child of children.get(block.id) ?? []) render(child.blocks, true, child, row.removed);
+      row.cyclic ||= frame.source?.cyclic ?? false;
+      row.members.push({ ...block, glue: frame.first && frame.fold ? frame.source?.entry.glue ?? "" : "", join: frame.first && frame.fold ? frame.source?.entry.id ?? null : null,
+        ...(frame.first && frame.fold && frame.source?.entry.glueSet ? { glueSet: true as const } : {}) });
+      frame.first = false;
+      for (const child of [...children.get(block.id) ?? []].reverse()) stack.push({ parts: child.blocks, fold: true, source: child, inheritedRemoved: row.removed, first: true, next: 0 });
     }
-    if (source) active.delete(source.id);
   };
   for (const block of blocks) {
     const owner = ownership.get(block.id);

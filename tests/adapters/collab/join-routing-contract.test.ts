@@ -51,9 +51,22 @@ test("a late refusal discards a staged endpoint and edits in both physical fragm
     try {
       const result = executeSharedOperations(set.a, [join(), insert(flowBaseReference("R2", "audioText", 1)), operation({ kind: "text-delete", id: "delete", by: "Writer", target,
         observed: [flowBaseReference("R1", "audioText", 1, 2), flowBaseReference("R2", "audioText", 0, 1)] }), join()], { base: readSharedRevision(set.a) });
-      assert.ok(!result.ok); assert.equal(result.index, 3); assert.equal(result.reason, "existing-join");
+      assert.ok(!result.ok && "index" in result); assert.equal(result.index, 3); assert.equal(result.reason, "existing-join");
       assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], before); assert.equal(updates, 0);
     } finally { stop(); }
+  } finally { set.close(); }
+});
+
+test("declared prefix-extraction limit refuses before changing either joined fragment", () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] }), runtime = createFlowLoadRuntime();
+  try {
+    registerSharedJoinHandlers(set.a); registerSharedSplitHandlers(set.a, runtime);
+    assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
+    const before = [encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)];
+    const result = executeSharedOperations(set.a, [operation({ kind: "split-before", id: "prefix", by: "Writer", target,
+      at: { left: null, right: flowBaseReference("R1", "audioText", 4), affinity: "before" }, observed: [], beat: "fresh", boundary: "fresh", fields: {} })], { base: readSharedRevision(set.a) });
+    assert.ok(!result.ok); assert.equal(result.reason, "partial-joined-prefix");
+    assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], before);
   } finally { set.close(); }
 });
 

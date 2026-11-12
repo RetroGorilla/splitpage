@@ -103,3 +103,17 @@ test("a second join in the same list observes the first join's destination end",
     set.queue.flush("dup"); agree("issued logical end", "dup", [set.a, set.b], read, ["ab c", "d ef"]);
   } finally { set.close(); }
 });
+
+for (const order of ["D1", "rev", "dup"] as const) test("joined typing preserves birth marks and Enter preserves both physical mark stores: " + order, () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "<b>ab</b>" }, { id: "R2", audioText: "<em>cd</em>" }] }), runtime = createFlowLoadRuntime();
+  try {
+    registerSharedJoinHandlers(set.a); registerSharedTextOperationHandlers(set.a); registerSharedSplitHandlers(set.a, runtime);
+    assert.deepEqual(executeSharedOperations(set.a, [join()]), { ok: true });
+    const typed = operation({ kind: "text-insert", id: "typed", by: "Writer", target,
+      at: { left: null, right: flowBaseReference("R1", "audioText", 4), affinity: "before" }, content: [{ value: "X", marks: [{ kind: "u", value: true }] }] });
+    assert.deepEqual(executeSharedOperations(set.a, [typed], { base: readSharedRevision(set.a) }), { ok: true });
+    assert.deepEqual(read(set.a), ["<strong>ab</strong> <em>c</em><u>X</u><em>d</em>"]);
+    assert.deepEqual(executeSharedOperations(set.a, [split("R1", flowBaseReference("R1", "audioText", 5))], { base: readSharedRevision(set.a) }), { ok: true });
+    set.queue.flush(order); agree("marked joined Enter", order, [set.a, set.b], read, ["<strong>ab</strong> <em>c</em><u>X</u>", "<em>d</em>"]);
+  } finally { set.close(); }
+});
