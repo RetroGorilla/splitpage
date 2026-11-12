@@ -7,8 +7,10 @@ import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import { startActions } from "../../src/bootstrap/actions.ts";
 import { wireRegistries } from "../../src/test/_registries.mjs";
+import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 
-test("bootstrap preserves the complete action registration order when export definitions move", () => {
+test("bootstrap preserves the complete action registration order when export definitions move", t => {
+  t.after(startTestSession(unwiredSessionDeps().deps));
   const wired = wireRegistries();
   const registry = createActionRegistry();
   const stop = startActions(registry, new EventTarget());

@@ -4,9 +4,11 @@ import { homes } from "./ports/location.ts";
 import { attributionPreferences } from "./ports/preferences.ts";
 import { saveChangeNotes, saves } from "./ports/saving.ts";
 import { draftChanges } from "./ports/startup.ts";
+import { capabilities } from "./ports/capabilities.ts";
 
 export function sessionEffects(): SessionEffects {
   return createSessionEffects({
+    capability: capabilities,
     saves,
     changes: saveChangeNotes,
     drafts: draftChanges,

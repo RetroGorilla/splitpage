@@ -7,6 +7,7 @@
     "src/bootstrap/wiring/ports/actions.ts",
     "src/bootstrap/wiring/ports/preferences.ts",
     "src/bootstrap/wiring/ports/document.ts",
+    "src/bootstrap/wiring/ports/capabilities.ts",
     "src/bootstrap/wiring/ports/location.ts",
     "src/bootstrap/wiring/ports/text.ts",
     "src/bootstrap/wiring/ports/editing.ts",
@@ -25,5 +26,5 @@
     "src/bootstrap/wiring/ports/person-colors.ts",
     "src/bootstrap/wiring/ports/rows.ts"
   ],
-  "expectedLoads": 24
+  "expectedLoads": 25
 }

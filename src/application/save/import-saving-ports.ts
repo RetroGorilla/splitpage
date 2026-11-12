@@ -4,6 +4,7 @@ import type { LocalFileAccess } from "../files/local-file-access.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { SaveJob, SaveOutcome, WriterResult } from "./coordinator.ts";
 import type { SaveDestination } from "./destinations.ts";
+import type { CapabilityPort } from "../session/ports.ts";
 
 export interface ImportSaveRequest {
   readonly kind: string;
@@ -23,6 +24,7 @@ export interface BuiltLocalFile {
 }
 
 export interface ImportSavingPorts {
+  readonly capability: Pick<CapabilityPort, "saveDestinations">;
   readonly location: Pick<DocumentLocation, "importHome" | "amendHome">;
   readonly saving: {
     readonly request: (request: ImportSaveRequest) => Promise<SaveOutcome>;

@@ -157,5 +157,8 @@ local person's. This owner answers for itself; the rest is named for its package
 
 ## Deliberate defects
 
+Package 14 also follows the session-mode and captured-save lifetime obligations
+in [Shared sessions and local file saving](stage-2-disabled-file-saving.md#package-14-obligations).
+
 `tests/collab/shared-session-mutants.json` holds eleven, each listed in
 `tests/collab/mutants.md` with the test that fails.

@@ -1,5 +1,6 @@
 import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
-import type { NoticeKind } from "../../application/effects/ports.ts";
+import type { NoticeKind, NoticePort } from "../../application/effects/ports.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export type ResumeHandle = Partial<Pick<LocalFileHandle, "name" | "requestPermission">>;
@@ -50,6 +51,8 @@ export function mountSaveRecovery(mount: { window: Window; ports: SaveRecoveryPo
 }
 
 export interface ConflictsPorts {
+  readonly capability: Pick<CapabilityPort, "saveDestinations">;
+  readonly notices: Pick<NoticePort, "show">;
   readonly closeFileConflict: () => void;
   readonly reloadProjectFromDisk: () => void;
   readonly reloadFileFromDisk: () => void;
@@ -76,6 +79,8 @@ export function mountConflicts(mount: { window: Window; ports: ConflictsPorts })
     else ports.reloadFileFromDisk();
   });
   life.listen(element("file-conflict-overwrite"), "click", function () {
+    const can = ports.capability.saveDestinations();
+    if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
     const ctx = ports.conflict();
     ports.closeFileConflict();
     if (ctx && ctx.kind === "project") ports.saveDoc({ force: true });
@@ -92,6 +97,8 @@ export function mountConflicts(mount: { window: Window; ports: ConflictsPorts })
   });
 
   life.listen(element("file-conflict-copy"), "click", function () {
+    const can = ports.capability.saveDestinations();
+    if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
     const ctx = ports.conflict();
     ports.closeFileConflict();
     if (ctx && ctx.kind === "project") { ports.saveDoc({ saveAs: true }); return; }

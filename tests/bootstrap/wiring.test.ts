@@ -52,6 +52,7 @@ import { addCommentCommand, addReplyCommand, unwrapCommentAnchorCommand } from "
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
+import { MAY_EDIT } from "../application/plan-views.ts";
 
 after(closeApp);
 
@@ -212,6 +213,7 @@ function fakes(): Fakes {
     saves: (ownership) => {
       note("saves");
       return {
+        capability: MAY_EDIT,
         destination: () => NO_DOCUMENT,
         keyOf: () => ({ owner: null, name: "none" }),
         obsolete: () => {},
@@ -379,6 +381,12 @@ test("failed partial startup: a save factory that returns malformed ports fails 
       [port, (ports) => without(ports, port), "the saves dependency returned no " + port + " port"]),
     ...(["destination", "keyOf", "obsolete"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
       [port + " not a function", (ports) => ({ ...ports, [port]: 7 }), "the saves dependency returned no " + port + " port"]),
+    ["capability not an object", (ports) => ({ ...ports, capability: 7 }), "the saves dependency returned no capability port"],
+    ["capability", (ports) => without(ports, "capability"), "the saves dependency returned no capability port"],
+    ...(["saveDestinations", "autosave"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [method, (ports) => ({ ...ports, capability: without(ports.capability, method) }), "the saves dependency's capability port has no " + method + " function"]),
+    ...(["saveDestinations", "autosave"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [method + " not a function", (ports) => ({ ...ports, capability: { ...ports.capability, [method]: "x" } }), "the saves dependency's capability port has no " + method + " function"]),
     ["ownership not an object", (ports) => ({ ...ports, ownership: 7 }), "the saves dependency returned no ownership port"],
     ["ownership", (ports) => without(ports, "ownership"), "the saves dependency returned no ownership port"],
     ...(["capture", "stillOwns"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
@@ -782,6 +790,7 @@ function heldSaves(name: string): HeldSaves {
   const finish: ((result: WriterResult) => void)[] = [];
   const call = (what: string): void => { calls.push(name + " " + what); };
   const saves: WiringDeps["saves"] = (ownership) => ({
+    capability: MAY_EDIT,
     destination: () => { call("destination"); return NO_DOCUMENT; },
     keyOf: () => { call("keyOf"); return { owner: null, name: "none" }; },
     obsolete: () => { call("obsolete"); },

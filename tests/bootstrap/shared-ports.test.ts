@@ -1,4 +1,5 @@
 import "../../src/test/_dom.mjs";
+import { MAY_EDIT } from "../application/plan-views.ts";
 import "../../src/test/_screen-state-started.mjs";
 import { externalLinks as portExternalLinks } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import { changes as portChanges } from "../../src/bootstrap/wiring/ports/preferences.ts";
@@ -129,6 +130,7 @@ test("shared ports follow their current owners, announce synchronously in subscr
 
 function savePorts(): LegacySavePorts {
   return {
+    capability: MAY_EDIT,
     destination: () => "here",
     keyOf: (identity) => ({ owner: identity, name: "" }),
     obsolete: () => {},

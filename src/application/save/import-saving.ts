@@ -22,6 +22,8 @@ function startImportSaving(ports: ImportSavingPorts): StartedImportSaving {
   const deliverFile = ports.delivery.deliver;
   const showToast = ports.notices.show;
 function saveBackItemState(): ImportSaveItem {
+  const can = ports.capability.saveDestinations();
+  if (!can.allowed) return { hidden: false, disabled: true, reason: can.reason, label: "Save to file" };
   const imported = importHome();
   if (!imported) return { hidden: false, disabled: true, reason: "", label: "Save to file" };
   return { hidden: false, disabled: false, reason: "",
@@ -36,10 +38,12 @@ const NOTHING_IMPORTED: WriterResult = Object.freeze({ kind: "refused", reason: 
 const IMPORT_REPLACED: WriterResult = Object.freeze({ kind: "refused", reason: "The imported file this write back was asked for is no longer open" });
 
 function saveBackToFile(opts?: { force?: boolean }): Promise<void> {
+  const can = ports.capability.saveDestinations();
+  if (!can.allowed) { showToast(can.reason, "warn"); return Promise.resolve(); }
   const imported = importHome();
   if (!imported) return Promise.resolve();
   return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
-    if (!active) return;
+    if (!active || importHome() !== imported) return;
     if (outcome.kind === "saved" && outcome.acknowledged) completion.acknowledged(imported);
   });
 }
@@ -49,6 +53,8 @@ function stillWritingBack(job: SaveJob<ImportSaveRequest>, imported: Home): bool
 }
 
 async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterResult> {
+  const can = ports.capability.saveDestinations();
+  if (!can.allowed) return { kind: "refused", reason: can.reason };
   const imported = importHome();
   if (!imported) return NOTHING_IMPORTED;
   if (job.request.target !== imported || !stillWritingBack(job, imported)) return IMPORT_REPLACED;

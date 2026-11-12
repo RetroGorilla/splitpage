@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
+import { captureSessionCapabilities, createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import { SHARED_SESSION_DISABLED } from "../../../src/application/session/ports.ts";
 import type { Capability, StandaloneCapabilityName } from "../../../src/application/session/ports.ts";
 
@@ -14,6 +14,29 @@ const REASONS = {
   folders: "Local folders cannot be attached to a shared session.",
   bundles: "File bundles are not available in a shared session."
 } as const;
+
+test("capturing a mode permission reads it once and freezes its literal value without freezing the supplied answer", () => {
+  const calls: string[] = [];
+  const supplied: { allowed: false; reason: string } = { allowed: false, reason: "original refusal" };
+  const source = {
+    ...createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
+    saveDestinations: (): Capability => { calls.push("saveDestinations"); return supplied; },
+    enabled: true,
+    edit(): Capability { return this.enabled ? { allowed: true } : { allowed: false, reason: "read only" }; }
+  };
+  const captured = captureSessionCapabilities(source);
+  const answer = captured.saveDestinations();
+  supplied.reason = "changed refusal";
+  assert.equal(captured.saveDestinations(), answer);
+  assert.deepEqual(answer, { allowed: false, reason: "original refusal" });
+  assert.deepEqual(calls, ["saveDestinations"]);
+  assert.equal(Object.isFrozen(answer), true);
+  assert.equal(Object.isFrozen(captured), true);
+  assert.equal(Object.isFrozen(supplied), false);
+  assert.deepEqual(captured.edit(), { allowed: true });
+  source.enabled = false;
+  assert.deepEqual(captured.edit(), { allowed: false, reason: "read only" });
+});
 
 test("the shared disable list declares each standalone family and its reason", () => {
   assert.deepEqual(SHARED_SESSION_DISABLED, REASONS);

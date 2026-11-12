@@ -152,7 +152,7 @@ const TRANSITION_PORTS: { readonly [P in keyof TransitionDeps]: readonly (keyof 
   history: ["keep"]
 };
 
-const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["destination", "keyOf", "obsolete"];
+const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave" | "capability">)[] = ["destination", "keyOf", "obsolete"];
 
 const OWNERSHIP_PORTS: readonly (keyof Operations)[] = ["capture", "stillOwns"];
 
@@ -255,6 +255,13 @@ function checkedSaves(ports: LegacySavePorts | null | undefined): LegacySavePort
   const given = ports as unknown as Record<string, unknown>;
   for (const port of SAVE_PORTS) {
     if (!present(given[port], "function")) throw new WiringError("saves", "Wiring: the saves dependency returned no " + port + " port");
+  }
+  const capability = given["capability"];
+  if (!present(capability, "object")) throw new WiringError("saves", "Wiring: the saves dependency returned no capability port");
+  for (const method of ["saveDestinations", "autosave"] as const) {
+    if (!present((capability as Record<string, unknown>)[method], "function")) {
+      throw new WiringError("saves", "Wiring: the saves dependency's capability port has no " + method + " function");
+    }
   }
   const ownership = given["ownership"];
   if (!present(ownership, "object")) throw new WiringError("saves", "Wiring: the saves dependency returned no ownership port");
