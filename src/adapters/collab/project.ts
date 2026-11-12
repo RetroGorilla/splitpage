@@ -11,8 +11,9 @@ import type { DocumentShape } from "../../core/document/validated.ts";
 import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
 import type { SharedTagProjectionRejection } from "../../core/collab/projection/tag-extents.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
+import type { SharedProjectionCache } from "./projection-cache.ts";
 import type { SharedProjectionFragmentReason } from "../../core/collab/projection/blocks.ts";
-import { projectSharedBrollKeys } from "../../core/collab/projection/broll.ts";
+import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
 import type { SharedProjectionGalleryOverflow } from "../../core/collab/projection/gallery.ts";
 import { readSharedRemovalBufferSources } from "./removal-record.ts";
 import type { SharedRemovalBufferSource } from "./removal-record.ts";
@@ -50,6 +51,20 @@ export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle):
 
 export function projectSharedDocumentStep(handle: SharedDocumentHandle, previous: DocumentShape | null): SharedDocumentProjectionStep {
   return withSharedSnapshot(handle, state => assembleSharedDocument(new SharedProjectionSource(state as unknown as SharedDocumentHandle), previous));
+}
+
+type SharedBrollCell = { readonly key: string; readonly units: readonly SharedProjectionUnit[] };
+
+// why: A rebuilt group hands on an equal new narration array; keeping the old one keeps its scan and cell cached.
+function projectSharedBrollCells(cache: SharedProjectionCache, cells: readonly SharedBrollCell[], shotIds: readonly string[]): Map<string, readonly SharedProjectionUnit[]> {
+  const kept = cells.map(value => ({ key: value.key, units: cache.array(["broll-input", value.key], value.units) }));
+  const rewrites = assignSharedBrollKeys(kept.map(value => ({ key: value.key,
+    atoms: cache.read(["broll-atoms", value.key], [value.units], () => readSharedBrollAtoms(value.units), "broll-scan") })), shotIds);
+  return new Map(kept.map((value, at) => {
+    const rewrite = rewrites[at];
+    return [value.key, !rewrite?.replaced.length ? value.units : cache.read(["broll-cell", value.key],
+      [value.units, JSON.stringify(rewrite.replaced.map(entry => [entry.index, entry.unit.value]))], () => applySharedBrollRewrite(value.units, rewrite))];
+  }));
 }
 
 export function assembleSharedDocument(source: SharedProjectionSource, previous: DocumentShape | null): SharedDocumentProjectionStep {
@@ -94,10 +109,8 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
       return { group, members, ...projected, audio: { key: JSON.stringify([group.root, "audioText"]), units: narration }, visualCells };
     }, "group")];
   });
-  const broll = new Map(projectSharedBrollKeys(plans.filter(plan => !plan.group.removed).flatMap(plan => [...plan.visualCells, plan.audio]),
-    (out.brollShots as Record<string, unknown>[]).map(shot => String(shot.id))).map(value => [value.key,
-      cache.array(["broll-cell", value.key], value.units.map((unit, index) => typeof unit.value === "string" || unit.value.atom !== "broll" ? unit
-        : cache.read(["broll-unit", value.key, String(index)], [unit.identity, unit.marks, JSON.stringify(unit.value)], () => unit)))]));
+  const broll = projectSharedBrollCells(cache, plans.filter(plan => !plan.group.removed).flatMap(plan => [...plan.visualCells, plan.audio]),
+    (out.brollShots as Record<string, unknown>[]).map(shot => String(shot.id)));
   for (const { group, members, row, overflow, audio, visualCells } of plans) {
     recovery.push(...overflow.map(entry => ({ kind: "gallery-overflow" as const, rowId: group.root, ...entry,
       slot: canonicalSharedProjection(entry.slot, "gallery") as Record<string, unknown> })));
