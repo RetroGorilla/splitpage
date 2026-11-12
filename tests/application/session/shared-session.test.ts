@@ -252,6 +252,32 @@ for (const during of ["edit", "remote"] as const) {
   });
 }
 
+test("re-entry: a command issued while another is planning or being asked for capability is rejected as reentered, and the outer command applies alone", () => {
+  const replica = fakeReplica(script()), inner: CommandOutcome[] = [];
+  let ask = false;
+  const h = sharedHarness(replica.port, { asked: () => { if (ask) inner.push(h.session.run(sharedCommand("asked", [LENGTH]))); } });
+  replica.script(() => { replica.write("local-command", timed(7)); return { ok: true }; });
+  const outer: Command = {
+    name: "outer", needs: "edit",
+    plan: () => {
+      inner.push(h.session.run(sharedCommand("planned", [LENGTH])));
+      return { changes: changeSet({ whole: true }), apply: () => { throw new Error("applied"); }, shared: { operations: [LENGTH] } };
+    }
+  };
+  ask = true;
+  assert.deepEqual(h.session.run(outer), { kind: "applied", generation: 1, changes: LENGTH_CELL });
+  ask = false;
+  assert.deepEqual(inner, [{ kind: "rejected", reason: "reentered" }, { kind: "rejected", reason: "reentered" }]);
+  assert.deepEqual(h.executed, [{ operations: [LENGTH], base: 1 }]);
+  assert.deepEqual(h.published, [{ kind: "edit", epoch: 1, generation: 1, changes: LENGTH_CELL }]);
+  assert.deepEqual([h.undo.length, h.session.generation(), h.session.revision()], [1, 1, 2]);
+  assert.deepEqual(h.log, ["project", "execute", "project", "undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"]);
+  const boom = new Error("plan");
+  assert.deepEqual(h.session.run({ name: "throws", needs: "edit", plan: () => { throw boom; } }), { kind: "failed", error: boom });
+  replica.script(() => ({ ok: true }));
+  assert.deepEqual(h.session.run(sharedCommand("after", [LENGTH])), { kind: "noop" });
+});
+
 test("re-entry: a command issued from undo recording, an effect or a handler inside execute is rejected the same way", () => {
   const replica = fakeReplica(script()), nested: CommandOutcome[] = [];
   const again = (): void => { nested.push(h.session.run(sharedCommand("nested", [LENGTH]))); };

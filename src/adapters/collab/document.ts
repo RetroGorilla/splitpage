@@ -50,7 +50,9 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
   } finally {
     trial.doc.destroy();
   }
-  transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
+  // why: Held until this handle's notifications finish, so each revision is observed with exactly its own content.
+  if (state.notifying) state.heldUpdates.push(Uint8Array.from(update));
+  else transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
   return { ok: true };
 }
 

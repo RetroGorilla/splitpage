@@ -7,7 +7,6 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSha
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
-import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "../../../src/adapters/collab/types.ts";
@@ -18,7 +17,7 @@ import { recordReplicas } from "../../adapters/collab/record-support.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
-import { adapterReplica, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { adapterReplica, registerSplits, sharedCommand, sharedHarness } from "./shared-session-support.ts";
 import type { SharedHarness } from "./shared-session-support.ts";
 
 const NOTHING = { whole: false, cells: [], rowsInserted: [], rowsRemoved: [], rowsMoved: false, runsMoved: false, docFields: [], derive: [], saveNow: false };
@@ -153,8 +152,8 @@ test("local command: each kind of operation is one execute, one edit and the pre
 test("split: one transaction names the shortened cell and the inserted beat on both replicas; the test entry port rewrites the beat's writer-scoped id", () => {
   const w = world();
   try {
-    registerSharedSplitHandlers(w.a.handle);
-    registerSharedSplitHandlers(w.b.handle);
+    registerSplits(w.a.handle);
+    registerSplits(w.b.handle);
     const target = { segment: ref("b:R1"), owner: ref("R1"), field: "audioText" as const };
     const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "audioText" }], rowsInserted: ["structure1enterbeat"] };
     const outcome = w.a.h.session.run(sharedCommand("split", [operation({ kind: "split", id: "enter", by: "A", target,
@@ -193,6 +192,97 @@ test("paint-time base: an observer told of a received update before the owner st
     assert.deepEqual(seen, [["observer", "remote", 2, [1, null]], ["subscriber", 2, [2, 7]]]);
     assert.deepEqual([readSharedRevision(run.b), pair()], [2, [2, 7]]);
   } finally { stop(); a.h.session.dispose(); b.h.session.dispose(); run.close(); }
+});
+
+const LENGTH_SECOND = { ...NOTHING, cells: [{ rowId: "R2", field: "lengthSeconds" }] };
+
+function twoUpdates(handle: SharedDocumentHandle, writer: Seat): Uint8Array[] {
+  const updates: Uint8Array[] = [];
+  const stop = deliveryReplica(handle).onLocalUpdate(update => { updates.push(update); });
+  assert.deepEqual(writer.h.session.run(length("A", "o1", 7)), { kind: "applied", generation: 1, changes: LENGTH });
+  assert.deepEqual(writer.h.session.run(length("A", "o2", 9, "R2")), { kind: "applied", generation: 2, changes: LENGTH_SECOND });
+  stop();
+  assert.equal(updates.length, 2);
+  return updates;
+}
+
+function pairOf(made: Pick<Seat, "h">, handle: SharedDocumentHandle): unknown {
+  return made.h.session.readAt((doc, revision) => [revision, readSharedRevision(handle), doc?.rows.map(row => row["lengthSeconds"] ?? null)]);
+}
+
+test("regression: an update an earlier observer applies while the owner's replica is notifying is held; each revision is published with exactly its own change", () => {
+  const run = recordReplicas(2, SOURCE);
+  const pending: Uint8Array[] = [], nested: unknown[] = [], seen: unknown[] = [];
+  const stop = observeSharedTransactions(run.b, () => { const next = pending.shift(); if (next) nested.push(applySharedUpdate(run.b, next)); });
+  const a = seat(run.a), b = seat(run.b);
+  b.h.session.subscribe(change => { seen.push([change.changes.cells, pairOf(b, run.b)]); });
+  try {
+    const [first, second] = twoUpdates(run.a, a);
+    assert.ok(first && second);
+    pending.push(second);
+    assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
+    assert.deepEqual(nested, [{ ok: true }]);
+    assert.deepEqual(seen, [
+      [[{ rowId: "R1", field: "lengthSeconds" }], [2, 2, [7, null]]],
+      [[{ rowId: "R2", field: "lengthSeconds" }], [3, 3, [7, 9]]]
+    ]);
+    assert.deepEqual(b.h.published, [
+      { kind: "remote", epoch: 1, generation: 0, changes: LENGTH },
+      { kind: "remote", epoch: 1, generation: 0, changes: LENGTH_SECOND }
+    ]);
+    assert.deepEqual([b.updates(), pairOf(b, run.b)], [2, [3, 3, [7, 9]]]);
+    untouched(b);
+  } finally { stop(); a.h.session.dispose(); b.h.session.dispose(); run.close(); }
+});
+
+test("regression: an update one owner's subscriber applies before a second owner has received the first is held; both owners publish one exact change per revision", () => {
+  const run = recordReplicas(2, SOURCE);
+  const pending: Uint8Array[] = [], nested: unknown[] = [], seen: unknown[] = [];
+  const a = seat(run.a), b = seat(run.b), later = { h: sharedHarness(adapterReplica(run.b)) };
+  b.h.session.subscribe(() => { const next = pending.shift(); if (next) nested.push(applySharedUpdate(run.b, next)); });
+  later.h.session.subscribe(change => { seen.push([change.changes.cells, pairOf(later, run.b)]); });
+  try {
+    const [first, second] = twoUpdates(run.a, a);
+    assert.ok(first && second);
+    pending.push(second);
+    assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
+    assert.deepEqual(nested, [{ ok: true }]);
+    assert.deepEqual(seen, [
+      [[{ rowId: "R1", field: "lengthSeconds" }], [2, 2, [7, null]]],
+      [[{ rowId: "R2", field: "lengthSeconds" }], [3, 3, [7, 9]]]
+    ]);
+    const expected = [
+      { kind: "remote", epoch: 1, generation: 0, changes: LENGTH },
+      { kind: "remote", epoch: 1, generation: 0, changes: LENGTH_SECOND }
+    ];
+    assert.deepEqual(b.h.published, expected);
+    assert.deepEqual(later.h.published, expected);
+    assert.deepEqual([pairOf(b, run.b), pairOf(later, run.b)], [[3, 3, [7, 9]], [3, 3, [7, 9]]]);
+  } finally { a.h.session.dispose(); b.h.session.dispose(); later.h.session.dispose(); run.close(); }
+});
+
+test("declared limit, the test entry mints a record from received text: a remote B-roll line leaves the shared shot collection empty, yet the held document gains a shot and the change names brollShots", () => {
+  const run = recordReplicas(2, { title: "Title", rows: [{ id: "R1", audioText: "ab", visualText: "Steam", status: "todo" }] });
+  const a = seat(run.a), b = seat(run.b);
+  try {
+    const target = { owner: ref("R1"), segment: ref("R1"), field: "visualText" as const };
+    const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "visualText" }], docFields: ["brollShots"] };
+    const outcome = a.h.session.run(sharedCommand("visual", [operation({ kind: "text-insert", id: "v1", by: "A", target,
+      at: { left: null, right: flowBaseReference("R1", "visualText", 0), affinity: "before" }, content: [{ value: "B-roll: ", marks: [] }] })]));
+    assert.deepEqual(outcome, { kind: "applied", generation: 1, changes });
+    run.queue.flush("D1");
+    assert.deepEqual(b.h.published, [{ kind: "remote", epoch: 1, generation: 0, changes }]);
+    assert.deepEqual(b.h.executed, []);
+    for (const made of [a, b]) {
+      assert.deepEqual(projectSharedDocument(made.handle).brollShots, []);
+      assert.equal(made.h.session.read(doc => doc?.rows[0]?.visualText), "B-roll: Steam");
+      const shots = made.h.session.read(doc => doc ? JSON.parse(JSON.stringify(doc.brollShots)) as Record<string, unknown>[] : []);
+      assert.equal(shots.length, 1);
+      assert.match(String(shots[0]?.["id"]), /^bs-load-[0-9a-f]+-1$/);
+      assert.deepEqual({ ...shots[0], id: "" }, { id: "", name: "Steam", desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "ab", location: "", props: [], origin: "script" });
+    }
+    assert.deepEqual([a.updates(), b.updates()], [1, 1]);
+  } finally { a.h.session.dispose(); b.h.session.dispose(); run.close(); }
 });
 
 const ADAPTER_ORIGIN_KINDS: Record<SharedTransactionOrigin, string> = {

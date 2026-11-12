@@ -24,17 +24,37 @@ export class CollabDocumentState {
   readonly pendingTickets = new Map<object, Exclude<SharedTransactionOrigin, "cleanup">>();
   adapterBatch = false;
   execution: { applying: boolean } | null = null;
+  notifying = false;
+  releasing = false;
+  readonly heldUpdates: Uint8Array[] = [];
 
   constructor() {
     this.doc.on("beforeObserverCalls", transaction => {
+      this.notifying = true;
       if (transaction.changed.size || transaction.deleteSet.clients.size || transaction.beforeState.size !== transaction.afterState.size
         || [...transaction.beforeState].some(([client, clock]) => transaction.afterState.get(client) !== clock)) this.revision++;
       if (this.adapterTransactions.has(transaction)) this.adapterBatch = true;
       // why: The completed delete set distinguishes native formatting maintenance from ordinary observer writes.
       if (this.adapterBatch && transaction.origin === null && transaction.local && formattingCleanup(transaction)) transaction.origin = "cleanup";
     });
-    this.doc.on("afterAllTransactions", () => { this.adapterBatch = false; });
+    this.doc.on("afterAllTransactions", () => {
+      this.adapterBatch = false;
+      this.notifying = false;
+      releaseHeldUpdates(this);
+    });
   }
+}
+
+// why: A write nested in a notification lands at once but is notified later, under the wrong revision.
+export function releaseHeldUpdates(state: CollabDocumentState): void {
+  if (state.releasing || state.execution) return;
+  state.releasing = true;
+  try {
+    for (let update = state.heldUpdates.shift(); update; update = state.heldUpdates.shift()) {
+      const held = update;
+      transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, held, "remote"));
+    }
+  } finally { state.releasing = false; }
 }
 
 export class SharedExecutionWriteError extends Error {

@@ -11,6 +11,8 @@ import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { observeSharedTransactions, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeClock } from "../session-fakes.ts";
@@ -19,6 +21,7 @@ import type { FakeClock } from "../session-fakes.ts";
 export interface SharedHarnessHooks {
   record?: () => void;
   effect?: (name: "dirty" | "draft" | "save") => void;
+  asked?: () => void;
   after?: SessionCounters;
 }
 
@@ -41,6 +44,10 @@ export function adapterReplica(handle: SharedDocumentHandle): ReplicaPort {
     execute: (operations, options) => executeSharedOperations(handle, operations, options),
     observe: listener => observeSharedTransactions(handle, listener)
   };
+}
+
+export function registerSplits(handle: SharedDocumentHandle): void {
+  registerSharedSplitHandlers(handle, { cells: createFlowLoadRuntime().cells });
 }
 
 export function enterProjection(raw: unknown): ValidatedDocument {
@@ -67,7 +74,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
       save: change => { log.push("save:" + change.generation); hooks.effect?.("save"); },
       refresh: jobs => { log.push("refresh"); refreshes.push(Array.from(jobs).sort()); }
     },
-    capability: { edit: (): Capability => denied === null ? { allowed: true } : { allowed: false, reason: denied } },
+    capability: { edit: (): Capability => { hooks.asked?.(); return denied === null ? { allowed: true } : { allowed: false, reason: denied }; } },
     report: error => { log.push("report"); reported.push(error); },
     timers: clock,
     after: hooks.after

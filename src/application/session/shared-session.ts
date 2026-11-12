@@ -81,6 +81,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   let disposed = false;
   let delivering = false;
   let running: Running | null = null;
+  let entered = false;
 
   // why: The whole document is projected and compared per transaction until the incremental projector replaces this step.
   function projectionStep(previous: ValidatedDocument | null): ProjectionStep {
@@ -156,7 +157,16 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
 
   function run(command: Command): CommandOutcome {
     if (disposed) return { kind: "rejected", reason: DISPOSED };
-    if (running || delivering) return { kind: "rejected", reason: REENTERED };
+    if (entered || delivering) return { kind: "rejected", reason: REENTERED };
+    entered = true;
+    try {
+      return decide(command);
+    } finally {
+      entered = false;
+    }
+  }
+
+  function decide(command: Command): CommandOutcome {
     const doc = document;
     if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
     if (command.needs === "edit") {

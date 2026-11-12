@@ -5,7 +5,6 @@ import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { destroySharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
-import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
@@ -16,7 +15,7 @@ import { createMonitoredSharedDocument, deliveryReplica } from "../../adapters/c
 import { recordReplicas } from "../../adapters/collab/record-support.ts";
 import { writesOutside } from "../session-fakes.ts";
 import { namesUnchanged } from "./change-set-checks.ts";
-import { adapterReplica, enterProjection, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { adapterReplica, enterProjection, registerSplits, sharedCommand, sharedHarness } from "./shared-session-support.ts";
 import type { SharedHarness } from "./shared-session-support.ts";
 
 const DECLARED_LIMITS: readonly { readonly name: string; readonly violation: RegExp }[] = [];
@@ -46,7 +45,7 @@ function snapshot(h: SharedHarness): Bag | null {
 
 function seat(name: string, handle: SharedDocumentHandle, violations: string[]): Seat {
   registerSharedTextOperationHandlers(handle);
-  registerSharedSplitHandlers(handle);
+  registerSplits(handle);
   const made: Seat = { name, handle, h: sharedHarness(adapterReplica(handle)), updates: 0, edits: 0, checked: 0 };
   collabState(handle).doc.on("update", () => { made.updates++; });
   let last = snapshot(made.h);
