@@ -28,6 +28,7 @@ export interface SharedPreparationView {
 }
 export type SharedPreparationResult = { readonly ok: false; readonly reason: string } | {
   readonly ok: true; readonly writes: readonly SharedPreparedWrite[]; readonly apply: (handle: SharedDocumentHandle) => void;
+  readonly complete?: () => string | null;
 };
 
 function liveValue(handle: SharedDocumentHandle, path: readonly string[]): unknown {
