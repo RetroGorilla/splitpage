@@ -53,6 +53,7 @@ export interface Harness {
   reported: unknown[];
   clock: FakeClock;
   deny: (reason: string | null) => void;
+  denyComment: (reason: string | null) => void;
 }
 
 export interface HarnessHooks {
@@ -74,6 +75,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
   const clock = fakeClock();
   const migration = fakeMigration();
   let denied: string | null = null;
+  let commentDenied: string | null = null;
   let nesting = false;
   function nested(): void {
     if (!hooks.beforeUndo || nesting) return;
@@ -97,7 +99,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     },
     capability: {
       edit: function (): Capability { return denied === null ? { allowed: true } : { allowed: false, reason: denied }; },
-      comment: function (): Capability { return { allowed: true }; }
+      comment: function (): Capability { return commentDenied === null ? { allowed: true } : { allowed: false, reason: commentDenied }; }
     },
     reconcile: {
       anchors: function (doc) {
@@ -133,7 +135,8 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     refreshes: refreshes,
     reported: reported,
     clock: clock,
-    deny: function (reason) { denied = reason; }
+    deny: function (reason) { denied = reason; },
+    denyComment: function (reason) { commentDenied = reason; }
   };
 }
 
