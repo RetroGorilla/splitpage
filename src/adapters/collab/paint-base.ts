@@ -54,5 +54,6 @@ export function readSharedPaintedText(handle: SharedDocumentHandle, address: Sha
     const relative = [...Y.encodeRelativePosition(Y.createRelativePositionFromJSON({ item, assoc: 0 }))];
     return readSharedAnchor(JSON.stringify({ ...frame, relative }));
   }
-  return Object.freeze({ revision, text: whole.slice(from, to), identity });
+  const endGap = encodeCollabTextAnchor(found.text, target, to, "before");
+  return Object.freeze({ revision, text: whole.slice(from, to), identity, endGap, ...(length ? {} : { emptyGap: endGap }) });
 }

@@ -11,13 +11,35 @@ import { insertSharedHtml } from "../../../src/adapters/collab/text-import.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { execute, operation, ref, replicas } from "./executor-support.ts";
 import { validatedFixture } from "./helpers.ts";
+import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 
-for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "html-import", "mark-write", "destroy"] as const) {
+for (const phase of ["preparation", "application"] as const) {
+  for (const reasons of [[], ["delivering"], ["buffer"], ["delivering", "buffer"]] as const) {
+    for (const action of ["arrival", "buffer acquisition"] as const) {
+      test(`${phase}, reasons ${reasons.join("+") || "none"}: ${action} is refused independently of gate reasons`, () => {
+        const run = replicas(), state = collabState(run.a);
+        try {
+          execute(run.b, { kind: "scalar", id: "incoming", by: "Bob", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 99 });
+          const incoming = encodeSharedState(run.b), before = encodeSharedState(run.a), vector = encodeSharedStateVector(run.a);
+          for (const reason of reasons) state.ingress.holds.add(reason);
+          state.execution = { applying: phase === "application" };
+          assert.throws(() => action === "arrival" ? applySharedUpdate(run.a, incoming) : holdSharedBuffer(run.a), SharedExecutionWriteError);
+          assert.deepEqual(encodeSharedState(run.a), before);
+          assert.deepEqual(encodeSharedStateVector(run.a), vector);
+          assert.equal(state.ingress.held.length, 0);
+        } finally { state.execution = null; state.ingress.holds.clear(); run.close(); }
+      });
+    }
+  }
+}
+
+for (const buffered of [false, true]) for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "html-import", "mark-write", "destroy", "buffer"] as const) {
   // why: A received update that arrives in a command's notifications is held, not refused; ingress-gate.test.ts pins it.
-  if (phase === "observer" && writer === "update") continue;
-  test(`${writer} cannot reenter from ${phase}, and the guard clears after the error`, () => {
+  if (phase === "observer" && (writer === "update" || writer === "buffer")) continue;
+  test(`${writer} cannot reenter from ${phase}, and the guard clears after the error${buffered ? " with a dirty buffer" : ""}`, () => {
     const run = replicas();
     try {
+      const release = buffered ? holdSharedBuffer(run.a) : () => {};
       const target = { scope: "beat" as const, record: "R1" };
       const nested = operation({ kind: "status", id: "reserved", by: "A", target, value: "ready", parents: [] });
       const ordinary = operation({ kind: "scalar", id: "ordinary", by: "A", target, field: "lengthSeconds", value: 7 });
@@ -34,6 +56,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
         else if (writer === "text-create") createCollabText(run.a, collabState(run.a).roots.meta, true);
         else if (writer === "html-import") insertSharedHtml(run.a, textTarget, text, "nested", [], "nested");
         else if (writer === "mark-write") writeSharedMarkRecord(run.a, textTarget, "nested", null);
+        else if (writer === "buffer") holdSharedBuffer(run.a);
         else destroySharedDocument(run.a);
       };
       let updates = 0;
@@ -51,6 +74,7 @@ for (const phase of ["prepare", "apply", "observer"] as const) for (const writer
       assert.equal(updates, phase === "observer" ? 1 : 0);
       if (phase !== "observer") { assert.deepEqual(encodeSharedState(run.a), before); assert.deepEqual(encodeSharedStateVector(run.a), vector); }
       assert.deepEqual(executeSharedOperations(run.a, [ordinary]), { ok: true });
+      release();
     } finally { run.close(); }
   });
 }

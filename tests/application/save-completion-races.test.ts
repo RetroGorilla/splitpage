@@ -7,6 +7,7 @@ import { cellRuns } from "../../src/test/_cell-runs.mjs";
 import { fakeClock } from "./session-fakes.ts";
 import type { FakeClock } from "./session-fakes.ts";
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 import type { DocumentSession } from "../../src/application/session/document-session.ts";
 import { createSaveCoordinator } from "../../src/application/save/coordinator.ts";
 import type { SaveCoordinator, SaveOutcome } from "../../src/application/save/coordinator.ts";
@@ -112,7 +113,7 @@ function world(): World {
     entry: raw => migrateRows(raw, fakeMigration().ports),
     undo: { adopt: undo.adopt, record: () => { undo.noteEdit(); }, absorbDisk: undo.noteRemote, absorbReload: undo.absorbRemote },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
-    capability: { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) },
+    capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
     reconcile: { anchors: () => 0 },
     attribution: { attribute: () => null },
     report: error => { throw error; },

@@ -4,6 +4,7 @@ import { edits as portEdits } from "../../../src/bootstrap/wiring/ports/editing.
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { DocumentEdits } from "../../../src/application/session/document-edits.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { ChangeSet } from "../../../src/application/session/change-set.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
@@ -42,7 +43,7 @@ function start(editor: string, record: () => void = () => {}) {
       save: () => { log.push("save"); },
       refresh: () => { log.push("refresh"); }
     },
-    capability: { edit: () => reason === null ? { allowed: true } : { allowed: false, reason }, comment: () => ({ allowed: true }) },
+    capability: createSessionCapabilities("standalone", { edit: () => reason === null ? { allowed: true } : { allowed: false, reason }, comment: () => ({ allowed: true }) }),
     editor: { name: () => editor },
     records: () => null,
     attribution: { attribute: () => null },

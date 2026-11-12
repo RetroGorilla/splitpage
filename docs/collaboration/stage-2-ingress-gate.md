@@ -35,8 +35,47 @@ handle that is destroyed are discarded with it. They were acknowledged as valid,
 applied.
 
 The gate keeps its reasons for being closed in one set, `holds`, and has one queue.
-Today the set has one member, `delivering`. A later reason (package 9c: a buffered edit
-or an open composition) is one more member; the drain starts only when the set is empty.
+The set has two members, `delivering` and `buffer`. `holdSharedBuffer` acquires the
+buffer reason and returns an idempotent release. The drain starts only when the
+set is empty, and stops if a callback opens a buffer while draining. A local
+buffer commit may write while `buffer` is set; `delivering` still refuses local
+writes with `SharedExecutionWriteError`. A commit moment during delivery must
+retain its edit for an explicit retry outside that notification.
+
+Preparation and application refuse arrivals and buffer acquisition independently
+of those reasons. `notifications` counts the synchronous guarded callbacks, so
+an actual notification is distinct from a `delivering` reason left in the set.
+Application still takes precedence over notification delivery. The execution
+guard matrix pins both phases with no reason, either reason and both reasons,
+for received updates and buffer acquisition.
+
+## Bounded buffered arrivals
+
+Assumed rule 26 on [#1414](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6814123286)
+sets the named constant `SHARED_BUFFER_QUEUE_BYTES` in `sharedBufferQueueBytes()`
+to 64 KiB. The accessor keeps the core module's load-time declarations limited to
+types and functions. While `buffer` is set the bound counts
+the bytes of the entire one queue, including entries held for delivery. An
+arrival that would exceed it returns `queue-full`, distinct from `invalid-update`.
+Every subsequent arrival is refused until buffer release, including one that
+would fit. Held entries and the native edit remain intact. Delivery alone has
+no byte refusal because that queue drains within the outer write.
+
+Release records the declined interval for `observeSharedDeclined`. The outermost
+write reports it once after the queue drains, inside `guardSharedCallback`, with
+the delivery reason set so every listener reads that completed prefix. A nested
+release waits for that same outer drain. A callback failure still permits draining
+arrivals queued by a reporting callback.
+No declined interval means no report. The caller fetches the missing difference
+with a state-vector exchange after release; transport is a later stage. Destroy
+clears the queue, byte accounting, refusal latch, pending reports and listeners
+without reporting. A destroyed handle cannot acquire another buffer reason.
+
+`tests/adapters/collab/buffer-gate.test.ts` covers the exact bound, latched small
+arrival, both reasons in both release orders, destroy and throwing callbacks.
+`tests/collab/buffer-overflow.test.ts` checks resynchronization after normal,
+reversed and duplicated delivery. Dirty intervals also run in the seeded ingress
+generator, retaining its prefix oracle for each published revision.
 
 ## Errors
 
@@ -80,4 +119,4 @@ and one at the end of its write. No transaction is added and nothing is queued.
 `ingress-gate-generator.test.ts` places arrivals at random at the top, inside
 notifications and inside the drain, with callbacks that throw, and checks each announced
 revision against the same arrivals applied one by one. `tests/collab/ingress-gate-mutants.json`
-holds eight deliberate defects, listed in `tests/collab/mutants.md`.
+holds nine deliberate defects, listed in `tests/collab/mutants.md`.
