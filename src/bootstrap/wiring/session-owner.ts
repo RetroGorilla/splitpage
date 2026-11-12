@@ -243,8 +243,7 @@ export function documentNumbering() {
 
 export const liveDocumentPort: LiveDocumentPort = Object.freeze({
   current: currentDocument,
-  assign: adoptReplacement,
-  stamp: stampDocument
+  assign: adoptReplacement
 });
 
 export function mergeBase(): ValidatedDocument | null {
@@ -321,6 +320,10 @@ export function cancelRefresh(jobs: readonly string[]): void {
   if (started && !started.ended) started.current.cancelRefresh(jobs);
 }
 
-export function liveSession(): CommonDocumentSession & StandaloneDocumentSession {
+export function liveSession(): CommonDocumentSession {
+  return session;
+}
+
+export function standaloneSession(): StandaloneDocumentSession {
   return session;
 }

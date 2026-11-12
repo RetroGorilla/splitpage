@@ -59,6 +59,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
   const undo: SharedHarness["undo"] = [], executed: SharedHarness["executed"] = [];
   const clock = fakeClock();
   let denied: string | null = null;
+  const can = (): Capability => { hooks.asked?.(); return denied === null ? { allowed: true } : { allowed: false, reason: denied }; };
   const session = createSharedSession({
     replica: {
       revision: replica.revision,
@@ -74,7 +75,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
       save: change => { log.push("save:" + change.generation); hooks.effect?.("save"); },
       refresh: jobs => { log.push("refresh"); refreshes.push(Array.from(jobs).sort()); }
     },
-    capability: { edit: (): Capability => { hooks.asked?.(); return denied === null ? { allowed: true } : { allowed: false, reason: denied }; } },
+    capability: { edit: can, comment: can },
     report: error => { log.push("report"); reported.push(error); },
     timers: clock,
     after: hooks.after

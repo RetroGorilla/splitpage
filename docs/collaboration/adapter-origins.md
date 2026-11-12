@@ -12,7 +12,7 @@
 
 Native formatting cleanup creates its own local transaction with no origin. The adapter gives that transaction `cleanup` while a named transaction scope is active, regardless of the triggering origin. Its deletes must reach other copies, including when a received update triggered it. Session and undo owners must treat this as maintenance, never as a user command or an attributed edit. Transaction observation reports a local command and a following cleanup separately.
 
-A received update that arrives while its handle is delivering a transaction's notifications is checked at once and held. Held updates are applied in arrival order when the notifications finish, each as its own `remote` transaction, so every transaction is observed at its own revision with its own content. `tests/adapters/collab/held-updates.test.ts` pins it.
+A received update that arrives while a transaction is being announced is held and applied afterwards as its own `remote` transaction, and a local write in that interval is refused: see [stage-2-ingress-gate.md](stage-2-ingress-gate.md).
 
 The deterministic test queue publishes generated maintenance updates after the received delivery returns, then drains them to quiescence. The existing refusal of a received update reported synchronously as local remains in force. `deliveryReplica` uses the adapter policy rather than duplicating an origin filter.
 

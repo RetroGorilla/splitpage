@@ -1,0 +1,49 @@
+{
+  "tests": ["tests/adapters/collab/ingress-gate.test.ts", "tests/adapters/collab/ingress-gate-generator.test.ts"],
+  "mutants": [{
+    "label": "gate not reopened after a throw",
+    "file": "src/adapters/collab/state.ts",
+    "find": "try { result = { value: write() }; } catch (error) { gate.errors.push(error); }",
+    "replace": "try { result = { value: write() }; } catch (error) { gate.frames = 0; throw error; }"
+  }, {
+    "label": "drain stopped by a throw",
+    "file": "src/adapters/collab/state.ts",
+    "find": "      catch (error) { gate.errors.push(error); }",
+    "replace": "      catch (error) { gate.errors.push(error); break; }"
+  }, {
+    "label": "arrival during the drain applied at once",
+    "file": "src/adapters/collab/state.ts",
+    "find": "      gate.holds.add(\"delivering\");",
+    "replace": "      gate.frames = 0;"
+  }, {
+    "label": "local write during a notification allowed",
+    "file": "src/adapters/collab/state.ts",
+    "find": "if (state.execution && state.execution !== execution || state.ingress.holds.size) throw new SharedExecutionWriteError();",
+    "replace": "if (state.execution && state.execution !== execution) throw new SharedExecutionWriteError();"
+  }, {
+    "label": "callback error thrown into the library's cleanup",
+    "file": "src/adapters/collab/state.ts",
+    "find": "    state.ingress.errors.push(error);",
+    "replace": "    throw error;"
+  }, {
+    "label": "aborted cleanup left unfinished",
+    "file": "src/adapters/collab/state.ts",
+    "find": "    doc._transactionCleanups = [];",
+    "replace": "    void 0;"
+  }, {
+    "label": "held update applied out of arrival order",
+    "file": "src/adapters/collab/document.ts",
+    "find": "gate.held.push(Uint8Array.from(update));",
+    "replace": "gate.held.unshift(Uint8Array.from(update));"
+  }, {
+    "label": "update inside another write joins its transaction",
+    "file": "src/adapters/collab/document.ts",
+    "find": "const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;",
+    "replace": "const closed = gate.holds.size > 0;"
+  }, {
+    "label": "held updates survive destroy",
+    "file": "src/adapters/collab/document.ts",
+    "find": "  state.ingress.held.length = 0;",
+    "replace": "  void 0;"
+  }]
+}

@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { CollabDocumentState, collabState, transactCollabState, assertSharedDocumentIdle } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, guardSharedCallback } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
@@ -14,14 +14,22 @@ export function transactSharedDocument(handle: SharedDocumentHandle, origin: Exc
   transactCollabState(state, origin, change);
 }
 
+function namedOrigin(origin: unknown): SharedTransactionOrigin | null {
+  return origin === "local-command" || origin === "local-undo" || origin === "hydration" || origin === "remote" || origin === "cleanup" ? origin : null;
+}
+
 export function observeSharedTransactions(handle: SharedDocumentHandle, listener: (origin: SharedTransactionOrigin | null) => void): () => void {
   const state = collabState(handle);
-  const receive = (transaction: Y.Transaction): void => {
-    const origin: unknown = transaction.origin;
-    listener(origin === "local-command" || origin === "local-undo" || origin === "hydration" || origin === "remote" || origin === "cleanup" ? origin : null);
-  };
+  const receive = (transaction: Y.Transaction): void => guardSharedCallback(state, () => listener(namedOrigin(transaction.origin)));
   state.doc.on("afterTransaction", receive);
   return () => state.doc.off("afterTransaction", receive);
+}
+
+export function observeSharedUpdates(handle: SharedDocumentHandle, listener: (update: Uint8Array, origin: SharedTransactionOrigin | null) => void): () => void {
+  const state = collabState(handle);
+  const receive = (update: Uint8Array, origin: unknown): void => guardSharedCallback(state, () => listener(update, namedOrigin(origin)));
+  state.doc.on("update", receive);
+  return () => state.doc.off("update", receive);
 }
 
 export function encodeSharedState(handle: SharedDocumentHandle): Uint8Array {
@@ -37,8 +45,9 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
 }
 
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
-  const state = collabState(handle);
-  assertSharedDocumentIdle(state);
+  const state = collabState(handle), gate = state.ingress;
+  const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
+  if (!closed) assertNoSharedExecution(state);
   const trial = new CollabDocumentState();
   try {
     const decoded = Y.decodeUpdate(update);
@@ -50,14 +59,16 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
   } finally {
     trial.doc.destroy();
   }
-  // why: Held until this handle's notifications finish, so each revision is observed with exactly its own content.
-  if (state.notifying) state.heldUpdates.push(Uint8Array.from(update));
+  // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
+  if (closed) gate.held.push(Uint8Array.from(update));
   else transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
   return { ok: true };
 }
 
 export function destroySharedDocument(handle: SharedDocumentHandle): void {
   const state = collabState(handle);
-  assertSharedDocumentIdle(state);
+  assertNoSharedExecution(state);
+  state.ingress.held.length = 0;
+  state.ingress.holds.clear();
   state.doc.destroy();
 }

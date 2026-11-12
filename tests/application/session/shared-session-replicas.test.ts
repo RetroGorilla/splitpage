@@ -7,7 +7,7 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSha
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
-import { collabState } from "../../../src/adapters/collab/state.ts";
+import { collabState, SharedExecutionWriteError } from "../../../src/adapters/collab/state.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
@@ -233,6 +233,26 @@ test("regression: an update an earlier observer applies while the owner's replic
     assert.deepEqual([b.updates(), pairOf(b, run.b)], [2, [3, 3, [7, 9]]]);
     untouched(b);
   } finally { stop(); a.h.session.dispose(); b.h.session.dispose(); run.close(); }
+});
+
+test("a command issued from an observer the replica tells before the session, during a received update's notification, fails: the adapter refuses the write and revision 2 holds the received change alone", () => {
+  const run = recordReplicas(2, SOURCE);
+  const outcomes: unknown[] = [], a = seat(run.a);
+  let b: Seat | null = null;
+  const stop = observeSharedTransactions(run.b, () => {
+    const outcome = b?.h.session.run(length("B", "direct", 99, "R2"));
+    if (outcome) outcomes.push(outcome.kind === "failed" ? [outcome.kind, outcome.error instanceof SharedExecutionWriteError] : outcome);
+  });
+  const made = b = seat(run.b);
+  try {
+    const [first] = twoUpdates(run.a, a);
+    assert.ok(first);
+    assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
+    assert.deepEqual(outcomes, [["failed", true]]);
+    assert.deepEqual(made.h.published, [{ kind: "remote", epoch: 1, generation: 0, changes: LENGTH }]);
+    assert.deepEqual([made.updates(), pairOf(made, run.b)], [1, [2, 2, [7, null]]]);
+    assert.deepEqual([made.h.undo, made.h.session.generation(), made.h.executed.length], [[], 0, 1]);
+  } finally { stop(); a.h.session.dispose(); made.h.session.dispose(); run.close(); }
 });
 
 test("regression: an update one owner's subscriber applies before a second owner has received the first is held; both owners publish one exact change per revision", () => {

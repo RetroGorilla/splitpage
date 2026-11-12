@@ -43,6 +43,26 @@ test("before anything is applied the session holds no document and refuses a com
   assert.equal(NO_DOCUMENT, "no document");
 });
 
+test("a plan that asks the comment capability gets the same answer as an edit: allowed it runs, denied it is rejected with the reason and nothing reaches the replica", () => {
+  const replica = fakeReplica(script()), h = sharedHarness(replica.port);
+  const answers: unknown[] = [];
+  const command: Command = {
+    name: "comment", needs: "nothing",
+    plan: (_doc, capability) => {
+      const can = capability.comment();
+      answers.push(can);
+      return can.allowed ? { changes: changeSet({ whole: true }), apply: () => { throw new Error("A shared session applied a standalone plan"); }, shared: { operations: [LENGTH] } } : { refused: can.reason };
+    }
+  };
+  replica.script(() => { replica.write("local-command", timed(7)); return { ok: true }; });
+  assert.deepEqual(h.session.run(command), { kind: "applied", generation: 1, changes: LENGTH_CELL });
+  h.deny("read only");
+  assert.deepEqual(h.session.run(command), { kind: "rejected", reason: "read only" });
+  assert.deepEqual(h.session.run(sharedCommand("length", [LENGTH])), { kind: "rejected", reason: "read only" });
+  assert.deepEqual(answers, [{ allowed: true }, { allowed: false, reason: "read only" }]);
+  assert.equal(h.executed.length, 1);
+});
+
 test("each transaction that advances the replica becomes exactly one change, its kind set by the origin; one that advances nothing becomes none", () => {
   const replica = fakeReplica(), h = sharedHarness(replica.port);
   replica.write("hydration", script());

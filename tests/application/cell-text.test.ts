@@ -4,7 +4,7 @@ import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { CELL_TEXT_DERIVES, cellRuns, cellTextCommand } from "../../src/application/commands/cell-text.ts";
 import type { CellRecords, CellText } from "../../src/application/commands/cell-text.ts";
-import type { CellTextPorts } from "../../src/application/session/ports.ts";
+import type { Capability, CellTextPorts } from "../../src/application/session/ports.ts";
 import { toHtml } from "../../src/core/text/html.ts";
 import { normalizeCell } from "../../src/core/text/runs.ts";
 import type { Marks, Run } from "../../src/core/text/runs.ts";
@@ -236,6 +236,45 @@ test("without edit capability, a change that only adds, moves or removes comment
   const legacy = appliedInReview("r5", cellRuns(normalizeCell([run("Every "), run("morning", { b: true, cmt: ["c9"] }), run(".")])), "an anchor in a cell stored in another form");
   assert.match(String(legacy?.audioText), /data-cmt="c9"/);
   assert.equal(legacy?.updatedBy, "Reviewer");
+});
+
+const ANCHOR_ONLY = cellRuns(normalizeCell([run("Every "), run("morning", { cmt: ["c9"] }), run(".")]));
+
+function askedBy(rowId: string, text: CellText, edit: Capability, comment: Capability): { asked: string[]; refused: string | null } {
+  const asked: string[] = [];
+  const planned = opened().session.read(function (doc) {
+    return doc && cellTextCommand(rowId, "audioText", text, ports()).plan(doc, {
+      edit: function () { asked.push("edit"); return edit; },
+      comment: function () { asked.push("comment"); return comment; }
+    });
+  });
+  return { asked: asked, refused: planned && "refused" in planned ? planned.refused : null };
+}
+
+test("with edit capability the typing command asks about editing once and never about commenting, for a text change and for an anchor-only one", () => {
+  const refuse: Capability = { allowed: false, reason: "no access" };
+  assert.deepEqual(askedBy("r1", cellRuns(normalizeCell([run("Every morning!")])), { allowed: true }, refuse), { asked: ["edit"], refused: null });
+  assert.deepEqual(askedBy("r1", ANCHOR_ONLY, { allowed: true }, refuse), { asked: ["edit"], refused: null });
+});
+
+test("without edit capability, a text change is refused with the edit reason and commenting is not asked about", () => {
+  const out = askedBy("r1", cellRuns(normalizeCell([run("Every morning!")])), { allowed: false, reason: "review" }, { allowed: false, reason: "no access" });
+  assert.deepEqual(out, { asked: ["edit"], refused: "review" });
+});
+
+test("without edit capability, an anchor-only change asks about commenting: allowed it plans, refused it ends with the comment reason and nothing is written", () => {
+  assert.deepEqual(askedBy("r1", ANCHOR_ONLY, { allowed: false, reason: "review" }, { allowed: true }), { asked: ["edit", "comment"], refused: null });
+  assert.deepEqual(askedBy("r1", ANCHOR_ONLY, { allowed: false, reason: "review" }, { allowed: false, reason: "no access" }), { asked: ["edit", "comment"], refused: "no access" });
+  const h = opened();
+  h.deny("review");
+  h.denyComment("no access");
+  const before = snapshot(h);
+  const p = ports("Reviewer");
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r1", "audioText", ANCHOR_ONLY, p)), { kind: "rejected", reason: "no access" });
+  assert.equal(p.asked(), 0);
+  assert.equal(h.session.generation(), 0);
+  assert.deepEqual(h.log, []);
+  assert.equal(snapshot(h), before);
 });
 
 test("without edit capability, the same text is still a no-op and a scene that is gone is still a no-op, not a refusal", () => {

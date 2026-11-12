@@ -68,13 +68,13 @@ after a projection that threw, until the next one succeeds. In both, `readAt` gi
 the old document with the old revision, never the old document with the new one.
 A subscriber of the session reads the new pair.
 
-A revision's projection holds that revision's change and no later one. The library
-applies a write nested in a notification at once and notifies it afterwards, so the
-adapter holds a received update that arrives while its handle is notifying
-(`applySharedUpdate` still checks it and answers at once) and applies the held
-updates in arrival order when the notifications finish. A local command in that
-interval is rejected by this owner as `reentered`. Other adapter writes nested in a
-notification (`transactSharedDocument`) are not held.
+A revision's projection holds that revision's change and no later one. That is the
+adapter's promise, kept by its ingress gate: see
+[stage-2-ingress-gate.md](stage-2-ingress-gate.md). A received update that arrives
+during a notification is held and announced afterwards as its own revision. A command
+issued in that interval is rejected by this owner as `reentered` when the owner is the
+one running or delivering; issued from an observer the replica tells before the owner,
+it fails, because the adapter refuses the write.
 
 ## The entry port
 
