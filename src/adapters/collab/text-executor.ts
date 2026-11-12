@@ -39,7 +39,7 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
     const right = at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
     if (left && right && left.from > right.from || !left && !right && plan.units.length) throw new SharedTextPreparationError("invalid-reference");
     let offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0);
-    requireSharedTextOwnership(view, plan, offset, offset);
+    offset = requireSharedTextOwnership(view, plan, offset, offset);
     const chunks = operation.content.map((chunk, chunkIndex) => {
       if (typeof chunk.value !== "string" && chunk.value.atom === "broll" && !reserveSharedCommandIdentities(view, [chunk.value.id])) throw new SharedTextPreparationError("existing-identity");
       const value = sharedPreparedTextInsert(sharedInlineContent(chunk.value));

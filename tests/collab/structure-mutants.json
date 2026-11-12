@@ -32,14 +32,74 @@
   }, {
     "label": "reservation scans existing text items",
     "file": "src/adapters/collab/structure-reservations.ts",
-    "find": "for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
-    "replace": "for (const target of transaction.changed.keys()) if (target instanceof Y.Text) for (let old = target._start; old; old = old.right) void old.content; for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
+    "find": "for (const change of embeds.read(transaction)) {",
+    "replace": "for (const target of transaction.changed.keys()) if (target instanceof Y.Text) for (let old = target._start; old; old = old.right) void old.content; for (const change of embeds.read(transaction)) {",
     "tests": ["tests/adapters/collab/structure-identities.test.ts"]
   }, {
     "label": "reservation repeats production struct traversal",
-    "file": "src/adapters/collab/structure-reservations.ts",
-    "find": "for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
-    "replace": "readSharedIdentityEmbeds(transaction, inspect); for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
+    "file": "src/adapters/collab/embed-changes.ts",
+    "find": "const value = readSharedIdentityEmbeds(transaction, inspect);",
+    "replace": "readSharedIdentityEmbeds(transaction, inspect); const value = readSharedIdentityEmbeds(transaction, inspect);",
     "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+  }, {
+    "label": "repeated head boundary included in write positions",
+    "file": "src/adapters/collab/structure-spans.ts",
+    "find": "return at; })",
+    "replace": "return at; }).map((at, index) => index === 0 ? block.from : at)",
+    "tests": ["tests/adapters/collab/projection-split-recovery.test.ts"]
+  }, {
+    "label": "later cleaned beat identity shown as a second row",
+    "file": "src/core/collab/projection/blocks.ts",
+    "find": "if (!block.reason && beats.has(cleanId(block.id)))",
+    "replace": "if (false && !block.reason && beats.has(cleanId(block.id)))",
+    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+  }, {
+    "label": "empty cleaned beat identity gets a row",
+    "file": "src/core/collab/projection/blocks.ts",
+    "find": "if (!block.reason && !cleanId(block.id))",
+    "replace": "if (false && !block.reason && !cleanId(block.id))",
+    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+  }, {
+    "label": "created visual address ignores its record pointer",
+    "file": "src/adapters/collab/text-location.ts",
+    "find": "view.get([\"beats\", owner, \"visual\"]) ?? owner",
+    "replace": "owner",
+    "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
+  }, {
+    "label": "refreshed head skips reused boundary changes",
+    "file": "src/adapters/collab/structure-index.ts",
+    "find": "rescanned.has(change.text)",
+    "replace": "changed.has(key)",
+    "tests": ["tests/adapters/collab/structure-index.test.ts"]
+  }, {
+    "label": "inspection consumer aborts metadata publication",
+    "file": "src/adapters/collab/embed-changes.ts",
+    "find": "guardSharedCallback(state, observer)",
+    "replace": "observer()",
+    "tests": ["tests/adapters/collab/structure-index.test.ts"]
+  }, {
+    "label": "owner resolution walks every beat",
+    "file": "src/adapters/collab/prepare.ts",
+    "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "replace": "ensureOpen(); for (const value of collabState(handle).roots.beats.values()) void value; bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "owner resolution walks the whole order",
+    "file": "src/adapters/collab/prepare.ts",
+    "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "replace": "ensureOpen(); collabState(handle).roots.order.forEach(() => {}); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
+    "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
+  }, {
+    "label": "fallback when projected resolution fails",
+    "file": "src/adapters/collab/text-target.ts",
+    "find": "raw.field === \"title\" ? collabPurposeTextTarget(handle, raw, \"opaque-title-label\") : collabProjectedTextTarget(handle, raw)",
+    "replace": "collabProjectedTextTarget(handle, raw) ?? collabPurposeTextTarget(handle, raw, \"stored-anchor-read\")",
+    "tests": ["tests/adapters/collab/native-text-purpose.test.ts"]
+  }, {
+    "label": "painted end gap escapes its projected split fragment",
+    "file": "src/adapters/collab/paint-base.ts",
+    "find": "end = span.to;",
+    "replace": "end = whole.length;",
+    "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
   }]
 }

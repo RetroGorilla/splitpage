@@ -1,9 +1,10 @@
 import type { SharedContentRef, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedStoredMarkValue } from "./stored-mark.ts";
 import type { SharedPreparationView } from "./prepare.ts";
-import { isStableSharedIdentity } from "./identity.ts";
 import { sharedStructureReference } from "./structure-identity.ts";
-import { readSharedStructureBoundary, sharedStructureSpans } from "./structure-boundary.ts";
+import { sharedStructureSpans } from "./structure-spans.ts";
+import { resolveSharedTextLocation } from "./text-location.ts";
+import { cleanId } from "../../core/document/text-policy.ts";
 
 export class SharedTextPreparationError extends Error {}
 export interface SharedPlannedTextUnit { readonly value: unknown; additions: SharedContentRef[] }
@@ -27,45 +28,23 @@ export interface SharedTextCommandPlan {
 }
 
 export function sharedTextLocation(view: SharedPreparationView, raw: SharedTextAddress) {
-  if (![raw.owner, raw.segment].every(isStableSharedIdentity)) throw new SharedTextPreparationError("unstable-identity");
   raw = { ...raw, owner: sharedStructureReference(view, raw.owner), segment: sharedStructureReference(view, raw.segment) };
-  let segment: string = raw.segment, parent: readonly string[];
-  if (raw.field === "title") {
-    if (raw.owner !== raw.segment || view.get(["meta", "docId"]) !== raw.owner) throw new SharedTextPreparationError("missing-target");
-    parent = ["meta"];
-  } else if (raw.field === "visualText") {
-    if (raw.segment === raw.owner && view.kind(["visuals", segment]) !== "map") {
-      const stored = view.get(["beats", raw.owner, "visual"]);
-      if (typeof stored !== "string" || !stored || !isStableSharedIdentity(stored)) throw new SharedTextPreparationError("missing-target");
-      segment = stored;
-    }
-    parent = ["visuals", segment];
-    if (view.get([...parent, "beat"]) !== raw.owner) throw new SharedTextPreparationError("missing-target");
-  } else {
-    if (view.kind([raw.field === "heading" ? "headings" : "beats", raw.owner]) !== "map") throw new SharedTextPreparationError("missing-target");
-    if (raw.segment === raw.owner && view.kind(["segments", segment, "text"]) !== "text") {
-      const stored = view.get([raw.field === "heading" ? "headings" : "beats", raw.owner, "segment"]);
-      if (stored !== undefined && (typeof stored !== "string" || !stored || !isStableSharedIdentity(stored))) throw new SharedTextPreparationError("unstable-identity");
-      segment = typeof stored === "string" ? stored : (raw.field === "heading" ? "h:" : "b:") + raw.owner;
-    }
-    parent = ["segments", segment];
-    const head = view.get([...parent, "head"]), boundary = readSharedStructureBoundary(head);
-    if (boundary?.owner !== raw.owner || boundary.field !== raw.field) {
-      const slot = sharedTextPlanSlot(view, [...parent, "text"]);
-      const deltas = slot.plan ? null : view.get([...parent, "text"]);
-      const units = slot.plan?.units ?? (Array.isArray(deltas) ? deltas.flatMap((item: { insert?: unknown }) => typeof item?.insert === "string" ? item.insert.split("").map(value => ({ value })) : [{ value: item?.insert }]) : []);
-      if (!sharedStructureSpans(head, units).some(span => span.owner === raw.owner && span.field === raw.field)) throw new SharedTextPreparationError("mismatched-target");
-    }
-  }
-  const path = [...parent, raw.field === "title" ? "title" : "text"], storePath = [...parent, raw.field === "title" ? "titleMarks" : "markRecords"];
-  if (view.kind(path) !== "text") throw new SharedTextPreparationError("missing-target");
-  if (view.kind(storePath) !== "map") throw new SharedTextPreparationError("missing-store");
-  return { target: { owner: raw.owner, segment: segment as SharedContentRef, field: raw.field }, path, storePath };
+  try { return resolveSharedTextLocation(view, raw); }
+  catch (error) { throw new SharedTextPreparationError(error instanceof Error ? error.message : "missing-target"); }
 }
 
 function provenance(owner: string, units: readonly SharedPlannedTextUnit[], at: number, field: SharedTextAddress["field"]): SharedTextProvenance {
   return { owner, field, units: [...units], value: units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join(""),
     before: Array.from({ length: units.length + 1 }, (_, index) => at + index), after: Array.from({ length: units.length + 1 }, (_, index) => at + index) };
+}
+
+function projectedProvenance(owner: string, units: readonly SharedPlannedTextUnit[], positions: readonly number[], from: number, to: number, field: SharedTextAddress["field"]): SharedTextProvenance {
+  const source = provenance(owner, positions.map(position => units[position] as SharedPlannedTextUnit), from, field);
+  for (let index = 0; index <= positions.length; index++) {
+    source.before[index] = index ? (positions[index - 1] as number) + 1 : positions[0] ?? to;
+    source.after[index] = positions[index] ?? to;
+  }
+  return source;
 }
 
 export function sharedTextCommandPlan(view: SharedPreparationView, target: SharedTextAddress): SharedTextCommandPlan {
@@ -75,8 +54,8 @@ export function sharedTextCommandPlan(view: SharedPreparationView, target: Share
     const facade = view.text(located.path);
     if (!facade && JSON.stringify(view.get(located.path)) !== "[]") throw new SharedTextPreparationError("missing-target");
     const units = (facade?.units ?? []).map(unit => ({ value: unit.value, additions: unit.marks.flatMap(group => group.additions.map(addition => addition.record)) }));
-    const spans = target.field === "audioText" || target.field === "heading" ? sharedStructureSpans(view.get([...located.path.slice(0, -1), "head"]), units) : [];
-    return { ...located, units, native: provenance("", units, 0, target.field), sources: spans.length ? spans.map(span => provenance(span.owner, units.slice(span.from, span.to), span.from, span.field)) : [provenance(target.owner, units, 0, target.field)], recordKeys: [...facade?.recordKeys ?? []],
+    const spans = target.field === "audioText" || target.field === "heading" ? sharedStructureSpans(view, located.target.segment, units) : [];
+    return { ...located, units, native: provenance("", units, 0, target.field), sources: spans.length ? spans.flatMap(span => [...new Set([span.owner, span.field === "audioText" ? cleanId(span.owner) : span.owner])].map(owner => projectedProvenance(owner, units, span.positions, span.from, span.to, span.field))) : [provenance(target.owner, units, 0, target.field)], recordKeys: [...facade?.recordKeys ?? []],
       additions: (facade?.records ?? []).flatMap(item => item.record.type === "add" ? [{ identity: item.identity, mark: item.record.mark }] : []) };
   })();
   return { ...slot.plan, target: located.target };
@@ -86,18 +65,24 @@ export function sharedTextPlanSlot(view: SharedPreparationView, path: readonly s
   return view.scratch("text-plan-slot:" + JSON.stringify(path), () => ({ plan: null }));
 }
 
-export function requireSharedTextOwnership(view: SharedPreparationView, plan: SharedTextCommandPlan, from: number, to: number): void {
-  if (plan.target.field !== "audioText" && plan.target.field !== "heading") return;
-  const spans = sharedStructureSpans(view.get([...plan.path.slice(0, -1), "head"]), plan.units);
-  if (!spans.some(span => span.owner === plan.target.owner && span.field === plan.target.field && span.from <= from && span.to >= to)) throw new SharedTextPreparationError("mismatched-target");
+export function requireSharedTextOwnership(view: SharedPreparationView, plan: SharedTextCommandPlan, from: number, to: number): number {
+  if (plan.target.field !== "audioText" && plan.target.field !== "heading") return from;
+  const spans = sharedStructureSpans(view, plan.target.segment, plan.units);
+  const span = spans.find(span => span.owner === plan.target.owner && span.field === plan.target.field && span.from <= from && span.to >= to);
+  if (!span) throw new SharedTextPreparationError("mismatched-target");
+  return from === to ? Math.max(from, span.positions[0] ?? span.to) : from;
 }
 
 export function sharedTextSource(plan: SharedTextCommandPlan, owner: string): SharedTextProvenance | undefined {
   return plan.sources.find(source => source.owner === owner);
 }
 
-export function addSharedTextSource(plan: SharedTextCommandPlan, owner: string, from: number, to: number, field = plan.target.field): void {
-  plan.sources.push(provenance(owner, plan.units.slice(from, to), from, field));
+export function addSharedTextSource(view: SharedPreparationView, plan: SharedTextCommandPlan, owner: string, from: number, to: number, field = plan.target.field): void {
+  if (field === "audioText" || field === "heading") {
+    const span = sharedStructureSpans(view, plan.target.segment, plan.units).find(span => span.owner === owner && span.field === field);
+    if (!span) throw new SharedTextPreparationError("mismatched-target");
+    plan.sources.push(projectedProvenance(owner, plan.units, span.positions.filter(position => position >= from && position < to), from, to, field));
+  } else plan.sources.push(provenance(owner, plan.units.slice(from, to), from, field));
 }
 
 export function sharedTextRange(value: string, from: number, to: number) {

@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { scalarFieldAllowed } from "./scalar-executor.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import type { SharedProjectionBeatStructure } from "../../core/collab/projection/joins.ts";

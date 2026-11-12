@@ -1,8 +1,8 @@
 import * as Y from "yjs";
 import type { SharedTextAddress, SharedContentRef } from "../../core/collab/operations.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
-import { collabTextTarget, collabApplyingTextTarget } from "./text-target.ts";
-import { resolveSharedTextAnchor, resolveCollabTextAnchor, encodeCollabTextAnchor } from "./anchors.ts";
+import { collabTextTarget, collabWritingTextTarget, collabPurposeTextTarget, collabPreparedOperationTextTarget } from "./text-target.ts";
+import { resolveCollabTextAnchor, encodeCollabTextAnchor } from "./anchors.ts";
 import { transactSharedDocument } from "./document.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, assertSharedDocumentIdle } from "./state.ts";
@@ -24,12 +24,13 @@ export function writeSharedMarkRecord(handle: SharedDocumentHandle, target: Shar
   assertSharedDocumentIdle(collabState(handle));
   const normalized = sharedMarkRecordKey(key, writingIdentity(handle)), record = normalized && readSharedMarkRecord(normalized, raw);
   if (!record) return { ok: false, reason: "invalid-record" };
-  const found = collabTextTarget(handle, target);
+  const found = collabWritingTextTarget(handle, target);
   if (!found) return { ok: false, reason: "missing-text" };
   const store: unknown = found.container.get(found.marksKey);
   if (!(store instanceof Y.Map)) return { ok: false, reason: "missing-store" };
-  const from = resolveSharedTextAnchor(handle, record.start, target), to = resolveSharedTextAnchor(handle, record.end, target);
-  if (from === null || to === null || to < from) return { ok: false, reason: "invalid-record" };
+  const start = resolveCollabTextAnchor(handle, record.start, found.text), end = resolveCollabTextAnchor(handle, record.end, found.text);
+  const from = start.kind === "gone" ? null : start.index, to = end.kind === "gone" ? null : end.index;
+  if (from === null || to === null || to < from || from < found.from || to > found.to) return { ok: false, reason: "invalid-record" };
   if (store.has(normalized)) return { ok: false, reason: "existing-record" };
   transactSharedDocument(handle, "local-command", () => storeRecord(store, normalized, record));
   return { ok: true };
@@ -37,8 +38,8 @@ export function writeSharedMarkRecord(handle: SharedDocumentHandle, target: Shar
 
 export function prepareSharedMarkRecord(handle: SharedDocumentHandle, target: SharedTextAddress, operation: string, from: number, to: number,
   change: SharedMarkWriteChangeInput): SharedMarkRecord | null {
-  const found = collabTextTarget(handle, target);
-  if (!found || change.born === "inserted") return null;
+  const found = collabWritingTextTarget(handle, target);
+  if (!found || from < found.from || to > found.to || change.born === "inserted") return null;
   const plan = prepareSharedMarkWrite({ length: found.text.length, recordKeys: [] }, writingIdentity(handle), operation, from, to, change);
   return plan ? anchoredRecord(found.text, found.target, plan, null) : null;
 }
@@ -57,12 +58,12 @@ export function writeCollabMarkPlan(text: Y.Text, store: Y.Map<unknown>, target:
 }
 
 export function applySharedMarkWrite(handle: SharedDocumentHandle, description: { readonly target: SharedTextAddress; readonly plan: Extract<SharedMarkWritePlan, { kind: "record" }> }): void {
-  const { text, store } = collabApplyingTextTarget(handle, description.target);
+  const { text, store } = collabPreparedOperationTextTarget(handle, description.target);
   writeCollabMarkPlan(text, store, description.target, description.plan, null);
 }
 
 export function readSharedMarkCharacters(handle: SharedDocumentHandle, target: SharedTextAddress): SharedMarkedCharacter[] | null {
-  const found = collabTextTarget(handle, target);
+  const found = target.segment === target.owner ? collabTextTarget(handle, target) : collabPurposeTextTarget(handle, target, "stored-anchor-read");
   if (!found) return null;
   return readCollabMarkState(handle, found.text, found.container.get(found.marksKey)).characters;
 }

@@ -7,50 +7,28 @@ import { prepareSharedStatusEvent } from "./status.ts";
 import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
 import { sharedStructureReference } from "./structure-identity.ts";
-import { isStableSharedIdentity } from "./identity.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
+import { resolveIndexedStructureOwner } from "./structure-plan.ts";
 
 export function scalarTarget(handle: SharedDocumentHandle, target: SharedScalarSet["target"]): Y.Map<unknown> | null {
   const roots = collabState(handle).roots;
+  const owner = target.scope === "document" ? target.record : resolveIndexedStructureOwner(observeSharedStructureIndex(handle), target.record, target.scope === "beat" ? "audioText" : "heading")?.owner;
   const record = target.scope === "document" ? roots.meta.get("docId") === target.record ? roots.meta : null
-    : roots[target.scope === "beat" ? "beats" : "headings"].get(target.record);
+    : owner === undefined ? null : roots[target.scope === "beat" ? "beats" : "headings"].get(owner);
   return record instanceof Y.Map ? record : null;
 }
 
-export function scalarFieldAllowed(scope: SharedScalarSet["target"]["scope"], field: string, value: unknown, clear: boolean): boolean {
-  if (scope === "document") {
-    if (field === "fileTitle") return !clear && value !== null && typeof value === "object" && !Array.isArray(value)
-      && Object.keys(value).every(key => key === "titleOrigin" || key === "titleVersion")
-      && ((value as Record<string, unknown>).titleOrigin === undefined || (value as Record<string, unknown>).titleOrigin === "file" || (value as Record<string, unknown>).titleOrigin === "user")
-      && ((value as Record<string, unknown>).titleVersion === undefined || typeof (value as Record<string, unknown>).titleVersion === "string"
-        && /^v\d+$/.test(String((value as Record<string, unknown>).titleVersion)));
-    if (field === "wordsPerMinute") return !clear && typeof value === "number" && Number.isInteger(value) && value >= 60 && value <= 400;
-    if (field === "targetSeconds") return clear || typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 86400;
-    if (field === "paragraphsDecided") return !clear && value === true;
-  }
-  if (scope === "beat") {
-    if (field === "lengthSeconds") return clear || typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 86400;
-    if (field === "paragraphStart") return clear || value === true;
-    if (field === "stamp") return !clear && value !== null && typeof value === "object" && !Array.isArray(value)
-      && Object.keys(value).every(key => key === "at" || key === "by")
-      && typeof (value as Record<string, unknown>).at === "string"
-      && ((value as Record<string, unknown>).by === null || typeof (value as Record<string, unknown>).by === "string");
-  }
-  if (scope === "heading" && field === "firstSceneId") return !clear && typeof value === "string" && !!value && isStableSharedIdentity(value);
-  return field === "extra" && !clear && typeof value === "string" && validExtra(value);
-}
-
-function validExtra(value: string): boolean {
-  try { const parsed: unknown = JSON.parse(value); return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed); }
-  catch { return false; }
-}
 
 function prepareScalar(operation: SharedScalarSet, view: SharedPreparationView): SharedPreparationResult {
   const { target } = operation;
-  const path = target.scope === "document" ? ["meta"] : [target.scope === "beat" ? "beats" : "headings", sharedStructureReference(view, target.record)];
+  const reference = sharedStructureReference(view, target.record), owner = target.scope === "document" ? reference : view.resolveOwner(reference, target.scope === "beat" ? "audioText" : "heading")?.owner;
+  if (!owner) return { ok: false, reason: "missing-target" };
+  const path = target.scope === "document" ? ["meta"] : [target.scope === "beat" ? "beats" : "headings", owner];
   if (view.kind(path) !== "map" || target.scope === "document" && view.get(["meta", "docId"]) !== target.record) return { ok: false, reason: "missing-target" };
   const value = operation.clear ? undefined : target.scope === "heading" && operation.field === "firstSceneId" && typeof operation.value === "string"
-    ? sharedStructureReference(view, operation.value) : operation.value;
+    ? view.resolveOwner(sharedStructureReference(view, operation.value), "audioText")?.owner : operation.value;
   if (!scalarFieldAllowed(target.scope, operation.field, value, operation.clear === true)) return { ok: false, reason: "unsupported-scalar-field" };
   if (target.scope === "heading" && operation.field === "firstSceneId" && (typeof value !== "string" || view.kind(["beats", value]) !== "map")) return { ok: false, reason: "missing-target" };
   const fieldPath = [...path, operation.field];
