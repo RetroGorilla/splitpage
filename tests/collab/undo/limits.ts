@@ -1,4 +1,8 @@
+import type { DeliveryOrder } from "../delivery.ts";
+import { runBufferTrace } from "./buffer-cases.ts";
+import type { UndoBufferTrace } from "./buffer-cases.ts";
 import { runDoubleDelete } from "./cases.ts";
+import { ADAPTER_WORLD } from "./scenario.ts";
 import type { UndoViolation } from "./generator.ts";
 
 export interface UndoLimit {
@@ -55,7 +59,19 @@ export const undoLimits: readonly UndoLimit[] = [
     title: "A copy holding a writer's later update before the earlier one cannot be read until the earlier one arrives",
     history: "Three writers; one writer's second update is delivered to a copy before the first. A limit of delivery into the shared document, so it is examined on the adapter executor.",
     shown: "waiting limits name the cut that examines them"
+  },
+  {
+    id: "insert-after-deleted-run", state: "carried",
+    title: "Text typed at a place inside a run the other writer already deleted sits after the whole run once the deletion is undone",
+    history: "R1 abcd, shared document only. Alice deletes bc, delivered. Bob types X where the gap between b and c was. Alice undoes: a b c X d, not a b X c d.",
+    shown: "carried limit insert-after-deleted-run: the literal histories fail in the declared way",
+    literal: { run: () => runBufferTrace("T01", "late-C", ADAPTER_WORLD), failure: /^T01 late-C undone\/A\.rows\[0\]\.characters\[2\]\.identity\.client: expected 2, got 1$/ }
   }
+];
+
+export const ADAPTER_BUFFER_LIMIT_RUNS: readonly { readonly trace: UndoBufferTrace; readonly order: DeliveryOrder }[] = [
+  { trace: "T01", order: "late-C" },
+  { trace: "T01 composition", order: "late-C" }
 ];
 
 export function undoLimitFor(violation: UndoViolation): UndoLimit | undefined {

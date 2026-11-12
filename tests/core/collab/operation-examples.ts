@@ -32,5 +32,10 @@ export const operationExamples = [
   { fixture: "T21 scalar", operation: { kind: "scalar", id: "length-A", by: "Alice", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 12 } },
   { fixture: "T21 status / causal branch", operation: { kind: "status", id: "c", by: "Alice", target: { scope: "beat", record: "R1" }, value: "ready", parents: ["a", "x"] } },
   { fixture: "selectionToOwnBeat prefix: original beat keeps its tail and visual", operation: { kind: "split-before", id: "prefix-A", by: "Alice", target,
-    at: { left: "s2", right: "s3", affinity: "after" }, observed: ["s1", "s2", "s3", "s4"], boundary: "a1", beat: "new1", fields: {} } }
+    at: { left: "s2", right: "s3", affinity: "after" }, observed: ["s1", "s2", "s3", "s4"], boundary: "a1", beat: "new1", fields: {} } },
+  { fixture: "T21 undo of a deletion: the character returns after its left neighbour with the bold it showed", operation: { kind: "text-restore",
+    id: "undo-delete-A", by: "Alice", target, units: [{ unit: "s2", left: "s1", value: "b", marks: ["bold-A"] }] } },
+  { fixture: "T21 undo of a format", operation: { kind: "mark-retract", id: "undo-bold-A", by: "Alice", target, occurrences: ["bold-A"] } },
+  { fixture: "T21 scalar undo of a status", operation: { kind: "status-retire", id: "undo-status-A", by: "Alice",
+    target: { scope: "beat", record: "R1" }, event: "c", value: "ready" } }
 ] as const;
