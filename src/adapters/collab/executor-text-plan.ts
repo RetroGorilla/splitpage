@@ -5,6 +5,8 @@ import { sharedStructureReference } from "./structure-identity.ts";
 import { sharedStructureSpans } from "./structure-spans.ts";
 import { resolveSharedTextLocation } from "./text-location.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
+import { sharedTextPoints } from "./text-points.ts";
+import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
 
 export class SharedTextPreparationError extends Error {}
 export interface SharedPlannedTextUnit { readonly value: unknown; additions: SharedContentRef[] }
@@ -25,11 +27,23 @@ export interface SharedTextCommandPlan {
   readonly native: SharedTextProvenance;
   readonly recordKeys: string[];
   readonly additions: { readonly identity: SharedContentRef; readonly mark: SharedStoredMarkValue }[];
+  readonly points: { offset: number; assoc: -1 | 0 }[];
 }
 
 export function sharedTextLocation(view: SharedPreparationView, raw: SharedTextAddress) {
   raw = { ...raw, owner: sharedStructureReference(view, raw.owner), segment: sharedStructureReference(view, raw.segment) };
-  try { return resolveSharedTextLocation(view, raw); }
+  try {
+    if (raw.field === "audioText" && raw.segment !== raw.owner) {
+      const owner = view.resolveOwner(raw.owner, "audioText");
+      if (owner && owner.segment !== raw.segment) {
+        const geometry = readSharedJoinedTextGeometry(view, owner.owner);
+        const part = geometry?.root === owner.owner && !geometry.removed ? geometry.parts.find(part => part.segment === raw.segment) : null;
+        if (!part) throw new SharedTextPreparationError("mismatched-target");
+        return resolveSharedTextLocation(view, { ...raw, owner: part.owner as SharedContentRef });
+      }
+    }
+    return resolveSharedTextLocation(view, raw);
+  }
   catch (error) { throw new SharedTextPreparationError(error instanceof Error ? error.message : "missing-target"); }
 }
 
@@ -55,7 +69,7 @@ export function sharedTextCommandPlan(view: SharedPreparationView, target: Share
     if (!facade && JSON.stringify(view.get(located.path)) !== "[]") throw new SharedTextPreparationError("missing-target");
     const units = (facade?.units ?? []).map(unit => ({ value: unit.value, additions: unit.marks.flatMap(group => group.additions.map(addition => addition.record)) }));
     const spans = target.field === "audioText" || target.field === "heading" ? sharedStructureSpans(view, located.target.segment, units) : [];
-    return { ...located, units, native: provenance("", units, 0, target.field), sources: spans.length ? spans.flatMap(span => [...new Set([span.owner, span.field === "audioText" ? cleanId(span.owner) : span.owner])].map(owner => projectedProvenance(owner, units, span.positions, span.from, span.to, span.field))) : [provenance(target.owner, units, 0, target.field)], recordKeys: [...facade?.recordKeys ?? []],
+    return { ...located, units, points: sharedTextPoints(view, located.path), native: provenance("", units, 0, target.field), sources: spans.length ? spans.flatMap(span => [...new Set([span.owner, span.field === "audioText" ? cleanId(span.owner) : span.owner])].map(owner => projectedProvenance(owner, units, span.positions, span.from, span.to, span.field))) : [provenance(target.owner, units, 0, target.field)], recordKeys: [...facade?.recordKeys ?? []],
       additions: (facade?.records ?? []).flatMap(item => item.record.type === "add" ? [{ identity: item.identity, mark: item.record.mark }] : []) };
   })();
   return { ...slot.plan, target: located.target };
@@ -69,8 +83,10 @@ export function requireSharedTextOwnership(view: SharedPreparationView, plan: Sh
   if (plan.target.field !== "audioText" && plan.target.field !== "heading") return from;
   const spans = sharedStructureSpans(view, plan.target.segment, plan.units);
   const span = spans.find(span => span.owner === plan.target.owner && span.field === plan.target.field && span.from <= from && span.to >= to);
-  if (!span) throw new SharedTextPreparationError("mismatched-target");
-  return from === to ? Math.max(from, span.positions[0] ?? span.to) : from;
+  const joined = !span && plan.target.field === "audioText" ? readSharedJoinedTextGeometry(view, plan.target.owner) : null;
+  const owned = span ?? (!joined?.removed ? spans.find(span => span.field === "audioText" && span.from <= from && span.to >= to && joined?.parts.some(part => part.owner === span.owner && part.segment === plan.target.segment)) : null);
+  if (!owned) throw new SharedTextPreparationError("mismatched-target");
+  return from === to ? Math.max(from, owned.positions[0] ?? owned.to) : from;
 }
 
 export function sharedTextSource(plan: SharedTextCommandPlan, owner: string): SharedTextProvenance | undefined {
@@ -100,6 +116,10 @@ export function sharedTextInsertionPosition(plan: SharedTextCommandPlan, offset:
 
 export function spliceSharedTextPlan(plan: SharedTextCommandPlan, from: number, to: number, values: readonly unknown[], operation?: string): void {
   const added = values.map(value => ({ value, additions: [] as SharedContentRef[] })), removed = to - from;
+  for (const point of plan.points) {
+    const collapsed = point.offset <= from ? point.offset : point.offset >= to ? point.offset - removed : from;
+    point.offset = collapsed + (collapsed > from || collapsed === from && point.assoc === 0 ? added.length : 0);
+  }
   for (const source of [plan.native, ...plan.sources]) for (const [positions, stickRight] of [[source.before, false], [source.after, true]] as const) {
     for (let index = 0; index < positions.length; index++) {
       const position = positions[index] as number;

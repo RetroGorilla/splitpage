@@ -1,5 +1,6 @@
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrite } from "./prepare.ts";
 import type { SharedTextCommandPlan } from "./executor-text-plan.ts";
 import type { SharedMarkWritePlan } from "./mark-plan.ts";
@@ -11,7 +12,8 @@ import { freezeSharedPreparedValue } from "./prepare-value.ts";
 import { SharedTextPreparationError } from "./executor-text-plan.ts";
 
 export type SharedTextExecutionStep = { readonly kind: "edit"; readonly write: SharedTextWritePlan }
-  | { readonly kind: "mark"; readonly target: SharedTextAddress; readonly plan: Extract<SharedMarkWritePlan, { kind: "record" }> };
+  | { readonly kind: "mark"; readonly target: SharedTextAddress; readonly plan: Extract<SharedMarkWritePlan, { kind: "record" }> }
+  | { readonly kind: "map"; readonly writes: readonly SharedPreparedWrite[] };
 export interface SharedTextExecutionDescription { readonly steps: readonly SharedTextExecutionStep[] }
 export type SharedTextOperationPreparation = Extract<SharedPreparationResult, { ok: false }>
   | (Extract<SharedPreparationResult, { ok: true }> & { readonly description: SharedTextExecutionDescription });
@@ -21,7 +23,8 @@ type PlannedTextMarkChange = { readonly type: "add"; readonly mark: unknown; rea
 
 export function applySharedTextDescription(handle: SharedDocumentHandle, description: SharedTextExecutionDescription): void {
   for (const step of description.steps) {
-    if (step.kind === "edit") applySharedTextEdit(handle, step.write);
+    if (step.kind === "map") applySharedMapWrites(handle, step.writes);
+    else if (step.kind === "edit") applySharedTextEdit(handle, step.write);
     else applySharedMarkWrite(handle, { target: step.target, plan: step.plan });
   }
 }

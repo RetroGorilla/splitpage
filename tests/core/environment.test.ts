@@ -18,6 +18,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "collab/projection/blocks.ts": await import("../../src/core/collab/projection/blocks.ts"),
   "collab/projection/fields.ts": await import("../../src/core/collab/projection/fields.ts"),
   "collab/projection/join-glue.ts": await import("../../src/core/collab/projection/join-glue.ts"),
+  "collab/projection/join-layout.ts": await import("../../src/core/collab/projection/join-layout.ts"),
   "collab/projection/joins.ts": await import("../../src/core/collab/projection/joins.ts"),
   "collab/projection/gallery.ts": await import("../../src/core/collab/projection/gallery.ts"),
   "collab/projection/broll.ts": await import("../../src/core/collab/projection/broll.ts"),

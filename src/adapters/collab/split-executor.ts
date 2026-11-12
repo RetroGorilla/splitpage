@@ -18,19 +18,39 @@ import { prepareSharedSegmentCreation } from "./segment-executor.ts";
 import type { SharedStructureContentPorts } from "./structure-content.ts";
 import { observeSharedStructureIdentities } from "./structure-reservations.ts";
 import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
+import { usesSharedJoinedText, readSharedJoinedText, sharedJoinedGap, sharedJoinedSelected, captureSharedJoinedTextSource } from "./joined-text-routing.ts";
+import type { SharedTextCommandPlan } from "./executor-text-plan.ts";
+import { sharedStructureReference } from "./structure-identity.ts";
 
 export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBefore, view: SharedPreparationView, identities: SharedStructureIdentityReservations) {
   try {
+    if (!usesSharedJoinedText(view, operation.target)) return preparePhysicalBeatSplit(operation, view, identities);
+    const row = readSharedJoinedText(view, operation.target); if (!row) throw new SharedTextPreparationError("missing-target");
+    const position = sharedJoinedGap(view, row, operation.at);
+    sharedJoinedSelected(view, row, operation.observed);
+    if (operation.kind === "split-before" && position.plan.target.owner !== row.spans[0]?.owner) throw new SharedTextPreparationError("partial-joined-prefix");
+    const prepared = preparePhysicalBeatSplit(operation, view, identities, position);
+    if (prepared.ok) {
+      const owner = sharedStructureReference(view, operation.beat), created = readSharedJoinedText(view, { owner, segment: owner, field: "audioText" });
+      if (created) captureSharedJoinedTextSource(view, created);
+    }
+    return prepared;
+  } catch (error) { if (error instanceof SharedTextPreparationError) return { ok: false as const, reason: error.message }; throw error; }
+}
+
+function preparePhysicalBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBefore, view: SharedPreparationView, identities: SharedStructureIdentityReservations,
+  fixed?: { readonly plan: SharedTextCommandPlan; readonly offset: number }) {
+  try {
     if (operation.target.field !== "audioText" && operation.target.field !== "heading" || operation.kind === "split-before" && operation.target.field !== "audioText"
       || ![operation.by, operation.boundary].every(isStableSharedIdentity)) throw new SharedTextPreparationError("invalid-split-target");
-    const plan = sharedTextCommandPlan(view, operation.target), { at } = operation;
-    const left = at.left === null ? null : resolveSharedTextReference(view, plan, at.left, "left");
-    const right = at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
+    const plan = fixed?.plan ?? sharedTextCommandPlan(view, operation.target), { at } = operation;
+    const left = fixed || at.left === null ? null : resolveSharedTextReference(view, plan, at.left, "left");
+    const right = fixed || at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
     const span = sharedStructureSpans(view, plan.target.segment, plan.units).find(span => span.owner === plan.target.owner);
     if (!span) throw new SharedTextPreparationError("missing-target");
-    const offset = Math.max(span.positions[0] ?? span.to, sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from));
+    const offset = Math.max(span.positions[0] ?? span.to, sharedTextInsertionPosition(plan, fixed?.offset ?? (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from));
     if (left && right && left.from > right.from || offset < span.from || offset > span.to) throw new SharedTextPreparationError("invalid-reference");
-    for (const ref of operation.observed) resolveSharedTextReference(view, plan, ref, "range");
+    if (!fixed) for (const ref of operation.observed) resolveSharedTextReference(view, plan, ref, "range");
     const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat, identities), path = ["beats", beat];
     if (view.has(path)) throw new SharedTextPreparationError("existing-identity");
     const writes: SharedPreparedWrite[] = [{ kind: "map", path }, { kind: "set", path: [...path, "id"], value: beat },
