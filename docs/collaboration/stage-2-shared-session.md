@@ -15,7 +15,7 @@ real replica port are packages 9, 12, 13 and 14.
 | `project()` | The whole document as a plain object. It may be frozen and share rows with the one before; the entry must not write to it |
 | `changes()` | Which rows and document fields differ between the document `project()` gives and the one it gave before |
 | `execute(operations, { base })` | Runs one list of operations as one transaction, or refuses it with a reason |
-| `observe(listener)` | Calls the listener after each transaction with its origin, or `null` |
+| `observe(listener)` | Calls the listener after each transaction with its origin, or `null`, and, when the replica could not publish that transaction, `{ error }` |
 
 The other ports are the standalone session's: `entry`, `undo.record`, `effects`,
 `capability`, `report`, `timers`. There is no attribution port.
@@ -24,7 +24,19 @@ The other ports are the standalone session's: `entry`, `undo.record`, `effects`,
 port on the incremental projector: `revision()`, `project()` and `changes()` read one
 published projection, and `observe` tells the session once per publication. The
 session therefore never projects the whole document; a transaction that changed
-nothing is not published and does not reach it. Nothing in the running app calls it
+nothing is not published and does not reach it. `revision()` is the published
+projection's, never the live document's, so an observer called between a transaction
+and its publication still reads a matching pair.
+
+When the projector throws, the replica catches it: the call that wrote the document
+returns normally, and `observe` passes `{ error }` with the origin. Until a
+publication lands, `revision()` names the transaction waiting for it, and `project()`
+and `changes()` try the projection again. The session reports the error, reprojects
+at once and hands row subscribers the whole document; if that attempt throws as well,
+both errors are reported and the session catches up at the next transaction. After
+`dispose()`, `execute` refuses with `replica-disposed` and writes nothing.
+
+Nothing in the running app calls it
 yet. Tests use it through `adapterReplica` in
 `tests/application/session/shared-session-support.ts`.
 
@@ -36,7 +48,8 @@ projection's report (`SharedProjectionChanges`, see
 [stage-2-incremental-projection.md](stage-2-incremental-projection.md#the-report-of-which-rows-changed)):
 added, removed, moved and changed rows, and changed document fields. An adoption,
 and the first change after a projection that threw, give the whole document. No
-feature paints from it yet.
+feature paints from it yet. Change and row subscribers added while a change is
+delivered are told from the next change on.
 
 Its row ids are the projection's. The change set beside it is still compared between
 two held documents, which are the entry's output (see "The entry port"), so the two
@@ -183,5 +196,5 @@ local person's. This owner answers for itself; the rest is named for its package
 Package 14 also follows the session-mode and captured-save lifetime obligations
 in [Shared sessions and local file saving](stage-2-disabled-file-saving.md#package-14-obligations).
 
-`tests/collab/shared-session-mutants.json` holds fourteen, each listed in
+`tests/collab/shared-session-mutants.json` holds twenty-one, each listed in
 `tests/collab/mutants.md` with the test that fails.

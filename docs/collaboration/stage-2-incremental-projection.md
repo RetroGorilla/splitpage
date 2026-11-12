@@ -48,6 +48,11 @@ own observers see the new pair, with held incoming updates still behind the
 per-handle gate. Each update drained by the gate gets its own publication.
 Duplicate deliveries that change no state need no new pair.
 
+If the assembly throws and an observer registered a failure listener, the projector
+calls those listeners instead and keeps the revision as `pending()`; `retry()`
+assembles it again from the last published document. With no failure listener the
+error propagates as before. No new library subscription is involved.
+
 The extra library subscription sites are the replica roots' `observeDeep`, the
 source roots' `observeDeep`, and source document `destroy`, all in
 `incremental-project.ts`. Each callback runs through `guardSharedCallback`; the

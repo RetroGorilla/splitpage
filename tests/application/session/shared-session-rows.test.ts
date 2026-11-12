@@ -75,6 +75,19 @@ test("after a projection that threw, the next report is the whole document, and 
   ]);
 });
 
+test("subscribers added while a change is delivered are told from the next change on, change and row subscribers alike", () => {
+  const replica = fakeReplica(script()), h = sharedHarness(replica.port), told: string[] = [];
+  const stop = h.session.subscribe(() => {
+    stop();
+    h.session.subscribe(change => { told.push("change:" + change.kind); });
+    h.session.subscribeRows(rows => { told.push("rows:" + rows.fields.join()); });
+  });
+  replica.write("remote", script({ title: "First" }));
+  assert.deepEqual(told, []);
+  replica.write("remote", script({ title: "Second" }));
+  assert.deepEqual(told, ["change:remote", "rows:title"]);
+});
+
 test("a row subscriber that throws is reported and the command is committed with its error; a disposed session tells and registers no one", () => {
   const replica = fakeReplica(script()), h = sharedHarness(replica.port), broken = new Error("row subscriber");
   let calls = 0;

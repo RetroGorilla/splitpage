@@ -12,6 +12,8 @@ import { changesBetween } from "./projection-changes.ts";
 
 export type ReplicaOrigin = "local-command" | "local-undo" | "hydration" | "remote" | "cleanup";
 
+export interface ReplicaFailure { readonly error: unknown }
+
 export type ReplicaExecution = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export interface ReplicaPort {
@@ -19,7 +21,7 @@ export interface ReplicaPort {
   readonly project: () => unknown;
   readonly changes: () => SharedProjectionChanges;
   readonly execute: (operations: readonly SharedOperation[], options: { readonly base: number }) => ReplicaExecution;
-  readonly observe: (listener: (origin: ReplicaOrigin | null) => void) => () => void;
+  readonly observe: (listener: (origin: ReplicaOrigin | null, failure?: ReplicaFailure) => void) => () => void;
 }
 
 export interface SharedSessionPorts {
@@ -111,25 +113,31 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     return { document: next, changes: previous ? changesBetween(previous, next) : WHOLE_DOCUMENT, rows: rows };
   }
 
-  function deliver(kind: TransactionKind, changes: ChangeSet, rows: SharedProjectionChanges, mine: Running | null): Landed {
-    const errors: unknown[] = [];
+  function deliver(kind: TransactionKind, changes: ChangeSet, rows: SharedProjectionChanges, mine: Running | null, failure: ReplicaFailure | undefined): Landed {
+    const errors: unknown[] = failure ? [failure.error] : [];
+    const told = listeners.slice(), toldRows = rowListeners.slice();
     const change: SessionChange = Object.freeze({ kind: kind, epoch: epoch, generation: generation, changes: changes });
     if (kind === "edit") attempt(errors, function () { ports.undo.record(changes, mine?.plan.selection); });
     if (kind === "edit" || kind === "replay") scheduler.pass(change).forEach(function (error) { errors.push(error); });
-    listeners.slice().forEach(function (listener) {
+    told.forEach(function (listener) {
       attempt(errors, function () { listener(change); });
     });
-    rowListeners.slice().forEach(function (listener) {
+    toldRows.forEach(function (listener) {
       attempt(errors, function () { listener(rows, change); });
     });
     errors.forEach(function (error) { ports.report(error); });
     return { change: change, errors: errors };
   }
 
-  function receive(origin: ReplicaOrigin | null): void {
+  function receive(origin: ReplicaOrigin | null, failure?: ReplicaFailure): void {
     if (disposed) return;
+    // why: A failed publication is retried at once below; its rows are reported whole rather than trusting the retry.
+    if (failure) missed = true;
     const at = ports.replica.revision();
-    if (at === revision) return;
+    if (at === revision) {
+      if (failure) ports.report(failure.error);
+      return;
+    }
     const mine = origin === "local-command" && running && !running.landed && !running.lost ? running : null;
     let step: ProjectionStep;
     try {
@@ -137,6 +145,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     } catch (error) {
       if (mine) mine.lost = { error: error };
       missed = true;
+      if (failure) ports.report(failure.error);
       ports.report(error);
       return;
     }
@@ -154,7 +163,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     const outer = delivering;
     delivering = true;
     try {
-      const landed = deliver(kind, changes, kind === "adopt" ? WHOLE_PROJECTION : step.rows, mine);
+      const landed = deliver(kind, changes, kind === "adopt" ? WHOLE_PROJECTION : step.rows, mine, failure);
       if (mine) mine.landed = landed;
     } finally {
       delivering = outer;
