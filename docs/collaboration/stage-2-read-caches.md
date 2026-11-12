@@ -3,7 +3,7 @@
 This is the first cut of package 6c. It caches existing readers and preparation;
 it does not replace the full-document projector or the shared session's comparison.
 Those follow as separate PRs so reader invalidation can be reviewed independently
-of segment invalidation and change reporting. The next cut shares the full
+of segment invalidation and change reporting. The [incremental cut](stage-2-incremental-projection.md) shares the full
 projector's assembly and chooses which segments to read; the final cut replaces
 the session's `projectionStep` and reports its precise change set.
 

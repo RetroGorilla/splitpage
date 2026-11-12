@@ -14,7 +14,8 @@ export interface SharedProjectionStream {
 }
 export type SharedProjectionFragmentReason = "missing-boundary" | "invalid-prefix" | "missing-beat" | "wrong-shape-beat" | "unowned-beat" | "foreign-segment" | "duplicate-boundary" | "invalid-beat-id";
 
-export function projectSharedBlocks(streams: readonly SharedProjectionStream[], records: readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null }[]) {
+export function projectSharedBlocks(streams: readonly SharedProjectionStream[], records: readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null }[],
+  collect?: (parts: readonly (readonly SharedProjectionUnit[])[], build: () => SharedProjectionUnit[]) => SharedProjectionUnit[]) {
   const contains = new Map<string, Set<string>>(), fallback = new Map<string, string>();
   for (const stream of streams) {
     const names = new Set<string>(); contains.set(stream.segment, names);
@@ -28,12 +29,16 @@ export function projectSharedBlocks(streams: readonly SharedProjectionStream[], 
   for (const stream of streams) {
     if (!stream.inOrder) continue;
     const local: typeof result = [];
+    const units = new Map<typeof result[number], (readonly SharedProjectionUnit[])[]>();
     const fresh = (head: SharedProjectionBoundary | null, from: number): typeof result[number] => ({ kind: head?.kind ?? "b", id: head?.id ?? null,
       segment: stream.segment, from, to: from, units: [], reason: head ? null : "missing-boundary" });
     let current = fresh(stream.head, 0), last = stream.head, adjacent = true;
     for (const part of stream.parts) {
       const next = part.boundary;
-      if (!next) { current.units.push(...part.units); current.to = part.to; if (part.to > part.from) adjacent = false; continue; }
+      if (!next) {
+        const parts = units.get(current) ?? []; parts.push(part.units); units.set(current, parts);
+        current.to = part.to; if (part.to > part.from) adjacent = false; continue;
+      }
       if (adjacent && last?.kind === next.kind && last.id === next.id) { current.to = part.to; continue; }
       current.to = part.from; local.push(current);
       if (next.before) {
@@ -47,6 +52,9 @@ export function projectSharedBlocks(streams: readonly SharedProjectionStream[], 
     local.push(current);
     const seen = new Set<string>();
     for (const block of local) {
+      const parts = units.get(block) ?? [];
+      const build = (): SharedProjectionUnit[] => { const value: SharedProjectionUnit[] = []; for (const part of parts) value.push(...part); return value; };
+      block.units = collect ? collect(parts, build) : build();
       if (block.id === null && !block.units.length && block.from === block.to) continue;
       if (!block.reason && block.id !== null) {
         if (block.kind === "b") {

@@ -31,13 +31,20 @@ function child(kind: SharedProjectionKind, key: string): SharedProjectionKind {
   return kind === "annotation" && key === "marks" ? "mark" : "unknown";
 }
 
-export function canonicalSharedProjection(value: unknown, kind: SharedProjectionKind = "document"): unknown {
-  if (Array.isArray(value)) return Array.from(value, item => canonicalSharedProjection(item, kind));
+export function canonicalSharedProjection(value: unknown, kind: SharedProjectionKind = "document",
+  reuse?: (source: object, context: SharedProjectionKind, build: () => unknown) => unknown): unknown {
+  if (value !== null && typeof value === "object" && reuse) return reuse(value, kind, () => canonicalSharedProjectionBody(value, kind, reuse));
+  return canonicalSharedProjectionBody(value, kind, reuse);
+}
+
+function canonicalSharedProjectionBody(value: unknown, kind: SharedProjectionKind,
+  reuse?: (source: object, context: SharedProjectionKind, build: () => unknown) => unknown): unknown {
+  if (Array.isArray(value)) return Array.from(value, item => canonicalSharedProjection(item, kind, reuse));
   if (value === null || typeof value !== "object") return value;
   const source = value as Record<string, unknown>, known = fieldOrder(kind);
   const keys = [...known.filter(key => Object.hasOwn(source, key)), ...Object.keys(source).filter(key => !known.includes(key)).sort()];
   return Object.fromEntries(keys.map(key => {
     const value = source[key], beatId = kind === "row" && key === "id" || kind === "section" && key === "firstSceneId" || kind === "comment" && key === "rowId";
-    return [key, canonicalSharedProjection(beatId && typeof value === "string" ? cleanId(value) : value, child(kind, key))];
+    return [key, canonicalSharedProjection(beatId && typeof value === "string" ? cleanId(value) : value, child(kind, key), reuse)];
   }));
 }
