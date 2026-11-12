@@ -25,11 +25,27 @@ a table differ in either direction:
 | Table | What the scan finds |
 | --- | --- |
 | `STEPS` | In the two session owners, every call that hands the mutable document to something, receives one, or reaches a named engine |
-| `FIELDS` | Every write of a who, when or placement field, by assignment or in an object literal, in any module under `src/` |
-| `RECORDS` | Every write of a record collection (tags, shots, people, comments): replacement, a mutating array call, an indexed write |
-| `COMPUTED` | Every write to a beat, a record or the document whose field name is known only at run time |
-| `ENGINES` | Every use of a function or port member that makes records, placement or attribution from text, and every place that provides or reads a command's shared operation list |
+| `FIELDS` | In any module under `src/`, every write of a who, when, placement or paragraph field: see below |
+| `RECORDS` | Every write of a record collection (tags, shots, people, comments, a comment's replies): replacement, a mutating array call, an indexed write, a truncation, and a call to a generic appender that pushes into its argument, listed at the call site |
+| `COMPUTED` | Every write whose field name is known only at run time, to a beat, a record, a reply or the document, or to a type one of them is assignable to, looking through casts; in the projection modules also to an open bag (`open`), and every merge or spread from one |
+| `ENGINES` | Every use of a function or port member that makes records, placement or attribution from text, and every place that provides or reads a command's shared operation list: in an object literal or a spread, as a class member under `implements`, by destructuring or by element access |
 | `DOORS` | Every module that reaches the standalone session's `stamp`, `amend` or `noteEdit`, from the typed inventory of `session-caller-scan.ts` |
+
+A field write in `FIELDS` is any of these:
+
+- an assignment, compound assignment, increment or removal by name, constant key or
+  union key, also through a cast;
+- a key in an object literal, except a literal `true` (a table of names);
+- a field carried by the source of an `Object.assign` into a value of a watched
+  type, or by a spread into a literal of a watched type;
+- a write into a sub-object of a watched field, such as `personColors[name]`;
+- a call to a generic setter that writes its argument (`put(row, "updatedAt", at)`),
+  listed at the call site with the key the call passes.
+
+`personColors`, `rowId` and `field` count in a literal only when the literal is
+merged by `Object.assign` or has a watched type. `docId` counts only on the
+document, and `name`, `desc` and `owner` only on tags and shots (`desc` on shots),
+or on an open-indexed type that one of them is assignable to, such as a `Partial`.
 
 The scan resolves names with the type checker: a renamed import, a constant or
 union key, a `Pick` of a port and a collection held under another name are all
@@ -37,22 +53,29 @@ found, and each form has a self-test on a probe module.
 
 ## What the scan does not see
 
-- A write inside a core helper is listed at the helper. Its callers are listed
-  only when the helper is a named engine.
+- A write inside a helper that is not generic is listed at the helper. Its callers
+  are listed only when the helper is a named engine.
 - A port that a feature declares again under its own interface is followed by the
   wiring, not by the scan. `stampRow` reaches three features this way.
-- A field name known only at run time is counted when the receiver is typed as a
-  beat, a record or the document, and not when it is a loose bag.
+- A field name known only at run time on a loose bag (`Record<string, unknown>`,
+  `any`) outside the projection modules, and a merge from such a bag there.
+- A whole value of a watched type copied or merged: it carries every field and
+  writes none.
 - Field names are matched by name. A module that builds an export row with a
   `createdAt` key is listed and classed as no write to the document.
+- `Reflect.set`, `Object.defineProperty`, a borrowed array method such as
+  `Array.prototype.push.call`, and a destructuring-assignment target such as
+  `({ a: row["updatedAt"] } = src)`. A self-test pins that the first, third and
+  fourth find nothing.
+- Counts are per top-level function. A write removed and another of the same field
+  added in one function leave the count, and so the test, unchanged.
 
 ## Cases the rules do not decide
 
-Five entries are undetermined. Each lists what a person would see.
+Four entries are undetermined. Each lists what a person would see.
 
 | Writer | Options |
 | --- | --- |
-| Stamp on undo | (a) An undo stamps the beat with the person who undid, as in a normal script. (b) An undo puts back the stamp from before the undone change, unless someone else changed the beat since. (c) An undo leaves the stamp: the beat keeps the name of the person whose change was undone. |
 | A person's colour | (a) Each copy writes its own person's chosen colour once, keyed by name, so everyone sees it; two people with one name share an entry. (b) Colours are not stored and each copy derives one from the name; a chosen colour shows only to the person who chose it. (c) Colours wait for presence in Stage 5; until then the colours the script had when it was shared are shown and new people get the default. |
 | A sound cue's entry following its edited words | (a) The editing copy renames the entry when its edit turns one cue into another. Two people editing the same cue at once can leave the old entry unused and a new empty one. (b) Each cue gets a stored identity so its entry follows any edit; this changes the stored format. (c) No rename: an edited cue is a new entry and its owner and notes are entered again. |
 | A tag's owner following `@Name` on a line | (a) The editing copy sets or clears the owner when its edit adds or removes the pairing. Two different pairings made at once leave one owner by the fixed rule while the text shows both. (b) The shown owner is derived from the text whenever a pairing exists, and the stored owner is used only when none does; the owner picker then has no effect while a pairing exists. |
@@ -67,3 +90,13 @@ Three more cases sit under entries whose class is determined:
   last renamed by hand, not the last words of the line.
 - The same comment anchor in both columns of one beat. A normal script places the
   comment in the visual column; the shared derivation must do the same.
+
+## Stamp on undo
+
+Settled as assumed rule 35: in a shared session undo leaves the stamp as it is. The
+stamp is not part of an undo record, so undoing neither restores an earlier stamp
+nor writes a new one, and stamped typing keeps coalescing into its typing groups.
+
+In a normal script, undo and redo stamp a beat they change through a field step,
+except a `paragraphStart` step, with the person and time of the undo. A beat that
+undo puts back is not stamped.

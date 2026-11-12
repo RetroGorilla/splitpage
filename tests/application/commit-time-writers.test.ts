@@ -6,9 +6,11 @@ import { typedStandaloneInventory } from "./session-caller-scan.ts";
 
 const RULES: WriterScanRules = {
   owners: ["application/session/document-session.ts", "application/session/shared-session.ts"],
-  fields: ["updatedAt", "updatedBy", "createdAt", "resolvedAt", "resolvedBy", "rev", "lastEditedAt", "lastEditedBy"],
+  fields: ["updatedAt", "updatedBy", "createdAt", "resolvedAt", "resolvedBy", "rev", "lastEditedAt", "lastEditedBy", "paragraphStart", "paragraphsDecided", "anchorId"],
   assigned: ["personColors", "rowId", "field"],
-  collections: ["productionTags", "brollShots", "people", "comments"],
+  typed: { document: ["docId"], productionTags: ["name", "owner"], brollShots: ["name", "desc", "owner"] },
+  collections: ["productionTags", "brollShots", "people", "comments", "comments.replies"],
+  projections: ["core/collab/projection/", "adapters/collab/project.ts", "adapters/collab/projection-reader.ts"],
   engines: [
     "adapters/production/broll-anchors.ts#anchorBrollInRows",
     "application/production/broll-records.ts#recordPastedBroll",
@@ -51,12 +53,16 @@ const WRITERS = {
     reason: "The projection turns the stored `stamp` into updatedAt and updatedBy."
   },
   "undo-stamp": {
-    family: "attribution", shared: "undetermined",
-    reason: "Undo and redo stamp every beat they change with the person and time of the undo. No rule says whether a shared undo stamps, puts the earlier stamp back or leaves the stamp alone."
+    family: "attribution", shared: "not applicable",
+    reason: "Standalone undo and redo stamp a beat they change through a field step other than paragraphStart, never a beat they put back. Shared: undo leaves the stamp as it is; the stamp is not in the undo record (assumed rule 35)."
   },
   "comment-stamp": {
     family: "attribution", shared: "operation",
     reason: "Who and when on a comment or reply (createdAt, updatedAt, the resolution) are fields of the comment command's own record operations; a later resolve or reopen wins (decided)."
+  },
+  "comment-stamp-read": {
+    family: "attribution", shared: "derivation",
+    reason: "The projection shows a comment's stored resolution as resolved, resolvedAt and resolvedBy."
   },
   "save-stamp": {
     family: "attribution", shared: "not applicable",
@@ -64,7 +70,7 @@ const WRITERS = {
   },
   "capture-read": {
     family: "attribution", shared: "derivation",
-    reason: "The projection shows the revision hydration retained, or 0; nothing writes it during a session."
+    reason: "The projection shows the rev, lastEditedBy, lastEditedAt and personColors hydration retained (rev 0 when absent); nothing writes them during a session."
   },
   "person-colour": {
     family: "attribution", shared: "undetermined",
@@ -122,13 +128,17 @@ const WRITERS = {
     family: "other", shared: "operation",
     reason: "The one write into shared state: the command's operation list, passed unchanged."
   },
+  "stored-read": {
+    family: "other", shared: "derivation",
+    reason: "The projection shows stored fields and records as they are: docId, paragraphsDecided, paragraphStart, gallery and joined fields, sections and the record collections with their replies."
+  },
   "paragraph-start": {
     family: "other", shared: "undetermined",
     reason: "Opening the Writer on a script whose paragraphs were never decided marks sentence paragraphs through the amend door. No rule says whether undecided paragraphs are derived or written by the first copy that opens the Writer."
   },
   "standalone-door": {
     family: "other", shared: "not applicable",
-    reason: "adopt, absorb, replay, amend, stamp and noteEdit are members of the standalone session only; a shared session has none of them."
+    reason: "adopt, absorb, replay, amend, stamp and noteEdit are members of the standalone session only, as is the undo history that replays recorded steps; a shared session has none of them."
   },
   "document-id": {
     family: "other", shared: "not applicable",
@@ -171,10 +181,13 @@ const STEPS: readonly Site[] = [
 const FIELDS: readonly Site[] = [
   ["adapters/collab/project.ts#assembleSharedDocument", "rev 1", "capture-read"],
   ["adapters/formats/export-projections.ts#commentEntries", "createdAt 2, resolvedBy 1", "no-document"],
+  ["adapters/formats/project-file.ts#buildSplitpageCopy", "docId 1", "no-document"],
   ["adapters/formats/project-file.ts#rowsFromMarkdownTable", "updatedAt 1, updatedBy 1", "file-entry"],
+  ["adapters/page/standalone-html.ts#standaloneHtmlFor", "docId 1", "no-document"],
   ["application/commands/beat-length.ts#beatLengthCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/beat-status.ts#beatStatusCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/beat-status.ts#setBeatFilmedCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
+  ["application/commands/broll-records.ts#setShotsCommand", "owner 1", "record-stated"],
   ["application/commands/cell-text.ts#cellTextCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/clipboard.ts#cutCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/clipboard.ts#pasteCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
@@ -184,35 +197,58 @@ const FIELDS: readonly Site[] = [
   ["application/commands/comments.ts#toggleResolveCommand", "resolvedAt 2, resolvedBy 2, updatedAt 1", "comment-stamp"],
   ["application/commands/document-edit.ts#applyRewrites", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/flow.ts#flowCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
+  ["application/commands/flow.ts#initializeFlowParagraphs", "paragraphStart 1, paragraphsDecided 1", "paragraph-start"],
   ["application/commands/gallery.ts#galleryCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
-  ["application/commands/import-rows.ts#importRowsCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
+  ["application/commands/import-rows.ts#importRowsCommand", "paragraphStart 1, updatedAt 1, updatedBy 1", "beat-stamp", "stated-write"],
+  ["application/commands/paragraphs.ts#applyParagraphFlags", "paragraphStart 2", "stated-write"],
+  ["application/commands/production-records.ts#updateTagsCommand", "owner 1", "record-stated"],
   ["application/commands/rows.ts#addBeatCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
+  ["application/commands/save-stamps.ts#documentIdStamp", "docId 1", "document-id"],
   ["application/commands/save-stamps.ts#editStamp", "lastEditedAt 1, lastEditedBy 1, rev 1", "save-stamp"],
+  ["application/commands/scenes.ts#removeSceneCommand", "paragraphStart 1", "stated-write"],
   ["application/commands/split-join.ts#joinBeatsCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/split-join.ts#splitBeatCommand", "updatedAt 2, updatedBy 2", "beat-stamp"],
+  ["application/editing/undo/history.ts#createUndoHistory", "paragraphStart 1", "standalone-door"],
+  ["application/editing/undo/history.ts#ownersReplayed", "owner 1", "standalone-door"],
+  ["application/editing/undo/history.ts#resolveDocFields", "name 1", "standalone-door"],
   ["application/editing/undo/undo.ts#createUndo", "updatedAt 1, updatedBy 1", "undo-stamp"],
-  ["application/recovery/draft-restore.ts#sameDocContent", "lastEditedAt 1, lastEditedBy 1, rev 1", "no-document"],
+  ["application/production/production-index.ts#createProductionIndex", "name 1", "cue-retitle"],
+  ["application/recovery/draft-restore.ts#sameDocContent", "docId 1, lastEditedAt 1, lastEditedBy 1, rev 1", "no-document"],
+  ["application/recovery/drafts.ts#startDrafts", "docId 1", "document-id"],
+  ["application/recovery/identity-replacement.ts#prepareIdentityReplacement", "anchorId 1", "local-merge"],
   ["application/save/file-saving.ts#writeCaptured", "lastEditedAt 1, lastEditedBy 1, rev 1", "save-stamp"],
   ["application/save/save-completion.ts#createSaveCompletion", "lastEditedAt 1, lastEditedBy 1, rev 1", "save-stamp"],
   ["application/save/session-effects.ts#createSessionEffects", "personColors 1", "person-colour"],
   ["application/session/document-session.ts#anchorPoint", "field 1, rowId 1", "rollback"],
   ["application/session/session-merge.ts#startSessionMerge", "updatedAt 1, updatedBy 1", "beat-stamp", "local-merge"],
+  ["application/transitions/transitions.ts#createTransitions", "docId 2", "document-id"],
   ["core/collab/projection/fields.ts#projectSharedBeatFields", "updatedAt 1, updatedBy 1", "beat-stamp-read"],
   ["core/collab/projection/text.ts#projectSharedCommentAnchors", "field 1, rowId 1", "anchor-repair"],
-  ["core/document/media.ts#mediaComments", "createdAt 1, resolvedAt 1, resolvedBy 1, updatedAt 1", "file-entry"],
-  ["core/merge/rows.ts#conflictComment", "createdAt 1, updatedAt 1", "local-merge"],
+  ["core/document/broll.ts#newBrollShot", "desc 1, name 1, owner 1", "record-stated", "shot-from-line"],
+  ["core/document/media.ts#mediaComments", "anchorId 1, createdAt 1, resolvedAt 1, resolvedBy 1, updatedAt 1", "file-entry"],
+  ["core/flow/flow.ts#withoutFlag", "paragraphStart 1", "stated-write"],
+  ["core/merge/lists.ts#mergeBrollShots", "owner 1", "local-merge"],
+  ["core/merge/rows.ts#conflictComment", "anchorId 1, createdAt 1, updatedAt 1", "local-merge"],
   ["core/merge/rows.ts#mergeComments", "resolvedAt 5, resolvedBy 5", "local-merge"],
-  ["core/merge/rows.ts#mergeRows", "updatedAt 1, updatedBy 1", "local-merge"],
-  ["core/migrate.ts#migrateRows", "createdAt 2, field 1, resolvedAt 2, resolvedBy 2, rev 1, rowId 2, updatedAt 2, updatedBy 1", "file-entry"],
+  ["core/merge/rows.ts#mergeRows", "paragraphStart 2, updatedAt 1, updatedBy 1", "local-merge"],
+  ["core/migrate.ts#migrateDocument", "docId 3", "file-entry"],
+  ["core/migrate.ts#migrateRows", "anchorId 2, createdAt 2, field 1, paragraphStart 1, resolvedAt 2, resolvedBy 2, rev 1, rowId 2, updatedAt 2, updatedBy 1", "file-entry"],
+  ["core/production/broll.ts#applyBrollRecords", "desc 1, name 1", "shot-name-from-line"],
+  ["core/production/owners.ts#applyOwnerSync", "owner 2", "owner-from-name"],
+  ["core/production/records.ts#removePerson", "owner 2", "record-stated"],
+  ["core/production/records.ts#renameRegistryTag", "name 1, owner 1", "record-stated"],
   ["core/text/anchors.ts#syncCommentAnchors", "field 1, rowId 1", "anchor-repair"],
-  ["features/clipboard/beat-clip.ts#insertBeats", "rowId 2", "record-with-text", "anchor-repair"],
-  ["features/comments/comments.ts#postComment", "createdAt 1, resolvedAt 1, resolvedBy 1, updatedAt 1", "comment-stamp"],
+  ["features/clipboard/beat-clip.ts#buildBeatPayload", "paragraphStart 1", "no-document"],
+  ["features/clipboard/beat-clip.ts#insertBeats", "anchorId 1, name 1, owner 3, rowId 3", "record-with-text", "anchor-repair"],
+  ["features/comments/comments.ts#postComment", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
   ["features/comments/comments.ts#postReply", "createdAt 1", "comment-stamp"],
+  ["features/merge/local-merge.ts#offerFileMerge", "docId 1", "local-merge"],
   ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"]
 ];
 
 const RECORDS: readonly Site[] = [
   ["adapters/collab/project.ts#assembleSharedDocument", "comments 1", "anchor-repair"],
+  ["adapters/collab/project.ts#assembleSharedDocumentFields", "brollShots 1, comments 1, people 1, productionTags 1", "stored-read"],
   ["adapters/formats/csv.ts#scriptTable", "comments 2", "no-document"],
   ["adapters/formats/project-file.ts#markdownCellToHtml", "productionTags 1", "file-entry"],
   ["application/commands/cell-text.ts#cellTextCommand", "brollShots 1, productionTags 1", "record-with-text"],
@@ -220,6 +256,7 @@ const RECORDS: readonly Site[] = [
   ["application/commands/cell-text.ts#newTags", "productionTags 1", "record-with-text"],
   ["application/commands/clipboard.ts#pasteCommand", "brollShots 1", "record-with-text"],
   ["application/commands/comments.ts#addCommentCommand", "comments 1", "record-stated"],
+  ["application/commands/comments.ts#addReplyCommand", "replies 2", "record-stated"],
   ["application/commands/comments.ts#deleteCommentCommand", "comments 1", "record-stated"],
   ["application/commands/comments.ts#restoreConflictCommand", "comments 2", "record-stated"],
   ["application/commands/flow.ts#flowCommand", "brollShots 1, comments 2, people 1, productionTags 1", "record-with-text", "record-stated"],
@@ -228,8 +265,10 @@ const RECORDS: readonly Site[] = [
   ["application/production/production-index.ts#createProductionIndex", "productionTags 1", "tag-from-text", "cue-retitle"],
   ["application/recovery/identity-replacement.ts#prepareIdentityReplacement", "comments 1", "local-merge"],
   ["application/session/document-session.ts#anchorPoint", "comments 1", "rollback"],
+  ["core/collab/projection/fields.ts#projectSharedCommentFields", "replies 1", "stored-read"],
+  ["core/merge/rows.ts#mergeComments", "replies 1", "local-merge"],
   ["core/merge/shape.ts#listShapedSide", "comments 1", "local-merge"],
-  ["core/migrate.ts#migrateRows", "brollShots 3, comments 3, people 3, productionTags 4", "file-entry"],
+  ["core/migrate.ts#migrateRows", "brollShots 3, comments 3, people 3, productionTags 4, replies 2", "file-entry"],
   ["core/production/records.ts#addBrollRecord", "brollShots 1", "record-stated"],
   ["core/production/records.ts#addRegistryTag", "productionTags 1", "record-stated"],
   ["core/production/records.ts#removeBrollRecord", "brollShots 1", "record-stated"],
@@ -238,19 +277,33 @@ const RECORDS: readonly Site[] = [
   ["core/production/records.ts#renameRegistryTag", "productionTags 1", "record-stated"],
   ["core/production/tags.ts#planQuickAdd", "productionTags 1", "record-stated"],
   ["core/production/tags.ts#planRegistryHealing", "productionTags 1", "tag-from-text", "cue-retitle"],
-  ["features/clipboard/beat-clip.ts#insertBeats", "brollShots 3, comments 4, people 2, productionTags 2", "record-with-text"]
+  ["features/clipboard/beat-clip.ts#insertBeats", "brollShots 3, comments 4, people 2, productionTags 2, replies 1", "record-with-text"]
 ];
 
 const COMPUTED: readonly Site[] = [
+  ["adapters/collab/project.ts#assembleSharedDocument", "open 3", "stored-read"],
+  ["adapters/collab/project.ts#assembleSharedDocumentFields", "open 3", "capture-read", "stored-read"],
   ["application/commands/broll-records.ts#setShotsCommand", "brollShots 1", "record-stated"],
   ["application/commands/cell-text.ts#cellTextCommand", "rows 1", "stated-write"],
   ["application/commands/clipboard.ts#cutCommand", "rows 1", "stated-write"],
   ["application/commands/clipboard.ts#pasteCommand", "rows 1", "stated-write"],
   ["application/commands/comments.ts#restoreConflictCommand", "rows 1", "stated-write"],
   ["application/commands/document-edit.ts#applyRewrites", "rows 1", "stated-write"],
+  ["application/commands/document-edit.ts#rewrittenCopies", "open 1", "no-document"],
   ["application/commands/gallery.ts#galleryCommand", "rows 1", "stated-write"],
   ["application/commands/split-join.ts#splitBeatCommand", "rows 2", "stated-write"],
-  ["core/document/broll.ts#newBrollShot", "brollShots 1", "record-stated"]
+  ["application/editing/undo/history.ts#repointLists", "open 1", "standalone-door"],
+  ["application/editing/undo/history.ts#writePlanned", "open 2", "standalone-door"],
+  ["core/collab/projection/fields.ts#projectSharedBeatFields", "open 1", "stored-read"],
+  ["core/collab/projection/fields.ts#projectSharedCommentFields", "open 1", "comment-stamp-read", "stored-read"],
+  ["core/collab/projection/fields.ts#projectSharedGalleryFields", "open 2", "stored-read"],
+  ["core/collab/projection/fields.ts#projectSharedGallerySlots", "open 2", "stored-read"],
+  ["core/collab/projection/gallery.ts#projectSharedGroupGallery", "open 4", "stored-read"],
+  ["core/collab/projection/joins.ts#projectSharedJoinedFields", "open 1", "stored-read"],
+  ["core/collab/projection/joins.ts#projectSharedSections", "open 1", "stored-read"],
+  ["core/document/broll.ts#newBrollShot", "brollShots 1", "record-stated"],
+  ["core/text/steps.ts#applyStep", "open 2", "standalone-door"],
+  ["features/clipboard/beat-clip.ts#insertBeats", "open 1", "record-with-text"]
 ];
 
 const FROM_TEXT = ["tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"] as const;
@@ -279,7 +332,8 @@ const ENGINES: readonly Site[] = [
   ["core/production/owners.ts#applyOwnerSync", "addPerson 1", "person-from-name"],
   ["core/production/records.ts#addBrollProp", "addRegistryTag 1", "record-stated"],
   ["features/clipboard/beat-clip.ts#insertBeats", "syncCommentAnchors 1", "anchor-repair"],
-  ["features/tags/production-tags.ts#tagRecordsPlan", "ProductionIndexOwner.recordsPlan 1", "registry-heal-on-draw"]
+  ["features/tags/production-tags.ts#tagRecordsPlan", "ProductionIndexOwner.recordsPlan 1", "registry-heal-on-draw"],
+  ["features/writer/flow-writer.ts#createFlowWriter", "Plan.shared (provided) 1", "stated-write"]
 ];
 
 const DOORS: Readonly<Record<"stamp" | "amend" | "noteEdit", readonly (readonly [file: string, ...writers: WriterName[]])[]>> = {
@@ -303,10 +357,10 @@ const DOORS: Readonly<Record<"stamp" | "amend" | "noteEdit", readonly (readonly 
 };
 
 const CLASS_COUNTS: Readonly<Record<Shared, number>> = {
-  "derivation": 4,
+  "derivation": 6,
   "operation": 10,
-  "not applicable": 8,
-  "undetermined": 5
+  "not applicable": 9,
+  "undetermined": 4
 };
 
 let inventory: WriterInventory | null = null;
@@ -384,19 +438,28 @@ test("the table's classes are counted", () => {
 
 const PROBE = "starters/writer-probe.ts";
 
+const HELPER = "starters/writer-helper.ts";
+
 const PROBE_IMPORTS = `
-  import type { DocumentRow, ValidatedDocument } from "../core/document/validated.ts";
-  import type { DocumentView } from "../application/session/document-session.ts";
+  import type { DocumentReply, DocumentRow, ValidatedDocument } from "../core/document/validated.ts";
+  import type { DocumentView, Plan } from "../application/session/document-session.ts";
   import type { ReconcilePort } from "../application/session/ports.ts";
+  import type { ReplicaPort } from "../application/session/shared-session.ts";
   import { syncCommentAnchors as repair } from "../core/text/anchors.ts";
   import * as owners from "../core/production/owners.ts";
+  import { append, put } from "./writer-helper.ts";
   declare const doc: ValidatedDocument;
   declare const row: DocumentRow;
   declare const bag: Record<string, unknown>;
 `;
 
-function probed(source: string, owners: readonly string[] = []): WriterInventory {
-  return commitWriterInventory({ ...RULES, owners: owners }, { [PROBE]: PROBE_IMPORTS + source });
+const HELPER_SOURCE = `
+  export function put<T, K extends keyof T>(target: T, key: K, value: T[K]): void { target[key] = value; }
+  export function append<T>(list: T[], item: T): void { list.push(item); }
+`;
+
+function probed(source: string, owners: readonly string[] = [], projections: readonly string[] = RULES.projections): WriterInventory {
+  return commitWriterInventory({ ...RULES, owners: owners, projections: projections }, { [PROBE]: PROBE_IMPORTS + source, [HELPER]: HELPER_SOURCE });
 }
 
 for (const [name, source, fields] of [
@@ -411,7 +474,14 @@ for (const [name, source, fields] of [
   ["a shorthand property", "function write(updatedAt: string) { return { updatedAt }; }", "updatedAt 1"],
   ["a computed literal property", "function write() { const key = 'resolvedBy'; return { [key]: '' }; }", "resolvedBy 1"],
   ["an assignment through a cast", "function write() { (row as Record<string, unknown>).updatedAt = ''; }", "updatedAt 1"],
-  ["an assigned-only field", "function write() { doc.personColors = {}; bag.rowId = ''; }", "personColors 1, rowId 1"]
+  ["an assigned-only field", "function write() { doc.personColors = {}; bag.rowId = ''; }", "personColors 1, rowId 1"],
+  ["a merged source that carries a field", "function write(source: { updatedAt: string; title: string }) { Object.assign(row, source); }", "updatedAt 1"],
+  ["a spread source that carries a field", "function write(source: { updatedBy: string }): DocumentRow { return { ...row, ...source }; }", "updatedBy 1"],
+  ["an assigned-only field merged in a literal", "function write(field: string) { Object.assign(bag, { field }); Object.assign(doc, { personColors: {} }); }", "field 1, personColors 1"],
+  ["an assigned-only field in a literal of a watched type", "function write(): DocumentRow { return { ...row, rowId: '' }; }", "rowId 1"],
+  ["a run-time key into a watched field through a cast, and its removal", "function write(name: string) { (doc['personColors'] as Record<string, string>)[name] = ''; delete (doc['personColors'] as Record<string, string>)[name]; }", "personColors 2"],
+  ["a generic setter in another module, at the call site", "function write() { put(row, 'updatedAt', ''); }", "updatedAt 1"],
+  ["a field named for one record kind, on that kind", "function write(tag: ValidatedDocument['productionTags'][number]) { tag.owner = ''; doc.docId = ''; row.owner = ''; bag.name = ''; }", "docId 1, owner 1"]
 ] as const) {
   test("writer scan self-test, fields: " + name, () => {
     assert.deepEqual(probed(source).fields, { [PROBE + "#write"]: fields });
@@ -434,7 +504,9 @@ for (const [name, source, records] of [
   ["a mutating call on a declared collection type", "function write(list: ValidatedDocument['comments']) { list.sort(); }", "comments 1"],
   ["an indexed write", "function write() { doc.people[0] = { id: '', name: '' }; }", "people 1"],
   ["a truncation", "function write() { doc.comments.length = 0; }", "comments 1"],
-  ["an untyped holder with a collection's name", "function write(holder: { brollShots: unknown[] }) { holder.brollShots.push(1); }", "brollShots 1"]
+  ["an untyped holder with a collection's name", "function write(holder: { brollShots: unknown[] }) { holder.brollShots.push(1); }", "brollShots 1"],
+  ["a nested collection", "function write() { doc.comments[0]?.replies?.push({ id: '' }); }", "replies 1"],
+  ["a generic appender in another module, at the call site", "function write() { append(doc.comments, { id: '' }); }", "comments 1"]
 ] as const) {
   test("writer scan self-test, records: " + name, () => {
     assert.deepEqual(probed(source).records, { [PROBE + "#write"]: records });
@@ -458,6 +530,23 @@ test("writer scan self-test, computed: a field name known only at run time count
   assert.deepEqual(found.computed, { [PROBE + "#onBeat"]: "rows 1", [PROBE + "#onDocument"]: "document 1", [PROBE + "#onRecord"]: "brollShots 1" });
 });
 
+test("writer scan self-test, computed: a run-time key behind a cast counts on a type a watched one is assignable to and on a reply", () => {
+  const found = probed(`
+    function onPartial(part: Partial<DocumentRow>, key: string) { (part as Record<string, unknown>)[key] = 1; }
+    function onReply(reply: DocumentReply, key: string) { (reply as unknown as Record<string, unknown>)[key] = 1; }
+  `);
+  assert.deepEqual(found.computed, { [PROBE + "#onPartial"]: "open 1", [PROBE + "#onReply"]: "replies 1" });
+});
+
+test("writer scan self-test, computed: in a projection module an open bag and a merge from one count, and elsewhere they do not", () => {
+  const source = `
+    function keyed(key: string) { bag[key] = 1; }
+    function merged(meta: Record<string, unknown>) { Object.assign(bag, meta); return { ...meta }; }
+  `;
+  assert.deepEqual(probed(source, [], [PROBE]).computed, { [PROBE + "#keyed"]: "open 1", [PROBE + "#merged"]: "open 2" });
+  assert.deepEqual(probed(source).computed, {});
+});
+
 test("writer scan self-test, engines: a renamed import, a namespace member, a port member under Pick and a provided port member, also one of several accepted shapes, all resolve", () => {
   const found = probed(`
     function renamed() { repair(doc, () => []); }
@@ -474,6 +563,32 @@ test("writer scan self-test, engines: a renamed import, a namespace member, a po
     [PROBE + "#provided"]: "ReconcilePort.anchors (provided) 1",
     [PROBE + "#renamed"]: "syncCommentAnchors 1"
   });
+});
+
+test("writer scan self-test, engines: a provider by spread or class and a reader by destructuring or element access all resolve", () => {
+  const found = probed(`
+    function spread(plan: Plan, extra: { shared: Plan["shared"] }): Plan { return { ...plan, ...extra }; }
+    function unpacked(plan: Plan) { const { shared } = plan; return shared; }
+    function indexed(plan: Plan) { return plan["shared"]; }
+    class Replica implements Pick<ReplicaPort, "execute"> { execute() { return null as never; } }
+    function taken(port: ReplicaPort) { const { execute } = port; return execute; }
+  `);
+  assert.deepEqual(found.engines, {
+    [PROBE + "#Replica"]: "ReplicaPort.execute (provided) 1",
+    [PROBE + "#indexed"]: "Plan.shared 1",
+    [PROBE + "#spread"]: "Plan.shared (provided) 2",
+    [PROBE + "#taken"]: "ReplicaPort.execute 1",
+    [PROBE + "#unpacked"]: "Plan.shared 1"
+  });
+});
+
+test("writer scan self-test: the forms the document lists as unseen find nothing", () => {
+  const found = probed(`
+    function reflected() { Reflect.set(row, "updatedAt", ""); }
+    function destructured(src: { a: string }) { ({ a: row["updatedAt"] } = src); }
+    function borrowed() { Array.prototype.push.call(doc.comments, null); }
+  `);
+  assert.deepEqual([found.fields, found.records, found.computed], [{}, {}, {}]);
 });
 
 test("writer scan self-test, steps: an owner's calls that take or return the document or reach an engine are steps, and a read-only view or a local helper is not", () => {
