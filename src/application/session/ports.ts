@@ -40,7 +40,22 @@ export type Capability =
   | { readonly allowed: true }
   | { readonly allowed: false; readonly reason: string };
 
-export interface CapabilityPort {
+export const SHARED_SESSION_DISABLED = Object.freeze({
+  saveDestinations: "Save destinations are not available in a shared session.",
+  autosave: "File autosave is not available in a shared session.",
+  merge: "Local merge is not available in a shared session.",
+  stash: "Stashed work cannot be applied to a shared session.",
+  drafts: "Independent drafts are not available in a shared session.",
+  history: "Earlier versions cannot replace a shared session.",
+  folders: "Local folders cannot be attached to a shared session.",
+  bundles: "File bundles are not available in a shared session."
+});
+
+export type StandaloneCapabilityName = keyof typeof SHARED_SESSION_DISABLED;
+
+type StandaloneCapabilities = { readonly [Name in StandaloneCapabilityName]: () => Capability };
+
+export interface CapabilityPort extends StandaloneCapabilities {
   edit: () => Capability;
   comment: () => Capability;
 }

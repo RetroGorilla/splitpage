@@ -1,4 +1,5 @@
 import { createSharedSession } from "../../../src/application/session/shared-session.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { ReplicaExecution, ReplicaOrigin, ReplicaPort, SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { SessionChange } from "../../../src/application/session/change-set.ts";
@@ -75,7 +76,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
       save: change => { log.push("save:" + change.generation); hooks.effect?.("save"); },
       refresh: jobs => { log.push("refresh"); refreshes.push(Array.from(jobs).sort()); }
     },
-    capability: { edit: can, comment: can },
+    capability: createSessionCapabilities("shared", { edit: can, comment: can }),
     report: error => { log.push("report"); reported.push(error); },
     timers: clock,
     after: hooks.after
