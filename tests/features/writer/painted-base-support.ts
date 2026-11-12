@@ -1,4 +1,5 @@
 import "../../../src/test/_dom.mjs";
+import { fakeCapabilities } from "../fakes.ts";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -30,7 +31,7 @@ export function writerFor(source?: PaintedTextSource) {
   const doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }] }, fakeMigration().ports);
   const text = { cells: fromHtml, clock: { nowIso: () => "2026-11-11T12:00:00.000Z" }, editor: { name: () => "Editor" } };
   const run = (command: Command): CommandOutcome => {
-    const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+    const plan = command.plan(doc, fakeCapabilities());
     if (!plan || "refused" in plan) return { kind: "noop" };
     plan.apply(doc);
     return { kind: "applied", generation: 1, changes: plan.changes };

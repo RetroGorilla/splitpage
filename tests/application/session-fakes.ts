@@ -1,4 +1,5 @@
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 import type { Command, CommandOutcome, CommonDocumentSession, DocumentSession, DocumentView, Plan, SessionCounters } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, needsReconciliation } from "../../src/application/session/change-set.ts";
 import type { ChangeSet, SessionChange } from "../../src/application/session/change-set.ts";
@@ -97,10 +98,10 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
       save: function (c) { log.push("save:" + c.generation); if (hooks.effect) hooks.effect("save"); },
       refresh: function (jobs) { log.push("refresh"); refreshes.push(Array.from(jobs).sort()); }
     },
-    capability: {
+    capability: createSessionCapabilities("standalone", {
       edit: function (): Capability { return denied === null ? { allowed: true } : { allowed: false, reason: denied }; },
       comment: function (): Capability { return commentDenied === null ? { allowed: true } : { allowed: false, reason: commentDenied }; }
-    },
+    }),
     reconcile: {
       anchors: function (doc) {
         log.push("reconcile");

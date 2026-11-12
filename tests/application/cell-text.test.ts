@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { CELL_TEXT_DERIVES, cellRuns, cellTextCommand } from "../../src/application/commands/cell-text.ts";
 import type { CellRecords, CellText } from "../../src/application/commands/cell-text.ts";
@@ -243,10 +244,10 @@ const ANCHOR_ONLY = cellRuns(normalizeCell([run("Every "), run("morning", { cmt:
 function askedBy(rowId: string, text: CellText, edit: Capability, comment: Capability): { asked: string[]; refused: string | null } {
   const asked: string[] = [];
   const planned = opened().session.read(function (doc) {
-    return doc && cellTextCommand(rowId, "audioText", text, ports()).plan(doc, {
+    return doc && cellTextCommand(rowId, "audioText", text, ports()).plan(doc, createSessionCapabilities("standalone", {
       edit: function () { asked.push("edit"); return edit; },
       comment: function () { asked.push("comment"); return comment; }
-    });
+    }));
   });
   return { asked: asked, refused: planned && "refused" in planned ? planned.refused : null };
 }
