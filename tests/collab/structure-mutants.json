@@ -32,14 +32,14 @@
   }, {
     "label": "reservation scans existing text items",
     "file": "src/adapters/collab/structure-reservations.ts",
-    "find": "for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
-    "replace": "for (const target of transaction.changed.keys()) if (target instanceof Y.Text) for (let old = target._start; old; old = old.right) void old.content; for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
+    "find": "for (const change of embeds.read(transaction)) {",
+    "replace": "for (const target of transaction.changed.keys()) if (target instanceof Y.Text) for (let old = target._start; old; old = old.right) void old.content; for (const change of embeds.read(transaction)) {",
     "tests": ["tests/adapters/collab/structure-identities.test.ts"]
   }, {
     "label": "reservation repeats production struct traversal",
-    "file": "src/adapters/collab/structure-reservations.ts",
-    "find": "for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
-    "replace": "readSharedIdentityEmbeds(transaction, inspect); for (const change of readSharedIdentityEmbeds(transaction, inspect)) {",
+    "file": "src/adapters/collab/embed-changes.ts",
+    "find": "const value = readSharedIdentityEmbeds(transaction, inspect);",
+    "replace": "readSharedIdentityEmbeds(transaction, inspect); const value = readSharedIdentityEmbeds(transaction, inspect);",
     "tests": ["tests/adapters/collab/structure-identities.test.ts"]
   }]
 }

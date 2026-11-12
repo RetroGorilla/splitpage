@@ -22,7 +22,7 @@ import { toHtml } from "../../../src/core/text/html.ts";
 import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
 import { validatedFixture, deliveryReplica } from "./helpers.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
-import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order.ts";
+import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
 import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segment-executor.ts";
 import { registerSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
 

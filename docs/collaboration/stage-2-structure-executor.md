@@ -3,7 +3,12 @@
 `registerSharedSplitHandlers(handle, { cells })` registers split, split-before and
 segment creation through the operation entry. `cells` is the app's cell decoder,
 called during preparation only. No application caller registers these handlers.
-The executor entry, preparation view and execution guard are unchanged.
+The executor entry and execution guard are unchanged. Preparation exposes a
+read-only owner lookup backed by per-handle structural metadata; callers share
+the same per-call planned heads, records and order. The metadata is warmed by the
+monitored constructor and patches touched records and boundary embeds. Its embed
+reader shares one pre-GC observation with the identity reservation index, so an
+ordinary edit never repeats the guarded struct traversal.
 
 New beat, segment, visual and gallery keys use
 `structure_<writer>_<operation-as-four-digit-UTF-16-hex>_<role>_<slot>`.

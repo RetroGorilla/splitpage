@@ -1,7 +1,7 @@
 import type { SharedSegmentCreate, SharedContentRef } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedPreparationView, SharedPreparedWrite } from "./prepare.ts";
-import type { SharedStructureOrderView } from "./structure-order.ts";
+import type { SharedStructureOrderView } from "./structure-order-index.ts";
 import type { SharedStructureContentPorts } from "./structure-content.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import type { SharedTextExecutionDescription } from "./text-description.ts";
@@ -14,7 +14,7 @@ import { applySharedMapWrites } from "./prepare.ts";
 import { applySharedTextCreation } from "./text-target.ts";
 import { prepareSharedTextCreation } from "./text-creation.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
-import { scalarFieldAllowed } from "./scalar-executor.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { spliceSharedTextPlan, addSharedTextSource, sharedTextOverlay, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { applySharedTextEdit } from "./text-edit.ts";
 import { applySharedTextDescription } from "./text-description.ts";

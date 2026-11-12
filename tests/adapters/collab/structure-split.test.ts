@@ -18,7 +18,7 @@ import { sharedTextLocation } from "../../../src/adapters/collab/executor-text-p
 import { applySharedTextCreation } from "../../../src/adapters/collab/text-target.ts";
 import { prepareSharedTextCreation } from "../../../src/adapters/collab/text-creation.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
-import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order.ts";
+import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
 import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segment-executor.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";

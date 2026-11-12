@@ -1,9 +1,11 @@
 import * as Y from "yjs";
 import { CollabDocumentState, collabState, transactCollabState, assertSharedDocumentIdle } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
-  return new CollabDocumentState() as unknown as SharedDocumentHandle;
+  const handle = new CollabDocumentState() as unknown as SharedDocumentHandle;
+  observeSharedStructureIndex(handle); return handle;
 }
 
 export function shouldDeliverSharedUpdate(origin: SharedTransactionOrigin | null): boolean { return origin !== "remote"; }

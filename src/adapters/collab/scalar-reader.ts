@@ -1,6 +1,7 @@
 import type { SharedScalarAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { scalarFieldAllowed, scalarTarget } from "./scalar-executor.ts";
+import { scalarTarget } from "./scalar-executor.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { sharedJson, withSharedSnapshot } from "./snapshot.ts";
 
 export function readSharedScalars(handle: SharedDocumentHandle, target: SharedScalarAddress): Record<string, unknown> | null {

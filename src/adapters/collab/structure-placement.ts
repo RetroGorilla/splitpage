@@ -1,6 +1,6 @@
 import type { SharedContentRef, SharedIdentityGap } from "../../core/collab/operations.ts";
 import type { SharedPreparationView } from "./prepare.ts";
-import type { SharedStructureOrderView } from "./structure-order.ts";
+import type { SharedStructureOrderView } from "./structure-order-index.ts";
 import { sharedStructureSegment, prepareSharedOrderInsertion, sharedPlannedSegmentIndex, sharedPlannedSegmentAt } from "./structure-order.ts";
 import { sharedStructureReference, SharedStructurePreparationError } from "./structure-identity.ts";
 import { sharedStructureSpans } from "./structure-boundary.ts";
