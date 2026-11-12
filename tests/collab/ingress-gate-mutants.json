@@ -18,7 +18,7 @@
   }, {
     "label": "local write during a notification allowed",
     "file": "src/adapters/collab/state.ts",
-    "find": "if (state.execution && state.execution !== execution || state.ingress.holds.size) throw new SharedExecutionWriteError();",
+    "find": "if (state.execution && state.execution !== execution || state.ingress.holds.has(\"delivering\")) throw new SharedExecutionWriteError();",
     "replace": "if (state.execution && state.execution !== execution) throw new SharedExecutionWriteError();"
   }, {
     "label": "callback error thrown into the library's cleanup",

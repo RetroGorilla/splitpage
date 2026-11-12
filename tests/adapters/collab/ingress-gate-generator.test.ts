@@ -5,6 +5,7 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeShar
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
+import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { operation } from "./executor-support.ts";
 import { createMonitoredSharedDocument, deliveryReplica } from "./helpers.ts";
@@ -42,12 +43,12 @@ function planned(error: unknown): number {
   return (error.errors as unknown[]).reduce((sum: number, inner) => sum + planned(inner), 0);
 }
 
-const totals = { top: 0, notified: 0, drained: 0, repeated: 0, waiting: 0, thrown: 0 };
+const totals = { top: 0, notified: 0, drained: 0, repeated: 0, waiting: 0, thrown: 0, buffered: 0 };
 
 for (let seed = 1; seed <= 12; seed++) {
   test(`seeded ${seed}: updates that arrive at the top, inside notifications and inside the drain, with callbacks that throw: each announced revision holds exactly its prefix of the arrival order`, () => {
     let random = 0x16a7e + seed * 7919;
-    const next = (below: number): number => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return random % below; };
+    const next = (below: number): number => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return (random >>> 8) % below; };
     const run = recordReplicas(3, SOURCE), reference = createMonitoredSharedDocument();
     try {
       assert.deepEqual(applySharedUpdate(reference, encodeSharedState(run.b)), { ok: true });
@@ -90,7 +91,15 @@ for (let seed = 1; seed <= 12; seed++) {
       while (position < schedule.length) {
         const queued = state.ingress.held.length;
         draining = false; inside = false;
-        try { arrive(); } catch (error) { surfaced += planned(error); }
+        try {
+          if (next(2)) {
+            const release = holdSharedBuffer(run.b), before = snapshot(run.b);
+            totals.buffered++;
+            for (let count = 1 + next(4); count > 0; count--) arrive();
+            assert.deepEqual(snapshot(run.b), before, "a dirty interval publishes and applies no arrival");
+            release();
+          } else arrive();
+        } catch (error) { surfaced += planned(error); }
         if (queued) violations.push(`arrival ${position}: the queue held ${queued} at the top`);
       }
 

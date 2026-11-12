@@ -1,0 +1,19 @@
+{
+  "tests": ["tests/adapters/collab/buffer-gate.test.ts"],
+  "mutants": [{
+    "label": "held update applied while dirty",
+    "file": "src/adapters/collab/document.ts",
+    "find": "const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;",
+    "replace": "const closed = gate.holds.has(\"delivering\") || gate.frames > 0 && !state.execution;"
+  }, {
+    "label": "second queue reorders buffered arrivals",
+    "file": "src/adapters/collab/document.ts",
+    "find": "gate.held.push(Uint8Array.from(update));",
+    "replace": "gate.held.unshift(Uint8Array.from(update));"
+  }, {
+    "label": "buffer reason never released",
+    "file": "src/adapters/collab/ingress.ts",
+    "find": "if (!gate.holds.delete(\"buffer\")) return;",
+    "replace": "if (gate.holds.has(\"buffer\")) return;"
+  }]
+}

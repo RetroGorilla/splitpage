@@ -13,12 +13,15 @@ function formattingCleanup(transaction: Y.Transaction): boolean {
   return deleted && formatsOnly;
 }
 
-export type IngressHold = "delivering";
+export type IngressHold = "delivering" | "buffer";
 
 export class IngressGate {
   readonly holds = new Set<IngressHold>();
   readonly held: Uint8Array[] = [];
   readonly errors: unknown[] = [];
+  heldBytes = 0;
+  declined = false;
+  readonly declineListeners = new Set<() => void>();
   frames = 0;
 }
 
@@ -57,7 +60,7 @@ export function assertNoSharedExecution(state: CollabDocumentState): void {
 }
 
 export function assertSharedDocumentIdle(state: CollabDocumentState, execution?: object): void {
-  if (state.execution && state.execution !== execution || state.ingress.holds.size) throw new SharedExecutionWriteError();
+  if (state.execution && state.execution !== execution || state.ingress.holds.has("delivering")) throw new SharedExecutionWriteError();
 }
 
 // why: A throw inside the library's cleanup would abort it; the error is kept and thrown after the drain.
@@ -73,12 +76,12 @@ function settleIngress(state: CollabDocumentState): void {
   try {
     gate.holds.delete("delivering");
     if (gate.holds.size) return;
-    for (let update = gate.held[0]; update; update = gate.held[0]) {
+    for (let update = gate.held[0]; update && !gate.holds.has("buffer"); update = gate.held[0]) {
       const next = update;
       gate.holds.add("delivering");
       try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
       catch (error) { gate.errors.push(error); }
-      if (gate.held[0] === next) gate.held.shift();
+      if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
     }
   } finally { gate.holds.delete("delivering"); }
 }

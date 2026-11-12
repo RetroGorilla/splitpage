@@ -35,8 +35,34 @@ handle that is destroyed are discarded with it. They were acknowledged as valid,
 applied.
 
 The gate keeps its reasons for being closed in one set, `holds`, and has one queue.
-Today the set has one member, `delivering`. A later reason (package 9c: a buffered edit
-or an open composition) is one more member; the drain starts only when the set is empty.
+The set has two members, `delivering` and `buffer`. `holdSharedBuffer` acquires the
+buffer reason and returns an idempotent release. The drain starts only when the
+set is empty, and stops if a callback opens a buffer while draining. A local
+buffer commit may write while `buffer` is set; `delivering` still refuses local
+writes with `SharedExecutionWriteError`. A commit moment during delivery must
+retain its edit for an explicit retry outside that notification.
+
+## Bounded buffered arrivals
+
+Assumed rule 26 on [#1414](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6814123286)
+sets `SHARED_BUFFER_QUEUE_BYTES` to 64 KiB. While `buffer` is set the bound counts
+the bytes of the entire one queue, including entries held for delivery. An
+arrival that would exceed it returns `queue-full`, distinct from `invalid-update`.
+Every subsequent arrival is refused until buffer release, including one that
+would fit. Held entries and the native edit remain intact. Delivery alone has
+no byte refusal because that queue drains within the outer write.
+
+Release reports the declined interval once through `observeSharedDeclined`,
+inside `guardSharedCallback`; a callback failure still allows the queue to drain.
+No declined interval means no report. The caller fetches the missing difference
+with a state-vector exchange after release; transport is a later stage. Destroy
+clears the queue, byte accounting, refusal latch and listeners without reporting.
+
+`tests/adapters/collab/buffer-gate.test.ts` covers the exact bound, latched small
+arrival, both reasons in both release orders, destroy and throwing callbacks.
+`tests/collab/buffer-overflow.test.ts` checks resynchronization after normal,
+reversed and duplicated delivery. Dirty intervals also run in the seeded ingress
+generator, retaining its prefix oracle for each published revision.
 
 ## Errors
 
