@@ -112,3 +112,13 @@ shared-only, with no latency claim. The production-dispatch counter in
 `tests/features/writer/buffer-cost.test.ts` pins 17 row reads for a standalone
 native key in both a two-row and a 200-row document, with no buffer construction;
 its shared control constructs one. The extra-row-walk mutant fails that test.
+
+The shared ownership checkpoint walks the shown beats and decodes their DOM text
+at each native entry and exit and before paint/settlement. For B shown beats and
+L shown units this adds O(B + L) scanning per checkpoint, plus DOM decoding and
+normalization costs. Unreported replacement discovery uses O(L) code-point work
+and temporary space for the affected field. A refused unowned field is repainted
+individually and refreshes its base. No shared constant-work or latency claim is
+made. These checkpoints and the additional painted strings are only constructed
+when the shared ports are supplied; the standalone input counter remains bound
+to the unchanged production dispatch.

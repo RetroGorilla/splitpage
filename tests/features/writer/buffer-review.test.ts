@@ -143,7 +143,7 @@ for (const [name, key] of composingKeys) {
       assert.deepEqual([page.text(), page.a.executed, commands, page.notices], ["ab", [], [], []]);
       page.native(2, 3, "你", undefined, "insertCompositionText"); page.end("你");
       assert.deepEqual([page.text(), page.beat().textContent], ["ab你", "ab你"]);
-      assert.deepEqual(page.reports, []);
+      assert.deepEqual(page.reports, name === "Enter" ? [] : [{ kind: "rejected", reason: "buffer-composition" }]);
     } finally { page.close(); }
   });
 

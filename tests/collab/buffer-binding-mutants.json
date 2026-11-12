@@ -1,5 +1,5 @@
 {
-  "tests": ["tests/features/writer/buffer-binding.test.ts", "tests/features/writer/buffer-review.test.ts"],
+  "tests": ["tests/features/writer/buffer-binding.test.ts", "tests/features/writer/buffer-review.test.ts", "tests/features/writer/buffer-invariants.test.ts"],
   "mutants": [{
     "label": "local command admitted before dirty native typing",
     "file": "src/features/writer/flow-buffer.ts",
@@ -38,7 +38,7 @@
   }, {
     "label": "dirty paint replaces native DOM from the model",
     "file": "src/features/writer/flow-surface.ts",
-    "find": "paint: buffered ? () => { if (!buffered.dirty()) paint(); } : paint,",
+    "find": "paint: buffered ? () => { if (buffered.canPaint()) paint(); } : paint,",
     "replace": "paint: buffered ? () => { const held = composing; composing = false; for (const beat of root.querySelectorAll(\".wr-beat\")) rendered.delete(beat as HTMLElement); paint(); composing = held; } : paint,"
   }, {
     "label": "disposal unmounts a refused native buffer",
@@ -69,8 +69,8 @@
   }, {
     "label": "composing keys settle and enter Writer commands",
     "file": "src/features/writer/flow-surface.ts",
-    "find": "      if (composing || key.isComposing || key.keyCode === 229) return;",
-    "replace": ""
+    "find": "      if (composing || key.isComposing || key.keyCode === 229) {",
+    "replace": "      composing = false; if (false) {"
   }, {
     "label": "failed acquisition leaves native mutation allowed",
     "file": "src/features/writer/flow-buffer.ts",
@@ -81,5 +81,15 @@
     "file": "src/features/writer/flow-buffer.ts",
     "find": "if (held.edit.isOpen()) { ports.report(outcome); return false; }",
     "replace": "if (held.edit.isOpen() || outcome.kind === \"failed\") { ports.report(outcome); return false; }"
+  }, {
+    "label": "input entry skips the ownership invariant",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "native: (event, dispatch) => {",
+    "replace": "native: (event, dispatch) => { if (event.type === \"input\") { dispatch(); return; }"
+  }, {
+    "label": "settlement caller clears composition before the gate",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "return checked.ok && settle();",
+    "replace": "surface.composition(false); return checked.ok && settle();"
   }]
 }

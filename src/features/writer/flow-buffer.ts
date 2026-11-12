@@ -4,6 +4,7 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
+import { bufferedNativeReplacement } from "../../core/collab/buffer.ts";
 
 export interface WriterBufferPorts extends Pick<BufferedTextCommit, "open">, Pick<SharedDocumentSession, "beforeCommand"> {
   readonly missingBase: (rowId: string) => void;
@@ -11,12 +12,14 @@ export interface WriterBufferPorts extends Pick<BufferedTextCommit, "open">, Pic
 }
 
 export interface WriterBufferBinding {
+  readonly native: (event: Event, dispatch: () => void) => void;
   readonly beforeInput: (event: InputEvent, range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
   readonly start: (event: Event, range: FlowRange | null) => void;
   readonly keydown: (event: KeyboardEvent) => void;
   readonly end: (event: CompositionEvent) => void;
   readonly finish: () => boolean;
+  readonly canPaint: () => boolean;
   readonly dirty: () => boolean;
   readonly base: (rowId: string) => PaintedText | null;
   readonly dispose: () => boolean;
@@ -25,6 +28,9 @@ export interface WriterBufferBinding {
 export function createWriterBuffer(ports: WriterBufferPorts, surface: {
   readonly root: HTMLElement;
   readonly base: (rowId: string) => PaintedText | null;
+  readonly painted: (rowId: string) => string | undefined;
+  readonly normalize: () => void;
+  readonly reset: (rowId: string) => void;
   readonly runs: (beat: HTMLElement) => readonly Run[];
   readonly selection: () => FlowRange | null;
   readonly composition: (value?: boolean) => boolean;
@@ -43,33 +49,70 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     ports.report({ kind: "rejected", reason });
   }
 
-  function begin(event: Event, range: FlowRange | null): boolean {
+  function begin(event: Event, range: FlowRange | null, repaint = true): boolean {
     if (!range || range.anchor.kind !== "beat" || range.head.kind !== "beat" || range.anchor.rowId !== range.head.rowId) {
       refuse(event, "buffer-unsupported-target"); return false;
     }
     const rowId = range.head.rowId;
-    if (active?.rowId === rowId) return true;
-    if (!finish()) { refuse(event, "buffer-pending"); return false; }
+    if (active?.rowId === rowId && active.edit.isOpen()) return true;
+    if (active && !settle()) { event.preventDefault(); return false; }
     const base = surface.base(rowId), beat = surface.root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(rowId) + '"]');
     if (!base || !beat) {
       event.preventDefault(); ports.missingBase(rowId);
-      surface.repaint(rowId); surface.restore(rowId, range);
+      if (repaint) { surface.repaint(rowId); surface.restore(rowId, range); }
       return false;
     }
     let edit: BufferedTextEdit | null;
     try { edit = ports.open(rowId, base); }
     catch (error) { event.preventDefault(); ports.report({ kind: "failed", error }); return false; }
     if (!edit || !edit.isOpen()) {
-      refuse(event, "buffer-unavailable"); surface.repaint(rowId); surface.restore(rowId, range); return false;
+      refuse(event, "buffer-unavailable");
+      if (repaint) { surface.repaint(rowId); surface.restore(rowId, range); }
+      return false;
     }
     active = { rowId, beat, base, edit, fault: false };
     return true;
   }
 
-  function finish(): boolean {
+  function reconcile(): void {
+    if (!active || !active.edit.isOpen() || active.fault) return;
+    const next = projection(surface.runs(active.beat)), before = active.edit.text();
+    if (!target) {
+      const replacement = bufferedNativeReplacement(before, next);
+      if (replacement) active.edit.replace(replacement.from, replacement.to, replacement.insert);
+      return;
+    }
+    if (next === before) return;
+    const [from, to] = target, inserted = next.length - before.length + to - from;
+    if (inserted < 0 || next.slice(0, from) !== before.slice(0, from) || next.slice(from + inserted) !== before.slice(to)) {
+      active.fault = true; ports.report({ kind: "rejected", reason: "buffer-native-evidence" }); return;
+    }
+    active.edit.replace(from, to, next.slice(from, from + inserted)); target = null;
+  }
+
+  function ownership(event: Event): { readonly ok: boolean; readonly adopted: boolean } {
+    surface.normalize();
+    let ok = true, adopted = false;
+    for (const beat of surface.root.querySelectorAll<HTMLElement>(".wr-beat")) {
+      if (active?.beat === beat && active.edit.isOpen()) continue;
+      const rowId = beat.dataset.id ?? "", shown = surface.painted(rowId), next = projection(surface.runs(beat));
+      if (next === shown) continue;
+      if (active?.edit.isOpen()) { refuse(event, "buffer-pending"); surface.reset(rowId); ok = false; continue; }
+      const pos = { kind: "beat" as const, rowId, offset: next.length };
+      if (!begin(event, { anchor: pos, head: pos }, false)) { surface.reset(rowId); ok = false; continue; }
+      reconcile(); adopted = true;
+    }
+    return { ok, adopted };
+  }
+
+  function settle(): boolean {
+    if (surface.composition()) { ports.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
     if (!active) return true;
-    if (committing || target || active.fault) return false;
-    if (surface.composition()) { surface.composition(false); ended = true; }
+    reconcile();
+    if (committing || target || active.fault) {
+      if (!active.fault) ports.report({ kind: "rejected", reason: "buffer-pending" });
+      return false;
+    }
     const held = active, range = surface.selection();
     const selection: readonly [number, number] | undefined = range?.anchor.kind === "beat" && range.head.kind === "beat"
       && range.anchor.rowId === held.rowId && range.head.rowId === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
@@ -86,9 +129,21 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     return true;
   }
 
+  function finish(): boolean {
+    const checked = ownership(new Event("settle", { cancelable: true }));
+    return checked.ok && settle();
+  }
+
   const stopAdmission = ports.beforeCommand(() => committing || finish());
 
   return {
+    native: (event, dispatch) => {
+      if (event.type === "compositionstart") surface.composition(true);
+      const before = ownership(event);
+      if (before.ok || event.type === "compositionend") dispatch();
+      const after = ownership(event);
+      if ((before.adopted || after.adopted) && !surface.composition()) settle();
+    },
     beforeInput: (event, range, native) => {
       const type = event.inputType, intended = native ?? range;
       if (refusedComposition && !event.isComposing && !/Composition/.test(type) && intended?.anchor.kind === "beat"
@@ -97,12 +152,12 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
       if (ended && /Composition/.test(type)) { event.preventDefault(); return true; }
       ended = false;
       if (type === "deleteByCut" || type === "deleteByDrag" || !/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type)) {
-        if (!finish()) { refuse(event, "buffer-pending"); return true; }
+        if (!finish()) { event.preventDefault(); return true; }
         return false;
       }
       if (!event.isComposing && !/Composition/.test(type) && intended?.anchor.kind === "beat" && intended.head.kind === "beat"
         && intended.anchor.rowId !== intended.head.rowId) {
-        if (!finish()) { refuse(event, "buffer-pending"); return true; }
+        if (!finish()) { event.preventDefault(); return true; }
         const missing = [intended.anchor.rowId, intended.head.rowId].find(rowId => !surface.base(rowId));
         if (missing) { event.preventDefault(); ports.missingBase(missing); surface.repaint(missing); return true; }
         return false;
@@ -113,7 +168,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
         if (!base) { begin(event, intended); return true; }
         const length = active?.rowId === rowId ? active.edit.text().length : base.text.length, at = intended.head.offset;
         if (type === "deleteContentBackward" && at === 0 || type === "deleteContentForward" && at === length) {
-          if (!finish()) { refuse(event, "buffer-pending"); return true; }
+          if (!finish()) { event.preventDefault(); return true; }
           return false;
         }
         refuse(event, "buffer-native-target"); return true;
@@ -126,13 +181,11 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     },
     input: () => {
       if (!active) return;
-      const next = projection(surface.runs(active.beat)), before = active.edit.text();
-      const [from, to] = target ?? [-1, -1], inserted = next.length - before.length + to - from;
-      if (from < 0 || inserted < 0 || next.slice(0, from) !== before.slice(0, from) || next.slice(from + inserted) !== before.slice(to)) {
-        active.fault = true; ports.report({ kind: "rejected", reason: "buffer-native-evidence" }); return;
+      reconcile();
+      if (target && !active.fault && projection(surface.runs(active.beat)) === active.edit.text()) {
+        const [from, to] = target;
+        active.edit.replace(from, to, active.edit.text().slice(from, to)); target = null;
       }
-      active.edit.replace(from, to, next.slice(from, from + inserted));
-      target = null;
       if (!surface.composition()) finish();
     },
     start: (event, range) => {
@@ -154,6 +207,11 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
       } else finish();
     },
     finish,
+    canPaint: () => {
+      const checked = ownership(new Event("paint", { cancelable: true }));
+      if (checked.adopted && !surface.composition()) settle();
+      return checked.ok && !active && !surface.composition();
+    },
     dirty: () => active !== null,
     base: rowId => active?.rowId === rowId ? active.base : null,
     dispose: () => {

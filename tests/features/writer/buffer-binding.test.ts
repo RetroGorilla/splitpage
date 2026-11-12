@@ -121,7 +121,7 @@ for (const [type, data, label, dirty, text] of [
     });
     try {
       registerSplits(page.h.a);
-      if (dirty) { page.start(4); page.native(4, 4, "Q", undefined, "insertCompositionText"); }
+      if (dirty) page.native(4, 4, "Q", undefined, "insertText", "R1", false);
       const selected = { anchor: beatPos("R1", 0), head: beatPos("R2", 2) };
       page.surface.place(selected);
       const target = page.surface.domRange(selected); assert.ok(target);
@@ -220,7 +220,7 @@ test("the mounted clipboard cut settles typing and held ingress before it captur
     copy: (range, _data, cut) => { copied.push([range.anchor.offset, range.head.offset, cut, page.text()]); },
     paste: () => undefined });
   try {
-    page.start(2); page.native(2, 2, "Z", undefined, "insertCompositionText");
+    page.native(2, 2, "Z", undefined, "insertText", "R1", false);
     page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0), "X")], ["b1"]);
     page.h.queue.flush("dup");
     page.surface.place({ anchor: beatPos("R1", 2), head: beatPos("R1", 3) });
@@ -244,7 +244,7 @@ test("the root clipboard paste settles typing and held ingress before planning a
     return null;
   });
   try {
-    page.start(2); page.native(2, 2, "Z", undefined, "insertCompositionText");
+    page.native(2, 2, "Z", undefined, "insertText", "R1", false);
     page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0), "X")], ["b1"]);
     page.h.queue.flush("dup");
     const event = new window.Event("paste", { bubbles: true, cancelable: true });
@@ -371,7 +371,7 @@ for (const kind of ["status", "scalar", "structural"] as const) {
     const page = bufferedWriter();
     try {
       registerSplits(page.h.a);
-      page.start(2); page.native(2, 2, "Z", undefined, "insertCompositionText");
+      page.native(2, 2, "Z", undefined, "insertText", "R1", false);
       assert.equal(page.text(), "ab");
       const command: Command = kind === "structural" ? { name: "split", needs: "edit", plan: (doc, capabilities) => {
         const result = startBeat(doc, beatPos("R1", 2), { cells: html => fromHtml(html ?? ""), newId: () => "tail", hasVisual: () => false,

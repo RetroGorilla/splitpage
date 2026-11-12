@@ -49,7 +49,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
   });
   surface.paint(); surface.place(caretAt(beatPos("R1", text.length)));
   const beat = (rowId = "R1") => { const element = root.querySelector<HTMLElement>('.wr-beat[data-id="' + rowId + '"]'); assert.ok(element); return element; };
-  function native(from: number, to: number, insert: string, during?: () => void, type = "insertText", rowId = "R1"): boolean {
+  function native(from: number, to: number, insert: string, during?: () => void, type = "insertText", rowId = "R1", reportInput = true): boolean {
     const target = { anchor: beatPos(rowId, from), head: beatPos(rowId, to) };
     surface.place(target);
     const range = surface.domRange(target); assert.ok(range);
@@ -61,7 +61,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     range.deleteContents();
     const node = document.createTextNode(insert); range.insertNode(node);
     window.getSelection()?.setBaseAndExtent(node, insert.length, node, insert.length);
-    root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data: insert }));
+    if (reportInput) root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data: insert }));
     return true;
   }
   return { h, a, root, surface, native, beat, reports, missing, notices, edits, outcomes, reads: () => reads, ready: () => { ready = true; },

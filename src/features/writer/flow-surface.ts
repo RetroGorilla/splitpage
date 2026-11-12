@@ -115,13 +115,7 @@ function beatHtml(runs: readonly Run[]): string {
 }
 
 export function createSurface(inputPorts: SurfacePorts): Surface {
-  const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: (rowId, runs) => {
-    if (buffered?.dirty()) return;
-    const row = inputPorts.doc().rows.find(row => row.id === rowId);
-    if (!row || projection(inputPorts.flow.cells(row.audioText)) !== projection(runs)) {
-      inputPorts.bufferedText?.report({ kind: "rejected", reason: "buffer-native-evidence" });
-    }
-  } } : inputPorts;
+  const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: () => {} } : inputPorts;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
@@ -1267,6 +1261,20 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
 
   const buffered = ports.bufferedText ? createWriterBuffer(ports.bufferedText, {
     root, base: rowId => paintedBeats?.base(rowId) ?? null,
+    painted: rowId => paintedBeats?.text(rowId),
+    normalize: () => {
+      const focus = elementOf(window.getSelection()?.focusNode ?? null);
+      repairOrphans(focus?.closest<HTMLElement>(".wr-beat") ?? null);
+    },
+    reset: rowId => {
+      const el = beatEl(rowId), row = ports.doc().rows.find(row => row.id === rowId);
+      if (!el) return;
+      if (!row) { el.remove(); return; }
+      const runs = cellOf(row), html = beatHtml(runs);
+      el.innerHTML = html; rendered.set(el, html);
+      decorate(el, row, el.getAttribute("data-num") ?? "");
+      paintedBeats?.field(rowId, projection(runs));
+    },
     runs: beat => ports.decode(ports.storedHtml(beat.innerHTML.replace(ZWSP_ALL, ""))),
     selection: () => selection(true), repaint: rowId => {
       const el = beatEl(rowId); if (el) rendered.delete(el);
@@ -1287,8 +1295,13 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     if (!buffered || buffered.finish()) return true;
     event.preventDefault(); return false;
   };
-  const clipboardHandlers = {
-    copy: buffered ? (event: ClipboardEvent) => { if (ready(event)) onCopy(event); } : onCopy,
+  const clipboardActions = {
+    copy: buffered ? (event: ClipboardEvent) => {
+      if (composing) {
+        const range = selection(true), selected = range && domRange(range);
+        if (selected && event.clipboardData) { event.preventDefault(); event.clipboardData.setData("text/plain", selected.toString()); }
+      } else if (ready(event)) onCopy(event);
+    } : onCopy,
     cut: buffered ? (event: ClipboardEvent) => { if (ready(event)) onCut(event); } : onCut,
     paste: buffered ? (event: ClipboardEvent) => { if (ready(event)) onPaste(event); } : onPaste
   };
@@ -1298,8 +1311,6 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       if (!buffered.beforeInput(input, selection(true), native)) onBeforeInput(event);
     } : onBeforeInput],
     [root, "input", buffered ? event => {
-      const focus = elementOf(window.getSelection()?.focusNode ?? null);
-      repairOrphans(focus?.closest<HTMLElement>(".wr-beat") ?? null);
       buffered.input();
       const input = event as InputEvent;
       if (!buffered.dirty() && input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
@@ -1307,32 +1318,51 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     } : onInput],
     [root, "keydown", buffered ? event => {
       const key = event as KeyboardEvent;
-      if (composing || key.isComposing || key.keyCode === 229) return;
+      if (composing || key.isComposing || key.keyCode === 229) {
+        const range = selection(true), at = range?.head;
+        const beat = at?.kind === "beat" ? beatEl(at.rowId) : null;
+        const boundary = at?.kind === "beat" && (key.key === "Backspace" && at.offset === 0
+          || key.key === "Delete" && beat !== null && at.offset === domKeys(beat).length);
+        const command = key.key === "Tab" || key.key === "Enter" && !key.isComposing && key.keyCode !== 229
+          || (key.ctrlKey || key.metaKey) && /^[zybiuvx]$/i.test(key.key)
+          || key.altKey && ["ArrowUp", "ArrowDown", "Backspace"].includes(key.key) || boundary;
+        if (composing && command) ready(event);
+        return;
+      }
       buffered.keydown(key);
       if (ready(event)) onKeydown(key);
     } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
-      [root, "copy", clipboardHandlers.copy as EventListener] as [EventTarget, string, EventListener],
-      [root, "cut", clipboardHandlers.cut as EventListener] as [EventTarget, string, EventListener],
-      [root, "paste", clipboardHandlers.paste as EventListener] as [EventTarget, string, EventListener]
+      [root, "copy", clipboardActions.copy as EventListener] as [EventTarget, string, EventListener],
+      [root, "cut", clipboardActions.cut as EventListener] as [EventTarget, string, EventListener],
+      [root, "paste", clipboardActions.paste as EventListener] as [EventTarget, string, EventListener]
     ],
     [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
     [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
     [root, "mousedown", onMouseDown],
-    [root, "focusout", buffered ? event => { if (ready(event)) onHostBlur(event); } : onHostBlur],
+    [root, "focusout", buffered ? event => { if (!composing && ready(event)) onHostBlur(event); } : onHostBlur],
+    ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
+      [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
     [window, "mouseup", onMouseUp],
     [document, "selectionchange", buffered ? () => { if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
   ];
-  listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
+  const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
+    [target, name, event => { buffered.native(event, () => handler(event)); }]) : listeners;
+  guarded.forEach(([target, name, handler]) => target.addEventListener(name, handler));
+  const clipboardHandlers = buffered ? {
+    copy: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.copy(event)); },
+    cut: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.cut(event)); },
+    paste: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.paste(event)); }
+  } : clipboardActions;
   const stopClipboard = ports.clipboard?.mount(clipboardHandlers);
 
   return {
     ...(buffered ? { settle: buffered.finish } : {}),
     finish: buffered ? () => buffered.finish() ? finish() : selection(true) : finish,
-    paint: buffered ? () => { if (!buffered.dirty()) paint(); } : paint,
-    repaint: buffered ? () => { if (!buffered.dirty()) repaint(); } : repaint,
+    paint: buffered ? () => { if (buffered.canPaint()) paint(); } : paint,
+    repaint: buffered ? () => { if (buffered.canPaint()) repaint(); } : repaint,
     refreshBeat: rowId => {
-      if (composing || syncingComposition || buffered?.dirty()) { repaintOwed = true; return; }
+      if (composing || syncingComposition || buffered && !buffered.canPaint()) { repaintOwed = true; return; }
       const el = beatEl(rowId);
       const row = ports.doc().rows.find(beat => beat.id === rowId);
       if (el && row) decorate(el, row, el.getAttribute("data-num") ?? "");
@@ -1364,7 +1394,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       queuedPastes.length = 0;
-      listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
+      guarded.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
     }
   };
 }

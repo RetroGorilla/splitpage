@@ -3,7 +3,10 @@
 M1 retains inbound updates while a native edit is open. `SharedTextBuffer` keeps
 the painted revision, text and per-unit origin offsets. Each native target range
 replaces those origins, including replacements with identical text. Its plan
-contains only the changed spans; it does not infer targets by comparing strings.
+contains only the changed spans. When `beforeinput` supplied a range, that range
+is the evidence, including a replacement with identical text. An unreported
+native change is instead adopted as the code-point-safe difference between the
+painted text and DOM, as ruled for the ownership invariant below.
 
 `bufferedTextOperations` names deletion units through the painted identities.
 Inserted runs use the existing flow insertion policy for atoms and marks. Each
@@ -25,8 +28,9 @@ the gate without applying held updates. Crash recovery is outside this in-memory
 package; no durable continuation is claimed.
 
 The Writer binding must make that local-command history unreachable: it commits
-dirty native typing before another local command enters the session, including
-status, scalar and structural commands. Any remaining stale-base outcome has the
+ordinary dirty native typing before another local command enters the session,
+including status, scalar and structural commands. During composition it refuses
+the command until compositionend instead of settling preedit. Any remaining stale-base outcome has the
 stated end in assumed rule 29 on #1414: a fresh soft-removed recovery beat keeps
 the whole native field and source owner/base metadata, through existing shared
 operations and the existing recovery reader, with no undo entry. Successful
@@ -59,9 +63,9 @@ standalone listeners keep their existing handler functions. Native `beforeinput`
 records its target and closes the buffer reason before the DOM changes. `input`
 checks the unchanged prefix and suffix against that target and records the native
 replacement; it never sends an unproved whole-field edit. Ordinary input commits
-there; composition commits on completion or before another local command.
-Clipboard handlers settle before capturing the range, both through the mounted
-clipboard port and direct root listeners. Native `deleteByCut` and `deleteByDrag`
+there; composition commits only on completion. Outside composition, clipboard
+handlers settle before capturing the range, both through the mounted clipboard
+port and direct root listeners. Native `deleteByCut` and `deleteByDrag`
 retain the existing refusal/delegation policy, so a refused paste/drop cannot
 leave a newly accepted source deletion behind.
 Collapsed Backspace/Delete at a beat boundary delegates to the existing
@@ -108,6 +112,39 @@ hold grants no ownership. The ownership invariant test checks each step through
 throws, refusals, rule 27, queue overflow and two surfaces. `BufferedTextEdit.isOpen`
 is the adapter's authority for completion: a no-op that closes before a throwing
 drain is reported, repainted and forgotten, so the next key opens a fresh edit.
+
+## Native ownership and composition invariants
+
+Every shared native listener enters and leaves through `WriterBufferBinding.native`,
+including mounted clipboard handlers, focus, pointer and selection events. Paint
+and programmatic settlement also use the ownership checkpoint. It compares every
+shown beat with its last painted text; that text is retained even when no valid
+painted identities were available. A difference with no owned open edit opens one
+against its painted base and records the native replacement. An `input` without
+`beforeinput` therefore follows the same commit path for insertion, deletion and
+replacement. If the base or edit is unavailable, the field is reset from the
+model immediately and the existing refusal is reported. Resetting one field does
+not replace another field's owned preedit. A second differing field is refused
+while the surface owns its one edit; no additional buffer or queue is introduced.
+
+`settle` is the single write gate: while the composition flag is set it reports
+`buffer-composition` and returns without reconciling, committing, cancelling,
+closing or replacing the owned edit. This applies to local command admission,
+clipboard mutation, non-text beforeinput, formatting, close, undo and disposal.
+Copy reads the selected native DOM text to the plain-text clipboard without
+settling. Focus loss does not settle. If no compositionend arrives after blur,
+the hold stays under rule 26's byte bound; focus return continues that composition.
+Only a later compositionend commits it, or compositionend with empty data cancels
+it. There is no timeout or focus-return commit.
+
+`buffer-invariants.test.ts` checks ownership after event histories with omitted
+beforeinput, failed acquisition, rule 27, a full queue and another surface; it
+checks each composition request followed by the final `你` replacement. Existing
+ordinary command/clipboard tests now hold a pending non-composition native input
+instead of treating preedit as ordinary typing. `standalone-native-cases.ts`
+extends the 138 key/lifecycle comparisons with 108 clipboard, focus and non-text
+beforeinput cases against main, comparing document, DOM, selection and event
+outcomes byte for byte. Standalone listener functions remain unchanged.
 
 ## Planned rule 29 operation list
 
