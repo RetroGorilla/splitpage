@@ -85,6 +85,30 @@ the base. Cancel releases and repaints even when the model string did not change
 An unproved native difference is reported and retained rather than guessed.
 `composition.ts` is unchanged; the shared Writer handlers own this interval.
 
+Selection restoration resolves the locally captured native anchors through the
+same projected blocks and join grouping as the document. Each endpoint carries
+its projected owner and offset; it is never clamped to the opening beat. A caret
+after typed text follows that text's final unit, including a split at that gap.
+If removal makes the endpoint invisible, there is no restored edit selection:
+the surface explicitly lands at offset zero of the first remaining beat. The
+typed snapshot remains in the original beat's recovery; this is not a second
+recovery entry. `buffer-review.test.ts` pins before, after, exact-gap and prefix
+splits plus removal, two and three writers, normal/reversed/duplicated delivery,
+literal owner/offset and a further native character, and an encoded late joiner.
+
+The surface's composition flag is the sole in-progress flag used by both native
+bindings. Shared key dispatch admits no command while it is set or a key carries
+`isComposing` or key code 229. The paired shared/standalone composition tests
+keep the final replacement across Enter, boundary Backspace/Delete, Tab, undo,
+redo, status, movement, join, heading and formatting chords.
+
+A native mutation requires this surface's open edit. Open refusal or throw
+prevents the mutation and reports through the existing port; another surface's
+hold grants no ownership. The ownership invariant test checks each step through
+throws, refusals, rule 27, queue overflow and two surfaces. `BufferedTextEdit.isOpen`
+is the adapter's authority for completion: a no-op that closes before a throwing
+drain is reported, repainted and forgotten, so the next key opens a fresh edit.
+
 ## Planned rule 29 operation list
 
 This is the literal request for a plain `aZd` snapshot, source owner `R1`, painted

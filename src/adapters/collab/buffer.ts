@@ -8,7 +8,8 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { readSharedRevision } from "./document.ts";
 import { holdSharedBuffer, sharedBufferDeliveryBusy } from "./ingress.ts";
 import { readSharedPaintedText } from "./paint-base.ts";
-import { resolveSharedTextAnchor } from "./anchors.ts";
+import { resolveSharedBufferedSelection } from "./buffer-selection.ts";
+import { sharedAnchorCharacterEnd } from "./anchors.ts";
 import { readProjectionFields } from "./projection-reader.ts";
 import { collabState } from "./state.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
@@ -33,6 +34,7 @@ export function createSharedBufferedText(
       let open = true;
       buffer.begin();
       return {
+        isOpen: () => open,
         text: () => buffer.text(),
         replace: (from, to, insert) => {
           if (!open) throw new Error("Buffered edit is closed");
@@ -53,20 +55,18 @@ export function createSharedBufferedText(
           } catch (error) { return { kind: "failed", error }; }
           if (outcome.kind === "applied" || outcome.kind === "committed" || outcome.kind === "noop") {
             const local = selection ? readSharedPaintedText(handle, target) : null;
-            const anchors = selection?.map(offset => local && (offset < local.text.length ? local.identity(offset) : local.endGap)) ?? [];
+            const anchors = selection?.map(offset => {
+              if (!local) return null;
+              const preceding = offset > 0 ? local.identity(offset - 1) : null;
+              return preceding ? sharedAnchorCharacterEnd(preceding) : local.identity(0) ?? local.emptyGap ?? null;
+            }) ?? [];
             buffer.commit(); open = false;
             try { release(); } catch (error) {
-              return outcome.kind === "noop" ? { kind: "failed", error }
+              outcome = outcome.kind === "noop" ? { kind: "failed", error }
                 : { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
             }
-            const current = selection ? readSharedPaintedText(handle, target) : null;
-            const first = current && (current.text.length ? current.identity(0) : current.emptyGap);
-            const start = first ? resolveSharedTextAnchor(handle, first, target) : null;
-            const offsets = anchors.map(anchor => anchor ? resolveSharedTextAnchor(handle, anchor, target) : null);
-            const [anchor, head] = offsets;
-            if (current && start !== null && anchor != null && head != null && session.read(doc => doc?.rows.some(row => row.id === rowId))) {
-              return { ...outcome, selection: [Math.max(0, Math.min(current.text.length, anchor - start)), Math.max(0, Math.min(current.text.length, head - start))] };
-            }
+            const restored = selection ? resolveSharedBufferedSelection(handle, anchors) : undefined;
+            return restored ? { ...outcome, selection: restored } : outcome;
           }
           return outcome;
         },

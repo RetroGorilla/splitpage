@@ -31,9 +31,7 @@ unit, and `null` for an owner that holds no part of the segment.
 ## When a beat has no base
 
 - The source reports another revision than `documentRevision()`.
-- The painted text differs from the shared text of the beat, unit for unit. The
-  production projection does not show a prefix split yet, so the halves of one
-  have no base until it does.
+- The painted text differs from the shared text of the beat, unit for unit.
 - The address names no text, or an owner with no span in it.
 
 The record is replaced by each paint, holds only the beats that pass painted,
@@ -101,10 +99,16 @@ was not measured and no timing rerun is claimed here. Capturing identities only
 when a buffer opens remains an option, provided its revision still equals the
 painted one.
 
-The buffer's selection restoration makes two additional shared painted reads per
-successful commit when a selection was supplied: after the local write and after
-the held updates drain. The following repaint has the paint cost above. These
-costs are shared-only, with no latency claim. The production-dispatch counter in
+The buffer's selection restoration makes one additional shared painted read
+after the local write when a selection was supplied. After held updates drain,
+it reads the projected blocks, units, marks, tags and join groups once, then
+projects those groups for each of the two endpoints with a zero-width marker.
+This adds a document projection's discovery/mark costs and up to two joined-unit
+projections, including their existing mark-policy costs. Finding each joined
+member's block adds O(B²) lookups in the worst case for B blocks, per endpoint.
+No constant-time shared selection cost
+is claimed. The following repaint has the paint cost above. These costs are
+shared-only, with no latency claim. The production-dispatch counter in
 `tests/features/writer/buffer-cost.test.ts` pins 17 row reads for a standalone
 native key in both a two-row and a 200-row document, with no buffer construction;
 its shared control constructs one. The extra-row-walk mutant fails that test.

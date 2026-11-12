@@ -1272,9 +1272,10 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       const el = beatEl(rowId); if (el) rendered.delete(el);
       repaint();
     },
+    composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (rowId, offsets) => {
       const exists = ports.doc().rows.some(row => row.id === rowId);
-      if (exists && offsets) place({ anchor: beatPos(rowId, offsets[0]), head: beatPos(rowId, offsets[1]) });
+      if (offsets) place(offsets);
       else if (!exists) {
         const first = ports.doc().rows[0];
         if (first) place(caretAt(beatPos(first.id, 0)));
@@ -1306,8 +1307,9 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     } : onInput],
     [root, "keydown", buffered ? event => {
       const key = event as KeyboardEvent;
+      if (composing || key.isComposing || key.keyCode === 229) return;
       buffered.keydown(key);
-      if (key.isComposing || ready(event)) onKeydown(key);
+      if (ready(event)) onKeydown(key);
     } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
       [root, "copy", clipboardHandlers.copy as EventListener] as [EventTarget, string, EventListener],

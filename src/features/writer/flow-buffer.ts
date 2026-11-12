@@ -27,13 +27,13 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
   readonly base: (rowId: string) => PaintedText | null;
   readonly runs: (beat: HTMLElement) => readonly Run[];
   readonly selection: () => FlowRange | null;
+  readonly composition: (value?: boolean) => boolean;
   readonly repaint: (rowId: string) => void;
-  readonly restore: (rowId: string, selection: readonly [number, number] | undefined) => void;
+  readonly restore: (rowId: string, selection: FlowRange | undefined) => void;
   readonly changed: () => void;
 }): WriterBufferBinding {
   let active: { rowId: string; beat: HTMLElement; base: PaintedText; edit: BufferedTextEdit; fault: boolean } | null = null;
   let target: readonly [number, number] | null = null;
-  let composing = false;
   let ended = false;
   let committing = false;
   let refusedComposition = false;
@@ -51,11 +51,16 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     if (active?.rowId === rowId) return true;
     if (!finish()) { refuse(event, "buffer-pending"); return false; }
     const base = surface.base(rowId), beat = surface.root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(rowId) + '"]');
-    const edit = base && beat ? ports.open(rowId, base) : null;
-    if (!base || !beat || !edit) {
+    if (!base || !beat) {
       event.preventDefault(); ports.missingBase(rowId);
-      surface.repaint(rowId); surface.restore(rowId, [range.anchor.offset, range.head.offset]);
+      surface.repaint(rowId); surface.restore(rowId, range);
       return false;
+    }
+    let edit: BufferedTextEdit | null;
+    try { edit = ports.open(rowId, base); }
+    catch (error) { event.preventDefault(); ports.report({ kind: "failed", error }); return false; }
+    if (!edit || !edit.isOpen()) {
+      refuse(event, "buffer-unavailable"); surface.repaint(rowId); surface.restore(rowId, range); return false;
     }
     active = { rowId, beat, base, edit, fault: false };
     return true;
@@ -64,20 +69,20 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
   function finish(): boolean {
     if (!active) return true;
     if (committing || target || active.fault) return false;
-    if (composing) { composing = false; ended = true; }
+    if (surface.composition()) { surface.composition(false); ended = true; }
     const held = active, range = surface.selection();
     const selection: readonly [number, number] | undefined = range?.anchor.kind === "beat" && range.head.kind === "beat"
       && range.anchor.rowId === held.rowId && range.head.rowId === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
     let outcome: ReturnType<BufferedTextEdit["commit"]>;
     committing = true;
     try { outcome = held.edit.commit(surface.runs(held.beat), selection); }
-    catch (error) { ports.report({ kind: "failed", error }); return false; }
+    catch (error) { outcome = { kind: "failed", error }; }
     finally { committing = false; }
-    if (outcome.kind !== "applied" && outcome.kind !== "committed" && outcome.kind !== "noop") { ports.report(outcome); return false; }
+    if (held.edit.isOpen()) { ports.report(outcome); return false; }
     active = null; target = null;
     surface.repaint(held.rowId); surface.restore(held.rowId, outcome.selection);
     surface.changed();
-    if (outcome.kind === "committed" && outcome.errors.length) ports.report(outcome);
+    if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) ports.report(outcome);
     return true;
   }
 
@@ -128,18 +133,18 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
       }
       active.edit.replace(from, to, next.slice(from, from + inserted));
       target = null;
-      if (!composing) finish();
+      if (!surface.composition()) finish();
     },
     start: (event, range) => {
       ended = false; refusedComposition = false;
       if (!range || range.anchor.kind !== "beat" || range.head.kind !== "beat" || range.anchor.rowId !== range.head.rowId) {
-        refusedComposition = true; refuse(event, "buffer-unsupported-target"); return;
+        surface.composition(true); refusedComposition = true; refuse(event, "buffer-unsupported-target"); return;
       }
-      if (begin(event, range)) composing = true;
+      begin(event, range); surface.composition(true);
     },
     keydown: event => { if (!event.isComposing && event.keyCode !== 229) { refusedComposition = false; ended = false; } },
     end: event => {
-      composing = false; ended = true;
+      surface.composition(false); ended = true;
       if (refusedComposition) return;
       if (!active) return;
       if (!event.data) {
@@ -153,7 +158,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     base: rowId => active?.rowId === rowId ? active.base : null,
     dispose: () => {
       if (!finish()) return false;
-      stopAdmission(); target = null; composing = false;
+      stopAdmission(); target = null; surface.composition(false);
       return true;
     }
   };
