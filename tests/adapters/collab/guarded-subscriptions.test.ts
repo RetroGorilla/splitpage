@@ -75,5 +75,5 @@ test("library subscriptions stay inside the shared adapter and every callback is
     "src/adapters/collab/structure-order-index.ts",
     "src/adapters/collab/structure-reservations.ts"
   ]);
-  assert.equal(found.length, 11);
+  assert.equal(found.length, 12);
 });
