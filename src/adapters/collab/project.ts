@@ -62,7 +62,7 @@ export function projectSharedDocumentWithRecovery(handle: SharedDocumentHandle):
       owner: fragment.id, segment: fragment.segment, field: fragment.kind === "h" ? "heading" : "audioText", from: fragment.from, to: fragment.to,
       html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", false) });
     const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
-    const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinGroups(order.map(id => readProjectionBeatStructure(roots.beats.get(id), id, roots.retiredJoins)));
+    const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinGroups(order.map(id => readProjectionBeatStructure(roots.beats.get(id), id, roots.retiredJoins, roots.meta)));
     const rows: Record<string, unknown>[] = [], plans = groups.flatMap(group => {
       const root = byId.get(group.root); if (!root) return [];
       const members = group.members.map(member => member.id), inOrder = order.filter(id => members.includes(id));

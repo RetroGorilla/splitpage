@@ -1,0 +1,21 @@
+{
+  "mutants": [{
+    "label": "join glue register ignored",
+    "file": "src/core/collab/projection/join-glue.ts",
+    "find": "return register === \"\" || register === \" \" ? register : issued;",
+    "replace": "void register; return issued;",
+    "tests": ["tests/adapters/collab/projection-join-glue.test.ts"]
+  }, {
+    "label": "invalid glue register accepted",
+    "file": "src/core/collab/projection/join-glue.ts",
+    "find": "return register === \"\" || register === \" \" ? register : issued;",
+    "replace": "return typeof register === \"string\" ? register as \"\" | \" \" : issued;",
+    "tests": ["tests/core/collab/projection-join-glue.test.ts"]
+  }, {
+    "label": "glue register scoped to beat instead of native join",
+    "file": "src/adapters/collab/projection-reader.ts",
+    "find": "glueRegisters.get(sharedJoinGlueRegisterField(key))",
+    "replace": "raw.get(sharedJoinGlueRegisterField(key))",
+    "tests": ["tests/adapters/collab/projection-join-glue.test.ts"]
+  }]
+}
