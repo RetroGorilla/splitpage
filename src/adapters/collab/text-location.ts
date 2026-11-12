@@ -24,7 +24,7 @@ export function resolveSharedTextLocation(view: SharedTextLocationReader, raw: S
         segment = visual;
       }
       parent = ["visuals", segment];
-      if (view.get([...parent, "beat"]) !== owner) throw new Error("mismatched-target");
+      if (view.get([...parent, "beat"]) !== owner) throw new Error("missing-target");
     } else {
       if (raw.segment === raw.owner) segment = winner.segment;
       if (segment !== winner.segment) throw new Error("mismatched-target");
