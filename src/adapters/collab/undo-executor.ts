@@ -15,7 +15,7 @@ import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
-import { readSharedMarkSeen, readSharedTextRestoreOperation } from "./mark-provenance.ts";
+import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired"]);
 
@@ -71,10 +71,6 @@ function occurrencesOf(history: SharedTextHistory, operation: string): SharedUnd
     .map(item => ({ occurrence: item.identity, units: history.showing(item.identity).map(unit => unit.identity) }));
 }
 
-function seenBy(history: SharedTextHistory, operation: string): SharedContentRef[] {
-  return [...new Set(history.records.filter(item => namedBy(item.record.operation, "range-mark", operation))
-    .flatMap(item => readSharedMarkSeen(item.record)).filter((value): value is SharedContentRef => typeof value === "string"))].sort();
-}
 
 function operationOf(raw: Record<string, unknown>): SharedOperation {
   const operation = readOperation(raw);
@@ -141,7 +137,7 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: after => {
         const now = command && after(part.target);
         return { effective: wanted.length > 0, part: { kind: "mark-add", target: part.target, mark: part.mark,
-          added: now && command ? occurrencesOf(now, command.id) : [], seen: now && command ? seenBy(now, command.id) : [] } };
+          added: now && command ? occurrencesOf(now, command.id) : [], seen: [] } };
       } };
     }
     case "scalar": {
@@ -239,7 +235,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (!was || !is) continue;
       if (operation.mark.value !== null) {
         const occurrences = occurrencesOf(is, operation.id);
-        if (occurrences.length) parts.push({ kind: "mark-add", target: operation.target, mark: operation.mark, added: occurrences, seen: seenBy(is, operation.id) });
+        if (occurrences.length) parts.push({ kind: "mark-add", target: operation.target, mark: operation.mark, added: occurrences, seen: [] });
         continue;
       }
       const observed = [...new Set(is.records.filter(item => item.record.type === "remove" && namedBy(item.record.operation, "range-mark", operation.id))

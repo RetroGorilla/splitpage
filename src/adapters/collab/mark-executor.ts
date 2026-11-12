@@ -6,7 +6,7 @@ import { sharedTextCommandPlan, sharedTextRange, requireSharedTextOwnership, Sha
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedMarkTranslation } from "./mark-translation.ts";
-import { sharedRangeMarkOperation } from "./mark-provenance.ts";
+import { readSharedMarkGeneration, sharedRangeMarkOperation } from "./mark-provenance.ts";
 
 export function prepareSharedMarkChange(operation: SharedMarkChange, view: SharedPreparationView): SharedTextOperationPreparation {
   return preparedTextOperation(() => {
@@ -28,11 +28,12 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
       const active = new Set(plan.units.slice(range.from, range.to).flatMap(unit => unit.additions));
       const translated = prepareSharedMarkTranslation(operation.mark, view.writer, operation.id, [index], plan.additions.filter(addition => active.has(addition.identity)));
       if (!translated) throw new SharedTextPreparationError("unstable-identity");
-      // why: an occurrence names the same change it had seen, so the undo of that one leaves this one.
+      // why: a mark made after seeing the same change is the next one, so the undo of the earlier one leaves it.
       const seen = translated.type === "add" ? known.filter(item => item.record.type === "add" && item.record.born === null
         && item.record.mark.kind === translated.mark.kind && item.record.mark.value === translated.mark.value && item.from !== null && item.to !== null
-        && plan.native.after[item.from] === range.from && plan.native.before[item.to] === range.to).map(item => item.identity) : [];
-      const record = prepareTextMarkWrite(plan, view, sharedRangeMarkOperation(operation.id, index, seen), range.from, range.to, translated);
+        && plan.native.after[item.from] === range.from && plan.native.before[item.to] === range.to).map(item => readSharedMarkGeneration(item.record)) : [];
+      const generation = seen.reduce((highest, value) => Math.max(highest, value), 0) + 1;
+      const record = prepareTextMarkWrite(plan, view, sharedRangeMarkOperation(operation.id, index, generation), range.from, range.to, translated);
       if (record.kind !== "record") throw new SharedTextPreparationError("invalid-mark-plan");
       return { kind: "mark", target: plan.target, plan: record };
     });

@@ -15,8 +15,14 @@ function named(operation: string, name: string): readonly unknown[] | null {
   } catch { return null; }
 }
 
-export function sharedRangeMarkOperation(operation: string, index: number, seen: readonly SharedContentRef[]): string {
-  return JSON.stringify(seen.length ? ["range-mark", operation, index, [...seen].sort()] : ["range-mark", operation, index]);
+// why: a name carries one number however many earlier marks there were, so its size does not grow with the history.
+export function sharedRangeMarkOperation(operation: string, index: number, generation: number): string {
+  return JSON.stringify(generation > 1 ? ["range-mark", operation, index, generation] : ["range-mark", operation, index]);
+}
+
+export function readSharedMarkGeneration(record: SharedMarkRecord): number {
+  const raw = record.type === "add" ? named(record.operation, "range-mark")?.[3] : undefined;
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 1 ? raw : 1;
 }
 
 export function sharedMarkRetractOperation(operation: string, index: number): string {
@@ -36,17 +42,10 @@ export function readSharedTextRestoreOperation(operation: string): { readonly cl
   return typeof client === "number" && typeof clock === "number" ? { client, clock } : null;
 }
 
-export function readSharedMarkSeen(record: SharedMarkRecord): readonly unknown[] {
-  const seen = record.type === "add" ? named(record.operation, "range-mark")?.[3] : null;
-  return Array.isArray(seen) ? seen as readonly unknown[] : [];
-}
-
-function sameChange(first: NamedMarkRecord, other: NamedMarkRecord): boolean {
-  const a = first.record, b = other.record;
-  // why: decided row: the same change made by two people who had not seen each other's is one change.
-  return a.type === "add" && b.type === "add" && a.born === null && b.born === null && a.start === b.start && a.end === b.end
-    && a.mark.kind === b.mark.kind && a.mark.value === b.mark.value
-    && !readSharedMarkSeen(a).includes(other.identity) && !readSharedMarkSeen(b).includes(first.identity);
+// why: decided row: the same change made by two people who had not seen each other's is one change; both carry one number.
+function changeKey(record: SharedMarkRecord): string | null {
+  return record.type === "add" && record.born === null
+    ? JSON.stringify([record.start, record.end, record.mark.kind, record.mark.value, readSharedMarkGeneration(record)]) : null;
 }
 
 export const SHARED_MARK_PROVENANCE_MARKER = "provenance";
@@ -67,21 +66,30 @@ export function readSharedMarkProvenance(records: readonly NamedMarkRecord[], so
   // why: typing reads this for every command; the marker written with the first retraction or copy says when to look.
   if (!hasSharedMarkProvenanceMarker(sortedKeys)) return null;
   const sources = new Map<SharedContentRef, SharedContentRef>(), retracted: SharedContentRef[] = [];
+  const changes = new Map<string, SharedContentRef[]>(), changeOf = new Map<SharedContentRef, string>();
   sharedMarkProvenanceCost.scans++;
   for (const { identity, record } of records) {
     sharedMarkProvenanceCost.visits++;
     if (record.type === "add") {
-      const source = named(record.operation, "mark-copy")?.[4];
+      const source = named(record.operation, "mark-copy")?.[4], change = changeKey(record);
       if (typeof source === "string") sources.set(identity, source as SharedContentRef);
+      if (change !== null) {
+        const members = changes.get(change);
+        if (members) members.push(identity); else changes.set(change, [identity]);
+        changeOf.set(identity, change);
+      }
     } else if (record.type === "remove" && named(record.operation, "mark-retract")) for (const observed of record.observed) retracted.push(observed);
   }
   if (!sources.size && !retracted.length) return null;
   const source = (identity: SharedContentRef): SharedContentRef => sources.get(identity) ?? identity, cancelled = new Set<SharedContentRef>();
   for (const observed of retracted) {
-    const own = source(observed), first = records.find(item => item.identity === own);
+    sharedMarkProvenanceCost.visits++;
+    const own = source(observed), change = changeOf.get(own);
     cancelled.add(own);
-    // why: the cancellation stays with the occurrence, so the same change is cancelled also when it arrives later.
-    if (first) for (const other of records) if (other.identity !== own && sameChange(first, other)) cancelled.add(other.identity);
+    if (change === undefined) continue;
+    // why: the cancellation stays with the change, so one that arrives later is cancelled too; each change is read once.
+    for (const member of changes.get(change) ?? []) { sharedMarkProvenanceCost.visits++; cancelled.add(member); }
+    changes.delete(change);
   }
   return { source, cancelled };
 }

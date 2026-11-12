@@ -228,10 +228,19 @@ How the points left open by the model are met:
 3. **One occurrence, not every mark in the range.** `mark-retract` names the
    occurrence, so another person's mark over the same words stays.
 4. **An identical change that arrives after the undo.** A forward mark now
-   names, in its operation, the same marks over the same range it had seen.
+   carries one number in its operation name: one more than the highest number
+   among the same marks over the same range it had seen, and no number when
+   it had seen none. Marks made apart share a number; a mark made after seeing
+   another carries the next. The name never contains another mark's name, so
+   its size does not grow with the history: 200 rounds of bold and undo leave
+   the longest stored key at 37 characters and add 481 to 497 bytes to the
+   encoded document per round (`undo-mark-growth.test.ts`). On the shared
+   document the record's `seen` list stays empty.
    A retraction cancels the occurrence and every addition of the same mark over
-   the same range where neither had seen the other, also one that arrives
-   later. This is the step beyond Stage 1 described above.
+   the same range with the same number, also one that arrives later. This is
+   the step beyond Stage 1 described above. One case the decided rows do not
+   settle: a mark made apart from another, but after seeing a third identical
+   one, carries the next number and is its own change.
 5. **The origin.** `executeSharedOperations` takes `origin: "local-undo"`;
    without it a write is `local-command` as before.
 6. **Only the command's own writes.** Updates that arrive during a command's
@@ -269,7 +278,12 @@ after (`undo-provenance-cache.test.ts`). Cost of typing one character, counted b
 | Text | `executeSharedOperations` | `executeSharedCommand` |
 | --- | --- | --- |
 | no marker, 10 or 1,000 ordinary records | 0 scans, 0 visits | 0 scans, 0 visits |
-| marker, n records | 1 scan, n visits | 3 scans, about 3n visits |
+| marker, n records | 1 scan, n visits and more | 3 scans, each n visits and more |
+
+With the marker one scan is one pass: every record once, then every retraction
+once and every member of a cancelled change once. The counter counts each of
+these. A reading with r retractions over 2r records, each of its own change,
+costs 4r visits: 40 for 10, 80 for 20, 400 for 100.
 
 A typed command reads the mark state for its record once, after it has
 written; which characters were there before is read from the text alone.

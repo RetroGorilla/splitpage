@@ -216,9 +216,9 @@ for (const ordinary of [10, 1000]) {
       assert.ok(added);
       assert.deepEqual(executeSharedOperations(handle, [retract("x1", "Alice", [added.identity])], { origin: "local-undo" }), { ok: true });
       const records = ordinary + 4;
-      assert.deepEqual(cost(() => { assert.deepEqual(executeSharedOperations(handle, [typed(handle, "t3")]), { ok: true }); }), { scans: 1, visits: records });
+      assert.deepEqual(cost(() => { assert.deepEqual(executeSharedOperations(handle, [typed(handle, "t3")]), { ok: true }); }), { scans: 1, visits: records + 2 });
       assert.deepEqual(cost(() => { assert.ok(executeSharedCommand(handle, [typed(handle, "t4")], { label: "typing", selection: null, typing: "t" }).record); }),
-        { scans: 3, visits: 3 * records + 5 });
+        { scans: 3, visits: 3 * records + 11 });
     } finally { destroySharedDocument(handle); }
   });
 }
