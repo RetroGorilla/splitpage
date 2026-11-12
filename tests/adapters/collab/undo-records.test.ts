@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { SharedRecordCollection } from "../../../src/core/collab/operations.ts";
+import type { SharedRecordCollection, SharedStatusEvent } from "../../../src/core/collab/operations.ts";
+import { readSharedStatus } from "../../../src/adapters/collab/status.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 import { encodeSharedState, observeSharedTransactions } from "../../../src/adapters/collab/document.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import { executeSharedCommand, reverseSharedUndoRecord, SHARED_UNDO_RECORDS, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { deliveryOrders } from "../../collab/delivery.ts";
-import { operation } from "./executor-support.ts";
+import { operation, ref } from "./executor-support.ts";
 import { createRecord, deleteRecord, recordReplicas, setRecord } from "./record-support.ts";
 
 const COMMAND = { label: "record", selection: null, typing: null };
@@ -168,6 +169,113 @@ for (const order of deliveryOrders) {
     } finally { run.close(); }
   });
 }
+
+const PROPS = [{ id: "p1", name: "Mug" }, { id: "p2", name: "Lamp" }];
+const SHOT = { id: "S2", name: "Desk", status: "unshot", origin: "list",
+  props: [{ key: "p1", fields: { id: "p1", name: "Mug", rank: "0000000000" } }, { key: "p2", fields: { id: "p2", name: "Lamp", rank: "0000000001" } }] };
+
+test("a shot with props: its removal is undone with the props it had, and the entry below it is still reached", () => {
+  const run = recordReplicas();
+  try {
+    const alice = writer("Alice");
+    const person = command(run.a, createRecord("people", "P1", { name: "Alice" }));
+    command(run.a, createRecord("shots", "S2", { name: "Desk", origin: "list", props: PROPS }));
+    assert.deepEqual(one(run.a, "shots", "S2"), SHOT);
+    const removed = command(run.a, deleteRecord("shots", "S2"));
+    assert.deepEqual(removed.parts, [{ kind: "record-delete", target: { collection: "shots", record: "S2" },
+      fields: { id: "S2", name: "Desk", origin: "list", props: PROPS, status: "unshot" } }]);
+    const undone = reversed(run.a, removed, alice);
+    assert.equal(undone.effective, true);
+    assert.deepEqual(one(run.a, "shots", "S2"), SHOT);
+    assert.equal(reversed(run.a, undone.inverse, alice).effective, true);
+    assert.equal(one(run.a, "shots", "S2"), null);
+    assert.equal(reversed(run.a, person, alice).effective, true);
+    assert.equal(one(run.a, "people", "P1"), null);
+    run.queue.flush("rev");
+    assert.equal(one(run.b, "shots", "S2"), null);
+  } finally { run.close(); }
+});
+
+test("a shot with props: its creation is undone and redone with the same props", () => {
+  const run = recordReplicas();
+  try {
+    const alice = writer("Alice");
+    const created = command(run.a, createRecord("shots", "S2", { name: "Desk", origin: "list", props: PROPS }));
+    const undone = reversed(run.a, created, alice);
+    assert.equal(undone.effective, true);
+    assert.equal(one(run.a, "shots", "S2"), null);
+    assert.equal(reversed(run.a, undone.inverse, alice).effective, true);
+    assert.deepEqual(one(run.a, "shots", "S2"), SHOT);
+    run.queue.flush("D1");
+    assert.deepEqual(one(run.b, "shots", "S2"), SHOT);
+  } finally { run.close(); }
+});
+
+test("a shot with props: a change of its props is undone to the list it had and redone", () => {
+  const run = recordReplicas();
+  try {
+    const alice = writer("Alice");
+    command(run.a, createRecord("shots", "S2", { name: "Desk", origin: "list", props: PROPS }));
+    const changed = command(run.a, setRecord("shots", "S2", "props", [{ id: "p2", name: "Lamp" }, { id: "p3", name: "Rug" }]));
+    assert.deepEqual(changed.parts, [{ kind: "record-field", target: { collection: "shots", record: "S2" }, field: "props",
+      prior: { value: PROPS }, written: { value: [{ id: "p2", name: "Lamp" }, { id: "p3", name: "Rug" }] } }]);
+    const undone = reversed(run.a, changed, alice);
+    assert.equal(undone.effective, true);
+    assert.deepEqual(one(run.a, "shots", "S2"), SHOT);
+    assert.equal(reversed(run.a, undone.inverse, alice).effective, true);
+    assert.deepEqual((one(run.a, "shots", "S2") as typeof SHOT).props.map(prop => prop.key), ["p2", "p3"]);
+    run.queue.flush("D1");
+    assert.deepEqual((one(run.b, "shots", "S2") as typeof SHOT).props.map(prop => prop.key), ["p2", "p3"]);
+  } finally { run.close(); }
+});
+
+for (const [collection, key, fields, scope, value] of [["tags", "t_9", { cat: "prop", name: "Mug" }, "tag", "have"], ["shots", "S9", { name: "Desk", origin: "list" }, "shot", "shot"]] as const) {
+  test(`the undo of creating one of ${collection} is used up once another person set its status, and it stays on every copy`, () => {
+    const run = recordReplicas();
+    try {
+      const created = command(run.a, createRecord(collection, key, fields));
+      run.queue.flush("D1");
+      command(run.b, { kind: "status", id: "st", by: "Bob", target: { scope, record: key }, value, parents: [] });
+      run.queue.flush("D1");
+      usedUp(run.a, created, writer("Alice"));
+      run.queue.flush("D1");
+      for (const handle of [run.a, run.b]) {
+        assert.notEqual(one(handle, collection, key), null);
+        assert.equal(readSharedStatus(handle, { scope, record: ref(key) } as SharedStatusEvent["target"]), value);
+      }
+    } finally { run.close(); }
+  });
+
+  test(`one of ${collection} removed after its status was set comes back with that status`, () => {
+    const run = recordReplicas();
+    try {
+      command(run.a, createRecord(collection, key, fields));
+      command(run.a, { kind: "status", id: "st", by: "Alice", target: { scope, record: key }, value, parents: [] });
+      const removed = command(run.a, deleteRecord(collection, key));
+      assert.equal(reversed(run.a, removed, writer("Alice")).effective, true);
+      run.queue.flush("D1");
+      for (const handle of [run.a, run.b]) assert.equal(readSharedStatus(handle, { scope, record: ref(key) } as SharedStatusEvent["target"]), value);
+    } finally { run.close(); }
+  });
+}
+
+test("a field that is cleared is undone to the value it had and redone to nothing", () => {
+  const run = recordReplicas();
+  try {
+    const alice = writer("Alice");
+    command(run.a, createRecord("people", "P1", { name: "Alice", nick: "Al" }));
+    const cleared = command(run.a, { kind: "record-set", id: "clear-nick", by: "Alice", target: { collection: "people", record: "P1" }, field: "nick", clear: true });
+    assert.deepEqual(cleared.parts, [{ kind: "record-field", target: { collection: "people", record: "P1" }, field: "nick", prior: { value: "Al" }, written: { clear: true } }]);
+    assert.deepEqual(one(run.a, "people", "P1"), { id: "P1", name: "Alice" });
+    const undone = reversed(run.a, cleared, alice);
+    assert.equal(undone.effective, true);
+    assert.deepEqual(one(run.a, "people", "P1"), { id: "P1", name: "Alice", nick: "Al" });
+    assert.equal(reversed(run.a, undone.inverse, alice).effective, true);
+    assert.deepEqual(one(run.a, "people", "P1"), { id: "P1", name: "Alice" });
+    run.queue.flush("D1");
+    assert.deepEqual(one(run.b, "people", "P1"), { id: "P1", name: "Alice" });
+  } finally { run.close(); }
+});
 
 test("a gallery slot and a visual are refused by name and nothing is written", () => {
   const run = recordReplicas();

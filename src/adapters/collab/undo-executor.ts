@@ -1,5 +1,5 @@
 import type {
-  SharedContentRef, SharedFieldValue, SharedJsonFields, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
+  SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
   SharedTextAddress
 } from "../../core/collab/operations.ts";
 import type { SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
@@ -96,7 +96,17 @@ function fieldNow(handle: SharedDocumentHandle, part: Extract<SharedUndoPart, { 
 
 function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress): SharedJsonFields | null {
   const found = readSharedRecords(handle, target.collection).find(item => item.key === target.record);
-  return found ? sharedPreparedValue(found.fields) as SharedJsonFields : null;
+  if (!found) return null;
+  const fields: Record<string, SharedJsonValue> = { ...sharedPreparedValue(found.fields) as SharedJsonFields };
+  const scope = target.collection === "tags" ? "tag" : target.collection === "shots" ? "shot" : null;
+  // why: a status is set by events beside the fields, so the status the record shows is read with them.
+  if (scope) fields.status = readSharedStatus(handle, { scope, record: target.record as SharedContentRef } as SharedStatusEvent["target"]);
+  // why: props are read with their rank and written without it; a record is kept in the form a command writes.
+  if (Array.isArray(fields.props)) fields.props = fields.props.map(prop => {
+    const { rank: _rank, extra: _extra, ...written } = (prop as { readonly fields: SharedJsonFields }).fields;
+    return written;
+  });
+  return fields;
 }
 
 function recordNow(handle: SharedDocumentHandle, part: { readonly kind: string; readonly target: SharedRecordAddress }): SharedJsonFields | null {
@@ -307,6 +317,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (!was && is) parts.push({ kind: "record-create", target: operation.target, fields: is });
       else if (was && !is) parts.push({ kind: "record-delete", target: operation.target, fields: was });
       else if (was && is) for (const field of [...new Set([...Object.keys(was), ...Object.keys(is)])].sort()) {
+        // why: a status changes through its own operation and is undone by the status part.
+        if (field === "status" && (operation.target.collection === "tags" || operation.target.collection === "shots")) continue;
         const prior = recordField(was, field), written = recordField(is, field);
         if (!same(prior, written)) parts.push({ kind: "record-field", target: operation.target, field, prior, written });
       }

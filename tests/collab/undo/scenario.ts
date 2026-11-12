@@ -38,7 +38,7 @@ export interface UndoReplica {
   readonly record?: (action: UndoRecordAction, collection: SharedRecordCollection, key: string, value: string) => string | null;
 }
 
-export type UndoRecordAction = "create" | "set" | "delete";
+export type UndoRecordAction = "create" | "set" | "delete" | "status";
 
 export interface UndoWorld {
   readonly queue: { readonly flush: (order: DeliveryOrder) => void; readonly deliverFrom: (from: ReplicaName, order: DeliveryOrder) => void;

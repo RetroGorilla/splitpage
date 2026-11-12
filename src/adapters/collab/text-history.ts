@@ -57,10 +57,13 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
     const provenance = readSharedMarkProvenance(records, store instanceof Y.Map && store.has(SHARED_MARK_PROVENANCE_MARKER) ? [SHARED_MARK_PROVENANCE_MARKER] : []);
     const source = (identity: SharedContentRef): SharedContentRef => provenance?.source(identity) ?? identity;
     // why: a deleted character keeps its place in the shared text; only that order says where it and its marks belong.
-    const places = new Map<string, number>();
-    let place = 0;
+    const places = new Map<string, number>(), sequence: SharedTextIdentity[] = [];
     for (let item = found.text._start; item; item = item.right) {
-      for (let unit = 0; unit < item.length; unit++) places.set(key({ client: item.id.client, clock: item.id.clock + unit }), place++);
+      for (let unit = 0; unit < item.length; unit++) {
+        const identity = { client: item.id.client, clock: item.id.clock + unit };
+        places.set(key(identity), sequence.length);
+        sequence.push(identity);
+      }
     }
     const units: SharedHistoryUnit[] = [], alive = new Map<string, SharedHistoryUnit>();
     facade.units.forEach((unit, index) => {
@@ -101,6 +104,14 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
     };
     // why: a restored character is ordered by its own place, not by the place of the character it once restored.
     const order = (unit: SharedTextIdentity): number => places.get(key(unit)) ?? -1;
+    // why: a restored character is written directly after the deleted one, so the visible one before that is its neighbour.
+    const left = (unit: SharedTextIdentity): SharedHistoryUnit | null => {
+      for (let at = order(unit) - 1; at >= 0; at--) {
+        const other = sequence[at], visible = other && alive.get(key(other));
+        if (visible) return visible;
+      }
+      return null;
+    };
     const inside = (record: SharedResolvedMarkRecord["record"], at: number): boolean => {
       const start = readSharedAnchorUnit(record.start), end = readSharedAnchorUnit(record.end);
       const from = start && !start.after ? places.get(key(start)) : undefined, to = end?.after ? places.get(key(end)) : undefined;
@@ -113,8 +124,7 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
       follow,
       // why: a deletion someone already undid, or whose character is back, is not undone a second time.
       back: unit => restorations.has(key(unit)) || units.some(other => key(root(other.unit)) === key(root(unit))),
-      left: unit => units.filter(other => order(other.unit) < order(unit)).at(-1) ?? null,
-      root, order,
+      left, root, order,
       shown: unit => {
         const at = places.get(key(unit));
         if (at === undefined) return [];

@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runBufferTrace } from "./buffer-cases.ts";
-import { ADAPTER_BUFFER_LIMIT_RUNS, undoLimits } from "./limits.ts";
+import { ADAPTER_BUFFER_LIMIT_RUNS, runPendingUpdate, runTypedBesideRestored, undoLimits } from "./limits.ts";
 import { ADAPTER_WORLD, BOLD, MODEL_WORLD, TAG_P } from "./scenario.ts";
 import type { UndoReplica } from "./scenario.ts";
 
 const TESTS = ["stage1-records.test.ts", "limits.test.ts", "../../application/editing/undo/shared-undo.test.ts"]
   .map(file => readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
 
-test("the declared limits are Stage 1's seven and one of the shared document, each carried, resolved or waiting", () => {
+test("the declared limits are Stage 1's seven and two of the shared document, each carried, resolved or waiting", () => {
   assert.deepEqual(undoLimits.map(limit => [limit.id, limit.state]), [
     ["double-restore", "carried"],
     ["later-format", "resolved"],
@@ -17,9 +17,18 @@ test("the declared limits are Stage 1's seven and one of the shared document, ea
     ["status-redo-conflict", "resolved"],
     ["redone-recovery", "waits"],
     ["redone-mark-reversed", "resolved"],
-    ["pending-update", "resolved"],
-    ["insert-after-deleted-run", "carried"]
+    ["pending-update", "carried"],
+    ["insert-after-deleted-run", "carried"],
+    ["typed-beside-restored", "carried"]
   ]);
+});
+
+test("carried limit typed-beside-restored: the literal history fails in the declared way", () => {
+  const limit = undoLimits.find(candidate => candidate.id === "typed-beside-restored");
+  assert.ok(limit?.literal);
+  assert.throws(limit.literal.run, error => error instanceof Error && limit.literal !== undefined && limit.literal.failure.test(error.message));
+  assert.deepEqual(runTypedBesideRestored(ADAPTER_WORLD, false), ["abX", "aXb", "aXb", "aXb"]);
+  assert.deepEqual(runTypedBesideRestored(MODEL_WORLD, false), ["abX", "abX", "abX", "abX"]);
 });
 
 test("carried limit insert-after-deleted-run: the literal histories fail in the declared way", () => {
@@ -89,7 +98,14 @@ test("former limit redone-mark-reversed: a redone tag stays when the writer's un
   }
 });
 
-test("former limit pending-update: a copy given a writer's later update first reads as it was, and reads both once the earlier one arrives", () => {
+test("carried limit pending-update: the literal history fails in the declared way", () => {
+  const limit = undoLimits.find(candidate => candidate.id === "pending-update");
+  assert.ok(limit?.literal);
+  assert.throws(limit.literal.run, error => error instanceof Error && limit.literal !== undefined && limit.literal.failure.test(error.message));
+  assert.deepEqual(runPendingUpdate(false), ["b", "YbX", "YbX", "YbX", "YbX", "YbX"]);
+});
+
+test("pending-update: a later update that only inserts is held whole, and the copy takes a command meanwhile", () => {
   const world = ADAPTER_WORLD.make([{ id: "R1", text: "ab" }], ["A", "B", "C"]), b = world.replica("B"), c = world.replica("C");
   b.edit({ at: b.observe("R1", 2, 2), text: "X", command: "paste" });
   b.edit({ at: b.observe("R1", 3, 3), text: "Y", command: "paste" });

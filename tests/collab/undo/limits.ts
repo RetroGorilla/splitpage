@@ -3,6 +3,7 @@ import { runBufferTrace } from "./buffer-cases.ts";
 import type { UndoBufferTrace } from "./buffer-cases.ts";
 import { runDoubleDelete } from "./cases.ts";
 import { ADAPTER_WORLD } from "./scenario.ts";
+import type { UndoReplica, UndoWorldKind } from "./scenario.ts";
 import type { UndoViolation } from "./generator.ts";
 
 export interface UndoLimit {
@@ -13,6 +14,39 @@ export interface UndoLimit {
   readonly shown: string;
   readonly matches?: (violation: UndoViolation) => boolean;
   readonly literal?: { readonly run: () => unknown; readonly failure: RegExp };
+}
+
+function shownText(replica: UndoReplica): string {
+  return replica.snapshot().rows.map(row => row.characters.map(character => character.value).join("")).join("|");
+}
+
+export function runPendingUpdate(checked = true): string[] {
+  const world = ADAPTER_WORLD.make([{ id: "R1", text: "ab" }], ["A", "B", "C"]), b = world.replica("B"), c = world.replica("C"), held = [shownText(b)];
+  b.edit({ at: b.observe("R1", 2, 2), text: "X", command: "paste" });
+  held.push(shownText(b));
+  b.edit({ at: b.observe("R1", 0, 1), text: "Y", command: "paste" });
+  held.push(shownText(b));
+  const waiting = world.queue.pending.filter(message => message.to === "C").map(message => message.id);
+  world.queue.deliver(waiting[1] ?? "");
+  const early = shownText(c);
+  world.queue.deliver(waiting[0] ?? "");
+  const read = [early, shownText(c)];
+  world.queue.flush("D1");
+  read.push(...[world.replica("A"), b, c, world.fresh("A")].map(shownText));
+  if (checked && !held.includes(early)) throw new Error(`pending-update/C before the earlier update: read ${JSON.stringify(early)}, which no copy ever held`);
+  return read;
+}
+
+export function runTypedBesideRestored(kind: UndoWorldKind = ADAPTER_WORLD, checked = true): string[] {
+  const world = kind.make([{ id: "R1", text: "ab" }]), a = world.replica("A"), b = world.replica("B");
+  b.edit({ at: b.observe("R1", 1, 2), command: "cut" });
+  b.undo.undo();
+  a.edit({ at: a.observe("R1", 2, 2), text: "X", command: "paste" });
+  const typed = shownText(a);
+  world.queue.flush("D1");
+  const read = [typed, ...[a, b, world.fresh("A")].map(shownText)];
+  if (checked && read[1] !== typed) throw new Error(`typed-beside-restored/A after delivery: read ${JSON.stringify(read[1])}, having typed X after b`);
+  return read;
 }
 
 export const undoLimits: readonly UndoLimit[] = [
@@ -55,10 +89,11 @@ export const undoLimits: readonly UndoLimit[] = [
     shown: "former limit redone-mark-reversed: a redone tag stays when the writer's undo and redo arrive in reverse"
   },
   {
-    id: "pending-update", state: "resolved",
-    title: "A copy holding a writer's later update before the earlier one could not be read until the earlier one arrived",
-    history: "Three writers; one writer's second update is delivered to a copy before the first. The copy reads as it was, takes commands, and reads both once the earlier one arrives.",
-    shown: "former limit pending-update: a copy given a writer's later update first reads as it was, and reads both once the earlier one arrives"
+    id: "pending-update", state: "carried",
+    title: "A copy given a writer's later update before the earlier one shows the later one's deletions without its insertions",
+    history: "R1 ab, three writers. Bob types X at the end, then pastes Y over a. Carol receives the second update first and reads b, a text no copy ever had; when the first arrives she reads YbX.",
+    shown: "carried limit pending-update: the literal history fails in the declared way",
+    literal: { run: () => runPendingUpdate(), failure: /^pending-update\/C before the earlier update: read "b", which no copy ever held$/ }
   },
   {
     id: "insert-after-deleted-run", state: "carried",
@@ -66,6 +101,14 @@ export const undoLimits: readonly UndoLimit[] = [
     history: "R1 abcd, shared document only. Alice deletes bc, delivered. Bob types X where the gap between b and c was. Alice undoes: a b c X d, not a b X c d.",
     shown: "carried limit insert-after-deleted-run: the literal histories fail in the declared way",
     literal: { run: () => runBufferTrace("T01", "late-C", ADAPTER_WORLD), failure: /^T01 late-C undone\/A\.rows\[0\]\.characters\[2\]\.identity\.client: expected 2, got 1$/ }
+  },
+  {
+    id: "typed-beside-restored", state: "carried",
+    title: "Text typed directly after a character, while another writer deletes that character and undoes it unseen, can end before the character",
+    history: "R1 ab, shared document only. Bob deletes b and undoes, neither delivered. Alice types X after b. Delivered: a X b on every copy, not a b X.",
+    shown: "carried limit typed-beside-restored: the literal history fails in the declared way",
+    matches: violation => violation.check === "characters arrived in another order than this writer had seen",
+    literal: { run: () => runTypedBesideRestored(), failure: /^typed-beside-restored\/A after delivery: read "aXb", having typed X after b$/ }
   }
 ];
 

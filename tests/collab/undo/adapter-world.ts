@@ -174,10 +174,15 @@ export class AdapterReplica {
     const fields: Record<SharedRecordCollection, Record<string, unknown>> = {
       comments: { createdAt: 0, text: value, rowId: this.world.beats[0], field: "audioText" },
       replies: { id, commentId, createdAt: 0, text: value },
-      people: { name: value }, tags: { cat: "prop", name: value }, shots: { name: value, origin: "list" }, gallery: {}, visuals: {}
+      people: { name: value }, tags: { cat: "prop", name: value }, gallery: {}, visuals: {},
+      shots: { name: value, origin: "list", props: [{ id: "p" + value, name: "Prop " + value }, { id: "q", name: "Rug" }] }
     };
+    const scope = collection === "tags" ? "tag" : "shot", props = collection === "shots" && value.endsWith("b");
     const made = action === "create" ? { kind: "record-create", ...this.author(), target, fields: fields[collection] }
-      : action === "set" ? { kind: "record-set", ...this.author(), target, field: main, value } : { kind: "record-delete", ...this.author(), target };
+      : action === "status" ? { kind: "status", ...this.author(), target: { scope, record: key }, value, parents: readSharedStatusHeads(this.handle, { scope, record: ref(key) }) }
+      : action === "delete" ? { kind: "record-delete", ...this.author(), target }
+      : props ? { kind: "record-set", ...this.author(), target, field: "props", value: [{ id: "q", name: "Rug" }, { id: "p" + value, name: "Prop " + value }] }
+      : { kind: "record-set", ...this.author(), target, field: main, value };
     let reason: string | null = null;
     this.world.now += 2000;
     this.undo.perform(() => {
@@ -217,7 +222,9 @@ export class AdapterReplica {
   snapshot(): ModelSnapshot {
     const records: Record<string, string> = {};
     for (const collection of SHARED_UNDO_RECORDS) for (const item of readSharedRecords(this.handle, collection)) {
-      const fields = item.fields as Record<string, unknown>;
+      const fields = { ...item.fields as Record<string, unknown> };
+      if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(item.key) });
+      if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(item.key) });
       records[collection + "|" + item.key] = JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
     }
     return { records, rows: this.world.beats.map(beat => {

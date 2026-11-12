@@ -7,7 +7,7 @@ import type { UndoReplica, UndoWorldKind } from "./scenario.ts";
 export const UNDO_COMMANDS = ["insert", "type", "delete", "replace", "bold", "unbold", "tag", "untag", "status", "scalar"] as const;
 export const UNDO_REVERSALS = ["undo", "redo", "undo-redo"] as const;
 export const UNDO_DELIVERIES = ["deliver", "deliver-dup", "deliver-rev"] as const;
-export const UNDO_RECORD_COMMANDS = ["record-create", "record-set", "record-delete"] as const;
+export const UNDO_RECORD_COMMANDS = ["record-create", "record-set", "record-delete", "record-status"] as const;
 export const UNDO_RECORD_KEYS: readonly (readonly [SharedRecordCollection, readonly string[]])[] = [
   ["comments", ["C1"]], ["replies", ['["C1","r1"]']], ["people", ["P1"]], ["tags", ["t_1"]], ["shots", ["S1"]]
 ];
@@ -47,8 +47,10 @@ function pick<T>(items: readonly T[], r: number): T {
 }
 
 const RECORD_WEIGHTED: readonly UndoStepKind[] = [
-  ...WEIGHTED, "record-create", "record-create", "record-create", "record-create", "record-set", "record-set", "record-set", "record-delete", "record-delete"
+  ...WEIGHTED, "record-create", "record-create", "record-create", "record-create", "record-set", "record-set", "record-set", "record-delete", "record-delete",
+  "record-status", "record-status", "record-status"
 ];
+const RECORD_STATUSES: Partial<Record<SharedRecordCollection, readonly string[]>> = { tags: ["sourcing", "have", "returned"], shots: ["shot", "unshot"] };
 
 export function generateUndoHistory(seed: number, writers: 2 | 3, length = 40, records = false): UndoHistory {
   const next = random(seed * 2 + writers), three = (): [number, number, number] => [next(), next(), next()];
@@ -69,7 +71,8 @@ interface Format {
   writer: ReplicaName; adds: boolean; mark: string; from: string; to: string; written: string[]; generation: number;
   state: "applied" | "undone" | "gone"; fresh: boolean; undone: boolean;
 }
-interface Entry { format: Format | null }
+interface Moved { row: string; id: string; root: string; value: string }
+interface Entry { format: Format | null; back: Moved[]; record: { key: string; before: string | undefined; after: string | undefined } | null }
 
 function multiset(items: readonly string[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -81,8 +84,8 @@ function comparable(snapshot: ModelSnapshot): unknown {
   return [snapshot.records ?? {}, snapshot.rows.map(row => ({ ...row, characters: row.characters.map(({ root, value, marks }) => ({ root, value, marks })) }))];
 }
 
-function recordValue(stored: string | undefined): string | null {
-  const fields = new Map(stored === undefined ? [] : JSON.parse(stored) as [string, unknown][]), value = fields.get("text") ?? fields.get("name");
+function recordValue(stored: string | undefined, field?: string): string | null {
+  const fields = new Map(stored === undefined ? [] : JSON.parse(stored) as [string, unknown][]), value = field ? fields.get(field) : fields.get("text") ?? fields.get("name");
   return typeof value === "string" ? value : null;
 }
 
@@ -102,6 +105,64 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     return found;
   };
 
+  // why: the run keeps its own account of where each character came from and of the order characters were seen in,
+  // so what a reversal puts back is judged against what the run saw taken away, not against the copy's own account.
+  const origins = new Map<string, string>(), doubled = new Set<string>(), ranks = new Map<string, number>(), orders = new Map<string, Set<number>>();
+  const setters = new Map<string, Set<ReplicaName>>();
+  const origin = (id: string): string => origins.get(id) ?? id;
+  const rank = (root: string): number => {
+    const known = ranks.get(root) ?? ranks.size;
+    ranks.set(root, known);
+    return known;
+  };
+  // why: an order a writer saw and then changed by its own command is a defect; one changed by what arrived from
+  // someone who had not seen it is the declared limit of text written behind a whole deleted run.
+  const placed = (who: string, snapshot: ModelSnapshot, own: boolean): void => {
+    const ordered = orders.get(who) ?? new Set<number>();
+    orders.set(who, ordered);
+    for (const row of snapshot.rows) {
+      const roots = row.characters.map(character => origin(character.id));
+      for (const [root, held] of multiset(roots)) if (held > 1) doubled.add(root);
+      for (const character of row.characters) if (character.root !== origin(character.id)) violate("a copy names another origin for a character", `${who} ${row.id} ${character.id}`);
+      const single = roots.filter(root => !doubled.has(root)).map(rank), swapped: string[] = [];
+      single.forEach((left, index) => {
+        for (const right of single.slice(index + 1)) {
+          if (ordered.delete(right * 65536 + left)) swapped.push(left + ">" + right);
+          ordered.add(left * 65536 + right);
+        }
+      });
+      if (swapped.length) violate(own ? "a writer's own command reordered characters it had seen" : "characters arrived in another order than this writer had seen",
+        `${who} ${row.id} ${row.characters.map(character => character.value).join("")}`);
+    }
+  };
+  const moved = (before: ModelSnapshot, after: ModelSnapshot): { gone: Moved[]; came: Moved[] } => {
+    const list = (from: ModelSnapshot, other: ModelSnapshot): Moved[] => from.rows.flatMap((row, index) => {
+      const held = new Set(other.rows[index]?.characters.map(character => character.id));
+      return row.characters.filter(character => !held.has(character.id)).map(character => ({ row: row.id, id: character.id, root: origin(character.id), value: character.value }));
+    });
+    return { gone: list(before, after), came: list(after, before) };
+  };
+  const returned = (name: ReplicaName, direction: string, entry: Entry, before: ModelSnapshot, after: ModelSnapshot): void => {
+    const { gone, came } = moved(before, after), shown = new Set(before.rows.flatMap(row => row.characters.map(character => origin(character.id))));
+    const expected = entry.back.filter(unit => !shown.has(unit.root));
+    const same = expected.length === came.length && expected.every((unit, index) => unit.row === came[index]?.row && unit.value === came[index]?.value);
+    if (!same) violate("a reversal did not put back what its entry had taken away, in its order",
+      `${name} ${direction}: expected ${JSON.stringify(expected.map(unit => unit.value).join(""))}, got ${JSON.stringify(came.map(unit => unit.value).join(""))}`);
+    const world = new Map(after.rows.flatMap(row => row.characters.map(character => [character.id, character.root] as const)));
+    came.forEach((unit, index) => { origins.set(unit.id, same ? expected[index]?.root ?? unit.id : world.get(unit.id) ?? unit.id); });
+    entry.back = gone;
+    const record = entry.record, had = before.records ?? {}, has = after.records ?? {};
+    if (!record) return;
+    const [from, to] = direction === "undo" ? [record.after, record.before] : [record.before, record.after];
+    if (had[record.key] === from && has[record.key] !== to) violate("a reversal did not bring the record back as it was, fields and author",
+      `${name} ${direction} ${record.key}: expected ${to ?? "none"}, got ${has[record.key] ?? "none"}`);
+    const status = recordValue(had[record.key], "status"), set = setters.get(record.key + "|" + String(status));
+    // why: rule 39: a status someone else gave the record since is their change, and an undo leaves it standing.
+    if (direction === "undo" && status !== recordValue(from, "status") && status !== recordValue(has[record.key], "status") && set && !set.has(name)) {
+      violate("an undo replaced another writer's current record status", `${name} ${record.key} ${status}`);
+    }
+  };
+
   const foreign = (name: ReplicaName, replica: UndoReplica, before: ModelSnapshot, after: ModelSnapshot, undoing: boolean): void => {
     const ledger = ledgers.get(name);
     if (!ledger) throw new Error("No ledger for " + name);
@@ -116,7 +177,7 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
       if (!ledger.records.has(key)) violate("changed another writer's record", `${name} ${key}`);
       const held = recordValue(had[key]);
       // why: every writer writes values carrying its own letter, so the value an undo replaces or removes shows whose it was.
-      if (undoing && held !== null && held[1] !== name) violate("an undo replaced another writer's current record value", `${name} ${key} ${held}`);
+      if (undoing && held !== null && held[1] !== name && recordValue(has[key]) !== held) violate("an undo replaced another writer's current record value", `${name} ${key} ${held}`);
     }
     before.rows.forEach((row, index) => {
       const next = after.rows[index];
@@ -147,6 +208,7 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
 
   const reverse = (name: ReplicaName, replica: UndoReplica, direction: "undo" | "redo"): boolean => {
     const before = replica.snapshot(), sizes = replica.undo.sizes(), written = replica.written.length, other = direction === "undo" ? "redo" : "undo";
+    placed(name, before, false);
     const outcome = replica.undo[direction]();
     const now = replica.undo.sizes();
     if (!outcome.ok) {
@@ -171,7 +233,10 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     count("effective " + direction);
     if (now[other] !== sizes[other] + 1) violate("an effective reversal left no way back", `${name} ${direction}`);
     if (replica.written.length !== written + 1) violate("an effective reversal did not write exactly one update", `${name} ${direction}`);
-    foreign(name, replica, before, replica.snapshot(), direction === "undo");
+    const after = replica.snapshot();
+    if (entry) returned(name, direction, entry, before, after);
+    placed(name, after, true);
+    foreign(name, replica, before, after, direction === "undo");
     return true;
   };
 
@@ -181,8 +246,9 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     const [r0, r1, r2] = step.r, beat = pick(world.beats, r0), length = replica.length(beat);
     const from = Math.floor(r1 * (length + 1)), start = Math.min(Math.max(0, length - 1), Math.floor(r1 * length));
     const range = replica.observe(beat, start, Math.min(length, start + 1 + Math.floor(r2 * 3)));
-    const sizes = replica.undo.sizes(), serial = replica.undo.serial();
-    let format: Format | null = null;
+    const sizes = replica.undo.sizes(), serial = replica.undo.serial(), before = replica.snapshot();
+    let format: Format | null = null, changed: string | null = null;
+    placed(name, before, false);
     const roots = (): void => { for (const id of range.ids) ledger.characters.add(replica.rootOf(id)); };
     const typed = (text: string, removing: boolean): void => {
       if (removing) roots();
@@ -222,16 +288,22 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
         replica.scalar(beat, "lengthSeconds", value === null ? undefined : value + 10 * NAMES.indexOf(name));
         break;
       }
-      case "record-create": case "record-set": case "record-delete": {
+      case "record-create": case "record-set": case "record-delete": case "record-status": {
         if (!replica.record) throw new Error("This world has no records");
-        const action = step.op === "record-create" ? "create" : step.op === "record-set" ? "set" : "delete", held = replica.snapshot().records ?? {};
-        const all = UNDO_RECORD_KEYS.flatMap(([collection, keys]) => keys.map(key => ({ collection, key })));
+        const action = step.op === "record-create" ? "create" : step.op === "record-set" ? "set" : step.op === "record-delete" ? "delete" : "status";
+        const held = before.records ?? {};
+        const all = UNDO_RECORD_KEYS.flatMap(([collection, keys]) => keys.map(key => ({ collection, key }))).filter(item => action !== "status" || RECORD_STATUSES[item.collection]);
         // why: one draw in four is left as drawn, so a command the document refuses is reached too.
         const fitting = r1 < 0.25 ? [] : all.filter(item => (held[item.collection + "|" + item.key] === undefined) === (action === "create"));
         const { collection, key } = pick(fitting.length ? fitting : all, r0);
-        const reason = replica.record(action, collection, key, "v" + name + pick(["a", "b"], r2));
-        if (reason === null) { ledger.records.add(collection + "|" + key); count(step.op + " " + collection); }
+        const value = action === "status" ? pick(RECORD_STATUSES[collection] ?? [], r2) : "v" + name + pick(["a", "b"], r2);
+        const reason = replica.record(action, collection, key, value);
+        if (reason === null) { ledger.records.add(collection + "|" + key); count(step.op + " " + collection); changed = collection + "|" + key; }
         else count("record command refused: " + reason);
+        if (reason === null && action === "status" && replica.undo.serial() !== serial) {
+          const known = setters.get(changed + "|" + value) ?? new Set<ReplicaName>();
+          setters.set(changed + "|" + value, known.add(name));
+        }
         break;
       }
       default: throw new Error("Not a command: " + step.op);
@@ -240,7 +312,10 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     if (replica.undo.serial() !== serial && replica.undo.sizes().redo !== 0) violate("a command kept the redo stack", name);
     if (replica.undo.serial() !== serial) {
       stack(name).redo.length = 0;
-      if (replica.undo.sizes().undo > sizes.undo) stack(name).undo.push({ format });
+      const after = replica.snapshot();
+      if (replica.undo.sizes().undo > sizes.undo) stack(name).undo.push({ format, back: moved(before, after).gone,
+        record: changed === null ? null : { key: changed, before: before.records?.[changed], after: after.records?.[changed] } });
+      placed(name, after, true);
     }
     if (stack(name).undo.length !== replica.undo.sizes().undo) violate("the entries are not one per command", name);
   };
@@ -273,8 +348,7 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
       } else command(name, replica, step);
     } catch (error) {
       violate("threw", `${name} ${step.op}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+    }  }
 
   at = history.steps.length;
   world.queue.flush("D1");
@@ -283,6 +357,7 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
   const copies = [...present, world.fresh("A")].map(replica => replica.snapshot());
   const first = JSON.stringify(copies[0]);
   copies.forEach((copy, index) => { if (JSON.stringify(copy) !== first) violate("copies differ", `copy ${index}`); });
+  present.forEach((replica, index) => { placed(replica.name, copies[index] ?? { rows: [] }, false); });
   for (const row of copies[0]?.rows ?? []) {
     for (const [root, held] of multiset(row.characters.map(character => character.root))) if (held > 1) violate("restored twice", `${row.id} ${root} x${held}`);
     if (new Set(row.characters.map(character => character.id)).size !== row.characters.length) violate("one identity twice", row.id);

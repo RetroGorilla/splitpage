@@ -75,7 +75,9 @@ export function prepareSharedTextRestore(operation: SharedTextRestore, view: Sha
           { type: "add", mark: found.mark, born: "inserted" }));
       });
       for (const mark of marks) records.push(mark);
-      edits.push({ target: plan.target, edit: typeof content === "string" ? { type: "text", at: offset, value: content } : { type: "atom", at: offset, value: content }, marks });
+      const beside = { client: original.client, clock: original.clock + length - 1 };
+      edits.push({ target: plan.target, marks,
+        edit: typeof content === "string" ? { type: "text", at: offset, value: content, beside } : { type: "atom", at: offset, value: content, beside } });
       previous = { left: unit.left, end: offset + length };
     });
     const copied = records.length > edits.length;
