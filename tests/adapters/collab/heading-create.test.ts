@@ -14,6 +14,7 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 
 const runtime = createFlowLoadRuntime();
 const source = { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] };
@@ -40,7 +41,7 @@ function setup(copies: 2 | 3) {
 function visible(handle: SharedDocumentHandle) {
   const { document, recovery } = projectSharedDocumentWithRecovery(handle), loaded = runtime.load(document);
   return { rows: loaded.rows.map(row => [shown(row.id), row.audioText]),
-    sections: (loaded.sections ?? []).map(scene => [shown(scene.id), scene.name, shown(scene.firstSceneId)]),
+    sections: ((loaded.sections ?? []) as DocumentScene[]).map(scene => [shown(scene.id), scene.name, shown(scene.firstSceneId)]),
     recovery: recovery.map(entry => entry.kind === "removed-heading" || entry.kind === "scene-with-no-beats" ? [entry.kind, shown(String(entry.heading.id)), entry.heading.name] : [entry.kind]) };
 }
 

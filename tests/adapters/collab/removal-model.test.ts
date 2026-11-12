@@ -14,6 +14,7 @@ import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
+import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 
 const identities = [
   { beat: "structure_1_007200310037_beat_0", removal: "structure_1_007200310037005f00720065006d006f00760065_removal_0", visual: "structure_1_007200310037_visual_0", a: "structure_1_0061_removal_0" },
@@ -171,7 +172,7 @@ test("seeded heading creations agree with a literal model through typing, a riva
       const expected = { rows: visible, sections, recovery: recovery.map(entry => JSON.stringify(entry)).sort() };
       agree("seed=" + seed, order, handles, handle => {
         const projected = projectSharedDocumentWithRecovery(handle), loaded = runtime.load(projected.document);
-        const result = { rows: loaded.rows.map(row => [show(row.id), row.audioText]), sections: (loaded.sections ?? []).map(scene => [show(scene.id), scene.name, show(scene.firstSceneId)]),
+        const result = { rows: loaded.rows.map(row => [show(row.id), row.audioText]), sections: ((loaded.sections ?? []) as DocumentScene[]).map(scene => [show(scene.id), scene.name, show(scene.firstSceneId)]),
           recovery: projected.recovery.map(entry => JSON.stringify(entry.kind === "removed-beat" ? [entry.kind, show(String(entry.row.id)), ""] : entry.kind === "removed-heading" || entry.kind === "scene-with-no-beats"
             ? [entry.kind, show(String(entry.heading.id)), entry.heading.name] : [entry.kind])).sort() };
         try { assert.deepEqual(result, expected); } catch (error) { violations.add(String(error)); }
