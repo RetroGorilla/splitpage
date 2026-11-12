@@ -24,6 +24,11 @@ An idle registration indexes cleaned keys and record ids in the beat, segment,
 heading, visual, gallery and registry roots, plus stored order names and inline
 b-roll ids. Native updates refresh only changed records. Text events patch added
 and deleted embeds from the transaction's before/after clocks and deletion ranges.
+Both ranges use the package entry's `iterateDeletedStructs`, with a `createDeleteSet`
+for additions; no store lookup or binary-search helper is used. Yjs 13.6.33 offers
+no event carrying removed embed values without reading the full text delta. One
+guarded function owns the remaining struct representation dependency; its named
+contract test pins the version, returned values and observer-before-GC order.
 They inspect neither the existing text item chain nor a text delta. Ordinary string
 insertions do not rebuild reservations. Reference counts remove deleted reservations, so
 an encoded late joiner has the same index. Prepare uses only cached lookups and a

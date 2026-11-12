@@ -4,11 +4,11 @@ import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
 import { readProjectionInlineValue } from "./projection-reader.ts";
 import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
-import { visitSharedIdentityStructs } from "./identity-structs.ts";
+import { readSharedIdentityEmbeds } from "./identity-structs.ts";
 
 let reservations: WeakMap<SharedDocumentHandle, SharedStructureIdentityReservations> | null = null;
 
-export function observeSharedStructureIdentities(handle: SharedDocumentHandle): SharedStructureIdentityReservations {
+export function observeSharedStructureIdentities(handle: SharedDocumentHandle, inspect?: () => void): SharedStructureIdentityReservations {
   const state = collabState(handle); assertSharedDocumentIdle(state);
   reservations ??= new WeakMap();
   const previous = reservations.get(handle); if (previous) return previous;
@@ -25,10 +25,9 @@ export function observeSharedStructureIdentities(handle: SharedDocumentHandle): 
     const changes = (transaction: Y.Transaction) => {
       let known = transactions.get(transaction); if (known) return known;
       const result: { text: Y.Text; identity: string; delta: 1 | -1 }[] = [];
-      visitSharedIdentityStructs(transaction, (item, delta) => {
-        if (!(item.parent instanceof Y.Text) || !(item.content instanceof Y.ContentEmbed)) return;
-        const identity = atom(item.content.embed); if (identity !== null) result.push({ text: item.parent, identity, delta });
-      });
+      for (const change of readSharedIdentityEmbeds(transaction, inspect)) {
+        const identity = atom(change.value); if (identity !== null) result.push({ text: change.text, identity, delta: change.delta });
+      }
       known = result; transactions.set(transaction, known); return known;
     };
     const update = (key: string) => {

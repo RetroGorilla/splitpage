@@ -23,7 +23,6 @@ import { insertBeats, typeWithMarks, beatPos } from "../../../src/core/flow/flow
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { deliveryReplica, createMonitoredSharedDocument } from "./helpers.ts";
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
-import { visitSharedIdentityStructs } from "../../../src/adapters/collab/identity-structs.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 
@@ -309,16 +308,17 @@ test("seeded creation and native mutation checkpoints compare maintained reserva
 });
 
 test("one character or embed patches reservations without inspecting the existing item chain or reading a delta", t => {
-  const counts: number[] = [], visits: number[] = [];
-  for (const existing of [1, 2048]) {
+  const counts: number[] = [], visits: number[] = [], kinds = ["character insert", "character delete", "embed insert", "embed delete"] as const;
+  for (const existing of [1, 2048]) for (const kind of kinds) {
     const set = replicas(2, { rows: [{ id: "R1", audioText: "" }] });
     try {
       const state = collabState(set.a), text = (state.roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
-      for (let index = 0; index < existing; index++) transactSharedDocument(set.a, "local-command", () => { text.insert(0, "a"); });
-      const index = observeSharedStructureIdentities(set.a); let inspections = 0, observing = false, visited = 0;
-      state.doc.on("beforeObserverCalls", () => { observing = true; }); state.doc.on("afterTransaction", transaction => {
-        observing = false; visitSharedIdentityStructs(transaction, () => { visited++; });
+      for (let index = 0; index < existing; index++) transactSharedDocument(set.a, "local-command", () => {
+        if (kind === "embed delete" && index === existing - 1) text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); else text.insert(0, "a");
       });
+      let inspections = 0, observing = false, visited = 0;
+      const index = observeSharedStructureIdentities(set.a, () => { visited++; });
+      state.doc.on("beforeObserverCalls", () => { observing = true; }); state.doc.on("afterTransaction", () => { observing = false; });
       let items = 0;
       for (let item = text._start; item; item = item.right) {
         items++;
@@ -326,12 +326,14 @@ test("one character or embed patches reservations without inspecting the existin
       }
       assert.equal(items, existing);
       const delta = text.toDelta; text.toDelta = () => { if (observing) throw new Error("Typing read the full text delta"); return delta.call(text) as unknown[]; };
-      transactSharedDocument(set.a, "local-command", () => { text.insert(0, "X"); }); counts.push(inspections); visits.push(visited);
-      transactSharedDocument(set.a, "local-command", () => { text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); }); assert.equal(index.has("probeAtom"), true);
-      transactSharedDocument(set.a, "local-command", () => { text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); });
-      transactSharedDocument(set.a, "local-command", () => { text.delete(0, 1); }); assert.equal(index.has("probeAtom"), true);
-      transactSharedDocument(set.a, "local-command", () => { text.delete(0, 1); }); assert.equal(index.has("probeAtom"), false);
+      visited = 0; inspections = 0;
+      transactSharedDocument(set.a, "local-command", () => {
+        if (kind === "character insert") text.insert(0, "X");
+        else if (kind === "embed insert") text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); else text.delete(0, 1);
+      }); counts.push(inspections); visits.push(visited);
+      assert.equal(index.has("probeAtom"), kind === "embed insert");
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [0, 0]); assert.deepEqual(visits, [1, 1]); t.diagnostic(JSON.stringify({ existingItems: [1, 2048], oldItemInspections: counts, changedStructVisits: visits }));
+  assert.deepEqual(visits, [1, 1, 1, 1, 1, 1, 1, 1]); assert.deepEqual(counts, [0, 1, 0, 1, 0, 1, 0, 1]);
+  t.diagnostic(JSON.stringify({ existingItems: [1, 2048], kinds, oldItemInspections: counts, productionStructVisits: visits }));
 });
