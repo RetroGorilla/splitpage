@@ -59,7 +59,9 @@ type SharedBrollCell = { readonly key: string; readonly units: readonly SharedPr
 function projectSharedBrollCells(cache: SharedProjectionCache, cells: readonly SharedBrollCell[], shotIds: readonly string[]): Map<string, readonly SharedProjectionUnit[]> {
   const kept = cells.map(value => ({ key: value.key, units: cache.array(["broll-input", value.key], value.units) }));
   const rewrites = assignSharedBrollKeys(kept.map(value => ({ key: value.key,
-    atoms: cache.read(["broll-atoms", value.key], [value.units], () => readSharedBrollAtoms(value.units), "broll-scan") })), shotIds);
+    atoms: cache.read(["broll-atoms", value.key], [value.units], () => {
+      cache.counted("broll-scan", value.key, value.units.length); return readSharedBrollAtoms(value.units);
+    }) })), shotIds);
   return new Map(kept.map((value, at) => {
     const rewrite = rewrites[at];
     return [value.key, !rewrite?.replaced.length ? value.units : cache.read(["broll-cell", value.key],
