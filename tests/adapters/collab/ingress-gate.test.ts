@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applySharedUpdate, destroySharedDocument, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import * as Y from "yjs";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { collabState, SharedExecutionWriteError } from "../../../src/adapters/collab/state.ts";
+import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import { insertSharedHtml } from "../../../src/adapters/collab/text-import.ts";
 import { collabTextTarget, createCollabText } from "../../../src/adapters/collab/text-target.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -72,6 +74,49 @@ test("received updates that arrive during a notification are held and applied in
     assert.equal(updates, 3);
     assert.deepEqual(gate(run.b), [0, 0, 0]);
   } finally { run.close(); }
+});
+
+test("a reservation index observes held updates in order and agrees with a fresh index after the drain", () => {
+  const run = recordReplicas(2, SOURCE), fresh = createMonitoredSharedDocument();
+  try {
+    const updates: Uint8Array[] = [], source = collabState(run.a), index = observeSharedStructureIdentities(run.b);
+    const text = (source.roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
+    const collect = observeSharedUpdates(run.a, update => { updates.push(update); });
+    transactSharedDocument(run.a, "local-command", () => {
+      source.roots.people.set("first-person", new Y.Map<unknown>([["id", "[First]"]]));
+      source.roots.order.push(["[FirstOrder]"]);
+      text.insertEmbed(0, { k: "[FirstAtom]", label: "B-roll:" });
+    });
+    transactSharedDocument(run.a, "local-command", () => {
+      source.roots.people.delete("first-person");
+      source.roots.people.set("second-person", new Y.Map<unknown>([["id", "[Second]"]]));
+      source.roots.order.delete(source.roots.order.length - 1, 1);
+      source.roots.order.push(["[SecondOrder]"]);
+      text.delete(0, 1);
+      text.insertEmbed(0, { k: "[SecondAtom]", label: "B-roll:" });
+    });
+    collect();
+    assert.equal(updates.length, 2);
+    const [first, second] = updates;
+    assert.ok(first && second);
+    const identities = ["first-person", "First", "FirstOrder", "FirstAtom", "second-person", "Second", "SecondOrder", "SecondAtom", "R1", "R2", "missing"];
+    const seen: [number, boolean[]][] = [], held: unknown[] = [];
+    const stop = observeSharedTransactions(run.b, () => {
+      if (!held.length) held.push([applySharedUpdate(run.b, second), collabState(run.b).ingress.held.length]);
+      seen.push([readSharedRevision(run.b), identities.map(identity => index.has(identity))]);
+    });
+    assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
+    stop();
+    assert.deepEqual(held, [[{ ok: true }, 1]]);
+    assert.deepEqual(seen, [
+      [2, [true, true, true, true, false, false, false, false, true, true, false]],
+      [3, [false, false, false, false, true, true, true, true, true, true, false]]
+    ]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
+    assert.deepEqual(applySharedUpdate(fresh, encodeSharedState(run.b)), { ok: true });
+    const rebuilt = observeSharedStructureIdentities(fresh);
+    assert.deepEqual(identities.map(identity => index.has(identity)), identities.map(identity => rebuilt.has(identity)));
+  } finally { run.close(); destroySharedDocument(fresh); }
 });
 
 test("receiving U1 then queuing duplicate U1 and U2 notifies revisions [1, 1, 2]", () => {
