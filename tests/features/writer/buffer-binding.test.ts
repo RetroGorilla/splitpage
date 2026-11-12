@@ -80,6 +80,7 @@ test("inline markdown reaches its command port only after native typing commits 
     assert.equal(page.surface.paintedBase("R1")?.text, "**ab**");
     assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
     page.surface.paint();
+    return null;
   });
   try {
     page.native(5, 5, "*");
@@ -197,7 +198,7 @@ for (const type of ["deleteByCut", "deleteByDrag"]) {
 
 for (const [type, at, command] of [["deleteContentBackward", 0, "backspace"], ["deleteContentForward", 4, "delete"]] as const) {
   test(`native ${type} at the beat boundary enters the existing ${command} command without opening a buffer`, () => {
-    const commands: string[] = [], page = bufferedWriter("abcd", true, name => { commands.push(name); });
+    const commands: string[] = [], page = bufferedWriter("abcd", true, name => { commands.push(name); return null; });
     try {
       assert.equal(page.native(at, at, "", undefined, type), false);
       assert.deepEqual(commands, [command]);
@@ -214,6 +215,7 @@ test("the mounted clipboard cut settles typing and held ingress before it captur
     commands.push(name);
     assert.equal(page.text(), "XabZ");
     assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
+    return null;
   }, { mount: handlers => { mounted.handlers = handlers; return () => {}; },
     copy: (range, _data, cut) => { copied.push([range.anchor.offset, range.head.offset, cut, page.text()]); },
     paste: () => undefined });
@@ -239,6 +241,7 @@ test("the root clipboard paste settles typing and held ingress before planning a
     assert.equal(page.text(), "XabZ");
     assert.equal(page.surface.selection()?.head.offset, 4);
     assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
+    return null;
   });
   try {
     page.start(2); page.native(2, 2, "Z", undefined, "insertCompositionText");

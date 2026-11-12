@@ -13,7 +13,7 @@ import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 
 export function bufferedWriter(text = "ab", sourceReady = true,
-  command?: (...args: Parameters<SurfacePorts["commit"]>) => ReturnType<SurfacePorts["commit"]> | void, clipboard?: SurfacePorts["clipboard"]) {
+  command?: SurfacePorts["commit"], clipboard?: SurfacePorts["clipboard"]) {
   const h = new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }]), a = sharedHarness(adapterReplica(h.a));
   const root = writerPage(), { effects, reports, missing } = fakeWriterBufferEffects();
   const notices: string[] = [];
@@ -29,7 +29,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: () => false, operations: { id: "native_command", by: "Alice" } },
     decode: fromHtml, storedHtml: html => html, moveBeat: () => {}, editingBlocked: () => false,
     syncBeat: () => { throw new Error("Shared native input reached whole-field synchronization"); },
-    commit: (name, operation, before) => { if (command) return command(name, operation, before) ?? null; throw new Error("Shared native input reached the standalone model command"); },
+    commit: (name, operation, before) => { if (command) return command(name, operation, before); throw new Error("Shared native input reached the standalone model command"); },
     undo: () => {}, notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
     settings: () => ({ enter: "double", tick: "delete", gapTyping: "here", markdown: true }), openFind: () => {}, plainVisual: () => ""
   });
