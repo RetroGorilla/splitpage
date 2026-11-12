@@ -5,6 +5,9 @@ plain validated data in core; adapters read native segment heads, embedded
 boundaries, mark records, joins and removal flags. Reading changes no shared
 bytes, state vector, revision or transaction count. No executor or cache is added.
 
+Production ordinary/prefix splits and blank creation are covered by the
+[split projection rules](stage-2-split-projection.md), including malformed boundary recovery.
+
 ## Answers and literal tests
 
 Source lines refer to [Stage 0 answers](stage-0/8-schema-hypotheses.md#projection-answers-for-merged-states-both-candidates).
@@ -71,7 +74,7 @@ status across writers, with a literal empty declared-limit table. A second
 generator checks arbitrary join/removal/retirement values, termination, text
 conservation and encoded reload agreement.
 
-Gallery folding/overflow and duplicate b-roll keys remain the record group.
-This step assembles distinct gallery items without applying those later limits.
+Gallery folding/overflow and duplicate b-roll keys are covered by the
+[record projection rules](stage-2-projection-records.md).
 Semantic undo of one side of a cycle is not covered; the undo package decides it.
 Raw flag-clearing tests assert projection behavior, not an undo command.

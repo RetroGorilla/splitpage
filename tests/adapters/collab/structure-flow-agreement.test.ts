@@ -14,6 +14,8 @@ import { startParagraph, startBeat, selectionToOwnBeat, beatPos, enterInHeading,
 import type { FlowDoc, FlowPorts } from "../../../src/core/flow/flow.ts";
 import { explode } from "../../../src/core/text/edits.ts";
 
+const structurePorts = { cells: createFlowLoadRuntime().cells };
+
 function readRows(handle: Parameters<typeof collabState>[0], aliases: ReadonlyMap<string, string>) {
   const { roots } = collabState(handle), rows: { id: string; text: string }[] = [];
   for (const segmentId of roots.order.toArray()) {
@@ -50,7 +52,7 @@ test("split vocabulary agrees with the flow applier for complete emitted split l
       const ops = outcome.ops ?? [], handle = createMonitoredSharedDocument(), aliases = new Map<string, string>();
       try {
         collabState(handle).doc.clientID = 101; hydrateSharedDocument(handle, source);
-        registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle);
+        registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
         for (const op of ops) if (op.kind === "split" || op.kind === "split-before" || op.kind === "segment-create") {
           aliases.set(JSON.stringify(["structure", "101", op.id, "beat"]), op.beat);
           if (op.kind === "split") splits++; else if (op.kind === "split-before") beforeSplits++; else creates++;
@@ -73,7 +75,7 @@ test("a heading split retains its native characters and accepts its following an
     const doc: FlowDoc = { rows: source.rows, sections: source.sections, comments: [] };
     const outcome = enterInHeading(doc, headingPos("H1", 2), { ...rt.ports, newId: () => "fresh", operations: { id: "heading", by: "Writer" } });
     assert.ok(outcome && "rows" in outcome && outcome.ops);
-    collabState(handle).doc.clientID = 101; hydrateSharedDocument(handle, source); registerSharedSplitHandlers(handle);
+    collabState(handle).doc.clientID = 101; hydrateSharedDocument(handle, source); registerSharedSplitHandlers(handle, structurePorts);
     assert.deepEqual(executeSharedOperations(handle, outcome.ops, { base: readSharedRevision(handle) }), { ok: true });
     const id = JSON.stringify(["structure", "101", "heading:0", "beat"]), expected = applyFlowOperations(doc, outcome.ops, rt.cells);
     assert.deepEqual(readRows(handle, new Map([[id, "fresh"]])), [{ id: "H1", text: expected.sections?.[0]?.name }, ...expected.rows.map(row => ({ id: row.id, text: row.audioText }))]);

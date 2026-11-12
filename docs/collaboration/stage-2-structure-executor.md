@@ -1,23 +1,72 @@
 # Structural operation execution
 
-`registerSharedSplitHandlers(handle)` registers split, split-before and blank
-segment creation through the operation entry. No application caller registers it.
+`registerSharedSplitHandlers(handle, { cells })` registers split, split-before and
+segment creation through the operation entry. `cells` is the app's cell decoder,
+called during preparation only. No application caller registers these handlers.
 The executor entry, preparation view and execution guard are unchanged.
 
-New beat and segment keys are JSON arrays containing `structure`, the live writer,
-the command id and the role. Supplied beat, segment and boundary names never become
+New beat, segment, visual and gallery keys are JSON arrays containing `structure`,
+the live writer, the command id and the role (and the gallery slot index).
+Supplied beat, segment and boundary names never become
 new shared text keys. A per-call alias table translates later operations in the
 same list, including scalar repairs. Reusing an occupied identity refuses the
 whole list. Stable-identity validation does not normalize identifiers.
 
-A segment creation currently accepts empty narration and visual cells. Nonempty
-initial cells or media fields return `unsupported-beat-field`; they are never
-dropped from an accepted command. Full initial-content creation is a further cut
-before the other structural handlers. This extra cut is needed because the flow
-vocabulary also uses segment-create for rich inserted rows, beyond blank Enter.
-Logical neighbours split across a physical segment return `partial-segment-gap`;
-heading-bound gaps return `heading-placement-required` until heading placement is
-implemented. Prefix splits accept narration; a heading prefix returns
+A creation resolves logical neighbours to their current spans. Within a physical
+segment it inserts a beat boundary and reuses the existing text and mark store;
+between containers it creates a segment and inserts it in the outer order. This
+lets Enter create a blank beat between the halves of an earlier split. Inserting
+before a scene's first beat stays after its existing heading; the app's following
+scalar operation repairs firstSceneId. Creation does not copy existing characters.
+
+The app emits a pasted group from last row to first. A forward neighbour can still
+be absent during preparation; the available neighbour determines placement, or a
+null right neighbour means document end, matching the independent flow applier.
+Two existing neighbours in reversed order refuse the entire list.
+
+The creation emitter records scene intent: `before` joins the right neighbour's
+scene, while `after` stays on the left side of any intervening heading. With no
+left neighbour yet, `after` falls back before the right neighbour's preceding
+heading-only segments; it does not cross a segment containing narration. When the
+right beat is inline under a heading, that heading's whole segment is the outer
+insertion point. The order cache supplies that position without rereading the
+whole order. This also covers reverse-emitted groups and insertion before the
+first heading. Scene repairs are supplied to the emitter before describing a
+creation; the executor does not infer intent from later scalar operations.
+
+| Emitter | Affinity and scene intent |
+| --- | --- |
+| replaceRange repair | before when the repaired row joins its right neighbour's repaired scene, otherwise after |
+| startParagraph end, startBeat end, blankAfter | before within the same scene; after at a scene or script end |
+| startParagraph beginning, blankBefore | before, using the repaired scene anchor to join the right beat |
+| enterInHeading at zero | after, placing narration before that heading |
+| finalizeHeading empty retained beat | before within the right scene, otherwise after; heading-finalize subsequently claims the retained beat |
+| finalizeHeading existing-scene repair | before within the repaired scene, otherwise after |
+| insertBeats | before when the right neighbour belongs to the insertion scene, otherwise after; heading offset zero stays before the heading |
+| pasteFlowRange empty/header placeholders | before within the repaired scene, otherwise after; heading-create subsequently claims new heading placeholders |
+| splitBeat, selectionToOwnBeat, insertBeats narration split | before a right text unit, after the last left unit; the text address stays inside the source beat's scene |
+| enterInHeading and insertBeats heading-tail split | before a right heading unit, after the last left unit; the resulting beat remains under that heading |
+
+These are emitted-list changes only: standalone rows and sections are unchanged.
+The independent flow applier honours the same affinity when choosing a row gap.
+Literal tests compare the heading preceding every shared row at scene and script
+edges, including concurrent creation and encoded late joins. The app agreement
+helper also compares shared scene anchors with the app and independent applier.
+
+Initial narration and visual runs use the existing text and mark preparation.
+Every created beat gets an independent visual text/store; `beats[id].visual` names
+that component, whose own `beat` remains its origin. Gallery records retain slot
+order, picture metadata and keyed links. Complete stamps use `stamp`; other row
+fields, including incomplete stamp fields, retain their presence in `extra`.
+The app also emits visual/gallery record-create observations for pasted rows. The
+record executor checks these against the same call's prepared content and aliases
+their supplied names; it does not create a second text or attachment. A conflicting
+observation refuses the whole list. Later calls use native identities from paint.
+
+Legacy image data URLs and gallery links containing device-local locations refuse
+the whole list; duplicate gallery links also refuse `invalid-initial-gallery`.
+Ingesting local bytes remains a caller responsibility. Prefix
+splits accept narration; a heading prefix returns
 `invalid-split-target`. No flow emitter produces that heading-prefix operation.
 
 Splitting inserts one boundary into the existing text and keeps the original
@@ -47,17 +96,21 @@ index data. The changing command still has one transaction and one delivered upd
 Text creation prepares absence checks for both text and mark store. Its guarded
 apply writer attaches both inside the entry's existing transaction, sharing the
 attachment primitive with idle-only creation. New virtual empty texts can accept
-later text operations in the same list. Every apply closure retains only its
+later narration and visual edits in the same list. Every apply closure retains only its
 deeply frozen description, including positions, payloads, map writes and placement.
 
 The structure tests use an independent reader, the strict replica comparison and
 the copied T05 two-splits oracle with original character identities and both caret
-anchors. The seeded flow test compares complete emitted lists with the independent
-flow applier. Production structural projection is not used for these comparisons;
+anchors. The creation model covers the three creation forms with two and three
+writers, reordered/duplicate delivery and an encoded late joiner. It also checks
+gallery payloads and the original character identities. Its complete emitted lists
+are compared with the independent flow applier; a separate rich batch matrix covers
+marks, atoms, metadata and multiple rows at the start, middle and end of narration.
+Production structural projection is not used for these comparisons;
 its interpretation belongs to the projection lane.
 
 Join, removal, restoration, heading creation/removal/finalization, movement,
 recovery placement and undo remain later cuts. In particular, the heading-name
 `cappedText` rule, imported-layout movement and the remaining structural Stage 1
-histories are still open here. Nothing in this change edits standalone flow,
-application, features, bootstrap, exports or browser behaviour.
+histories are still open here. Standalone flow results, application, features,
+bootstrap, exports and browser behaviour remain unchanged.

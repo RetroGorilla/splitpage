@@ -34,6 +34,11 @@ export function sharedTextLocation(view: SharedPreparationView, raw: SharedTextA
     if (raw.owner !== raw.segment || view.get(["meta", "docId"]) !== raw.owner) throw new SharedTextPreparationError("missing-target");
     parent = ["meta"];
   } else if (raw.field === "visualText") {
+    if (raw.segment === raw.owner && view.kind(["visuals", segment]) !== "map") {
+      const stored = view.get(["beats", raw.owner, "visual"]);
+      if (typeof stored !== "string" || !stored || !isStableSharedIdentity(stored)) throw new SharedTextPreparationError("missing-target");
+      segment = stored;
+    }
     parent = ["visuals", segment];
     if (view.get([...parent, "beat"]) !== raw.owner) throw new SharedTextPreparationError("missing-target");
   } else {

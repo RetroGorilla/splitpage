@@ -6,6 +6,9 @@ import type { SharedProjectionBeatStructure } from "../../core/collab/projection
 import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
 import type { SharedInlineValue } from "../../core/collab/operations.ts";
 import { readTextInsert } from "../../core/collab/read-operation.ts";
+import { readSharedStructureBoundary } from "./structure-boundary.ts";
+import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
+import type { SharedProjectionBoundary, SharedProjectionStream } from "../../core/collab/projection/blocks.ts";
 
 function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
@@ -20,10 +23,12 @@ export function readProjectionFields(raw: unknown, scope: "document" | "beat" | 
   if (!(raw instanceof Y.Map)) return null;
   const output: [string, unknown][] = [];
   const fields = scope === "document" ? ["fileTitle", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "extra"]
-    : scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra"] : ["extra"];
+    : scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra", "segment", "splitBy"] : ["extra"];
   for (const key of fields) {
     const value = sharedJson(raw.get(key));
-    if (key === "stamp" ? retainedStamp(value) : scalarFieldAllowed(scope, key, value, false)) output.push([key, value]);
+    const valid = key === "segment" || key === "splitBy" ? typeof value === "string" && (key !== "segment" || value.length > 0) && isStableSharedIdentity(value)
+      : key === "stamp" ? retainedStamp(value) : scalarFieldAllowed(scope, key, value, false);
+    if (valid) output.push([key, value]);
   }
   if (scope === "document") {
     const id: unknown = raw.get("docId"), schema: unknown = raw.get("schema"), capture = bag(raw.get("capture"));
@@ -42,11 +47,9 @@ export function readProjectionFields(raw: unknown, scope: "document" | "beat" | 
   }
   return Object.fromEntries(output);
 }
-export function readProjectionHead(raw: unknown): { readonly kind: "b" | "h"; readonly id: string } | null {
-  const head = bag(raw), keys = Object.keys(head), kind = keys[0];
-  if (keys.length !== 1 || kind !== "b" && kind !== "h") return null;
-  const id = head[kind];
-  return typeof id === "string" && id.length > 0 && isStableSharedIdentity(id) ? { kind, id } : null;
+export function readProjectionHead(raw: unknown): SharedProjectionBoundary | null {
+  const head = readSharedStructureBoundary(sharedJson(raw));
+  return head ? { kind: head.field === "heading" ? "h" : "b", id: head.owner, before: head.before } : null;
 }
 
 export function readProjectionInlineValue(raw: unknown): SharedInlineValue | null {
@@ -61,29 +64,27 @@ export function readProjectionInlineValue(raw: unknown): SharedInlineValue | nul
   return read && (typeof read === "string" || read.atom !== "broll" || isStableSharedIdentity(read.id)) ? read : null;
 }
 
-export function readProjectionBlocks(order: Y.Array<string>, segments: Y.Map<unknown>, readUnits?: (container: Y.Map<unknown>) => readonly SharedProjectionUnit[]) {
-  const blocks: { kind: "b" | "h"; id: string; units: SharedProjectionUnit[] }[] = [], seen = new Set<string>();
-  for (const key of new Set(order.toArray())) {
+export function readProjectionBlocks(order: Y.Array<string>, segments: Y.Map<unknown>, beats: Y.Map<unknown>, readUnits?: (container: Y.Map<unknown>) => readonly SharedProjectionUnit[]) {
+  const streams: SharedProjectionStream[] = [];
+  const ordered = new Set(order.toArray());
+  for (const key of new Set([...ordered, ...[...segments.keys()].sort()])) {
     if (typeof key !== "string" || !isStableSharedIdentity(key)) continue;
     const segment: unknown = segments.get(key); if (!(segment instanceof Y.Map)) continue;
-    const all = readUnits?.(segment) ?? []; let cursor = 0, current: typeof blocks[number] | undefined;
-    function boundary(head: ReturnType<typeof readProjectionHead>): void {
-      if (!head || seen.has(head.kind + head.id)) return;
-      seen.add(head.kind + head.id); current = { ...head, units: [] }; blocks.push(current);
+    const all = readUnits?.(segment) ?? [], parts: SharedProjectionStream["parts"][number][] = []; let cursor = 0, offset = 0;
+    const text: unknown = segment.get("text");
+    for (const delta of text instanceof Y.Text ? text.toDelta() as { insert: unknown }[] : []) {
+      const boundary = readProjectionHead(delta.insert), value = boundary ? null : readProjectionInlineValue(delta.insert);
+      const size = typeof value === "string" ? value.length : value ? 1 : 0, length = typeof delta.insert === "string" ? delta.insert.length : 1;
+      parts.push({ boundary, units: all.slice(cursor, cursor + size), from: offset, to: offset + length });
+      cursor += size; offset += length;
     }
-    boundary(readProjectionHead(segment.get("head")));
-    const text: unknown = segment.get("text"); if (!(text instanceof Y.Text)) continue;
-    for (const delta of text.toDelta() as { insert: unknown }[]) {
-      const head = readProjectionHead(delta.insert);
-      if (head) boundary(head);
-      else {
-        const value = readProjectionInlineValue(delta.insert), length = typeof value === "string" ? value.length : value ? 1 : 0;
-        if (current) current.units.push(...all.slice(cursor, cursor + length));
-        cursor += length;
-      }
-    }
+    streams.push({ segment: key, inOrder: ordered.has(key), head: readProjectionHead(segment.get("head")), parts });
   }
-  return blocks;
+  const records = [...beats.keys()].sort().map(id => {
+    const fields = readProjectionFields(beats.get(id), "beat");
+    return { id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null };
+  });
+  return projectSharedBlocks(streams, records);
 }
 
 export function readProjectionBeatStructure(raw: unknown, id: string, retirements: Y.Map<unknown>): SharedProjectionBeatStructure {
