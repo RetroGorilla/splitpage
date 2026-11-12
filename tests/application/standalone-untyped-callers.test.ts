@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { typedStandaloneInventory, untypedStandaloneAccesses } from "./session-caller-scan.ts";
+import { capabilityPortCallers } from "./capability-caller-scan.ts";
 
 test("untyped app tests reach standalone members only through the standalone door", () => {
   assert.deepEqual(untypedStandaloneAccesses(), {});
@@ -68,6 +69,21 @@ const TYPED_SCAN_LIMITS = [
   { name: "a receiver lookup widened to string", source: 'const door = "standalone" + "Session"; bridge[door]().stamp(null!);' },
   { name: "a reflective lookup returning an untyped callback", source: 'Reflect.get(standaloneSession(), "stamp")(null!);' }
 ];
+
+const SAVE_SCAN_LIMITS = [
+  { name: "reflective lookup of an untyped file writer", source: 'Reflect.get(fileTargets, "writeToHandle")(null!, "body");' }
+];
+
+for (const limit of SAVE_SCAN_LIMITS) {
+  test("declared typed save scan limit: " + limit.name, () => {
+    assert.deepEqual(capabilityPortCallers(["adapters/files/file-target.ts#writeToHandle"], {
+      path: "starters/save-type-probe.ts", source: `
+        import * as fileTargets from "../adapters/files/file-target.ts";
+        ${limit.source}
+      `
+    }), { "adapters/files/file-target.ts#writeToHandle": {} });
+  });
+}
 
 for (const limit of TYPED_SCAN_LIMITS) {
   test("declared typed scan limit: " + limit.name, () => {

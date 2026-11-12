@@ -29,9 +29,11 @@ import { writerActions } from "../../src/bootstrap/wiring/writer.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
 import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
 import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
+  const stopSession = startTestSession(unwiredSessionDeps().deps);
   const globals = [window, globalThis].flatMap((target) =>
     ["CSS", "Highlight"].map((name) => ({ target, name, descriptor: Object.getOwnPropertyDescriptor(target, name) })));
   const css = { highlights: new Map() };
@@ -56,7 +58,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const file = fileMenuActions();
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature,
     registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
-    registerAll(registry, [...settingsActions(), ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature
+    registerAll(registry, [...settingsActions(), ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature, stopSession
   ];
   return { registry, dispose: () => {
     try {

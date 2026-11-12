@@ -5,6 +5,7 @@ import type { ImportSavingOwner, ImportSavingPorts, ImportSaveRequest } from "..
 import type { SaveJob } from "../../src/application/save/coordinator.ts";
 import { createDocumentLocation } from "../../src/application/location/document-location.ts";
 import { fakeNotices } from "../features/fakes.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 function harness() {
   const log: string[] = [];
@@ -13,6 +14,7 @@ function harness() {
   const state = { conflict: false, owns: true };
   const owner: ImportSavingOwner = createImportSavingOwner();
   const ports: ImportSavingPorts = {
+    capability: MAY_EDIT,
     location,
     saving: { request: async (request) => { assert.equal(request.target, imported); log.push(request.kind); return { kind: "saved", acknowledged: true }; }, unsavedFor: () => true },
     buildFileData: async (kind, base) => { log.push("build:" + kind + ":" + base); return { data: "bytes", filename: "draft.txt" }; },

@@ -74,6 +74,7 @@ test("captureOperation and stillOwns follow the live session, document and desti
   const loc = await import("../bootstrap/wiring/location-owner.ts");
   const saves = await import("../bootstrap/wiring/save-owners.ts");
   const stopSaves = saves.startSaves({
+    capability: (await import("../application/session/capabilities.ts")).createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
       destination: () => loc.currentHome(),
     keyOf: (h) => ({ owner: h, name: "" }),
     obsolete: () => {},

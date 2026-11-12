@@ -4,6 +4,7 @@ import { standaloneSession, sessionStarted } from "../bootstrap/wiring/session-o
 import { appSessionDeps } from "./_app-session.mjs";
 import { startTestSession } from "./_session.mjs";
 import { savesStarted, startSaves } from "../bootstrap/wiring/save-owners.ts";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 function asGiven(doc) {
   return doc;
@@ -19,6 +20,7 @@ export function loadTestDocument(doc) {
   if (!sessionStarted()) startSession();
   if (!savesStarted()) {
     startSaves({
+      capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
       destination: () => null,
       keyOf: () => ({ owner: null, name: "document-only test" }),
       obsolete: () => {},

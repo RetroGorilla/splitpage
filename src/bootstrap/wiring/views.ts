@@ -42,6 +42,8 @@ import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
 import { fileConflicts, saveDoc } from "./save-owners.ts";
 import { fileDelivery } from "./ports/files.ts";
+import { capabilities } from "./ports/capabilities.ts";
+import { notices } from "./ports/effects.ts";
 import { localFileMenuControls, localFilesOwner } from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
@@ -180,6 +182,8 @@ export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery>
 export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
   return replaceViewMount("mountConflicts", function () {
     const ports: ConflictsPorts = {
+      capability: capabilities,
+      notices,
       closeFileConflict: function () { fileConflicts().close(); },
       reloadProjectFromDisk: (...args: Parameters<ReturnType<typeof localFilesOwner>["reloadProjectFromDisk"]>) => localFilesOwner().reloadProjectFromDisk(...args),
       reloadFileFromDisk: (...args: Parameters<ReturnType<typeof localFilesOwner>["reloadFileFromDisk"]>) => localFilesOwner().reloadFileFromDisk(...args),

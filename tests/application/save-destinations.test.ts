@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createSaveDestinations } from "../../src/application/save/destinations.ts";
 import type { SaveDestination } from "../../src/application/save/destinations.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 interface Request {
   readonly kind: string;
@@ -17,7 +18,7 @@ function destination(id: string, takes: (request: Request, place: string) => boo
 }
 
 test("taking asks the newest destination first and answers the first that takes the request at that place", () => {
-  const registry = createSaveDestinations<Request, string>();
+  const registry = createSaveDestinations<Request, string>(MAY_EDIT);
   const asked: string[] = [];
   registry.register(destination("catch-all", (r, p) => { asked.push("catch-all " + r.kind + "@" + p); return true; }));
   registry.register(destination("copies", (r, p) => { asked.push("copies " + r.kind + "@" + p); return r.kind === "saveAs"; }));
@@ -28,7 +29,7 @@ test("taking asks the newest destination first and answers the first that takes 
 });
 
 test("taking answers null when no destination takes the request", () => {
-  const registry = createSaveDestinations<Request, string>();
+  const registry = createSaveDestinations<Request, string>(MAY_EDIT);
   assert.equal(registry.taking({ kind: "save" }, "file"), null);
   registry.register(destination("server", (_r, p) => p === "server"));
   assert.equal(registry.taking({ kind: "save" }, "file"), null);
@@ -36,7 +37,7 @@ test("taking answers null when no destination takes the request", () => {
 });
 
 test("register returns a removal that drops only that destination, and a second removal does nothing", () => {
-  const registry = createSaveDestinations<Request, string>();
+  const registry = createSaveDestinations<Request, string>(MAY_EDIT);
   const dropA = registry.register(destination("a", () => true));
   registry.register(destination("b", () => false));
   dropA();
@@ -48,7 +49,7 @@ test("register returns a removal that drops only that destination, and a second 
 });
 
 test("register refuses a duplicate id, a missing id and a destination without its functions", () => {
-  const registry = createSaveDestinations<Request, string>();
+  const registry = createSaveDestinations<Request, string>(MAY_EDIT);
   registry.register(destination("a", () => true));
   assert.throws(() => registry.register(destination("a", () => true)), /a destination called a is already registered/);
   assert.throws(() => registry.register(destination("", () => true)), /needs an id/);
@@ -61,7 +62,7 @@ test("register refuses a duplicate id, a missing id and a destination without it
 });
 
 test("a registered destination is held as it was given: changing the caller's object later changes nothing", () => {
-  const registry = createSaveDestinations<Request, string>();
+  const registry = createSaveDestinations<Request, string>(MAY_EDIT);
   const given = { ...destination("a", () => true) };
   registry.register(given);
   given.takes = () => false;

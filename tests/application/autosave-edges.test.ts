@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HALTED_BY_DEFAULT, createAutoSavePolicy } from "../../src/application/save/autosave.ts";
 import type { AutoSavePolicy } from "../../src/application/save/autosave.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 interface Rig {
   policy: AutoSavePolicy;
@@ -13,6 +14,7 @@ function rig(enabledAtStart: () => boolean = function () { return true; }): Rig 
   const started: number[] = [];
   const stopped: unknown[] = [];
   const policy = createAutoSavePolicy({
+    capability: MAY_EDIT,
     timers: {
       start: function (_run: () => void, ms: number) { started.push(ms); return started.length; },
       stop: function (handle: unknown) { stopped.push(handle); }
