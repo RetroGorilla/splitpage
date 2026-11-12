@@ -1,16 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applySharedUpdate, destroySharedDocument, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import * as Y from "yjs";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { collabState, SharedExecutionWriteError } from "../../../src/adapters/collab/state.ts";
+import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import { insertSharedHtml } from "../../../src/adapters/collab/text-import.ts";
 import { collabTextTarget, createCollabText } from "../../../src/adapters/collab/text-target.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { operation, ref } from "./executor-support.ts";
-import { deliveryReplica, validatedFixture } from "./helpers.ts";
+import { createMonitoredSharedDocument, deliveryReplica, validatedFixture } from "./helpers.ts";
 import { recordReplicas } from "./record-support.ts";
 
 const SOURCE = { title: "Title", rows: [{ id: "R1", audioText: "ab", status: "todo" }, { id: "R2", audioText: "cd", status: "todo" }] };
@@ -40,9 +42,9 @@ function watch(handle: SharedDocumentHandle, seen: Seen[]): () => void {
   return observeSharedTransactions(handle, origin => { seen.push([origin, readSharedRevision(handle), lengths(handle)]); });
 }
 
-function gate(handle: SharedDocumentHandle): [number, number, number, number] {
+function gate(handle: SharedDocumentHandle): [number, number, number] {
   const state = collabState(handle);
-  return [state.ingress.holds.size, state.ingress.held.length, state.ingress.frames, state.doc._transactionCleanups.length];
+  return [state.ingress.holds.size, state.ingress.held.length, state.ingress.frames];
 }
 
 function thrown(run: () => unknown): unknown {
@@ -56,6 +58,8 @@ test("received updates that arrive during a notification are held and applied in
     const [first, second, third] = written(run.a, [["R1", 7], ["R2", 9], ["R1", 8]]);
     assert.ok(first && second && third);
     const pending = [second, third], results: unknown[] = [], early: Seen[] = [], late: Seen[] = [];
+    let updates = 0;
+    const count = observeSharedUpdates(run.b, () => { updates++; });
     const stop = observeSharedTransactions(run.b, origin => {
       for (let next = pending.shift(); next; next = pending.shift()) results.push([applySharedUpdate(run.b, next), readSharedRevision(run.b), lengths(run.b)]);
       early.push([origin, readSharedRevision(run.b), lengths(run.b)]);
@@ -63,12 +67,98 @@ test("received updates that arrive during a notification are held and applied in
     const detach = watch(run.b, late);
     assert.deepEqual([readSharedRevision(run.b), lengths(run.b)], [1, [null, null]]);
     assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
-    stop(); detach();
+    stop(); detach(); count();
     assert.deepEqual(results, [[{ ok: true }, 2, [7, null]], [{ ok: true }, 2, [7, null]]]);
     assert.deepEqual(early, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]]]);
     assert.deepEqual(late, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]]]);
-    assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
+    assert.equal(updates, 3);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
   } finally { run.close(); }
+});
+
+test("a reservation index observes held updates in order and agrees with a fresh index after the drain", () => {
+  const run = recordReplicas(2, SOURCE), fresh = createMonitoredSharedDocument();
+  try {
+    const updates: Uint8Array[] = [], source = collabState(run.a), index = observeSharedStructureIdentities(run.b);
+    const text = (source.roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
+    const collect = observeSharedUpdates(run.a, update => { updates.push(update); });
+    transactSharedDocument(run.a, "local-command", () => {
+      source.roots.people.set("first-person", new Y.Map<unknown>([["id", "[First]"]]));
+      source.roots.order.push(["[FirstOrder]"]);
+      text.insertEmbed(0, { k: "[FirstAtom]", label: "B-roll:" });
+    });
+    transactSharedDocument(run.a, "local-command", () => {
+      source.roots.people.delete("first-person");
+      source.roots.people.set("second-person", new Y.Map<unknown>([["id", "[Second]"]]));
+      source.roots.order.delete(source.roots.order.length - 1, 1);
+      source.roots.order.push(["[SecondOrder]"]);
+      text.delete(0, 1);
+      text.insertEmbed(0, { k: "[SecondAtom]", label: "B-roll:" });
+    });
+    collect();
+    assert.equal(updates.length, 2);
+    const [first, second] = updates;
+    assert.ok(first && second);
+    const identities = ["first-person", "First", "FirstOrder", "FirstAtom", "second-person", "Second", "SecondOrder", "SecondAtom", "R1", "R2", "missing"];
+    const seen: [number, boolean[]][] = [], held: unknown[] = [];
+    const stop = observeSharedTransactions(run.b, () => {
+      if (!held.length) held.push([applySharedUpdate(run.b, second), collabState(run.b).ingress.held.length]);
+      seen.push([readSharedRevision(run.b), identities.map(identity => index.has(identity))]);
+    });
+    assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
+    stop();
+    assert.deepEqual(held, [[{ ok: true }, 1]]);
+    assert.deepEqual(seen, [
+      [2, [true, true, true, true, false, false, false, false, true, true, false]],
+      [3, [false, false, false, false, true, true, true, true, true, true, false]]
+    ]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
+    assert.deepEqual(applySharedUpdate(fresh, encodeSharedState(run.b)), { ok: true });
+    const rebuilt = observeSharedStructureIdentities(fresh);
+    assert.deepEqual(identities.map(identity => index.has(identity)), identities.map(identity => rebuilt.has(identity)));
+  } finally { run.close(); destroySharedDocument(fresh); }
+});
+
+test("receiving U1 then queuing duplicate U1 and U2 notifies revisions [1, 1, 2]", () => {
+  const source = createMonitoredSharedDocument(), target = createMonitoredSharedDocument();
+  try {
+    const updates: Uint8Array[] = [], seen: [number, unknown][] = [];
+    const collect = observeSharedUpdates(source, update => { updates.push(update); });
+    for (const value of [1, 2]) transactSharedDocument(source, "local-command", () => collabState(source).roots.meta.set("step", value));
+    collect();
+    const [first, second] = updates;
+    assert.ok(first && second);
+    const pending = [first, second];
+    const stop = observeSharedTransactions(target, () => {
+      seen.push([readSharedRevision(target), collabState(target).roots.meta.get("step")]);
+      for (let next = pending.shift(); next; next = pending.shift()) assert.deepEqual(applySharedUpdate(target, next), { ok: true });
+    });
+    assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+    stop();
+    assert.deepEqual(seen, [[1, 1], [1, 1], [2, 2]]);
+    assert.deepEqual(gate(target), [0, 0, 0]);
+  } finally { destroySharedDocument(source); destroySharedDocument(target); }
+});
+
+test("receiving U1 then queuing dependency-waiting U3 before U2 notifies revisions [1, 1, 2]", () => {
+  const source = createMonitoredSharedDocument(), target = createMonitoredSharedDocument();
+  try {
+    const updates: Uint8Array[] = [], seen: [number, unknown][] = [];
+    const collect = observeSharedUpdates(source, update => { updates.push(update); });
+    for (const value of [1, 2, 3]) transactSharedDocument(source, "local-command", () => collabState(source).roots.meta.set("step", value));
+    collect();
+    const [first, second, third] = updates;
+    assert.ok(first && second && third);
+    const pending = [third, second];
+    const stop = observeSharedTransactions(target, () => {
+      seen.push([readSharedRevision(target), collabState(target).roots.meta.get("step")]);
+      for (let next = pending.shift(); next; next = pending.shift()) assert.deepEqual(applySharedUpdate(target, next), { ok: true });
+    });
+    assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+    stop();
+    assert.deepEqual(seen, [[1, 1], [1, 1], [2, 3]]);
+    assert.deepEqual(gate(target), [0, 0, 0]);
+  } finally { destroySharedDocument(source); destroySharedDocument(target); }
 });
 
 test("an invalid update that arrives during a notification is refused at once and nothing is held for it", () => {
@@ -85,50 +175,29 @@ test("an invalid update that arrives during a notification is refused at once an
     stop(); detach();
     assert.deepEqual(results, [[{ ok: false, reason: "invalid-update" }, 0]]);
     assert.deepEqual(seen, [["remote", 2, [7, null]]]);
-    assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
   } finally { run.close(); }
 });
 
-for (const listener of ["update subscriber", "library update listener"] as const) {
-  test(`a ${listener} that throws during a notification does not close the gate for good: the held update and two later ones are each announced at their own revision`, () => {
-    const run = recordReplicas(2, SOURCE);
-    try {
-      const [first, second, third, fourth] = written(run.a, [["R1", 7], ["R2", 9], ["R1", 8], ["R2", 10]]);
-      assert.ok(first && second && third && fourth);
-      const failure = new Error("update listener failed"), seen: Seen[] = [], pending = [second];
-      let failures = 0;
-      const fail = (): void => { if (!failures++) throw failure; };
-      const stop = observeSharedTransactions(run.b, () => { for (let next = pending.shift(); next; next = pending.shift()) applySharedUpdate(run.b, next); });
-      const detach = watch(run.b, seen);
-      const remove = listener === "update subscriber" ? observeSharedUpdates(run.b, fail) : (collabState(run.b).doc.on("update", fail), () => collabState(run.b).doc.off("update", fail));
-      assert.equal(thrown(() => applySharedUpdate(run.b, first)), failure);
-      assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]]]);
-      assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
-      remove();
-      assert.deepEqual([applySharedUpdate(run.b, third), applySharedUpdate(run.b, fourth)], [{ ok: true }, { ok: true }]);
-      stop(); detach();
-      assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]], ["remote", 5, [8, 10]]]);
-      assert.deepEqual([failures, readSharedRevision(run.b), lengths(run.b), gate(run.b)], [2, 5, [8, 10], [0, 0, 0, 0]]);
-    } finally { run.close(); }
-  });
-}
-
-test("declared limit, a listener set on the library aborts its cleanup: a transaction still waiting to be announced is never announced, the revision advances once for it and later updates are announced", () => {
+test(`an update subscriber that throws during a notification does not close the gate for good: the held update and two later ones are each announced at their own revision`, () => {
   const run = recordReplicas(2, SOURCE);
   try {
-    const [first, second] = written(run.a, [["R1", 7], ["R2", 9]]);
-    assert.ok(first && second);
-    const failure = new Error("library listener failed"), seen: Seen[] = [], state = collabState(run.b);
+    const [first, second, third, fourth] = written(run.a, [["R1", 7], ["R2", 9], ["R1", 8], ["R2", 10]]);
+    assert.ok(first && second && third && fourth);
+    const failure = new Error("update listener failed"), seen: Seen[] = [], pending = [second];
     let failures = 0;
     const fail = (): void => { if (!failures++) throw failure; };
-    const stop = observeSharedTransactions(run.b, origin => { if (origin === "remote" && !state.roots.meta.has("raw")) state.roots.meta.set("raw", true); });
+    const stop = observeSharedTransactions(run.b, () => { for (let next = pending.shift(); next; next = pending.shift()) applySharedUpdate(run.b, next); });
     const detach = watch(run.b, seen);
-    state.doc.on("update", fail);
+    const remove = observeSharedUpdates(run.b, fail);
     assert.equal(thrown(() => applySharedUpdate(run.b, first)), failure);
-    assert.deepEqual([seen, readSharedRevision(run.b), state.roots.meta.get("raw"), gate(run.b)], [[["remote", 2, [7, null]]], 3, true, [0, 0, 0, 0]]);
-    assert.deepEqual(applySharedUpdate(run.b, second), { ok: true });
+    assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]]]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
+    remove();
+    assert.deepEqual([applySharedUpdate(run.b, third), applySharedUpdate(run.b, fourth)], [{ ok: true }, { ok: true }]);
     stop(); detach();
-    assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 4, [7, 9]]]);
+    assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]], ["remote", 5, [8, 10]]]);
+    assert.deepEqual([failures, readSharedRevision(run.b), lengths(run.b), gate(run.b)], [2, 5, [8, 10], [0, 0, 0]]);
   } finally { run.close(); }
 });
 
@@ -145,7 +214,7 @@ test("a transaction observer that throws while the drain applies a held update d
     const detach = watch(run.b, seen);
     assert.equal(thrown(() => applySharedUpdate(run.b, first)), failure);
     assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]]]);
-    assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
     assert.deepEqual(applySharedUpdate(run.b, fourth), { ok: true });
     stop(); detach();
     assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]], ["remote", 5, [8, 10]]]);
@@ -162,7 +231,28 @@ test("two callbacks that throw are thrown together after the drain, in the order
     const error = thrown(() => applySharedUpdate(run.b, first));
     stop(); detach(); remove();
     assert.ok(error instanceof AggregateError);
-    assert.deepEqual([error.errors, seen, gate(run.b)], [[one, two], [["remote", 2, [7, null]]], [0, 0, 0, 0]]);
+    assert.deepEqual([error.errors, seen, gate(run.b)], [[one, two], [["remote", 2, [7, null]]], [0, 0, 0]]);
+  } finally { run.close(); }
+});
+
+test("a failing transaction body is reported before its failing subscriber, once each, after the held update drains", () => {
+  const run = recordReplicas(2, SOURCE);
+  try {
+    const [incoming] = written(run.a, [["R1", 7]]);
+    assert.ok(incoming);
+    const bodyError = new Error("body failed"), callbackError = new Error("callback failed"), seen: Seen[] = [];
+    const stop = observeSharedTransactions(run.b, () => { if (readSharedRevision(run.b) === 2) throw callbackError; });
+    const detach = watch(run.b, seen);
+    const error = thrown(() => transactSharedDocument(run.b, "local-command", () => {
+      collabState(run.b).roots.meta.set("local", true);
+      assert.deepEqual(applySharedUpdate(run.b, incoming), { ok: true });
+      throw bodyError;
+    }));
+    stop(); detach();
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [bodyError, callbackError]);
+    assert.deepEqual(seen, [["local-command", 2, [null, null]], ["remote", 3, [7, null]]]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
   } finally { run.close(); }
 });
 
@@ -185,7 +275,7 @@ for (const event of ["afterAllTransactions", "beforeTransaction"] as const) {
       stop(); detach();
       assert.deepEqual(results, [[{ ok: true }, 3]]);
       assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]], ["remote", 5, [8, 10]]]);
-      assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
+      assert.deepEqual(gate(run.b), [0, 0, 0]);
     } finally { run.close(); }
   });
 }
@@ -209,7 +299,7 @@ for (const place of ["the library's beforeTransaction event", "the body of a loc
       detach();
       assert.deepEqual(results, [[{ ok: true }, 1, [null, null]]]);
       assert.deepEqual(seen, place === "the body of a local transaction" ? [["local-command", 2, [null, null]], ["remote", 3, [7, null]]] :[["remote", 2, [7, null]], ["remote", 3, [7, 9]]]);
-      assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
+      assert.deepEqual(gate(run.b), [0, 0, 0]);
     } finally { run.close(); }
   });
 }
@@ -242,7 +332,7 @@ for (const writer of ["entry", "transaction", "hydration", "text-create", "html-
       assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
       stop(); detach(); count();
       assert.deepEqual([refused, seen, updates], [[true], [["remote", 2, [7, null]]], 1]);
-      assert.deepEqual([readSharedRevision(run.b), state.roots.meta.has("nested"), text.toString(), gate(run.b)], [2, false, "ab", [0, 0, 0, 0]]);
+      assert.deepEqual([readSharedRevision(run.b), state.roots.meta.has("nested"), text.toString(), gate(run.b)], [2, false, "ab", [0, 0, 0]]);
       assert.deepEqual(executeSharedOperations(run.b, [scalar("after", "R2", 5, "B")], { base: 2 }), { ok: true });
     } finally { run.close(); }
   });
@@ -260,7 +350,7 @@ test("a received update delivered from an observer of a local command is held an
     stop(); detach();
     assert.deepEqual(results, [[{ ok: true }, 2, [7, null]]]);
     assert.deepEqual(seen, [["local-command", 2, [7, null]], ["remote", 3, [7, 9]]]);
-    assert.deepEqual(gate(run.b), [0, 0, 0, 0]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
   } finally { run.close(); }
 });
 
@@ -278,7 +368,7 @@ test("destroying a handle during a notification discards its held updates and le
     watch(run.b, seen);
     assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
     assert.deepEqual(results, [{ ok: true }, 1, 0, 0]);
-    assert.deepEqual([seen, lengths(run.b), gate(run.b)], [[["remote", 2, [7, null]]], [7, null], [0, 0, 0, 0]]);
+    assert.deepEqual([seen, lengths(run.b), gate(run.b)], [[["remote", 2, [7, null]]], [7, null], [0, 0, 0]]);
   } finally { run.close(); }
 });
 
@@ -294,7 +384,7 @@ test("a held update whose application fails is reported and skipped: the rest of
     state.doc.transact = ((...parameters: Parameters<typeof transact>) => { if (++calls === 2) throw failure; return transact(...parameters); }) as typeof transact;
     assert.equal(thrown(() => applySharedUpdate(run.b, first)), failure);
     state.doc.transact = transact;
-    assert.deepEqual([calls, seen, gate(run.b)], [3, [["remote", 2, [7, null]], ["remote", 3, [8, null]]], [0, 0, 0, 0]]);
+    assert.deepEqual([calls, seen, gate(run.b)], [3, [["remote", 2, [7, null]], ["remote", 3, [8, null]]], [0, 0, 0]]);
     assert.deepEqual(applySharedUpdate(run.b, second), { ok: true });
     stop(); detach();
     assert.deepEqual(seen, [["remote", 2, [7, null]], ["remote", 3, [8, null]], ["remote", 4, [8, 10]]]);
@@ -310,6 +400,6 @@ test("with nothing held the gate adds no transaction and holds nothing: five rec
     state.ingress.held.push = (...items) => { entries++; return hold(...items); };
     for (const update of updates) { closed += state.ingress.holds.size; assert.deepEqual(applySharedUpdate(run.b, update), { ok: true }); }
     state.doc.transact = transact;
-    assert.deepEqual([transactions, readSharedRevision(run.b), entries, closed, lengths(run.b), gate(run.b)], [5, 6, 0, 0, [5, 4], [0, 0, 0, 0]]);
+    assert.deepEqual([transactions, readSharedRevision(run.b), entries, closed, lengths(run.b), gate(run.b)], [5, 6, 0, 0, [5, 4], [0, 0, 0]]);
   } finally { run.close(); }
 });

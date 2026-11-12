@@ -13,6 +13,7 @@ import { flowOperationCoverage } from "../collab/coverage-fixture.ts";
 import { applyFlowOperations } from "./operation-applier.ts";
 import { flowBaseReference, readFlowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
+import { cleanId } from "../../../src/core/document/text-policy.ts";
 
 const rt = createFlowLoadRuntime(), cells = rt.ports.cells;
 const sources = new Map<string, string>();
@@ -70,6 +71,9 @@ function check(input: StructuralCase): { kinds: readonly string[]; changed: bool
   assert.deepEqual(withoutOps, plain, "operation recording changes standalone result");
   assert.equal(new Set(ops.map(op => op.id)).size, ops.length, "operation ids must be distinct within a command");
   for (const op of ops) assert.ok(readOperation(JSON.parse(JSON.stringify(op)) as unknown), "invalid wire operation " + op.kind);
+  for (const op of ops) if (!["text-insert", "text-delete", "mark", "scalar", "status", "record-create", "record-set", "record-delete"].includes(op.kind)) {
+    assert.equal(cleanId(op.id), op.id, "structural operation identity changes on load");
+  }
   const applied = applyFlowOperations(base, ops, cells);
   assert.deepEqual(base, before, "reference applier mutates the base");
   assert.deepEqual(applied, { rows: described.rows, sections: described.sections, removedComments: described.removedComments });

@@ -5,12 +5,67 @@ segment creation through the operation entry. `cells` is the app's cell decoder,
 called during preparation only. No application caller registers these handlers.
 The executor entry, preparation view and execution guard are unchanged.
 
-New beat, segment, visual and gallery keys are JSON arrays containing `structure`,
-the live writer, the command id and the role (and the gallery slot index).
+New beat, segment, visual and gallery keys use
+`structure_<writer>_<operation-as-four-digit-UTF-16-hex>_<role>_<slot>`.
+The writer is canonical decimal, the role is fixed and the slot is a nonnegative
+integer (zero except for later gallery slots). Encoding the raw operation preserves
+its identity while escaping separators. The approach matches b-roll projection:
+derive from raw identity, reserve and compare on the app's `cleanId` result.
+An operation id that `cleanId` would change refuses with
+`invalid-structure-operation-id`; it is never rewritten. Structural operations
+emitted by flow use `_o_` before their ordinal. Native text and mark operation ids,
+mark-record keys and mark-occurrence ids retain their existing forms.
 Supplied beat, segment and boundary names never become
 new shared text keys. A per-call alias table translates later operations in the
 same list, including scalar repairs. Reusing an occupied identity refuses the
-whole list. Stable-identity validation does not normalize identifiers.
+whole list. No compatibility translation or second generated-id parser is added.
+
+An idle registration indexes cleaned keys and record ids in the beat, segment,
+heading, visual, gallery and registry roots, plus stored order names and inline
+b-roll ids. Native updates refresh only changed records. Text events patch added
+and deleted embeds from the transaction's before/after clocks and deletion ranges.
+Both ranges use the package entry's `iterateDeletedStructs`, with a `createDeleteSet`
+for additions; no store lookup or binary-search helper is used. Yjs 13.6.33 offers
+no event carrying removed embed values without reading the full text delta. One
+guarded function owns the remaining struct representation dependency; its named
+contract test pins the version, returned values and observer-before-GC order.
+They inspect neither the existing text item chain nor a text delta. Ordinary string
+insertions do not rebuild reservations. Reference counts remove deleted reservations, so
+an encoded late joiner has the same index. Prepare uses only cached lookups and a
+per-call reservation set. Record creation and b-roll insertion also contribute to
+that set, in either order around structural creation. A cleaned collision refuses
+the complete list with `existing-identity`.
+
+| App load path | Identity rule |
+| --- | --- |
+| rows, comments, replies, people and b-roll records | `migrateRows` applies `cleanId`; the new format is unchanged |
+| comment row/anchor references and HTML comment/b-roll attributes | `cleanId` or `safeId`, with the same result |
+| scene ids and first-beat anchors | scene ids accept the same ASCII alphabet; anchors remain exact row ids |
+| gallery picture and link data | hashes and URL/file keys are retained by their existing codecs; visual/gallery container keys stay native |
+| tag registry and b-roll prop tag references | the narrower `t_` grammar stays with the tag owner; this executor mints no tag ids |
+| document id | its separate document-id policy is unchanged; this executor mints no document id |
+
+Literal tests run every created key through ordinary record, reference, HTML and
+scene load paths. They check segment ids in block projection and visual/gallery
+keys in native record projection; these container keys are not plain-document id
+fields today. All four structural forms also pass through `projectSharedDocument`
+and the real `migrateRows` pipeline on every copy. A seeded tuple test checks
+unambiguous components and unchanged ids after load, including escaped separators,
+ambiguous decimal concatenations and refused stripped characters.
+
+The identity history model has this literal declared limit:
+
+| Declared limit | Replacement rule in the span/address cut |
+| --- | --- |
+| same cleaned beat id created at the same moment: the load renames the later beat and a command addressed to the id reaches the other one | The first beat in merged document order keeps the cleaned id and is the row; later beats with that cleaned id go to recovery without renaming. Address resolution reaches the beat shown. |
+
+A local reservation cannot observe an undelivered native creation. This case is
+not emitted by the app: each writer's generated ids carry its own writer component.
+The pinned native history currently loads Reserved under the shared Created id,
+renames Created, and a command planned for Reserved edits Created instead. The next
+cut must replace that literal outcome with the decided projection/address rule.
+The seeded checkpoint model collects violations and compares them with this table;
+it compares patched reservations with a fresh encoded-state index at every checkpoint.
 
 A creation resolves logical neighbours to their current spans. Within a physical
 segment it inserts a beat boundary and reuses the existing text and mark store;

@@ -3,6 +3,8 @@
 Each shared document handle has one gate, `IngressGate` in `src/adapters/collab/state.ts`.
 It makes one promise: a revision is announced with exactly its own change. An observer
 that reads the revision and the document during a notification never sees a later write.
+There is one notification per transaction; the revision advances only when the transaction
+changed the document. Duplicate and dependency-waiting updates can repeat a revision.
 
 The library applies a write nested in a notification at once and announces it afterwards.
 Without the gate an observer told about revision 2 could read a document that already
@@ -55,11 +57,14 @@ where a throw aborts the cleanup.
 
 ## Declared limits
 
-- A listener set on the library itself, outside the adapter, is not guarded. If it throws
-  where the library's cleanup cannot recover, the adapter finishes the library's list so
-  later transactions are announced. A transaction that was still waiting in that
-  cascade is never announced; the revision advances once for it, so a base read before
-  it is refused as stale.
+- Subscriptions go through the adapter (`observeSharedTransactions`, `observeSharedUpdates`).
+  A listener set directly on the library object is outside the contract.
+  `tests/adapters/collab/guarded-subscriptions.test.ts` holds this rule for `src/`:
+  library subscriptions stay inside the adapter and their callbacks use `guardSharedCallback`.
+- The scan cannot see computed calls such as `doc["on"](...)`, bound or destructured
+  subscription methods, receivers typed `any` or `Pick<Y.Doc, "on">`, or an untyped nested
+  `.get(...).observe(...)`. It does not read JSX or TSX files. Its guard check matches
+  the name `guardSharedCallback`, not its binding.
 - A transaction started on the library itself, outside every adapter write, is not
   gated. Nothing in `src` starts one. A raw write from an observer stays visible as a
   transaction with no origin: see [adapter-origins.md](adapter-origins.md).
@@ -75,4 +80,4 @@ and one at the end of its write. No transaction is added and nothing is queued.
 `ingress-gate-generator.test.ts` places arrivals at random at the top, inside
 notifications and inside the drain, with callbacks that throw, and checks each announced
 revision against the same arrivals applied one by one. `tests/collab/ingress-gate-mutants.json`
-holds nine deliberate defects, listed in `tests/collab/mutants.md`.
+holds eight deliberate defects, listed in `tests/collab/mutants.md`.

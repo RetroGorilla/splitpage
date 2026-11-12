@@ -3,8 +3,8 @@
   "mutants": [{
     "label": "gate not reopened after a throw",
     "file": "src/adapters/collab/state.ts",
-    "find": "try { result = { value: write() }; } catch (error) { gate.errors.push(error); }",
-    "replace": "try { result = { value: write() }; } catch (error) { gate.frames = 0; throw error; }"
+    "find": "catch (error) { if (!failure.recorded || !Object.is(failure.error, error)) gate.errors.push(error); }",
+    "replace": "catch (error) { gate.frames = 0; throw error; }"
   }, {
     "label": "drain stopped by a throw",
     "file": "src/adapters/collab/state.ts",
@@ -25,11 +25,6 @@
     "file": "src/adapters/collab/state.ts",
     "find": "    state.ingress.errors.push(error);",
     "replace": "    throw error;"
-  }, {
-    "label": "aborted cleanup left unfinished",
-    "file": "src/adapters/collab/state.ts",
-    "find": "    doc._transactionCleanups = [];",
-    "replace": "    void 0;"
   }, {
     "label": "held update applied out of arrival order",
     "file": "src/adapters/collab/document.ts",

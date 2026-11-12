@@ -34,7 +34,8 @@ export class FlowOperationTrace {
   private readonly request: FlowOperationRequest;
   constructor(base: TraceDoc, ports: TracePorts, request: FlowOperationRequest) { this.base = base; this.ports = ports; this.request = request; }
   emit(payload: FlowOperationPayload): void {
-    this.ops.push({ ...payload, id: flowIdentity(this.request.id + ":" + this.ops.length), by: this.request.by } as SharedOperation);
+    const structural = ["split", "split-before", "segment-create", "join", "remove", "restore", "heading-create", "heading-finalize", "heading-remove", "move"].includes(payload.kind);
+    this.ops.push({ ...payload, id: flowIdentity(this.request.id + (structural ? "_o_" : ":") + this.ops.length), by: this.request.by } as SharedOperation);
   }
   target(owner: string, field: SharedTextAddress["field"] = "audioText"): SharedTextAddress {
     return { owner: flowIdentity(owner), segment: flowIdentity(owner), field };
