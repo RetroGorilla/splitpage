@@ -22,7 +22,7 @@ function open(t: TestContext) {
     entry: (raw) => migrateRows(raw),
     undo: { adapter: undoSessionPort(), route: routeUndoReplays },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
-    capability: { edit: () => ({ allowed: true }) },
+    capability: { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) },
     editor: { name: () => "Undo control" },
     records: () => null,
     attribution: { attribute: () => null },

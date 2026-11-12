@@ -112,7 +112,7 @@ function world(): World {
     entry: raw => migrateRows(raw, fakeMigration().ports),
     undo: { adopt: undo.adopt, record: () => { undo.noteEdit(); }, absorbDisk: undo.noteRemote, absorbReload: undo.absorbRemote },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
-    capability: { edit: () => ({ allowed: true }) },
+    capability: { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) },
     reconcile: { anchors: () => 0 },
     attribution: { attribute: () => null },
     report: error => { throw error; },

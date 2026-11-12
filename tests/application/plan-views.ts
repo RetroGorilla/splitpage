@@ -6,9 +6,15 @@ import { migratedThenSet } from "../core/migrate-ports.ts";
 
 type Bag = Record<string, unknown>;
 
-export const MAY_EDIT: CapabilityPort = { edit: function () { return { allowed: true }; } };
+export const MAY_EDIT: CapabilityPort = {
+  edit: function () { return { allowed: true }; },
+  comment: function () { return { allowed: true }; }
+};
 
-export const REVIEW_ONLY: CapabilityPort = { edit: function () { return { allowed: false, reason: "review" }; } };
+export const REVIEW_ONLY: CapabilityPort = {
+  edit: function () { return { allowed: false, reason: "review" }; },
+  comment: function () { return { allowed: true }; }
+};
 
 export function rowsOf(ids: readonly string[], extra: Bag = {}): Bag[] {
   return ids.map(function (id) { return { id: id, visualText: "", audioText: "", status: "todo", ...extra }; });

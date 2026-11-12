@@ -639,6 +639,25 @@ test("undo teardown: an old uninstall run after a newer installation leaves the 
   stopGuard();
 });
 
+test("the standalone session allows commenting whatever its edit effect answers, and reads no effect to say so", () => {
+  const asked: string[] = [];
+  const ports = legacySessionPorts({
+    ...fakes().deps,
+    effects: {
+      dirty: () => { asked.push("dirty"); },
+      draft: () => { asked.push("draft"); },
+      save: () => { asked.push("save"); },
+      edit: () => { asked.push("edit"); return { allowed: false, reason: "review" }; },
+      attribute: () => { asked.push("attribute"); return null; }
+    }
+  });
+  assert.deepEqual(Object.keys(ports.capability).sort(), ["comment", "edit"]);
+  assert.deepEqual(ports.capability.comment(), { allowed: true });
+  assert.deepEqual(asked, []);
+  assert.deepEqual(ports.capability.edit(), { allowed: false, reason: "review" });
+  assert.deepEqual(asked, ["edit"]);
+});
+
 test("a session built by wireApp runs exactly the effects it was handed: a probe counts one call of each per edit", () => {
   const f = fakes();
   const calls = new Map<string, number>();

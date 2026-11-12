@@ -42,6 +42,7 @@ export type Capability =
 
 export interface CapabilityPort {
   edit: () => Capability;
+  comment: () => Capability;
 }
 
 export interface RecordsPlan {
