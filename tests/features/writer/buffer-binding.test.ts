@@ -403,20 +403,21 @@ for (const kind of ["status", "scalar", "structural"] as const) {
   });
 }
 
-test("rule 29 dependent slice: residual stale base shows refusal and retains native text and hold, including disposal", () => {
-  const page = bufferedWriter("abcd");
+test("rule 29: a refused recovery write shows its refusal and retains native text and hold, including disposal", () => {
+  const page = bufferedWriter("abcd", true, undefined, undefined, { author: serial => "r" + serial });
   try {
     page.start(1, 3); page.native(1, 3, "Z", undefined, "insertCompositionText");
     const other = collabState(page.h.a).roots.beats.get("R2"); assert.ok(other instanceof Y.Map);
     transactSharedDocument(page.h.a, "local-command", () => { other.set("lengthSeconds", 7); });
     page.end("Z");
-    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "stale-base" }]);
+    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "unhandled-kind" }]);
     assert.deepEqual([page.text(), page.beat().textContent], ["abcd", "aZd"]);
     assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
     page.surface.repaint(); page.surface.dispose();
     assert.equal(page.beat().textContent, "aZd");
     assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
-    assert.deepEqual(page.reports[1], { kind: "rejected", reason: "stale-base" });
+    assert.deepEqual(page.reports[1], { kind: "rejected", reason: "unhandled-kind" });
+    assert.deepEqual(page.recovered, []);
     assert.deepEqual(projectSharedDocumentWithRecovery(page.h.a).recovery, []);
     assert.deepEqual(page.a.session.run({ name: "must-wait", needs: "edit", plan: () => {
       assert.fail("A pending native edit must stop another command before planning");

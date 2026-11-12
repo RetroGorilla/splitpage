@@ -98,8 +98,8 @@
   }, {
     "label": "painted end gap escapes its projected split fragment",
     "file": "src/adapters/collab/paint-base.ts",
-    "find": "end = span.to;",
-    "replace": "end = whole.length;",
+    "find": "part.target, part.to, \"before\"",
+    "replace": "part.target, part.text.length, \"before\"",
     "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
   }]
 }

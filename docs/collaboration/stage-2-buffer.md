@@ -35,16 +35,8 @@ stated end in assumed rule 29 on #1414: a fresh soft-removed recovery beat keeps
 the whole native field and source owner/base metadata, through existing shared
 operations and the existing recovery reader, with no undo entry. Successful
 recovery releases the hold; refused recovery retains it and reports through the
-counted port. Rule 29's write is the last dependent slice, in its own pull request
-after the structure lane's removal handler is on main; this binding does not
-implement that write or change removal state outside the operation entry.
-
-Until that dependency lands, "rule 29 dependent slice: residual stale base shows
-refusal and retains native text and hold, including disposal" pins the temporary
-end: `report` receives the existing `stale-base` refusal, the native DOM and hold
-stay live, and another local command, closing the Writer or disposing it cannot
-discard them. Wiring must route `report` to the existing refusal display and count
-each occurrence. Explicit composition cancellation remains cancellation.
+counted port. [The rule 29 recovery write](#the-rule-29-recovery-write) describes it.
+Explicit composition cancellation remains cancellation.
 
 The normal binding commits before another local command plans through
 `SharedDocumentSession.run`: status, scalar and a structural split have named
@@ -52,8 +44,8 @@ command-admission tests. Writer replay entry also settles typing before choosing
 an undo entry. Admission refuses while the native event has not supplied its
 evidence, rather than letting another plan advance its revision. Consequently
 the stale regression requires bypassing that entry with a raw local adapter
-transaction; no normal bound command history is known to reach it. The final
-rule 29 slice keeps the stated recovery end even for that boundary violation.
+transaction; no normal bound command history is known to reach it. The recovery
+write keeps the stated end even for that boundary violation.
 
 ## Native binding
 
@@ -146,41 +138,75 @@ extends the 138 key/lifecycle comparisons with 108 clipboard, focus and non-text
 beforeinput cases against main, comparing document, DOM, selection and event
 outcomes byte for byte. Standalone listener functions remain unchanged.
 
-## Planned rule 29 operation list
+## The rule 29 recovery write
 
-This is the literal request for a plain `aZd` snapshot, source owner `R1`, painted
-revision 7, current revision 9, writer 1 and two current visible rows. It will be
-one session command at base 9. `draft_17` and `draft_segment_17` are aliases minted
-by the first operation; the observed range and boundary in the second must
-resolve `draft_17` through that same preparation's alias map. The visual id is the
-creation path's actual id for writer 1 and operation `r17`, not another record.
+`BufferedTextEdit.recover(runs)` writes the native field to recovery. It answers
+`null` unless the edit is open and its last `commit` was refused in one of two
+ways: the session adopted another document (`buffer-epoch`), or the session
+admitted the command and the document refused its list (`stale-base`, or a
+handler's reason). A commit that was not admitted (delivery in progress, no edit
+permission, re-entry, a disposed session) or that threw leaves nothing to recover:
+it can be asked again, and `commit` itself is unchanged.
+
+The write is one session command at the current revision whose plan declares
+`undo: false`, so the session publishes one edit with its effect pass and does not
+tell the undo port. `bufferedRecoveryOperations` builds the list. For a plain `aZd`
+field, source owner `R1`, painted revision 7, current revision 9, writer 1,
+operation id `r17` and two visible rows it is literally:
 
 ```json
 [
   {
     "kind": "segment-create", "id": "r17", "by": "Alice",
-    "segment": "draft_segment_17", "beat": "draft_17",
+    "segment": "draft_segment_r17", "beat": "draft_r17",
     "at": { "left": null, "right": null, "affinity": "after" },
     "fields": { "audioText": "aZd", "bufferSourceOwner": "R1", "bufferPaintedBase": 7 }
   },
   {
     "kind": "remove", "id": "r17_remove", "by": "Alice", "removalKind": "beat",
-    "targets": ["draft_17"],
-    "observed": ["[\"flow-base\",\"draft_17\",\"audioText\",0,3]"],
-    "boundaries": ["draft_17"],
+    "targets": ["draft_r17"],
+    "observed": ["[\"flow-base\",\"draft_r17\",\"audioText\",0,3]"],
+    "boundaries": ["draft_r17"],
     "components": ["structure_1_007200310037_visual_0"],
     "gallery": [], "comments": [], "at": 2
   }
 ]
 ```
 
-Expected executor result: `{ "ok": true }`, with one transaction and no visible
-new beat. The existing recovery projection must contain exactly one removed beat
-`structure_1_007200310037_beat_0` holding `aZd` and the source/base metadata, on the
-typist, the other copy and an encoded-state late joiner. The final helper must
-suppress its undo record; a refusal keeps the original buffer/hold and is counted.
-Normal T01 already commits into its original beat before the held removal drains,
-so it must create no additional snapshot. Restore/discard remain package 11.
+The operation id is the `author` port's id and the removal's is that id with
+`_remove`; `draft_<id>` and `draft_segment_<id>` are aliases that exist only inside
+the list. The author id must therefore be one the structure executor accepts as an
+operation id (letters, digits, `_` and `-`); another id refuses the write with
+`invalid-structure-operation-id` and keeps the edit. `audioText` is the whole
+native field as stored HTML, with its formatting and inline markers; an emptied
+field writes an empty entry and observes nothing. The component is the creation's
+own visual id for this writer and operation, supplied as a checked observation.
+
+A successful write closes the edit and releases the hold before it forgets the
+native text, so a paint during the drain finds a closed edit whose text is still
+the field's and resets the field instead of adopting it. No new row is visible,
+recovery holds exactly one removed beat with the field and the source owner and
+painted base, on the typist, the other copy and a late joiner. A refused write
+changes nothing and keeps the edit and its hold. `tests/collab/buffer-recovery.test.ts`
+holds the literal, the refusals, the adopted document, a formatted field and T01
+with the removal command, where typing committed before a held removal joins that
+beat's recovery and adds no entry of its own.
+
+The Writer binding asks for the write inside settlement, when a commit left its
+edit open. On success it forgets the edit, repaints the field from the document,
+puts the caret back at its offset (the surface clamps it to the repainted text),
+calls `recovered(rowId)` once and reports nothing else; settlement then counts as
+done, so the local command, close or disposal that asked for it goes on against
+the repainted document. A refused write is reported through `report` with its own
+reason, and the native text and hold stay: "rule 29: a refused recovery write shows
+its refusal and retains native text and hold, including disposal". Wiring must
+route `recovered` to a notice and count it. `tests/features/writer/buffer-recovery.test.ts`
+holds the composition, ordinary typing, command admission and disposal cases.
+Restore and discard remain package 11.
+
+Two cases the write does not cover, both as before it: a commit that threw (among
+them a write that landed and could not be projected) keeps its edit, and assumed
+rule 26's bound never interrupts typing, so it leads to no recovery entry.
 
 ## Mapping and coverage
 

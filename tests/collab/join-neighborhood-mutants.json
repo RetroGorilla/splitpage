@@ -1,0 +1,27 @@
+{
+  "mutants": [{
+    "label": "join neighborhood omits incoming sources",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "...(incoming.get(beat)?.keys() ?? [])",
+    "replace": "...([] as string[])",
+    "tests": ["tests/adapters/collab/join-neighborhood.test.ts"]
+  }, {
+    "label": "join neighborhood drops a duplicate edge early",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "(sources.get(beat) ?? 0) + 1",
+    "replace": "1",
+    "tests": ["tests/adapters/collab/join-neighborhood.test.ts"]
+  }, {
+    "label": "join neighborhood retains an old target after retargeting",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "if (previous !== undefined)",
+    "replace": "if (false && previous !== undefined)",
+    "tests": ["tests/adapters/collab/join-neighborhood.test.ts"]
+  }, {
+    "label": "join neighborhood walks unrelated native records",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "neighbors: (beat: string) => Object.freeze([...new Set([...(outgoing.get(beat)?.values() ?? []), ...(incoming.get(beat)?.keys() ?? [])])].filter(id => id !== beat).sort())",
+    "replace": "neighbors: (beat: string) => { for (const value of beats.values()) { void value; } return Object.freeze([...new Set([...(outgoing.get(beat)?.values() ?? []), ...(incoming.get(beat)?.keys() ?? [])])].filter(id => id !== beat).sort()); }",
+    "tests": ["tests/adapters/collab/join-neighborhood.test.ts"]
+  }]
+}

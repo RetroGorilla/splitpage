@@ -13,8 +13,15 @@ function context(view: StructurePlanScratch) {
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
+export function sharedStructurePlanIndex(view: StructurePlanScratch): SharedStructureIndex {
+  const index = context(view).index; if (!index) throw new Error("Structural index is not bound to preparation"); return index;
+}
 export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment }); }
+export function isPlannedStructureOwner(view: StructurePlanScratch, id: string): boolean { return context(view).records.has(id); }
 export function planSharedStructureRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).removed.set(id, removed); }
+export function readSharedStructureRemoval(view: StructurePlanScratch, id: string): boolean {
+  const state = context(view); return state.removed.get(id) ?? state.index?.removed(id) ?? false;
+}
 export function planSharedStructureHead(view: StructurePlanScratch, segment: string, head: unknown): void {
   context(view).heads.set(segment, { segment, inOrder: true, head: readProjectionHead(head), parts: [] });
 }
@@ -23,6 +30,11 @@ export function readSharedStructureStream(view: StructurePlanScratch, segment: s
   const state = context(view), raw = state.heads.get(segment) ?? state.index?.segment(segment); if (!raw) return undefined;
   const slot = view.scratch("text-plan-slot:" + JSON.stringify(["segments", segment, "text"]), () => ({ plan: null as { units: readonly { value: unknown }[] } | null }));
   return slot.plan ? { ...raw, parts: slot.plan.units.map((unit, from) => ({ boundary: readProjectionHead(unit.value), units: [], from, to: from + 1 })) } : raw;
+}
+
+export function readPlannedSharedTextOffset(view: StructurePlanScratch, segment: string, offset: number, assoc: -1 | 0 = 0): number {
+  const slot = view.scratch("text-plan-slot:" + JSON.stringify(["segments", segment, "text"]), () => ({ plan: null as { native?: { after: readonly number[]; before: readonly number[] } } | null }));
+  return slot.plan?.native?.[assoc < 0 ? "before" : "after"][offset] ?? offset;
 }
 
 export function interpretSharedStructure(view: StructurePlanScratch, requests: readonly { readonly owner: string; readonly heading: boolean }[], actual?: SharedProjectionStream, purpose: "projected" | "restore-membership" = "projected") {

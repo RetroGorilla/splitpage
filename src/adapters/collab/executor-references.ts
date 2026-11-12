@@ -9,6 +9,9 @@ import { readSharedRevision } from "./document.ts";
 import { createSharedAnchor, readSharedAnchor, sharedAnchorCharacterEnd } from "./anchors.ts";
 import { readSharedTextTarget } from "./text-target.ts";
 import { sharedStructureReference } from "./structure-identity.ts";
+import { collabProjectedTextTarget } from "./text-target.ts";
+import { readSharedPaintedText } from "./paint-base.ts";
+import { sharedJoinedSpanReference } from "./joined-text-span.ts";
 
 interface CapturedTextSpan { readonly target: SharedTextAddress; readonly start: SharedContentRef; readonly end: SharedContentRef; readonly units: readonly SharedContentRef[] }
 export interface SharedResolvedTextReference { readonly from: number; readonly to: number; readonly units: readonly SharedPlannedTextUnit[] }
@@ -81,6 +84,15 @@ export function resolveSharedTextReference(view: SharedPreparationView, plan: Sh
 }
 
 export function captureSharedTextRange(handle: SharedDocumentHandle, target: SharedTextAddress, from: number, to: number): SharedContentRef | null {
+  const projected = target.field === "audioText" ? collabProjectedTextTarget(handle, target) : null;
+  if (projected && projected.parts.length > 1) {
+    const painted = readSharedPaintedText(handle, target); if (!painted) return null;
+    try {
+      const range = sharedTextRange(painted.text, from, to), units: SharedContentRef[] = [];
+      for (let index = range.from; index < range.to; index++) { const identity = painted.identity(index); if (!identity) return null; units.push(identity); }
+      return sharedJoinedSpanReference(target, units);
+    } catch { return null; }
+  }
   const prep = createSharedPreparation(handle);
   try {
     const plan = sharedTextCommandPlan(prep.view, target), source = sharedTextSource(plan, target.owner);

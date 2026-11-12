@@ -128,6 +128,10 @@ const WRITERS = {
     family: "other", shared: "operation",
     reason: "The one write into shared state: the command's operation list, passed unchanged."
   },
+  "recovery-write": {
+    family: "other", shared: "operation",
+    reason: "A write nobody commanded: when the document refuses buffered typing, the buffer keeps the field as one list of its own (a beat created and removed in the same list) whose plan declares `undo: false`, so the session records no undo entry (assumed rule 29)."
+  },
   "stored-read": {
     family: "other", shared: "derivation",
     reason: "The projection shows stored fields and records as they are: docId, paragraphsDecided, paragraphStart, gallery and joined fields, sections and the record collections with their replies."
@@ -309,7 +313,7 @@ const COMPUTED: readonly Site[] = [
 const FROM_TEXT = ["tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"] as const;
 
 const ENGINES: readonly Site[] = [
-  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 1", "stated-write"],
+  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2", "stated-write", "recovery-write"],
   ["adapters/production/broll-anchors.ts#anchorBrollInRows", "planBrollAnchors 1", "broll-key"],
   ["application/commands/broll-records.ts#addShotCommand", "addBrollRecord 1", "record-stated"],
   ["application/commands/production-records.ts#addPersonCommand", "addPerson 1", "record-stated"],
@@ -322,7 +326,7 @@ const ENGINES: readonly Site[] = [
   ["application/production/production-index.ts#createProductionIndex", "ProductionIndexOwner.recordsPlan (provided) 1, planRegistryHealing 1", "tag-from-text", "cue-retitle"],
   ["application/save/session-effects.ts#createSessionEffects", "colorsWithMine 1", "person-colour"],
   ["application/session/document-session.ts#createDocumentSession", "AttributionPort.attribute 1, ReconcilePort.anchors 1, ReconcilePort.records 1", "person-colour", "anchor-repair", ...FROM_TEXT],
-  ["application/session/shared-session.ts#createSharedSession", "Plan.shared 4, ReplicaPort.execute 1", "shared-execute"],
+  ["application/session/shared-session.ts#createSharedSession", "Plan.shared 5, ReplicaPort.execute 1", "shared-execute", "recovery-write"],
   ["bootstrap/wiring/broll.ts#mountBrollFeature", "anchorBrollInRows 1", "broll-key"],
   ["bootstrap/wiring/clipboard.ts#mountCopyPasteFeature", "recordPastedBroll 1", "record-with-text"],
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
@@ -358,7 +362,7 @@ const DOORS: Readonly<Record<"stamp" | "amend" | "noteEdit", readonly (readonly 
 
 const CLASS_COUNTS: Readonly<Record<Shared, number>> = {
   "derivation": 6,
-  "operation": 10,
+  "operation": 11,
   "not applicable": 9,
   "undetermined": 4
 };

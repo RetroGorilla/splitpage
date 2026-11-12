@@ -79,8 +79,61 @@
   }, {
     "label": "drain failure leaves the surface attached to its closed edit",
     "file": "src/features/writer/flow-buffer.ts",
-    "find": "if (held.edit.isOpen()) { ports.report(outcome); return false; }",
-    "replace": "if (held.edit.isOpen() || outcome.kind === \"failed\") { ports.report(outcome); return false; }"
+    "find": "if (held.edit.isOpen()) return recover(held, outcome, selection);",
+    "replace": "if (outcome.kind === \"failed\") { ports.report(outcome); return false; } if (held.edit.isOpen()) return recover(held, outcome, selection);"
+  }, {
+    "label": "recovered typing is not announced",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "ports.recovered(held.rowId);",
+    "replace": "void held.rowId;",
+    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovered field keeps its native text",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "surface.repaint(held.rowId); const shown",
+    "replace": "const shown",
+    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
+  }, {
+    "label": "refused recovery discards the native edit",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (held.edit.isOpen()) { ports.report(kept ?? refusal); return false; }",
+    "replace": "if (held.edit.isOpen()) { ports.report(kept ?? refusal); held.edit.cancel(); }"
+  }, {
+    "label": "recovery write leaves an undo entry",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": ", undo: false }",
+    "replace": " }",
+    "tests": ["tests/collab/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovery write leaves a visible new beat",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "{ rows: doc.rows.length, visual })",
+    "replace": "{ rows: doc.rows.length, visual }).slice(0, 1)",
+    "tests": ["tests/collab/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovery attempted for a commit the document never refused",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "if (!open || !stranded) return null;",
+    "replace": "if (!open) return null;",
+    "tests": ["tests/collab/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovered edit stays open over its released hold",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "open = false; stranded = false; try",
+    "replace": "stranded = false; try",
+    "tests": ["tests/collab/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovered edit forgets its native text before its hold drains",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "stranded = false; try { release(); }",
+    "replace": "stranded = false; buffer.cancel(); try { release(); }",
+    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
+  }, {
+    "label": "recovery entry loses its painted base",
+    "file": "src/core/collab/buffer-operations.ts",
+    "find": "bufferPaintedBase: snapshot.base",
+    "replace": "bufferPaintedBase: observed.rows",
+    "tests": ["tests/core/collab/buffer-operations.test.ts"]
   }, {
     "label": "input entry skips the ownership invariant",
     "file": "src/features/writer/flow-buffer.ts",

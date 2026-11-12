@@ -1,0 +1,51 @@
+{
+  "mutants": [{
+    "label": "tail follows the beat id",
+    "file": "src/core/collab/projection/join-layout.ts",
+    "find": "const point = endEntry?.binding?.end;",
+    "replace": "const point = undefined;",
+    "tests": ["tests/adapters/collab/join-split-handoff.test.ts"]
+  }, {
+    "label": "seen and unseen differ",
+    "file": "src/adapters/collab/split-executor.ts",
+    "find": "const position = sharedJoinedGap(view, row, operation.at);",
+    "replace": "throw new SharedTextPreparationError(\"invalid-reference\"); const position = sharedJoinedGap(view, row, operation.at);",
+    "tests": ["tests/adapters/collab/join-split-handoff.test.ts"]
+  }, {
+    "label": "joined painting returns only the first physical fragment",
+    "file": "src/adapters/collab/paint-base.ts",
+    "find": "found.parts.entries()",
+    "replace": "found.parts.slice(0, 1).entries()",
+    "tests": ["tests/adapters/collab/join-routing-limit.test.ts"]
+  }, {
+    "label": "joined source loses its later split fragments",
+    "file": "src/core/collab/projection/join-layout.ts",
+    "find": "sources.set(id, { id, into: root ?? into, entry, blocks: parts,",
+    "replace": "sources.set(id, { id, into: root ?? into, entry, blocks: [own],",
+    "tests": ["tests/adapters/collab/join-layout-histories.test.ts"]
+  }, {
+    "label": "visual fields follow the narration tail",
+    "file": "src/core/collab/projection/join-layout.ts",
+    "find": "into: source.into });",
+    "replace": "into: source.end });",
+    "tests": ["tests/adapters/collab/joined-flow-agreement.test.ts"]
+  }, {
+    "label": "joined lookup walks unrelated beat values",
+    "file": "src/adapters/collab/join-index.ts",
+    "find": "entries: (beat: string) => Object.freeze([...(entries.get(beat)?.values() ?? [])].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0))",
+    "replace": "entries: (beat: string) => { for (const value of beats.values()) { void value; } return Object.freeze([...(entries.get(beat)?.values() ?? [])].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)); }",
+    "tests": ["tests/adapters/collab/join-routing-contract.test.ts"]
+  }, {
+    "label": "native joined split bypasses surrogate clamping",
+    "file": "src/adapters/collab/split-executor.ts",
+    "find": "sharedTextInsertionPosition(plan, fixed?.offset ?? (at.affinity === \"before\" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from)",
+    "replace": "(fixed?.offset ?? (at.affinity === \"before\" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? span.from)",
+    "tests": ["tests/adapters/collab/join-routing-contract.test.ts"]
+  }, {
+    "label": "native binding neighborhood follows only issued beat targets",
+    "file": "src/adapters/collab/joined-text-geometry.ts",
+    "find": "for (const id of index.segmentJoins(key))",
+    "replace": "for (const id of [] as string[])",
+    "tests": ["tests/adapters/collab/join-binding-neighborhood.test.ts", "tests/adapters/collab/join-binding-model.test.ts"]
+  }]
+}

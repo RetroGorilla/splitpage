@@ -11,6 +11,8 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
 import { createSharedJoinIndex } from "./join-index.ts";
 import type { SharedJoinIndex } from "./join-index.ts";
+import { sharedJoinEndpointOffset, readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
+import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
 
 export interface SharedAttachmentOwnership {
   readonly keys: (collection: "visuals" | "gallery", beat: string) => readonly string[];
@@ -25,6 +27,9 @@ export interface SharedStructureIndex {
   readonly removed: (id: string) => boolean;
   readonly attachments: () => SharedAttachmentOwnership;
   readonly joins: () => SharedJoinIndex;
+  readonly endpoint: (position: SharedJoinEndpointPosition) => number | null;
+  readonly joinSegments: (join: string) => readonly string[];
+  readonly segmentJoins: (segment: string) => readonly string[];
 }
 type IndexedStructureSegment = { head: SharedProjectionBoundary | null; text: Y.Text | null;
   boundaries: Map<string, { identity: { client: number; clock: number }; boundary: SharedProjectionBoundary }> };
@@ -37,6 +42,17 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>();
   const removed = new Set<string>();
   let joinIndex: ReturnType<typeof createSharedJoinIndex> | null = null;
+  const bindingSegments = new Map<string, readonly string[]>(), segmentBindings = new Map<string, Set<string>>();
+  const updateBinding = (field: string) => {
+    const prefix = sharedJoinEndpointField(""); if (!field.startsWith(prefix)) return;
+    const join = field.slice(prefix.length);
+    for (const segment of bindingSegments.get(join) ?? []) { const entries = segmentBindings.get(segment); entries?.delete(join); if (!entries?.size) segmentBindings.delete(segment); }
+    bindingSegments.delete(join);
+    if (!join || !isStableSharedIdentity(join)) return;
+    const binding = readSharedJoinEndpoint(state.roots.meta.get(field)); if (!binding) return;
+    const keys = [...new Set([binding.end.segment, binding.start.segment])]; bindingSegments.set(join, keys);
+    for (const segment of keys) { const entries = segmentBindings.get(segment) ?? new Set<string>(); entries.add(join); segmentBindings.set(segment, entries); }
+  };
   let attachmentsReady = false;
   const attachments = { visuals: new Map<string, Set<string>>(), gallery: new Map<string, Set<string>>() };
   const attachmentUpdater = (collection: "visuals" | "gallery") => {
@@ -95,6 +111,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       const changed = new Set<string>(), texts = new Map<Y.Text, string>(), rescanned = new Set<Y.Text>();
       for (const event of events) {
         if (!event.path.length && event instanceof Y.YMapEvent) for (const key of event.keysChanged) { if (typeof key === "string") changed.add(key); }
+        else if (root === state.roots.meta && event.path.length) changed.add(String(event.path[0]));
         else if (textChanges && event.path.length === 2 && event.path[1] === "text" && event.target instanceof Y.Text) texts.set(event.target, String(event.path[0]));
         else if (event.path.length === 1 && event instanceof Y.YMapEvent && [...event.keysChanged].some(key => fields.includes(key as string))) changed.add(String(event.path[0]));
         else if (root === state.roots.beats && event.path.length === 2 && event.path[1] === "removals") changed.add(String(event.path[0]));
@@ -115,13 +132,17 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   for (const key of state.roots.segments.keys()) updateSegment(key);
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
+  for (const key of state.roots.meta.keys()) updateBinding(key);
   const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment", "removals"]),
     observe(state.roots.headings, updateHeading, ["id"]), observe(state.roots.visuals, key => { if (attachmentsReady) updateVisual(key); }, ["beat"]),
-    observe(state.roots.gallery, key => { if (attachmentsReady) updateGallery(key); }, ["beat"])];
+    observe(state.roots.gallery, key => { if (attachmentsReady) updateGallery(key); }, ["beat"]), observe(state.roots.meta, updateBinding, [])];
   state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
   const attachmentIndex: SharedAttachmentOwnership = Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) });
   const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), removed: (id: string) => removed.has(id),
-    joins: () => { assertSharedDocumentIdle(state); joinIndex ??= createSharedJoinIndex(state.roots.beats); return joinIndex.index; },
+    joins: () => { if (!joinIndex) { assertSharedDocumentIdle(state); joinIndex = createSharedJoinIndex(state.roots.beats); } return joinIndex.index; },
+    endpoint: (position: SharedJoinEndpointPosition) => sharedJoinEndpointOffset(position, state.doc, segments.get(position.segment)?.text),
+    joinSegments: (join: string) => Object.freeze([...(bindingSegments.get(join) ?? [])]),
+    segmentJoins: (segment: string) => Object.freeze([...(segmentBindings.get(segment) ?? [])].sort()),
     attachments: () => { assertSharedDocumentIdle(state); if (!attachmentsReady) {
       for (const key of state.roots.visuals.keys()) updateVisual(key);
       for (const key of state.roots.gallery.keys()) updateGallery(key);

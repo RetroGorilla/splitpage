@@ -14,6 +14,8 @@ import { prepareSharedMarkTranslation } from "./mark-translation.ts";
 import { preparedTextDescription, prepareTextMarkWrite, preparedTextOperation } from "./text-description.ts";
 import type { SharedTextOperationPreparation } from "./text-description.ts";
 import { prepareSharedMarkChange } from "./mark-executor.ts";
+import { usesSharedJoinedText, readSharedJoinedText, sharedJoinedGap, sharedJoinedSelected, prepareSharedGlueDeletion } from "./joined-text-routing.ts";
+import type { SharedTextCommandPlan, SharedPlannedTextUnit } from "./executor-text-plan.ts";
 
 export function sharedInlineContent(value: SharedInlineValue): string | Readonly<Record<string, unknown>> {
   if (typeof value === "string") return value;
@@ -34,11 +36,21 @@ function checkAuthor(operation: SharedTextInsert | SharedTextDelete): void {
 export function prepareSharedTextInsertion(operation: SharedTextInsert, view: SharedPreparationView): SharedTextOperationPreparation {
   return preparedTextOperation(() => {
     checkAuthor(operation);
-    const plan = sharedTextCommandPlan(view, operation.target), { at } = operation;
-    const left = at.left === null ? null : resolveSharedTextReference(view, plan, at.left, "left");
-    const right = at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
-    if (left && right && left.from > right.from || !left && !right && plan.units.length) throw new SharedTextPreparationError("invalid-reference");
-    let offset = sharedTextInsertionPosition(plan, (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0);
+    if (!usesSharedJoinedText(view, operation.target)) return preparePhysicalTextInsertion(operation, view);
+    const row = readSharedJoinedText(view, operation.target); if (!row) throw new SharedTextPreparationError("missing-target");
+    const position = sharedJoinedGap(view, row, operation.at);
+    return preparePhysicalTextInsertion(operation, view, position);
+  });
+}
+
+function preparePhysicalTextInsertion(operation: SharedTextInsert, view: SharedPreparationView, fixed?: { readonly plan: SharedTextCommandPlan; readonly offset: number }): SharedTextOperationPreparation {
+  return preparedTextOperation(() => {
+    checkAuthor(operation);
+    const plan = fixed?.plan ?? sharedTextCommandPlan(view, operation.target), { at } = operation;
+    const left = fixed || at.left === null ? null : resolveSharedTextReference(view, plan, at.left, "left");
+    const right = fixed || at.right === null ? null : resolveSharedTextReference(view, plan, at.right, "point");
+    if (!fixed && (left && right && left.from > right.from || !left && !right && plan.units.length)) throw new SharedTextPreparationError("invalid-reference");
+    let offset = sharedTextInsertionPosition(plan, fixed?.offset ?? (at.affinity === "before" ? right?.from ?? left?.from : left?.from ?? right?.from) ?? 0);
     offset = requireSharedTextOwnership(view, plan, offset, offset);
     const chunks = operation.content.map((chunk, chunkIndex) => {
       if (typeof chunk.value !== "string" && chunk.value.atom === "broll" && !reserveSharedCommandIdentities(view, [chunk.value.id])) throw new SharedTextPreparationError("existing-identity");
@@ -74,7 +86,20 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
 export function prepareSharedTextDeletion(operation: SharedTextDelete, view: SharedPreparationView): SharedTextOperationPreparation {
   return preparedTextOperation(() => {
     checkAuthor(operation);
-    const plan = sharedTextCommandPlan(view, operation.target), selected = new Set(operation.observed.flatMap(reference => resolveSharedTextReference(view, plan, reference, "range").units));
+    if (!usesSharedJoinedText(view, operation.target)) return preparePhysicalTextDeletion(operation, view);
+    const row = readSharedJoinedText(view, operation.target); if (!row) throw new SharedTextPreparationError("missing-target");
+    const selected = sharedJoinedSelected(view, row, operation.observed), prepared = selected.physical.map(part => preparePhysicalTextDeletion(operation, view, part));
+    const refusal = prepared.find(item => !item.ok); if (refusal) return refusal;
+    const accepted = prepared.filter((item): item is Extract<SharedTextOperationPreparation, { ok: true }> => item.ok), glue = prepareSharedGlueDeletion(view, selected.groups);
+    if (!glue.ok) return glue;
+    return preparedTextDescription([...accepted.flatMap(item => item.writes), ...glue.writes], [...accepted.flatMap(item => item.description.steps), ...(glue.writes.length ? [{ kind: "map" as const, writes: glue.writes }] : [])]);
+  });
+}
+
+function preparePhysicalTextDeletion(operation: SharedTextDelete, view: SharedPreparationView, fixed?: { readonly plan: SharedTextCommandPlan; readonly units: ReadonlySet<SharedPlannedTextUnit> }): SharedTextOperationPreparation {
+  return preparedTextOperation(() => {
+    checkAuthor(operation);
+    const plan = fixed?.plan ?? sharedTextCommandPlan(view, operation.target), selected = fixed?.units ?? new Set(operation.observed.flatMap(reference => resolveSharedTextReference(view, plan, reference, "range").units));
     const ranges: { from: number; to: number }[] = [];
     for (let index = 0; index < plan.units.length; index++) if (selected.has(plan.units[index] as typeof plan.units[number])) {
       const last = ranges.at(-1);
