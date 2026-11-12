@@ -15,7 +15,7 @@ import { preparedTextDescription, prepareTextMarkWrite, preparedTextOperation } 
 import type { SharedTextOperationPreparation } from "./text-description.ts";
 import { prepareSharedMarkChange } from "./mark-executor.ts";
 
-function inline(value: SharedInlineValue): string | Readonly<Record<string, unknown>> {
+export function sharedInlineContent(value: SharedInlineValue): string | Readonly<Record<string, unknown>> {
   if (typeof value === "string") return value;
   switch (value.atom) {
     case "who": return { w: value.name };
@@ -42,7 +42,7 @@ export function prepareSharedTextInsertion(operation: SharedTextInsert, view: Sh
     requireSharedTextOwnership(view, plan, offset, offset);
     const chunks = operation.content.map((chunk, chunkIndex) => {
       if (typeof chunk.value !== "string" && chunk.value.atom === "broll" && !reserveSharedCommandIdentities(view, [chunk.value.id])) throw new SharedTextPreparationError("existing-identity");
-      const value = sharedPreparedTextInsert(inline(chunk.value));
+      const value = sharedPreparedTextInsert(sharedInlineContent(chunk.value));
       if (typeof value !== "string" && (!value || typeof value !== "object" || Array.isArray(value))) throw new SharedTextPreparationError("invalid-content");
       const marks = chunk.marks.map((mark, markIndex) => {
         const translated = prepareSharedMarkTranslation(mark, view.writer, operation.id, [chunkIndex, markIndex]);
