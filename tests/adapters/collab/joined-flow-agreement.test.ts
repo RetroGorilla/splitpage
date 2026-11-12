@@ -163,8 +163,9 @@ test("seeded joined rows agree with app formatting across the join point while a
         agree("app formatting on a joined row " + step, order, handles, handle => {
           const actual = runtime.load(projectSharedDocumentWithRecovery(handle).document);
           if (JSON.stringify(actual.rows) !== JSON.stringify(loaded.rows)) {
-            const chars = (rows: typeof actual.rows) => rows.map(row => explode(runtime.cells(row.audioText ?? "")).map((char, index) => row.id === owner && index === separator ? null : char));
-            violations.add(separator >= start && separator < end && JSON.stringify(chars(actual.rows)) === JSON.stringify(chars(loaded.rows)) ? "separator-keeps-no-inline-format" : "app-formatting");
+            const apart = (rows: typeof actual.rows) => rows.map(row => ({ ...row,
+              audioText: explode(runtime.cells(row.audioText ?? "")).map((char, index) => row.id === owner && index === separator ? null : char) }));
+            violations.add(separator >= start && separator < end && JSON.stringify(apart(actual.rows)) === JSON.stringify(apart(loaded.rows)) ? "separator-keeps-no-inline-format" : "app-formatting");
           }
           return actual.rows;
         }); compared++;

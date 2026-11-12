@@ -29,7 +29,7 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
 }
 
 function preparePhysicalMarkChange(operation: SharedMarkChange, view: SharedPreparationView): SharedTextOperationPreparation {
-  const plan = sharedTextCommandPlan(view, operation.target), value = plan.units.map(unit => typeof unit.value === "string" ? unit.value : "￼").join("");
+  const plan = sharedTextCommandPlan(view, operation.target), value = plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join("");
   const ranges: MarkRange[] = [];
   const resolved = operation.observed.map(reference => {
     const range = resolveSharedTextReference(view, plan, reference, "range"), clamped = sharedTextRange(value, range.from, range.to);
