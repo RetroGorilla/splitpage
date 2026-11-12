@@ -257,8 +257,10 @@ export function commitWriterInventory(rules: WriterScanRules, probes?: Readonly<
           for (const key of flag ? [] : keys) if (fields.has(key)) tally(fieldWrites, site(node), key);
           const contextual = checker.getContextualType(node);
           if (!contextual) continue;
+          const wanted = checker.getNonNullableType(contextual);
           for (const key of keys) {
-            const engine = declared(checker.getPropertyOfType(checker.getNonNullableType(contextual), key));
+            const engine = (wanted.isUnion() ? wanted.types : [wanted])
+              .map(part => declared(checker.getPropertyOfType(part, key))).find(found => found !== null);
             if (engine) tally(engineUses, site(node), engine.slice(engine.indexOf("#") + 1) + " (provided)");
           }
         }

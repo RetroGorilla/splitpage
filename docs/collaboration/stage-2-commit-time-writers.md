@@ -28,7 +28,7 @@ a table differ in either direction:
 | `FIELDS` | Every write of a who, when or placement field, by assignment or in an object literal, in any module under `src/` |
 | `RECORDS` | Every write of a record collection (tags, shots, people, comments): replacement, a mutating array call, an indexed write |
 | `COMPUTED` | Every write to a beat, a record or the document whose field name is known only at run time |
-| `ENGINES` | Every use of a function or port member that makes records, placement or attribution from text |
+| `ENGINES` | Every use of a function or port member that makes records, placement or attribution from text, and every place that provides or reads a command's shared operation list |
 | `DOORS` | Every module that reaches the standalone session's `stamp`, `amend` or `noteEdit`, from the typed inventory of `session-caller-scan.ts` |
 
 The scan resolves names with the type checker: a renamed import, a constant or

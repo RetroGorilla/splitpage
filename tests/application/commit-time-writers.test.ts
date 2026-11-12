@@ -13,6 +13,7 @@ const RULES: WriterScanRules = {
     "adapters/production/broll-anchors.ts#anchorBrollInRows",
     "application/production/broll-records.ts#recordPastedBroll",
     "application/session/document-session.ts#AttributionPort.attribute",
+    "application/session/document-session.ts#Plan.shared",
     "application/session/ports.ts#ReconcilePort.anchors",
     "application/session/ports.ts#ReconcilePort.records",
     "application/session/shared-session.ts#ReplicaPort.execute",
@@ -162,7 +163,8 @@ const STEPS: readonly Site[] = [
   ["application/session/document-session.ts#stamp", "plan.apply", "standalone-door", "save-stamp", "document-id", "registry-heal-on-draw", "person-colour"],
   ["application/session/document-session.ts#take", "ports.undo.absorbDisk", "standalone-door"],
   ["application/session/document-session.ts#transact", "ports.attribution.attribute | apply | sign.apply | ports.reconcile.anchors", "person-colour", "stated-write", "anchor-repair"],
-  ["application/session/document-session.ts#withRecords", "records | plan.apply", "tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"],  ["application/session/shared-session.ts#execute", "ports.replica.execute", "shared-execute"],
+  ["application/session/document-session.ts#withRecords", "records | plan.apply", "tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"],
+  ["application/session/shared-session.ts#execute", "ports.replica.execute", "shared-execute"],
   ["application/session/shared-session.ts#projectionStep", "ports.entry ->", "file-entry"]
 ];
 
@@ -254,6 +256,7 @@ const COMPUTED: readonly Site[] = [
 const FROM_TEXT = ["tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"] as const;
 
 const ENGINES: readonly Site[] = [
+  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 1", "stated-write"],
   ["adapters/production/broll-anchors.ts#anchorBrollInRows", "planBrollAnchors 1", "broll-key"],
   ["application/commands/broll-records.ts#addShotCommand", "addBrollRecord 1", "record-stated"],
   ["application/commands/production-records.ts#addPersonCommand", "addPerson 1", "record-stated"],
@@ -266,7 +269,7 @@ const ENGINES: readonly Site[] = [
   ["application/production/production-index.ts#createProductionIndex", "ProductionIndexOwner.recordsPlan (provided) 1, planRegistryHealing 1", "tag-from-text", "cue-retitle"],
   ["application/save/session-effects.ts#createSessionEffects", "colorsWithMine 1", "person-colour"],
   ["application/session/document-session.ts#createDocumentSession", "AttributionPort.attribute 1, ReconcilePort.anchors 1, ReconcilePort.records 1", "person-colour", "anchor-repair", ...FROM_TEXT],
-  ["application/session/shared-session.ts#createSharedSession", "ReplicaPort.execute 1", "shared-execute"],
+  ["application/session/shared-session.ts#createSharedSession", "Plan.shared 4, ReplicaPort.execute 1", "shared-execute"],
   ["bootstrap/wiring/broll.ts#mountBrollFeature", "anchorBrollInRows 1", "broll-key"],
   ["bootstrap/wiring/clipboard.ts#mountCopyPasteFeature", "recordPastedBroll 1", "record-with-text"],
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
@@ -455,16 +458,18 @@ test("writer scan self-test, computed: a field name known only at run time count
   assert.deepEqual(found.computed, { [PROBE + "#onBeat"]: "rows 1", [PROBE + "#onDocument"]: "document 1", [PROBE + "#onRecord"]: "brollShots 1" });
 });
 
-test("writer scan self-test, engines: a renamed import, a namespace member, a port member under Pick and a provided port member all resolve", () => {
+test("writer scan self-test, engines: a renamed import, a namespace member, a port member under Pick and a provided port member, also one of several accepted shapes, all resolve", () => {
   const found = probed(`
     function renamed() { repair(doc, () => []); }
     function namespaced() { return owners.planOwnerSync; }
     function ported(port: Pick<ReconcilePort, "anchors">) { port.anchors(doc); }
     function provided(): ReconcilePort { return { anchors: () => 0 }; }
+    function offered(): ReconcilePort | { readonly refused: string } | null { return { anchors: () => 0 }; }
     function unrelated() { const syncCommentAnchors = () => 0; return { anchors: syncCommentAnchors() }; }
   `);
   assert.deepEqual(found.engines, {
     [PROBE + "#namespaced"]: "planOwnerSync 1",
+    [PROBE + "#offered"]: "ReconcilePort.anchors (provided) 1",
     [PROBE + "#ported"]: "ReconcilePort.anchors 1",
     [PROBE + "#provided"]: "ReconcilePort.anchors (provided) 1",
     [PROBE + "#renamed"]: "syncCommentAnchors 1"
