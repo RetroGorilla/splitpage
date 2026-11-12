@@ -42,7 +42,7 @@ export function readSharedTextRestoreOperation(operation: string): { readonly cl
   return typeof client === "number" && typeof clock === "number" ? { client, clock } : null;
 }
 
-// why: decided row: the same change made by two people who had not seen each other's is one change; both carry one number.
+// why: decided row: the same change made by two people who had not seen each other's is one change.
 function changeKey(record: SharedMarkRecord): string | null {
   return record.type === "add" && record.born === null
     ? JSON.stringify([record.start, record.end, record.mark.kind, record.mark.value, readSharedMarkGeneration(record)]) : null;
