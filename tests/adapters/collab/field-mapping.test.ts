@@ -71,7 +71,7 @@ const inventoryMapping: readonly [string, string, readonly MappedValueProbe[]][]
   ["`sections[].firstSceneId`", "derived from the next beat boundary in order; absent as a scalar", [["headings",["Hprobe","firstSceneId"],"derived from order; no shared scalar","absent"],["order",[],["h:Hprobe","b:Rprobe"]]]],
   ["`id`", "comments map key and record id", [["comments",["Cprobe","id"],"Cprobe"]]],
   ["`rowId`", "comments[id].rowId (last known fallback)", [["comments",["Cprobe","rowId"],"Rprobe"]]],
-  ["`field`", "comments[id].field (last known fallback)", [["comments",["Cprobe","field"],"audioText"]]],
+  ["`field`", "comments[id].field (last known fallback)", [["comments",["Cprobe","field"],"visualText"]]],
   ["`anchorId`", "comments[id].anchorId", [["comments",["Cprobe","anchorId"],"Canchor"]]],
   ["`quotedText`", "comments[id].quote", [["comments",["Cprobe","quote"],"Quoted sentinel"]]],
   ["`author`", "comments[id].author", [["comments",["Cprobe","author"],"Author sentinel"]]],

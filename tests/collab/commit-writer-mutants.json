@@ -1,0 +1,3 @@
+{"mutants":[
+  {"label":"comment placed in the audio column before the visual column","file":"src/adapters/collab/project.ts","find":"[...visualCells.map(value => [broll.get(value.key) ?? value.units, \"visualText\"] as const),","replace":"[[broll.get(audio.key) ?? audio.units, \"audioText\"] as const, ...visualCells.map(value => [broll.get(value.key) ?? value.units, \"visualText\"] as const),","tests":["tests/adapters/collab/comment-anchor-columns.test.ts"]}
+]}
