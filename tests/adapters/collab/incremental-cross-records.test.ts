@@ -22,12 +22,12 @@ test("incremental join separator register changes only its joined row after a me
     transactSharedDocument(run.a, "local-command", () => {
       const joins = nativeMap(run.a, "beats", "R2").get("joins"); assert.ok(joins instanceof Y.Map); joins.set("native-join", { into: "R1", glue: " " });
     });
-    const untouched = projector.read().document.rows[1], field = sharedJoinGlueRegisterField("native-join");
+    const untouched = projector.read().document.rows[1], field = 'joinGlue:["join-retirement","R2","R1"," ",0]';
     work.length = 0;
     const measured = measureLibraryReads(run.a, "R2", () => transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(field, "")), docs);
     assert.equal(projector.read().document.rows[0]?.audioText, "onetwo");
     assert.equal(projector.read().document.rows[1], untouched);
-    assert.deepEqual(work, ["group:R1", "cell:[\"R1\",\"audioText\"]"]);
+    assert.deepEqual(work, ["group:R1", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
     assert.equal(measured.totals.texts, 0); assert.equal(measured.totals.markEntries, 0);
     assert.deepEqual(measured.unrelated, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
     assertIncremental(run.a, projector);
@@ -36,9 +36,9 @@ test("incremental join separator register changes only its joined row after a me
     assertIncremental(run.a, projector);
     work.length = 0;
     transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.delete(field));
-    assert.deepEqual(work, []);
+    assert.deepEqual(work, ["compare-field:comments"]);
     transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(sharedJoinGlueRegisterField("not-issued"), ""));
-    assert.deepEqual(work, []); assertIncremental(run.a, projector);
+    assert.deepEqual(work, ["compare-field:comments", "compare-field:comments"]); assertIncremental(run.a, projector);
   } finally { projector.dispose(); run.close(); }
 });
 

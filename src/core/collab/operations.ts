@@ -77,6 +77,10 @@ export interface SharedJoinGlue extends SharedOperationAuthor {
   readonly joins: readonly SharedContentRef[];
   readonly glue: " " | "";
 }
+export interface SharedJoinRetire extends SharedOperationAuthor {
+  readonly kind: "join-retire";
+  readonly joins: readonly SharedContentRef[];
+}
 export interface SharedSoftRemove extends SharedOperationAuthor {
   readonly kind: "remove";
   readonly removalKind: "beat" | "range" | "header" | "became-heading";
@@ -179,7 +183,7 @@ export type SharedStatusRetire = SharedOperationAuthor & {
   readonly event: SharedContentRef;
 } & Pick<SharedStatusEvent, "target" | "value">;
 export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedBeatSplitBefore
-  | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedSoftRemove | SharedRestore | SharedSegmentMove
+  | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
   | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire;
 

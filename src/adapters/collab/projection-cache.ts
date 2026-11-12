@@ -1,7 +1,7 @@
 import { canonicalSharedProjection } from "../../core/collab/projection/canonical.ts";
 import type { SharedProjectionKind } from "../../core/collab/projection/canonical.ts";
 
-export type SharedProjectionWork = "segment" | "visual" | "record" | "fields" | "group" | "cell" | "snapshot";
+export type SharedProjectionWork = "segment" | "visual" | "record" | "fields" | "group" | "cell" | "snapshot" | "compare-row" | "compare-field";
 
 export class SharedProjectionCache {
   private readonly slots = new Map<string, { readonly dependencies: readonly unknown[]; readonly value: unknown; readonly children: ReadonlySet<string> }>();
@@ -14,6 +14,7 @@ export class SharedProjectionCache {
 
   begin(): void { this.used.clear(); }
   end(): void { for (const key of this.slots.keys()) if (!this.used.has(key)) this.slots.delete(key); }
+  counted(work: SharedProjectionWork, key: string): void { this.count?.(work, key); }
 
   read<T>(slot: readonly string[], dependencies: readonly unknown[], build: () => T, work?: SharedProjectionWork): T {
     const key = JSON.stringify(slot), previous = this.slots.get(key);
