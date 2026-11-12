@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { untypedStandaloneAccesses } from "./session-caller-scan.ts";
+import { typedStandaloneInventory, untypedStandaloneAccesses } from "./session-caller-scan.ts";
 
 test("untyped app tests reach standalone members only through the standalone door", () => {
   assert.deepEqual(untypedStandaloneAccesses(), {});
@@ -60,5 +60,24 @@ for (const limit of UNSEEN_COMPUTED_KEYS) {
       import { liveSession } from "../bootstrap/wiring/session-owner.ts";
       ${limit.source}
     `), {});
+  });
+}
+
+const TYPED_SCAN_LIMITS = [
+  { name: "a receiver deliberately erased to any", source: 'const erased = standaloneSession() as any; erased.stamp(null!);' },
+  { name: "a receiver lookup widened to string", source: 'const door = "standalone" + "Session"; bridge[door]().stamp(null!);' },
+  { name: "a reflective lookup returning an untyped callback", source: 'Reflect.get(standaloneSession(), "stamp")(null!);' }
+];
+
+for (const limit of TYPED_SCAN_LIMITS) {
+  test("declared typed scan limit: " + limit.name, () => {
+    const found = typedStandaloneInventory({ "starters/session-type-probe.ts": `
+      import { standaloneSession } from "../bootstrap/wiring/session-owner.ts";
+      import * as bridge from "../bootstrap/wiring/session-owner.ts";
+      ${limit.source}
+    ` });
+    assert.deepEqual(found.members, { stamp: {}, amend: {}, noteEdit: {}, held: {} });
+    assert.deepEqual(found.dynamicAccesses, {});
+    assert.deepEqual(found.typePositions, {});
   });
 }

@@ -81,11 +81,45 @@ test("typed inventory: the four held port declarations resolve to the standalone
   assert.deepEqual(current().portMemberTypes, PORTS);
 });
 
+test("typed inventory: no unbounded computed standalone accesses exist outside the audited files", () => {
+  assert.deepEqual(current().dynamicAccesses, {});
+});
+
 const IMPORTS = `
   import type { StandaloneDocumentSession as Session } from "../application/session/document-session.ts";
   import type { UndoPorts } from "../application/editing/undo/undo.ts";
   import { standaloneSession } from "../bootstrap/wiring/session-owner.ts";
 `;
+
+for (const [name, source, members, dynamicAccesses, positions] of [
+  ["a constant key", 'function inspect(renamed: Session) { const key = "stamp"; renamed[key](null!); }',
+    { stamp: { "starters/session-type-probe.ts": 1 }, amend: {}, noteEdit: {}, held: {} }, {}, 1],
+  ["a union key", 'function inspect(renamed: Session, key: "stamp" | "amend") { renamed[key](null!); }',
+    { stamp: { "starters/session-type-probe.ts": 1 }, amend: { "starters/session-type-probe.ts": 1 }, noteEdit: {}, held: {} }, {}, 1],
+  ["a bounded generic key", 'function inspect<Key extends "stamp" | "amend">(renamed: Session, key: Key) { renamed[key](null!); }',
+    { stamp: { "starters/session-type-probe.ts": 1 }, amend: { "starters/session-type-probe.ts": 1 }, noteEdit: {}, held: {} }, {}, 1],
+  ["an unbounded string key", 'function inspect(renamed: Session, key: string) { renamed[key](null!); }',
+    { stamp: {}, amend: {}, noteEdit: {}, held: {} }, { "starters/session-type-probe.ts": 1 }, 1],
+  ["an unbounded port key", 'function inspect(renamed: UndoPorts, key: string) { renamed[key](); }',
+    { stamp: {}, amend: {}, noteEdit: {}, held: {} }, { "starters/session-type-probe.ts": 1 }, 0],
+  ["a namespace element receiver with a constant key", 'import * as bridge from "../bootstrap/wiring/session-owner.ts"; function inspect() { const key = "stamp"; bridge["standaloneSession"]()[key]({ name: "probe", plan: () => null }); }',
+    { stamp: { "starters/session-type-probe.ts": 1 }, amend: {}, noteEdit: {}, held: {} }, {}, 0],
+  ["a constant computed binding", 'const key = "stamp"; const { [key]: captured } = standaloneSession(); void captured;',
+    { stamp: { "starters/session-type-probe.ts": 1 }, amend: {}, noteEdit: {}, held: {} }, {}, 0],
+  ["a constant computed assignment", 'const key = "held"; let captured; ({ [key]: captured } = standaloneSession());',
+    { stamp: {}, amend: {}, noteEdit: {}, held: { "starters/session-type-probe.ts": 1 } }, {}, 0],
+  ["an unbounded computed binding", 'function inspect(renamed: Session, key: string) { const { [key]: captured } = renamed; void captured; }',
+    { stamp: {}, amend: {}, noteEdit: {}, held: {} }, { "starters/session-type-probe.ts": 1 }, 1],
+  ["an unrelated dynamic receiver", 'function inspect(renamed: Record<string, () => void>, key: string) { renamed[key](); }',
+    { stamp: {}, amend: {}, noteEdit: {}, held: {} }, {}, 0]
+] as const) {
+  test("typed computed-key self-test: " + name, () => {
+    const found = typedStandaloneInventory({ "starters/session-type-probe.ts": IMPORTS + source });
+    assert.deepEqual(found.members, members);
+    assert.deepEqual(found.dynamicAccesses, dynamicAccesses);
+    assert.deepEqual(found.typePositions, positions ? { "starters/session-type-probe.ts": positions } : {});
+  });
+}
 
 for (const [name, source, member, count, positions] of [
   ["a renamed full-session receiver", "function inspect(renamed: Session) { renamed.stamp(null!); }", "stamp", 1, 1],

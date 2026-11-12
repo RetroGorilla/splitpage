@@ -223,6 +223,7 @@ export function typedStandaloneInventory(probes?: Readonly<Record<string, string
   const carriedTypes = new Set(memberTypes.values());
   const members: Record<string, Counts> = { stamp: {}, amend: {}, noteEdit: {}, held: {} };
   const typePositions: Counts = {};
+  const dynamicAccesses: Counts = {};
   function matches(type: ts.Type, seen = new Set<ts.Type>()): readonly string[] {
     if (seen.has(type)) return [];
     seen.add(type);
@@ -241,6 +242,32 @@ export function typedStandaloneInventory(probes?: Readonly<Record<string, string
     if (ts.isComputedPropertyName(node) && ts.isStringLiteralLike(node.expression)) return node.expression.text;
     return null;
   }
+  function finiteKeys(type: ts.Type, seen = new Set<ts.Type>()): readonly string[] | null {
+    if (type.isStringLiteral()) return [type.value];
+    if (seen.has(type)) return null;
+    seen.add(type);
+    if (type.isUnion()) {
+      const keys: string[] = [];
+      for (const part of type.types) {
+        const found = finiteKeys(part, new Set(seen));
+        if (found === null) return null;
+        keys.push(...found);
+      }
+      return [...new Set(keys)];
+    }
+    const constraint = checker.getBaseConstraintOfType(type);
+    return constraint && constraint !== type ? finiteKeys(constraint, seen) : null;
+  }
+  function propertyNames(node: ts.Node): readonly string[] | null {
+    const name = literalName(node);
+    if (name !== null) return [name];
+    return ts.isComputedPropertyName(node) ? finiteKeys(checker.getTypeAtLocation(node.expression)) : null;
+  }
+  function standaloneReceiver(type: ts.Type, at: ts.Node): boolean {
+    if (carries(type)) return true;
+    if (type.isUnionOrIntersection()) return type.types.some(part => standaloneReceiver(part, at));
+    return checker.getPropertiesOfType(type).some(symbol => matches(checker.getTypeOfSymbolAtLocation(symbol, at)).length > 0);
+  }
   for (const path of paths) {
     const source = program.getSourceFile(absolute(path));
     if (!source) throw new Error("Typed session caller was not loaded: " + path);
@@ -250,6 +277,9 @@ export function typedStandaloneInventory(probes?: Readonly<Record<string, string
         if (inventory) inventory[path] = (inventory[path] ?? 0) + 1;
       }
     };
+    function dynamic(from: ts.Type, at: ts.Node): void {
+      if (standaloneReceiver(from, at)) dynamicAccesses[path] = (dynamicAccesses[path] ?? 0) + 1;
+    }
     function property(from: ts.Type, name: string, at: ts.Node): ts.Type | null {
       const symbol = checker.getPropertyOfType(checker.getNonNullableType(from), name);
       if (!symbol) return null;
@@ -260,29 +290,39 @@ export function typedStandaloneInventory(probes?: Readonly<Record<string, string
     function binding(pattern: ts.ObjectBindingPattern, from: ts.Type): void {
       for (const element of pattern.elements) {
         if (element.dotDotDotToken) continue;
-        const name = literalName(element.propertyName ?? element.name);
-        if (name === null) continue;
-        const type = property(from, name, element) ?? checker.getTypeAtLocation(element.name);
-        if (!checker.getPropertyOfType(checker.getNonNullableType(from), name)) count(type);
-        if (type && ts.isObjectBindingPattern(element.name)) binding(element.name, type);
+        const names = propertyNames(element.propertyName ?? element.name);
+        if (names === null) {
+          if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) dynamic(from, element);
+          continue;
+        }
+        for (const name of names) {
+          const type = property(from, name, element) ?? checker.getTypeAtLocation(element.name);
+          if (!checker.getPropertyOfType(checker.getNonNullableType(from), name)) count(type);
+          if (type && ts.isObjectBindingPattern(element.name)) binding(element.name, type);
+        }
       }
     }
     function assignment(pattern: ts.ObjectLiteralExpression, from: ts.Type): void {
       for (const element of pattern.properties) {
         if (!ts.isPropertyAssignment(element) && !ts.isShorthandPropertyAssignment(element)) continue;
-        const name = literalName(element.name);
-        if (name === null) continue;
-        const type = property(from, name, element);
-        if (type && ts.isPropertyAssignment(element) && ts.isObjectLiteralExpression(element.initializer)) assignment(element.initializer, type);
+        const names = propertyNames(element.name);
+        if (names === null) {
+          if (ts.isComputedPropertyName(element.name)) dynamic(from, element);
+          continue;
+        }
+        for (const name of names) {
+          const type = property(from, name, element);
+          if (type && ts.isPropertyAssignment(element) && ts.isObjectLiteralExpression(element.initializer)) assignment(element.initializer, type);
+        }
       }
     }
     const visit = (node: ts.Node): void => {
       if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
         const from = checker.getTypeAtLocation(node.expression);
         count(from);
-        const name = ts.isPropertyAccessExpression(node) ? node.name.text
-          : ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
-        if (name !== null) property(from, name, node);
+        const names = ts.isPropertyAccessExpression(node) ? [node.name.text] : finiteKeys(checker.getTypeAtLocation(node.argumentExpression));
+        if (names === null) dynamic(from, node);
+        else for (const name of names) property(from, name, node);
       }
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) count(checker.getTypeAtLocation(node.expression));
       if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isObjectBindingPattern(node.name)) binding(node.name, checker.getTypeAtLocation(node.initializer ?? node));
@@ -300,5 +340,5 @@ export function typedStandaloneInventory(probes?: Readonly<Record<string, string
     const member = declaration?.members.find(node => ts.isPropertySignature(node) && literalName(node.name) === name);
     portMemberTypes[path + "#" + owner + "." + name] = !!member && ts.isPropertySignature(member) && !!member.type && checker.getTypeFromTypeNode(member.type) === held;
   }
-  return { members, typePositions, portMemberTypes };
+  return { members, typePositions, portMemberTypes, dynamicAccesses };
 }
