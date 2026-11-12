@@ -1,20 +1,36 @@
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { createSharedIncrementalProjector } from "../../../src/adapters/collab/incremental-project.ts";
-import type { SharedIncrementalProjector } from "../../../src/adapters/collab/incremental-project.ts";
+import type { SharedIncrementalProjection, SharedIncrementalProjector } from "../../../src/adapters/collab/incremental-project.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
+import { projectSharedDocumentStep } from "../../../src/adapters/collab/project.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
+import { expectedProjectionChanges } from "../../collab/projection-changes-oracle.ts";
+import type { DocumentShape } from "../../../src/core/document/validated.ts";
+
+const seen = new WeakMap<SharedIncrementalProjector, { step: SharedIncrementalProjection; full: DocumentShape }>();
+
+export const incrementalReports = { compared: 0 };
 
 export function assertIncremental(handle: SharedDocumentHandle, projector: SharedIncrementalProjector): void {
-  const { document, recovery, revision } = projector.read();
+  const step = projector.read(), { document, recovery, revision } = step;
   assert.equal(revision, readSharedRevision(handle));
+  const previous = seen.get(projector), fresh = projectSharedDocumentStep(handle, previous?.full ?? null);
   assertReplicasAgree("incremental and fresh full projection", [
     { order: "D1", replica: "A", output: { document, recovery } },
-    { order: "late-C", replica: "C", output: projectSharedDocumentWithRecovery(handle) }
+    { order: "late-C", replica: "C", output: { document: fresh.document, recovery: fresh.recovery } }
   ]);
+  if (previous && previous.step !== step && revision === previous.step.revision + 1) {
+    assertReplicasAgree("incremental report, fresh full comparison and slow comparison", [
+      { order: "D1", replica: "A", output: step.changes },
+      { order: "late-C", replica: "C", output: fresh.changes },
+      { order: "D2", replica: "B", output: expectedProjectionChanges(previous.full, fresh.document) }
+    ]);
+    incrementalReports.compared++;
+  }
+  seen.set(projector, { step, full: fresh.document });
 }
 
 export function nativeMap(handle: SharedDocumentHandle, collection: "beats" | "segments" | "headings" | "visuals", key: string): Y.Map<unknown> {

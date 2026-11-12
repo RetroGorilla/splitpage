@@ -23,7 +23,7 @@ test("native caret follows its joined owner and the changed separator register",
     const record = collabState(page.h.b).roots.beats.get("R2"); assert.ok(record instanceof Y.Map);
     const joins = record.get("joins"); assert.ok(joins instanceof Y.Map);
     transactSharedDocument(page.h.b, "local-command", () => { joins.set("joined-tail", { into: "R1", glue: " " }); });
-    transactSharedDocument(page.h.b, "local-command", () => { collabState(page.h.b).roots.meta.set("joinGlue:joined-tail", ""); });
+    transactSharedDocument(page.h.b, "local-command", () => { collabState(page.h.b).roots.meta.set('joinGlue:["join-retirement","R2","R1"," ",0]', ""); });
     page.h.queue.flush("dup"); page.end("Q");
     assert.deepEqual(projectSharedDocumentWithRecovery(page.h.a).document.rows.map(row => [row.id, row.audioText]), [["R1", "abnextQ"]]);
     const selected = { anchor: beatPos("R1", 7), head: beatPos("R1", 7) };

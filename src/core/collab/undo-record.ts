@@ -15,7 +15,7 @@ export interface SharedUndoMarkOccurrence {
 }
 
 export type SharedStructureCommand = Extract<SharedOperation["kind"],
-  "segment-create" | "split" | "split-before" | "join" | "join-glue" | "remove" | "restore" | "segment-move"
+  "segment-create" | "split" | "split-before" | "join" | "join-glue" | "join-retire" | "remove" | "restore" | "segment-move"
   | "heading-create" | "heading-finalize" | "heading-remove">;
 
 export interface SharedUndoTextPart {
