@@ -13,12 +13,16 @@ function formattingCleanup(transaction: Y.Transaction): boolean {
   return deleted && formatsOnly;
 }
 
-export type IngressHold = "delivering";
+export type IngressHold = "delivering" | "buffer";
 
 export class IngressGate {
   readonly holds = new Set<IngressHold>();
   readonly held: Uint8Array[] = [];
   readonly errors: unknown[] = [];
+  heldBytes = 0;
+  declined = false;
+  declinedReports = 0;
+  readonly declineListeners = new Set<() => void>();
   frames = 0;
 }
 
@@ -26,6 +30,7 @@ export class CollabDocumentState {
   readonly doc = new Y.Doc();
   readonly roots = declareCollabRoots(this.doc);
   fresh = true;
+  destroyed = false;
   revision = 0;
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
   readonly hydrationTransactions = new WeakSet<Y.Transaction>();
@@ -57,7 +62,7 @@ export function assertNoSharedExecution(state: CollabDocumentState): void {
 }
 
 export function assertSharedDocumentIdle(state: CollabDocumentState, execution?: object): void {
-  if (state.execution && state.execution !== execution || state.ingress.holds.size) throw new SharedExecutionWriteError();
+  if (state.execution && state.execution !== execution || state.ingress.holds.has("delivering")) throw new SharedExecutionWriteError();
 }
 
 // why: A throw inside the library's cleanup would abort it; the error is kept and thrown after the drain.
@@ -71,14 +76,21 @@ export function guardSharedCallback(state: CollabDocumentState, call: () => void
 function settleIngress(state: CollabDocumentState): void {
   const gate = state.ingress;
   try {
-    gate.holds.delete("delivering");
-    if (gate.holds.size) return;
-    for (let update = gate.held[0]; update; update = gate.held[0]) {
-      const next = update;
+    for (;;) {
+      gate.holds.delete("delivering");
+      if (gate.holds.size) return;
+      const next = gate.held[0];
+      if (!next) {
+        if (!gate.declinedReports) return;
+        gate.declinedReports--;
+        gate.holds.add("delivering");
+        for (const listener of gate.declineListeners) guardSharedCallback(state, listener);
+        continue;
+      }
       gate.holds.add("delivering");
       try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
       catch (error) { gate.errors.push(error); }
-      if (gate.held[0] === next) gate.held.shift();
+      if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
     }
   } finally { gate.holds.delete("delivering"); }
 }

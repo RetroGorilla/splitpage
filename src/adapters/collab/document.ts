@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { exceedsBufferQueue } from "../../core/collab/buffer.ts";
 import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, guardSharedCallback } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 
@@ -47,7 +48,11 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
   const state = collabState(handle), gate = state.ingress;
   const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
-  if (!closed) assertNoSharedExecution(state);
+  if (!gate.holds.has("delivering")) assertNoSharedExecution(state);
+  if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
+    gate.declined = true;
+    return { ok: false, reason: "queue-full" };
+  }
   const trial = new CollabDocumentState();
   try {
     const decoded = Y.decodeUpdate(update);
@@ -60,7 +65,7 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
     trial.doc.destroy();
   }
   // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
-  if (closed) gate.held.push(Uint8Array.from(update));
+  if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
   else transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
   return { ok: true };
 }
@@ -68,7 +73,12 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
 export function destroySharedDocument(handle: SharedDocumentHandle): void {
   const state = collabState(handle);
   assertNoSharedExecution(state);
+  state.destroyed = true;
   state.ingress.held.length = 0;
+  state.ingress.heldBytes = 0;
+  state.ingress.declined = false;
+  state.ingress.declinedReports = 0;
+  state.ingress.declineListeners.clear();
   state.ingress.holds.clear();
   state.doc.destroy();
 }
