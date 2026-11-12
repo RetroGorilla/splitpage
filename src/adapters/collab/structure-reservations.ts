@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState, assertSharedDocumentIdle } from "./state.ts";
+import { collabState, assertSharedDocumentIdle, guardSharedCallback } from "./state.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
 import { readProjectionInlineValue } from "./projection-reader.ts";
 import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
@@ -46,7 +46,7 @@ export function observeSharedStructureIdentities(handle: SharedDocumentHandle, i
       for (const identity of identities) count(identity, 1); for (const [identity, amount] of atoms) count(identity, amount);
     };
     for (const key of root.keys()) update(key);
-    const observe: Parameters<typeof root.observeDeep>[0] = (events, transaction) => {
+    const observe: Parameters<typeof root.observeDeep>[0] = (events, transaction) => guardSharedCallback(state, () => {
       const changed = new Set<string>(), texts = new Map<Y.Text, string>();
       for (const event of events) {
         if (!event.path.length && event instanceof Y.YMapEvent) for (const key of event.keysChanged) { if (typeof key === "string") changed.add(key); }
@@ -63,11 +63,11 @@ export function observeSharedStructureIdentities(handle: SharedDocumentHandle, i
         if (next > 0) entry.atoms.set(change.identity, next); else entry.atoms.delete(change.identity);
         count(change.identity, change.delta);
       }
-    };
+    });
     root.observeDeep(observe); detach.push(() => root.unobserveDeep(observe));
   }
   const order = state.roots.order, values = order.toArray(); for (const value of values) count(value, 1);
-  const observeOrder: Parameters<typeof order.observe>[0] = event => {
+  const observeOrder: Parameters<typeof order.observe>[0] = event => guardSharedCallback(state, () => {
     let offset = 0;
     for (const change of event.delta) {
       if (change.retain) offset += change.retain;
@@ -79,9 +79,9 @@ export function observeSharedStructureIdentities(handle: SharedDocumentHandle, i
         offset += inserted.length;
       }
     }
-  };
+  });
   order.observe(observeOrder); detach.push(() => order.unobserve(observeOrder));
-  state.doc.once("destroy", () => { for (const stop of detach) stop(); });
+  state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of detach) stop(); }));
   const view = Object.freeze({ has: (identity: string) => counts.has(cleanId(identity)) });
   reservations.set(handle, view); return view;
 }

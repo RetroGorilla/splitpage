@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedProjectionBoundary, SharedProjectionStream } from "../../core/collab/projection/blocks.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
-import { collabState, assertSharedDocumentIdle } from "./state.ts";
+import { collabState, assertSharedDocumentIdle, guardSharedCallback } from "./state.ts";
 import { observeSharedStructureOrder } from "./structure-order-index.ts";
 import { readProjectionFields, readProjectionHead } from "./projection-reader.ts";
 import { freezeSharedPreparedValue, sharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
@@ -60,7 +60,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   };
   const updateHeading = (key: string) => { headings.delete(key); if (readProjectionFields(state.roots.headings.get(key), "heading")) headings.add(key); };
   const observe = (root: Y.Map<unknown>, update: (key: string) => void, textChanges = false) => {
-    const listener: Parameters<typeof root.observeDeep>[0] = (events, transaction) => {
+    const listener: Parameters<typeof root.observeDeep>[0] = (events, transaction) => guardSharedCallback(state, () => {
       const changed = new Set<string>(), texts = new Map<Y.Text, string>();
       for (const event of events) {
         if (!event.path.length && event instanceof Y.YMapEvent) for (const key of event.keysChanged) { if (typeof key === "string") changed.add(key); }
@@ -77,14 +77,14 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
         if (change.delta === 1) value.boundaries.set(id, { identity, boundary }); else value.boundaries.delete(id);
         membership(key, value, true);
       }
-    };
+    });
     root.observeDeep(listener); return () => root.unobserveDeep(listener);
   };
   for (const key of state.roots.segments.keys()) updateSegment(key);
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
   const stops = [observe(state.roots.segments, updateSegment, true), observe(state.roots.beats, updateRecord), observe(state.roots.headings, updateHeading)];
-  state.doc.once("destroy", () => { for (const stop of stops) stop(); });
+  state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
   const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id),
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),
     candidates: (name: string, heading: boolean) => Object.freeze([...(heading ? headingNames.get(name) : names.get(cleanId(name))) ?? []]),
