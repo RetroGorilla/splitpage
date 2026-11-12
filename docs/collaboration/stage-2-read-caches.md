@@ -126,3 +126,21 @@ The projection mutant manifest adds stale text after a mark-only arrival, an
 unrefreshed status index and an extra unrelated registry read during preparation.
 The first two fail named behavior tests. Join-partner invalidation and omitted
 status change sets belong to the later incremental and session cuts.
+
+## Projected address integration
+
+After merging the structure address resolver, preparation resolves the current
+projected owner before consulting its physical text plan or cached facade. The
+mark preparation and write helpers likewise retain the projected-target and native
+span checks from that resolver. A warm physical reading grants no address access:
+the literal regression removes narration from order or hides a visual component,
+then checks missing results for marks and missing-target refusals for both an
+already warmed preparation and a fresh preparation after a remote update.
+Physical stored-anchor, hydration, opaque-title and staged-operation access retain
+their named purposes from the structure executor.
+
+The structure ownership index removes the remaining native beat-record lookup:
+warm typing and warm mark preparation now each read 0 native records instead of 1.
+Typing plus the mark refresh therefore reads 1 text, 19 mark entries and 0 native
+beat records, with 0 unrelated reads. The earlier table records the pre-merge
+measurement; its text/mark counts and the status-event bounds remain unchanged.

@@ -3,7 +3,12 @@
 `registerSharedSplitHandlers(handle, { cells })` registers split, split-before and
 segment creation through the operation entry. `cells` is the app's cell decoder,
 called during preparation only. No application caller registers these handlers.
-The executor entry, preparation view and execution guard are unchanged.
+The executor entry and execution guard are unchanged. Preparation exposes a
+read-only owner lookup backed by per-handle structural metadata; callers share
+the same per-call planned heads, records and order. The metadata is warmed by the
+monitored constructor and patches touched records and boundary embeds. Its embed
+reader shares one pre-GC observation with the identity reservation index, so an
+ordinary edit never repeats the guarded struct traversal.
 
 New beat, segment, visual and gallery keys use
 `structure_<writer>_<operation-as-four-digit-UTF-16-hex>_<role>_<slot>`.
@@ -27,8 +32,11 @@ and deleted embeds from the transaction's before/after clocks and deletion range
 Both ranges use the package entry's `iterateDeletedStructs`, with a `createDeleteSet`
 for additions; no store lookup or binary-search helper is used. Yjs 13.6.33 offers
 no event carrying removed embed values without reading the full text delta. One
-guarded function owns the remaining struct representation dependency; its named
+guarded function owns the embed-reader struct representation dependency; its named
 contract test pins the version, returned values and observer-before-GC order.
+The existing `state.ts` formatting-cleanup classifier is a second representation
+site: it reads `Item.content` only to distinguish `ContentFormat` cleanup deletes,
+not to extract embed values. Both sites depend on Yjs 13.6.33.
 They inspect neither the existing text item chain nor a text delta. Ordinary string
 insertions do not rebuild reservations. Reference counts remove deleted reservations, so
 an encoded late joiner has the same index. Prepare uses only cached lookups and a
@@ -53,19 +61,86 @@ and the real `migrateRows` pipeline on every copy. A seeded tuple test checks
 unambiguous components and unchanged ids after load, including escaped separators,
 ambiguous decimal concatenations and refused stripped characters.
 
-The identity history model has this literal declared limit:
+A local reservation cannot observe an undelivered native creation. Rule 21
+therefore selects the first beat in merged document order for each cleaned id;
+later beats with that cleaned id go to recovery without renaming. The pinned
+native history shows Reserved, keeps Created in recovery, and a command planned
+from the loaded Reserved row edits Reserved. Text, scalar and status preparation
+resolve the id shown on the author's copy to that native record. The identity checkpoint
+model's literal declared-limit table is now empty; unmatched violations fail.
+It compares patched reservations with a fresh encoded-state index at every checkpoint.
 
-| Declared limit | Replacement rule in the span/address cut |
-| --- | --- |
-| same cleaned beat id created at the same moment: the load renames the later beat and a command addressed to the id reaches the other one | The first beat in merged document order keeps the cleaned id and is the row; later beats with that cleaned id go to recovery without renaming. Address resolution reaches the beat shown. |
+[Assumed rule 25](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6812501580):
+a beat whose stored id cleans to empty has no row or invented id; its text goes
+to recovery with reason `invalid-beat-id`. A literal native `[]` case checks this
+on three writers and an encoded late joiner, including unchanged-state refusal.
 
-A local reservation cannot observe an undelivered native creation. This case is
-not emitted by the app: each writer's generated ids carry its own writer component.
-The pinned native history currently loads Reserved under the shared Created id,
-renames Created, and a command planned for Reserved edits Created instead. The next
-cut must replace that literal outcome with the decided projection/address rule.
-The seeded checkpoint model collects violations and compares them with this table;
-it compares patched reservations with a fresh encoded-state index at every checkpoint.
+The core `projectSharedBlocks` interpreter owns both projection and write spans.
+Preparation assembles only candidate streams for the requested cleaned identity
+and the touched segment's boundaries. Its per-call planned heads, records and
+text units use the same interpreter. Adjacent boundaries naming the same raw beat
+coalesce; later occurrences, invalid records and foreign owners give no write span.
+Projected unit positions exclude structural and unreadable embeds. Flow offsets,
+painted identities and native anchors therefore address the visible fragment;
+an insertion before an adjacent head boundary clamps past it. A fragment already
+in recovery on the author's copy is refused through a projected beat address.
+A command accepted before a competing beat arrives stays on its original native
+beat when that beat later enters recovery. The in-flight literal keeps its text,
+duration and status; deleting the winning record reveals all three edits again.
+
+One text-location resolver serves preparation and projected/painted readers. It maps a created
+beat's flow-shaped visual address through `beats[id].visual`, and maps a displayed
+cleaned beat id to the selected native record and physical segment. Stored mark
+anchors remain physical, including in recovery; they never reroute to a competing
+beat. Native mark preparation, mark write and typed anchor creation resolve projected
+addresses by default. Failure never grants physical access. The closed exceptions are:
+
+- (a) resolving an anchor that is already stored (reading);
+- (b) writes made under the hydration origin;
+- (c) opaque title labels;
+- (d) text staged earlier in the same operation list.
+
+`collabPurposeTextTarget` requires an explicit purpose and checks hydration against
+the active outer adapter origin. The deterministic hydration writer remains limited
+to the first hydration transaction; a later hydration-origin write uses its native
+writer. Declaring the title field selects the opaque title-label exception, without
+granting another field access. `collabPreparedOperationTextTarget` accepts only the
+entry's applying phase, after preparation has validated its frozen target; it also
+addresses text created earlier in that list before observers publish the new row.
+Stored-anchor readers explicitly request the reading purpose. Native ranges and
+anchor positions stay within the fragment the core interpreter projects, using the
+cached boundary spans rather than reading the text delta again. Native nullable
+preparation/creation APIs refuse with null; a missing native write target returns
+`missing-text`, and a range outside the visible fragment returns `invalid-record`.
+Refusal leaves bytes, vector, revision and delivered-update count unchanged.
+
+The three original native-mark fixtures are byte-identical to main. The app's
+`titleCommand` changes standalone document fields; no
+shared title-address emitter exists yet, so there is no app-side title agreement
+proof authorizing rejection of those native labels. `FlowOperationTrace.target`
+and `marks` describe beat/heading addresses from the flow document; the text and
+mark flow-agreement tests cover those emitted addresses. The title cases in text
+and mark operation tests are adapter contract tests, not an app emitter proof.
+Literal entry refusals declare both opaque title labels and an unattached segment
+invalid projected operation addresses, all with `missing-target`.
+
+Head-only refreshes reuse boundary metadata and still consume the transaction's
+added/deleted embeds; a genuinely rescanned text skips that patch. Ownership records
+refresh only for identity/segment changes, not duration or other scalar fields.
+The mixed head/embed model covers 48 histories, 288 commands, 336 checkpoints and
+840 live-versus-encoded index comparisons with no declared limits. Each inspection
+consumer is guarded separately, so its error is surfaced after index publication.
+
+The malformed-boundary model compares write spans and projected fragments at each
+of 1,368 seeded checkpoints over 19 shapes, on the writers and encoded late joins.
+Literal adjacent-head edits cover offsets 0, 1 and 2 with native and flow references.
+Measured prepare `get` calls with 0/10,000 unrelated records fall from 3/3 to 0/0
+for split, 12/12 to 1/1 for two ordered creations, and 10/10 to 0/0 for rich inline
+creation. These counters cover the preparation port, not text facade reads.
+Owner lookup separately asserts 0/0 native record reads and zero whole-order reads.
+The cost guards trap values, keys, entries, forEach, toArray and iteration wherever
+the native collection exposes them; unrelated beats and order entries are populated.
+The existing scalar preparation test remains unchanged at 4/4 map reads.
 
 A creation resolves logical neighbours to their current spans. Within a physical
 segment it inserts a beat boundary and reuses the existing text and mark store;

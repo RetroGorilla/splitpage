@@ -46,7 +46,7 @@ export function prepareSharedInitialContent(view: SharedPreparationView, target:
   if (source >= 0) plan.sources.splice(source, 1);
   const added = plan.units.length - start, span = plan.sources.find(source => source.owner === id);
   const from = span?.before[0] ?? prior;
-  addSharedTextSource(plan, target.owner, from, from + added, target.field);
+  addSharedTextSource(view, plan, target.owner, from, from + added, target.field);
   return prepared;
 }
 

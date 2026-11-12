@@ -6,6 +6,8 @@ import { createCollabTextFacade } from "./prepare-text.ts";
 import type { SharedPreparationText } from "./prepare-text.ts";
 import type { SharedStatusEvent } from "../../core/collab/operations.ts";
 import { sharedStatusEventKeys } from "./status-index.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
+import { bindSharedStructurePlan, resolveSharedStructureOwner } from "./structure-plan.ts";
 
 export type SharedPreparedWrite = {
   readonly path: readonly string[];
@@ -22,6 +24,7 @@ export interface SharedPreparationView {
   readonly statusEvents: (target: SharedStatusEvent["target"]) => readonly string[];
   readonly text: (path: readonly string[]) => SharedPreparationText | null;
   readonly scratch: <T>(key: string, create: () => T) => T;
+  readonly resolveOwner: (owner: string, field: "audioText" | "heading") => { readonly owner: string; readonly segment: string } | null;
 }
 export type SharedPreparationResult = { readonly ok: false; readonly reason: string } | {
   readonly ok: true; readonly writes: readonly SharedPreparedWrite[]; readonly apply: (handle: SharedDocumentHandle) => void;
@@ -51,6 +54,9 @@ export function createSharedPreparation(handle: SharedDocumentHandle, base: numb
   const view: SharedPreparationView = Object.freeze({
     writer: String(collabState(handle).doc.clientID),
     base,
+    resolveOwner: (owner: string, field: "audioText" | "heading") => {
+      ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle)); return resolveSharedStructureOwner(view, owner, field);
+    },
     get: (path: readonly string[]): unknown => {
       ensureOpen();
       const item = lookup(path);

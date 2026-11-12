@@ -1,22 +1,23 @@
 import type { SharedContentRef, SharedIdentityGap } from "../../core/collab/operations.ts";
 import type { SharedPreparationView } from "./prepare.ts";
-import type { SharedStructureOrderView } from "./structure-order.ts";
+import type { SharedStructureOrderView } from "./structure-order-index.ts";
 import { sharedStructureSegment, prepareSharedOrderInsertion, sharedPlannedSegmentIndex, sharedPlannedSegmentAt } from "./structure-order.ts";
 import { sharedStructureReference, SharedStructurePreparationError } from "./structure-identity.ts";
-import { sharedStructureSpans } from "./structure-boundary.ts";
+import { sharedStructureSpans } from "./structure-spans.ts";
 import { sharedTextCommandPlan, sharedTextInsertionPosition } from "./executor-text-plan.ts";
 import { readProjectionHead } from "./projection-reader.ts";
 
 export function prepareSharedBeatPlacement(view: SharedPreparationView, order: SharedStructureOrderView, gap: SharedIdentityGap, segment: string) {
   const locate = (reference: SharedContentRef | null) => {
     if (reference === null) return null;
-    const owner = sharedStructureReference(view, reference);
+    const named = sharedStructureReference(view, reference), resolved = view.resolveOwner(named, "audioText") ?? view.resolveOwner(named, "heading");
+    const owner = resolved?.owner ?? named;
     if (!["beats", "headings", "segments"].some(root => view.kind([root, owner]) === "map")) return null;
     const key = sharedStructureSegment(view, reference), index = sharedPlannedSegmentIndex(view, order, key);
     const field = view.kind(["beats", owner]) === "map" ? "audioText" : view.kind(["headings", owner]) === "map" ? "heading" : null;
     if (field === null) return { key, index, plan: null, span: null };
-    const plan = sharedTextCommandPlan(view, { owner, segment: key as SharedContentRef, field });
-    const span = sharedStructureSpans(view.get(["segments", key, "head"]), plan.units).find(span => span.owner === owner && span.field === field);
+    const plan = sharedTextCommandPlan(view, { owner: owner as SharedContentRef, segment: key as SharedContentRef, field });
+    const span = sharedStructureSpans(view, key, plan.units).find(span => span.owner === plan.target.owner && span.field === field);
     if (!span) throw new SharedStructurePreparationError("missing-order-target");
     return { key, index, plan, span };
   };
@@ -42,7 +43,7 @@ export function prepareSharedBeatPlacement(view: SharedPreparationView, order: S
         const boundary = readProjectionHead(head);
         if (boundary?.kind !== "h" || previous === undefined) break;
         const previousPlan = sharedTextCommandPlan(view, { owner: boundary.id as SharedContentRef, segment: previous as SharedContentRef, field: "heading" });
-        if (sharedStructureSpans(head, previousPlan.units).some(span => span.field === "audioText")) break;
+        if (sharedStructureSpans(view, previous, previousPlan.units).some(span => span.field === "audioText")) break;
         rightKey = previous as string;
       }
     }

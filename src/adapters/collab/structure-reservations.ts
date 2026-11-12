@@ -4,7 +4,7 @@ import { collabState, assertSharedDocumentIdle, guardSharedCallback } from "./st
 import { cleanId } from "../../core/document/text-policy.ts";
 import { readProjectionInlineValue } from "./projection-reader.ts";
 import type { SharedStructureIdentityReservations } from "./structure-identity.ts";
-import { readSharedIdentityEmbeds } from "./identity-structs.ts";
+import { sharedEmbedChangeReader } from "./embed-changes.ts";
 
 let reservations: WeakMap<SharedDocumentHandle, SharedStructureIdentityReservations> | null = null;
 
@@ -13,6 +13,7 @@ export function observeSharedStructureIdentities(handle: SharedDocumentHandle, i
   reservations ??= new WeakMap();
   const previous = reservations.get(handle); if (previous) return previous;
   const counts = new Map<string, number>(), detach: (() => void)[] = [];
+  const embeds = sharedEmbedChangeReader(handle, inspect);
   const transactions = new WeakMap<Y.Transaction, readonly { text: Y.Text; identity: string; delta: 1 | -1 }[]>();
   const count = (raw: unknown, delta: number) => {
     if (typeof raw !== "string") return;
@@ -25,7 +26,7 @@ export function observeSharedStructureIdentities(handle: SharedDocumentHandle, i
     const changes = (transaction: Y.Transaction) => {
       let known = transactions.get(transaction); if (known) return known;
       const result: { text: Y.Text; identity: string; delta: 1 | -1 }[] = [];
-      for (const change of readSharedIdentityEmbeds(transaction, inspect)) {
+      for (const change of embeds.read(transaction)) {
         const identity = atom(change.value); if (identity !== null) result.push({ text: change.text, identity, delta: change.delta });
       }
       known = result; transactions.set(transaction, known); return known;

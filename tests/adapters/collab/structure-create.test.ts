@@ -1,6 +1,7 @@
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
+import { trapSharedCollectionWalks } from "./collection-guards.ts";
 import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
-import test, { mock } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { replicas, agree, operation, ref } from "./executor-support.ts";
@@ -22,7 +23,7 @@ import { toHtml } from "../../../src/core/text/html.ts";
 import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
 import { validatedFixture, deliveryReplica } from "./helpers.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
-import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order.ts";
+import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
 import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segment-executor.ts";
 import { registerSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
 
@@ -221,14 +222,14 @@ test("inline rich creation reads only touched records and freezes its descriptio
         assert.ok(prepared.description.content.every(content => Object.isFrozen(content) && Object.isFrozen(content.steps)));
         return prepared;
       } });
-      const whole = mock.method(collabState(handle).roots.order, "toArray", () => { throw new Error("whole order read during preparation"); });
+      const roots = collabState(handle).roots, restore = trapSharedCollectionWalks(roots.beats, roots.segments, roots.headings, roots.order);
       try {
         const command = operation({ kind: "segment-create", id: "create", by: "Writer", beat: "new", segment: "new", at: { left: "R1", right: structureIdentityFixture("1", "cut", "beat"), affinity: "before" }, fields: { audioText: "<em>A😀</em>", visualText: "<strong>V</strong>" } });
-        assert.deepEqual(executeSharedOperations(handle, [command], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads); assert.equal(whole.mock.callCount(), 0);
-      } finally { whole.mock.restore(); }
+        assert.deepEqual(executeSharedOperations(handle, [command], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads);
+      } finally { restore(); }
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [10, 10]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, wholeOrderReads: 0 }));
+  assert.deepEqual(counts, [0, 0]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, wholeOrderReads: 0 }));
 });
 
 test("insertBeats initializes visual runs, marks, gallery records and following narration through the app list", () => {

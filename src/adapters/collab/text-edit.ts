@@ -3,7 +3,7 @@ import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedMarkBirth, SharedTextIdentity } from "./mark-record.ts";
 import type { SharedMarkWritePlan } from "./mark-plan.ts";
-import { collabApplyingTextTarget } from "./text-target.ts";
+import { collabPreparedOperationTextTarget } from "./text-target.ts";
 import { writeCollabMarkPlan } from "./mark-store.ts";
 
 export type CollabTextMutation = { readonly type: "text"; readonly at: number; readonly value: string }
@@ -22,7 +22,7 @@ export function editCollabText(text: Y.Text, edit: CollabTextMutation): SharedMa
 }
 
 export function applySharedTextEdit(handle: SharedDocumentHandle, description: SharedTextWritePlan): void {
-  const { text, store } = collabApplyingTextTarget(handle, description.target);
+  const { text, store } = collabPreparedOperationTextTarget(handle, description.target);
   const born = editCollabText(text, description.edit);
   for (const plan of description.marks) writeCollabMarkPlan(text, store, description.target, plan, born);
 }

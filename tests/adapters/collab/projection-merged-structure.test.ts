@@ -121,8 +121,11 @@ for (const copies of [2, 3]) for (const order of deliveryOrders) test(`native sp
     });
     run.queue.flush(order);
     const address = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
-    const mark = prepareSharedMarkRecord(run.b, address, "boundary-mark", 2, 3, { type: "add", mark: { kind: "comment", id: ref("boundary"), value: "C1" } });
-    assert.ok(mark); assert.deepEqual(writeSharedMarkRecord(run.b, address, "boundary-mark", mark), { ok: true }); run.queue.flush(order);
+    // why: This reader fixture imports a mark on an invisible boundary; native editing now requires a projected range.
+    transactSharedDocument(run.b, "hydration", () => {
+      const mark = prepareSharedMarkRecord(run.b, address, "boundary-mark", 2, 3, { type: "add", mark: { kind: "comment", id: ref("boundary"), value: "C1" } });
+      assert.ok(mark); assert.deepEqual(writeSharedMarkRecord(run.b, address, "boundary-mark", mark), { ok: true });
+    }); run.queue.flush(order);
     const document = { ...literalMergedDocument(""), rows: [row("R1", box + "ab</span>"), row("R2", box + "cd</span>")],
       productionTags: [{ id: "t_box", cat: "prop", name: "Box", owner: "", notes: "", status: "needed" }] };
     for (const handle of handles) {

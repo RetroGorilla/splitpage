@@ -35,7 +35,7 @@ test("typing and mark preparation read zero unrelated texts, marks and records w
       assert.deepEqual(warm.totals, noLibraryReads); assert.deepEqual(warm.result.counts, noRuleReads);
       primePreparation(run.a, "R0");
       const typed = measureLibraryReads(run.a, "R0", () => measureSharedReads(() => typeBenchmarkCharacter(run.a, "R0", 2, "z", "measured-type")));
-      assert.deepEqual(typed.totals, { texts: 0, markEntries: 0, records: 1, statusEntries: 0, orderEntries: 0 });
+      assert.deepEqual(typed.totals, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
       assert.deepEqual(typed.unrelated, noLibraryReads); assert.deepEqual(typed.result.counts, noRuleReads);
       const refreshed = measureLibraryReads(run.a, "R0", () => measureSharedReads(() => readCollabMarkState(run.a, text, store)));
       assert.deepEqual(refreshed.totals, { texts: 1, markEntries: 19, records: 0, statusEntries: 0, orderEntries: 0 });
@@ -46,7 +46,7 @@ test("typing and mark preparation read zero unrelated texts, marks and records w
         kind: "mark", id: "measured-mark", by: "Writer", target: { owner: "R0", segment: "b:R0", field: "audioText" },
         observed: [flowBaseReference("R0", "audioText", 0, 2)], mark: { kind: "b", value: true }
       }])));
-      assert.deepEqual(marked.totals, { texts: 0, markEntries: 0, records: 1, statusEntries: 0, orderEntries: 0 });
+      assert.deepEqual(marked.totals, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
       assert.deepEqual(marked.unrelated, noLibraryReads); assert.deepEqual(marked.result.counts, noRuleReads);
       readings.push({ beats, cold: cold.totals, warm: warm.totals, typed: typed.totals, refreshed: refreshed.totals, marked: marked.totals });
     } finally { run.close(); }

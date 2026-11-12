@@ -1,4 +1,5 @@
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
+import { trapSharedCollectionWalks } from "./collection-guards.ts";
 import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import test, { mock } from "node:test";
@@ -18,7 +19,7 @@ import { sharedTextLocation } from "../../../src/adapters/collab/executor-text-p
 import { applySharedTextCreation } from "../../../src/adapters/collab/text-target.ts";
 import { prepareSharedTextCreation } from "../../../src/adapters/collab/text-creation.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
-import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order.ts";
+import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
 import { prepareSharedSegmentCreation } from "../../../src/adapters/collab/segment-executor.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -233,10 +234,12 @@ test("split reads only its touched segment and beat regardless of unrelated beat
         get: path => { reads++; assert.ok(path[0] === "beats" || path[0] === "segments"); return view.get(path); },
         keys: () => { throw new Error("whole root scan"); }
       }, identities) });
-      assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads);
+      const roots = collabState(handle).roots, restore = trapSharedCollectionWalks(roots.beats, roots.segments, roots.headings, roots.order);
+      try { assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads); }
+      finally { restore(); }
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [3, 3]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts }));
+  assert.deepEqual(counts, [0, 0]); t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts }));
 });
 
 test("planned segment creation uses cached order positions with zero whole-order reads", t => {
@@ -261,7 +264,7 @@ test("planned segment creation uses cached order positions with zero whole-order
       assert.deepEqual(native.toArray().slice(0, 3), [structureIdentityFixture("1", "one", "segment"), structureIdentityFixture("1", "two", "segment"), "b:R1"]);
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [12, 12]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));
+  assert.deepEqual(counts, [1, 1]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));
 });
 
 for (const phase of ["idle", "prepare", "observer"] as const) test(`apply text creation refuses ${phase}`, () => {

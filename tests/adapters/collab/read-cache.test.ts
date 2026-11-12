@@ -5,7 +5,7 @@ import { replicas, ref } from "./executor-support.ts";
 import { cacheText, cacheMarks, cacheStatus } from "./read-cache-support.ts";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
-import { prepareSharedMarkRecord, readCollabMarkState, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { prepareSharedMarkRecord, readCollabMarkState, readSharedMarkCharacters, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { sharedMarkRecordKey } from "../../../src/adapters/collab/mark-record.ts";
@@ -13,10 +13,46 @@ import { measureSharedReads } from "../../../src/adapters/collab/read-counts.ts"
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { measureLibraryReads } from "../../collab/library-read-counts.ts";
+import { sharedTextCommandPlan } from "../../../src/adapters/collab/executor-text-plan.ts";
+import { collabProjectedTextTarget } from "../../../src/adapters/collab/text-target.ts";
 
 const target = Object.freeze({ owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const });
 const plain = [{ value: "a", marks: [] }, { value: "b", marks: [] }, { value: "Z", marks: [] }];
 const bold = [{ value: "a", marks: [["b", true]] }, { value: "b", marks: [["b", true]] }, { value: "Z", marks: [] }];
+
+test("warm mark and preparation caches cannot bypass missing projected text addresses", () => {
+  for (const field of ["audioText", "visualText"] as const) {
+    const run = replicas(2, { rows: [{ id: "R1", audioText: "ab", visualText: "cd" }, { id: "R2", audioText: "ef" }] });
+    const address = { owner: ref("R1"), segment: ref("R1"), field };
+    const preparation = createSharedPreparation(run.b);
+    const values = () => sharedTextCommandPlan(preparation.view, address).units.map(unit => unit.value);
+    try {
+      assert.deepEqual(readSharedMarkCharacters(run.b, address)?.map(character => character.value), field === "audioText" ? ["a", "b"] : ["c", "d"]);
+      assert.deepEqual(values(), field === "audioText" ? ["a", "b"] : ["c", "d"]);
+      const warm = measureSharedReads(values);
+      assert.deepEqual(warm.result, field === "audioText" ? ["a", "b"] : ["c", "d"]);
+      assert.equal(warm.counts.texts, 0);
+      const record = prepareSharedMarkRecord(run.a, address, "before-hidden", 0, 1, { type: "add", mark: { kind: "b", value: true } });
+      assert.ok(record);
+      transactSharedDocument(run.a, "local-command", () => {
+        const roots = collabState(run.a).roots;
+        if (field === "audioText") roots.order.delete(0, roots.order.length);
+        else {
+          const visual = roots.visuals.get("R1"); assert.ok(visual instanceof Y.Map); visual.set("beat", "R2");
+        }
+      });
+      assert.deepEqual(applySharedUpdate(run.b, encodeSharedState(run.a)), { ok: true });
+      assert.equal(collabProjectedTextTarget(run.b, address), null);
+      assert.equal(readSharedMarkCharacters(run.b, address), null);
+      assert.equal(prepareSharedMarkRecord(run.b, address, "after-hidden", 0, 1, { type: "add", mark: { kind: "b", value: true } }), null);
+      assert.deepEqual(writeSharedMarkRecord(run.b, address, "before-hidden", { ...record, writer: collabState(run.b).doc.clientID }), { ok: false, reason: "missing-text" });
+      assert.throws(values, /missing-target/);
+      const fresh = createSharedPreparation(run.b);
+      try { assert.throws(() => sharedTextCommandPlan(fresh.view, address), /missing-target/); }
+      finally { fresh.close(); }
+    } finally { preparation.close(); run.close(); }
+  }
+});
 
 test("a cached text reflects a mark record received without a text change", () => {
   const run = replicas();
