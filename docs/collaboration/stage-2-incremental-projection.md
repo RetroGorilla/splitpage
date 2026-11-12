@@ -2,9 +2,10 @@
 
 This is package 6c's second cut. `createSharedIncrementalProjector` owns a normalized
 replica, cached validated inputs, and an immutable document/recovery/revision pair.
-It shares `assembleSharedDocument` with the full reader. The remaining session
-integration and precise change report are a separate cut; no application caller
-or standalone editing path changes here.
+It shares `assembleSharedDocument` with the full reader. Each publication also
+carries the report of which rows changed (see "The report of which rows changed").
+The session integration is a separate cut; no application caller or standalone
+editing path changes here.
 
 ## One assembly
 
@@ -67,6 +68,45 @@ native UTF-16 positions. Input snapshots do not initialize another ownership
 index. The production snapshot hook counts this wider whole-state wire copy.
 Literal tests check isolated high and low surrogates, their later merge, deletion,
 mark-only arrivals and an unrelated edit that retains the marked row by identity.
+
+## The report of which rows changed
+
+`assembleSharedDocument(source, previous)` returns `changes` beside the document
+and the recovery list. It is `compareSharedProjections(previous, next)` in
+`src/core/collab/projection/changes.ts`, a function of the two documents and
+nothing else, so two copies that hold the same two documents give the same report.
+The full reader reaches it through `projectSharedDocumentStep(handle, previous)`;
+the incremental projector passes the document it last published.
+
+| Field | Meaning |
+| --- | --- |
+| `whole` | No previous document, or a repeated or missing row id on either side. The lists are then empty |
+| `added` | Ids in the next document only, in its order |
+| `removed` | Ids in the previous document only, in its order |
+| `moved` | Kept rows that are not on the longest run of kept rows that held its order. Of equally long runs, the one whose rows come earliest in the next order stays. In the next order |
+| `changed` | Kept rows with a differing field: `{ id, fields }`, fields in the next row's key order, then fields only the previous row had |
+| `fields` | Document fields other than `rows` that differ, in the same key order |
+
+A painter that takes out the removed and moved rows and puts the added and moved
+rows at their places in the next order has the next order; `moved` is the fewest
+rows for which that holds. Values are equal when they have the same kind, the same
+keys in the same order, the same list length and holes, and `Object.is` leaves.
+The order of a row's own keys is not a change: the canonical form fixes it from
+the key set.
+
+An object that both documents hold is not walked. The projector's documents are
+frozen and share every row and field the assembly retained, so a typed character
+compares one row by value among 300 (`compare-row` in the work counter) and the
+comments list (`compare-field:comments`), which every assembly builds again. The
+report builds one id index per document per publication and reads no native state.
+
+Each report is relative to the document published before it, whether or not a
+subscriber of that publication threw.
+
+Measured, and open: a change of structure (a reorder, a new beat, a join) makes the
+assembly build every row again, because the block memo is keyed by position. The
+report still names only the rows that differ, after comparing each rebuilt row by
+value: 300 of 300 for one row moved to the front.
 
 ## Counted work
 
@@ -140,5 +180,15 @@ The existing fixture save-byte contract is unchanged.
 New deliberate defects omit a join partner dependency, ignore mark-only deep
 events, omit the join-register index, or insert a full read into typing. The first
 three fail the named literal behavior tests; the last fails the native read bounds. The earlier stale mark
-cache defect remains in the manifest. A defect for an omitted status change-set
-entry belongs to the deferred change-report integration.
+cache defect remains in the manifest.
+
+The report is compared at every checkpoint above with a fresh full comparison and
+with a slow comparison written for the tests (`tests/collab/projection-changes-oracle.ts`):
+2,720 reports in the seeded history test and 1,455 in the fixture test. A second
+seeded test (`incremental-changes-generator.test.ts`: three seeds, two and three
+writers, normal, reversed and duplicated delivery, 18 late joiners, 630 commands
+of 18 kinds, seven of them wrong-shape writes) compares 1,360 reports and, per
+history, the report from the common start to the settled document on every copy.
+Its declared limits are empty. Five report defects are in the manifest: an omitted
+status, ignored moves, a rebuilt row trusted by id, no previous document, and
+retained rows compared by value while typing.

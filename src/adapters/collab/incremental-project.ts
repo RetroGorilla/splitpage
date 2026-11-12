@@ -2,14 +2,14 @@ import * as Y from "yjs";
 import { createSharedDocument, destroySharedDocument, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "./document.ts";
 import { CollabDocumentState, collabState, guardSharedCallback } from "./state.ts";
 import { assembleSharedDocument } from "./project.ts";
-import type { SharedDocumentProjectionResult } from "./project.ts";
+import type { SharedDocumentProjectionStep } from "./project.ts";
 import { freezeSharedProjection, SharedProjectionCache } from "./projection-cache.ts";
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { CollabRoots } from "./roots.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 
-export interface SharedIncrementalProjection extends SharedDocumentProjectionResult { readonly revision: number }
+export interface SharedIncrementalProjection extends SharedDocumentProjectionStep { readonly revision: number }
 
 export interface SharedIncrementalProjector {
   readonly read: () => SharedIncrementalProjection;
@@ -28,7 +28,7 @@ export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
   const listeners = new Set<Parameters<SharedIncrementalProjector["observe"]>[0]>(), stops: (() => void)[] = [];
   const mirrorStops: (() => void)[] = [];
   let current: SharedIncrementalProjection;
-  try { current = freezeSharedProjection({ ...assembleSharedDocument(source), revision: readSharedRevision(handle) }); }
+  try { current = freezeSharedProjection({ ...assembleSharedDocument(source, null), revision: readSharedRevision(handle) }); }
   catch (error) { destroySharedDocument(mirror); throw error; }
   let disposed = false, normalize = false, normalized: SharedDocumentHandle | null = null;
   const dispose = (): void => {
@@ -67,7 +67,7 @@ export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
       source.normalizedInput(replacement);
       if (normalized) destroySharedDocument(normalized); normalized = replacement;
     }
-    current = freezeSharedProjection({ ...assembleSharedDocument(source), revision: readSharedRevision(handle) });
+    current = freezeSharedProjection({ ...assembleSharedDocument(source, current.document), revision: readSharedRevision(handle) });
     for (const listener of listeners) guardSharedCallback(state, () => listener(current, origin));
   }));
   return Object.freeze({

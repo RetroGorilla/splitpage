@@ -10,7 +10,7 @@ import { registerBenchmarkHandlers, submitBenchmarkOperations } from "../../coll
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { createMonitoredSharedDocument } from "./helpers.ts";
-import { assertIncremental, nativeMap } from "./incremental-support.ts";
+import { assertIncremental, incrementalReports, nativeMap } from "./incremental-support.ts";
 import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { operationExamples } from "../../core/collab/operation-examples.ts";
 import { sharedJoinGlueRegisterField } from "../../../src/core/collab/projection/join-glue.ts";
@@ -23,6 +23,7 @@ import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 test("seeded incremental projection agrees at every authored and delivered revision with no declared limits", t => {
   const declaredLimits: readonly string[] = [], violations: string[] = [], kinds = new Set<string>(), choices = new Set<string>();
   let histories = 0, checkpoints = 0, commands = 0, lateJoiners = 0;
+  const reported = incrementalReports.compared;
   for (const seed of [1, 73, 1414, 0xfedcba98]) for (const writers of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
     const run = replicas(writers, { title: "Script", rows: [
       { id: "R1", audioText: "abcdefgh" }, { id: "R2", audioText: "uvwxyz" }, { id: "R3", audioText: "thirty" }, { id: "R4", audioText: "heading source" }
@@ -38,6 +39,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
       try { assertIncremental(handle, projector); checkpoints++; }
       catch (error) { violations.push(`seed=${seed} writers=${writers} order=${order}: ${String(error)}`); }
     };
+    for (const [index, handle] of handles.entries()) { const projector = projectors[index]; assert.ok(projector); assertIncremental(handle, projector); }
     const stops = projectors.map((projector, index) => projector.observe(() => checkpoint(index)));
     try {
       for (const handle of handles) { registerBenchmarkHandlers(handle); registerSharedUndoOperationHandlers(handle); }
@@ -101,6 +103,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
       run.queue.flush(order);
       const late = createMonitoredSharedDocument(), lateProjector = createSharedIncrementalProjector(late);
       try {
+        assertIncremental(late, lateProjector);
         assert.deepEqual(applySharedUpdate(late, encodeSharedState(run.a)), { ok: true }); assertIncremental(late, lateProjector);
         const readings: ReplicaReading<SharedDocumentProjectionResult>[] = handles.map((handle, index) => {
           checkpoint(index); const value = projectors[index]?.read(); assert.ok(value);
@@ -116,6 +119,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
   assert.deepEqual(violations, declaredLimits);
   assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1320);
   assert.equal(checkpoints, 2756);
+  assert.equal(incrementalReports.compared - reported, 2720);
   assert.equal(choices.size, 216);
   assert.deepEqual([...kinds].sort(), ["heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "status-retire", "text-delete", "text-insert", "text-restore"]);
