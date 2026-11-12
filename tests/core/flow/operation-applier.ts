@@ -67,7 +67,8 @@ export function applyFlowOperations(base: FlowDoc, ops: readonly SharedOperation
   for (const op of ops) {
     if (op.kind === "segment-create") {
       const before = rows.findIndex(row => row.id === op.at.right), after = rows.findIndex(row => row.id === op.at.left);
-      rows.splice(before >= 0 ? before : after >= 0 ? after + 1 : rows.length, 0, { id: op.beat, ...op.fields });
+      const at = op.at.affinity === "after" && after >= 0 ? after + 1 : before >= 0 ? before : after >= 0 ? after + 1 : rows.length;
+      rows.splice(at, 0, { id: op.beat, ...op.fields });
     } else if (op.kind === "text-delete") {
       const chars = text(op.target.owner, op.target.field), removed = chars.map(unit => selected(unit, op.observed));
       let before: string | null = null;
