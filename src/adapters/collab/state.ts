@@ -20,7 +20,6 @@ export class IngressGate {
   readonly held: Uint8Array[] = [];
   readonly errors: unknown[] = [];
   frames = 0;
-  announced = 0;
 }
 
 export class CollabDocumentState {
@@ -38,7 +37,7 @@ export class CollabDocumentState {
 
   constructor() {
     this.doc.on("beforeObserverCalls", transaction => guardSharedCallback(this, () => {
-      if (this.ingress.frames) { this.ingress.holds.add("delivering"); this.ingress.announced++; }
+      if (this.ingress.frames) this.ingress.holds.add("delivering");
       if (transaction.changed.size || transaction.deleteSet.clients.size || transaction.beforeState.size !== transaction.afterState.size
         || [...transaction.beforeState].some(([client, clock]) => transaction.afterState.get(client) !== clock)) this.revision++;
       if (this.adapterTransactions.has(transaction)) this.adapterBatch = true;
@@ -69,21 +68,9 @@ export function guardSharedCallback(state: CollabDocumentState, call: () => void
   }
 }
 
-function finishCascade(state: CollabDocumentState, own: boolean): void {
-  const gate = state.ingress, { doc } = state;
-  // why: A listener set on the library itself can abort its cleanup, and later transactions would never be announced.
-  if (own && !doc._transaction && doc._transactionCleanups.length) {
-    if (doc._transactionCleanups.length > gate.announced) state.revision++;
-    doc._transactionCleanups = [];
-    state.adapterBatch = false;
-  }
-  gate.announced = 0;
-}
-
-function settleIngress(state: CollabDocumentState, own: boolean): void {
+function settleIngress(state: CollabDocumentState): void {
   const gate = state.ingress;
   try {
-    finishCascade(state, own);
     gate.holds.delete("delivering");
     if (gate.holds.size) return;
     for (let update = gate.held[0]; update; update = gate.held[0]) {
@@ -91,7 +78,6 @@ function settleIngress(state: CollabDocumentState, own: boolean): void {
       gate.holds.add("delivering");
       try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
       catch (error) { gate.errors.push(error); }
-      finishCascade(state, own);
       if (gate.held[0] === next) gate.held.shift();
     }
   } finally { gate.holds.delete("delivering"); }
@@ -104,12 +90,11 @@ export function sharedWriteFrame<T>(state: CollabDocumentState, write: () => T):
     gate.frames++;
     try { return write(); } finally { gate.frames--; }
   }
-  const own = !state.doc._transactionCleanups.length;
   let result: { value: T } | null = null;
   gate.frames = 1;
   try {
     try { result = { value: write() }; } catch (error) { gate.errors.push(error); }
-    settleIngress(state, own);
+    settleIngress(state);
   } finally { gate.frames = 0; }
   const errors = gate.errors.splice(0);
   if (errors.length > 1) throw new AggregateError(errors, "Shared document callbacks failed");
