@@ -18,9 +18,8 @@ import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDeskto
 import { draftsTesting } from "./drafts.ts";
 import { flushDraftNow } from "./recovery-owners.ts";
 import { saveDoc } from "./save-owners.ts";
-import { noteSessionEdit } from "./session-owner.ts";
 import { openDocument } from "./transition-owners.ts";
-import { documentReader as portDocument } from "./ports/document.ts";
+import { documentReader as portDocument, legacyEdit } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
 import { saves as portSaves } from "./ports/saving.ts";
@@ -71,7 +70,7 @@ function testHooks(mounted: DesktopMount) {
     },
     get tabId() { const port = desktopPort(); return port && port.tabId; },
     get drafts() { return draftsTesting(); },
-    markDirtyForTest: function () { noteSessionEdit(); }
+    markDirtyForTest: function () { legacyEdit.noteEdit(); }
   };
 }
 

@@ -11,7 +11,7 @@ import type { Command } from "../../../src/application/session/document-session.
 import { migrateRows } from "../../../src/core/migrate.ts";
 import {
   editAllowed, liveSession, onSessionChange, readSession, runCommand, runDocumentEdit,
-  sessionStamps, sessionTextPorts, startSessionBridge
+  sessionStamps, sessionTextPorts, standaloneSession, startSessionBridge
 } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeClock } from "../session-fakes.ts";
@@ -42,7 +42,7 @@ function start(editor: string, record: () => void = () => {}) {
       save: () => { log.push("save"); },
       refresh: () => { log.push("refresh"); }
     },
-    capability: { edit: () => reason === null ? { allowed: true } : { allowed: false, reason } },
+    capability: { edit: () => reason === null ? { allowed: true } : { allowed: false, reason }, comment: () => ({ allowed: true }) },
     editor: { name: () => editor },
     records: () => null,
     attribution: { attribute: () => null },
@@ -89,7 +89,7 @@ test("document edits preserve outcomes, one undo record per edit and listener or
     assert.deepEqual(edits.run(command), { kind: "rejected", reason: "no document" });
     assert.equal(edits.edit(command), false);
     assert.deepEqual(h.recorded, []);
-    liveSession().adopt({ title: "Initial", rows: [] });
+    standaloneSession().adopt({ title: "Initial", rows: [] });
     h.log.length = 0;
     assert.equal(edits.allowed(), true);
     assert.deepEqual(edits.run(command), { kind: "applied", generation: 1, changes: titleChanges });
@@ -117,7 +117,7 @@ test("document edits preserve the exact refusal and commands needing no edit per
   const edits: DocumentEdits = portEdits;
   const h = start("Reader");
   try {
-    liveSession().adopt({ title: "Initial", rows: [] });
+    standaloneSession().adopt({ title: "Initial", rows: [] });
     h.deny(REFUSED);
     assert.equal(edits.allowed(), false);
     const refused: Command = { name: "refused", needs: "edit", plan: () => assert.fail("a refusal must come before planning") };
@@ -148,7 +148,7 @@ test("run returns failures while edit throws the same error and rolls back faile
     plan: () => ({ changes: titleChanges, apply: (doc) => { doc.title = "Broken"; throw failure; } })
   };
   try {
-    liveSession().adopt({ title: "Initial", rows: [] });
+    standaloneSession().adopt({ title: "Initial", rows: [] });
     for (const command of [planning, writing]) {
       const outcome = edits.run(command);
       assert.deepEqual(outcome, { kind: "failed", error: failure });
@@ -171,7 +171,7 @@ test("document edits preserve committed outcomes and edit succeeds after an undo
   const failure = new Error("undo failed");
   const h = start("First", () => { throw failure; });
   try {
-    liveSession().adopt({ title: "Initial", rows: [] });
+    standaloneSession().adopt({ title: "Initial", rows: [] });
     assert.deepEqual(edits.run(titleCommand("Committed")), {
       kind: "committed", generation: 1, changes: titleChanges, errors: [failure]
     });
@@ -190,7 +190,7 @@ test("the same document edits port follows restarted sessions and their editor a
   const edits: DocumentEdits = portEdits;
   const first = start("First");
   try {
-    liveSession().adopt({ title: "First document", rows: [] });
+    standaloneSession().adopt({ title: "First document", rows: [] });
     assert.equal(edits.stamps.editor.name(), "First");
     assert.equal(edits.text.editor.name(), "First");
     assert.equal(edits.edit(titleCommand("First edit")), true);
@@ -199,7 +199,7 @@ test("the same document edits port follows restarted sessions and their editor a
   }
   const second = start("Second");
   try {
-    liveSession().adopt({ title: "Second document", rows: [] });
+    standaloneSession().adopt({ title: "Second document", rows: [] });
     second.deny(REFUSED);
     assert.equal(portEdits, edits);
     assert.equal(edits.stamps.editor.name(), "Second");
