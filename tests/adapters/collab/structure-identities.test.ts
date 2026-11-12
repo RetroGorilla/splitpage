@@ -325,7 +325,7 @@ test("one character or embed patches reservations without inspecting the existin
         const content = item.content; Object.defineProperty(item, "content", { configurable: true, get: () => { if (observing) inspections++; return content; }, set: value => { Object.defineProperty(item, "content", { configurable: true, writable: true, value }); } });
       }
       assert.equal(items, existing);
-      const delta = text.toDelta; text.toDelta = () => { if (observing) throw new Error("Typing read the full text delta"); return delta.call(text); };
+      const delta = text.toDelta; text.toDelta = () => { if (observing) throw new Error("Typing read the full text delta"); return delta.call(text) as unknown[]; };
       transactSharedDocument(set.a, "local-command", () => { text.insert(0, "X"); }); counts.push(inspections); visits.push(visited);
       transactSharedDocument(set.a, "local-command", () => { text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); }); assert.equal(index.has("probeAtom"), true);
       transactSharedDocument(set.a, "local-command", () => { text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); });
