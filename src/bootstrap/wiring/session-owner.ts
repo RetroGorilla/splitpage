@@ -324,6 +324,10 @@ export function liveSession(): CommonDocumentSession {
   return session;
 }
 
+export function currentCapabilities(): CapabilityPort {
+  return running().ports.capability;
+}
+
 export function standaloneSession(): StandaloneDocumentSession {
   return session;
 }

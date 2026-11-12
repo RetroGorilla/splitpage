@@ -16,7 +16,7 @@ import type { FileConflicts } from "../../application/save/file-conflict.ts";
 import type { SaveDestination, SaveDestinations } from "../../application/save/destinations.ts";
 import type { SaveChange } from "../../application/save/save-state.ts";
 import type { AutoSaveTarget } from "../../application/save/status.ts";
-import type { TimerPort } from "../../application/session/ports.ts";
+import type { CapabilityPort, TimerPort } from "../../application/session/ports.ts";
 import { showToast } from "./effects-owner.ts";
 import { preferences } from "./preferences-owner.ts";
 
@@ -34,6 +34,7 @@ export type LegacySaveDestinations = SaveDestinations<LegacySaveRequest, unknown
 export type LegacySaveDestination = SaveDestination<LegacySaveRequest, unknown>;
 
 export interface LegacySavePorts {
+  readonly capability: Pick<CapabilityPort, "saveDestinations" | "autosave">;
   readonly destination: () => unknown;
   readonly keyOf: (identity: unknown) => DestinationKey;
   readonly obsolete: (request: LegacySaveRequest, here: boolean) => void;
@@ -49,6 +50,7 @@ export interface LegacyAutoSavePorts {
 type Coordinator = SaveCoordinator<LegacySaveRequest, unknown>;
 
 interface Started {
+  readonly capability: LegacySavePorts["capability"];
   readonly coordinator: Coordinator;
   readonly autosave: AutoSavePolicy;
   readonly destinations: LegacySaveDestinations;
@@ -104,6 +106,8 @@ const NOT_AUTOSAVING: WriterResult = Object.freeze({ kind: "refused", reason: "A
 let autoSaveWriting = false;
 
 function writeAutoSave(mine: Started, write: () => Promise<WriterResult>, target: AutoSaveTarget): Promise<WriterResult> {
+  const can = mine.capability.autosave();
+  if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
   if (!mine.autosave.may(target) || !mine.coordinator.unsaved()) return Promise.resolve(NOT_AUTOSAVING);
   autoSaveWriting = true;
   return write().then(function (result) {
@@ -116,6 +120,12 @@ function writeAutoSave(mine: Started, write: () => Promise<WriterResult>, target
 }
 
 function writeThrough(mine: Started, job: LegacySaveJob): Promise<WriterResult> {
+  const can = mine.capability.saveDestinations();
+  if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
+  if (AUTOMATIC.indexOf(job.request.kind) !== -1) {
+    const can = mine.capability.autosave();
+    if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
+  }
   const place = mine.place();
   const destination = mine.destinations.taking(job.request, place);
   if (!destination) return Promise.resolve(NO_DESTINATION);
@@ -125,8 +135,9 @@ function writeThrough(mine: Started, job: LegacySaveJob): Promise<WriterResult> 
 
 export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "start" | "stop">): () => void {
   if (started) throw new Error("The save coordinator is already started; stop it first");
-  const destinations = createSaveDestinations<LegacySaveRequest, unknown>();
+  const destinations = createSaveDestinations<LegacySaveRequest, unknown>(ports.capability);
   const mine: Started = Object.freeze({
+    capability: ports.capability,
     coordinator: createSaveCoordinator<LegacySaveRequest, unknown>({
       ownership: ports.ownership,
       destination: { current: ports.destination, keyOf: ports.keyOf },
@@ -135,6 +146,7 @@ export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "star
       join: joinSaves
     }),
     autosave: createAutoSavePolicy({
+      capability: ports.capability,
       timers: timers,
       enabledAtStart: ports.autosave.enabledAtStart,
       due: autoSaveDue,
@@ -164,9 +176,16 @@ export function savesStarted(): boolean {
 
 export function requestSave(request: LegacySaveRequest): Promise<SaveOutcome> {
   const now = live();
+  const can = now.capability.saveDestinations();
+  if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
+  if (AUTOMATIC.indexOf(request.kind) !== -1) {
+    const can = now.capability.autosave();
+    if (!can.allowed) return Promise.resolve({ kind: "refused", reason: can.reason });
+  }
   return now.coordinator.request(Object.freeze(request.target === undefined ? { kind: request.kind } : { kind: request.kind, target: request.target }))
     .then(function (outcome) {
-      if (outcome.kind === "refused" && outcome.conflict && started === now) now.conflicts.show(outcome.conflict);
+      if (outcome.kind === "refused" && outcome.conflict && started === now && now.capability.saveDestinations().allowed &&
+          (AUTOMATIC.indexOf(request.kind) === -1 || now.capability.autosave().allowed)) now.conflicts.show(outcome.conflict);
       return outcome;
     });
 }
@@ -229,6 +248,7 @@ export function saveDestinations(): LegacySaveDestinations {
 
 export function autoSaveTarget(): AutoSaveTarget {
   const now = live();
+  if (!now.capability.autosave().allowed || !now.capability.saveDestinations().allowed) return null;
   const place = now.place();
   const destination = now.destinations.taking(AUTOSAVE_REQUEST, place);
   return destination ? destination.autoSaveTarget(place) : null;
@@ -267,12 +287,16 @@ export function flushAutoSave(): void {
 }
 
 export function setAutoSaveEnabled(on: boolean): void {
+  const can = live().capability.autosave();
+  if (!can.allowed) { showToast(can.reason, "warn"); return; }
   preferences().setAutosave(!!on);
   live().autosave.setEnabled(on);
   if (on && unsavedChanges()) scheduleAutoSave();
 }
 
 export function toggleAutoSave(): void {
+  const can = live().capability.autosave();
+  if (!can.allowed) { showToast(can.reason, "warn"); return; }
   const on = !live().autosave.enabled();
   setAutoSaveEnabled(on);
   showToast(on
@@ -293,6 +317,8 @@ function saveKind(opts: SaveDocOptions): LegacySaveKind {
 }
 
 export function saveDoc(opts?: SaveDocOptions | null): Promise<void> {
+  const can = live().capability.saveDestinations();
+  if (!can.allowed) { showToast(can.reason, "warn"); return Promise.resolve(); }
   const given = opts || {};
   if (!given.auto) resumeAutoSave();
   return requestSave({ kind: saveKind(given) }).then(function () {});

@@ -52,6 +52,7 @@ function harness(setup: Setup = {}) {
     classList: { toggle: (token: string, force?: boolean) => { if (force) menu.classes.add(token); else menu.classes.delete(token); return !!force; } }
   };
   const ports: FileSavingPorts = {
+    capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
     edits: { edit: (command) => {
       const plan = command.plan(doc, createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }));
       if (!plan || "refused" in plan) return false;

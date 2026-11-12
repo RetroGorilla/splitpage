@@ -4,6 +4,7 @@ import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../
 import type { SaveRecoveryPorts, ConflictsPorts, SavePorts, FileMenuPorts } from "../../../src/features/file-menu/mount.ts";
 import { viewHarness } from "../view-harness.ts";
 import type { Registration } from "../view-harness.ts";
+import { fakeCapabilities, fakeNotices } from "../fakes.ts";
 
 const expected: readonly Registration[] = [
   [
@@ -120,6 +121,8 @@ export function setup() {
     capture: h.capture
   };
   const p1: ConflictsPorts = {
+    capability: fakeCapabilities(),
+    notices: fakeNotices().notices,
     closeFileConflict: h.log("closeFileConflict"),
     reloadProjectFromDisk: h.log("reloadProjectFromDisk"),
     reloadFileFromDisk: h.log("reloadFileFromDisk"),

@@ -1,4 +1,4 @@
-import type { TimerPort } from "../session/ports.ts";
+import type { Capability, CapabilityPort, TimerPort } from "../session/ports.ts";
 import type { AutoSaveTarget } from "./status.ts";
 
 export interface AutoSaveWhereInput {
@@ -30,6 +30,7 @@ export interface AutoSaveTiming {
 export type AutoSaveChange = "enabled" | "halt";
 
 export interface AutoSavePolicyPorts {
+  readonly capability: Pick<CapabilityPort, "autosave">;
   readonly timers: Pick<TimerPort, "start" | "stop">;
   readonly enabledAtStart: () => boolean;
   readonly due: () => void;
@@ -39,15 +40,15 @@ export interface AutoSavePolicyPorts {
 export interface AutoSavePolicy {
   readonly timing: AutoSaveTiming;
   readonly enabled: () => boolean;
-  readonly setEnabled: (on: boolean) => void;
+  readonly setEnabled: (on: boolean) => Capability | undefined;
   readonly halted: () => string;
   readonly halt: (reason: string) => void;
   readonly resume: () => boolean;
   readonly may: (target: AutoSaveTarget) => boolean;
   readonly idleFor: () => number;
-  readonly schedule: (target: AutoSaveTarget) => void;
+  readonly schedule: (target: AutoSaveTarget) => Capability | undefined;
   readonly clear: () => void;
-  readonly dueNow: () => void;
+  readonly dueNow: () => Capability | undefined;
   readonly pending: () => boolean;
   readonly scheduled: () => number;
   readonly stop: () => void;
@@ -67,6 +68,7 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
   let stopped = false;
 
   function isOn(): boolean {
+    if (!ports.capability.autosave().allowed) return false;
     if (on === null) on = !!ports.enabledAtStart();
     return on;
   }
@@ -80,12 +82,15 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
     if (maxTimer !== null) { ports.timers.stop(maxTimer); maxTimer = null; }
   }
 
-  function due(): void {
+  function due(): Capability | undefined {
+    const can = ports.capability.autosave();
+    if (!can.allowed) { clear(); return can; }
     clear();
     ports.due();
   }
 
   function may(target: AutoSaveTarget): boolean {
+    if (!ports.capability.autosave().allowed) return false;
     return autoSaveMay({ on: isOn(), halted: halt, target: target });
   }
 
@@ -93,6 +98,8 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
     timing: timing,
     enabled: isOn,
     setEnabled: function (next: boolean) {
+      const can = ports.capability.autosave();
+      if (!can.allowed) return can;
       on = !!next;
       if (!on) clear();
       ports.changed("enabled");
@@ -112,6 +119,8 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
     may: may,
     idleFor: idleFor,
     schedule: function (target: AutoSaveTarget) {
+      const can = ports.capability.autosave();
+      if (!can.allowed) return can;
       if (stopped || !may(target)) return;
       if (idleTimer !== null) ports.timers.stop(idleTimer);
       idleTimer = ports.timers.start(due, idleFor());
@@ -120,7 +129,7 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
     },
     clear: clear,
     dueNow: function () {
-      if (!stopped) due();
+      if (!stopped) return due();
     },
     pending: function () { return idleTimer !== null || maxTimer !== null; },
     scheduled: function () { return arms; },

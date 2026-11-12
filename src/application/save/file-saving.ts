@@ -92,6 +92,12 @@ function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, pub
 }
 
 async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<FileSaveRequest>): Promise<WriterResult> {
+  const can = mountedPorts().capability.saveDestinations();
+  if (!can.allowed) return { kind: "refused", reason: can.reason };
+  if (opts?.auto) {
+    const can = mountedPorts().capability.autosave();
+    if (!can.allowed) return { kind: "refused", reason: can.reason };
+  }
   opts = opts || {};
   let saveAs = !!opts.saveAs;
   const auto = !!opts.auto;
@@ -108,6 +114,8 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   try {
     // why: no copy into the old folder may still be running once the bytes that carry the folder along are captured
     if (bundles.drained && !(await bundles.drained)) return CANCELLED;
+    const can = mountedPorts().capability.saveDestinations();
+    if (!can.allowed) return { kind: "refused", reason: can.reason };
     // why: the save clears undo history at its commit, so an undo before then would land in a history about to go
     const release = mountedPorts().history.hold();
     try {
@@ -121,6 +129,12 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
 }
 
 async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, saveAs: boolean, auto: boolean, bundles: BundleSaveWindow | null): Promise<WriterResult> {
+  const can = mountedPorts().capability.saveDestinations();
+  if (!can.allowed) return { kind: "refused", reason: can.reason };
+  if (auto) {
+    const can = mountedPorts().capability.autosave();
+    if (!can.allowed) return { kind: "refused", reason: can.reason };
+  }
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
@@ -302,6 +316,7 @@ export function obsoleteSaveText(title: string | null | undefined): string {
 
 function savePorts(ownership: Operations): FileSavePorts {
   return {
+    capability: mountedPorts().capability,
     destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,

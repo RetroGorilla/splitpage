@@ -11,6 +11,7 @@ import type { DocumentReader } from "../session/document-reader.ts";
 import type { DocumentEdits } from "../session/document-edits.ts";
 import type { Undo } from "../editing/undo/undo.ts";
 import type { StandaloneDocumentSession } from "../session/document-session.ts";
+import type { CapabilityPort } from "../session/ports.ts";
 import type { Operations } from "../session/operation.ts";
 import type { AutoSaveChange, AutoSavePolicy } from "./autosave.ts";
 import type { DestinationKey } from "./coordinator.ts";
@@ -55,6 +56,7 @@ export interface AutoSaveMenuItem {
 }
 
 export interface FileSavingPorts {
+  readonly capability: Pick<CapabilityPort, "saveDestinations" | "autosave">;
   readonly edits: Pick<DocumentEdits, "edit">;
   readonly history: Pick<Undo, "amendRows" | "hold" | "reset">;
   readonly deferred: FileSavingDeferredPorts;
@@ -92,6 +94,7 @@ export interface BundleSaveWindow {
 }
 
 export interface FileSavePorts {
+  readonly capability: FileSavingPorts["capability"];
   readonly destination: () => unknown;
   readonly keyOf: (identity: unknown) => DestinationKey;
   readonly obsolete: (request: FileSaveRequest, here: boolean) => void;

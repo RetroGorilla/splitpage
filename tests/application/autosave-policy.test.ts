@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_AUTOSAVE_TIMING, HALTED_BY_DEFAULT, createAutoSavePolicy } from "../../src/application/save/autosave.ts";
 import type { AutoSaveChange, AutoSavePolicy } from "../../src/application/save/autosave.ts";
+import { MAY_EDIT } from "./plan-views.ts";
 
 interface Timer {
   readonly run: () => void;
@@ -21,6 +22,7 @@ function bench(enabled = true): Bench {
   const changes: AutoSaveChange[] = [];
   const b = { timers, changes, due: 0 } as unknown as Bench;
   const policy = createAutoSavePolicy({
+    capability: MAY_EDIT,
     timers: {
       start: function (run, ms) {
         const timer: Timer = { run: run, ms: ms, live: true };
@@ -44,6 +46,7 @@ function live(b: Bench): number[] {
 test("the start-up preference is read once, when first needed, and decides whether autosave is on", () => {
   let reads = 0;
   const policy = createAutoSavePolicy({
+    capability: MAY_EDIT,
     timers: { start: () => 1, stop: () => {} },
     enabledAtStart: () => { reads++; return false; },
     due: () => {},

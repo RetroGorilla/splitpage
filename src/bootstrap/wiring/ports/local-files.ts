@@ -13,6 +13,7 @@ import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts"
 import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.ts";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
+import { capabilities } from "./capabilities.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
@@ -79,6 +80,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
 
 export function importSavingPorts(menu: () => LocalFileMenuControls): ImportSavingPorts {
   return {
+    capability: capabilities,
     location: { importHome, amendHome },
     saving: { request: (request) => requestSave(request as Parameters<typeof requestSave>[0]), unsavedFor },
     buildFileData: (kind, base) => menu().buildFileData(kind, base),
