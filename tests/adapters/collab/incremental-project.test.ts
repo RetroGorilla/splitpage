@@ -7,6 +7,9 @@ import { applySharedUpdate, encodeSharedState, observeSharedTransactions, readSh
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { assertIncremental, nativeMap, nativeText } from "./incremental-support.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
+import { SHARED_MARK_PROVENANCE_MARKER } from "../../../src/adapters/collab/mark-provenance.ts";
 
 test("incremental join refreshes its partner after text and status changes", () => {
   const run = replicas(2, { rows: [{ id: "R1", audioText: "one" }, { id: "R2", audioText: "two" }, { id: "R3", audioText: "three" }] });
@@ -43,6 +46,16 @@ test("incremental mark-only arrival and an opaque undo marker invalidate the cac
     });
     assert.deepEqual(work.filter(value => value.startsWith("segment:")), ["segment:b:R1"]);
     assert.equal(projector.read().document.rows[0]?.audioText, "<strong>ab</strong>Z");
+    registerSharedUndoOperationHandlers(run.b);
+    const preparation = createSharedPreparation(run.b);
+    const occurrences = preparation.view.text(["segments", "b:R1", "text"])?.records.filter(item => item.record.type === "add").map(item => item.identity);
+    preparation.close(); assert.ok(occurrences); assert.equal(occurrences.length, 1);
+    execute(run.b, { kind: "mark-retract", id: "retract-bold", by: "Writer", target, occurrences });
+    run.queue.flush("dup");
+    const store = nativeMap(run.a, "segments", "b:R1").get("markRecords"); assert.ok(store instanceof Y.Map);
+    assert.equal(store.get(SHARED_MARK_PROVENANCE_MARKER), true);
+    assert.equal(projector.read().document.rows[0]?.audioText, "abZ");
+    assertIncremental(run.a, projector);
   } finally { stop(); projector.dispose(); run.close(); }
 });
 

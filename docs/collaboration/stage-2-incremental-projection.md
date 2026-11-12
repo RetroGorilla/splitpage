@@ -118,11 +118,14 @@ opaque undo markers, normal and prefix splits across a tag, ownership changes,
 duplicate and empty cleaned ids, dangling joins, wrong native record shapes,
 gallery folding, shared comment anchors, b-roll first occurrence and shot
 reservations, and each revision in a held-update drain.
+After merging the undo executor, the mark-only arrival test also receives a real
+provenance marker and retraction together from another writer, and checks the
+literal unmarked result from its already warm incremental reader.
 
 The seeded comparison uses four seeds, two and three writers, normal, reversed
-and duplicated delivery, 24 encoded late joiners, 1,140 authored actions and 2,384
+and duplicated delivery, 24 encoded late joiners, 1,320 authored actions and 2,756
 checkpoints. Choices use the complete generator output divided by 2^32. It covers
-all 19 operation kinds in the committed operation examples. Eleven use installed
+all 22 operation kinds in the committed operation examples. Fourteen use installed
 command handlers; join, glue, removal, restore, move and heading shapes whose
 handlers have not landed use direct authored transactions. A separate test checks
 all 291 fixture references after hydration and scripted edits at 1,455 publication

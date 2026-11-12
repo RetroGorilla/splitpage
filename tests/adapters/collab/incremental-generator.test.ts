@@ -16,6 +16,9 @@ import { operationExamples } from "../../core/collab/operation-examples.ts";
 import { sharedJoinGlueRegisterField } from "../../../src/core/collab/projection/join-glue.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import type { SharedDocumentProjectionResult } from "../../../src/adapters/collab/project.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 
 test("seeded incremental projection agrees at every authored and delivered revision with no declared limits", t => {
   const declaredLimits: readonly string[] = [], violations: string[] = [], kinds = new Set<string>(), choices = new Set<string>();
@@ -37,7 +40,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
     };
     const stops = projectors.map((projector, index) => projector.observe(() => checkpoint(index)));
     try {
-      for (const handle of handles) registerBenchmarkHandlers(handle);
+      for (const handle of handles) { registerBenchmarkHandlers(handle); registerSharedUndoOperationHandlers(handle); }
       for (const [writer, handle] of handles.entries()) {
         const roots = collabState(handle).roots, prefix = `s${seed}w${writer}`, by = "Writer";
         const submit = (command: { kind: string } & Record<string, unknown>): void => {
@@ -47,10 +50,19 @@ test("seeded incremental projection agrees at every authored and delivered revis
         submit({ kind: "text-insert", target, at: { left: null, right: flowBaseReference("R1", "audioText", offset), affinity: "before" },
           content: [{ value: String.fromCharCode(65 + pick(26)), marks: [] }] });
         submit({ kind: "mark", target, observed: [flowBaseReference("R1", "audioText", 0, 2 + pick(3))], mark: { kind: pick(2) ? "b" : "i", value: true } });
+        const preparation = createSharedPreparation(handle);
+        const occurrences = preparation.view.text(["segments", "b:R1", "text"])?.records.filter(item => item.record.type === "add").map(item => item.identity);
+        preparation.close(); assert.ok(occurrences); assert.equal(occurrences.length, 1);
+        submit({ kind: "mark-retract", target, occurrences });
+        const anchorTarget = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
+        const deleted = createSharedAnchor(handle, anchorTarget, 6, "after"), left = createSharedAnchor(handle, anchorTarget, 5, "after"); assert.ok(deleted && left);
         submit({ kind: "text-delete", target, observed: [flowBaseReference("R1", "audioText", 6, 7)] });
+        submit({ kind: "text-restore", target, units: [{ unit: deleted, left, value: "f", marks: [] }] });
         submit({ kind: "scalar", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 1 + pick(40) });
         const statusTarget = { scope: "beat" as const, record: ref("R1") };
-        submit({ kind: "status", target: statusTarget, value: pick(2) ? "ready" : "shot", parents: readSharedStatusHeads(handle, statusTarget) });
+        const status = pick(2) ? "ready" : "shot";
+        submit({ kind: "status", target: statusTarget, value: status, parents: readSharedStatusHeads(handle, statusTarget) });
+        submit({ kind: "status-retire", target: statusTarget, value: status, event: JSON.stringify([String(collabState(handle).doc.clientID), prefix + "status"]) });
         const person = "P" + writer;
         submit({ kind: "record-create", target: { collection: "people", record: person }, fields: { id: person, name: "Ada" } });
         submit({ kind: "record-set", target: { collection: "people", record: person }, field: "name", value: "Ada" + pick(99) });
@@ -102,11 +114,11 @@ test("seeded incremental projection agrees at every authored and delivered revis
     finally { for (const stop of stops) stop(); for (const projector of projectors) projector.dispose(); run.close(); }
   }
   assert.deepEqual(violations, declaredLimits);
-  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1140);
-  assert.equal(checkpoints, 2384);
+  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1320);
+  assert.equal(checkpoints, 2756);
   assert.equal(choices.size, 216);
-  assert.deepEqual([...kinds].sort(), ["heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "record-create", "record-delete", "record-set",
-    "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "text-delete", "text-insert"]);
+  assert.deepEqual([...kinds].sort(), ["heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
+    "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "status-retire", "text-delete", "text-insert", "text-restore"]);
   assert.deepEqual([...new Set(operationExamples.map(example => example.operation.kind))].sort(), [...kinds].sort());
   t.diagnostic(JSON.stringify({ histories, commands, checkpoints, lateJoiners, choices: choices.size, declaredLimits }));
 });
