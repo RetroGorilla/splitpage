@@ -127,7 +127,11 @@ export function cellTextCommand(rowId: string, field: string, text: CellText, po
       const tags = newTags(doc, records.tags || []);
       const shots = newShots(doc, records.shots || []);
       const can = capability.edit();
-      if (!can.allowed && (tags.length || shots.length || !onlyAnchorsDiffer(before, after, text, ports.cells))) return { refused: can.reason };
+      if (!can.allowed) {
+        if (tags.length || shots.length || !onlyAnchorsDiffer(before, after, text, ports.cells)) return { refused: can.reason };
+        const anchors = capability.comment();
+        if (!anchors.allowed) return { refused: anchors.reason };
+      }
       const moved = !sameIds(idsInHtml(before, ports.cells), idsInRuns(text.runs));
       const docFields: string[] = [];
       if (tags.length) docFields.push("productionTags");

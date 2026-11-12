@@ -46,13 +46,6 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
         log.push("assign:" + doc.title);
         live = doc;
         epoch++;
-      },
-      stamp: function (task) {
-        const doc = live;
-        const plan = doc ? task.plan(doc) : null;
-        if (!doc || !plan) return { kind: "noop" };
-        plan.apply(doc);
-        return { kind: "applied", generation: 0, changes: plan.changes };
       }
     },
     destination: {

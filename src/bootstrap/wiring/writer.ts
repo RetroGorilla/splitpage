@@ -29,7 +29,7 @@ import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
 import { screenIsStale } from "../../features/rows/render.ts";
 import { undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
-import { liveSession } from "./session-owner.ts";
+import { standaloneSession } from "./session-owner.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
 import { pictures } from "./ports/pictures.ts";
@@ -95,7 +95,7 @@ export function mountWriterRuntimeFeature() {
         },
         create: (root, selectionMoved, undoStep) => {
           undoOwner().flush();
-          const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
+          const initialized = standaloneSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
           let dismissedGhost: typeof tagGhost = null;
           return createFlowWriter({

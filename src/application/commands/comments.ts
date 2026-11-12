@@ -2,7 +2,7 @@ import { cappedText } from "../../core/document/text-policy.ts";
 import type { DocumentComment, DocumentReply, ValidatedDocument } from "../../core/document/validated.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, CommandRefusal, DocumentView, Plan } from "../session/document-session.ts";
 import type { Clock, StampPorts } from "../session/ports.ts";
 import { applyRewrites, realRewrites, rewriteChanges, withFields } from "./document-edit.ts";
 import type { RewritePlanner } from "./document-edit.ts";
@@ -40,7 +40,9 @@ export function addCommentCommand(comment: DocumentComment): Command {
   return {
     name: "add-comment",
     needs: "nothing",
-    plan: function (doc): Plan | null {
+    plan: function (doc, capability): Plan | CommandRefusal | null {
+      const can = capability.comment();
+      if (!can.allowed) return { refused: can.reason };
       if (commentAt(doc, comment.id) !== -1) return null;
       return {
         changes: postedChange(),
@@ -54,7 +56,9 @@ export function addReplyCommand(commentId: string, reply: DocumentReply, clock: 
   return {
     name: "add-reply",
     needs: "nothing",
-    plan: function (doc): Plan | null {
+    plan: function (doc, capability): Plan | CommandRefusal | null {
+      const can = capability.comment();
+      if (!can.allowed) return { refused: can.reason };
       if (commentAt(doc, commentId) === -1) return null;
       return {
         changes: postedChange(),
@@ -130,7 +134,9 @@ export function unwrapCommentAnchorCommand(unwrap: RewritePlanner): Command {
   return {
     name: "unwrap-comment-anchor",
     needs: "nothing",
-    plan: function (doc): Plan | null {
+    plan: function (doc, capability): Plan | CommandRefusal | null {
+      const can = capability.comment();
+      if (!can.allowed) return { refused: can.reason };
       const rewrites = realRewrites(doc, unwrap(doc));
       if (!rewrites.length) return null;
       return {
