@@ -9,7 +9,8 @@ interface StructurePlanScratch { readonly scratch: <T>(key: string, create: () =
 
 function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
-    records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>() }));
+    records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>(),
+    headings: new Map<string, boolean>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
@@ -19,6 +20,7 @@ export function sharedStructurePlanIndex(view: StructurePlanScratch): SharedStru
 export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment }); }
 export function isPlannedStructureOwner(view: StructurePlanScratch, id: string): boolean { return context(view).records.has(id); }
 export function planSharedStructureRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).removed.set(id, removed); }
+export function planSharedHeadingRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).headings.set(id, removed); }
 export function readSharedStructureRemoval(view: StructurePlanScratch, id: string): boolean {
   const state = context(view); return state.removed.get(id) ?? state.index?.removed(id) ?? false;
 }
@@ -59,8 +61,8 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
       const left = readPlannedStructureIndex(view, index.order, a.segment), right = readPlannedStructureIndex(view, index.order, b.segment);
       return (left < 0 ? Infinity : left) - (right < 0 ? Infinity : right) || (a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0);
     });
-  return projectSharedBlocks(streams, [...records.values()]).filter(block => purpose === "restore-membership" || block.kind === "h" || block.id === null
-    || !(state.removed.get(block.id) ?? index.removed(block.id)));
+  return projectSharedBlocks(streams, [...records.values()]).filter(block => purpose === "restore-membership" || block.id === null
+    || !(block.kind === "h" ? state.headings.get(block.id) ?? index.headingRemoved(block.id) : state.removed.get(block.id) ?? index.removed(block.id)));
 }
 
 function resolveOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading", purpose: "projected" | "restore-membership") {
@@ -77,6 +79,11 @@ export function resolveSharedStructureOwner(view: StructurePlanScratch, owner: s
 
 export function resolveSharedRestorableBeat(view: StructurePlanScratch, owner: string) {
   const found = resolveOwner(view, owner, "audioText", "restore-membership");
+  return found?.owner === owner ? found : null;
+}
+
+export function resolveSharedRestorableHeading(view: StructurePlanScratch, owner: string) {
+  const found = resolveOwner(view, owner, "heading", "restore-membership");
   return found?.owner === owner ? found : null;
 }
 

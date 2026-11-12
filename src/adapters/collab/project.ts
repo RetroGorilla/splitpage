@@ -37,7 +37,8 @@ export interface SharedDocumentProjectionResult {
     | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly buffer?: readonly SharedRemovalBufferSource[] }
     | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
       readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
-    | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null })[];
+    | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
+    | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>> })[];
 }
 
 export interface SharedDocumentProjectionStep extends SharedDocumentProjectionResult {
@@ -129,8 +130,12 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   const headings = blocks.flatMap<Parameters<typeof projectSharedSections>[0][number]>(block => {
     if (block.kind === "b") return [cache.read(["heading-beat", block.id], [], () => ({ kind: "b" as const, id: block.id }))];
     const extra = source.fields("heading", block.id);
-    return extra ? [cache.read(["heading", block.id], [extra, block.units], () => ({ kind: "h" as const, id: block.id,
-      name: block.units.map(unit => typeof unit.value === "string" ? unit.value : "").join(""), extra: sharedProjectionExtra(extra) }))] : [];
+    if (!extra) return [];
+    const heading = cache.read(["heading", block.id], [extra, block.units], () => ({ kind: "h" as const, id: block.id,
+      name: block.units.map(unit => typeof unit.value === "string" ? unit.value : "").join(""), extra: sharedProjectionExtra(extra) }));
+    if (!source.headingRemoved(block.id)) return [heading];
+    for (const entry of projectSharedSections([heading], new Set()).empty) recovery.push({ kind: "removed-heading", heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown> });
+    return [];
   });
   const visible = rows.map(row => String(row.id));
   const { sections, empty } = cache.read(["sections"], [...headings, ...visible], () => projectSharedSections(headings, new Set(visible)));
@@ -178,7 +183,7 @@ function assembleSharedDocumentFields(source: SharedProjectionSource): SharedDoc
   let heading: string | null = null;
   for (const head of source.blocks(false)) {
     if (head.reason || head.id === null) continue;
-    if (head.kind === "h") { heading = source.fields("heading", head.id)?.id === head.id ? head.id : null; continue; }
+    if (head.kind === "h") { heading = source.fields("heading", head.id)?.id === head.id && !source.headingRemoved(head.id) ? head.id : null; continue; }
     const fields = source.fields("beat", head.id), id = readSharedContentRef(head.id);
     if (!fields || fields.id !== head.id || !id) continue;
     const rowId = head.id;

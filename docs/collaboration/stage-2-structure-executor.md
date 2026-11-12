@@ -239,7 +239,7 @@ marks, atoms, metadata and multiple rows at the start, middle and end of narrati
 Production structural projection is not used for these comparisons;
 its interpretation belongs to the projection lane.
 
-Join, heading creation/removal/finalization, movement, complete recovery placement
+Join, heading creation/finalization, movement, complete recovery placement
 and structural undo integration remain later cuts. In particular, the heading-name
 `cappedText` rule, imported-layout movement and the remaining structural Stage 1
 histories are still open here. Standalone flow results, application, features,
@@ -308,11 +308,46 @@ and restore; the test reader supplies removal caret fallback, which is not a new
 production caret-placement claim. The seeded model has 72 histories, 900 operations,
 144 checkpoints and 504 live/fresh index comparisons, including 36 restores before
 peer delivery, with literal declared limits
-`[]` for its beat-only cases. Complete app lists execute 30 operations in 15 calls,
-skip zero and defer 12 operations in three whole lists requiring `heading-remove`.
-Their declared limit is: "Removing across a scene boundary also removes a heading;
-the complete list waits for the heading handler." T08/T09 heading variants, T06/T12
+`[]` for its beat-only cases. Complete app lists execute 42 operations in 18 calls
+and skip or defer none: the three lists that remove across a scene boundary run
+since heading removal (below). T08 creation, the T09 cross-heading selection, T06/T12
 join, imported-layout move and complete structural undo await their named cuts.
 Split-descendant removal classification and comment/reply recovery placement (T11)
 remain recovery work; retained observed ids, boundaries, attachment ids and author
 are its inputs. No claim of that classification is made by this beat-only model.
+
+## Heading removal and restore
+
+`heading-remove` runs through the same removal handlers. It resolves the projected
+heading and issues a `header` removal record with the beat removal's identity
+format, immutability and generation rule (assumed rule 33). The flag
+`{generation, removed}` is stored under `removal:<removal key>` on the heading
+record itself: hydrated headings have no nested map, and two writers creating one
+at once would lose a flag. The record's `at` is 0, since the operation carries no
+row index. Observed name characters are kept as native identities.
+
+A demotion (`newBeat`) is a heading split at offset 0 in the same transaction: the
+name's characters, with their identities, become the new beat's narration and the
+emptied heading is masked. Typing at the end of the name follows it into the new
+beat, as in the copied T08 result. Typing at the very start of the name is ordered
+against the boundary by writer id: from a writer whose id is lower than the
+remover's it stays in the masked heading, and so in recovery. `nextBeat` is not
+checked; the app's following scalar sets `paragraphStart`.
+
+The structural interpreter and the projection both mask a removed heading. Typing
+and a second removal refuse it with `missing-target` (tested); marks and scalars
+resolve owners through the same interpreter. A
+removed heading whose name still holds text is listed in recovery as
+`removed-heading` with its section record; an empty one is not. Restore cancels
+its own generation and unmasks the heading; it does not undo a demotion's split.
+Projection and the structure index read each heading record once, for both its
+fields and its removal state, so full-assembly read counts are unchanged.
+
+A heading inside a joined row (the first projected beat after it is a later part
+of a joined row) refuses the whole list with `joined-heading`, leaving bytes, state
+vector and revision unchanged. Evidence: the copied T08 remove result under three
+delivery orders and an encoded late joiner; discard and demotion literals against
+concurrent typing in the name and in the following narration, with restore and an
+incremental-versus-fresh projection comparison; a seeded model of 36 histories,
+56 checkpoints and 144 commands with literal declared limits `[]`; and two removal
+mutants. Heading creation, finalization, movement and structural undo are not built.

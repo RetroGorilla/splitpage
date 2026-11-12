@@ -72,3 +72,57 @@ test("seeded removal checkpoints agree with a literal model and fresh ownership 
   assert.deepEqual([...violations], declaredLimits); assert.deepEqual({ histories, checkpoints, comparisons, commands, earlyRestores }, { histories: 72, checkpoints: 144, comparisons: 504, commands: 900, earlyRestores: 36 });
   t.diagnostic(JSON.stringify({ seed: "0x5c33", histories, checkpoints, comparisons, commands, earlyRestores, declaredLimits }));
 });
+
+test("seeded heading removals agree with a literal model through typing, restores, reordered delivery and a late joiner", t => {
+  let seed = 0x4d08, histories = 0, checkpoints = 0, commands = 0, demotions = 0, earlyRestores = 0;
+  const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 16) % n; }, violations = new Set<string>();
+  const place = (base: string, typed: readonly { writer: number; offset: number; letter: string }[]) => {
+    let out = "";
+    for (let at = 0; at <= base.length; at++) out += typed.filter(item => item.offset === at).sort((a, b) => a.writer - b.writer).map(item => item.letter).join("") + base.charAt(at);
+    return out;
+  };
+  for (let sample = 0; sample < 6; sample++) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
+    const set = replicas(copies, { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "ab" }], sections: [{ id: "H1", name: "In", firstSceneId: "R1" }] });
+    const handles = [set.a, set.b, set.c].slice(0, copies), remover = random(copies), demote = random(2) === 0, early = random(2) === 0, restorer = random(copies);
+    const typed = handles.flatMap((_, writer) => writer === remover ? [] : [{ writer, letter: "PQR".charAt(writer), heading: random(2) === 0, offset: 0 }])
+      .map(item => ({ ...item, offset: item.heading ? 1 + random(2) : random(3) }));
+    const send = (handle: typeof set.a, ops: unknown[]) => { assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true }); commands += ops.length; };
+    const removal = "structure_" + (remover + 1) + "_0075006e0068006500610064_removal_0";
+    const checkpoint = (removed: boolean) => {
+      set.queue.flush(order); checkpoints++;
+      const name = place("In", typed.filter(item => item.heading)), narration = place("ab", typed.filter(item => !item.heading));
+      const expected = { rows: demote ? [["R0", "x", false], ["Rn", name, false], ["R1", narration, true]] : [["R0", "x", false], ["R1", narration, false]],
+        sections: !demote && !removed ? [["H1", name, "R1"]] : [], recovery: !demote && removed ? [["removed-heading", "H1", name]] : [], owner: removed ? null : "H1" };
+      agree("seed=" + seed, order, handles, handle => {
+        const { document, recovery } = projectSharedDocumentWithRecovery(handle), prep = createSharedPreparation(handle);
+        try {
+          const result = { rows: document.rows.map(row => [row.id.startsWith("structure_") ? "Rn" : row.id, row.audioText, row.paragraphStart === true]),
+            sections: ((document.sections ?? []) as { id: string; name: string; firstSceneId: string }[]).map(scene => [scene.id, scene.name, scene.firstSceneId]),
+            recovery: recovery.map(entry => entry.kind === "removed-heading" ? [entry.kind, entry.heading.id, entry.heading.name] : [entry.kind]),
+            owner: prep.view.resolveOwner("H1", "heading")?.owner ?? null };
+          try { assert.deepEqual(result, expected); } catch (error) { violations.add(String(error)); }
+          return result;
+        } finally { prep.close(); }
+      });
+    };
+    try {
+      for (const handle of handles) { registerSharedRemovalHandlers(handle); registerSharedTextOperationHandlers(handle); }
+      for (const item of typed) {
+        const handle = handles[item.writer], field = item.heading ? "heading" : "audioText", owner = item.heading ? "H1" : "R1"; assert.ok(handle);
+        send(handle, [{ kind: "text-insert", id: "typed", by: "Writer", target: { owner, segment: (item.heading ? "h:" : "b:") + owner, field },
+          at: item.offset ? { left: flowBaseReference(owner, field, item.offset - 1), right: null, affinity: "after" } : { left: null, right: flowBaseReference(owner, field, 0), affinity: "before" },
+          content: [{ value: item.letter, marks: [] }] }]);
+      }
+      const author = handles[remover]; assert.ok(author);
+      send(author, [{ kind: "heading-remove", id: "unhead", by: "Writer", heading: "H1", observed: [flowBaseReference("H1", "heading", 0, 2)], newBeat: demote ? "Rn" : null, nextBeat: demote ? "R1" : null },
+        ...demote ? [{ kind: "scalar", id: "para", by: "Writer", target: { scope: "beat", record: "R1" }, field: "paragraphStart", value: true }] : []]);
+      const restore = (handle: typeof set.a) => send(handle, [{ kind: "restore", id: "back", by: "Writer", removals: [removal] }]);
+      if (early) { restore(author); earlyRestores++; } else { checkpoint(true); const handle = handles[restorer]; assert.ok(handle); restore(handle); }
+      checkpoint(false);
+      histories++; if (demote) demotions++;
+    } finally { set.close(); }
+  }
+  assert.deepEqual([...violations], declaredLimits);
+  assert.deepEqual({ histories, checkpoints, commands, demotions, earlyRestores }, { histories: 36, checkpoints: 56, commands: 144, demotions: 18, earlyRestores: 16 });
+  t.diagnostic(JSON.stringify({ seed: "0x4d08", histories, checkpoints, commands, demotions, earlyRestores, declaredLimits }));
+});
