@@ -1,0 +1,9 @@
+{
+  "tests": ["tests/collab/buffer-commit.test.ts"],
+  "mutants": [{
+    "label": "commit mapped against current offsets instead of painted identities",
+    "file": "src/core/collab/buffer-operations.ts",
+    "find": "observed: Array.from({ length: splice.to - splice.from }, (_, offset) => identity(splice.from + offset))",
+    "replace": "observed: [JSON.stringify([\"flow-base\", target.owner, target.field, splice.from, splice.to]) as SharedContentRef]"
+  }]
+}
