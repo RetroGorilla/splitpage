@@ -1,4 +1,4 @@
-import { expectedStructureIdentity } from "../../collab/structure-identity.ts";
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type * as Y from "yjs";
@@ -45,7 +45,7 @@ test("split vocabulary agrees with the flow applier for complete emitted split l
     const length = explode(rt.cells(source.rows[0]?.audioText)).length, offset = random(length + 1);
     for (const kind of ["paragraph", "beat", "isolate"] as const) {
       let next = 0;
-      const ports: FlowPorts = { ...rt.ports, newId: () => "fresh" + ++next, operations: { id: "flow" + sample, by: "Writer" } };
+      const ports: FlowPorts = { ...rt.ports, newId: () => "fresh" + ++next, operations: { id: "flow", by: "Writer" } };
       const outcome = kind === "paragraph" ? startParagraph(doc, beatPos("R1", offset), ports) : kind === "beat" ? startBeat(doc, beatPos("R1", offset), ports)
         : selectionToOwnBeat(doc, { anchor: beatPos("R1", 0), head: beatPos("R1", Math.max(1, offset)) }, ports);
       calls++;
@@ -55,7 +55,7 @@ test("split vocabulary agrees with the flow applier for complete emitted split l
         collabState(handle).doc.clientID = 101; hydrateSharedDocument(handle, source);
         registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
         for (const op of ops) if (op.kind === "split" || op.kind === "split-before" || op.kind === "segment-create") {
-          aliases.set(expectedStructureIdentity("101", op.id, "beat"), op.beat);
+          aliases.set(structureIdentityFixture("101", op.id, "beat"), op.beat);
           if (op.kind === "split") splits++; else if (op.kind === "split-before") beforeSplits++; else creates++;
         }
         assert.deepEqual(executeSharedOperations(handle, ops, { base: readSharedRevision(handle) }), { ok: true }, `${sample}/${kind}/${JSON.stringify(ops)}`);
@@ -78,7 +78,7 @@ test("a heading split retains its native characters and accepts its following an
     assert.ok(outcome && "rows" in outcome && outcome.ops);
     collabState(handle).doc.clientID = 101; hydrateSharedDocument(handle, source); registerSharedSplitHandlers(handle, structurePorts);
     assert.deepEqual(executeSharedOperations(handle, outcome.ops, { base: readSharedRevision(handle) }), { ok: true });
-    const id = expectedStructureIdentity("101", "heading_o_0", "beat"), expected = applyFlowOperations(doc, outcome.ops, rt.cells);
+    const id = structureIdentityFixture("101", "heading_o_0", "beat"), expected = applyFlowOperations(doc, outcome.ops, rt.cells);
     assert.deepEqual(readRows(handle, new Map([[id, "fresh"]])), [{ id: "H1", text: expected.sections?.[0]?.name }, ...expected.rows.map(row => ({ id: row.id, text: row.audioText }))]);
     assert.equal((collabState(handle).roots.headings.get("H1") as Y.Map<unknown>).get("firstSceneId"), id);
   } finally { destroySharedDocument(handle); }

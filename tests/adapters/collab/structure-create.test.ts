@@ -1,4 +1,4 @@
-import { expectedStructureIdentity } from "../../collab/structure-identity.ts";
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
@@ -71,7 +71,7 @@ function run(handle: SharedDocumentHandle, doc: FlowDoc, outcome: FlowOutcome, c
   assert.ok(outcome && "rows" in outcome && outcome.ops);
   const expected = applyFlowOperations(doc, outcome.ops, structurePorts.cells), aliases = new Map<string, string>();
   assert.deepEqual(expected.rows, outcome.rows); assert.deepEqual(expected.sections, outcome.sections);
-  for (const op of outcome.ops) if (op.kind === "split" || op.kind === "segment-create") aliases.set(op.beat, expectedStructureIdentity(String(collabState(handle).doc.clientID), op.id, "beat"));
+  for (const op of outcome.ops) if (op.kind === "split" || op.kind === "segment-create") aliases.set(op.beat, structureIdentityFixture(String(collabState(handle).doc.clientID), op.id, "beat"));
   const rows = expected.rows.map(row => ({ ...row, id: aliases.get(String(row.id)) ?? String(row.id) })) as FlowRow[];
   assert.deepEqual(executeSharedOperations(handle, outcome.ops, { base: readSharedRevision(handle) }), { ok: true });
   assert.deepEqual(read(handle).rows, rows.map(row => ({ id: row.id, text: toHtml(structurePorts.cells(row.audioText ?? "")), visual: toHtml(structurePorts.cells(row.visualText ?? "")) })));
@@ -109,7 +109,7 @@ test("seeded creation forms agree with complete app lists and a literal concurre
       if (kind === "inline") {
         doc = run(set.a, doc, startBeat(doc, beatPos("R1", raw), { ...runtime.ports, newId: () => "tail", operations: { id: "seed", by: "Seed" } }), counts); set.queue.flush("D1");
       }
-      const ids = handles.map((_, index) => expectedStructureIdentity(String(index + 1), "edit_o_0", "beat"));
+      const ids = handles.map((_, index) => structureIdentityFixture(String(index + 1), "edit_o_0", "beat"));
       for (const [index, handle] of handles.entries()) {
         const ports = { ...runtime.ports, newId: () => "same", operations: { id: "edit", by: "Writer" + index } }, letter = "MNO".charAt(index);
         const outcome = kind === "inline" ? startBeat(doc, beatPos("R1", offset), ports) : kind === "heading" ? startParagraph(doc, beatPos("R1", 0), ports)
@@ -120,7 +120,7 @@ test("seeded creation forms agree with complete app lists and a literal concurre
       set.queue.flush(order);
       const created = ids.map((id, index) => ({ id, text: "MNO".charAt(index), visual: kind === "visual" ? "<em>v" + "MNO".charAt(index) + "</em>" : "" }));
       const base = { id: "R1", text: kind === "inline" ? text.slice(0, offset) : text, visual: "" };
-      const rows = kind === "inline" ? [base, ...created, { id: expectedStructureIdentity("1", "seed_o_0", "beat"), text: text.slice(offset), visual: "" }]
+      const rows = kind === "inline" ? [base, ...created, { id: structureIdentityFixture("1", "seed_o_0", "beat"), text: text.slice(offset), visual: "" }]
         : kind === "heading" ? [...created, base] : [base, ...created];
       agree(`creation seed=${seed}/${kind}`, order, handles, handle => {
         const characters = readSharedMarkCharacters(handle, { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" }); assert.ok(characters);
@@ -130,7 +130,7 @@ test("seeded creation forms agree with complete app lists and a literal concurre
           return { record, beat: value.get("beat"), picture: value.get("picture"), links: [...links.values()].map(link => ({ href: link.get("href") })) };
         });
         return { ...read(handle), gallery };
-      }, { rows, headings: kind === "heading" ? ["H1"] : [], gallery: kind === "visual" ? ids.map((beat, index) => ({ record: expectedStructureIdentity(String(index + 1), "edit_o_0", "gallery", 0), beat,
+      }, { rows, headings: kind === "heading" ? ["H1"] : [], gallery: kind === "visual" ? ids.map((beat, index) => ({ record: structureIdentityFixture(String(index + 1), "edit_o_0", "gallery", 0), beat,
         picture: { imageRef: { sha256: "abc".charAt(index).repeat(64) }, name: "MNO".charAt(index) }, links: [{ href: "https://example.com/" + "MNO".charAt(index) }] })) : [] }); histories++;
     } finally { set.close(); }
   }
@@ -223,7 +223,7 @@ test("inline rich creation reads only touched records and freezes its descriptio
       } });
       const whole = mock.method(collabState(handle).roots.order, "toArray", () => { throw new Error("whole order read during preparation"); });
       try {
-        const command = operation({ kind: "segment-create", id: "create", by: "Writer", beat: "new", segment: "new", at: { left: "R1", right: expectedStructureIdentity("1", "cut", "beat"), affinity: "before" }, fields: { audioText: "<em>A😀</em>", visualText: "<strong>V</strong>" } });
+        const command = operation({ kind: "segment-create", id: "create", by: "Writer", beat: "new", segment: "new", at: { left: "R1", right: structureIdentityFixture("1", "cut", "beat"), affinity: "before" }, fields: { audioText: "<em>A😀</em>", visualText: "<strong>V</strong>" } });
         assert.deepEqual(executeSharedOperations(handle, [command], { base: readSharedRevision(handle) }), { ok: true }); counts.push(reads); assert.equal(whole.mock.callCount(), 0);
       } finally { whole.mock.restore(); }
     } finally { set.close(); }
@@ -252,7 +252,7 @@ test("startParagraph before a scene's first beat stays after its heading and rep
     const doc = run(set.a, { ...source, comments: [] }, startParagraph({ ...source, comments: [] }, beatPos("R1", 0), { ...rt.ports, newId: () => "new", operations: { id: "enter", by: "Writer" } }));
     const fresh = doc.rows[0]?.id; assert.ok(fresh);
     assert.equal((collabState(set.a).roots.headings.get("H1") as Y.Map<unknown>).get("firstSceneId"), fresh);
-    assert.deepEqual(collabState(set.a).roots.order.toArray(), ["h:H1", expectedStructureIdentity("1", "enter_o_0", "segment"), "b:R1"]);
+    assert.deepEqual(collabState(set.a).roots.order.toArray(), ["h:H1", structureIdentityFixture("1", "enter_o_0", "segment"), "b:R1"]);
     set.queue.flush("D1"); agree("scene first paragraph", "D1", [set.a, set.b], read);
   } finally { set.close(); }
 });
@@ -261,7 +261,7 @@ test("startParagraph before a scene's first beat stays after its heading and rep
 test("creation affinity preserves literal scene membership at scene gaps and script edges", () => {
   const source = { rows: [{ id: "R0", audioText: "abcd" }, { id: "R1", audioText: "efgh", paragraphStart: true }],
     sections: [{ id: "H0", name: "First", firstSceneId: "R0" }, { id: "H1", name: "Second", firstSceneId: "R1" }] };
-  const fresh = expectedStructureIdentity("1", "action_o_0", "beat");
+  const fresh = structureIdentityFixture("1", "action_o_0", "beat");
   const cases = [
     { kind: "beat", owner: "R0", offset: 4, affinity: "after", expected: [["R0", "H0"], [fresh, "H0"], ["R1", "H1"]] },
     { kind: "paragraph", owner: "R0", offset: 4, affinity: "after", expected: [["R0", "H0"], [fresh, "H0"], ["R1", "H1"]] },
@@ -298,7 +298,7 @@ test("reverse-emitted pasted groups stay before the next scene's heading", () =>
       registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.a);
       run(set.a, doc, insertBeats(doc, first ? headingPos("H0", 0) : beatPos("R0", 4), [{ id: "p1", audioText: "P" }, { id: "p2", audioText: "Q" }],
         { ...runtime.ports, operations: { id: "paste", by: "Writer" } }));
-      const p1 = expectedStructureIdentity("1", "paste_o_2", "beat"), p2 = expectedStructureIdentity("1", "paste_o_0", "beat");
+      const p1 = structureIdentityFixture("1", "paste_o_2", "beat"), p2 = structureIdentityFixture("1", "paste_o_0", "beat");
       const expected = first ? [[p1, null], [p2, null], ["R0", "H0"], ["R1", "H1"]] : [["R0", "H0"], [p1, "H0"], [p2, "H0"], ["R1", "H1"]];
       set.queue.flush("dup"); agree("reverse paste scene edge", "dup", [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), expected);
     } finally { set.close(); }
@@ -315,7 +315,7 @@ test("concurrent creations keep their own scenes at the middle, end and first he
       const ports = { ...runtime.ports, newId: () => "same", operations: { id: "enter", by: "Writer" } };
       run(set.a, doc, edge === "first" ? enterInHeading(doc, headingPos("H0", 0), ports) : startBeat(doc, beatPos(edge === "middle" ? "R0" : "R1", 4), ports));
       run(set.b, doc, startParagraph(doc, beatPos(edge === "first" ? "R0" : "R1", edge === "end" ? 4 : 0), ports));
-      const a = expectedStructureIdentity("1", "enter_o_0", "beat"), b = expectedStructureIdentity("2", "enter_o_0", "beat");
+      const a = structureIdentityFixture("1", "enter_o_0", "beat"), b = structureIdentityFixture("2", "enter_o_0", "beat");
       const expected = edge === "middle" ? [["R0", "H0"], [a, "H0"], [b, "H1"], ["R1", "H1"]]
         : edge === "end" ? [["R0", "H0"], ["R1", "H1"], [a, "H1"], [b, "H1"]] : [[a, null], [b, "H0"], ["R0", "H0"], ["R1", "H1"]];
       set.queue.flush(order); agree("concurrent scene intent " + edge, order, [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), expected);
@@ -336,7 +336,7 @@ test("creation before a heading stays outside its inline first beat", () => {
         beat: "new", segment: "new", at: { left: "future", right: "R0", affinity: "after" }, fields: { audioText: "N" } })], { base: readSharedRevision(set.a) }), { ok: true });
       else run(set.a, doc, mode === "paste" ? insertBeats(doc, headingPos("H0", 0), [{ id: "p1", audioText: "P" }, { id: "p2", audioText: "Q" }], ports)
         : enterInHeading(doc, headingPos("H0", 0), ports));
-      const tail = expectedStructureIdentity("1", "tail_o_0", "beat"), last = expectedStructureIdentity("1", "before_o_0", "beat"), first = expectedStructureIdentity("1", "before_o_2", "beat");
+      const tail = structureIdentityFixture("1", "tail_o_0", "beat"), last = structureIdentityFixture("1", "before_o_0", "beat"), first = structureIdentityFixture("1", "before_o_2", "beat");
       const expected = mode === "paste" ? [[first, null], [last, null], [tail, "H0"], ["R0", "H0"]]
         : mode === "fallback" ? [[tail, "H0"], [last, "H0"], ["R0", "H0"]] : [[last, null], [tail, "H0"], ["R0", "H0"]];
       set.queue.flush("rev"); agree("before inline heading beat", "rev", [set.a, set.b], handle => membership(handle).map(row => [row.id, row.heading]), expected);

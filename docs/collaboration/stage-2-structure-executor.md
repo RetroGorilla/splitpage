@@ -22,10 +22,10 @@ whole list. No compatibility translation or second generated-id parser is added.
 
 An idle registration indexes cleaned keys and record ids in the beat, segment,
 heading, visual, gallery and registry roots, plus stored order names and inline
-b-roll ids. Native updates refresh only changed records. Text events inspect native
-items without reading the event delta, which would open another transaction;
-embedded-value edits refresh that touched container. Ordinary string insertions
-do not rebuild its reservations. Reference counts remove deleted reservations, so
+b-roll ids. Native updates refresh only changed records. Text events patch added
+and deleted embeds from the transaction's before/after clocks and deletion ranges.
+They inspect neither the existing text item chain nor a text delta. Ordinary string
+insertions do not rebuild reservations. Reference counts remove deleted reservations, so
 an encoded late joiner has the same index. Prepare uses only cached lookups and a
 per-call reservation set. Record creation and b-roll insertion also contribute to
 that set, in either order around structural creation. A cleaned collision refuses
@@ -47,6 +47,20 @@ fields today. All four structural forms also pass through `projectSharedDocument
 and the real `migrateRows` pipeline on every copy. A seeded tuple test checks
 unambiguous components and unchanged ids after load, including escaped separators,
 ambiguous decimal concatenations and refused stripped characters.
+
+The identity history model has this literal declared limit:
+
+| Declared limit | Replacement rule in the span/address cut |
+| --- | --- |
+| same cleaned beat id created at the same moment: the load renames the later beat and a command addressed to the id reaches the other one | The first beat in merged document order keeps the cleaned id and is the row; later beats with that cleaned id go to recovery without renaming. Address resolution reaches the beat shown. |
+
+A local reservation cannot observe an undelivered native creation. This case is
+not emitted by the app: each writer's generated ids carry its own writer component.
+The pinned native history currently loads Reserved under the shared Created id,
+renames Created, and a command planned for Reserved edits Created instead. The next
+cut must replace that literal outcome with the decided projection/address rule.
+The seeded checkpoint model collects violations and compares them with this table;
+it compares patched reservations with a fresh encoded-state index at every checkpoint.
 
 A creation resolves logical neighbours to their current spans. Within a physical
 segment it inserts a beat boundary and reuses the existing text and mark store;

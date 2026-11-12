@@ -7,12 +7,12 @@ import { registerSharedTextOperationHandlers } from "../../../src/adapters/colla
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { readSharedRevision, encodeSharedState, encodeSharedStateVector, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision, encodeSharedState, encodeSharedStateVector, transactSharedDocument, applySharedUpdate, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
 import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import { readSharedMarkRecord } from "../../../src/adapters/collab/mark-record.ts";
-import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { projectSharedDocument, projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { readProjectionBlocks } from "../../../src/adapters/collab/projection-reader.ts";
 import { readProjectionUnits } from "../../../src/adapters/collab/projection-text-reader.ts";
 import { cleanId, safeId } from "../../../src/core/document/text-policy.ts";
@@ -21,14 +21,18 @@ import { ensureTagIds } from "../../../src/core/document/tags.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { insertBeats, typeWithMarks, beatPos } from "../../../src/core/flow/flow.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import { deliveryReplica } from "./helpers.ts";
-import { expectedStructureIdentity } from "../../collab/structure-identity.ts";
+import { deliveryReplica, createMonitoredSharedDocument } from "./helpers.ts";
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
+import { visitSharedIdentityStructs } from "../../../src/adapters/collab/identity-structs.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import type { DeliveryOrder } from "../../collab/delivery.ts";
 
 const runtime = createFlowLoadRuntime(), ports = { cells: runtime.cells };
 const beat = "structure_1_0065006e007400650072_beat_0", segment = "structure_1_0065006e007400650072_segment_0";
 const visual = "structure_1_0065006e007400650072_visual_0", gallery = "structure_1_0065006e007400650072_gallery_0";
 const secondGallery = "structure_1_0065006e007400650072_gallery_1";
 const source = { rows: [{ id: "R1", audioText: "abcd" }] };
+const declaredLimits = ["same cleaned beat id created at the same moment: the load renames the later beat and a command addressed to the id reaches the other one"] as const;
 const create = (id = "enter") => operation({ kind: "segment-create", id, by: "Writer", beat: "new", segment: "new",
   at: { left: "R1", right: null, affinity: "after" }, fields: { audioText: "<em>P</em>", visualText: '<strong><a href="https://example.com">V</a></strong>',
     imageRef: { sha256: "a".repeat(64) }, moreImages: [{ imageRef: { sha256: "b".repeat(64) } }] } });
@@ -104,12 +108,12 @@ test("seeded raw tuples remain distinct after real app validation, with separato
     assert.throws(() => sharedStructureIdentity("1", operation, "beat"), { message: "invalid-structure-operation-id" });
   }
   const tags = [{ id: "t_seed", cat: "prop", name: "Cup" }]; ensureTagIds(tags); assert.equal(tags[0]?.id, "t_seed");
-  t.diagnostic(JSON.stringify({ tuples: checked, loaded: loaded.rows.length, refused, invalidOperations: 9, limits: [] }));
+  t.diagnostic(JSON.stringify({ tuples: checked, loaded: loaded.rows.length, refused, invalidOperations: 9, scope: "identity tuples" }));
 });
 
 test("cleaned stored identities reserve every creation role before and after registration and on an encoded join", () => {
   for (const role of ["beat", "segment", "visual", "gallery"] as const) for (const root of ["beats", "segments", "headings", "visuals", "gallery", "comments", "replies", "people", "tags", "shots"] as const) {
-    const set = replicas(2, source), id = expectedStructureIdentity("1", "enter", role), raw = "[" + id + "]";
+    const set = replicas(2, source), id = structureIdentityFixture("1", "enter", role), raw = "[" + id + "]";
     try {
       registerSharedSplitHandlers(set.a, ports);
       transactSharedDocument(set.a, "local-command", () => {
@@ -197,7 +201,7 @@ test("split, prefix, blank and rich paste IDs survive projection and app load on
           at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [], beat: "new", boundary: "new", fields: {} })];
         assert.deepEqual(executeSharedOperations(handle, commands, { base: readSharedRevision(handle) }), { ok: true });
       }
-      const expected = ["R1", ...handles.map((_, index) => expectedStructureIdentity(String(index + 1), operationId, "beat"))].sort();
+      const expected = ["R1", ...handles.map((_, index) => structureIdentityFixture(String(index + 1), operationId, "beat"))].sort();
       set.queue.flush(order); agree("validated creation IDs " + kind, order, handles, handle => {
         const projected = projectSharedDocument(handle), loaded = runtime.load(projected);
         for (const root of ["beats", "segments", "visuals", "gallery"] as const) for (const key of collabState(handle).roots[root].keys()) if (key.startsWith("structure_")) assert.equal(cleanId(key), key);
@@ -205,5 +209,129 @@ test("split, prefix, blank and rich paste IDs survive projection and app load on
       }, { projected: expected, loaded: expected }); histories++;
     } finally { set.close(); }
   }
-  assert.equal(histories, 32); t.diagnostic(JSON.stringify({ histories, kinds: ["split", "split-before", "blank", "paste"], limits: [] }));
+  assert.equal(histories, 32); t.diagnostic(JSON.stringify({ fixedMatrixHistories: histories, kinds: ["split", "split-before", "blank", "paste"] }));
+});
+
+function concurrentCleanedCollision(order: DeliveryOrder): string {
+  const set = replicas(2, source), raw = "[structure_1_0065006e007400650072_beat_0]";
+  try {
+    registerSharedSplitHandlers(set.a, ports); registerSharedTextOperationHandlers(set.a);
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ ...create(), fields: { audioText: "Created" } })], { base: readSharedRevision(set.a) }), { ok: true });
+    transactSharedDocument(set.b, "local-command", () => {
+      const roots = collabState(set.b).roots, record = new Y.Map<unknown>(), container = new Y.Map<unknown>();
+      record.set("id", raw); record.set("segment", "reserved-segment"); roots.beats.set(raw, record);
+      container.set("head", { b: raw }); container.set("text", new Y.Text("Reserved")); container.set("markRecords", new Y.Map<unknown>());
+      roots.segments.set("reserved-segment", container); roots.order.insert(0, ["reserved-segment"]);
+    });
+    set.queue.flush(order);
+    const read = (handle: SharedDocumentHandle) => { const projection = projectSharedDocumentWithRecovery(handle); return {
+      rows: projection.document.rows.map(row => ({ id: row.id, text: row.audioText })), loaded: runtime.load(projection.document).rows.map(row => ({ id: row.id, text: row.audioText })), recovery: projection.recovery }; };
+    const rows = [{ id: raw, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: beat, text: "Created" }];
+    const loaded = [{ id: beat, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: "structure_1_0065006e007400650072_beat_0-1", text: "Created" }];
+    agree("declared cleaned-id collision before edit", order, [set.a, set.b], read, { rows, loaded, recovery: [] });
+    const held = runtime.load(projectSharedDocument(set.a)), edit = typeWithMarks({ rows: held.rows, comments: [] }, beatPos(beat, 0), "!", {}, { ...runtime.ports, operations: { id: "held", by: "Writer" } });
+    assert.ok(edit && "ops" in edit && edit.ops); assert.equal(edit.rows[0]?.audioText, "!Reserved");
+    assert.deepEqual(executeSharedOperations(set.a, edit.ops, { base: readSharedRevision(set.a) }), { ok: true }); set.queue.flush(order);
+    agree("declared cleaned-id collision edits the other beat", order, [set.a, set.b], read, {
+      rows: [{ id: raw, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: beat, text: "!Created" }],
+      loaded: [{ id: beat, text: "Reserved" }, { id: "R1", text: "abcd" }, { id: "structure_1_0065006e007400650072_beat_0-1", text: "!Created" }], recovery: []
+    });
+    return declaredLimits[0];
+  } finally { set.close(); }
+}
+
+test("declared limit: simultaneous cleaned beat identity collision renames the later beat and edits the other one", t => {
+  const violations = new Set<string>();
+  for (const order of ["D1", "dup", "rev", "late-C"] as const) violations.add(concurrentCleanedCollision(order));
+  assert.deepEqual([...violations], declaredLimits); t.diagnostic(JSON.stringify({ histories: 4, declaredLimits, violations: [...violations] }));
+});
+
+test("seeded creation and native mutation checkpoints compare maintained reservations with encoded fresh indexes", t => {
+  let seed = 0x14664, histories = 0, checkpoints = 0, copies = 0, deliveries = 0;
+  const random = (limit: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % limit; };
+  const violations = new Set<string>(), covered = new Set<string>(), probes = new Set([beat, segment, visual, gallery, "probeA", "probeB", "probeAtom"]);
+  const checkpoint = (handles: readonly SharedDocumentHandle[]) => {
+    checkpoints++;
+    for (const handle of handles) {
+      for (const root of ["segments", "beats", "headings", "visuals", "gallery", "comments", "replies", "people", "tags", "shots"] as const) for (const [key, raw] of collabState(handle).roots[root]) {
+        probes.add(cleanId(key)); if (raw instanceof Y.Map && typeof raw.get("id") === "string") probes.add(cleanId(raw.get("id") as string));
+      }
+      const fresh = createMonitoredSharedDocument();
+      try {
+        assert.ok(applySharedUpdate(fresh, encodeSharedState(handle)).ok);
+        const maintained = observeSharedStructureIdentities(handle), rebuilt = observeSharedStructureIdentities(fresh);
+        for (const id of probes) if (maintained.has(id) !== rebuilt.has(id)) violations.add("patched reservation index differs from encoded fresh index");
+        copies++;
+      } finally { destroySharedDocument(fresh); }
+    }
+  };
+  for (let sample = 0; sample < 8; sample++) for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"] as const) {
+    const set = replicas(writers, source), handles = [set.a, set.b, set.c].slice(0, writers);
+    try {
+      for (const handle of handles) { registerSharedSplitHandlers(handle, ports); registerSharedTextOperationHandlers(handle); observeSharedStructureIdentities(handle); }
+      checkpoint(handles);
+      for (const [writer, handle] of handles.entries()) {
+        const kind = ["split", "split-before", "blank", "paste"][(sample + writer + random(4)) % 4] as "split" | "split-before" | "blank" | "paste"; covered.add(kind);
+        const command = kind === "blank" || kind === "paste" ? operation({ ...create(), fields: kind === "blank" ? {} : { audioText: "Created", visualText: "Visual", imageRef: { sha256: "a".repeat(64) } } })
+          : operation({ kind, id: "enter", by: "Writer", target: { owner: "R1", segment: "b:R1", field: "audioText" }, at: { left: null, right: flowBaseReference("R1", "audioText", random(5)), affinity: "before" }, observed: [], boundary: "new", beat: "new", fields: {} });
+        assert.deepEqual(executeSharedOperations(handle, [command], { base: readSharedRevision(handle) }), { ok: true }); checkpoint(handles);
+      }
+      for (let step = 0; step < 8; step++) {
+        const handle = handles[random(writers)]; assert.ok(handle);
+        transactSharedDocument(handle, "local-command", () => {
+          const roots = collabState(handle).roots, text = (roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
+          const kind = (sample + step) % 8; covered.add("mutation" + kind);
+          if (kind === 0) { const reply = new Y.Map<unknown>(); reply.set("id", "[probeA]"); roots.replies.set("probe-reply", reply); }
+          if (kind === 1) { const reply = roots.replies.get("probe-reply"); if (reply instanceof Y.Map) reply.set("id", "[probeB]"); }
+          if (kind === 2) roots.order.push(["[probeA]"]);
+          if (kind === 3) { const at = roots.order.toArray().indexOf("[probeA]"); if (at >= 0) roots.order.delete(at, 1); }
+          if (kind === 4) text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" });
+          if (kind === 5) { const first = text.toDelta()[0]; if (first && typeof first.insert !== "string" && "k" in first.insert) text.delete(0, 1); }
+          if (kind === 6) { text.insertEmbed(0, { k: "[probeB]", label: "B-roll:" }); text.delete(0, 1); }
+          if (kind === 7) { roots.replies.delete("probe-reply"); text.insert(0, "X"); }
+        }); checkpoint(handles);
+      }
+      while (set.queue.pending.length) {
+        const at = order === "rev" ? set.queue.pending.length - 1 : order === "dup" ? random(set.queue.pending.length) : 0, message = set.queue.pending[at]; assert.ok(message);
+        set.queue.deliver(message.id, order === "dup" ? 2 : 1); deliveries++; checkpoint(handles);
+      }
+      agree("seeded identity checkpoints", order, handles, handle => {
+        const document = projectSharedDocument(handle), loaded = runtime.load(document);
+        if (document.rows.some((row, index) => row.id !== loaded.rows[index]?.id)) violations.add("a generated beat id changes on load");
+        return { document, loaded };
+      }); histories++;
+    } finally { set.close(); }
+  }
+  for (const order of ["D1", "dup", "rev", "late-C"] as const) { violations.add(concurrentCleanedCollision(order)); histories++; }
+  assert.equal(covered.size, 12); assert.equal(histories, 68); assert.deepEqual({ checkpoints, copies, deliveries }, { checkpoints: 1542, copies: 4050, deliveries: 806 });
+  assert.deepEqual([...violations].sort(), [...declaredLimits].sort());
+  t.diagnostic(JSON.stringify({ seed: 0x14664, histories, checkpoints, copies, deliveries, covered: [...covered].sort(), declaredLimits, violations: [...violations] }));
+});
+
+test("one character or embed patches reservations without inspecting the existing item chain or reading a delta", t => {
+  const counts: number[] = [], visits: number[] = [];
+  for (const existing of [1, 2048]) {
+    const set = replicas(2, { rows: [{ id: "R1", audioText: "" }] });
+    try {
+      const state = collabState(set.a), text = (state.roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
+      for (let index = 0; index < existing; index++) transactSharedDocument(set.a, "local-command", () => { text.insert(0, "a"); });
+      const index = observeSharedStructureIdentities(set.a); let inspections = 0, observing = false, visited = 0;
+      state.doc.on("beforeObserverCalls", () => { observing = true; }); state.doc.on("afterTransaction", transaction => {
+        observing = false; visitSharedIdentityStructs(transaction, () => { visited++; });
+      });
+      let items = 0;
+      for (let item = text._start; item; item = item.right) {
+        items++;
+        const content = item.content; Object.defineProperty(item, "content", { configurable: true, get: () => { if (observing) inspections++; return content; }, set: value => { Object.defineProperty(item, "content", { configurable: true, writable: true, value }); } });
+      }
+      assert.equal(items, existing);
+      const delta = text.toDelta; text.toDelta = () => { if (observing) throw new Error("Typing read the full text delta"); return delta.call(text); };
+      transactSharedDocument(set.a, "local-command", () => { text.insert(0, "X"); }); counts.push(inspections); visits.push(visited);
+      transactSharedDocument(set.a, "local-command", () => { text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); }); assert.equal(index.has("probeAtom"), true);
+      transactSharedDocument(set.a, "local-command", () => { text.insertEmbed(0, { k: "[probeAtom]", label: "B-roll:" }); });
+      transactSharedDocument(set.a, "local-command", () => { text.delete(0, 1); }); assert.equal(index.has("probeAtom"), true);
+      transactSharedDocument(set.a, "local-command", () => { text.delete(0, 1); }); assert.equal(index.has("probeAtom"), false);
+    } finally { set.close(); }
+  }
+  assert.deepEqual(counts, [0, 0]); assert.deepEqual(visits, [1, 1]); t.diagnostic(JSON.stringify({ existingItems: [1, 2048], oldItemInspections: counts, changedStructVisits: visits }));
 });

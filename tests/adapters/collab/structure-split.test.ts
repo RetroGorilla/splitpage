@@ -1,4 +1,4 @@
-import { expectedStructureIdentity } from "../../collab/structure-identity.ts";
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import { observeSharedStructureIdentities } from "../../../src/adapters/collab/structure-reservations.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import test, { mock } from "node:test";
@@ -61,7 +61,7 @@ for (const before of [false, true]) test(`split${before ? " before" : ""} and su
     registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
     const detach = observeSharedTransactions(handle, origin => origins.push(origin)), stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update));
     assert.deepEqual(executeSharedOperations(handle, [split("enter", before), type("typed", "same-beat", "X")], { base: readSharedRevision(handle) }), { ok: true });
-    const id = expectedStructureIdentity("1", "enter", "beat");
+    const id = structureIdentityFixture("1", "enter", "beat");
     assert.deepEqual(read(handle), { rows: before ? [{ id, text: "Xab" }, { id: "R1", text: "cd" }] : [{ id: "R1", text: "ab" }, { id, text: "Xcd" }], beats: ["R1", id].sort() });
     assert.equal((collabState(handle).roots.beats.get(id) as Y.Map<unknown>).get("splitBy"), "Writer");
     set.queue.flush("D1");
@@ -81,7 +81,7 @@ test("seeded two and three writer split, prefix split and blank creation histori
     const offset = seed % 5, clamped = text === "A😀B" ? [0, 1, 3, 3, 4][offset] as number : offset;
     const kind = sample % 3, set = replicas(writers, { rows: [{ id: "R1", audioText: text }] }), handles = [set.a, set.b, set.c].slice(0, writers);
     try {
-      const ids = handles.map((_, index) => expectedStructureIdentity(String(index + 1), "enter", "beat"));
+      const ids = handles.map((_, index) => structureIdentityFixture(String(index + 1), "enter", "beat"));
       for (const [index, handle] of handles.entries()) {
         registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
         const right = form === "native-anchor" ? createSharedAnchor(handle, "b:R1", offset, "after") : flowBaseReference("R1", "audioText", offset); assert.ok(right);
@@ -108,7 +108,7 @@ for (const before of [false, true]) for (const append of [false, true]) for (con
     registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.b);
     const anchor = createSharedAnchor(set.a, "b:R1", 2, "after"); assert.ok(anchor);
     assert.deepEqual(executeSharedOperations(set.a, [operation({ ...split("enter", before), at: { left: null, right: anchor, affinity: "before" } })], { base: readSharedRevision(set.a) }), { ok: true });
-    const id = expectedStructureIdentity("1", "enter", "beat");
+    const id = structureIdentityFixture("1", "enter", "beat");
     assert.deepEqual(read(set.a).rows, before ? [{ id, text: "A😀" }, { id: "R1", text: "B" }] : [{ id: "R1", text: "A😀" }, { id, text: "B" }]);
     if (append) {
       const end = createSharedAnchor(set.b, "b:R1", 4, "after"); assert.ok(end);
@@ -130,7 +130,7 @@ for (const before of [false, true]) test(`split${before ? " before" : ""} clamps
     assert.deepEqual(executeSharedOperations(set.a, [insertion, operation({ ...split("enter", before),
       at: { left: null, right: flowBaseReference("inserted", "audioText", 1), affinity: "before" } })], { base: readSharedRevision(set.a) }), { ok: true });
     set.queue.flush("D1");
-    const id = expectedStructureIdentity("1", "enter", "beat");
+    const id = structureIdentityFixture("1", "enter", "beat");
     agree("insert then split", "D1", [set.a, set.b], read, { rows: before ? [{ id, text: "a😀" }, { id: "R1", text: "bcd" }] : [{ id: "R1", text: "a😀" }, { id, text: "bcd" }], beats: ["R1", id].sort() });
   } finally { set.close(); }
 });
@@ -148,7 +148,7 @@ for (const writers of [2, 3]) for (const order of ["D1", "dup", "rev", "late-C"]
       const actual = read(handle);
       assert.equal(actual.rows.length, writers + 1); assert.equal(actual.beats.length, writers + 1);
       for (let index = 0; index < writers; index++) {
-        const row = actual.rows.find(row => row.id === expectedStructureIdentity(String(index + 1), "enter", "beat"));
+        const row = actual.rows.find(row => row.id === structureIdentityFixture(String(index + 1), "enter", "beat"));
         assert.ok(row?.text.startsWith(String(index + 1)));
       }
       assert.equal(actual.rows.map(row => row.text).join("").replace(/[123]/g, ""), "abcd");
@@ -188,7 +188,7 @@ test("text and marks cannot address another beat's characters through a shared p
   try {
     registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle);
     assert.deepEqual(executeSharedOperations(handle, [split()], { base: readSharedRevision(handle) }), { ok: true });
-    const id = expectedStructureIdentity("1", "enter", "beat"), targetB = { ...target, owner: id }, observed = [flowBaseReference("R1", "audioText", 0, 1)];
+    const id = structureIdentityFixture("1", "enter", "beat"), targetB = { ...target, owner: id }, observed = [flowBaseReference("R1", "audioText", 0, 1)];
     const bytes = encodeSharedState(handle), vector = encodeSharedStateVector(handle), revision = readSharedRevision(handle), updates: Uint8Array[] = [];
     const stop = deliveryReplica(handle).onLocalUpdate(update => updates.push(update));
     for (const bad of [
@@ -258,7 +258,7 @@ test("planned segment creation uses cached order positions with zero whole-order
         assert.deepEqual(executeSharedOperations(handle, [create("one", "one-beat", null, "R1"), create("two", "two-beat", "one-beat", "R1")]), { ok: true });
         counts.push(reads); assert.equal(whole.mock.callCount(), 0);
       } finally { whole.mock.restore(); }
-      assert.deepEqual(native.toArray().slice(0, 3), [expectedStructureIdentity("1", "one", "segment"), expectedStructureIdentity("1", "two", "segment"), "b:R1"]);
+      assert.deepEqual(native.toArray().slice(0, 3), [structureIdentityFixture("1", "one", "segment"), structureIdentityFixture("1", "two", "segment"), "b:R1"]);
     } finally { set.close(); }
   }
   assert.deepEqual(counts, [12, 12]); t.diagnostic(JSON.stringify({ unrelatedOrderEntries: [0, 10000], prepareGets: counts, executionWholeOrderReads: 0 }));

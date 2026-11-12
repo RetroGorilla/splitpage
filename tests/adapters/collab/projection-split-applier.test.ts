@@ -1,4 +1,4 @@
-import { expectedStructureIdentity } from "../../collab/structure-identity.ts";
+import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validatedFixture } from "./helpers.ts";
@@ -21,7 +21,7 @@ const open = '<span class="cmt-anchor" data-cmt="C1"><a href="https://example.te
 const close = '</strong></span></a></span>';
 function logicalRows(rows: readonly DocumentRow[], operations: readonly SharedOperation[]) {
   const aliases = new Map(operations.flatMap(op => op.kind === "split" || op.kind === "split-before" || op.kind === "segment-create"
-    ? [[expectedStructureIdentity("1", op.id, "beat"), op.beat] as const] : []));
+    ? [[structureIdentityFixture("1", op.id, "beat"), op.beat] as const] : []));
   return rows.map(row => ({ ...row, id: aliases.get(row.id) ?? row.id }));
 }
 for (const kind of ["beat", "paragraph", "prefix", "blank"] as const) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
