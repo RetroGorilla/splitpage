@@ -11,6 +11,7 @@ import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import type { SharedProjectionBoundary, SharedProjectionStream } from "../../core/collab/projection/blocks.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
 import { projectSharedJoinGlue, sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
+import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 
 function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
@@ -99,8 +100,8 @@ export function readProjectionBeatStructure(raw: unknown, id: string, retirement
   const stored: unknown = raw.get("joins"), removals: unknown = raw.get("removals");
   if (stored instanceof Y.Map) for (const key of [...stored.keys()].sort()) {
     if (!key || !isStableSharedIdentity(key) || retirements.get(key) === true) continue;
-    const value = bag(stored.get(key));
-    if (typeof value.into === "string" && value.into.length > 0 && isStableSharedIdentity(value.into) && (value.glue === "" || value.glue === " "))
+    const value = readSharedJoinEntry(stored.get(key));
+    if (value && retirements.get(sharedJoinRetirementGroup(id, value)) !== true)
       joins.push({ id: key, into: value.into, glue: projectSharedJoinGlue(value.glue, glueRegisters.get(sharedJoinGlueRegisterField(key))) });
   }
   const removed = readSharedRemovalState(removals instanceof Y.Map ? removals : []).removed;

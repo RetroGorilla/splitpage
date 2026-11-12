@@ -158,6 +158,9 @@ export function readBeatJoin(raw: unknown) {
 export function readJoinGlue(raw: unknown) {
   return readKind(raw, "join-glue", { joins: list(ref), glue: oneOf(" ", "") });
 }
+export function readJoinRetire(raw: unknown) {
+  return readKind(raw, "join-retire", { joins: list(ref) });
+}
 export function readSoftRemove(raw: unknown) {
   return readKind(raw, "remove", { removalKind: oneOf("beat", "range", "header", "became-heading"), targets: list(ref),
     observed: list(ref), boundaries: list(ref), components: list(ref), gallery: list(ref), at: numeric }, { comments: list(ref) });
@@ -226,6 +229,7 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "split-before": return readBeatSplitBefore(value);
       case "join": return readBeatJoin(value);
       case "join-glue": return readJoinGlue(value);
+      case "join-retire": return readJoinRetire(value);
       case "remove": return readSoftRemove(value);
       case "restore": return readRestore(value);
       case "segment-move": return readSegmentMove(value);
