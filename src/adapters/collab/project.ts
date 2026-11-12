@@ -81,8 +81,7 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   const fragments = source.blocks();
   const blocks = fragments.filter((block): block is typeof block & { id: string } => !block.reason && block.id !== null);
   const narrationByBeat = new Map(blocks.filter(block => block.kind === "b").map(block => [block.id, block.units]));
-  function cell(value: readonly SharedProjectionUnit[], rowId: string, field: "audioText" | "visualText", visible: boolean, key: string): string {
-    if (visible) projectSharedCommentAnchors(value, comments, rowId, field, anchored);
+  function cell(value: readonly SharedProjectionUnit[], rowId: string, field: "audioText" | "visualText", key: string): string {
     const units = value;
     const result = cache.read(["cell", key], [units, tags], () => projectSharedTextResult(units, tags), "cell");
     recovery.push(...result.rejected.map(entry => ({ ...entry, rowId, field })));
@@ -90,7 +89,7 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   }
   for (const fragment of fragments) if (fragment.reason) recovery.push({ kind: "unprojectable-fragment", reason: fragment.reason,
     owner: fragment.id, segment: fragment.segment, field: fragment.kind === "h" ? "heading" : "audioText", from: fragment.from, to: fragment.to,
-    html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", false, JSON.stringify([fragment.segment, fragment.from, fragment.to])) });
+    html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", JSON.stringify([fragment.segment, fragment.from, fragment.to])) });
   const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
   const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinedLayout(blocks.filter(block => block.kind === "b"), order.map(id => source.structure(id)));
   const ranks = new Map(order.map((id, index) => [id, index]));
@@ -116,8 +115,10 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   for (const { group, members, row, overflow, audio, visualCells } of plans) {
     recovery.push(...overflow.map(entry => ({ kind: "gallery-overflow" as const, rowId: group.root, ...entry,
       slot: canonicalSharedProjection(entry.slot, "gallery") as Record<string, unknown> })));
-    const audioText = cell(broll.get(audio.key) ?? audio.units, group.root, "audioText", !group.removed, audio.key);
-    const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", !group.removed, value.key)).filter(Boolean).join("<br>");
+    if (!group.removed) for (const [units, field] of [...visualCells.map(value => [broll.get(value.key) ?? value.units, "visualText"] as const),
+      [broll.get(audio.key) ?? audio.units, "audioText"] as const]) projectSharedCommentAnchors(units, comments, group.root, field, anchored);
+    const audioText = cell(broll.get(audio.key) ?? audio.units, group.root, "audioText", audio.key);
+    const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", value.key)).filter(Boolean).join("<br>");
     const painted = cache.read(["painted-row", group.root], [row, audioText, visualText], () => ({ ...row, audioText, visualText }));
     if (group.removed) {
       const buffer = readSharedRemovalBufferSources(source.roots.beats, source.roots.removalRecords, members, collabState(source.handle).reads);
