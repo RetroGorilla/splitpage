@@ -129,3 +129,28 @@ test("incremental surrogate fragments normalize exactly like a fresh wire snapsh
     assertIncremental(run.a, projector);
   } finally { stop(); projector.dispose(); run.close(); }
 });
+
+test("incremental normalized inputs retain untouched groups and stay fresh after mark-only and unrelated updates", () => {
+  const run = replicas(2, { rows: [{ id: "R1", audioText: "" }, { id: "R2", audioText: "other" }] });
+  const work: string[] = [], projector = createSharedIncrementalProjector(run.a, (kind, key) => work.push(kind + ":" + key));
+  const stop = projector.observe(() => assertIncremental(run.a, projector));
+  try {
+    const untouched = projector.read().document.rows[1];
+    transactSharedDocument(run.a, "local-command", () => nativeText(run.a, "b:R1").insert(0, "\ud800"));
+    work.length = 0;
+    transactSharedDocument(run.a, "local-command", () => nativeText(run.a, "b:R1").insert(1, "\udc00"));
+    assert.equal(projector.read().document.rows[0]?.audioText, "\ud800\udc00");
+    assert.equal(projector.read().document.rows[1], untouched);
+    assert.deepEqual(work, ["snapshot:normalized-input", "segment:b:R1", "group:R1", "cell:[\"R1\",\"audioText\"]"]);
+    const target = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
+    const mark = prepareSharedMarkRecord(run.a, target, "unicode-bold", 0, 2, { type: "add", mark: { kind: "b", value: true } }); assert.ok(mark);
+    work.length = 0;
+    assert.deepEqual(writeSharedMarkRecord(run.a, target, "unicode-bold", mark), { ok: true });
+    assert.equal(projector.read().document.rows[0]?.audioText, "<strong>\ud800\udc00</strong>");
+    assert.deepEqual(work, ["snapshot:normalized-input", "segment:b:R1", "group:R1", "cell:[\"R1\",\"audioText\"]"]);
+    const marked = projector.read().document.rows[0]; work.length = 0;
+    execute(run.a, { kind: "scalar", id: "other-length", by: "Writer", target: { scope: "beat", record: "R2" }, field: "lengthSeconds", value: 12 });
+    assert.equal(projector.read().document.rows[0], marked);
+    assert.deepEqual(work, ["snapshot:normalized-input", "fields:R2", "group:R2"]);
+  } finally { stop(); projector.dispose(); run.close(); }
+});

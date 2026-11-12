@@ -15,7 +15,7 @@ export interface SharedProjectionStream {
 export type SharedProjectionFragmentReason = "missing-boundary" | "invalid-prefix" | "missing-beat" | "wrong-shape-beat" | "unowned-beat" | "foreign-segment" | "duplicate-boundary" | "invalid-beat-id";
 
 export function projectSharedBlocks(streams: readonly SharedProjectionStream[], records: readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null }[],
-  collect: (parts: readonly (readonly SharedProjectionUnit[])[]) => SharedProjectionUnit[] = parts => parts.flat()) {
+  collect?: (parts: readonly (readonly SharedProjectionUnit[])[], build: () => SharedProjectionUnit[]) => SharedProjectionUnit[]) {
   const contains = new Map<string, Set<string>>(), fallback = new Map<string, string>();
   for (const stream of streams) {
     const names = new Set<string>(); contains.set(stream.segment, names);
@@ -52,7 +52,9 @@ export function projectSharedBlocks(streams: readonly SharedProjectionStream[], 
     local.push(current);
     const seen = new Set<string>();
     for (const block of local) {
-      block.units = collect(units.get(block) ?? []);
+      const parts = units.get(block) ?? [];
+      const build = (): SharedProjectionUnit[] => { const value: SharedProjectionUnit[] = []; for (const part of parts) value.push(...part); return value; };
+      block.units = collect ? collect(parts, build) : build();
       if (block.id === null && !block.units.length && block.from === block.to) continue;
       if (!block.reason && block.id !== null) {
         if (block.kind === "b") {

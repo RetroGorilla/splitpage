@@ -9,8 +9,52 @@ import { registerSharedRecordHandlers } from "../../../src/adapters/collab/recor
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { assertIncremental, nativeMap, nativeText } from "./incremental-support.ts";
 import { pictureA } from "./projection-record-support.ts";
+import { captureIncrementalReplica } from "./incremental-support.ts";
+import { measureLibraryReads } from "../../collab/library-read-counts.ts";
+import { sharedJoinGlueRegisterField } from "../../../src/core/collab/projection/join-glue.ts";
 
 const marker = '<span class="broll-key" data-broll-id="S1" contenteditable="false">B-roll:</span>';
+
+test("incremental join separator register changes only its joined row after a metadata-only transaction", () => {
+  const run = replicas(2, { rows: [{ id: "R1", audioText: "one" }, { id: "R2", audioText: "two" }, { id: "R3", audioText: "three" }] });
+  const work: string[] = [], { projector, docs } = captureIncrementalReplica(run.a, (kind, key) => work.push(kind + ":" + key));
+  try {
+    transactSharedDocument(run.a, "local-command", () => {
+      const joins = nativeMap(run.a, "beats", "R2").get("joins"); assert.ok(joins instanceof Y.Map); joins.set("native-join", { into: "R1", glue: " " });
+    });
+    const untouched = projector.read().document.rows[1], field = sharedJoinGlueRegisterField("native-join");
+    work.length = 0;
+    const measured = measureLibraryReads(run.a, "R2", () => transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(field, "")), docs);
+    assert.equal(projector.read().document.rows[0]?.audioText, "onetwo");
+    assert.equal(projector.read().document.rows[1], untouched);
+    assert.deepEqual(work, ["group:R1", "cell:[\"R1\",\"audioText\"]"]);
+    assert.equal(measured.totals.texts, 0); assert.equal(measured.totals.markEntries, 0);
+    assert.deepEqual(measured.unrelated, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
+    assertIncremental(run.a, projector);
+    transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(field, { wrong: true }));
+    assert.equal(projector.read().document.rows[0]?.audioText, "one two");
+    assertIncremental(run.a, projector);
+    work.length = 0;
+    transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.delete(field));
+    assert.deepEqual(work, []);
+    transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(sharedJoinGlueRegisterField("not-issued"), ""));
+    assert.deepEqual(work, []); assertIncremental(run.a, projector);
+  } finally { projector.dispose(); run.close(); }
+});
+
+test("incremental tag registry edits refresh every referencing row through the shared text rule", () => {
+  const open = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Cup" contenteditable="false">';
+  const run = replicas(2, { rows: [{ id: "R1", audioText: open + "one</span>" }, { id: "R2", audioText: open + "two</span>" }],
+    productionTags: [{ id: "t_1", cat: "prop", name: "Cup", status: "needed" }] });
+  const projector = createSharedIncrementalProjector(run.a);
+  try {
+    registerSharedRecordHandlers(run.a);
+    execute(run.a, { kind: "record-set", id: "rename-tag", by: "Writer", target: { collection: "tags", record: "t_1" }, field: "name", value: "Jug" });
+    const changed = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Jug" contenteditable="false">';
+    assert.deepEqual(projector.read().document.rows.map(row => row.audioText), [changed + "one</span>", changed + "two</span>"]);
+    assertIncremental(run.a, projector);
+  } finally { projector.dispose(); run.close(); }
+});
 
 test("incremental b-roll uses unchanged cells after shot reservation and document order changes", () => {
   const run = replicas(2, { rows: [{ id: "R1", visualText: marker }, { id: "R2", audioText: "" }] });

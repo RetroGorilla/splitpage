@@ -24,6 +24,12 @@ searching the cached record list merely to decide a group's dependencies. The
 gallery rule still receives all validated gallery records and members in merged
 row order. The join reader remains the single place for issued joins and their
 separator register; the incremental reader does not decode separators itself.
+An index of the validated issued join ids maps register fields back to their beat
+readers. A `joinGlue:<id>` change invalidates those structures, leaving document
+fields, the title, texts and unrelated groups cached. Register validation and
+fallback to the issued separator stay in `readProjectionBeatStructure`, with
+`roots.meta` passed by the shared source. The literal probe changes only metadata,
+checks the new separator before its counts, and checks zero unrelated native reads.
 
 Statuses reuse the existing target index. Target versions change on event
 replacement, retargeting, deletion and retirement. A change to block ownership
@@ -52,10 +58,15 @@ surrogate fragments per native string item. Later native item merging can make
 two originally malformed fragments into a valid pair, so replaying their earlier
 encoded updates alone can disagree with a fresh full snapshot. The source deep
 observer checks changed texts through `toDelta`. If a changed text contains a
-UTF-16 surrogate code unit, the projector rebuilds its normalized replica and
-input caches from the current encoded state. This also covers valid non-BMP text;
-that path deliberately pays a full read. A literal test checks isolated high and
-low surrogates, their later merge, deletion and a subsequent ordinary insertion.
+UTF-16 surrogate code unit, the projector supplies a current wire snapshot as its
+native input on that and later transactions until disposal. This also covers
+valid non-BMP text. It retains the input versions and pure caches, so only dirty
+entries and groups are read and projected again. The original replica retains
+the change, ownership and status indexes; string normalization preserves their
+native UTF-16 positions. Input snapshots do not initialize another ownership
+index. The production snapshot hook counts this wider whole-state wire copy.
+Literal tests check isolated high and low surrogates, their later merge, deletion,
+mark-only arrivals and an unrelated edit that retains the marked row by identity.
 
 ## Counted work
 
@@ -96,8 +107,9 @@ marker, order, removal or shot-id changes can rewrite an otherwise unchanged cel
 Comment first-occurrence anchoring also uses rendered order. Tag registry changes
 invalidate text interpretation. A dirty gallery group still costs member beats
 times supplied gallery records. These are cached-input scans, not unrelated
-native text or record reads. Initialization and the surrogate fallback read the
-whole state; this PR makes no timing or total-memory claim.
+native text or record reads. Initialization reads the whole state; the surrogate
+fallback copies the whole encoded state but retains unrelated projection inputs.
+This PR makes no timing or total-memory claim.
 
 ## Evidence and limits
 
@@ -123,7 +135,7 @@ The existing fixture save-byte contract is unchanged.
 | None; the asserted literal violation table is empty |
 
 New deliberate defects omit a join partner dependency, ignore mark-only deep
-events, or insert a full read into typing. The first two fail the named literal
-behavior tests; the third fails the native read bounds. The earlier stale mark
+events, omit the join-register index, or insert a full read into typing. The first
+three fail the named literal behavior tests; the last fails the native read bounds. The earlier stale mark
 cache defect remains in the manifest. A defect for an omitted status change-set
 entry belongs to the deferred change-report integration.

@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { createSharedDocument, destroySharedDocument, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "./document.ts";
-import { collabState, guardSharedCallback } from "./state.ts";
+import { CollabDocumentState, collabState, guardSharedCallback } from "./state.ts";
 import { assembleSharedDocument } from "./project.ts";
 import type { SharedDocumentProjectionResult } from "./project.ts";
 import { freezeSharedProjection, SharedProjectionCache } from "./projection-cache.ts";
@@ -21,21 +21,22 @@ export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
   count?: (work: SharedProjectionWork, key: string) => void): SharedIncrementalProjector {
   const state = collabState(handle);
   if (state.destroyed) throw new Error("Shared document has ended");
-  let mirror = createSharedDocument(), replica = collabState(mirror);
+  const mirror = createSharedDocument(), replica = collabState(mirror);
   try { Y.applyUpdate(replica.doc, Y.encodeStateAsUpdate(state.doc)); }
   catch (error) { destroySharedDocument(mirror); throw error; }
-  let source = new SharedProjectionSource(mirror, new SharedProjectionCache(count));
+  const source = new SharedProjectionSource(mirror, new SharedProjectionCache(count));
   const listeners = new Set<Parameters<SharedIncrementalProjector["observe"]>[0]>(), stops: (() => void)[] = [];
   const mirrorStops: (() => void)[] = [];
   let current: SharedIncrementalProjection;
   try { current = freezeSharedProjection({ ...assembleSharedDocument(source), revision: readSharedRevision(handle) }); }
   catch (error) { destroySharedDocument(mirror); throw error; }
-  let disposed = false, normalize = false;
+  let disposed = false, normalize = false, normalized: SharedDocumentHandle | null = null;
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
     for (const stop of stops.splice(0)) stop();
     for (const stop of mirrorStops.splice(0)) stop();
+    if (normalized) destroySharedDocument(normalized);
     listeners.clear(); destroySharedDocument(mirror);
   };
   const watchMirror = (): void => {
@@ -58,14 +59,14 @@ export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
   const destroyed = (): void => guardSharedCallback(state, dispose);
   state.doc.on("destroy", destroyed); stops.push(() => state.doc.off("destroy", destroyed));
   stops.push(observeSharedUpdates(handle, (update, origin) => {
+    transactSharedDocument(mirror, "remote", () => Y.applyUpdate(replica.doc, update));
     if (normalize) {
-      const replacement = createSharedDocument(), next = collabState(replacement);
-      try { Y.applyUpdate(next.doc, Y.encodeStateAsUpdate(state.doc)); }
+      const next = new CollabDocumentState(), replacement = next as unknown as SharedDocumentHandle;
+      try { count?.("snapshot", "normalized-input"); Y.applyUpdate(next.doc, Y.encodeStateAsUpdate(state.doc)); }
       catch (error) { destroySharedDocument(replacement); throw error; }
-      for (const stop of mirrorStops.splice(0)) stop(); destroySharedDocument(mirror);
-      mirror = replacement; replica = next; source = new SharedProjectionSource(mirror, new SharedProjectionCache(count));
-      watchMirror(); normalize = false;
-    } else transactSharedDocument(mirror, "remote", () => Y.applyUpdate(replica.doc, update));
+      source.normalizedInput(replacement);
+      if (normalized) destroySharedDocument(normalized); normalized = replacement;
+    }
     current = freezeSharedProjection({ ...assembleSharedDocument(source), revision: readSharedRevision(handle) });
     for (const listener of listeners) guardSharedCallback(state, () => listener(current, origin));
   }));

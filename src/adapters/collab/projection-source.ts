@@ -17,6 +17,8 @@ import type { SharedDocumentHandle } from "./types.ts";
 export class SharedProjectionSource {
   readonly cache: SharedProjectionCache;
   readonly roots: CollabRoots;
+  private input: SharedDocumentHandle;
+  private inputRoots: CollabRoots;
   private readonly versions = new Map<string, number>();
   private readonly keyVersions = new Map<string, number>();
   private readonly joinFields = new Map<string, readonly string[]>();
@@ -27,16 +29,20 @@ export class SharedProjectionSource {
   constructor(handle: SharedDocumentHandle, cache = new SharedProjectionCache()) {
     this.handle = handle;
     this.roots = collabState(handle).roots;
+    this.input = handle; this.inputRoots = this.roots;
     this.cache = cache;
   }
 
   begin(): void { this.cache.begin(); this.ownership = this.structureToken(); }
 
+  normalizedInput(handle: SharedDocumentHandle): void { this.input = handle; this.inputRoots = collabState(handle).roots; }
+
   changed(name: keyof CollabRoots, events: readonly Y.YEvent<Y.AbstractType<unknown>>[]): void {
     this.versions.set(name, this.version(name) + 1);
     for (const event of events) {
       const path = event.path;
-      const keys = path.length ? [String(path[0])] : event instanceof Y.YMapEvent ? [...event.keysChanged] : [];
+      const keys = path.length ? [String(path[0])] : event instanceof Y.YMapEvent
+        ? [...event.keysChanged].filter((key: unknown): key is string => typeof key === "string") : [];
       for (const key of keys) {
         const slot = JSON.stringify([name, key]);
         this.keyVersions.set(slot, (this.keyVersions.get(slot) ?? 0) + 1);
@@ -60,18 +66,18 @@ export class SharedProjectionSource {
   private keyVersion(name: string, key: string): number { return this.keyVersions.get(JSON.stringify([name, key])) ?? 0; }
 
   private keys(name: Exclude<keyof CollabRoots, "order">): readonly string[] {
-    return this.cache.read(["keys", name], [this.version(name + ":keys")], () => [...this.roots[name].keys()].sort());
+    return this.cache.read(["keys", name], [this.version(name + ":keys")], () => [...this.inputRoots[name].keys()].sort());
   }
 
   fields(scope: "document" | "beat" | "heading", key = ""): Record<string, unknown> | null {
     const name = scope === "document" ? "meta" : scope === "beat" ? "beats" : "headings";
     return this.cache.read(["fields", name, key], [scope === "document" ? this.version("meta-fields") : this.keyVersion(name, key)],
-      () => readProjectionFields(scope === "document" ? this.roots.meta : this.roots[name].get(key), scope));
+      () => readProjectionFields(scope === "document" ? this.inputRoots.meta : this.inputRoots[name].get(key), scope));
   }
 
   title(): string {
     return this.cache.read(["title"], [this.keyVersion("meta", "title")], () => {
-      const title: unknown = this.roots.meta.get("title");
+      const title: unknown = this.inputRoots.meta.get("title");
       return title instanceof Y.Text ? title.toString() : "";
     });
   }
@@ -79,12 +85,12 @@ export class SharedProjectionSource {
   records(collection: SharedRecordCollection) {
     const records = this.keys(collection).flatMap(key => {
       const value = this.cache.read(["record", collection, key], [this.keyVersion(collection, key)], () => {
-        const fields = readStoredSharedRecord(collection, key, this.roots[collection].get(key));
+        const fields = readStoredSharedRecord(collection, key, this.inputRoots[collection].get(key));
         return fields ? { key, fields } : null;
       }, "record");
       return value ? [value] : [];
     });
-    return this.cache.read(["records", collection], records, () => sortSharedRecordReadings(collection, records));
+    return this.cache.read(["records", collection], records, () => sortSharedRecordReadings(collection, [...records]));
   }
 
   recordGroups(collection: "visuals" | "gallery") {
@@ -98,18 +104,18 @@ export class SharedProjectionSource {
 
   units(collection: "segments" | "visuals", key: string) {
     return this.cache.read(["units", collection, key], [this.keyVersion(collection, key)], () => {
-      const raw: unknown = this.roots[collection].get(key);
-      return raw instanceof Y.Map ? readProjectionUnits(this.handle, raw.get("text"), raw.get("markRecords")) : [];
+      const raw: unknown = this.inputRoots[collection].get(key);
+      return raw instanceof Y.Map ? readProjectionUnits(this.input, raw.get("text"), raw.get("markRecords")) : [];
     }, collection === "segments" ? "segment" : "visual");
   }
 
   private streams(includeUnits: boolean) {
-    const order = this.cache.read(["order"], [this.version("order")], () => this.roots.order.toArray());
+    const order = this.cache.read(["order"], [this.version("order")], () => this.inputRoots.order.toArray());
     const ordered = new Set(order), mode = includeUnits ? "text" : "fields";
     const streams = [...new Set([...ordered, ...this.keys("segments")])].flatMap(key => {
       if (typeof key !== "string" || !isStableSharedIdentity(key)) return [];
       const stream = this.cache.read(["stream", mode, key], [this.keyVersion("segments", key), ordered.has(key)], () => {
-        const raw: unknown = this.roots.segments.get(key);
+        const raw: unknown = this.inputRoots.segments.get(key);
         return raw instanceof Y.Map ? readProjectionStream(key, raw, ordered.has(key), includeUnits ? this.units("segments", key) : []) : null;
       });
       return stream ? [stream] : [];
@@ -123,7 +129,7 @@ export class SharedProjectionSource {
       ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null })));
     return this.cache.read(["blocks", String(includeUnits)], [streams, records], () => {
       let index = 0;
-      return projectSharedBlocks(streams, records, parts => this.cache.read(["block-units", String(includeUnits), String(index++)], parts, () => parts.flat()));
+      return projectSharedBlocks(streams, records, (parts, build) => this.cache.read(["block-units", String(includeUnits), String(index++)], parts, build));
     });
   }
 
@@ -149,7 +155,7 @@ export class SharedProjectionSource {
 
   structure(id: string) {
     return this.cache.read(["beat-structure", id], [this.keyVersion("beats", id), this.version("retiredJoins"), this.version(JSON.stringify(["join-glue", id]))], () => {
-      const structure = readProjectionBeatStructure(this.roots.beats.get(id), id, this.roots.retiredJoins, this.roots.meta);
+      const structure = readProjectionBeatStructure(this.inputRoots.beats.get(id), id, this.inputRoots.retiredJoins, this.inputRoots.meta);
       this.unindexJoins(id);
       const fields = structure.joins.map(join => sharedJoinGlueRegisterField(join.id)); this.joinFields.set(id, fields);
       for (const field of fields) { const readers = this.joinReaders.get(field) ?? new Set<string>(); readers.add(id); this.joinReaders.set(field, readers); }

@@ -104,6 +104,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
   assert.deepEqual(violations, declaredLimits);
   assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1140);
   assert.equal(checkpoints, 2384);
+  assert.equal(choices.size, 216);
   assert.deepEqual([...kinds].sort(), ["heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "text-delete", "text-insert"]);
   assert.deepEqual([...new Set(operationExamples.map(example => example.operation.kind))].sort(), [...kinds].sort());
