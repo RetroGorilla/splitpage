@@ -15,7 +15,7 @@ export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anc
   const blocks = readProjectionBlocks(roots.order, roots.segments, roots.beats,
     container => readProjectionUnits(handle, container.get("text"), container.get("markRecords")))
     .filter((block): block is typeof block & { id: string } => !block.reason && block.kind === "b" && block.id !== null);
-  const groups = projectSharedJoinGroups(blocks.map(block => readProjectionBeatStructure(roots.beats.get(block.id), block.id, roots.retiredJoins)));
+  const groups = projectSharedJoinGroups(blocks.map(block => readProjectionBeatStructure(roots.beats.get(block.id), block.id, roots.retiredJoins, roots.meta)));
   const tags = readSharedRecords(handle, "tags").map(record => record.fields);
   function point(anchor: SharedContentRef | null | undefined) {
     const location = anchor ? resolveSharedAnchor(handle, anchor) : "gone";

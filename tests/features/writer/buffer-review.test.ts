@@ -14,6 +14,27 @@ import { encodeSharedState, applySharedUpdate, destroySharedDocument } from "../
 import { transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import * as Y from "yjs";
 
+test("native caret follows its joined owner and the changed separator register", () => {
+  const page = bufferedWriter();
+  try {
+    page.surface.place({ anchor: beatPos("R2", 4), head: beatPos("R2", 4) });
+    page.root.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    page.native(4, 4, "Q", undefined, "insertCompositionText", "R2");
+    const record = collabState(page.h.b).roots.beats.get("R2"); assert.ok(record instanceof Y.Map);
+    const joins = record.get("joins"); assert.ok(joins instanceof Y.Map);
+    transactSharedDocument(page.h.b, "local-command", () => { joins.set("joined-tail", { into: "R1", glue: " " }); });
+    transactSharedDocument(page.h.b, "local-command", () => { collabState(page.h.b).roots.meta.set("joinGlue:joined-tail", ""); });
+    page.h.queue.flush("dup"); page.end("Q");
+    assert.deepEqual(projectSharedDocumentWithRecovery(page.h.a).document.rows.map(row => [row.id, row.audioText]), [["R1", "abnextQ"]]);
+    const selected = { anchor: beatPos("R1", 7), head: beatPos("R1", 7) };
+    assert.deepEqual(page.outcomes.at(-1)?.selection, selected);
+    assert.deepEqual(page.surface.selection(), selected);
+    page.h.queue.flush("dup"); page.h.join();
+    for (const handle of [page.h.b, page.h.c]) assert.deepEqual(projectSharedDocumentWithRecovery(handle), projectSharedDocumentWithRecovery(page.h.a));
+    assert.deepEqual(page.reports, []);
+  } finally { page.close(); }
+});
+
 for (const [label, kind, typedAt, splitAt, rows, caret, next] of [
   ["split before caret", "split", 4, 2, ["ab", "cdQ", "next"], ["structure_2_0073_beat_0", 3], ["ab", "cdQY", "next"]],
   ["split after caret", "split", 1, 3, ["aQbc", "d", "next"], ["R1", 2], ["aQYbc", "d", "next"]],
