@@ -1,3 +1,4 @@
+import * as Y from "yjs";
 import type { SharedContentRef, SharedInlineValue, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedMarkGroup, SharedTextIdentity } from "./mark-record.ts";
@@ -8,7 +9,7 @@ import { sharedTextCommandPlan, SharedTextPreparationError } from "./executor-te
 import { collabTextTarget } from "./text-target.ts";
 import { createSharedAnchor, readSharedAnchorUnit, resolveSharedTextAnchor } from "./anchors.ts";
 import { readProjectionInlineValue } from "./projection-reader.ts";
-import { readSharedMarkProvenance, readSharedTextRestoreOperation } from "./mark-provenance.ts";
+import { SHARED_MARK_PROVENANCE_MARKER, readSharedMarkProvenance, readSharedTextRestoreOperation } from "./mark-provenance.ts";
 
 export interface SharedHistoryUnit {
   readonly identity: SharedContentRef;
@@ -52,7 +53,8 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
   try {
     const plan = sharedTextCommandPlan(prep.view, raw), target = plan.target, facade = prep.view.text(plan.path), found = collabTextTarget(handle, target);
     if (!facade || !found) return null;
-    const records = facade.records, provenance = readSharedMarkProvenance(records, found.container.get(found.marksKey));
+    const records = facade.records, store: unknown = found.container.get(found.marksKey);
+    const provenance = readSharedMarkProvenance(records, store instanceof Y.Map && store.has(SHARED_MARK_PROVENANCE_MARKER) ? [SHARED_MARK_PROVENANCE_MARKER] : []);
     const source = (identity: SharedContentRef): SharedContentRef => provenance?.source(identity) ?? identity;
     // why: a deleted character keeps its place in the shared text; only that order says where it and its marks belong.
     const places = new Map<string, number>();

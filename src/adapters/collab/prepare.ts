@@ -4,6 +4,8 @@ import { collabState, SharedExecutionWriteError } from "./state.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { createCollabTextFacade } from "./prepare-text.ts";
 import type { SharedPreparationText } from "./prepare-text.ts";
+import type { SharedStatusEvent } from "../../core/collab/operations.ts";
+import { sharedStatusEventKeys } from "./status-index.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { bindSharedStructurePlan, resolveSharedStructureOwner } from "./structure-plan.ts";
 
@@ -19,6 +21,7 @@ export interface SharedPreparationView {
   readonly has: (path: readonly string[]) => boolean;
   readonly kind: (path: readonly string[]) => "map" | "text" | "array" | "value" | "missing";
   readonly keys: (path: readonly string[]) => readonly string[];
+  readonly statusEvents: (target: SharedStatusEvent["target"]) => readonly string[];
   readonly text: (path: readonly string[]) => SharedPreparationText | null;
   readonly scratch: <T>(key: string, create: () => T) => T;
   readonly resolveOwner: (owner: string, field: "audioText" | "heading") => { readonly owner: string; readonly segment: string } | null;
@@ -81,6 +84,18 @@ export function createSharedPreparation(handle: SharedDocumentHandle, base: numb
           const key = write.path.at(-1);
           if (key !== undefined) { if (write.kind === "delete") keys.delete(key); else keys.add(key); }
         }
+      }
+      return Object.freeze([...keys].sort());
+    },
+    statusEvents: (target: SharedStatusEvent["target"]): readonly string[] => {
+      ensureOpen();
+      const indexed = sharedStatusEventKeys(handle, target);
+      if (!indexed) return view.keys(["statusEvents"]);
+      const keys = new Set(indexed);
+      for (const write of overlay.values()) {
+        const key = write.path[1];
+        if (write.path.length !== 2 || write.path[0] !== "statusEvents" || key === undefined) continue;
+        if (write.kind === "delete") keys.delete(key); else keys.add(key);
       }
       return Object.freeze([...keys].sort());
     },

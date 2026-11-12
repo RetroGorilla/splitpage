@@ -259,7 +259,12 @@ join (checked on the 291 reference documents in
 `undo-provenance-marker.test.ts`).
 
 `readSharedMarkProvenance` trusts the marker in one direction: absent means
-no scan. Cost of typing one character, counted by `sharedMarkProvenanceCost`:
+no scan. The mark-state reader looks for it among the store keys it has
+already read and sorted, so the check reads nothing more from the library and
+the read cache's counts are as without it. A cached reading is keyed by the
+text and its store; the marker and the first retraction arrive in one
+transaction on that store, so a reading cached before them is not served
+after (`undo-provenance-cache.test.ts`). Cost of typing one character, counted by `sharedMarkProvenanceCost`:
 
 | Text | `executeSharedOperations` | `executeSharedCommand` |
 | --- | --- | --- |

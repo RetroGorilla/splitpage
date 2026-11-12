@@ -6,17 +6,18 @@ import { resolveCollabTextAnchor, encodeCollabTextAnchor } from "./anchors.ts";
 import { transactSharedDocument } from "./document.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, assertSharedDocumentIdle } from "./state.ts";
-import { readSharedMarkRecord, sharedMarkContains, sharedMarkRecordKey } from "./mark-record.ts";
+import { readSharedMarkRecord, readSharedMarkRecordIdentity, sharedMarkContains, sharedMarkRecordKey } from "./mark-record.ts";
 import type { SharedMarkRecord, SharedMarkGroup, SharedMarkedCharacter } from "./mark-record.ts";
-import { sharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
+import { sharedPreparedValue, sharedPreparedTextInsert, freezeSharedPreparedValue } from "./prepare-value.ts";
 import { prepareSharedMarkWrite } from "./mark-plan.ts";
 import type { SharedMarkWritePlan, SharedMarkWriteChangeInput } from "./mark-plan.ts";
 import type { SharedMarkBirth } from "./mark-record.ts";
 import { readSharedMarkProvenance } from "./mark-provenance.ts";
+import { countSharedRead } from "./read-counts.ts";
 
 export type SharedMarkWriteResult = { readonly ok: true } | { readonly ok: false; readonly reason: "missing-text" | "missing-store" | "invalid-record" | "existing-record" };
 export interface SharedResolvedMarkRecord { readonly identity: SharedContentRef; readonly record: SharedMarkRecord; readonly from: number | null; readonly to: number | null }
-type LocatedMark = { record: SharedMarkRecord; reference: SharedContentRef; from: number; to: number };
+type LocatedMark = { record: SharedMarkRecord; reference: SharedContentRef; from: number; to: number; order: number };
 
 function writingIdentity(handle: SharedDocumentHandle) { const state = collabState(handle); return state.hydrating ? "hydration" as const : state.doc.clientID; }
 
@@ -65,26 +66,50 @@ export function applySharedMarkWrite(handle: SharedDocumentHandle, description: 
 export function readSharedMarkCharacters(handle: SharedDocumentHandle, target: SharedTextAddress): SharedMarkedCharacter[] | null {
   const found = target.segment === target.owner ? collabTextTarget(handle, target) : collabPurposeTextTarget(handle, target, "stored-anchor-read");
   if (!found) return null;
-  return readCollabMarkState(handle, found.text, found.container.get(found.marksKey)).characters;
+  return [...readCollabMarkState(handle, found.text, found.container.get(found.marksKey)).characters];
 }
 
-export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, store: unknown) {
-  const located: LocatedMark[] = [], records: SharedResolvedMarkRecord[] = [];
-  if (store instanceof Y.Map) for (const key of [...store.keys()].sort()) {
-    const record = readSharedMarkRecord(key, sharedPreparedValue(store.get(key)));
+export interface SharedMarkStateReading {
+  readonly records: readonly SharedResolvedMarkRecord[];
+  readonly recordKeys: readonly string[];
+  readonly characters: readonly SharedMarkedCharacter[];
+}
+
+// why: a reading stays valid until its text or its record store changes; anchors move only when their own text does.
+export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, store: unknown): SharedMarkStateReading {
+  return collabState(handle).reads.memo(store instanceof Y.Map ? [text, store] : [text], "mark-state", () => freezeSharedPreparedValue(markState(handle, text, store)));
+}
+
+function markState(handle: SharedDocumentHandle, text: Y.Text, store: unknown): SharedMarkStateReading {
+  const located: LocatedMark[] = [], records: SharedResolvedMarkRecord[] = [], caches = collabState(handle).reads;
+  const keys = store instanceof Y.Map ? [...store.keys()].sort() : [];
+  if (store instanceof Y.Map) for (const key of keys) {
+    const record = caches.entry(store, "mark-record", key, () => {
+      countSharedRead("markRecords");
+      return readSharedMarkRecord(key, sharedPreparedValue(store.get(key)));
+    });
     if (!record) continue;
+    countSharedRead("markAnchors", 2);
     const start = resolveCollabTextAnchor(handle, record.start, text), end = resolveCollabTextAnchor(handle, record.end, text);
     const from = start.kind === "gone" ? null : start.index, to = end.kind === "gone" ? null : end.index;
     const reference = readSharedContentRef(key);
     if (reference) records.push({ identity: reference, record, from, to });
-    if (reference && from !== null && to !== null && to > from) located.push({ record, reference, from, to });
+    if (reference && from !== null && to !== null && to > from) located.push({ record, reference, from, to, order: located.length });
   }
   const value = text.toDelta().map((delta: { insert: unknown }) => typeof delta.insert === "string" ? sharedPreparedTextInsert(delta.insert) as string : "\ufffc").join("");
-  const result: SharedMarkedCharacter[] = [], provenance = readSharedMarkProvenance(records, store);
+  const result: SharedMarkedCharacter[] = [], starting = [...located].sort((a, b) => a.from - b.from || a.order - b.order);
+  const provenance = readSharedMarkProvenance(records, keys);
+  let covering: LocatedMark[] = [], next = 0;
+  countSharedRead("texts");
   for (let offset = 0; offset < value.length; offset++) {
+    countSharedRead("identities");
     const identity = Y.createRelativePositionFromTypeIndex(text, offset).item;
     if (!identity) throw new Error("Shared text character has no identity");
-    const relevant = located.filter(item => item.from <= offset && item.to > offset && sharedMarkContains(item.record.type === "remove" ? null : item.record.born, identity));
+    // why: records enter at their first unit and leave at their end, so a unit meets only the records that cover it.
+    for (let entering = starting[next]; entering && entering.from <= offset; entering = starting[++next]) covering.push(entering);
+    if (covering.some(item => item.to <= offset)) covering = covering.filter(item => item.to > offset);
+    countSharedRead("markChecks", covering.length);
+    const relevant = covering.filter(item => sharedMarkContains(item.record.type === "remove" ? null : item.record.born, identity)).sort((a, b) => a.order - b.order);
     const excluded = new Set(relevant.flatMap(item => item.record.type === "add" ? [] : item.record.observed));
     const groups = new Map<string, { kind: SharedMarkGroup["kind"]; id: SharedContentRef | null; additions: { record: SharedContentRef; operation: SharedContentRef; value: true | string }[] }>();
     // why: a copy on a restored character stands for its source, so what takes the source away here takes the copy too.
@@ -107,5 +132,5 @@ export function readCollabMarkState(handle: SharedDocumentHandle, text: Y.Text, 
     });
     result.push({ offset, identity: { client: identity.client, clock: identity.clock }, value: value.charAt(offset), marks });
   }
-  return { records, characters: result };
+  return { records, recordKeys: keys.filter(key => readSharedMarkRecordIdentity(key) !== null), characters: result };
 }

@@ -1,4 +1,3 @@
-import * as Y from "yjs";
 import type { SharedContentRef } from "../../core/collab/operations.ts";
 import type { SharedMarkRecord } from "./mark-record.ts";
 
@@ -53,9 +52,20 @@ function sameChange(first: NamedMarkRecord, other: NamedMarkRecord): boolean {
 export const SHARED_MARK_PROVENANCE_MARKER = "provenance";
 export const sharedMarkProvenanceCost = { scans: 0, visits: 0 };
 
-export function readSharedMarkProvenance(records: readonly NamedMarkRecord[], store: unknown): SharedMarkProvenance | null {
+// why: the store's keys are already read and sorted, so finding the marker among them reads nothing from the library.
+export function hasSharedMarkProvenanceMarker(sortedKeys: readonly string[]): boolean {
+  let low = 0, high = sortedKeys.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1, key = sortedKeys[middle];
+    if (key === SHARED_MARK_PROVENANCE_MARKER) return true;
+    if (key !== undefined && key < SHARED_MARK_PROVENANCE_MARKER) low = middle + 1; else high = middle - 1;
+  }
+  return false;
+}
+
+export function readSharedMarkProvenance(records: readonly NamedMarkRecord[], sortedKeys: readonly string[]): SharedMarkProvenance | null {
   // why: typing reads this for every command; the marker written with the first retraction or copy says when to look.
-  if (!(store instanceof Y.Map) || !store.has(SHARED_MARK_PROVENANCE_MARKER)) return null;
+  if (!hasSharedMarkProvenanceMarker(sortedKeys)) return null;
   const sources = new Map<SharedContentRef, SharedContentRef>(), retracted: SharedContentRef[] = [];
   sharedMarkProvenanceCost.scans++;
   for (const { identity, record } of records) {
