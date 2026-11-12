@@ -9,9 +9,8 @@ import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
-import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { observeSharedTransactions, readSharedRevision } from "../../../src/adapters/collab/document.ts";
-import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
+import { compareSharedProjections } from "../../../src/core/collab/projection/changes.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -39,12 +38,7 @@ export interface SharedHarness {
 }
 
 export function adapterReplica(handle: SharedDocumentHandle): ReplicaPort {
-  return {
-    revision: () => readSharedRevision(handle),
-    project: () => projectSharedDocument(handle),
-    execute: (operations, options) => executeSharedOperations(handle, operations, options),
-    observe: listener => observeSharedTransactions(handle, listener)
-  };
+  return createSharedReplica(handle);
 }
 
 export function registerSplits(handle: SharedDocumentHandle): void {
@@ -52,7 +46,7 @@ export function registerSplits(handle: SharedDocumentHandle): void {
 }
 
 export function enterProjection(raw: unknown): ValidatedDocument {
-  return migrateRows(raw, fakeMigration().ports);
+  return migrateRows(structuredClone(raw), fakeMigration().ports);
 }
 
 export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = {}): SharedHarness {
@@ -65,6 +59,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
     replica: {
       revision: replica.revision,
       project: () => { log.push("project"); return replica.project(); },
+      changes: replica.changes,
       execute: (operations, options) => { log.push("execute"); executed.push({ operations, base: options.base }); return replica.execute(operations, options); },
       observe: replica.observe
     },
@@ -97,16 +92,18 @@ export interface FakeReplica {
 export function fakeReplica(initial: Record<string, unknown> | null = null): FakeReplica {
   const listeners = new Set<(origin: ReplicaOrigin | null) => void>();
   let revision = initial ? 1 : 0, held: Record<string, unknown> = initial ?? {}, failing: Error | null = null;
+  let before: Record<string, unknown> | null = null;
   let script: (operations: readonly SharedOperation[]) => ReplicaExecution = () => ({ ok: true });
   const tell = (origin: ReplicaOrigin | null): void => { for (const listener of [...listeners]) listener(origin); };
   return {
     port: {
       revision: () => revision,
       project: () => { if (failing) throw failing; return JSON.parse(JSON.stringify(held)) as unknown; },
+      changes: () => compareSharedProjections(before, held),
       execute: (operations, options) => options.base === revision ? script(operations) : { ok: false, reason: "stale-base" },
       observe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }
     },
-    write: (origin, document) => { held = document; revision++; tell(origin); },
+    write: (origin, document) => { before = revision ? held : null; held = document; revision++; tell(origin); },
     echo: tell,
     script: next => { script = next; },
     fail: error => { failing = error; },
