@@ -186,4 +186,3 @@ export function prepareSharedGlueDeletion(view: SharedPreparationView, groups: r
   const writes = freezeSharedPreparedValue(groups.map(group => ({ kind: "set" as const, path: ["meta", sharedJoinGlueRegisterField(group)], value: "" })));
   return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }
-

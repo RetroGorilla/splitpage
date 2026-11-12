@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { projectSharedJoinedLayout } from "../../../src/core/collab/projection/join-layout.ts";
 
-const blocks = [{ id: "R1", segment: "one", from: 0, to: 1 }, { id: "fresh", segment: "one", from: 2, to: 3 }, { id: "R2", segment: "two", from: 0, to: 2 }];
+const blocks = [{ id: "R1", segment: "one", from: 0, to: 1, units: ["not layout metadata"] }, { id: "fresh", segment: "one", from: 2, to: 3 }, { id: "R2", segment: "two", from: 0, to: 2 }];
 const binding = { end: { segment: "one", offset: 3 }, start: { segment: "two", offset: 0 }, stop: { segment: "two", offset: 2 } };
 
 test("joined layout follows the native end while fields stay with the retained destination", () => {

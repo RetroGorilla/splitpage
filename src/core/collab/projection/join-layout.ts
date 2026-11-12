@@ -58,7 +58,8 @@ export function projectSharedJoinedLayout(blocks: readonly SharedJoinLayoutBlock
       let row = frame.fold && frame.first && rows.at(-1)?.removed === removed ? rows.at(-1) : undefined;
       if (!row) { row = { root: block.id, removed, cyclic: false, members: [], fields: [] }; rows.push(row); }
       row.cyclic ||= frame.source?.cyclic ?? false;
-      row.members.push({ ...block, glue: frame.first && frame.fold ? frame.source?.entry.glue ?? "" : "", join: frame.first && frame.fold ? frame.source?.entry.id ?? null : null,
+      row.members.push({ id: block.id, segment: block.segment, from: block.from, to: block.to,
+        glue: frame.first && frame.fold ? frame.source?.entry.glue ?? "" : "", join: frame.first && frame.fold ? frame.source?.entry.id ?? null : null,
         ...(frame.first && frame.fold && frame.source?.entry.glueSet ? { glueSet: true as const } : {}) });
       frame.first = false;
       for (const child of [...children.get(block.id) ?? []].reverse()) stack.push({ parts: child.blocks, fold: true, source: child, inheritedRemoved: row.removed, first: true, next: 0 });
