@@ -8,6 +8,7 @@ import { bufferedNativeReplacement } from "../../core/collab/buffer.ts";
 
 export interface WriterBufferPorts extends Pick<BufferedTextCommit, "open">, Pick<SharedDocumentSession, "beforeCommand"> {
   readonly missingBase: (rowId: string) => void;
+  readonly recovered: (rowId: string) => void;
   readonly report: (outcome: CommandOutcome) => void;
 }
 
@@ -106,6 +107,23 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     return { ok, adopted };
   }
 
+  function recover(held: NonNullable<typeof active>, refusal: CommandOutcome, selection: readonly [number, number] | undefined): boolean {
+    let kept: CommandOutcome | null;
+    committing = true;
+    try { kept = held.edit.recover(surface.runs(held.beat)); }
+    catch (error) { kept = { kind: "failed", error }; }
+    finally { committing = false; }
+    if (held.edit.isOpen()) { ports.report(kept ?? refusal); return false; }
+    active = null; target = null;
+    surface.repaint(held.rowId); const shown = surface.painted(held.rowId) !== undefined;
+    const at = (offset: number) => ({ kind: "beat" as const, rowId: held.rowId, offset });
+    surface.restore(held.rowId, selection && shown ? { anchor: at(selection[0]), head: at(selection[1]) } : undefined);
+    surface.changed();
+    ports.recovered(held.rowId);
+    if (kept && (kept.kind === "failed" || kept.kind === "committed" && kept.errors.length)) ports.report(kept);
+    return true;
+  }
+
   function settle(): boolean {
     if (surface.composition()) { ports.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
     if (!active) return true;
@@ -122,7 +140,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
     try { outcome = held.edit.commit(surface.runs(held.beat), selection); }
     catch (error) { outcome = { kind: "failed", error }; }
     finally { committing = false; }
-    if (held.edit.isOpen()) { ports.report(outcome); return false; }
+    if (held.edit.isOpen()) return recover(held, outcome, selection);
     active = null; target = null;
     surface.repaint(held.rowId); surface.restore(held.rowId, outcome.selection);
     surface.changed();

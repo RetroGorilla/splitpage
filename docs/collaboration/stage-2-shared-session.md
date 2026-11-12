@@ -112,6 +112,11 @@ as `not shared`; an empty operation list is a no-op. The default base is the rev
 of the projection the plan read, so a projection that fell behind refuses as
 `stale-base`. A refused list produces no change and calls no subscriber.
 
+A plan whose `shared` part declares `undo: false` is still one `edit` with its
+generation and effect pass, but the undo port is not told. Its one caller is the
+buffer's recovery write (assumed rule 29 on #1414): undoing it would throw the
+kept typing away.
+
 `beforeCommand(listener)` registers local admission and returns its unsubscriber.
 An outer local `run` asks admissions before capability and planning, so a native
 buffer can commit and release held arrivals before the next command reads the
@@ -160,5 +165,5 @@ local person's. This owner answers for itself; the rest is named for its package
 Package 14 also follows the session-mode and captured-save lifetime obligations
 in [Shared sessions and local file saving](stage-2-disabled-file-saving.md#package-14-obligations).
 
-`tests/collab/shared-session-mutants.json` holds eleven, each listed in
+`tests/collab/shared-session-mutants.json` holds twelve, each listed in
 `tests/collab/mutants.md` with the test that fails.
