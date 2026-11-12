@@ -6,7 +6,7 @@ import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/remo
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { readSharedRevision, encodeSharedState, encodeSharedStateVector } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
@@ -15,7 +15,7 @@ import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 
 test("complete removal lists agree with app rows, scene membership and the independent applier", t => {
-  const runtime = createFlowLoadRuntime(); let calls = 0, executed = 0, removals = 0, creates = 0, deferred = 0;
+  const runtime = createFlowLoadRuntime(); let calls = 0, executed = 0, removals = 0, creates = 0;
   for (const sample of ["backspace", "forward", "range", "first", "only", "all"] as const) for (const order of ["D1", "rev", "dup"] as const) {
     const blank = sample === "backspace" || sample === "forward";
     const source = validatedFixture({ rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: blank ? "" : "cd", ...(blank ? {} : { visualText: "<em>Look</em>", imageName: "Picture" }) }, { id: "R3", audioText: "ef" }],
@@ -29,13 +29,6 @@ test("complete removal lists agree with app rows, scene membership and the indep
     const set = replicas(3, source), aliases = new Map<string, string>();
     try {
       registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a);
-      if (sample === "only") {
-        const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
-        const result = executeSharedOperations(set.a, outcome.ops, { base: revision }); assert.ok(!result.ok);
-        assert.equal(result.reason, "unhandled-kind"); assert.equal(result.operation.kind, "heading-remove"); assert.equal(result.index, 1);
-        assert.deepEqual(encodeSharedState(set.a), bytes); assert.deepEqual(encodeSharedStateVector(set.a), vector); assert.equal(readSharedRevision(set.a), revision);
-        deferred += outcome.ops.length; continue;
-      }
       for (const op of outcome.ops) if (op.kind === "segment-create") { aliases.set(op.beat, structureIdentityFixture("1", op.id, "beat")); creates++; }
       assert.deepEqual(executeSharedOperations(set.a, outcome.ops, { base: readSharedRevision(set.a) }), { ok: true }, sample + JSON.stringify(outcome.ops));
       const read = (handle: typeof set.a) => { const loaded = runtime.load(projectSharedDocument(handle)); return { rows: loaded.rows, sections: loaded.sections }; };
@@ -47,7 +40,6 @@ test("complete removal lists agree with app rows, scene membership and the indep
       calls++; executed += outcome.ops.length; removals += outcome.ops.filter(op => op.kind === "remove").length;
     } finally { set.close(); }
   }
-  assert.deepEqual({ calls, executed, removals, creates, deferred }, { calls: 15, executed: 30, removals: 21, creates: 3, deferred: 12 });
-  t.diagnostic(JSON.stringify({ calls, executed, removals, creates, skipped: 0, deferred,
-    limits: ["Removing across a scene boundary also removes a heading; the complete list waits for the heading handler."] }));
+  assert.deepEqual({ calls, executed, removals, creates }, { calls: 18, executed: 42, removals: 24, creates: 3 });
+  t.diagnostic(JSON.stringify({ calls, executed, removals, creates, skipped: 0, deferred: 0, limits: [] }));
 });

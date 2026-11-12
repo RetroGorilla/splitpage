@@ -25,7 +25,7 @@ function retainedStamp(value: unknown): boolean {
     && (stamp.by === null || typeof stamp.by === "string");
 }
 export function readProjectionFields(raw: unknown, scope: "document" | "beat" | "heading"): Record<string, unknown> | null {
-  if (!(raw instanceof Y.Map)) return null;
+  if (!(raw instanceof Y.Map) && !(raw instanceof Map)) return null;
   const output: [string, unknown][] = [];
   const fields = scope === "document" ? ["fileTitle", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "extra"]
     : scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra", "segment", "splitBy"] : ["extra"];

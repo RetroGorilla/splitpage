@@ -5,6 +5,7 @@ import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-g
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
+import { readSharedHeadingRemovalState } from "./removal-state.ts";
 import { readStoredSharedRecord } from "./record-codec.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
@@ -72,9 +73,21 @@ export class SharedProjectionSource {
   }
 
   fields(scope: "document" | "beat" | "heading", key = ""): Record<string, unknown> | null {
-    const name = scope === "document" ? "meta" : scope === "beat" ? "beats" : "headings";
+    if (scope === "heading") return this.heading(key).fields;
+    const name = scope === "document" ? "meta" : "beats";
     return this.cache.read(["fields", name, key], [scope === "document" ? this.version("meta-fields") : this.keyVersion(name, key)],
       () => readProjectionFields(scope === "document" ? this.inputRoots.meta : this.inputRoots[name].get(key), scope));
+  }
+
+  headingRemoved(id: string): boolean { return this.heading(id).removed; }
+
+  private heading(id: string): { readonly fields: Record<string, unknown> | null; readonly removed: boolean } {
+    return this.cache.read(["fields", "headings", id], [this.keyVersion("headings", id)], () => {
+      const raw: unknown = this.inputRoots.headings.get(id), entries = new Map<string, unknown>();
+      if (!(raw instanceof Y.Map)) return { fields: null, removed: false };
+      raw.forEach((value, key) => entries.set(key, value));
+      return { fields: readProjectionFields(entries, "heading"), removed: readSharedHeadingRemovalState(entries.keys(), key => entries.get(key)).removed };
+    });
   }
 
   title(): string {
