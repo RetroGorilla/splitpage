@@ -50,3 +50,38 @@ test("mode capabilities keep the common edit and comment answers live", () => {
     assert.deepEqual(capability.comment(), { allowed: false, reason: "role changed" });
   }
 });
+
+for (const mode of ["standalone", "shared"] as const) {
+  test(mode + ": common capability methods keep their receiver and read its current answer", () => {
+    const common = {
+      enabled: true,
+      edit(): Capability { return this.enabled ? { allowed: true } : { allowed: false, reason: "editing disabled" }; },
+      comment(): Capability { return this.enabled ? { allowed: true } : { allowed: false, reason: "comments disabled" }; }
+    };
+    const capability = createSessionCapabilities(mode, common);
+    assert.deepEqual(capability.edit(), { allowed: true });
+    assert.deepEqual(capability.comment(), { allowed: true });
+    common.enabled = false;
+    assert.deepEqual(capability.edit(), { allowed: false, reason: "editing disabled" });
+    assert.deepEqual(capability.comment(), { allowed: false, reason: "comments disabled" });
+    common.edit = () => ({ allowed: false, reason: "edit method replaced" });
+    common.comment = () => ({ allowed: false, reason: "comment method replaced" });
+    assert.deepEqual(capability.edit(), { allowed: false, reason: "edit method replaced" });
+    assert.deepEqual(capability.comment(), { allowed: false, reason: "comment method replaced" });
+  });
+
+  test(mode + ": common capability methods on a class prototype are forwarded live", () => {
+    class CommonCapability {
+      enabled = true;
+      edit(): Capability { return this.enabled ? { allowed: true } : { allowed: false, reason: "editing disabled" }; }
+      comment(): Capability { return this.enabled ? { allowed: true } : { allowed: false, reason: "comments disabled" }; }
+    }
+    const common = new CommonCapability();
+    const capability = createSessionCapabilities(mode, common);
+    assert.deepEqual(capability.edit(), { allowed: true });
+    assert.deepEqual(capability.comment(), { allowed: true });
+    common.enabled = false;
+    assert.deepEqual(capability.edit(), { allowed: false, reason: "editing disabled" });
+    assert.deepEqual(capability.comment(), { allowed: false, reason: "comments disabled" });
+  });
+}
