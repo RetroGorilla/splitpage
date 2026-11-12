@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
+import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
+import { operation } from "./executor-support.ts";
 import { holdSharedBuffer, observeSharedDeclined } from "../../../src/adapters/collab/ingress.ts";
 import { collabState, SharedExecutionWriteError } from "../../../src/adapters/collab/state.ts";
-import { SHARED_BUFFER_QUEUE_BYTES } from "../../../src/core/collab/buffer.ts";
+import { sharedBufferQueueBytes } from "../../../src/core/collab/buffer.ts";
 
 function updates(): { source: ReturnType<typeof createSharedDocument>; values: Uint8Array[] } {
   const source = createSharedDocument(), values: Uint8Array[] = [];
@@ -75,8 +78,8 @@ function boundedUpdate(): { source: ReturnType<typeof createSharedDocument>; upd
     transactSharedDocument(trial, "local-command", () => collabState(trial).roots.meta.set("padding", "x".repeat(length)));
     update = encodeSharedState(trial);
     destroySharedDocument(trial);
-    if (update.byteLength === SHARED_BUFFER_QUEUE_BYTES) break;
-    length += SHARED_BUFFER_QUEUE_BYTES - update.byteLength;
+    if (update.byteLength === sharedBufferQueueBytes()) break;
+    length += sharedBufferQueueBytes() - update.byteLength;
   }
   assert.equal(update.byteLength, 65536);
   assert.deepEqual(applySharedUpdate(source, update), { ok: true });
@@ -147,4 +150,70 @@ test("delivery-only queue has no buffer bound; declined callback failures still 
     assert.throws(release, error => error === failure);
     assert.deepEqual([collabState(target).ingress.heldBytes, collabState(target).ingress.holds.size], [0, 0]);
   } finally { destroySharedDocument(source); destroySharedDocument(target); }
+});
+
+for (const nested of [false, true]) {
+  test(`declined report follows the drain and reads held content${nested ? " after a nested release" : ""}`, () => {
+    const { source, values } = updates(), target = createSharedDocument(), oversized = boundedUpdate();
+    const events: unknown[] = [], state = collabState(target), release = holdSharedBuffer(target);
+    try {
+      const first = values[0]; assert.ok(first);
+      assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+      assert.deepEqual(applySharedUpdate(target, oversized.update), { ok: false, reason: "queue-full" });
+      assert.deepEqual(applySharedUpdate(target, new Uint8Array([0, 0])), { ok: false, reason: "queue-full" });
+      observeSharedTransactions(target, origin => {
+        if (origin === "remote") events.push(["remote", state.roots.meta.get("value")]);
+        if (nested && origin === "local-command") release();
+      });
+      observeSharedDeclined(target, () => { events.push(["declined", state.roots.meta.get("value")]); });
+      if (nested) transactSharedDocument(target, "local-command", () => state.roots.meta.set("local", true));
+      else release();
+      assert.deepEqual(events, [["remote", 1], ["declined", 1]]);
+      release();
+      assert.deepEqual(events, [["remote", 1], ["declined", 1]]);
+    } finally { destroySharedDocument(source); destroySharedDocument(target); destroySharedDocument(oversized.source); }
+  });
+}
+
+test("an arrival during release drain is accepted behind held entries with the latch cleared", () => {
+  const { source, values } = updates(), target = createSharedDocument(), oversized = boundedUpdate();
+  const [first, second, third] = values; assert.ok(first && second && third);
+  const state = collabState(target), seen: unknown[] = [], release = holdSharedBuffer(target);
+  try {
+    assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+    assert.deepEqual(applySharedUpdate(target, second), { ok: true });
+    assert.deepEqual(applySharedUpdate(target, oversized.update), { ok: false, reason: "queue-full" });
+    observeSharedTransactions(target, () => {
+      const value: unknown = state.roots.meta.get("value"); seen.push(value);
+      if (value === 1) assert.deepEqual(applySharedUpdate(target, third), { ok: true });
+    });
+    observeSharedDeclined(target, () => { seen.push(["declined", state.roots.meta.get("value")]); });
+    release();
+    assert.deepEqual(seen, [1, 2, 3, ["declined", 3]]);
+  } finally { destroySharedDocument(source); destroySharedDocument(target); destroySharedDocument(oversized.source); }
+});
+
+test("a command's guarded notification can acquire the buffer reason and hold arrivals", () => {
+  const { source, values } = updates(), target = createSharedDocument(), state = collabState(target);
+  let release = (): void => {}, once = false;
+  try {
+    transactSharedDocument(target, "local-command", () => state.roots.meta.set("docId", "script"));
+    observeSharedTransactions(target, () => {
+      if (once) return;
+      once = true; release = holdSharedBuffer(target);
+      const first = values[0]; assert.ok(first);
+      assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+    });
+    assert.deepEqual(executeSharedOperations(target, [operation({ kind: "scalar", id: "local", by: "Alice", target: { scope: "document", record: "script" }, field: "wordsPerMinute", value: 120 })]), { ok: true });
+    assert.deepEqual([...state.ingress.holds], ["buffer"]);
+    assert.equal(state.roots.meta.get("value"), undefined);
+    release();
+    assert.equal(state.roots.meta.get("value"), 1);
+  } finally { destroySharedDocument(source); destroySharedDocument(target); }
+});
+
+test("a destroyed handle cannot acquire a new buffer reason", () => {
+  const target = createSharedDocument(); destroySharedDocument(target);
+  assert.throws(() => holdSharedBuffer(target), /destroyed/);
+  assert.equal(collabState(target).ingress.holds.size, 0);
 });

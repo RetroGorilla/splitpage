@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
-import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeSharedStateVector, observeSharedTransactions, observeSharedUpdates, readSharedRevision } from "../../../src/adapters/collab/document.ts";
+import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, observeSharedTransactions, observeSharedUpdates, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
+import { holdSharedBuffer, observeSharedDeclined } from "../../../src/adapters/collab/ingress.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { operation } from "./executor-support.ts";
 import { createMonitoredSharedDocument, deliveryReplica } from "./helpers.ts";
@@ -125,3 +125,67 @@ for (let seed = 1; seed <= 12; seed++) {
 test("the seeded runs reached every placement: the top, a notification, the drain, repeats, updates waiting for an earlier one, thrown callbacks", () => {
   for (const [name, count] of Object.entries(totals)) assert.ok(count >= 5, `${name}: ${count}`);
 });
+
+for (let seed = 1; seed <= 6; seed++) {
+  test(`seeded overflow ${seed}: every copy publishes its accepted arrival prefixes through refusal, release and redelivery`, () => {
+    let random = seed * 7919;
+    const next = (below: number): number => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return (random >>> 8) % below; };
+    const run = recordReplicas(3, SOURCE), references: SharedDocumentHandle[] = [];
+    try {
+      const updates: Uint8Array[][] = [[], []];
+      for (const [index, handle] of [run.a, run.c].entries()) {
+        const list = updates[index]; assert.ok(list);
+        const stop = observeSharedUpdates(handle, update => { list.push(update); });
+        transactSharedDocument(handle, "local-command", () => collabState(handle).roots.meta.set("extra", JSON.stringify({ payload: String(index).repeat(40000), seed })));
+        if (!index) written(handle, "small", 1, () => 0);
+        stop();
+      }
+      const controls = [run.a, run.b, run.c].map((handle, index) => {
+        const reference = createMonitoredSharedDocument(); references.push(reference);
+        assert.deepEqual(applySharedUpdate(reference, encodeSharedState(handle)), { ok: true });
+        const revision = [3, 1, 2][index]; assert.ok(revision);
+        assert.equal(readSharedRevision(handle), revision);
+        collabState(reference).revision = revision;
+        const expected: ReturnType<typeof snapshot>[] = [];
+        observeSharedTransactions(handle, () => {
+          const prefix = expected.shift(); assert.ok(prefix, "publication without an accepted arrival");
+          assert.deepEqual(snapshot(handle), prefix, "each publication is exactly its accepted arrival prefix");
+        });
+        return {
+          receive: (update: Uint8Array, accepted: boolean): void => {
+            const before = snapshot(handle);
+            if (accepted) { assert.deepEqual(applySharedUpdate(reference, update), { ok: true }); expected.push(snapshot(reference)); }
+            assert.deepEqual(applySharedUpdate(handle, update), accepted ? { ok: true } : { ok: false, reason: "queue-full" });
+            if (!accepted) assert.deepEqual(snapshot(handle), before, "a refusal changes neither projection nor native state");
+          },
+          settled: () => { assert.deepEqual(expected, [], "accepted prefixes were all published"); }
+        };
+      });
+      const first = updates[next(2)]?.[0], a = updates[0], c = updates[1]; assert.ok(first && a && c);
+      const oversized = first === a[0] ? c[0] : a[0], small = a[1]; assert.ok(oversized && small);
+      const target = controls[1]; assert.ok(target);
+      let declined = 0;
+      const release = holdSharedBuffer(run.b), frozen = snapshot(run.b);
+      observeSharedDeclined(run.b, () => { declined++; assert.notDeepEqual(snapshot(run.b), frozen); });
+      target.receive(first, true);
+      target.receive(oversized, false);
+      target.receive(small, false);
+      assert.deepEqual(snapshot(run.b), frozen);
+      release();
+      assert.equal(declined, 1);
+      const retry = [oversized, small];
+      if (next(2)) retry.reverse();
+      for (const update of retry) {
+        target.receive(update, true);
+        if (next(2)) target.receive(update, true);
+      }
+      for (const [index, handle] of [run.a, run.b, run.c].entries()) {
+        const control = controls[index]; assert.ok(control);
+        control.receive(encodeSharedUpdate(run.b, encodeSharedStateVector(handle)), true);
+        control.settled();
+      }
+      assert.deepEqual([shown(run.a), shown(run.c)], [shown(run.b), shown(run.b)]);
+      assert.equal(projectSharedDocument(run.b).rows[1]?.lengthSeconds, 100);
+    } finally { run.close(); for (const reference of references) destroySharedDocument(reference); }
+  });
+}

@@ -15,5 +15,10 @@
     "file": "src/adapters/collab/ingress.ts",
     "find": "if (!gate.holds.delete(\"buffer\")) return;",
     "replace": "if (gate.holds.has(\"buffer\")) return;"
+  }, {
+    "label": "queue-full refusal latch removed",
+    "file": "src/adapters/collab/document.ts",
+    "find": "gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength)",
+    "replace": "exceedsBufferQueue(gate.heldBytes, update.byteLength)"
   }]
 }

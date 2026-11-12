@@ -48,7 +48,7 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
   const state = collabState(handle), gate = state.ingress;
   const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
-  if (!closed) assertNoSharedExecution(state);
+  if (!gate.holds.has("delivering")) assertNoSharedExecution(state);
   if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
     gate.declined = true;
     return { ok: false, reason: "queue-full" };
@@ -73,9 +73,11 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
 export function destroySharedDocument(handle: SharedDocumentHandle): void {
   const state = collabState(handle);
   assertNoSharedExecution(state);
+  state.destroyed = true;
   state.ingress.held.length = 0;
   state.ingress.heldBytes = 0;
   state.ingress.declined = false;
+  state.ingress.declinedReports = 0;
   state.ingress.declineListeners.clear();
   state.ingress.holds.clear();
   state.doc.destroy();

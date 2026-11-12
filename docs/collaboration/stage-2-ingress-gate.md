@@ -45,18 +45,24 @@ retain its edit for an explicit retry outside that notification.
 ## Bounded buffered arrivals
 
 Assumed rule 26 on [#1414](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6814123286)
-sets `SHARED_BUFFER_QUEUE_BYTES` to 64 KiB. While `buffer` is set the bound counts
+sets the named constant `SHARED_BUFFER_QUEUE_BYTES` in `sharedBufferQueueBytes()`
+to 64 KiB. The accessor keeps the core module's load-time declarations limited to
+types and functions. While `buffer` is set the bound counts
 the bytes of the entire one queue, including entries held for delivery. An
 arrival that would exceed it returns `queue-full`, distinct from `invalid-update`.
 Every subsequent arrival is refused until buffer release, including one that
 would fit. Held entries and the native edit remain intact. Delivery alone has
 no byte refusal because that queue drains within the outer write.
 
-Release reports the declined interval once through `observeSharedDeclined`,
-inside `guardSharedCallback`; a callback failure still allows the queue to drain.
+Release records the declined interval for `observeSharedDeclined`. The outermost
+write reports it once after the queue drains, inside `guardSharedCallback`, with
+the delivery reason set so every listener reads that completed prefix. A nested
+release waits for that same outer drain. A callback failure still permits draining
+arrivals queued by a reporting callback.
 No declined interval means no report. The caller fetches the missing difference
 with a state-vector exchange after release; transport is a later stage. Destroy
-clears the queue, byte accounting, refusal latch and listeners without reporting.
+clears the queue, byte accounting, refusal latch, pending reports and listeners
+without reporting. A destroyed handle cannot acquire another buffer reason.
 
 `tests/adapters/collab/buffer-gate.test.ts` covers the exact bound, latched small
 arrival, both reasons in both release orders, destroy and throwing callbacks.

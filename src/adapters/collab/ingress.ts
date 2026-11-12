@@ -1,9 +1,10 @@
 import type { SharedDocumentHandle } from "./types.ts";
-import { assertNoSharedExecution, collabState, guardSharedCallback, sharedWriteFrame } from "./state.ts";
+import { assertNoSharedExecution, collabState, sharedWriteFrame } from "./state.ts";
 
 export function holdSharedBuffer(handle: SharedDocumentHandle): () => void {
   const state = collabState(handle), gate = state.ingress;
-  assertNoSharedExecution(state);
+  if (!gate.holds.has("delivering")) assertNoSharedExecution(state);
+  if (state.destroyed) throw new Error("Cannot buffer a destroyed shared document");
   if (gate.holds.has("buffer")) throw new Error("A shared buffer is already open");
   gate.holds.add("buffer");
   let open = true;
@@ -11,11 +12,9 @@ export function holdSharedBuffer(handle: SharedDocumentHandle): () => void {
     if (!open) return;
     open = false;
     if (!gate.holds.delete("buffer")) return;
-    const declined = gate.declined;
+    if (gate.declined) gate.declinedReports++;
     gate.declined = false;
-    sharedWriteFrame(state, () => {
-      if (declined) for (const listener of gate.declineListeners) guardSharedCallback(state, listener);
-    });
+    sharedWriteFrame(state, () => {});
   };
 }
 

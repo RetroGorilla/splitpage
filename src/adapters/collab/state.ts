@@ -21,6 +21,7 @@ export class IngressGate {
   readonly errors: unknown[] = [];
   heldBytes = 0;
   declined = false;
+  declinedReports = 0;
   readonly declineListeners = new Set<() => void>();
   frames = 0;
 }
@@ -29,6 +30,7 @@ export class CollabDocumentState {
   readonly doc = new Y.Doc();
   readonly roots = declareCollabRoots(this.doc);
   fresh = true;
+  destroyed = false;
   revision = 0;
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
   readonly hydrationTransactions = new WeakSet<Y.Transaction>();
@@ -74,10 +76,17 @@ export function guardSharedCallback(state: CollabDocumentState, call: () => void
 function settleIngress(state: CollabDocumentState): void {
   const gate = state.ingress;
   try {
-    gate.holds.delete("delivering");
-    if (gate.holds.size) return;
-    for (let update = gate.held[0]; update && !gate.holds.has("buffer"); update = gate.held[0]) {
-      const next = update;
+    for (;;) {
+      gate.holds.delete("delivering");
+      if (gate.holds.size) return;
+      const next = gate.held[0];
+      if (!next) {
+        if (!gate.declinedReports) return;
+        gate.declinedReports--;
+        gate.holds.add("delivering");
+        for (const listener of gate.declineListeners) guardSharedCallback(state, listener);
+        continue;
+      }
       gate.holds.add("delivering");
       try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
       catch (error) { gate.errors.push(error); }
