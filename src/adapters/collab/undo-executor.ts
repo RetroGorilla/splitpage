@@ -103,8 +103,8 @@ function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress)
   if (scope) fields.status = readSharedStatus(handle, { scope, record: target.record as SharedContentRef } as SharedStatusEvent["target"]);
   // why: props are read with their rank and written without it; a record is kept in the form a command writes.
   if (Array.isArray(fields.props)) fields.props = fields.props.map(prop => {
-    const { rank: _rank, extra: _extra, ...written } = (prop as { readonly fields: SharedJsonFields }).fields;
-    return written;
+    const read = (prop as { readonly fields: SharedJsonFields }).fields;
+    return Object.fromEntries(Object.entries(read).filter(([field]) => field !== "rank" && field !== "extra"));
   });
   return fields;
 }
