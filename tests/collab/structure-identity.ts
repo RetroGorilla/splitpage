@@ -1,4 +1,9 @@
 const identities: Readonly<Record<string, string>> = Object.freeze({
+  "1/flow_o_0/beat/0": "structure_1_0066006c006f0077005f006f005f0030_beat_0",
+  "1/flow_o_1/beat/0": "structure_1_0066006c006f0077005f006f005f0031_beat_0",
+  "1/flow_o_2/beat/0": "structure_1_0066006c006f0077005f006f005f0032_beat_0",
+  "1/flow_o_3/beat/0": "structure_1_0066006c006f0077005f006f005f0033_beat_0",
+  "1/flow_o_4/beat/0": "structure_1_0066006c006f0077005f006f005f0034_beat_0",
   "1/enter/beat/0": "structure_1_0065006e007400650072_beat_0",
   "2/enter/beat/0": "structure_2_0065006e007400650072_beat_0",
   "3/enter/beat/0": "structure_3_0065006e007400650072_beat_0",

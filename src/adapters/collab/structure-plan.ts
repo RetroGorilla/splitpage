@@ -9,11 +9,12 @@ interface StructurePlanScratch { readonly scratch: <T>(key: string, create: () =
 
 function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
-    records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>() }));
+    records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
 export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment }); }
+export function planSharedStructureRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).removed.set(id, removed); }
 export function planSharedStructureHead(view: StructurePlanScratch, segment: string, head: unknown): void {
   context(view).heads.set(segment, { segment, inOrder: true, head: readProjectionHead(head), parts: [] });
 }
@@ -24,7 +25,7 @@ export function readSharedStructureStream(view: StructurePlanScratch, segment: s
   return slot.plan ? { ...raw, parts: slot.plan.units.map((unit, from) => ({ boundary: readProjectionHead(unit.value), units: [], from, to: from + 1 })) } : raw;
 }
 
-export function interpretSharedStructure(view: StructurePlanScratch, requests: readonly { readonly owner: string; readonly heading: boolean }[], actual?: SharedProjectionStream) {
+export function interpretSharedStructure(view: StructurePlanScratch, requests: readonly { readonly owner: string; readonly heading: boolean }[], actual?: SharedProjectionStream, purpose: "projected" | "restore-membership" = "projected") {
   const state = context(view), index = state.index; if (!index) throw new Error("Structural index is not bound to preparation");
   const names = new Set<string>(), headings = new Set<string>();
   const add = (owner: string, heading: boolean) => { (heading ? headings : names).add(owner); };
@@ -46,15 +47,25 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
       const left = readPlannedStructureIndex(view, index.order, a.segment), right = readPlannedStructureIndex(view, index.order, b.segment);
       return (left < 0 ? Infinity : left) - (right < 0 ? Infinity : right) || (a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0);
     });
-  return projectSharedBlocks(streams, [...records.values()]);
+  return projectSharedBlocks(streams, [...records.values()]).filter(block => purpose === "restore-membership" || block.kind === "h" || block.id === null
+    || !(state.removed.get(block.id) ?? index.removed(block.id)));
+}
+
+function resolveOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading", purpose: "projected" | "restore-membership") {
+  const index = context(view).index; if (!index) throw new Error("Structural index is not bound to preparation");
+  const heading = field === "heading";
+  const block = interpretSharedStructure(view, [{ owner, heading }], undefined, purpose).find(block => !block.reason && block.id !== null
+    && block.kind === (heading ? "h" : "b") && (heading ? block.id === owner : cleanId(block.id) === cleanId(owner)));
+  return block?.id && (!heading || index.heading(block.id)) ? Object.freeze({ owner: block.id, segment: block.segment }) : null;
 }
 
 export function resolveSharedStructureOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading") {
-  const index = context(view).index; if (!index) throw new Error("Structural index is not bound to preparation");
-  const heading = field === "heading";
-  const block = interpretSharedStructure(view, [{ owner, heading }]).find(block => !block.reason && block.id !== null
-    && block.kind === (heading ? "h" : "b") && (heading ? block.id === owner : cleanId(block.id) === cleanId(owner)));
-  return block?.id && (!heading || index.heading(block.id)) ? Object.freeze({ owner: block.id, segment: block.segment }) : null;
+  return resolveOwner(view, owner, field, "projected");
+}
+
+export function resolveSharedRestorableBeat(view: StructurePlanScratch, owner: string) {
+  const found = resolveOwner(view, owner, "audioText", "restore-membership");
+  return found?.owner === owner ? found : null;
 }
 
 function indexedStructureView(index: SharedStructureIndex) {

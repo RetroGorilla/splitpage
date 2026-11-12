@@ -9,6 +9,7 @@ import { readTextInsert } from "../../core/collab/read-operation.ts";
 import { readSharedStructureBoundary } from "./structure-boundary.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import type { SharedProjectionBoundary, SharedProjectionStream } from "../../core/collab/projection/blocks.ts";
+import { readSharedRemovalState } from "./removal-state.ts";
 import { projectSharedJoinGlue, sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
 
 function bag(value: unknown): Record<string, unknown> {
@@ -102,6 +103,6 @@ export function readProjectionBeatStructure(raw: unknown, id: string, retirement
     if (typeof value.into === "string" && value.into.length > 0 && isStableSharedIdentity(value.into) && (value.glue === "" || value.glue === " "))
       joins.push({ id: key, into: value.into, glue: projectSharedJoinGlue(value.glue, glueRegisters.get(sharedJoinGlueRegisterField(key))) });
   }
-  const removed = removals instanceof Y.Map && [...removals.keys()].some(key => key.length > 0 && isStableSharedIdentity(key) && removals.get(key) === true);
+  const removed = readSharedRemovalState(removals instanceof Y.Map ? removals : []).removed;
   return { id, joins, removed };
 }

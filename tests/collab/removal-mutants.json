@@ -1,0 +1,57 @@
+{
+  "mutants": [{
+    "label": "restore copies text instead of retaining identities",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "const observed = description.captures.map(capture =>",
+    "replace": "if (description.record.kind === \"restore\") { const text = collabPreparedOperationTextTarget(handle, {owner: description.record.targets[0].beat, segment: description.record.targets[0].segment, field: \"audioText\"} as import(\"../../core/collab/operations.ts\").SharedTextAddress).text; const value = text.toString(); text.delete(0, text.length); text.insert(0, value); } const observed = description.captures.map(capture =>",
+    "tests": ["tests/adapters/collab/removal-stage1.test.ts"]
+  }, {
+    "label": "old restore cancels fresh removal",
+    "file": "src/core/collab/removal-state.ts",
+    "find": "active = false; cancelled = false;",
+    "replace": "active = false;",
+    "tests": ["tests/adapters/collab/structure-removal.test.ts"]
+  }, {
+    "label": "staged removal ignores creation aliases",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "const owner = view.resolveOwner(sharedStructureReference(view, reference), \"audioText\");",
+    "replace": "const owner = view.resolveOwner(reference, \"audioText\");",
+    "tests": ["tests/adapters/collab/structure-removal.test.ts"]
+  }, {
+    "label": "removal trusts foreign components",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "if (supplied.some(reference =>",
+    "replace": "if (false && supplied.some(reference =>",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "removal scans unrelated attachment root",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "const path = [\"beats\", beat, \"removals\"];",
+    "replace": "view.keys([\"gallery\"]); const path = [\"beats\", beat, \"removals\"];",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "staged gallery membership omits later records",
+    "file": "src/adapters/collab/structure-gallery.ts",
+    "find": "sharedCreatedAttachments(view).push({ collection: \"gallery\", beat, html: null, record });",
+    "replace": "if (index === 0) sharedCreatedAttachments(view).push({ collection: \"gallery\", beat, html: null, record });",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "incremental provenance cache never invalidates changed records",
+    "file": "src/adapters/collab/removal-record.ts",
+    "find": "caches.entry(records, \"removal-source-record\", key, () =>",
+    "replace": "caches.keep(records, \"removal-source-record:\" + key, () =>",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "incremental provenance rereads unrelated recovered beats",
+    "file": "src/adapters/collab/removal-record.ts",
+    "find": "const raw = caches.entry(beats,",
+    "replace": "beats.get(beat); const raw = caches.entry(beats,",
+    "tests": ["tests/adapters/collab/removal-contract.test.ts"]
+  }, {
+    "label": "removal omits pending record attachment membership",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "...sharedPendingAttachmentKeys(view, collection),",
+    "replace": "",
+    "tests": ["tests/adapters/collab/removal-pending-records.test.ts"]
+  }]
+}

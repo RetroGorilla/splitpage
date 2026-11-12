@@ -35,7 +35,7 @@ export function prepareSharedInitialGallery(operation: SharedSegmentCreate, view
       for (const [field, item] of Object.entries(value)) writes.push({ kind: "set", path: [...link, field], value: item });
       writes.push({ kind: "set", path: [...link, "rank"], value: String(rank).padStart(10, "0") }, { kind: "set", path: [...link, "extra"], value: "{}" });
     });
-    if (!sharedCreatedAttachments(view).some(entry => entry.collection === "gallery" && entry.beat === beat)) sharedCreatedAttachments(view).push({ collection: "gallery", beat, html: null, record });
+    sharedCreatedAttachments(view).push({ collection: "gallery", beat, html: null, record });
   });
   return writes;
 }

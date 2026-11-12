@@ -7,7 +7,7 @@ import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { prepareSharedCreatedAttachment } from "./structure-content.ts";
+import { prepareSharedCreatedAttachment, sharedPendingAttachmentKeys } from "./structure-content.ts";
 import { reserveSharedCommandIdentities } from "./structure-identity.ts";
 
 function candidate(view: SharedPreparationView, writes: readonly SharedPreparedWrite[]): Pick<SharedPreparationView, "get" | "kind" | "keys"> {
@@ -37,7 +37,11 @@ function candidate(view: SharedPreparationView, writes: readonly SharedPreparedW
       return Object.freeze([...keys].sort());
     } };
 }
-function accepted(writes: readonly SharedPreparedWrite[]): SharedPreparationResult {
+function accepted(view: SharedPreparationView, writes: readonly SharedPreparedWrite[]): SharedPreparationResult {
+  for (const write of writes) {
+    const [collection, record] = write.path;
+    if ((collection === "visuals" || collection === "gallery") && record !== undefined) sharedPendingAttachmentKeys(view, collection).add(record);
+  }
   return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }
 function setValue(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], value: unknown): void {
@@ -92,7 +96,7 @@ function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationVie
     }
   }
   if (!readPreparedSharedRecord(collection, key, candidate(view, writes))) return { ok: false, reason: "invalid-record-shape" };
-  return reserveSharedCommandIdentities(view, [key, ...(typeof fields.id === "string" ? [fields.id] : [])]) ? accepted(writes) : { ok: false, reason: "existing-identity" };
+  return reserveSharedCommandIdentities(view, [key, ...(typeof fields.id === "string" ? [fields.id] : [])]) ? accepted(view, writes) : { ok: false, reason: "existing-identity" };
 }
 
 function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): SharedPreparationResult {
@@ -113,14 +117,14 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
     if (!sharedRecordFieldAccepted(collection, field, operation.value)) return { ok: false, reason: "invalid-record-field" };
     setValue(view, writes, [...path, field], operation.value);
   }
-  return readPreparedSharedRecord(collection, key, candidate(view, writes)) ? accepted(writes) : { ok: false, reason: "invalid-record-shape" };
+  return readPreparedSharedRecord(collection, key, candidate(view, writes)) ? accepted(view, writes) : { ok: false, reason: "invalid-record-shape" };
 }
 
 function prepareDelete(operation: SharedRecordDelete, view: SharedPreparationView): SharedPreparationResult {
   const { collection, record: key } = operation.target;
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
   if (!readPreparedSharedRecord(collection, key, view)) return { ok: false, reason: "missing-or-invalid-record" };
-  return accepted([{ path: [collection, key], kind: "delete" }]);
+  return accepted(view, [{ path: [collection, key], kind: "delete" }]);
 }
 
 export const recordHandlers: SharedOperationHandlers = Object.freeze({ "record-create": prepareCreate, "record-set": prepareSet, "record-delete": prepareDelete });

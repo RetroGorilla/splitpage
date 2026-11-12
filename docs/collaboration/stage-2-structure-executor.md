@@ -239,8 +239,80 @@ marks, atoms, metadata and multiple rows at the start, middle and end of narrati
 Production structural projection is not used for these comparisons;
 its interpretation belongs to the projection lane.
 
-Join, removal, restoration, heading creation/removal/finalization, movement,
-recovery placement and undo remain later cuts. In particular, the heading-name
+Join, heading creation/removal/finalization, movement, complete recovery placement
+and structural undo integration remain later cuts. In particular, the heading-name
 `cappedText` rule, imported-layout movement and the remaining structural Stage 1
 histories are still open here. Standalone flow results, application, features,
 bootstrap, exports and browser behaviour remain unchanged.
+
+## Beat removal and restore
+
+`registerSharedRemovalHandlers(handle)` adds `remove` and `restore` to the same
+entry. A remove records its writer, operation, author, original references, target
+beats and physical segments, boundary membership, native observed character ids,
+derived visual/gallery membership and optional comment observations. Its key uses
+the existing identity format with role `removal`; a restore uses role `restore`.
+Issued records are immutable. A per-beat `removals` map holds
+`{generation, removed}` under the issued removal's native key. Existing `true`
+membership means generation zero; malformed values and legacy `false` are inert.
+
+Simultaneous removals of a visible beat have the same generation. One cancellation
+in that generation restores their one effect, including an identical removal not
+yet delivered. A fresh removal after a cancellation gets the next generation;
+restoring an older generation cannot restore that fresh removal. A used-up restore
+is an accepted no-op. Generation overflow refuses `removal-generation-limit`.
+Restore writes cancellation membership and its own issued record. It inserts no
+boundary, text, mark, segment or order entry, so the restored beat cannot be
+mistaken for a repeated boundary and original anchors and native ids survive.
+
+The structural interpreter masks removed beats after duplicate-id selection.
+Typed anchors, text, marks, scalar and status preparation therefore refuse an
+already removed target; a command issued before receiving the removal remains
+accepted and its text stays on that beat in recovery. Restore has a named
+`restore-membership` lookup for its exact stored target, never a text-writing
+fallback. The same-list exception "text staged earlier in the same operation
+list" also covers a beat staged earlier in that list: targets, boundaries,
+observed flow ranges and later restore references share the creation alias map.
+
+Rule 29 accepts the literal `r17` create/remove command. The two supplied buffer
+fields pass `readSharedBufferRecoveryMetadata`: a stable nonempty source owner
+and a nonnegative safe integer painted base. They are private creation metadata,
+transferred to the removal record when removed, never row extras. Recovery exposes
+all validated sources in an optional `buffer` array beside the row. Neither the
+visible projection nor a restored row or export receives those fields. The base
+is historical provenance, not a replacement for the entry's current painted base.
+Full and incremental projection share this assembly. Provenance caches track each
+beat's membership and each referenced record through the existing keyed read cache;
+metadata-only corruption and membership deletion are compared with fresh snapshots.
+Typing with zero or 299 unrelated recovery beats performs zero unrelated native
+reads, with seven text and two mark-entry reads in either case.
+Visual and gallery membership is derived from validated records, including all
+staged gallery records and ordinary record creates or ownership changes earlier in
+the list. Accepted record writes add their touched keys to the per-call scratch
+plan; removal validates their current overlaid ownership, excluding deleted records
+and those reassigned away. It scans neither attachment root. Caller component ids are checked observations, not authority;
+empty observations and the flow emitter's logical attachment names are accepted.
+The executor creates no undo entry; rule 29 is submitted without one by its caller.
+
+The attachment index is activated while idle by handler registration and patches
+changed ownership only; a full snapshot does not warm unused attachment ownership.
+Preparation inspects touched beats, segments and attachments, never whole roots or
+the order array. The count test measures 57 record reads and four text reads with
+both zero and 10,000 unrelated beats and gallery entries, including four required
+identity-absence queries. Descriptions are deeply frozen; apply only translates
+fixed positions to ids for text created earlier in the transaction and writes the
+prepared payload. There is one transaction and update, and no full-state encoding.
+
+The copied T10 oracles check original and concurrent identities through removal
+and restore; the test reader supplies removal caret fallback, which is not a new
+production caret-placement claim. The seeded model has 72 histories, 900 operations,
+144 checkpoints and 504 live/fresh index comparisons, including 36 restores before
+peer delivery, with literal declared limits
+`[]` for its beat-only cases. Complete app lists execute 30 operations in 15 calls,
+skip zero and defer 12 operations in three whole lists requiring `heading-remove`.
+Their declared limit is: "Removing across a scene boundary also removes a heading;
+the complete list waits for the heading handler." T08/T09 heading variants, T06/T12
+join, imported-layout move and complete structural undo await their named cuts.
+Split-descendant removal classification and comment/reply recovery placement (T11)
+remain recovery work; retained observed ids, boundaries, attachment ids and author
+are its inputs. No claim of that classification is made by this beat-only model.

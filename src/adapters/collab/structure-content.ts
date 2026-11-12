@@ -54,6 +54,10 @@ export function sharedCreatedAttachments(view: SharedPreparationView): { collect
   return view.scratch("structure-created-attachments", () => []);
 }
 
+export function sharedPendingAttachmentKeys(view: SharedPreparationView, collection: "visuals" | "gallery"): Set<string> {
+  return view.scratch("pending-attachment-keys:" + collection, () => new Set());
+}
+
 export function prepareSharedCreatedAttachment(operation: SharedRecordCreate, view: SharedPreparationView): SharedPreparationResult | null {
   const { collection, record } = operation.target, beat = operation.fields.beat;
   if (typeof beat !== "string") return null;
