@@ -13,6 +13,32 @@ function harness() {
   return fakeWriterPorts(migrateRows({ title: "Writer mount", rows: [] }, fakeMigration().ports));
 }
 
+test("a refused buffer settlement keeps the Writer open through close, undo and owner disposal", () => {
+  const h = harness(), create = h.ports.flow.create;
+  let allowed = false, replayed = false;
+  const writer = startWriter({ ...h.ports, flow: { ...h.ports.flow, create: (...args) => {
+    const flow = create(...args);
+    return { ...flow, settle: () => allowed, beforeReplay: direction => { replayed = true; flow.beforeReplay(direction); } };
+  } } });
+  try {
+    writer.openWriter();
+    const root = document.getElementById("writer-doc"); assert.ok(root);
+    root.textContent = "held native text";
+    writer.closeWriter();
+    assert.equal(h.state.open, true);
+    assert.equal(root.textContent, "held native text");
+    assert.equal(writer.writerUndoStep("undo"), true);
+    assert.equal(replayed, false);
+    writer.dispose();
+    assert.equal(h.state.open, true);
+    assert.equal(root.textContent, "held native text");
+    allowed = true;
+    writer.closeWriter();
+    assert.equal(h.state.open, false);
+    assert.equal(root.textContent, "");
+  } finally { allowed = true; writer.dispose(); }
+});
+
 test("viewing-only flow host cancels input and editing keys before its surface handlers", () => {
   const h = harness();
   h.state.allowed = false;

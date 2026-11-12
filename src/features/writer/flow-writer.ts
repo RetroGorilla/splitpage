@@ -79,6 +79,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const surface = createSurface({
     ...(ports.clipboard ? { clipboard: ports.clipboard } : {}),
     ...(ports.paintedText ? { paintedText: ports.paintedText } : {}),
+    ...(ports.bufferedText ? { bufferedText: ports.bufferedText } : {}),
     root,
     lifetime: ports.lifetime,
     heldSelection: ports.heldSelection,
@@ -326,6 +327,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         return index < 0 ? 0 : index;
       }
     },
+    ...(surface.settle ? { settle: surface.settle } : {}),
     isCurrent,
     finish: () => { visual?.close(false); return isCurrent() ? surface.finish() : null; },
     repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
@@ -344,6 +346,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
     dispose: () => {
+      if (surface.settle && !surface.settle()) return;
       ports.closeFind?.();
       observer.disconnect();
       visual?.dispose();

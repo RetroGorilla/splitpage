@@ -112,6 +112,15 @@ as `not shared`; an empty operation list is a no-op. The default base is the rev
 of the projection the plan read, so a projection that fell behind refuses as
 `stale-base`. A refused list produces no change and calls no subscriber.
 
+`beforeCommand(listener)` registers local admission and returns its unsubscriber.
+An outer local `run` asks admissions before capability and planning, so a native
+buffer can commit and release held arrivals before the next command reads the
+document. A flush may itself call `run`; it skips admission recursively, while
+ordinary planning/execution/delivery re-entry is still refused before admission.
+A false admission returns `buffer-pending`, a thrown admission returns `failed`,
+and neither plans the waiting command. Disposing clears these registrations.
+The Writer uses this port only when explicitly bound to a shared buffer.
+
 | Replica result | Outcome |
 | --- | --- |
 | accepted, transaction landed | `applied`, or `committed` with the errors of undo, effects or subscribers |

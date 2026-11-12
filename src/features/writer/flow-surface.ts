@@ -15,6 +15,8 @@ import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import { createPaintedBeats } from "./flow-painted-base.ts";
+import { createWriterBuffer } from "./flow-buffer.ts";
+import type { WriterBufferPorts } from "./flow-buffer.ts";
 import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
@@ -32,6 +34,7 @@ export interface SurfacePorts {
     readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
   };
   readonly paintedText?: PaintedTextSource;
+  readonly bufferedText?: WriterBufferPorts;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
@@ -66,6 +69,7 @@ export interface SurfaceSettings {
 }
 
 export interface Surface {
+  readonly settle?: () => boolean;
   readonly finish: () => FlowRange | null;
   readonly paint: () => void;
   readonly repaint: () => void;
@@ -110,7 +114,14 @@ function beatHtml(runs: readonly Run[]): string {
   return /<br\s*\/?>$/.test(html) ? html + ZWSP : html;
 }
 
-export function createSurface(ports: SurfacePorts): Surface {
+export function createSurface(inputPorts: SurfacePorts): Surface {
+  const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: (rowId, runs) => {
+    if (buffered?.dirty()) return;
+    const row = inputPorts.doc().rows.find(row => row.id === rowId);
+    if (!row || projection(inputPorts.flow.cells(row.audioText)) !== projection(runs)) {
+      inputPorts.bufferedText?.report({ kind: "rejected", reason: "buffer-native-evidence" });
+    }
+  } } : inputPorts;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
@@ -1254,31 +1265,63 @@ export function createSurface(ports: SurfacePorts): Surface {
     return problems;
   }
 
+  const buffered = ports.bufferedText ? createWriterBuffer(ports.bufferedText, {
+    root, base: rowId => paintedBeats?.base(rowId) ?? null,
+    runs: beat => ports.decode(ports.storedHtml(beat.innerHTML.replace(ZWSP_ALL, ""))),
+    selection: () => selection(true), repaint: rowId => {
+      const el = beatEl(rowId); if (el) rendered.delete(el);
+      repaint();
+    },
+    restore: (rowId, offsets) => {
+      const exists = ports.doc().rows.some(row => row.id === rowId);
+      if (exists && offsets) place({ anchor: beatPos(rowId, offsets[0]), head: beatPos(rowId, offsets[1]) });
+      else if (!exists) {
+        const first = ports.doc().rows[0];
+        if (first) place(caretAt(beatPos(first.id, 0)));
+      }
+    },
+    changed: ports.changed
+  }) : null;
+  const ready = (event: Event): boolean => {
+    if (!buffered || buffered.finish()) return true;
+    event.preventDefault(); return false;
+  };
   const listeners: [EventTarget, string, EventListener][] = [
-    [root, "beforeinput", onBeforeInput],
-    [root, "input", onInput],
-    [root, "keydown", onKeydown as EventListener],
+    [root, "beforeinput", buffered ? event => {
+      const input = event as InputEvent, native = typeof input.getTargetRanges === "function" ? range0(input) : null;
+      if (!buffered.beforeInput(input, selection(true), native)) onBeforeInput(event);
+    } : onBeforeInput],
+    [root, "input", buffered ? event => {
+      const focus = elementOf(window.getSelection()?.focusNode ?? null);
+      repairOrphans(focus?.closest<HTMLElement>(".wr-beat") ?? null);
+      buffered.input();
+      const input = event as InputEvent;
+      if (!buffered.dirty() && input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
+      if (!buffered.dirty()) noteSelection();
+    } : onInput],
+    [root, "keydown", buffered ? event => { if ((event as KeyboardEvent).isComposing || ready(event)) onKeydown(event as KeyboardEvent); } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
       [root, "copy", onCopy as EventListener] as [EventTarget, string, EventListener],
       [root, "cut", onCut as EventListener] as [EventTarget, string, EventListener],
       [root, "paste", onPaste as EventListener] as [EventTarget, string, EventListener]
     ],
-    [root, "compositionstart", onCompositionStart],
-    [root, "compositionend", onCompositionEnd],
+    [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
+    [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
     [root, "mousedown", onMouseDown],
-    [root, "focusout", onHostBlur],
+    [root, "focusout", buffered ? event => { if (ready(event)) onHostBlur(event); } : onHostBlur],
     [window, "mouseup", onMouseUp],
-    [document, "selectionchange", onSelectionChange]
+    [document, "selectionchange", buffered ? () => { if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
   ];
   listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
   const stopClipboard = ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste });
 
   return {
-    finish,
-    paint,
-    repaint,
+    ...(buffered ? { settle: buffered.finish } : {}),
+    finish: buffered ? () => buffered.finish() ? finish() : selection(true) : finish,
+    paint: buffered ? () => { if (!buffered.dirty()) paint(); } : paint,
+    repaint: buffered ? () => { if (!buffered.dirty()) repaint(); } : repaint,
     refreshBeat: rowId => {
-      if (composing || syncingComposition) { repaintOwed = true; return; }
+      if (composing || syncingComposition || buffered?.dirty()) { repaintOwed = true; return; }
       const el = beatEl(rowId);
       const row = ports.doc().rows.find(beat => beat.id === rowId);
       if (el && row) decorate(el, row, el.getAttribute("data-num") ?? "");
@@ -1295,14 +1338,15 @@ export function createSurface(ports: SurfacePorts): Surface {
       place(range, true);
     },
     prepareVisual,
-    format,
+    format: buffered ? mark => { if (buffered.finish()) format(mark); } : format,
     pendingMarks: () => pending ? pending.marks : null,
-    apply,
+    apply: buffered ? (name, operation, before) => buffered.finish() ? apply(name, operation, before) : null : apply,
     toOwnBeat,
     domRange,
     domCheck,
-    paintedBase: rowId => paintedBeats ? paintedBeats.base(rowId) : null,
+    paintedBase: rowId => buffered?.base(rowId) ?? (paintedBeats ? paintedBeats.base(rowId) : null),
     dispose: () => {
+      if (buffered && !buffered.dispose()) return;
       stopClipboard?.();
       beatMenu.dispose();
       paintedBeats?.clear();
