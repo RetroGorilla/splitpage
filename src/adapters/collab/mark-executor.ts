@@ -6,13 +6,14 @@ import { sharedTextCommandPlan, sharedTextRange, requireSharedTextOwnership, Sha
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedMarkTranslation } from "./mark-translation.ts";
+import { sharedRangeMarkOperation } from "./mark-provenance.ts";
 
 export function prepareSharedMarkChange(operation: SharedMarkChange, view: SharedPreparationView): SharedTextOperationPreparation {
   return preparedTextOperation(() => {
     if (!isStableSharedIdentity(operation.id) || !isStableSharedIdentity(operation.by)
       || !prepareSharedMarkTranslation(operation.mark, view.writer, operation.id, [0])) throw new SharedTextPreparationError("unstable-identity");
     const plan = sharedTextCommandPlan(view, operation.target), value = plan.units.map(unit => typeof unit.value === "string" ? unit.value : "\ufffc").join("");
-    const ranges: { from: number; to: number }[] = [];
+    const ranges: { from: number; to: number }[] = [], known = view.text(plan.path)?.records ?? [];
     const resolved = operation.observed.map(reference => {
       const range = resolveSharedTextReference(view, plan, reference, "range"), clamped = sharedTextRange(value, range.from, range.to);
       requireSharedTextOwnership(view, plan, clamped.from, clamped.to); return clamped;
@@ -27,7 +28,11 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
       const active = new Set(plan.units.slice(range.from, range.to).flatMap(unit => unit.additions));
       const translated = prepareSharedMarkTranslation(operation.mark, view.writer, operation.id, [index], plan.additions.filter(addition => active.has(addition.identity)));
       if (!translated) throw new SharedTextPreparationError("unstable-identity");
-      const record = prepareTextMarkWrite(plan, view, JSON.stringify(["range-mark", operation.id, index]), range.from, range.to, translated);
+      // why: an occurrence names the same change it had seen, so the undo of that one leaves this one.
+      const seen = translated.type === "add" ? known.filter(item => item.record.type === "add" && item.record.born === null
+        && item.record.mark.kind === translated.mark.kind && item.record.mark.value === translated.mark.value && item.from !== null && item.to !== null
+        && plan.native.after[item.from] === range.from && plan.native.before[item.to] === range.to).map(item => item.identity) : [];
+      const record = prepareTextMarkWrite(plan, view, sharedRangeMarkOperation(operation.id, index, seen), range.from, range.to, translated);
       if (record.kind !== "record") throw new SharedTextPreparationError("invalid-mark-plan");
       return { kind: "mark", target: plan.target, plan: record };
     });
