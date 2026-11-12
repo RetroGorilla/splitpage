@@ -1,7 +1,7 @@
 import { canonicalSharedProjection } from "../../core/collab/projection/canonical.ts";
 import type { SharedProjectionKind } from "../../core/collab/projection/canonical.ts";
 
-export type SharedProjectionWork = "segment" | "visual" | "record" | "fields" | "group" | "cell" | "snapshot" | "compare-row" | "compare-field";
+export type SharedProjectionWork = "segment" | "visual" | "record" | "fields" | "group" | "cell" | "snapshot" | "compare-row" | "compare-field" | "broll-scan";
 
 export class SharedProjectionCache {
   private readonly slots = new Map<string, { readonly dependencies: readonly unknown[]; readonly value: unknown; readonly children: ReadonlySet<string> }>();
@@ -9,12 +9,12 @@ export class SharedProjectionCache {
   private readonly building: Set<string>[] = [];
   private readonly canonicalValues = new WeakMap<object, Map<SharedProjectionKind, unknown>>();
 
-  private readonly count: ((work: SharedProjectionWork, key: string) => void) | undefined;
-  constructor(count?: (work: SharedProjectionWork, key: string) => void) { this.count = count; }
+  private readonly count: ((work: SharedProjectionWork, key: string, units?: number) => void) | undefined;
+  constructor(count?: (work: SharedProjectionWork, key: string, units?: number) => void) { this.count = count; }
 
   begin(): void { this.used.clear(); }
   end(): void { for (const key of this.slots.keys()) if (!this.used.has(key)) this.slots.delete(key); }
-  counted(work: SharedProjectionWork, key: string): void { this.count?.(work, key); }
+  counted(work: SharedProjectionWork, key: string, units?: number): void { this.count?.(work, key, units); }
 
   read<T>(slot: readonly string[], dependencies: readonly unknown[], build: () => T, work?: SharedProjectionWork): T {
     const key = JSON.stringify(slot), previous = this.slots.get(key);

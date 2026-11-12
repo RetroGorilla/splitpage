@@ -27,7 +27,7 @@ test("incremental join separator register changes only its joined row after a me
     const measured = measureLibraryReads(run.a, "R2", () => transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.meta.set(field, "")), docs);
     assert.equal(projector.read().document.rows[0]?.audioText, "onetwo");
     assert.equal(projector.read().document.rows[1], untouched);
-    assert.deepEqual(work, ["group:R1", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
+    assert.deepEqual(work, ["group:R1", "broll-scan:[\"R1\",\"audioText\"]", "cell:[\"R1\",\"audioText\"]", "compare-row:R1", "compare-field:comments"]);
     assert.equal(measured.totals.texts, 0); assert.equal(measured.totals.markEntries, 0);
     assert.deepEqual(measured.unrelated, { texts: 0, markEntries: 0, records: 0, statusEntries: 0, orderEntries: 0 });
     assertIncremental(run.a, projector);

@@ -21,7 +21,7 @@ export interface SharedIncrementalProjector {
 }
 
 export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
-  count?: (work: SharedProjectionWork, key: string) => void): SharedIncrementalProjector {
+  count?: (work: SharedProjectionWork, key: string, units?: number) => void): SharedIncrementalProjector {
   const state = collabState(handle);
   if (state.destroyed) throw new Error("Shared document has ended");
   const mirror = createSharedDocument(), replica = collabState(mirror);

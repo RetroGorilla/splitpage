@@ -121,9 +121,9 @@ test("over the adapter the session's document and report come from the increment
     assert.deepEqual(entered.slice(1).map((document, at) => document.rows.map((row, index) => row === entered[at]?.rows[index])),
       [[true, false, true], [false, true, true], [true, true, false]]);
     assert.deepEqual(work, [
-      "segment:b:R2", "group:R2", "cell:[\"R2\",\"audioText\"]", "compare-row:R2", "compare-field:comments",
+      "segment:b:R2", "group:R2", "broll-scan:[\"R2\",\"audioText\"]", "cell:[\"R2\",\"audioText\"]", "compare-row:R2", "compare-field:comments",
       "fields:R1", "group:R1", "compare-row:R1", "compare-field:comments",
-      "segment:b:R3", "group:R3", "cell:[\"R3\",\"audioText\"]", "compare-row:R3", "compare-field:comments"
+      "segment:b:R3", "group:R3", "broll-scan:[\"R3\",\"audioText\"]", "cell:[\"R3\",\"audioText\"]", "compare-row:R3", "compare-field:comments"
     ]);
     assert.deepEqual(told, [
       ["edit", { ...ROWS, changed: [{ id: "R2", fields: ["audioText"] }] }],
