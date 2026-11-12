@@ -12,13 +12,37 @@ real replica port are packages 9, 12, 13 and 14.
 | Field | Meaning |
 | --- | --- |
 | `revision()` | A number that advances once for each transaction that changed the document |
-| `project()` | The whole document as a plain object |
+| `project()` | The whole document as a plain object. It may be frozen and share rows with the one before; the entry must not write to it |
+| `changes()` | Which rows and document fields differ between the document `project()` gives and the one it gave before |
 | `execute(operations, { base })` | Runs one list of operations as one transaction, or refuses it with a reason |
 | `observe(listener)` | Calls the listener after each transaction with its origin, or `null` |
 
 The other ports are the standalone session's: `entry`, `undo.record`, `effects`,
-`capability`, `report`, `timers`. There is no attribution port. Tests build the
-replica port from the adapter in `tests/application/session/shared-session-support.ts`.
+`capability`, `report`, `timers`. There is no attribution port.
+
+`createSharedReplica(handle)` in `src/adapters/collab/replica.ts` builds the replica
+port on the incremental projector: `revision()`, `project()` and `changes()` read one
+published projection, and `observe` tells the session once per publication. The
+session therefore never projects the whole document; a transaction that changed
+nothing is not published and does not reach it. Nothing in the running app calls it
+yet. Tests use it through `adapterReplica` in
+`tests/application/session/shared-session-support.ts`.
+
+## The changed-rows port
+
+`subscribeRows(listener)` on the shared session calls `listener(rows, change)` once
+per published change, after the change's ordinary subscribers. `rows` is the
+projection's report (`SharedProjectionChanges`, see
+[stage-2-incremental-projection.md](stage-2-incremental-projection.md#the-report-of-which-rows-changed)):
+added, removed, moved and changed rows, and changed document fields. An adoption,
+and the first change after a projection that threw, give the whole document. No
+feature paints from it yet.
+
+Its row ids are the projection's. The change set beside it is still compared between
+two held documents, which are the entry's output (see "The entry port"), so the two
+can name a row differently until the entry of package 14. With that entry the
+comparison of held documents, and the copy the tests' entry makes of every
+projection, can go.
 
 ## One transaction, one change
 
@@ -43,9 +67,8 @@ and reported through `report` as an unrecognised origin.
 "Compared" is `changesBetween(before, after)` in `projection-changes.ts`: the cells of
 kept beats whose value differs, inserted and removed beat ids, whether kept beats
 changed order, and the document fields whose value differs. A repeated beat id on
-either side gives the whole document. The owner projects the whole document per
-transaction in one function, `projectionStep`, which the incremental projector (6c)
-replaces; the precise set is the contract.
+either side gives the whole document. The owner takes each next document from the
+replica port in one function, `projectionStep`; the precise set is the contract.
 
 The held document is what the `entry` port returns for the projection, and the set
 is compared between two held documents: see "The entry port" below for what that
@@ -60,7 +83,7 @@ after another person's change subscribes and asks for them.
 projected at, in one call. A painter records a base only when that revision equals
 the one the replica reports at that moment.
 
-The owner projects inside the replica's notification for the transaction, the same
+The owner takes the projection inside the replica's notification for the transaction, the same
 synchronous step that applied it, and sets the document and the revision together
 before it publishes. The pair is therefore behind the replica in two places only:
 for an observer the replica tells before the session, during that notification; and
@@ -160,5 +183,5 @@ local person's. This owner answers for itself; the rest is named for its package
 Package 14 also follows the session-mode and captured-save lifetime obligations
 in [Shared sessions and local file saving](stage-2-disabled-file-saving.md#package-14-obligations).
 
-`tests/collab/shared-session-mutants.json` holds eleven, each listed in
+`tests/collab/shared-session-mutants.json` holds fourteen, each listed in
 `tests/collab/mutants.md` with the test that fails.
