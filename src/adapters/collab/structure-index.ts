@@ -8,7 +8,7 @@ import { readProjectionFields, readProjectionHead } from "./projection-reader.ts
 import { freezeSharedPreparedValue, sharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
 import { sharedEmbedChangeReader } from "./embed-changes.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { readSharedRemovalState } from "./removal-state.ts";
+import { readSharedRemovalState, readSharedHeadingRemovalState } from "./removal-state.ts";
 import { createSharedJoinIndex } from "./join-index.ts";
 import type { SharedJoinIndex } from "./join-index.ts";
 import { sharedJoinEndpointOffset, readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
@@ -22,6 +22,7 @@ export interface SharedStructureIndex {
   readonly segment: (id: string) => SharedProjectionStream | undefined;
   readonly records: (name: string) => readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null }[];
   readonly heading: (id: string) => boolean;
+  readonly headingRemoved: (id: string) => boolean;
   readonly candidates: (name: string, heading: boolean) => readonly string[];
   readonly order: ReturnType<typeof observeSharedStructureOrder>;
   readonly removed: (id: string) => boolean;
@@ -39,7 +40,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   indexes ??= new WeakMap(); const previous = indexes.get(handle); if (previous) return previous;
   const state = collabState(handle); assertSharedDocumentIdle(state);
   const order = observeSharedStructureOrder(handle), segments = new Map<string, IndexedStructureSegment>(), embeds = sharedEmbedChangeReader(handle);
-  const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>();
+  const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>(), removedHeadings = new Set<string>();
   const removed = new Set<string>();
   let joinIndex: ReturnType<typeof createSharedJoinIndex> | null = null;
   const bindingSegments = new Map<string, readonly string[]>(), segmentBindings = new Map<string, Set<string>>();
@@ -104,7 +105,13 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     records.set(key, Object.freeze({ id: key, valid: fields?.id === key, segment: typeof fields?.segment === "string" ? fields.segment : null }));
     member(recordNames, cleanId(key), key, true);
   };
-  const updateHeading = (key: string) => { headings.delete(key); if (readProjectionFields(state.roots.headings.get(key), "heading")) headings.add(key); };
+  const updateHeading = (key: string) => {
+    headings.delete(key); removedHeadings.delete(key);
+    const raw = state.roots.headings.get(key), entries = new Map<string, unknown>(); if (!(raw instanceof Y.Map)) return;
+    raw.forEach((value, field) => entries.set(field, value));
+    if (readProjectionFields(entries, "heading")) headings.add(key);
+    if (readSharedHeadingRemovalState(entries.keys(), field => entries.get(field)).removed) removedHeadings.add(key);
+  };
   const observe = (root: Y.Map<unknown>, update: (key: string) => unknown, fields: readonly string[], textChanges = false) => {
     const listener: Parameters<typeof root.observeDeep>[0] = (events, transaction) => guardSharedCallback(state, () => {
       if (root === state.roots.beats) joinIndex?.changed(events);
@@ -115,6 +122,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
         else if (textChanges && event.path.length === 2 && event.path[1] === "text" && event.target instanceof Y.Text) texts.set(event.target, String(event.path[0]));
         else if (event.path.length === 1 && event instanceof Y.YMapEvent && [...event.keysChanged].some(key => fields.includes(key as string))) changed.add(String(event.path[0]));
         else if (root === state.roots.beats && event.path.length === 2 && event.path[1] === "removals") changed.add(String(event.path[0]));
+        else if (root === state.roots.headings && event.path.length === 1 && event instanceof Y.YMapEvent) changed.add(String(event.path[0]));
       }
       for (const key of changed) { const text = update(key); if (text instanceof Y.Text) rescanned.add(text); }
       if (texts.size) for (const change of embeds.read(transaction)) {
@@ -138,7 +146,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     observe(state.roots.gallery, key => { if (attachmentsReady) updateGallery(key); }, ["beat"]), observe(state.roots.meta, updateBinding, [])];
   state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
   const attachmentIndex: SharedAttachmentOwnership = Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) });
-  const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), removed: (id: string) => removed.has(id),
+  const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), headingRemoved: (id: string) => removedHeadings.has(id), removed: (id: string) => removed.has(id),
     joins: () => { if (!joinIndex) { assertSharedDocumentIdle(state); joinIndex = createSharedJoinIndex(state.roots.beats); } return joinIndex.index; },
     endpoint: (position: SharedJoinEndpointPosition) => sharedJoinEndpointOffset(position, state.doc, segments.get(position.segment)?.text),
     joinSegments: (join: string) => Object.freeze([...(bindingSegments.get(join) ?? [])]),

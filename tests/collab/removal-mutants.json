@@ -53,5 +53,17 @@
     "find": "...sharedPendingAttachmentKeys(view, collection),",
     "replace": "",
     "tests": ["tests/adapters/collab/removal-pending-records.test.ts"]
+  }, {
+    "label": "removed heading stays a scene",
+    "file": "src/adapters/collab/project.ts",
+    "find": "if (!source.headingRemoved(block.id)) return [heading];",
+    "replace": "return [heading];",
+    "tests": ["tests/adapters/collab/heading-removal.test.ts"]
+  }, {
+    "label": "old heading restore cancels fresh removal",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "        if (!state.removed || state.generation !== target.generation || !view.has([\"headings\", target.beat, field])) continue;\n        if (!resolveSharedRestorableHeading(view, target.beat)) throw new SharedStructurePreparationError(\"missing-target\");\n        writes.push({ kind: \"set\", path: [\"headings\", target.beat, field], value: { generation: target.generation, removed: false } });",
+    "replace": "        if (!state.removed || !view.has([\"headings\", target.beat, field])) continue;\n        if (!resolveSharedRestorableHeading(view, target.beat)) throw new SharedStructurePreparationError(\"missing-target\");\n        writes.push({ kind: \"set\", path: [\"headings\", target.beat, field], value: { generation: state.generation ?? 0, removed: false } });",
+    "tests": ["tests/adapters/collab/heading-removal.test.ts"]
   }]
 }
