@@ -13,6 +13,7 @@ import { holdSharedBuffer, sharedBufferDeliveryBusy } from "./ingress.ts";
 import { readSharedPaintedText } from "./paint-base.ts";
 import { resolveSharedBufferedSelection } from "./buffer-selection.ts";
 import { sharedAnchorCharacterEnd } from "./anchors.ts";
+import { collabState } from "./state.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 
 export function sharedBufferedTarget(_handle: SharedDocumentHandle, rowId: string): SharedTextAddress {
