@@ -84,16 +84,19 @@ function settleIngress(state: CollabDocumentState): void {
 }
 
 // why: The outermost adapter write owns the end of its notifications: the gate opens and the held updates apply here.
-export function sharedWriteFrame<T>(state: CollabDocumentState, write: () => T): T {
+export function sharedWriteFrame<T>(state: CollabDocumentState, write: (recordFailure: (error: unknown) => void) => T): T {
   const gate = state.ingress;
   if (gate.frames) {
     gate.frames++;
-    try { return write(); } finally { gate.frames--; }
+    try { return write(() => {}); } finally { gate.frames--; }
   }
   let result: { value: T } | null = null;
+  const failure = { recorded: false, error: undefined as unknown };
+  const recordFailure = (error: unknown): void => { failure.recorded = true; failure.error = error; gate.errors.push(error); };
   gate.frames = 1;
   try {
-    try { result = { value: write() }; } catch (error) { gate.errors.push(error); }
+    try { result = { value: write(recordFailure) }; }
+    catch (error) { if (!failure.recorded || !Object.is(failure.error, error)) gate.errors.push(error); }
     settleIngress(state);
   } finally { gate.frames = 0; }
   const errors = gate.errors.splice(0);
@@ -102,7 +105,7 @@ export function sharedWriteFrame<T>(state: CollabDocumentState, write: () => T):
   return result.value;
 }
 
-function runCollabTransaction(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void): void {
+function runCollabTransaction(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void, recordFailure?: (error: unknown) => void): void {
   const requested: unknown = origin;
   if (requested === "cleanup") throw new Error("Cleanup origin is assigned only to checked formatting maintenance");
   const ticket = {};
@@ -121,14 +124,16 @@ function runCollabTransaction(state: CollabDocumentState, origin: Exclude<Shared
       state.fresh = false;
       const previous = state.hydrating;
       state.hydrating = state.hydrationTransactions.has(transaction);
-      try { change(); } finally { state.hydrating = previous; }
+      try { change(); }
+      catch (error) { recordFailure?.(error); throw error; }
+      finally { state.hydrating = previous; }
     }, ticket);
   } finally { state.pendingTickets.delete(ticket); }
 }
 
 export function transactCollabState(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void, execution?: object): void {
   assertSharedDocumentIdle(state, execution);
-  sharedWriteFrame(state, () => runCollabTransaction(state, origin, change));
+  sharedWriteFrame(state, recordFailure => runCollabTransaction(state, origin, change, recordFailure));
 }
 
 export function collabState(handle: SharedDocumentHandle): CollabDocumentState {

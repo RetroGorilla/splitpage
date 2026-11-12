@@ -190,6 +190,27 @@ test("two callbacks that throw are thrown together after the drain, in the order
   } finally { run.close(); }
 });
 
+test("a failing transaction body is reported before its failing subscriber, once each, after the held update drains", () => {
+  const run = recordReplicas(2, SOURCE);
+  try {
+    const [incoming] = written(run.a, [["R1", 7]]);
+    assert.ok(incoming);
+    const bodyError = new Error("body failed"), callbackError = new Error("callback failed"), seen: Seen[] = [];
+    const stop = observeSharedTransactions(run.b, () => { if (readSharedRevision(run.b) === 2) throw callbackError; });
+    const detach = watch(run.b, seen);
+    const error = thrown(() => transactSharedDocument(run.b, "local-command", () => {
+      collabState(run.b).roots.meta.set("local", true);
+      assert.deepEqual(applySharedUpdate(run.b, incoming), { ok: true });
+      throw bodyError;
+    }));
+    stop(); detach();
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [bodyError, callbackError]);
+    assert.deepEqual(seen, [["local-command", 2, [null, null]], ["remote", 3, [7, null]]]);
+    assert.deepEqual(gate(run.b), [0, 0, 0]);
+  } finally { run.close(); }
+});
+
 for (const event of ["afterAllTransactions", "beforeTransaction"] as const) {
   test(`an update that arrives during the drain, from the library's ${event} event of a held update, joins the tail of the queue`, () => {
     const run = recordReplicas(3, SOURCE);
