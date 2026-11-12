@@ -22,6 +22,7 @@ export function readSharedPaintedText(handle: SharedDocumentHandle, address: Sha
   }
   if (whole.length !== found.text.length) return null;
   let positions = Array.from({ length: whole.length }, (_, index) => index);
+  let end = whole.length;
   if (target.field === "visualText" && found.container.get("beat") !== target.owner) return null;
   if (target.field === "audioText" || target.field === "heading") {
     const preparation = createSharedPreparation(handle);
@@ -30,6 +31,7 @@ export function readSharedPaintedText(handle: SharedDocumentHandle, address: Sha
       const span = sharedStructureSpans(preparation.view, target.segment, units).find(span => span.owner === target.owner && span.field === target.field);
       if (!span) return null;
       positions = span.positions;
+      end = span.to;
     } finally { preparation.close(); }
   }
   const length = positions.length;
@@ -56,5 +58,6 @@ export function readSharedPaintedText(handle: SharedDocumentHandle, address: Sha
     const relative = [...Y.encodeRelativePosition(Y.createRelativePositionFromJSON({ item, assoc: 0 }))];
     return readSharedAnchor(JSON.stringify({ ...frame, relative }));
   }
-  return Object.freeze({ revision, text: positions.map(position => whole.charAt(position)).join(""), identity });
+  const endGap = encodeCollabTextAnchor(found.text, target, end, "before");
+  return Object.freeze({ revision, text: positions.map(position => whole.charAt(position)).join(""), identity, endGap, ...(length ? {} : { emptyGap: endGap }) });
 }

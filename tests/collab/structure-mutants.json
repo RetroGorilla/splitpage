@@ -95,5 +95,11 @@
     "find": "raw.field === \"title\" ? collabPurposeTextTarget(handle, raw, \"opaque-title-label\") : collabProjectedTextTarget(handle, raw)",
     "replace": "collabProjectedTextTarget(handle, raw) ?? collabPurposeTextTarget(handle, raw, \"stored-anchor-read\")",
     "tests": ["tests/adapters/collab/native-text-purpose.test.ts"]
+  }, {
+    "label": "painted end gap escapes its projected split fragment",
+    "file": "src/adapters/collab/paint-base.ts",
+    "find": "end = span.to;",
+    "replace": "end = whole.length;",
+    "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
   }]
 }

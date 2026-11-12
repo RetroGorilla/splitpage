@@ -7,7 +7,7 @@ import { encodeSharedState, readSharedRevision } from "../../../src/adapters/col
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
-import { createSharedAnchor, sharedAnchorCharacterEnd } from "../../../src/adapters/collab/anchors.ts";
+import { createSharedAnchor, sharedAnchorCharacterEnd, resolveSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
@@ -23,6 +23,27 @@ const NEW = structureIdentityFixture("1", "enter", "beat");
 const SOURCE: SharedTextAddress = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" };
 const CREATED: SharedTextAddress = { owner: ref(NEW), segment: ref("b:R1"), field: "audioText" };
 const structurePorts = { cells: createFlowLoadRuntime().cells };
+
+test("an empty inline split half paints its own gap and accepts typing without entering the next beat", () => {
+  const set = replicas(3, { rows: [{ id: "R1", audioText: "abcd" }] });
+  try {
+    registerSharedSplitHandlers(set.a, structurePorts); registerSharedTextOperationHandlers(set.a);
+    const right = createSharedAnchor(set.a, SOURCE, 0, "after"); assert.ok(right);
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "split", id: "enter", by: "Writer", target: SOURCE,
+      at: { left: null, right, affinity: "before" }, observed: [], boundary: "new-boundary", beat: "new-beat", fields: {} })]), { ok: true });
+    set.queue.flush("dup");
+    agree("empty inline gap", "dup", [set.a, set.b, set.c], handle => {
+      const painted = read(handle, SOURCE); assert.ok(painted.endGap && painted.emptyGap);
+      assert.equal(painted.endGap, painted.emptyGap);
+      return { text: painted.text, gap: resolveSharedAnchor(handle, painted.emptyGap) };
+    }, { text: "", gap: { segment: "b:R1", offset: 0 } });
+    const painted = read(set.a, SOURCE); assert.ok(painted.emptyGap);
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "text-insert", id: "fill", by: "Writer", target: SOURCE,
+      at: { left: null, right: painted.emptyGap, affinity: "before" }, content: [{ value: "X", marks: [] }] })], { base: painted.revision }), { ok: true });
+    set.queue.flush("rev");
+    agree("fill empty inline half", "rev", [set.a, set.b, set.c], handle => [read(handle, SOURCE).text, read(handle, CREATED).text], ["X", "abcd"]);
+  } finally { set.close(); }
+});
 
 test("created visual text has one flow-shaped address for painted reads and executor writes", () => {
   const set = replicas(3, { rows: [{ id: "R1", audioText: "ab" }] });
@@ -94,6 +115,9 @@ for (const before of [false, true]) test(`after a ${before ? "prefix " : ""}spli
   const { set, whole, first, second } = splitAtD(before);
   try {
     const head = read(set.a, first), tail = read(set.a, second);
+    assert.ok(head.endGap && tail.endGap);
+    assert.deepEqual(resolveSharedAnchor(set.a, head.endGap), { segment: "b:R1", offset: 4 });
+    assert.deepEqual(resolveSharedAnchor(set.a, tail.endGap), { segment: "b:R1", offset: 8 });
     assert.deepEqual([head.text, tail.text], ["ab￼c", "def"]);
     assert.deepEqual([head.revision, tail.revision, readSharedRevision(set.a)], [2, 2, 2]);
     const heads = units(head), tails = units(tail);

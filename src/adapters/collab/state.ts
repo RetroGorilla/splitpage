@@ -24,6 +24,7 @@ export class IngressGate {
   declinedReports = 0;
   readonly declineListeners = new Set<() => void>();
   frames = 0;
+  notifications = 0;
 }
 
 export class CollabDocumentState {
@@ -62,16 +63,24 @@ export function assertNoSharedExecution(state: CollabDocumentState): void {
   if (state.execution) throw new SharedExecutionWriteError();
 }
 
+export function assertSharedIngressAllowed(state: CollabDocumentState): void {
+  if (state.execution && (state.execution.applying || !state.ingress.notifications)) throw new SharedExecutionWriteError();
+}
+
 export function assertSharedDocumentIdle(state: CollabDocumentState, execution?: object): void {
   if (state.execution && state.execution !== execution || state.ingress.holds.has("delivering")) throw new SharedExecutionWriteError();
 }
 
 // why: A throw inside the library's cleanup would abort it; the error is kept and thrown after the drain.
 export function guardSharedCallback(state: CollabDocumentState, call: () => void): void {
-  try { call(); } catch (error) {
-    if (!state.ingress.frames) throw error;
-    state.ingress.errors.push(error);
-  }
+  const gate = state.ingress;
+  gate.notifications++;
+  try {
+    try { call(); } catch (error) {
+      if (!gate.frames) throw error;
+      gate.errors.push(error);
+    }
+  } finally { gate.notifications--; }
 }
 
 function settleIngress(state: CollabDocumentState): void {
