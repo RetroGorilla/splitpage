@@ -10,7 +10,7 @@ import { insertSharedHtml } from "../../../src/adapters/collab/text-import.ts";
 import { collabTextTarget, createCollabText } from "../../../src/adapters/collab/text-target.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { operation, ref } from "./executor-support.ts";
-import { deliveryReplica, validatedFixture } from "./helpers.ts";
+import { createMonitoredSharedDocument, deliveryReplica, validatedFixture } from "./helpers.ts";
 import { recordReplicas } from "./record-support.ts";
 
 const SOURCE = { title: "Title", rows: [{ id: "R1", audioText: "ab", status: "todo" }, { id: "R2", audioText: "cd", status: "todo" }] };
@@ -56,6 +56,8 @@ test("received updates that arrive during a notification are held and applied in
     const [first, second, third] = written(run.a, [["R1", 7], ["R2", 9], ["R1", 8]]);
     assert.ok(first && second && third);
     const pending = [second, third], results: unknown[] = [], early: Seen[] = [], late: Seen[] = [];
+    let updates = 0;
+    const count = observeSharedUpdates(run.b, () => { updates++; });
     const stop = observeSharedTransactions(run.b, origin => {
       for (let next = pending.shift(); next; next = pending.shift()) results.push([applySharedUpdate(run.b, next), readSharedRevision(run.b), lengths(run.b)]);
       early.push([origin, readSharedRevision(run.b), lengths(run.b)]);
@@ -63,12 +65,55 @@ test("received updates that arrive during a notification are held and applied in
     const detach = watch(run.b, late);
     assert.deepEqual([readSharedRevision(run.b), lengths(run.b)], [1, [null, null]]);
     assert.deepEqual(applySharedUpdate(run.b, first), { ok: true });
-    stop(); detach();
+    stop(); detach(); count();
     assert.deepEqual(results, [[{ ok: true }, 2, [7, null]], [{ ok: true }, 2, [7, null]]]);
     assert.deepEqual(early, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]]]);
     assert.deepEqual(late, [["remote", 2, [7, null]], ["remote", 3, [7, 9]], ["remote", 4, [8, 9]]]);
+    assert.equal(updates, 3);
     assert.deepEqual(gate(run.b), [0, 0, 0]);
   } finally { run.close(); }
+});
+
+test("receiving U1 then queuing duplicate U1 and U2 notifies revisions [1, 1, 2]", () => {
+  const source = createMonitoredSharedDocument(), target = createMonitoredSharedDocument();
+  try {
+    const updates: Uint8Array[] = [], seen: [number, unknown][] = [];
+    const collect = observeSharedUpdates(source, update => { updates.push(update); });
+    for (const value of [1, 2]) transactSharedDocument(source, "local-command", () => collabState(source).roots.meta.set("step", value));
+    collect();
+    const [first, second] = updates;
+    assert.ok(first && second);
+    const pending = [first, second];
+    const stop = observeSharedTransactions(target, () => {
+      seen.push([readSharedRevision(target), collabState(target).roots.meta.get("step")]);
+      for (let next = pending.shift(); next; next = pending.shift()) assert.deepEqual(applySharedUpdate(target, next), { ok: true });
+    });
+    assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+    stop();
+    assert.deepEqual(seen, [[1, 1], [1, 1], [2, 2]]);
+    assert.deepEqual(gate(target), [0, 0, 0]);
+  } finally { destroySharedDocument(source); destroySharedDocument(target); }
+});
+
+test("receiving U1 then queuing dependency-waiting U3 before U2 notifies revisions [1, 1, 2]", () => {
+  const source = createMonitoredSharedDocument(), target = createMonitoredSharedDocument();
+  try {
+    const updates: Uint8Array[] = [], seen: [number, unknown][] = [];
+    const collect = observeSharedUpdates(source, update => { updates.push(update); });
+    for (const value of [1, 2, 3]) transactSharedDocument(source, "local-command", () => collabState(source).roots.meta.set("step", value));
+    collect();
+    const [first, second, third] = updates;
+    assert.ok(first && second && third);
+    const pending = [third, second];
+    const stop = observeSharedTransactions(target, () => {
+      seen.push([readSharedRevision(target), collabState(target).roots.meta.get("step")]);
+      for (let next = pending.shift(); next; next = pending.shift()) assert.deepEqual(applySharedUpdate(target, next), { ok: true });
+    });
+    assert.deepEqual(applySharedUpdate(target, first), { ok: true });
+    stop();
+    assert.deepEqual(seen, [[1, 1], [1, 1], [2, 3]]);
+    assert.deepEqual(gate(target), [0, 0, 0]);
+  } finally { destroySharedDocument(source); destroySharedDocument(target); }
 });
 
 test("an invalid update that arrives during a notification is refused at once and nothing is held for it", () => {

@@ -3,6 +3,8 @@
 Each shared document handle has one gate, `IngressGate` in `src/adapters/collab/state.ts`.
 It makes one promise: a revision is announced with exactly its own change. An observer
 that reads the revision and the document during a notification never sees a later write.
+There is one notification per transaction; the revision advances only when the transaction
+changed the document. Duplicate and dependency-waiting updates can repeat a revision.
 
 The library applies a write nested in a notification at once and announces it afterwards.
 Without the gate an observer told about revision 2 could read a document that already
