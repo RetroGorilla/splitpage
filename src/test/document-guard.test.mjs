@@ -9,7 +9,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 (await import("../application/identity/document-guard.ts")).startDocumentGuard(documentGuardAsked(location.search), console.error);
 
 const { DocumentWriteError, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../application/identity/document-guard.ts");
-const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
+const { currentDocument, heldDocument, liveDocumentPort, standaloneSession, runDocumentEdit, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { beatLengthCommand } = await import("../application/commands/beat-length.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -137,7 +137,7 @@ test("a view handed to the session is unwrapped: a replacement and a disk update
   assert.deepEqual(viewsIn(heldDocument()), []);
   const theirs = script("Theirs");
   theirs.rows.push(shown().rows[1]);
-  liveSession().absorbDisk(theirs);
+  standaloneSession().absorbDisk(theirs);
   assert.equal(heldDocument(), theirs);
   assert.deepEqual(viewsIn(heldDocument()), []);
 });

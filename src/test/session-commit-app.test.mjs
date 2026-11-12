@@ -6,7 +6,7 @@ import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts"
 
 await bootApp();
 
-const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
+const { liveSession, standaloneSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { cycleRowStatus } = await import("../bootstrap/wiring/beat-status.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.ts");
@@ -159,8 +159,8 @@ test("the dirty effect itself writes no document content, for a named editor too
   named();
   const doc = fresh();
   const before = JSON.stringify(doc);
-  liveSession().settle("disk");
-  liveSession().noteEdit();
+  standaloneSession().settle("disk");
+  standaloneSession().noteEdit();
   assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(unsavedChanges(), true);
 });

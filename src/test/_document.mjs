@@ -1,6 +1,6 @@
 import { preferencesStarted, startPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { locationStarted, startLocation } from "../bootstrap/wiring/location-owner.ts";
-import { liveSession, sessionStarted } from "../bootstrap/wiring/session-owner.ts";
+import { standaloneSession, sessionStarted } from "../bootstrap/wiring/session-owner.ts";
 import { appSessionDeps } from "./_app-session.mjs";
 import { startTestSession } from "./_session.mjs";
 import { savesStarted, startSaves } from "../bootstrap/wiring/save-owners.ts";
@@ -32,6 +32,6 @@ export function loadTestDocument(doc) {
       stop: () => {}
     });
   }
-  liveSession().adopt(doc);
+  standaloneSession().adopt(doc);
   return doc;
 }

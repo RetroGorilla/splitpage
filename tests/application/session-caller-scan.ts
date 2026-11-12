@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
@@ -89,6 +89,95 @@ export function liveSessionMembers(): Record<string, string[]> {
     };
     visit(source);
     if (members.length) found[source.fileName] = members.sort();
+  }
+  return found;
+}
+
+export function untypedStandaloneAccesses(probe?: string): Record<string, string[]> {
+  const folder = join(REPO, "src/test");
+  const roots = readdirSync(folder).filter((name) => name.endsWith(".mjs")).sort().map((name) => join(folder, name));
+  const options: ts.CompilerOptions = {
+    allowJs: true,
+    noEmit: true,
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    allowImportingTsExtensions: true,
+    skipLibCheck: true
+  };
+  const host = ts.createCompilerHost(options);
+  const probePath = join(folder, "session-caller-probe.mjs");
+  const read = host.readFile;
+  if (probe !== undefined) {
+    roots.push(probePath);
+    host.readFile = (path) => path.split("\\").join("/") === probePath.split("\\").join("/") ? probe : read(path);
+  }
+  const program = ts.createProgram(roots, options, host);
+  const checker = program.getTypeChecker();
+  const contract = program.getSourceFile(join(REPO, "src/application/session/document-session.ts"));
+  if (!contract) throw new Error("Session contract was not loaded");
+  const interfaces = contract.statements.filter(ts.isInterfaceDeclaration);
+  const common = interfaces.find((node) => node.name.text === "CommonDocumentSession");
+  const standalone = interfaces.find((node) => node.name.text === STANDALONE);
+  if (!common || !standalone) throw new Error("Session interfaces were not loaded");
+  const commonType = checker.getTypeAtLocation(common);
+  const members = new Set(checker.getPropertiesOfType(checker.getTypeAtLocation(standalone)).map((member) => member.name));
+  function literalName(node: ts.Node): string | null {
+    if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isComputedPropertyName(node) && ts.isStringLiteralLike(node.expression)) return node.expression.text;
+    return null;
+  }
+  function nestedType(from: ts.Type, name: string, at: ts.Node): ts.Type | null {
+    const property = checker.getPropertyOfType(from, name);
+    return property ? checker.getTypeOfSymbolAtLocation(property, at) : null;
+  }
+  function binding(pattern: ts.ObjectBindingPattern, from: ts.Type, accesses: string[]): void {
+    for (const element of pattern.elements) {
+      if (element.dotDotDotToken) continue;
+      const name = literalName(element.propertyName ?? element.name);
+      if (name === null) continue;
+      if (from === commonType && members.has(name)) accesses.push(name);
+      if (ts.isObjectBindingPattern(element.name)) {
+        const type = nestedType(from, name, element);
+        if (type) binding(element.name, type, accesses);
+      }
+    }
+  }
+  function assignment(pattern: ts.ObjectLiteralExpression, from: ts.Type, accesses: string[]): void {
+    for (const property of pattern.properties) {
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) continue;
+      const name = literalName(property.name);
+      if (name === null) continue;
+      if (from === commonType && members.has(name)) accesses.push(name);
+      if (ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer)) {
+        const type = nestedType(from, name, property);
+        if (type) assignment(property.initializer, type, accesses);
+      }
+    }
+  }
+  const found: Record<string, string[]> = {};
+  for (const path of roots) {
+    if (probe !== undefined && path !== probePath) continue;
+    const source = program.getSourceFile(path);
+    if (!source) throw new Error("Session caller was not loaded");
+    const accesses: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+        const key = ts.isPropertyAccessExpression(node) ? node.name.text
+          : ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
+        if (key && members.has(key) && checker.getTypeAtLocation(node.expression) === commonType) accesses.push(key);
+      }
+      if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer) {
+        binding(node.name, checker.getTypeAtLocation(node.initializer), accesses);
+      }
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isObjectLiteralExpression(node.left)) {
+        assignment(node.left, checker.getTypeAtLocation(node.right), accesses);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    if (accesses.length) found[relative(REPO, path).split("\\").join("/")] = accesses.sort();
   }
   return found;
 }

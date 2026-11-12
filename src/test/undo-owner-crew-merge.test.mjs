@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument, liveSession } from "../bootstrap/wiring/session-owner.ts";
+import { currentDocument, liveSession, standaloneSession } from "../bootstrap/wiring/session-owner.ts";
 import { setShotsCommand } from "../application/commands/broll-records.ts";
 import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
@@ -78,7 +78,7 @@ test("owner-picker assignment round trips after an incoming person removal (#529
   const incoming = clone(base);
   incoming.people = incoming.people.filter((p) => p.id !== "p_Ada");
   const merged = mergeStates(base, clone(currentDocument()), incoming).merged;
-  liveSession().absorbMerged("disk", merged);
+  standaloneSession().absorbMerged("disk", merged);
   assert.equal(currentDocument()[key][0].owner, "p_Bo");
   assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 0 });
   const entry = undoOwner().last();
