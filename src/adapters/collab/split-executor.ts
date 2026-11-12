@@ -14,6 +14,7 @@ import { sharedStructureSpans } from "./structure-boundary.ts";
 import { scalarFieldAllowed } from "./scalar-executor.ts";
 import { observeSharedStructureOrder } from "./structure-order.ts";
 import { prepareSharedSegmentCreation } from "./segment-executor.ts";
+import type { SharedStructureContentPorts } from "./structure-content.ts";
 
 export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBefore, view: SharedPreparationView) {
   try {
@@ -48,8 +49,8 @@ export function prepareSharedBeatSplit(operation: SharedBeatSplit | SharedBeatSp
   } catch (error) { if (error instanceof SharedTextPreparationError || error instanceof SharedStructurePreparationError) return { ok: false as const, reason: error.message }; throw error; }
 }
 
-export function registerSharedSplitHandlers(handle: SharedDocumentHandle): void {
+export function registerSharedSplitHandlers(handle: SharedDocumentHandle, ports: SharedStructureContentPorts): void {
   const order = observeSharedStructureOrder(handle);
   registerSharedOperationHandlers(handle, { split: prepareSharedBeatSplit, "split-before": prepareSharedBeatSplit,
-    "segment-create": (operation, view) => prepareSharedSegmentCreation(operation, view, order) });
+    "segment-create": (operation, view) => prepareSharedSegmentCreation(operation, view, order, ports) });
 }

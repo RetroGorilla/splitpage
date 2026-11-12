@@ -441,7 +441,7 @@ export function rowSlots(row: unknown): Slot[] {
   return out;
 }
 
-function readAnnotation(input: unknown): Annotation | null {
+export function readAnnotation(input: unknown): Annotation | null {
   if (!input || typeof input !== "object") return null;
   const a = input as AnnotationInput;
   const ref: ImageRef | null = normalizeImageRef(a.imageRef);

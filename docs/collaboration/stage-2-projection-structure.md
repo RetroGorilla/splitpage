@@ -74,7 +74,7 @@ status across writers, with a literal empty declared-limit table. A second
 generator checks arbitrary join/removal/retirement values, termination, text
 conservation and encoded reload agreement.
 
-Gallery folding/overflow and duplicate b-roll keys remain the record group.
-This step assembles distinct gallery items without applying those later limits.
+Gallery folding/overflow and duplicate b-roll keys are covered by the
+[record projection rules](stage-2-projection-records.md).
 Semantic undo of one side of a cycle is not covered; the undo package decides it.
 Raw flag-clearing tests assert projection behavior, not an undo command.

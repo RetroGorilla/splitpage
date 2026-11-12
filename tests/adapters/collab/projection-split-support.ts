@@ -7,6 +7,9 @@ import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { literalMergedDocument } from "./projection-merged-support.ts";
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+
+const structurePorts = { cells: createFlowLoadRuntime().cells };
 
 export const splitIdentities = ['["structure","1","cut","beat"]', '["structure","2","cut","beat"]', '["structure","3","cut","beat"]'] as const;
 export const splitInputFields = [
@@ -26,7 +29,7 @@ export function splitRow(writer: number, audioText: string) {
 export function splitOriginal(audioText: string) { const row = literalMergedDocument(audioText).rows[0]; assert.ok(row); return row; }
 export function splitReplicas(count: number, source: Record<string, unknown>) {
   const run = replicas(count, source), handles = [run.a, run.b, ...(count === 3 ? [run.c] : [])];
-  for (const handle of handles) { registerSharedSplitHandlers(handle); registerSharedTextOperationHandlers(handle); }
+  for (const handle of handles) { registerSharedSplitHandlers(handle, structurePorts); registerSharedTextOperationHandlers(handle); }
   return { ...run, handles };
 }
 export function submitProjectionOperations(handle: SharedDocumentHandle, commands: readonly unknown[]): void {
