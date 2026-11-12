@@ -8,7 +8,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { createBeatStatus } from "../../../src/features/rows/beat-status.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits } from "../fakes.ts";
+import { fakeCapabilities, fakeDocument, fakeEdits } from "../fakes.ts";
 
 const TEN = "one two three four five six seven eight nine ten";
 
@@ -27,7 +27,7 @@ test("setting Filmed is a no-op for a missing beat or an unchanged status", () =
   const h = setup();
   h.owner.setFilmed("r1", false);
   h.owner.setFilmed("missing", true);
-  for (const command of h.edits.ran) assert.equal(command.plan(h.doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }), null);
+  for (const command of h.edits.ran) assert.equal(command.plan(h.doc, fakeCapabilities()), null);
   assert.deepEqual(h.grace, []);
 });
 
@@ -50,7 +50,7 @@ function setup(opts: { targetSeconds?: number; hideShot?: boolean; hiding?: () =
     edits: opts.applies ? {
       run: (command) => {
         edits.edits.run(command);
-        const plan = command.plan(doc, { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+        const plan = command.plan(doc, fakeCapabilities());
         if (plan && "apply" in plan) plan.apply(doc);
         const outcome: CommandOutcome = { kind: "applied", generation: 1, changes: changeSet({}) };
         return outcome;

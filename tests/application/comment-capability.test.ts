@@ -6,6 +6,7 @@ import type { CellRewrite } from "../../src/application/commands/document-edit.t
 import { addCommentCommand, addReplyCommand, unwrapCommentAnchorCommand } from "../../src/application/commands/comments.ts";
 import { harness, rawScript, runConfined } from "./session-fakes.ts";
 import { viewOf } from "./plan-views.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 
 const CLOCK = { nowIso: function () { return "2026-11-11T12:00:00.000Z"; } };
 const NO_ACCESS = "no access";
@@ -42,10 +43,10 @@ const CASES: readonly CommentCase[] = [
 ];
 
 function asking(order: string[], comment: Capability): CapabilityPort {
-  return {
+  return createSessionCapabilities("standalone", {
     edit: function () { order.push("edit"); return { allowed: false, reason: "review" }; },
     comment: function () { order.push("comment"); return comment; }
-  };
+  });
 }
 
 function watched(order: string[]): DocumentView {

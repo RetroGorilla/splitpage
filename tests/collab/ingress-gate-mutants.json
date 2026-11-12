@@ -13,12 +13,12 @@
   }, {
     "label": "arrival during the drain applied at once",
     "file": "src/adapters/collab/state.ts",
-    "find": "      gate.holds.add(\"delivering\");",
-    "replace": "      gate.frames = 0;"
+    "find": "      gate.holds.add(\"delivering\");\n      try { runCollabTransaction",
+    "replace": "      gate.frames = 0;\n      try { runCollabTransaction"
   }, {
     "label": "local write during a notification allowed",
     "file": "src/adapters/collab/state.ts",
-    "find": "if (state.execution && state.execution !== execution || state.ingress.holds.size) throw new SharedExecutionWriteError();",
+    "find": "if (state.execution && state.execution !== execution || state.ingress.holds.has(\"delivering\")) throw new SharedExecutionWriteError();",
     "replace": "if (state.execution && state.execution !== execution) throw new SharedExecutionWriteError();"
   }, {
     "label": "callback error thrown into the library's cleanup",

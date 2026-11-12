@@ -5,6 +5,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { UndoControl } from "../../../src/application/editing/undo-control.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { undoOwner, undoPorts, startUndo, undoSessionPort, routeUndoReplays } from "../../../src/bootstrap/wiring/undo.ts";
@@ -22,7 +23,7 @@ function open(t: TestContext) {
     entry: (raw) => migrateRows(raw),
     undo: { adapter: undoSessionPort(), route: routeUndoReplays },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
-    capability: { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) },
+    capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
     editor: { name: () => "Undo control" },
     records: () => null,
     attribution: { attribute: () => null },

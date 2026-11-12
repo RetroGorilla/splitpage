@@ -30,6 +30,7 @@ import type { CommonDocumentSession, DocumentView } from "../application/session
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import type { Operations } from "../application/session/operation.ts";
 import { startPageEffects } from "./effects.ts";
 import { legacyExportServices } from "./export-services.ts";
@@ -331,7 +332,7 @@ export function legacySessionPorts(deps: SessionPortDeps): SessionBridgePorts {
       save: function (change: SessionChange) { effects.save(change); },
       refresh: function (jobs: ReadonlySet<string>) { deps.refresh(jobs); }
     }),
-    capability: Object.freeze({ edit: function () { return effects.edit(); }, comment: function () { return COMMENT_ALLOWED; } }),
+    capability: createSessionCapabilities("standalone", { edit: function () { return effects.edit(); }, comment: function () { return COMMENT_ALLOWED; } }),
     editor: Object.freeze({ name: function () { return deps.editorName(); } }),
     records: Object.assign(function (doc: ValidatedDocument, changes: ChangeSet) { return deps.records(doc, changes); }, {
       resync: function (doc: ValidatedDocument | null) { if (deps.records.resync) deps.records.resync(doc); }
