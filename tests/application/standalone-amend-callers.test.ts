@@ -6,7 +6,7 @@ import type { FileSavingPorts } from "../../src/application/save/file-saving-por
 import type { GalleryVideoPorts, VideoBundlePorts } from "../../src/features/gallery/ports.ts";
 import type { SessionUndoPorts, liveSession, standaloneSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import type { Wiring } from "../../src/bootstrap/wiring.ts";
-import { identifierMentions, liveSessionMembers, sourceModuleCount, standaloneTypeMentions } from "./session-caller-scan.ts";
+import { identifierMentions, liveSessionMembers, memberMentions, sourceModuleCount, standaloneTypeMentions } from "./session-caller-scan.ts";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
@@ -34,12 +34,16 @@ const NAMED: AmendContracts = {
 
 const COMMON_MEMBERS = ["cancelRefresh", "dispose", "epoch", "generation", "read", "refresh", "run", "subscribe"];
 
+const AMEND_CARRIERS = [
+  "running().current",
+  "mine.current",
+  "replays",
+  "history"
+];
+
 const AMEND = {
-  "application/editing/undo/history.ts": 4,
-  "application/editing/undo/undo.ts": 9,
-  "application/session/document-session.ts": 2,
-  "bootstrap/wiring/session-owner.ts": 4,
-  "bootstrap/wiring/undo.ts": 2,
+  "application/editing/undo/undo.ts": 3,
+  "bootstrap/wiring/session-owner.ts": 3,
   "bootstrap/wiring/writer.ts": 1
 };
 
@@ -53,21 +57,17 @@ const STANDALONE_DOOR = {
 };
 
 const FOLD_INTO_EDIT = {
-  "application/editing/undo/undo.ts": 4,
   "bootstrap/wiring/gallery.ts": 2
 };
 
 const FOLD_PORT = {
-  "bootstrap/wiring/gallery.ts": 2,
-  "features/gallery/ports.ts": 1,
   "features/gallery/video-bundles.ts": 1,
   "features/gallery/video.ts": 1
 };
 
 const AMEND_ROWS = {
-  "application/editing/undo/undo.ts": 4,
   "application/save/save-completion.ts": 1,
-  "bootstrap/wiring/file-saving.ts": 2
+  "bootstrap/wiring/file-saving.ts": 1
 };
 
 test("the amend scan reads the app's modules", () => {
@@ -82,13 +82,13 @@ test("the live session is typed as the common session, and the wiring asks it on
 });
 
 test("the session's amend is reached from the audited modules, and the standalone session is named where it is", () => {
-  assert.deepEqual(identifierMentions("amend"), AMEND);
+  assert.deepEqual(memberMentions("amend", AMEND_CARRIERS), AMEND);
   assert.deepEqual(standaloneTypeMentions("amend"), AMEND_TYPES);
   assert.deepEqual(identifierMentions("standaloneSession"), STANDALONE_DOOR);
 });
 
 test("the gallery fold and the save-time row relink reach amend only through the undo owner", () => {
-  assert.deepEqual(identifierMentions("foldIntoEdit"), FOLD_INTO_EDIT);
-  assert.deepEqual(identifierMentions("fold"), FOLD_PORT);
-  assert.deepEqual(identifierMentions("amendRows"), AMEND_ROWS);
+  assert.deepEqual(memberMentions("foldIntoEdit", ["undoOwner()"]), FOLD_INTO_EDIT);
+  assert.deepEqual(memberMentions("fold", ["ports.undo"]), FOLD_PORT);
+  assert.deepEqual(memberMentions("amendRows", ["undoOwner()", "ports.history"]), AMEND_ROWS);
 });

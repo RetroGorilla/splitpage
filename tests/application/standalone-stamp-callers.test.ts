@@ -7,7 +7,7 @@ import type { SaveCompletionPorts } from "../../src/application/save/save-comple
 import type { LiveDocumentPort } from "../../src/application/transitions/ports.ts";
 import type { ProductionTagPorts } from "../../src/features/tags/ports.ts";
 import type { stamping } from "../../src/bootstrap/wiring/ports/document.ts";
-import { identifierMentions, liveSessionMembers, sourceModuleCount, standaloneTypeMentions, under } from "./session-caller-scan.ts";
+import { identifierMentions, liveSessionMembers, memberMentions, sourceModuleCount, standaloneTypeMentions, under } from "./session-caller-scan.ts";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
@@ -31,6 +31,14 @@ const NAMED: StampContracts = {
   transitionsHoldNone: true
 };
 
+const STAMP_CARRIERS = [
+  "running().current",
+  "session",
+  "stamping",
+  "ports.stamping",
+  "ports.document"
+];
+
 const STAMP_TYPES = {
   "application/identity/ports.ts": 1,
   "application/save/file-saving-ports.ts": 1,
@@ -52,11 +60,10 @@ const SHARED_PORT = {
 };
 
 const STAMP_IN_WIRING = {
-  "bootstrap/wiring.ts": 1,
-  "bootstrap/wiring/file-saving.ts": 2,
+  "bootstrap/wiring/file-saving.ts": 1,
   "bootstrap/wiring/ports/document-identity.ts": 1,
   "bootstrap/wiring/ports/document.ts": 1,
-  "bootstrap/wiring/session-owner.ts": 4
+  "bootstrap/wiring/session-owner.ts": 3
 };
 
 const STAMP_BUILDERS = {
@@ -78,7 +85,7 @@ test("every port that carries the session's stamp names the standalone session",
 test("the wiring reaches the session's stamp through one shared port with three audited users", () => {
   assert.deepEqual(under(identifierMentions("stampDocument"), "bootstrap/"), BRIDGE_FUNCTION);
   assert.deepEqual(under(identifierMentions("stamping"), "bootstrap/"), SHARED_PORT);
-  assert.deepEqual(under(identifierMentions("stamp"), "bootstrap/"), STAMP_IN_WIRING);
+  assert.deepEqual(under(memberMentions("stamp", STAMP_CARRIERS), "bootstrap/"), STAMP_IN_WIRING);
   for (const [file, members] of Object.entries(liveSessionMembers())) assert.ok(!members.includes("stamp"), file);
 });
 

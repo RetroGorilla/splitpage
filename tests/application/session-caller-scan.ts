@@ -78,6 +78,67 @@ export function standaloneTypeMentions(member: string): Counts {
   });
 }
 
+function expressionText(node: ts.Expression, source: ts.SourceFile): string {
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isNonNullExpression(node)) {
+    return expressionText(node.expression, source);
+  }
+  return node.getText(source).replace(/\s+/g, "");
+}
+
+function memberAccess(node: ts.Node, member: string, carriers: ReadonlySet<string>, source: ts.SourceFile): boolean {
+  if (ts.isPropertyAccessExpression(node) && node.name.text === member) {
+    return carriers.has(expressionText(node.expression, source));
+  }
+  if (ts.isElementAccessExpression(node) && ts.isStringLiteral(node.argumentExpression) && node.argumentExpression.text === member) {
+    return carriers.has(expressionText(node.expression, source));
+  }
+  return false;
+}
+
+export function memberMentions(member: string, carriers: readonly string[]): Counts {
+  const known = new Set(["liveSession()", "standaloneSession()", ...carriers]);
+  const counts: Counts = {};
+  for (const source of sources()) {
+    let count = 0;
+    const visit = function (node: ts.Node): void {
+      if (memberAccess(node, member, known, source)) count++;
+      const members = standaloneMembers(node);
+      if (members) count += members.filter(function (m) { return m === member || m === "*"; }).length;
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    if (count) counts[source.fileName] = count;
+  }
+  return counts;
+}
+
+export function portMemberTypes(ports: readonly { readonly file: string; readonly type: string; readonly member: string }[]): Record<string, string | null> {
+  const byFile = new Map(sources().map(function (s) { return [s.fileName, s]; }));
+  const result: Record<string, string | null> = {};
+  for (const port of ports) {
+    const source = byFile.get(port.file);
+    let found: string | null = null;
+    if (source) {
+      for (const stmt of source.statements) {
+        if (ts.isInterfaceDeclaration(stmt) && stmt.name.text === port.type) {
+          for (const elem of stmt.members) {
+            if (ts.isPropertySignature(elem) && elem.type && ts.isIdentifier(elem.name) && elem.name.text === port.member) {
+              if (ts.isIndexedAccessTypeNode(elem.type) && namesStandalone(elem.type.objectType) &&
+                  ts.isLiteralTypeNode(elem.type.indexType) && ts.isStringLiteral(elem.type.indexType.literal)) {
+                found = STANDALONE + "[\"" + elem.type.indexType.literal.text + "\"]";
+              } else {
+                found = elem.type.getText(source);
+              }
+            }
+          }
+        }
+      }
+    }
+    result[port.type + "." + port.member] = found;
+  }
+  return result;
+}
+
 export function liveSessionMembers(): Record<string, string[]> {
   const found: Record<string, string[]> = {};
   for (const source of sources()) {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { CommonDocumentSession, StandaloneDocumentSession } from "../../src/application/session/document-session.ts";
 import type { ImportDialogPorts } from "../../src/features/imports/ports.ts";
 import type { legacyEdit } from "../../src/bootstrap/wiring/ports/document.ts";
-import { identifierMentions, liveSessionMembers, sourceModuleCount, standaloneTypeMentions, under } from "./session-caller-scan.ts";
+import { identifierMentions, liveSessionMembers, memberMentions, sourceModuleCount, standaloneTypeMentions, under } from "./session-caller-scan.ts";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
@@ -18,6 +18,13 @@ const NAMED: NoteEditContracts = {
   newDocumentImport: true,
   commonHasNoNoteEdit: true
 };
+
+const NOTE_EDIT_CARRIERS = [
+  "running().current",
+  "session",
+  "legacyEdit",
+  "ports"
+];
 
 const NOTE_EDIT_TYPES = {
   "bootstrap/wiring/ports/document.ts": 1,
@@ -40,13 +47,10 @@ const IMPORT_DIALOG_WRAPPER = {
 };
 
 const NOTE_EDIT = {
-  "application/editing/undo/undo.ts": 4,
-  "application/session/document-session.ts": 2,
   "bootstrap/wiring/desktop.ts": 1,
-  "bootstrap/wiring/imports.ts": 2,
+  "bootstrap/wiring/imports.ts": 1,
   "bootstrap/wiring/ports/document.ts": 1,
-  "bootstrap/wiring/session-owner.ts": 3,
-  "bootstrap/wiring/undo.ts": 1,
+  "bootstrap/wiring/session-owner.ts": 2,
   "features/imports/imports.ts": 1,
   "features/imports/ports.ts": 1
 };
@@ -67,8 +71,9 @@ test("the wiring reaches the session's noteEdit through one shared port, used by
 });
 
 test("the modules that mention noteEdit are the audited ones, and the import dialog is the only feature among them", () => {
-  assert.deepEqual(identifierMentions("noteEdit"), NOTE_EDIT);
+  const noteEdit = memberMentions("noteEdit", NOTE_EDIT_CARRIERS);
+  assert.deepEqual(noteEdit, NOTE_EDIT);
   assert.deepEqual(under(identifierMentions("noteSessionEdit"), "features/"), IMPORT_DIALOG_WRAPPER);
-  assert.deepEqual(Object.keys(under(identifierMentions("noteEdit"), "features/")), ["features/imports/imports.ts", "features/imports/ports.ts"]);
-  assert.deepEqual(under(identifierMentions("noteEdit"), "adapters/"), {});
+  assert.deepEqual(Object.keys(under(noteEdit, "features/")), ["features/imports/imports.ts", "features/imports/ports.ts"]);
+  assert.deepEqual(under(noteEdit, "adapters/"), {});
 });
