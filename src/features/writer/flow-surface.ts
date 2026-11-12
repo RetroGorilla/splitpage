@@ -1286,6 +1286,11 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     if (!buffered || buffered.finish()) return true;
     event.preventDefault(); return false;
   };
+  const clipboardHandlers = {
+    copy: buffered ? (event: ClipboardEvent) => { if (ready(event)) onCopy(event); } : onCopy,
+    cut: buffered ? (event: ClipboardEvent) => { if (ready(event)) onCut(event); } : onCut,
+    paste: buffered ? (event: ClipboardEvent) => { if (ready(event)) onPaste(event); } : onPaste
+  };
   const listeners: [EventTarget, string, EventListener][] = [
     [root, "beforeinput", buffered ? event => {
       const input = event as InputEvent, native = typeof input.getTargetRanges === "function" ? range0(input) : null;
@@ -1299,11 +1304,15 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       if (!buffered.dirty() && input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
       if (!buffered.dirty()) noteSelection();
     } : onInput],
-    [root, "keydown", buffered ? event => { if ((event as KeyboardEvent).isComposing || ready(event)) onKeydown(event as KeyboardEvent); } : onKeydown as EventListener],
+    [root, "keydown", buffered ? event => {
+      const key = event as KeyboardEvent;
+      buffered.keydown(key);
+      if (key.isComposing || ready(event)) onKeydown(key);
+    } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
-      [root, "copy", onCopy as EventListener] as [EventTarget, string, EventListener],
-      [root, "cut", onCut as EventListener] as [EventTarget, string, EventListener],
-      [root, "paste", onPaste as EventListener] as [EventTarget, string, EventListener]
+      [root, "copy", clipboardHandlers.copy as EventListener] as [EventTarget, string, EventListener],
+      [root, "cut", clipboardHandlers.cut as EventListener] as [EventTarget, string, EventListener],
+      [root, "paste", clipboardHandlers.paste as EventListener] as [EventTarget, string, EventListener]
     ],
     [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
     [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
@@ -1313,7 +1322,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     [document, "selectionchange", buffered ? () => { if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
   ];
   listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
-  const stopClipboard = ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste });
+  const stopClipboard = ports.clipboard?.mount(clipboardHandlers);
 
   return {
     ...(buffered ? { settle: buffered.finish } : {}),

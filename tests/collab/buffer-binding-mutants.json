@@ -6,6 +6,31 @@
     "find": "const stopAdmission = ports.beforeCommand(() => committing || finish());",
     "replace": "const stopAdmission = () => {};"
   }, {
+    "label": "native cut and drag bypass delegated refusal",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "type === \"deleteByCut\" || type === \"deleteByDrag\" || ",
+    "replace": ""
+  }, {
+    "label": "ordinary cross-beat input never reaches its command port",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "&& intended.anchor.rowId !== intended.head.rowId)",
+    "replace": "&& false)"
+  }, {
+    "label": "refused cross-beat composition permits native mutation",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) { refuse(event, \"buffer-unsupported-target\"); return true; }",
+    "replace": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) return true;"
+  }, {
+    "label": "native boundary deletion never reaches its structural command",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "if (type === \"deleteContentBackward\" && at === 0 || type === \"deleteContentForward\" && at === length)",
+    "replace": "if (false)"
+  }, {
+    "label": "mounted clipboard captures selection before settling typing",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "ports.clipboard?.mount(clipboardHandlers)",
+    "replace": "ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste })"
+  }, {
     "label": "native input accepted without a painted base",
     "file": "src/features/writer/flow-buffer.ts",
     "find": "event.preventDefault(); ports.missingBase(rowId);",

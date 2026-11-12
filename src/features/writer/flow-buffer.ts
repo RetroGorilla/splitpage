@@ -14,6 +14,7 @@ export interface WriterBufferBinding {
   readonly beforeInput: (event: InputEvent, range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
   readonly start: (event: Event, range: FlowRange | null) => void;
+  readonly keydown: (event: KeyboardEvent) => void;
   readonly end: (event: CompositionEvent) => void;
   readonly finish: () => boolean;
   readonly dirty: () => boolean;
@@ -35,6 +36,7 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
   let composing = false;
   let ended = false;
   let committing = false;
+  let refusedComposition = false;
 
   function refuse(event: Event, reason: string): void {
     event.preventDefault();
@@ -83,18 +85,37 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
 
   return {
     beforeInput: (event, range, native) => {
-      const type = event.inputType;
+      const type = event.inputType, intended = native ?? range;
+      if (refusedComposition && !event.isComposing && !/Composition/.test(type) && intended?.anchor.kind === "beat"
+        && intended.head.kind === "beat" && intended.anchor.rowId === intended.head.rowId) refusedComposition = false;
+      if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) { refuse(event, "buffer-unsupported-target"); return true; }
       if (ended && /Composition/.test(type)) { event.preventDefault(); return true; }
       ended = false;
-      if (!/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type)) {
+      if (type === "deleteByCut" || type === "deleteByDrag" || !/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type)) {
         if (!finish()) { refuse(event, "buffer-pending"); return true; }
         return false;
       }
-      const intended = native ?? range;
+      if (!event.isComposing && !/Composition/.test(type) && intended?.anchor.kind === "beat" && intended.head.kind === "beat"
+        && intended.anchor.rowId !== intended.head.rowId) {
+        if (!finish()) { refuse(event, "buffer-pending"); return true; }
+        const missing = [intended.anchor.rowId, intended.head.rowId].find(rowId => !surface.base(rowId));
+        if (missing) { event.preventDefault(); ports.missingBase(missing); surface.repaint(missing); return true; }
+        return false;
+      }
+      if (type.startsWith("delete") && intended?.anchor.kind === "beat" && intended.head.kind === "beat"
+        && intended.anchor.rowId === intended.head.rowId && intended.anchor.offset === intended.head.offset) {
+        const rowId = intended.head.rowId, base = active?.rowId === rowId ? active.base : surface.base(rowId);
+        if (!base) { begin(event, intended); return true; }
+        const length = active?.rowId === rowId ? active.edit.text().length : base.text.length, at = intended.head.offset;
+        if (type === "deleteContentBackward" && at === 0 || type === "deleteContentForward" && at === length) {
+          if (!finish()) { refuse(event, "buffer-pending"); return true; }
+          return false;
+        }
+        refuse(event, "buffer-native-target"); return true;
+      }
       if (!begin(event, intended)) return true;
       if (!intended || intended.anchor.kind !== "beat" || intended.head.kind !== "beat") return true;
       const from = Math.min(intended.anchor.offset, intended.head.offset), to = Math.max(intended.anchor.offset, intended.head.offset);
-      if (type.startsWith("delete") && from === to) { refuse(event, "buffer-native-target"); return true; }
       target = [from, to];
       return true;
     },
@@ -109,9 +130,17 @@ export function createWriterBuffer(ports: WriterBufferPorts, surface: {
       target = null;
       if (!composing) finish();
     },
-    start: (event, range) => { ended = false; if (begin(event, range)) composing = true; },
+    start: (event, range) => {
+      ended = false; refusedComposition = false;
+      if (!range || range.anchor.kind !== "beat" || range.head.kind !== "beat" || range.anchor.rowId !== range.head.rowId) {
+        refusedComposition = true; refuse(event, "buffer-unsupported-target"); return;
+      }
+      if (begin(event, range)) composing = true;
+    },
+    keydown: event => { if (!event.isComposing && event.keyCode !== 229) { refusedComposition = false; ended = false; } },
     end: event => {
       composing = false; ended = true;
+      if (refusedComposition) return;
       if (!active) return;
       if (!event.data) {
         const held = active; active = null; target = null;

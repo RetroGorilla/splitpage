@@ -66,6 +66,13 @@ binding. The named tests below are in `tests/features/writer/buffer-binding.test
    implementation of the command port's markdown transformation. Finishing or
    cancelling invalidates the edited beat's render cache before repainting.
 
+Assumed rule 31 separately declares cross-beat composition a limit, with no write
+and no hold. It is not a package 14 task. Ordinary cross-beat input goes through
+the existing structural command port after settling typing; current whole-start
+cases refuse until removal/join handlers land. The named rule 31 tests in the
+same binding test file pin the refusal, selection and document, so enabling that
+dependency requires an explicit expected-result change.
+
 ## Cost
 
 A paint makes one read per painted beat, and the Writer paints every row, so

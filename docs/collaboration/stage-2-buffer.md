@@ -60,6 +60,24 @@ records its target and closes the buffer reason before the DOM changes. `input`
 checks the unchanged prefix and suffix against that target and records the native
 replacement; it never sends an unproved whole-field edit. Ordinary input commits
 there; composition commits on completion or before another local command.
+Clipboard handlers settle before capturing the range, both through the mounted
+clipboard port and direct root listeners. Native `deleteByCut` and `deleteByDrag`
+retain the existing refusal/delegation policy, so a refused paste/drop cannot
+leave a newly accepted source deletion behind.
+Collapsed Backspace/Delete at a beat boundary delegates to the existing
+structural command port after settlement; it opens no empty native buffer.
+
+Assumed rule 31 on #1414 routes ordinary cross-beat insert/delete targets through
+that command port after settlement. A refusal prevents the native mutation and
+keeps the document and selection, with the existing refusal shown. The two tests
+named "rule 31 dependency: whole-start cross-beat ... until removal/join handlers
+land" pin the current refused end; their expected outcome must be updated visibly
+when the structure handlers arrive. The composition case is a declared limit:
+IME/dead keys starting over beats are refused without a write or opening a hold,
+including their trailing native commit. A new ordinary key or a new composition
+inside one beat starts a new attempt. "rule 31 declared limit: cross-beat
+composition and its late commit are refused without writes or a hold" pins it.
+This limit is not assigned to package 14; only the maintainer can reopen it.
 
 Paints wait while native intent is held. Successful commit releases the reason,
 drains arrivals, maps the caret through native anchors, then repaints and refreshes

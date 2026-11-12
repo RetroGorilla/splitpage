@@ -3,12 +3,14 @@ import * as Y from "yjs";
 import assert from "node:assert/strict";
 import { bufferedWriter } from "./buffer-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { observeSharedTransactions, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { observeSharedTransactions, transactSharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { sharedCommand, registerSplits } from "../../application/session/shared-session-support.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { beatPos, startBeat } from "../../../src/core/flow/flow.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
+import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
+import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 
 test("rule 27: missing base counts once, refuses native input and repaints; the very next input works", () => {
   const page = bufferedWriter("ab", false);
@@ -93,6 +95,159 @@ test("empty beat native typing uses the painted zero gap", () => {
   try {
     assert.equal(page.native(0, 0, "Z"), true);
     assert.equal(page.text(), "Z");
+    assert.deepEqual(page.reports, []);
+  } finally { page.close(); }
+});
+
+for (const [type, data, label, dirty, text] of [
+  ["insertText", "Z", "replace-selection", true, "abcdQ"],
+  ["deleteContentForward", "", "delete-selection", false, "abcd"]
+] as const) {
+  test(`rule 31 dependency: whole-start cross-beat ${type} keeps document and selection until removal/join handlers land`, () => {
+    const commands: string[] = [];
+    const snapshot: { bytes?: Uint8Array } = {};
+    const page = bufferedWriter("abcd", true, (name, operation) => {
+      commands.push(name);
+      assert.equal(page.text(), text);
+      assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
+      snapshot.bytes = encodeSharedState(page.h.a);
+      const edited = operation(page.a.session.read(doc => { assert.ok(doc); return doc as FlowDoc; }));
+      assert.ok(edited && "ops" in edited && edited.ops);
+      assert.equal(edited.ops.some(op => op.kind === "join" || op.kind === "remove"), true, JSON.stringify(edited.ops));
+      const outcome = page.a.session.run(sharedCommand(name, edited.ops));
+      assert.deepEqual(outcome, { kind: "rejected", reason: "unhandled-kind" });
+      return { refused: "unhandled-kind" };
+    });
+    try {
+      registerSplits(page.h.a);
+      if (dirty) { page.start(4); page.native(4, 4, "Q", undefined, "insertCompositionText"); }
+      const selected = { anchor: beatPos("R1", 0), head: beatPos("R2", 2) };
+      page.surface.place(selected);
+      const target = page.surface.domRange(selected); assert.ok(target);
+      const input = new window.InputEvent("beforeinput", { inputType: type, data, bubbles: true, cancelable: true });
+      Object.defineProperty(input, "getTargetRanges", { value: () => [target] });
+      assert.equal(page.root.dispatchEvent(input), false);
+      assert.deepEqual(commands, [label]);
+      assert.deepEqual(page.surface.selection(), selected);
+      assert.ok(snapshot.bytes);
+      assert.deepEqual(encodeSharedState(page.h.a), snapshot.bytes);
+      assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+      assert.deepEqual(page.notices, ["unhandled-kind"]);
+      assert.deepEqual(page.reports, []);
+    } finally { page.close(); }
+  });
+}
+
+test("rule 31 declared limit: cross-beat composition and its late commit are refused without writes or a hold", () => {
+  const page = bufferedWriter("abcd", true, () => { assert.fail("A refused composition must not ask the command port"); });
+  try {
+    const selected = { anchor: beatPos("R1", 1), head: beatPos("R2", 2) };
+    page.surface.place(selected);
+    const target = page.surface.domRange(selected); assert.ok(target);
+    const before = encodeSharedState(page.h.a);
+    assert.equal(page.root.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, cancelable: true })), false);
+    const update = new window.InputEvent("beforeinput", { inputType: "insertCompositionText", data: "Z", isComposing: true, bubbles: true, cancelable: true });
+    Object.defineProperty(update, "getTargetRanges", { value: () => [target] });
+    assert.equal(page.root.dispatchEvent(update), false);
+    page.end("Z");
+    const late = new window.InputEvent("beforeinput", { inputType: "insertText", data: "Z", bubbles: true, cancelable: true });
+    Object.defineProperty(late, "getTargetRanges", { value: () => [target] });
+    assert.equal(page.root.dispatchEvent(late), false);
+    assert.deepEqual(encodeSharedState(page.h.a), before);
+    assert.deepEqual(page.surface.selection(), selected);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+    assert.deepEqual(page.reports, [
+      { kind: "rejected", reason: "buffer-unsupported-target" },
+      { kind: "rejected", reason: "buffer-unsupported-target" },
+      { kind: "rejected", reason: "buffer-unsupported-target" }
+    ]);
+    page.start(4); page.native(4, 4, "Q", undefined, "insertCompositionText"); page.end("Q");
+    assert.equal(page.text(), "abcdQ");
+  } finally { page.close(); }
+});
+
+test("rules 27 and 31: a cross-beat native command without a base requests paint before any command entry", () => {
+  const page = bufferedWriter("abcd", false, () => { assert.fail("An unpainted target must not enter a command"); });
+  try {
+    page.ready();
+    const selected = { anchor: beatPos("R1", 0), head: beatPos("R2", 2) };
+    page.surface.place(selected);
+    const target = page.surface.domRange(selected); assert.ok(target);
+    const input = new window.InputEvent("beforeinput", { inputType: "insertText", data: "Z", bubbles: true, cancelable: true });
+    Object.defineProperty(input, "getTargetRanges", { value: () => [target] });
+    assert.equal(page.root.dispatchEvent(input), false);
+    assert.deepEqual(page.missing, ["R1"]);
+    assert.deepEqual(page.surface.selection(), selected);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+    assert.equal(page.surface.paintedBase("R1")?.text, "abcd");
+  } finally { page.close(); }
+});
+
+for (const type of ["deleteByCut", "deleteByDrag"]) {
+  test(`${type} keeps the existing native refusal and cannot delete into a refused paste or drop`, () => {
+    const page = bufferedWriter("abcd");
+    try {
+      assert.equal(page.native(1, 3, "", undefined, type), false);
+      assert.deepEqual([page.text(), page.beat().textContent], ["abcd", "abcd"]);
+      assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+      assert.equal(page.a.executed.length, 0);
+    } finally { page.close(); }
+  });
+}
+
+for (const [type, at, command] of [["deleteContentBackward", 0, "backspace"], ["deleteContentForward", 4, "delete"]] as const) {
+  test(`native ${type} at the beat boundary enters the existing ${command} command without opening a buffer`, () => {
+    const commands: string[] = [], page = bufferedWriter("abcd", true, name => { commands.push(name); });
+    try {
+      assert.equal(page.native(at, at, "", undefined, type), false);
+      assert.deepEqual(commands, [command]);
+      assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+      assert.deepEqual([page.text(), page.beat().textContent, page.reports], ["abcd", "abcd", []]);
+    } finally { page.close(); }
+  });
+}
+
+test("the mounted clipboard cut settles typing and held ingress before it captures the selection", () => {
+  const mounted: { handlers?: Parameters<NonNullable<SurfacePorts["clipboard"]>["mount"]>[0] } = {};
+  const copied: unknown[] = [], commands: string[] = [];
+  const page = bufferedWriter("ab", true, name => {
+    commands.push(name);
+    assert.equal(page.text(), "XabZ");
+    assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
+  }, { mount: handlers => { mounted.handlers = handlers; return () => {}; },
+    copy: (range, _data, cut) => { copied.push([range.anchor.offset, range.head.offset, cut, page.text()]); },
+    paste: () => undefined });
+  try {
+    page.start(2); page.native(2, 2, "Z", undefined, "insertCompositionText");
+    page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0), "X")], ["b1"]);
+    page.h.queue.flush("dup");
+    page.surface.place({ anchor: beatPos("R1", 2), head: beatPos("R1", 3) });
+    const event = new window.Event("cut", { cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { getData: () => "", setData: () => {}, types: [] } });
+    assert.ok(mounted.handlers); mounted.handlers.cut(event as ClipboardEvent);
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(copied, [[3, 4, true, "XabZ"]]);
+    assert.deepEqual(commands, ["cut"]);
+    assert.deepEqual(page.reports, []);
+  } finally { page.close(); }
+});
+
+test("the root clipboard paste settles typing and held ingress before planning at the remapped caret", () => {
+  const commands: string[] = [];
+  const page = bufferedWriter("ab", true, name => {
+    commands.push(name);
+    assert.equal(page.text(), "XabZ");
+    assert.equal(page.surface.selection()?.head.offset, 4);
+    assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
+  });
+  try {
+    page.start(2); page.native(2, 2, "Z", undefined, "insertCompositionText");
+    page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0), "X")], ["b1"]);
+    page.h.queue.flush("dup");
+    const event = new window.Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { getData: () => "Q", types: ["text/plain"] } });
+    assert.equal(page.root.dispatchEvent(event), false);
+    assert.deepEqual(commands, ["paste"]);
     assert.deepEqual(page.reports, []);
   } finally { page.close(); }
 });
