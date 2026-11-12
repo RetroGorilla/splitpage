@@ -1,9 +1,9 @@
 import type { SharedDocumentHandle } from "./types.ts";
-import { assertNoSharedExecution, collabState, sharedWriteFrame } from "./state.ts";
+import { assertSharedIngressAllowed, collabState, sharedWriteFrame } from "./state.ts";
 
 export function holdSharedBuffer(handle: SharedDocumentHandle): () => void {
   const state = collabState(handle), gate = state.ingress;
-  if (!gate.holds.has("delivering")) assertNoSharedExecution(state);
+  assertSharedIngressAllowed(state);
   if (state.destroyed) throw new Error("Cannot buffer a destroyed shared document");
   if (gate.holds.has("buffer")) throw new Error("A shared buffer is already open");
   gate.holds.add("buffer");

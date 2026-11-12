@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { exceedsBufferQueue } from "../../core/collab/buffer.ts";
-import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, guardSharedCallback } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, assertSharedIngressAllowed, guardSharedCallback } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
@@ -48,7 +48,7 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
   const state = collabState(handle), gate = state.ingress;
   const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
-  if (!gate.holds.has("delivering")) assertNoSharedExecution(state);
+  assertSharedIngressAllowed(state);
   if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
     gate.declined = true;
     return { ok: false, reason: "queue-full" };
