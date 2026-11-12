@@ -54,6 +54,27 @@ decisions live in prepare; the frozen apply payload only writes fixed map paths.
 A nonempty list uses one transaction and one delivered update. Refusals leave bytes,
 state vector, revision and delivered-update count unchanged.
 
+The join index also keeps both directions of validated candidate relationships for
+joined-text routing. `neighbors(beat)` is a frozen, sorted metadata lookup with no
+native reads; it retains a reverse edge until its last duplicate entry disappears.
+Missing destinations remain candidates, self-links add no neighboring beat, and
+invalid entries still reserve their native keys but add no edge. These candidates
+do not select joins or interpret retirement: the core interpreter owns those rules.
+Map replacements and source deletion patch the same index through its existing
+guarded callback. The routing command and painted readers are not changed by this
+metadata preparation step.
+
+The split handoff distinguishes two histories before routing changes projection.
+After seeing `ab cd` joined under R1, the app and independent applier split at one
+into `a` / `b cd`; the current entry refuses `invalid-reference`, unchanged. Its
+literal declared limit is: "Enter after a visible join is refused with
+invalid-reference; extending joined-row routing requires the split/projection rule."
+A split made apart from the join is accepted and the existing literal-target
+interpreter shows `a cd` / `b`. Following the destination's original end through
+both splits would change that latter result too. The handoff pins both with two
+and three copies, reordered/duplicated delivery and an encoded late joiner; it
+does not select a new concurrent interpretation or add endpoint metadata.
+
 The unchanged copied T06 narration oracle and T12 join/undo oracles check original
 native identities, concurrent typing, marks and caret positions through a test
 reader. Retirement inserts no replacement text, boundary, segment or order entry.
