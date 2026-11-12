@@ -43,13 +43,13 @@ function saveBackToFile(opts?: { force?: boolean }): Promise<void> {
   const imported = importHome();
   if (!imported) return Promise.resolve();
   return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
-    if (!active || !ports.capability.saveDestinations().allowed) return;
+    if (!active || importHome() !== imported) return;
     if (outcome.kind === "saved" && outcome.acknowledged) completion.acknowledged(imported);
   });
 }
 
 function stillWritingBack(job: SaveJob<ImportSaveRequest>, imported: Home): boolean {
-  return active && ports.capability.saveDestinations().allowed && importHome() === imported && job.owns();
+  return active && importHome() === imported && job.owns();
 }
 
 async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterResult> {

@@ -46,9 +46,10 @@ test("a destination selected before authority changes refuses a later write with
 
 test("standalone destinations retain the registered writer and frozen receiver when the original object changes", async () => {
   const calls: string[] = [];
+  const receivers: unknown[] = [];
   const source = {
     id: "file", takes: () => true, autoSaveTarget: () => null,
-    async write() { calls.push("original:" + this.id); return { kind: "saved" as const }; }
+    async write() { receivers.push(this); calls.push("original:" + this.id); return { kind: "saved" as const }; }
   };
   const destinations = createSaveDestinations<{ kind: string }>(STANDALONE);
   destinations.register(source);
@@ -58,6 +59,8 @@ test("standalone destinations retain the registered writer and frozen receiver w
   assert.ok(destination);
   assert.equal(Object.isFrozen(destination), true);
   assert.deepEqual(await destination.write(job("save", calls)), { kind: "saved" });
+  assert.equal(receivers[0], destination);
+  assert.equal(Object.isFrozen(receivers[0]), true);
   assert.deepEqual(calls, ["original:file"]);
 });
 
@@ -191,12 +194,12 @@ test("automatic requests ask autosave before planning even when manual destinati
   assert.deepEqual(calls, []);
 });
 
-test("Save As waiting for bundle copies rechecks before holding standalone undo or capturing", async t => {
-  let capability = STANDALONE;
+test("Save As waiting for bundle copies stops before holding undo or capturing when replacement loses ownership", async t => {
+  let owns = true;
   let drained: (ready: boolean) => void = () => { throw new Error("drain was not started"); };
   const waiting = new Promise<boolean>(resolve => { drained = resolve; });
   const calls: string[] = [];
-  const ports = guardedFilePorts({ saveDestinations: () => capability.saveDestinations(), autosave: () => capability.autosave() }, calls, {
+  const ports = guardedFilePorts(STANDALONE, calls, {
     beginSave: () => {
       calls.push("bundle.begin");
       return { drained: waiting, ask: async () => [], end: () => { calls.push("bundle.end"); } };
@@ -210,12 +213,12 @@ test("Save As waiting for bundle copies rechecks before holding standalone undo 
   });
   const saving = mountFileSaving(ports);
   t.after(saving.dispose);
-  const pending = saving.destination().write(job("saveAs", calls));
+  const pending = saving.destination().write({ ...job("saveAs", calls), owns: () => { calls.push("owns"); return owns; } });
   assert.deepEqual(calls, ["resume", "owns", "bundle.begin"]);
-  capability = SHARED;
+  owns = false;
   drained(true);
-  assert.deepEqual(await pending, { kind: "refused", reason: "Save destinations are not available in a shared session." });
-  assert.deepEqual(calls, ["resume", "owns", "bundle.begin", "bundle.end"]);
+  assert.deepEqual(await pending, { kind: "cancelled" });
+  assert.deepEqual(calls, ["resume", "owns", "bundle.begin", "owns", "bundle.end"]);
 });
 
 test("shared save requests stop before destination, ownership, writer and conflict ports", async t => {

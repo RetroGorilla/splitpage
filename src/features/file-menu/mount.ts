@@ -109,8 +109,6 @@ export function mountConflicts(mount: { window: Window; ports: ConflictsPorts })
     const owns = ports.capture();
     void ports.buildFileData(imported.format, base + " (copy)").then(function (built) {
       if (!life.active() || !owns()) return;
-      const can = ports.capability.saveDestinations();
-      if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
       ports.deliverFile(base + " (copy)." + ext, built.data, { savedMsg: "Saved a separate copy" });
     });
   });

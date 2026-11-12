@@ -50,6 +50,13 @@ const DESTINATIONS = {
 };
 
 const AUTOSAVE = {
+  "application/save/autosave.ts#AutoSavePolicyPorts.timers": { "application/save/autosave.ts": 5 },
+  "application/session/ports.ts#TimerPort.start": {
+    "application/editing/scene-boundary.ts": 1,
+    "application/save/autosave.ts": 2,
+    "application/session/effects.ts": 2,
+    "application/shot-hiding.ts": 1
+  },
   "application/save/autosave.ts#createAutoSavePolicy": { "bootstrap/wiring/save-owners.ts": 1 },
   "application/save/autosave.ts#AutoSavePolicy.schedule": { "bootstrap/wiring/save-owners.ts": 1 },
   "application/save/autosave.ts#AutoSavePolicy.dueNow": {
@@ -130,4 +137,21 @@ test("save caller scan self-test: a namespace function access uses the computed 
     const key = "writeToHandle";
     files[key](null!, "body");
   ` }), { [point]: { "starters/save-capability-probe.ts": 1 } });
+});
+
+test("autosave caller scan self-test: a timer started through renamed policy ports names its file", () => {
+  const point = "application/save/autosave.ts#AutoSavePolicyPorts.timers";
+  assert.deepEqual(capabilityPortCallers([point], { path: "starters/autosave-capability-probe.ts", source: `
+    import type { AutoSavePolicyPorts } from "../application/save/autosave.ts";
+    function probe(port: AutoSavePolicyPorts) { port.timers.start(port.due, 2000); }
+  ` }), { [point]: { "starters/autosave-capability-probe.ts": 1 } });
+});
+
+test("autosave caller scan self-test: an indexed timer-port alias retains the scheduling declaration", () => {
+  const point = "application/session/ports.ts#TimerPort.start";
+  assert.deepEqual(capabilityPortCallers([point], { path: "starters/autosave-capability-probe.ts", source: `
+    import type { AutoSavePolicyPorts } from "../application/save/autosave.ts";
+    type Timers = AutoSavePolicyPorts["timers"];
+    function probe(port: Timers) { port.start(() => {}, 2000); }
+  ` }), { [point]: { "starters/autosave-capability-probe.ts": 1 } });
 });

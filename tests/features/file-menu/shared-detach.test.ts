@@ -55,16 +55,16 @@ for (const id of ["file-conflict-overwrite", "file-conflict-copy"]) {
   });
 }
 
-test("a conflict copy prepared before authority changes refuses delivery with the current reason", async t => {
+test("a conflict copy prepared before replacement drops delivery when ownership is lost", async t => {
   const h = viewHarness();
   t.after(() => h.window.close());
-  let capability = STANDALONE;
+  let owns = true;
   let finish: (built: { data: string }) => void = () => { throw new Error("copy not started"); };
   const waiting = new Promise<{ data: string }>(resolve => { finish = resolve; });
   const calls: unknown[][] = [];
   const notices = fakeNotices();
   const owner = mountConflicts({ window: h.window, ports: {
-    capability: { saveDestinations: () => capability.saveDestinations() },
+    capability: STANDALONE,
     notices: notices.notices,
     closeFileConflict: () => { calls.push(["close"]); },
     reloadProjectFromDisk: () => {}, reloadFileFromDisk: () => {}, saveDoc: () => {},
@@ -73,15 +73,15 @@ test("a conflict copy prepared before authority changes refuses delivery with th
     buildFileData: (format, name) => { calls.push(["build", format, name]); return waiting; },
     deliverFile: (...args) => { calls.push(["deliver", ...args]); },
     conflict: () => { calls.push(["conflict"]); return { kind: "import" }; },
-    capture: () => { calls.push(["capture"]); return () => true; }
+    capture: () => { calls.push(["capture"]); return () => owns; }
   } });
   t.after(owner.dispose);
   h.fire(h.el("file-conflict-copy"), "click");
   assert.deepEqual(calls, [["conflict"], ["close"], ["home"], ["capture"], ["build", "md", "Script (copy)"]]);
-  capability = SHARED;
+  owns = false;
   finish({ data: "captured" });
   await waiting;
   await Promise.resolve();
   assert.deepEqual(calls, [["conflict"], ["close"], ["home"], ["capture"], ["build", "md", "Script (copy)"]]);
-  assert.deepEqual(notices.shown.map(({ message, kind }) => [message, kind]), [["Save destinations are not available in a shared session.", "warn"]]);
+  assert.deepEqual(notices.shown, []);
 });

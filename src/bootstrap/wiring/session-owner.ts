@@ -1,4 +1,5 @@
 import { createDocumentSession } from "../../application/session/document-session.ts";
+import { captureSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { AbsorbedKind, Command, CommandOutcome, CommonDocumentSession, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp, StandaloneDocumentSession } from "../../application/session/document-session.ts";
 import type { ChangeSet } from "../../application/session/change-set.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
@@ -35,6 +36,7 @@ interface Started {
   readonly numbering: DocumentNumberingReader;
   readonly ports: SessionBridgePorts;
   current: DocumentSession;
+  capability: CapabilityPort;
   ended: boolean;
   mergeBase: ValidatedDocument | null;
 }
@@ -74,7 +76,7 @@ function hearing(entry: Hearing): SessionListener {
   };
 }
 
-function createSession(ports: SessionBridgePorts, after: SessionCounters, numbering: DocumentNumberingReader): DocumentSession {
+function createSession(ports: SessionBridgePorts, after: SessionCounters, numbering: DocumentNumberingReader, capability: CapabilityPort): DocumentSession {
   const made = createDocumentSession({
     entry: ports.entry,
     undo: ports.undo.adapter,
@@ -87,7 +89,7 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters, number
         refreshListeners.slice().forEach(function (listener) { listener(jobs); });
       }
     },
-    capability: ports.capability,
+    capability: capability,
     reconcile: {
       anchors: function (doc) { return syncCommentAnchors(doc, cellOf); },
       records: ports.records
@@ -182,7 +184,8 @@ const STALE: CommandOutcome = Object.freeze({ kind: "noop" });
 export function startSessionBridge(ports: SessionBridgePorts): () => void {
   if (started) throw new Error("The document session is already started; stop it first");
   const numbering = createNumberingReader();
-  const mine: Started = { ports: ports, numbering, current: createSession(ports, { epoch: 0, generation: 0 }, numbering), ended: false, mergeBase: null };
+  const capability = captureSessionCapabilities(ports.capability);
+  const mine: Started = { ports: ports, numbering, capability, current: createSession(ports, { epoch: 0, generation: 0 }, numbering, capability), ended: false, mergeBase: null };
   const releases: (() => void)[] = [];
   const release = (): void => {
     if (started === mine) started = null;
@@ -217,11 +220,13 @@ export function sessionStarted(): boolean {
   return started !== null;
 }
 
-export function adoptReplacement(doc: ValidatedDocument): void {
+export function adoptReplacement(doc: ValidatedDocument, capability?: CapabilityPort): void {
   const now = running();
   if (now.ended) return;
   const old = now.current;
-  now.current = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() }, now.numbering);
+  const nextCapability = capability ? captureSessionCapabilities(capability) : now.capability;
+  now.current = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() }, now.numbering, nextCapability);
+  now.capability = nextCapability;
   old.dispose();
   now.current.adopt(unwrapped(doc));
   announceReplaced();
@@ -278,7 +283,7 @@ export function stampDocument(task: Stamp): CommandOutcome {
 }
 
 export function editAllowed(): boolean {
-  return running().ports.capability.edit().allowed;
+  return running().capability.edit().allowed;
 }
 
 function attribute(): void {
@@ -325,7 +330,7 @@ export function liveSession(): CommonDocumentSession {
 }
 
 export function currentCapabilities(): CapabilityPort {
-  return running().ports.capability;
+  return running().capability;
 }
 
 export function standaloneSession(): StandaloneDocumentSession {
