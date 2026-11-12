@@ -156,7 +156,9 @@ every visible unit twice (60,550 units; a fresh full assembly scans the 30,275 o
 In `incremental-broll.test.ts` a typed character or an inserted marker scans one
 cell. A rebuilt join group's equal narration keeps its earlier list, so its scan and
 cell stay cached. The assignment still visits every marker and shot id on each
-publication. Marker, order, removal or shot-id changes can rewrite an otherwise
+publication, and the check that a cell's unit list is the one kept from before still
+compares every visible unit by identity (30,205 comparisons for that typed character
+at 300 beats, 934,041 at 10,001; the earlier rule made the same comparisons). Marker, order, removal or shot-id changes can rewrite an otherwise
 unchanged cell without scanning it; a rewritten cell is memoized by its units and
 its replacement ids. A seeded history in `incremental-broll.test.ts` compares the
 incremental and fresh full projections at every publication across these changes.
