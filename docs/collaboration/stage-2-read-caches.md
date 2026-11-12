@@ -25,8 +25,8 @@ Text and mark-store versions jointly own a frozen mark reading. Its canonical
 occupied-key list includes invalid records whose keys still reserve an identity.
 Validation of an unchanged record is reused after other records or text change;
 anchor offsets are resolved again when their text changes. Replacing the text or
-store changes the memo's source identity. A sweep visits only records whose
-resolved ranges cover the current unit, preserving the previous UTF-16 key order.
+store changes the memo's source identity. A sweep supplies only covering records
+to the relevance filter, preserving the previous UTF-16 key order.
 The preparation facade reuses frozen units, keys and resolved records, with a new
 resolver closure bound to that preparation's lifetime.
 
@@ -64,12 +64,13 @@ helper copied into it. No timing was measured.
 | Prepare and apply a mark after warming preparation | Whole touched text and key list read again | 0 text reads, 0 mark-store entry visits, 1 beat-record read |
 | Second status command, with 10,000 unrelated events | 20,003 status-entry visits, including 20,000 unrelated visits | 4 status-entry visits, 0 unrelated visits |
 | Second status command, with no unrelated events | 3 status-entry visits | 4 status-entry visits |
-| Read 1,000 units with 200 disjoint one-unit marks | 200,000 range-predicate visits | 200 covering-record predicate visits; repeat read: 0 |
+| Relevant-record selection for 1,000 units with 200 disjoint one-unit marks | 200,000 filter-predicate inputs | 200 filter-predicate inputs; repeat read: 0 |
 
 Entry visits count `get` and `has` as well as yielded keys, values, entries,
 iterators, `forEach`, `map`, `toArray`, slices and JSON readings where supplied
 by the public type. Nested public calls can contribute more than one visit.
-The last row's baseline counter was inserted immediately before the old production
+The last row counts inputs to the relevant-record filter, not all sweep work.
+Its baseline counter was inserted immediately before the old production
 `located.filter`; it counts the filter's actual input length on each unit.
 The new production `measureSharedReads` hook counts validation, resolved anchors,
 units and covering-record predicates only while a caller supplies a measurement.
@@ -109,6 +110,13 @@ using the strict agreement helper at 2,620 transaction checkpoints, over 840
 commands and 24 histories. It covers every formatting kind, insertion, deletion,
 status, scalars, record edits and invalid mark records. Broader structural histories
 and the 291-reference byte contract remain the existing projection gates.
+
+The existing range-mark preparation expectation tightens from `[2, 2]` text reads
+to `[0, 0]`, with its whole-root traps and zero document-lookup assertion unchanged.
+The new preparation test first checks the literal new marks after another writer's
+mark-only update, then asserts exactly two text reads. Repeating preparation makes
+zero reads; a later text update again makes exactly two and returns the new text.
+The stale-mark mutant fails the new-result assertion before it can check the count.
 
 | New cache-history declared limits |
 | --- |

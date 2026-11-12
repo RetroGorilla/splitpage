@@ -12,6 +12,7 @@ import { sharedMarkRecordKey } from "../../../src/adapters/collab/mark-record.ts
 import { measureSharedReads } from "../../../src/adapters/collab/read-counts.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
+import { measureLibraryReads } from "../../collab/library-read-counts.ts";
 
 const target = Object.freeze({ owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const });
 const plain = [{ value: "a", marks: [] }, { value: "b", marks: [] }, { value: "Z", marks: [] }];
@@ -27,6 +28,36 @@ test("a cached text reflects a mark record received without a text change", () =
     assert.deepEqual(applySharedUpdate(run.b, encodeSharedState(run.a)), { ok: true });
     assert.deepEqual(cacheMarks(run.b), bold);
     assert.equal(measureSharedReads(() => cacheMarks(run.b)).counts.markRecords, 0);
+  } finally { run.close(); }
+});
+
+test("preparation reads again and returns new marks and text after another writer's updates", () => {
+  const run = replicas();
+  const prepare = () => {
+    const preparation = createSharedPreparation(run.b);
+    try {
+      const text = preparation.view.text(["segments", "b:R1", "text"]); assert.ok(text);
+      return text.units.map(unit => ({ value: unit.value, marks: unit.marks.flatMap(group => group.values.map(value => [group.kind, value])) }));
+    } finally { preparation.close(); }
+  };
+  try {
+    assert.deepEqual(prepare(), plain);
+    const warm = measureLibraryReads(run.b, "R1", prepare);
+    assert.deepEqual(warm.result, plain); assert.equal(warm.totals.texts, 0);
+    const record = prepareSharedMarkRecord(run.a, target, "remote-bold", 0, 2, { type: "add", mark: { kind: "b", value: true } });
+    assert.ok(record); assert.deepEqual(writeSharedMarkRecord(run.a, target, "remote-bold", record), { ok: true });
+    assert.deepEqual(applySharedUpdate(run.b, encodeSharedState(run.a)), { ok: true });
+    const marked = measureLibraryReads(run.b, "R1", prepare);
+    assert.deepEqual(marked.result, bold);
+    assert.equal(marked.totals.texts, 2);
+    const again = measureLibraryReads(run.b, "R1", prepare);
+    assert.deepEqual(again.result, bold); assert.equal(again.totals.texts, 0);
+    transactSharedDocument(run.a, "local-command", () => { cacheText(run.a).text.insert(3, "!"); });
+    assert.deepEqual(applySharedUpdate(run.b, encodeSharedState(run.a)), { ok: true });
+    const typed = measureLibraryReads(run.b, "R1", prepare);
+    assert.deepEqual(typed.result, [{ value: "a", marks: [["b", true]] }, { value: "b", marks: [["b", true]] },
+      { value: "Z", marks: [] }, { value: "!", marks: [] }]);
+    assert.equal(typed.totals.texts, 2);
   } finally { run.close(); }
 });
 

@@ -35,6 +35,6 @@ export function createCollabTextFacade(handle: SharedDocumentHandle, text: Y.Tex
       recordKeys: state.recordKeys, records: state.records });
   });
   return Object.freeze({ ...data,
-    resolveAnchor: (anchor: unknown) => { ensureOpen(); return freezeSharedPreparedValue(resolveCollabTextAnchor(handle, anchor, text)); }
+    resolveAnchor: Object.freeze((anchor: unknown) => { ensureOpen(); return freezeSharedPreparedValue(resolveCollabTextAnchor(handle, anchor, text)); })
   });
 }
