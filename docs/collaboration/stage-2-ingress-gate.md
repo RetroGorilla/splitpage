@@ -42,6 +42,13 @@ buffer commit may write while `buffer` is set; `delivering` still refuses local
 writes with `SharedExecutionWriteError`. A commit moment during delivery must
 retain its edit for an explicit retry outside that notification.
 
+Preparation and application refuse arrivals and buffer acquisition independently
+of those reasons. `notifications` counts the synchronous guarded callbacks, so
+an actual notification is distinct from a `delivering` reason left in the set.
+Application still takes precedence over notification delivery. The execution
+guard matrix pins both phases with no reason, either reason and both reasons,
+for received updates and buffer acquisition.
+
 ## Bounded buffered arrivals
 
 Assumed rule 26 on [#1414](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6814123286)

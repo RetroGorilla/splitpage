@@ -13,6 +13,26 @@ import { execute, operation, ref, replicas } from "./executor-support.ts";
 import { validatedFixture } from "./helpers.ts";
 import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 
+for (const phase of ["preparation", "application"] as const) {
+  for (const reasons of [[], ["delivering"], ["buffer"], ["delivering", "buffer"]] as const) {
+    for (const action of ["arrival", "buffer acquisition"] as const) {
+      test(`${phase}, reasons ${reasons.join("+") || "none"}: ${action} is refused independently of gate reasons`, () => {
+        const run = replicas(), state = collabState(run.a);
+        try {
+          execute(run.b, { kind: "scalar", id: "incoming", by: "Bob", target: { scope: "beat", record: "R1" }, field: "lengthSeconds", value: 99 });
+          const incoming = encodeSharedState(run.b), before = encodeSharedState(run.a), vector = encodeSharedStateVector(run.a);
+          for (const reason of reasons) state.ingress.holds.add(reason);
+          state.execution = { applying: phase === "application" };
+          assert.throws(() => action === "arrival" ? applySharedUpdate(run.a, incoming) : holdSharedBuffer(run.a), SharedExecutionWriteError);
+          assert.deepEqual(encodeSharedState(run.a), before);
+          assert.deepEqual(encodeSharedStateVector(run.a), vector);
+          assert.equal(state.ingress.held.length, 0);
+        } finally { state.execution = null; state.ingress.holds.clear(); run.close(); }
+      });
+    }
+  }
+}
+
 for (const buffered of [false, true]) for (const phase of ["prepare", "apply", "observer"] as const) for (const writer of ["entry", "transaction", "update", "hydration", "text-create", "html-import", "mark-write", "destroy", "buffer"] as const) {
   // why: A received update that arrives in a command's notifications is held, not refused; ingress-gate.test.ts pins it.
   if (phase === "observer" && (writer === "update" || writer === "buffer")) continue;
