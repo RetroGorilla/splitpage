@@ -95,5 +95,17 @@
     "find": "index.coveredBy(id).some(beat => !state.removed.has(beat))",
     "replace": "index.coveredBy(id).length > 0",
     "tests": ["tests/adapters/collab/split-removal.test.ts"]
+  }, {
+    "label": "removed beats claim comments before live words",
+    "file": "src/adapters/collab/project.ts",
+    "find": "for (const plan of plans) if (!plan.group.removed) anchor(plan);",
+    "replace": "for (const plan of plans) if (plan.group.removed) anchor(plan);",
+    "tests": ["tests/adapters/collab/comment-recovery.test.ts"]
+  }, {
+    "label": "comment with words listed as without words",
+    "file": "src/adapters/collab/project.ts",
+    "find": "const words = new Set(anchored);",
+    "replace": "const words = new Set<string>();",
+    "tests": ["tests/adapters/collab/comment-recovery.test.ts"]
   }]
 }

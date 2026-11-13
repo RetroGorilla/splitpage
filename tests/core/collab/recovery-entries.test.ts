@@ -8,11 +8,13 @@ const MODULE = fileURLToPath(new URL("../../../src/core/collab/recovery.ts", imp
 const NOTE = new URL("../../../docs/collaboration/stage-2-recovery-model.md", import.meta.url);
 
 const ENTRIES: Readonly<Record<string, readonly string[]>> = {
+  "comment-without-words": ["comment", "field", "rowId"],
   "crossing-tag": ["field", "from", "occurrence", "rowId", "tag", "to", "words"],
   "deleted-tag": ["field", "from", "occurrence", "rowId", "tag", "to", "words"],
   "gallery-overflow": ["beat", "itemId", "rowId", "slot"],
-  "removed-beat": ["buffer?", "members", "removal?", "row", "splitBy?"],
+  "removed-beat": ["buffer?", "comments?", "members", "removal?", "row", "splitBy?"],
   "removed-heading": ["heading", "removal?"],
+  "reply-without-comment": ["commentId", "reply"],
   "scene-with-no-beats": ["beforeRowId", "heading"],
   "unprojectable-fragment": ["field", "from", "html", "owner", "reason", "segment", "to"]
 };

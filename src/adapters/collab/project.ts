@@ -8,11 +8,11 @@ import { projectSharedJoinedLayout } from "../../core/collab/projection/join-lay
 import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
-import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
+import { projectSharedTextResult, projectSharedCommentAnchors, readSharedCommentAnchors } from "../../core/collab/projection/text.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { SharedProjectionCache } from "./projection-cache.ts";
 import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
-import { projectSharedCoveredBeats, projectSharedRecoveryRemoval } from "../../core/collab/recovery.ts";
+import { projectSharedCoveredBeats, projectSharedLostComments, projectSharedRecoveryRemoval } from "../../core/collab/recovery.ts";
 import type { SharedCoverageBlock, SharedRecoveryEntry, SharedRecoveryRemovalSource } from "../../core/collab/recovery.ts";
 import { readSharedActiveRemovalSources, readSharedRemovalBufferSources, readSharedRemovalSources } from "./removal-record.ts";
 import { collabState } from "./state.ts";
@@ -108,11 +108,14 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   });
   const broll = projectSharedBrollCells(cache, plans.filter(plan => !plan.group.removed).flatMap(plan => [...plan.visualCells, plan.audio]),
     (out.brollShots as Record<string, unknown>[]).map(shot => String(shot.id)));
-  for (const { group, members, row, overflow, audio, visualCells } of plans) {
+  const anchor = ({ group, audio, visualCells }: typeof plans[number]) => [...visualCells.map(value => [broll.get(value.key) ?? value.units, "visualText"] as const),
+    [broll.get(audio.key) ?? audio.units, "audioText"] as const].flatMap(([units, field]) => projectSharedCommentAnchors(units, comments, group.root, field, anchored));
+  // why: live words win over removed ones, so every live cell anchors before any removed group claims what is left.
+  for (const plan of plans) if (!plan.group.removed) anchor(plan);
+  for (const plan of plans) {
+    const { group, members, row, overflow, audio, visualCells } = plan;
     recovery.push(...overflow.map(entry => ({ kind: "gallery-overflow" as const, rowId: group.root, ...entry,
       slot: canonicalSharedProjection(entry.slot, "gallery") as Record<string, unknown> })));
-    if (!group.removed) for (const [units, field] of [...visualCells.map(value => [broll.get(value.key) ?? value.units, "visualText"] as const),
-      [broll.get(audio.key) ?? audio.units, "audioText"] as const]) projectSharedCommentAnchors(units, comments, group.root, field, anchored);
     const audioText = cell(broll.get(audio.key) ?? audio.units, group.root, "audioText", audio.key);
     const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", value.key)).filter(Boolean).join("<br>");
     const painted = cache.read(["painted-row", group.root], [row, audioText, visualText], () => ({ ...row, audioText, visualText }));
@@ -128,8 +131,9 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
       const parts = [...group.members.map(member => ({ removals: applicable(member.id), units: narrationByBeat.get(member.id) ?? [] })),
         ...visualCells.map(value => ({ removals: applicable(value.beat), units: value.units }))];
       const removal = cache.read(["removed-provenance", group.root], parts.flatMap(part => [part.units, part.removals.length, ...part.removals]), () => projectSharedRecoveryRemoval(parts));
+      const held = anchor(plan).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
       recovery.push({ kind: "removed-beat", row: cache.canonical(painted, "row") as Record<string, unknown>, members, ...(removal ? { removal } : {}), ...(buffer.length ? { buffer } : {}),
-        ...(typeof splitBy === "string" ? { splitBy } : {}) });
+        ...(typeof splitBy === "string" ? { splitBy } : {}), ...(held.length ? { comments: held } : {}) });
     }
     else rows.push(painted);
   }
@@ -150,6 +154,9 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   const visible = rows.map(row => String(row.id));
   const { sections, empty } = cache.read(["sections"], [...headings, ...visible], () => projectSharedSections(headings, new Set(visible)));
   recovery.push(...empty.map(entry => ({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId })));
+  const words = new Set(anchored);
+  for (const fragment of fragments) if (fragment.reason || fragment.kind === "h") readSharedCommentAnchors(fragment.units, words);
+  recovery.push(...projectSharedLostComments(comments, words, source.records("replies")));
   Object.assign(out, { rows }); if (sections.length) out.sections = sections; else delete out.sections;
   const document = cache.canonical(out) as DocumentShape;
   const changes = compareSharedProjections(previous, document, (kind, key) => cache.counted(kind === "row" ? "compare-row" : "compare-field", key));

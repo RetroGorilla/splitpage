@@ -15,6 +15,10 @@ function pending(oracle: string, trace: string, stage0Row: string, workPackage: 
   return { oracle, trace, stage0Row, workPackage, status: "pending" };
 }
 
+function covered(oracle: string, trace: string, stage0Row: string, workPackage: Stage2Package): FixtureEntry {
+  return { oracle, trace, stage0Row, workPackage, status: "covered" };
+}
+
 function candidateA(oracle: string, trace: string, stage0Row: string): FixtureEntry {
   return { oracle, trace, stage0Row, workPackage: null, status: "candidate A only" };
 }
@@ -30,8 +34,8 @@ export const fixtureTable: readonly FixtureEntry[] = [
   pending("oracles.ts:commentsOverlapOracle", "T11 step 1", "T11", "5"),
   pending("oracles.ts:commentsOracle", "T11 overlap", "T11", "5"),
   pending("oracles.ts:commentsReplyOracle", "T11 reply", "T11", "5"),
-  pending("oracles.ts:commentsRemovedOracle", "T11 removed/split", "T11", "11"),
-  pending("oracles.ts:commentsRestoredOracle", "T11 restored", "T11", "11"),
+  covered("oracles.ts:commentsRemovedOracle", "T11 removed/split", "T11", "11"),
+  covered("oracles.ts:commentsRestoredOracle", "T11 restored", "T11", "11"),
   pending("oracles.ts:lengthOracle", "PROJ omitted field", "Omitted field", "6a"),
   pending("oracles.ts:splitOracle", "T05", "T05", "5"),
   pending("oracles.ts:swappedSplitOracle", "T05 swapped clients", "T05", "5"),
