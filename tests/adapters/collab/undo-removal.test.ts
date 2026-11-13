@@ -9,6 +9,9 @@ import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
+import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { encodeSharedState, encodeSharedStateVector, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
@@ -43,7 +46,7 @@ function start(order: typeof ORDERS[number], source: Record<string, unknown>) {
   const set = replicas(2, source), handles = [set.a, set.b], incremental = handles.map(handle => captureIncrementalReplica(handle));
   handles.forEach(handle => {
     registerSharedRemovalHandlers(handle); registerSharedSplitHandlers(handle, runtime); registerSharedTextOperationHandlers(handle);
-    registerSharedRecordHandlers(handle); registerSharedUndoOperationHandlers(handle);
+    registerSharedRecordHandlers(handle); registerSharedUndoOperationHandlers(handle); registerSharedJoinHandlers(handle);
   });
   const flush = () => { set.queue.flush(order); handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); }); };
   const send = (handle: SharedDocumentHandle, ...values: unknown[]) =>
@@ -53,15 +56,15 @@ function start(order: typeof ORDERS[number], source: Record<string, unknown>) {
     assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); return execution.record;
   };
   let count = 0;
-  const reverse = (record: SharedUndoRecord, effective: boolean) => {
-    const done = reverseSharedUndoRecord(set.a, record, { by: "Writer", nextId: () => "u" + ++count }); flush();
+  const reverse = (record: SharedUndoRecord, effective: boolean, handle = set.a, deliver = true) => {
+    const done = reverseSharedUndoRecord(handle, record, { by: "Writer", nextId: () => "u" + ++count }); if (deliver) flush();
     assert.ok(done.ok); assert.equal(done.effective, effective); return done.inverse;
   };
   const check = (label: string, expected: Reading) => agree(label, order, handles, read, expected);
-  const unchanged = (record: SharedUndoRecord, label: string, expected: Reading) => {
-    const before = [encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)];
-    const inverse = reverse(record, false);
-    assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], before); check(label, expected); return inverse;
+  const unchanged = (record: SharedUndoRecord, label: string, expected: Reading, handle = set.a) => {
+    const before = [encodeSharedState(handle), encodeSharedStateVector(handle), readSharedRevision(handle)];
+    const inverse = reverse(record, false, handle);
+    assert.deepEqual([encodeSharedState(handle), encodeSharedStateVector(handle), readSharedRevision(handle)], before); check(label, expected); return inverse;
   };
   const removal = (record: SharedUndoRecord) => { const part = record.parts[0]; assert.ok(part?.kind === "remove"); return part.removal; };
   return { set, flush, send, command, reverse, check, unchanged, removal, close: () => { incremental.forEach(value => value.projector.dispose()); set.close(); } };
@@ -156,3 +159,78 @@ test("a removal of another kind than a beat stays a structure part; its undo is 
   assert.deepEqual(reverseSharedUndoRecord(run.set.a, record, { by: "Writer", nextId: () => "r1" }), { ok: false, reason: "undo-unsupported:remove" });
   assert.deepEqual([encodeSharedState(run.set.a), encodeSharedStateVector(run.set.a), readSharedRevision(run.set.a)], before);
 }));
+
+const VISUAL = { rows: [{ id: "R1", audioText: "abcd", visualText: "v" }, { id: "R2", audioText: "ef" }] };
+const beat = { scope: "beat", record: "R1" } as const, joinR2 = { kind: "join", id: "j", by: "Other", from: "R2", into: "R1", glue: " " };
+type Run = ReturnType<typeof start>;
+function restoredByWriter(run: Run): SharedUndoRecord {
+  const theirs = run.command(run.set.b, removeOp("gone", "Other"), "remove"); run.flush();
+  const record = run.command(run.set.a, operation({ kind: "restore", id: "back", by: "Writer", removals: [run.removal(theirs)] }), "restore"); run.flush();
+  return record;
+}
+for (const [name, change, after, source, before] of [
+  ["a field set", (run: Run) => run.send(run.set.b, { kind: "scalar", id: "f", by: "Other", target: beat, field: "lengthSeconds", value: 9 }), live, PLAIN, null],
+  ["a status set", (run: Run) => run.send(run.set.b, { kind: "status", id: "s", by: "Other", target: beat, value: "ready", parents: readSharedStatusHeads(run.set.b, beat) }), live, PLAIN, null],
+  ["typing in the visual column", (run: Run) => run.send(run.set.b, { kind: "text-insert", id: "v", by: "Other", target: { owner: "R1", segment: "R1", field: "visualText" },
+    at: { left: null, right: flowBaseReference("R1", "visualText", 0), affinity: "before" }, content: [{ value: "X", marks: [] }] }), live, VISUAL, null],
+  ["another beat joined into it", (run: Run) => run.send(run.set.b, joinR2), state([["R1", "abcd ef"]]), PLAIN, null],
+  ["typing in a piece joined to it", (run: Run) => run.send(run.set.b, { kind: "text-insert", id: "t", by: "Other", target, at: { left: null, right: flowBaseReference("R1", "audioText", 7), affinity: "before" },
+    content: [{ value: "X", marks: [] }] }), state([["R1", "abcd efX"]]), PLAIN, (run: Run) => { run.send(run.set.a, joinR2); run.flush(); }],
+  ["a removal and restore by someone else", (run: Run) => {
+    const again = run.command(run.set.b, removeOp("again", "Other"), "remove"); run.flush();
+    run.send(run.set.b, { kind: "restore", id: "back2", by: "Other", removals: [run.removal(again)] });
+  }, live, PLAIN, null]
+] as const) for (const order of ORDERS) test(`used up: undo of a restore after ${name}: ${order}`, () => scenario(order, run => {
+  before?.(run);
+  const record = restoredByWriter(run); change(run); run.flush();
+  run.unchanged(record, "used up", after);
+}, source));
+
+for (const order of ORDERS) test(`rule 44: undo of a restore made while someone split the beat unseen removes both halves, and the redo brings both back: ${order}`, () => scenario(order, run => {
+  const record = restoredByWriter(run);
+  const undone = run.reverse(record, true, run.set.a, false);
+  run.send(run.set.b, { kind: "split", id: "cut", by: "Other", target, at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" },
+    observed: [], boundary: "Rs", beat: "Rs", fields: {} });
+  run.flush(); run.check("both removed", state([["R2", "ef"]], [["R1", "ab"], ["Rs", "cd"]]));
+  run.reverse(undone, true); run.check("both back", state([["R1", "ab"], ["Rs", "cd"], ["R2", "ef"]]));
+}));
+
+for (const order of ORDERS) test(`used up: undo of a restore after someone removed the beat again: ${order}`, () => scenario(order, run => {
+  const record = restoredByWriter(run);
+  run.send(run.set.b, removeOp("again", "Other")); run.flush(); run.check("removed again", gone);
+  run.unchanged(record, "used up", gone);
+}));
+
+function refused(run: Run, record: SharedUndoRecord, reason: string) {
+  const before = [encodeSharedState(run.set.a), encodeSharedStateVector(run.set.a), readSharedRevision(run.set.a)];
+  assert.deepEqual(reverseSharedUndoRecord(run.set.a, record, { by: "Writer", nextId: () => "r1" }), { ok: false, reason });
+  assert.deepEqual([encodeSharedState(run.set.a), encodeSharedStateVector(run.set.a), readSharedRevision(run.set.a)], before);
+}
+
+test("a command with two removals keeps the generic parts and its undo is refused", () => scenario("D1", run => {
+  const execution = executeSharedCommand(run.set.a, [removeOp("one"), operation({ kind: "remove", id: "two", by: "Writer", removalKind: "beat", targets: ["R2"],
+    observed: [flowBaseReference("R2", "audioText", 0, 2)], boundaries: ["R2"], components: [], gallery: [], at: 1 })],
+  { label: "remove", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); run.flush();
+  assert.deepEqual(execution.record.parts.map(part => part.kind === "structure" ? part.command : part.kind), ["remove", "remove"]);
+  refused(run, execution.record, "undo-unsupported:remove");
+}));
+
+test("a restore of a range removal keeps the generic part and its undo is refused", () => scenario("D1", run => {
+  const theirs = run.command(run.set.b, operation({ ...removeOp("range", "Other"), removalKind: "range" }), "remove"); run.flush();
+  const removal = theirs.parts[0]; assert.ok(removal?.kind === "structure");
+  const key = collabState(run.set.b).roots.removalRecords.keys().next().value; assert.ok(typeof key === "string");
+  const record = run.command(run.set.a, operation({ kind: "restore", id: "back", by: "Writer", removals: [key] }), "restore"); run.flush();
+  assert.deepEqual(record.parts.map(part => part.kind === "structure" ? part.command : part.kind), ["restore"]);
+  refused(run, record, "undo-unsupported:restore");
+}));
+
+for (const together of [false, true]) for (const order of ORDERS)
+  test(`rule 33: two writers undo the removals they made apart ${together ? "at the same moment: both write and the beat is live" : "in turn: the second is used up"}: ${order}`, () => scenario(order, run => {
+    const ours = run.command(run.set.a, removeOp("gone"), "remove"), theirs = run.command(run.set.b, removeOp("gone", "Other"), "remove"); run.flush();
+    run.check("removed", gone);
+    run.reverse(ours, true, run.set.a, !together);
+    if (together) run.reverse(theirs, true, run.set.b);
+    else run.unchanged(theirs, "second used up", live, run.set.b);
+    run.check("live", live);
+  }));

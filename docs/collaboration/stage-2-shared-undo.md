@@ -390,7 +390,9 @@ operation id and `removal`) and the beats that stopped being live, read from
 the live beats before and after the command. A command with one restore of beat
 removals records a `restore` part: the key of its restore record, the beats
 that became live, the removal's place and a fingerprint of those beats as the
-restore left them (the stored beat and its text with marks). A command with
+restore left them: the stored beat with its fields, flags and joins, its status
+and status events, its visual and gallery records, and every piece of its
+joined row with characters and marks. A command with
 more than one removal or restore, or a removal of another kind, records the
 generic structure part.
 
@@ -402,10 +404,16 @@ beat's flags are removed at the removal's generation. If someone else
 restored it, or removed it again afterwards (rule 33), it is used up. Its
 inverse is a `restore` part.
 
-Undo of a `restore` part runs a new `remove` of the same beats, observing
-their whole text (a new change, rule 33). It writes only while every beat is
-live and the fingerprint is unchanged; once anyone typed in, formatted or
-otherwise changed one of them, it is used up. Its inverse is a `remove` part,
+Undo of a `restore` part runs a new `remove` of the same beats (a new change,
+rule 33). It observes each beat's characters as the row shows them, over the
+row's painted length, so a split made at the same moment and unseen sends both
+halves to recovery, as for an ordinary removal (rule 44). It writes only while
+every beat is live and the fingerprint is unchanged; once anyone typed in it
+or in a piece joined to it, formatted it, set a field or the status, changed
+its visual column or records, joined another beat into it, or removed and
+restored it, it is used up. When two writers removed a beat apart and undo
+their removals in turn, the first brings it back and the second is used up;
+when they undo at the same moment, both write and the beat is live. Its inverse is a `remove` part,
 so a redo after an undone removal follows the same rule. Each case has a
 literal in `undo-removal.test.ts` over in-order, reversed and duplicated
 delivery and a late joiner, with the incremental projection compared after

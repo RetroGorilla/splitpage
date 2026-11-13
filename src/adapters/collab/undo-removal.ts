@@ -1,9 +1,8 @@
 import * as Y from "yjs";
-import type { SharedContentRef, SharedOperation, SharedRestore, SharedSoftRemove } from "../../core/collab/operations.ts";
+import type { SharedContentRef, SharedOperation, SharedRestore, SharedSoftRemove, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedUndoPart } from "../../core/collab/undo-record.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
-import { sharedJson } from "./snapshot.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { sharedStructureIdentity } from "./structure-identity.ts";
 import { bindSharedStructurePlan, readSharedStructureRemoval } from "./structure-plan.ts";
@@ -13,6 +12,9 @@ import type { SharedStoredRemovalCommand } from "./removal-record.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
 import { readSharedTextHistory } from "./text-history.ts";
 import { captureSharedTextRange } from "./executor-references.ts";
+import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
+import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
+import { readSharedPaintedText } from "./paint-base.ts";
 
 export type SharedRemovalUndoPart = Extract<SharedUndoPart, { kind: "remove" | "restore" }>;
 
@@ -39,13 +41,38 @@ function segmentOf(handle: SharedDocumentHandle, beat: string): string | null {
   try { return prep.view.resolveOwner(beat, "audioText")?.segment ?? null; } finally { prep.close(); }
 }
 
-// why: undo of a restore never removes someone else's work, so it compares the beats with how the restore left them.
+function rowPieces(handle: SharedDocumentHandle, beat: string): readonly { readonly owner: string; readonly segment: string; readonly glue: string; readonly group: string | null }[] {
+  const prep = createSharedPreparation(handle);
+  try {
+    const owner = prep.view.resolveOwner(beat, "audioText");
+    const parts = owner ? readSharedJoinedTextGeometry(prep.view, beat)?.parts ?? [{ owner: beat, segment: owner.segment, glue: "", group: null }] : [];
+    return parts.map(({ owner, segment, glue, group }) => ({ owner, segment, glue, group }));
+  } finally { prep.close(); }
+}
+
+// why: the attachment index cannot be read inside a write, so a beat's visuals and gallery are found by the beat they name.
+function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
+  const roots = collabState(handle).roots;
+  return (["visuals", "gallery"] as const).flatMap(collection => [...roots[collection].entries()]
+    .filter(([, record]) => record instanceof Y.Map && record.get("beat") === beat).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+    .map(([key, record]) => [collection, key, (record as Y.Map<unknown>).toJSON()]));
+}
+
+// why: undo of a restore never removes someone else's work, so it compares the beats with how the restore left them:
+// the stored beat, its status, its visuals and every piece of its row with characters and marks.
 export function readSharedBeatContent(handle: SharedDocumentHandle, beats: readonly string[]): string {
   return JSON.stringify(beats.map(beat => {
-    const segment = segmentOf(handle, beat), stored = collabState(handle).roots.beats.get(beat);
-    const history = segment ? readSharedTextHistory(handle, { owner: beat as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" }) : null;
-    return [beat, stored instanceof Y.Map ? sharedJson(stored) : null, history?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
+    const stored = collabState(handle).roots.beats.get(beat), status = { scope: "beat", record: beat as SharedContentRef } as const;
+    const pieces = rowPieces(handle, beat).map(piece => {
+      const history = readSharedTextHistory(handle, { owner: piece.owner as SharedContentRef, segment: piece.segment as SharedContentRef, field: "audioText" });
+      return [piece, history?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
+    });
+    return [beat, stored instanceof Y.Map ? stored.toJSON() : null, readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat), pieces];
   }));
+}
+
+function textLength(handle: SharedDocumentHandle, target: SharedTextAddress): number {
+  return readSharedPaintedText(handle, target)?.text.length ?? 0;
 }
 
 export function recordSharedRemoval(handle: SharedDocumentHandle, operation: SharedSoftRemove | SharedRestore, before: ReadonlySet<string>): SharedRemovalUndoPart | null {
@@ -93,7 +120,8 @@ export function planSharedRemovalUndo(handle: SharedDocumentHandle, part: Shared
   const unchanged = part.beats.length > 0 && part.beats.every(beat => before.has(beat)) && readSharedBeatContent(handle, part.beats) === part.content;
   if (!unchanged) return { effective: false, inverse: () => part };
   const command = author(), observed = part.beats.flatMap(beat => {
-    const segment = segmentOf(handle, beat), span = segment && captureSharedTextRange(handle, { owner: beat as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" }, 0, Number.MAX_SAFE_INTEGER);
+    const segment = segmentOf(handle, beat), target = segment ? { owner: beat as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" } as const : null;
+    const span = target && captureSharedTextRange(handle, target, 0, textLength(handle, target));
     return span ? [span] : [];
   });
   push({ kind: "remove", ...command, removalKind: "beat", targets: part.beats, observed, boundaries: part.beats, components: [], gallery: [], at: part.at });

@@ -84,5 +84,7 @@
   {"label":"removal undo ignores that the removal is no longer shown","file":"src/adapters/collab/undo-removal.ts","find":"    return state.removed && state.generation === target.generation;","replace":"    return true;","tests":["tests/adapters/collab/undo-removal.test.ts"]},
   {"label":"restore undo ignores changes since the restore","file":"src/adapters/collab/undo-removal.ts","find":"readSharedBeatContent(handle, part.beats) === part.content","replace":"true","tests":["tests/adapters/collab/undo-removal.test.ts"]},
   {"label":"undo of a discard retires nothing","file":"src/adapters/collab/undo-executor.ts","find":"if (effective) operations.push(operationOf({ kind: \"discard-retire\"","replace":"if (false) operations.push(operationOf({ kind: \"discard-retire\"","tests":["tests/adapters/collab/discard.test.ts"]},
-  {"label":"redo of a discard names the retired record","file":"src/adapters/collab/undo-executor.ts","find":"discard: eventKey(handle, command.id) } })","replace":"discard: part.discard } })","tests":["tests/adapters/collab/discard.test.ts"]}
+  {"label":"redo of a discard names the retired record","file":"src/adapters/collab/undo-executor.ts","find":"discard: eventKey(handle, command.id) } })","replace":"discard: part.discard } })","tests":["tests/adapters/collab/discard.test.ts"]},
+  {"label":"restore undo compares the beat without its stored record","file":"src/adapters/collab/undo-removal.ts","find":"stored instanceof Y.Map ? stored.toJSON() : null","replace":"null","tests":["tests/adapters/collab/undo-removal.test.ts"]},
+  {"label":"undo of a restore observes no text","file":"src/adapters/collab/undo-removal.ts","find":"return span ? [span] : [];","replace":"return [];","tests":["tests/adapters/collab/undo-removal.test.ts"]}
 ]}
