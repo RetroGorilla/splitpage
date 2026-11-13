@@ -12,6 +12,9 @@ const RULES: WriterScanRules = {
   collections: ["productionTags", "brollShots", "people", "comments", "comments.replies"],
   projections: ["core/collab/projection/", "adapters/collab/project.ts", "adapters/collab/projection-reader.ts"],
   engines: [
+    "adapters/collab/stamp.ts#readSharedStamp",
+    "adapters/collab/stamp.ts#sharedBeatStamp",
+    "adapters/collab/stamp.ts#sharedStampOperation",
     "adapters/production/broll-anchors.ts#anchorBrollInRows",
     "application/production/broll-records.ts#recordPastedBroll",
     "application/session/document-session.ts#AttributionPort.attribute",
@@ -47,15 +50,15 @@ interface Writer {
 const WRITERS = {
   "beat-stamp": {
     family: "attribution", shared: "operation",
-    reason: "A command that changes a beat writes who and when (updatedAt, updatedBy). Shared: one scalar `stamp` {at, by} for that beat in the command's list, or the fields of the operation that creates the beat; once per typing group (decided 2026-11-09)."
+    reason: "A command that changes a beat writes who and when (updatedAt, updatedBy). Shared: one scalar `stamp` {at, by} for that beat in the command's list, or the fields of the operation that creates the beat; once per typing group (decided 2026-11-09), built for Writer typing as one stamp per buffered commit. A stamp replaces the stamps its copy has seen."
   },
   "beat-stamp-read": {
     family: "attribution", shared: "derivation",
-    reason: "The projection turns the stored `stamp` into updatedAt and updatedBy."
+    reason: "The projection turns the stored `stamp` into updatedAt and updatedBy; of stamps written without seeing each other it shows the later time, then the later name."
   },
   "undo-stamp": {
     family: "attribution", shared: "not applicable",
-    reason: "Standalone undo and redo stamp a beat they change through a field step other than paragraphStart, never a beat they put back. Shared: undo leaves the stamp as it is; the stamp is not in the undo record (assumed rule 35)."
+    reason: "Standalone undo and redo stamp a beat they change through a field step other than paragraphStart, never a beat they put back. Shared: undo leaves the stamp as it is; the executor leaves stamp scalars out of the undo record (assumed rule 35)."
   },
   "comment-stamp": {
     family: "attribution", shared: "operation",
@@ -314,7 +317,12 @@ const COMPUTED: readonly Site[] = [
 const FROM_TEXT = ["tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"] as const;
 
 const ENGINES: readonly Site[] = [
-  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2, sharedTagsIntroducedByText 1", "stated-write", "recovery-write", "tag-from-text"],
+  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2, sharedBeatStamp 1, sharedTagsIntroducedByText 1", "stated-write", "recovery-write", "tag-from-text",
+    "beat-stamp"],
+  ["adapters/collab/projection-reader.ts#readProjectionFields", "readSharedStamp 1", "beat-stamp-read"],
+  ["adapters/collab/scalar-executor.ts#prepareScalar", "sharedStampOperation 1", "beat-stamp"],
+  ["adapters/collab/scalar-reader.ts#readSharedScalars", "readSharedStamp 1", "beat-stamp-read"],
+  ["adapters/collab/undo-executor.ts#executeCommand", "sharedStampOperation 1", "undo-stamp"],
   ["adapters/production/broll-anchors.ts#anchorBrollInRows", "planBrollAnchors 1", "broll-key"],
   ["application/commands/broll-records.ts#addShotCommand", "addBrollRecord 1", "record-stated"],
   ["application/commands/production-records.ts#addPersonCommand", "addPerson 1", "record-stated"],

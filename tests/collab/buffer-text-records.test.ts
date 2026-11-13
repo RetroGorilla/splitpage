@@ -11,7 +11,7 @@ import { newRegistryTag } from "../../src/core/production/tags.ts";
 import { namedTagId } from "../../src/core/text/runs.ts";
 import type { Run } from "../../src/core/text/runs.ts";
 import { assertReplicasAgree } from "./agreement.ts";
-import { bufferReaders } from "./buffer-readers.ts";
+import { bufferReaders, bufferStamps } from "./buffer-readers.ts";
 
 const CHAIR = { id: "t_l9u69h7au1fw", cat: "prop", name: "Chair", status: "needed" };
 const DOOR = { id: "t_1opaishvqv40e", cat: "sound", name: "door slam", status: "needed" };
@@ -20,7 +20,8 @@ const chair = (text = "Chair"): Run => ({ text, marks: { tag: namedTagId("prop",
 function writer(h: Stage1ExecutorHarness, handle: SharedDocumentHandle, by: string) {
   const session = sharedHarness(adapterReplica(handle));
   let serial = 0;
-  const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer:" + ++serial, by }), readers: bufferReaders });
+  const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer:" + ++serial, by }), readers: bufferReaders,
+    stamps: bufferStamps(by) });
   const open = (row = "R1") => {
     const painted = readSharedPaintedText(handle, h.target(row)); assert.ok(painted);
     const edit = port.open(row, painted); assert.ok(edit);
@@ -47,7 +48,7 @@ test("a tag typed into narration with no registry entry gets one, minted as a no
     try {
       const edit = a.open(); edit.replace(2, 2, "Chair");
       assert.equal(edit.commit([{ text: "ab", marks: {} }, chair()]).kind, "applied");
-      assert.deepEqual(a.sent(), [["text-insert", ["record-create", CHAIR.id, { cat: "prop", name: "Chair", status: "needed" }]]]);
+      assert.deepEqual(a.sent(), [["text-insert", ["record-create", CHAIR.id, { cat: "prop", name: "Chair", status: "needed" }], "scalar"]]);
       h.queue.flush(order); h.join();
       assertReplicasAgree("tag from text", [h.a, h.b, h.c].map((handle, index) => ({ order: index === 2 ? "late-C" as const : order === "late-C" ? "D1" as const : order,
         replica: index === 0 ? "A" as const : index === 1 ? "B" as const : "C" as const, output: projectSharedDocumentWithRecovery(handle) })));
@@ -74,8 +75,8 @@ test("a sound cue typed into narration gets a sound entry; plain typing, a regis
     assert.equal(edit.commit([{ text: "y", marks: {} }, chair("ChairChair"), { text: "abx\n", marks: {} }, cue]).kind, "applied");
     const sent = a.sent();
     assert.deepEqual([sent[0], sent[1]?.slice(1), sent[2]?.slice(1), sent[3]?.slice(1), sent[5]?.slice(1)],
-      [["text-insert"], [["record-create", DOOR.id, { cat: "sound", name: "door slam", status: "needed" }]],
-        [["record-create", CHAIR.id, { cat: "prop", name: "Chair", status: "needed" }]], [], []]);
+      [["text-insert", "scalar"], [["record-create", DOOR.id, { cat: "sound", name: "door slam", status: "needed" }], "scalar"],
+        [["record-create", CHAIR.id, { cat: "prop", name: "Chair", status: "needed" }], "scalar"], ["scalar"], ["scalar"]]);
     assert.deepEqual(tags(h.a), [DOOR]);
   } finally { a.session.session.dispose(); h.destroy(); }
 });
@@ -87,7 +88,7 @@ test("a registered tag typed into a beat that did not show it gets no entry, and
     assert.equal(edit.commit([{ text: "ab", marks: {} }, chair()]).kind, "applied");
     edit = a.open("R2"); edit.replace(0, 0, "Chair");
     assert.equal(edit.commit([chair(), { text: "cd", marks: {} }]).kind, "applied");
-    assert.deepEqual(a.sent()[1], ["text-insert"]);
+    assert.deepEqual(a.sent()[1], ["text-insert", "scalar"]);
     assert.deepEqual(tags(h.a), [CHAIR]);
     assert.deepEqual(projectSharedDocumentWithRecovery(h.a).recovery, []);
   } finally { a.session.session.dispose(); h.destroy(); }

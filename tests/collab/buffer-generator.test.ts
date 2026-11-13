@@ -7,7 +7,7 @@ import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState } from "../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
 import { assertReplicasAgree } from "./agreement.ts";
-import { bufferReaders } from "./buffer-readers.ts";
+import { bufferReaders, bufferStamps } from "./buffer-readers.ts";
 
 const DECLARED_LIMITS: readonly { readonly name: string; readonly violation: RegExp }[] = [];
 const WRITERS = ["Alice", "Bob", "Carol"] as const;
@@ -24,7 +24,9 @@ for (let seed = 1; seed <= 12; seed++) {
     try {
       const edits = handles.map((handle, index) => {
         const session = sessions[index], spec = EDITS[index], by = WRITERS[index]; assert.ok(session && spec && by);
-        const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer", by }), readers: bufferReaders });
+        const at = "2026-11-12T10:00:0" + (seed + index) % 2 + ".000Z";
+        const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer", by }), readers: bufferReaders,
+          stamps: bufferStamps(by, () => at) });
         const painted = readSharedPaintedText(handle, h.target("R1")); assert.ok(painted);
         const edit = port.open("R1", painted); assert.ok(edit);
         edit.replace(spec.from, spec.to, spec.insert);
@@ -48,6 +50,7 @@ for (let seed = 1; seed <= 12; seed++) {
       for (const handle of [...handles, late]) {
         const shown = projectSharedDocumentWithRecovery(handle);
         if (shown.document.rows[0]?.audioText !== "aABdC" || shown.recovery.length) violations.push("native edit lost or moved");
+        if (!WRITERS.some(by => by === shown.document.rows[0]?.updatedBy)) violations.push("no writer's stamp shown");
       }
       assert.deepEqual(violations.filter(violation => !DECLARED_LIMITS.some(limit => limit.violation.test(violation))), []);
       assert.deepEqual(DECLARED_LIMITS.filter(limit => !violations.some(violation => limit.violation.test(violation))).map(limit => limit.name), []);
