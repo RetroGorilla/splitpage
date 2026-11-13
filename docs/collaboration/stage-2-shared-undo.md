@@ -70,13 +70,15 @@ A refusal leaves both stacks as they were. The reasons:
 
 - `undo-unsupported:<kind>`: the entry has a part the executor cannot reverse.
   The executor is not called. Every structure command but a join, a beat
-  removal and a restore of beat removals is refused this way until its
-  executor lands: `segment-create`, `split`, `split-before`, `join-glue`,
-  `segment-move`, `heading-create`, `heading-finalize`, `heading-remove`. A
+  removal, a heading removal without a new beat and a restore of either is
+  refused this way until its executor lands: `segment-create`, `split`,
+  `split-before`, `join-glue`, `segment-move`, `heading-create`,
+  `heading-finalize`, and `heading-remove` with a new beat (a demotion). A
   removal of another kind (range, became-heading) is named `remove` and
   refused by the executor with `undo-unsupported:remove`. See
-  [Undo of a join](#undo-of-a-join) and
-  [Undo of a removal and a restore](#undo-of-a-removal-and-a-restore).
+  [Undo of a join](#undo-of-a-join),
+  [Undo of a removal and a restore](#undo-of-a-removal-and-a-restore) and
+  [Undo of a heading removal and its restore](#undo-of-a-heading-removal-and-its-restore).
 - `command-in-progress`: asked while a command is being recorded.
 - `undo-in-progress`: asked from inside an undo.
 - `held`: a hold is open.
@@ -418,6 +420,27 @@ so a redo after an undone removal follows the same rule. Each case has a
 literal in `undo-removal.test.ts` over in-order, reversed and duplicated
 delivery and a late joiner, with the incremental projection compared after
 every delivery.
+
+### Undo of a heading removal and its restore
+
+A `heading-remove` without a new beat writes a `header` removal record, so it
+is recorded as a `remove` part naming the heading in `headings`, and a restore
+of one header removal as a `restore` part naming it. The same rules as for a
+beat apply: undo of the removal runs `restore` while the removal is the one the
+heading shows (its `removal:` field is removed at the removal's generation),
+and a name typed by someone who had not seen the removal comes back with it.
+Undo of the restore runs a new `heading-remove` that observes the whole name,
+only while the heading is live and nothing stored for it or for its scene's
+first beat changed since the restore: the heading record, the name's characters
+and marks, and the first beat as compared for a beat. Literals in
+`undo-heading.test.ts`.
+
+Not undone yet, each refused by name with a literal: a demotion (a
+`heading-remove` with a new beat), because restoring the removal leaves the
+name in the new beat and undoing the split has no operation yet; a heading
+created by paste, because every paste that creates a heading also creates a
+beat (`segment-create`); a command that removes a heading and a beat together;
+and a restore of a heading removal and a beat removal at once.
 
 ### The provenance marker
 
