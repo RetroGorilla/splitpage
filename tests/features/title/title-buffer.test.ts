@@ -140,6 +140,7 @@ test("shared title: Enter changes nothing and tells nothing", () => {
 
 for (const [label, act] of [
   ["Ctrl+V", (page: TitlePage) => page.edge.paste("Q")],
+  ["Ctrl+X over a selection", (page: TitlePage) => { page.edge.select(0, 2); return page.edge.cut(); }],
   ["Ctrl+Z", (page: TitlePage) => page.edge.undo("Draft")]
 ] as const) {
   test(`shared title: ${label} after typing is refused and the person is told; nothing changes`, () => {
@@ -166,6 +167,81 @@ test("shared title: a composition settles once at compositionend", () => {
     page.edge.imeCommit("漢");
     assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, written(page)], ["Draft漢", "Draft漢", "Draft漢", [], [[inserted("漢")]]]);
     copies(page, ["Draft漢", "user"]);
+  } finally { page.close(); }
+});
+
+const FULL = "a".repeat(300);
+const TOO_LONG = [{ kind: "rejected", reason: "buffer-title-length" }];
+
+test("shared title: a letter typed into a full 300-unit title is refused and told once; nothing is written, and the next edits still work", () => {
+  const page = sharedTitle(FULL);
+  try {
+    page.main.focus();
+    page.edge.select(300);
+    page.edge.type("X");
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, page.a.executed.length, holds(page)],
+      [FULL, FULL, FULL, [300, 300, "none"], TOO_LONG, 0, []]);
+    copies(page, [FULL, "user"]);
+    assert.equal(page.edge.backspace(), true);
+    page.edge.type("Y");
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, written(page)],
+      ["a".repeat(299) + "Y", "a".repeat(299) + "Y", "a".repeat(299) + "Y", TOO_LONG, [[{ kind: "text-delete", observed: 1 }], [inserted("Y")]]]);
+    copies(page, ["a".repeat(299) + "Y", "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title: a composition that would take the title past 300 units is refused and told once at its commit", () => {
+  const page = sharedTitle("a".repeat(299));
+  try {
+    page.main.focus();
+    page.edge.select(299);
+    page.edge.imeSet("漢字");
+    page.edge.imeCommit("漢字");
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length, holds(page)],
+      ["a".repeat(299), "a".repeat(299), "a".repeat(299), TOO_LONG, 0, []]);
+    copies(page, ["a".repeat(299), "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title: two writers each typing the 300th unit leave 301 stored; the inputs show it, growth is refused and a deletion is written", () => {
+  const page = sharedTitle("a".repeat(299));
+  try {
+    page.main.focus();
+    page.edge.select(299);
+    remote(page, 0, "Y");
+    page.edge.type("X");
+    page.h.queue.flush("dup");
+    page.paint();
+    const both = "Y" + "a".repeat(299) + "X";
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.viewTitle(), page.reports], [both, both, both, "Y" + "a".repeat(299), []]);
+    copies(page, [both, "user"]);
+    page.edge.select(301);
+    page.edge.type("Z");
+    assert.deepEqual([page.stored(), page.main.value, page.reports, page.a.executed.length], [both, both, TOO_LONG, 1]);
+    assert.equal(page.edge.backspace(), true);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length],
+      ["Y" + "a".repeat(299), "Y" + "a".repeat(299), "Y" + "a".repeat(299), TOO_LONG, 2]);
+    copies(page, ["Y" + "a".repeat(299), "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title: two writers each committing two units onto 298 leave 302 stored, and it shortens one deletion at a time", () => {
+  const page = sharedTitle("a".repeat(298));
+  try {
+    page.main.focus();
+    page.edge.select(298);
+    remote(page, 0, "YZ");
+    page.edge.imeSet("漢字");
+    page.edge.imeCommit("漢字");
+    page.h.queue.flush("dup");
+    page.paint();
+    const both = "YZ" + "a".repeat(298) + "漢字";
+    assert.deepEqual([page.stored(), page.main.value, page.viewTitle(), page.reports], [both, both, "YZ" + "a".repeat(298), []]);
+    page.edge.select(302);
+    assert.equal(page.edge.backspace(), true);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length],
+      [both.slice(0, 301), both.slice(0, 301), both.slice(0, 301), [], 2]);
+    copies(page, [both.slice(0, 301), "user"]);
   } finally { page.close(); }
 });
 
