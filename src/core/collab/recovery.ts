@@ -16,7 +16,7 @@ export type SharedRecoveryEntry =
   | (SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
   | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
   | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly removal?: SharedRecoveryRemoval;
-    readonly buffer?: readonly SharedRemovalBufferSource[] }
+    readonly buffer?: readonly SharedRemovalBufferSource[]; readonly splitBy?: string }
   | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
     readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
   | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
@@ -38,4 +38,23 @@ export function projectSharedRecoveryRemoval(parts: readonly { readonly removals
     }
   }
   return ids.size ? { ids: [...ids].sort(compare), by: [...by].sort(compare).join(", "), edited } : null;
+}
+
+export interface SharedCoverageBlock { readonly id: string; readonly segment: string; readonly units: readonly SharedProjectionUnit[] }
+
+export function projectSharedCoveredBeats(blocks: readonly SharedCoverageBlock[], removed: ReadonlySet<string>,
+  sources: ReadonlyMap<string, readonly SharedRecoveryRemovalSource[]>): Map<string, SharedRecoveryRemovalSource[]> {
+  const bySegment = new Map<string, SharedRecoveryRemovalSource[]>(), covered = new Map<string, SharedRecoveryRemovalSource[]>();
+  for (const block of blocks) if (removed.has(block.id)) {
+    const list = bySegment.get(block.segment) ?? [];
+    for (const source of sources.get(block.id) ?? []) if (!list.includes(source)) list.push(source);
+    bySegment.set(block.segment, list);
+  }
+  for (const block of blocks) {
+    const candidates = removed.has(block.id) ? undefined : bySegment.get(block.segment);
+    if (!candidates?.length) continue;
+    const covering = candidates.filter(source => block.units.some(unit => unit.identity !== undefined && source.observed.has(sharedRecoveryIdentityKey(unit.identity))));
+    if (covering.length) covered.set(block.id, covering);
+  }
+  return covered;
 }

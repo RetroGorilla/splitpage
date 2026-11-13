@@ -12,6 +12,7 @@ import type { SharedHistoryUnit, SharedTextHistory } from "./text-history.ts";
 import { executeSharedOperations } from "./execute.ts";
 import { collabState, sharedWriteFrame } from "./state.ts";
 import { scalarTarget } from "./scalar-executor.ts";
+import { sharedStampOperation } from "./stamp.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
@@ -321,7 +322,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       else if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, operation.target));
     } else if (operation.kind === "record-create" || operation.kind === "record-set" || operation.kind === "record-delete") {
       if (!records.has(recordKey(operation.target))) records.set(recordKey(operation.target), recordFields(handle, operation.target));
-    } else if (operation.kind === "scalar") {
+    } else if (operation.kind === "scalar" && !sharedStampOperation(operation)) {
+      // why: assumed rule 35 on #1414: a stamp is left out of the undo record, so stamped typing still groups.
       const record = scalarTarget(handle, operation.target);
       if (record) priors.set(operation, record.has(operation.field) ? { value: sharedPreparedValue(record.get(operation.field)) as Extract<SharedFieldValue, { clear?: false }>["value"] } : { clear: true });
     }

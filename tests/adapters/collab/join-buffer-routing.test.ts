@@ -6,7 +6,7 @@ import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { sharedBufferedTarget, createSharedBufferedText } from "../../../src/adapters/collab/buffer.ts";
-import { bufferReaders } from "../../collab/buffer-readers.ts";
+import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { resolveSharedBufferedSelection } from "../../../src/adapters/collab/buffer-selection.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedAnchorCharacterEnd } from "../../../src/adapters/collab/anchors.ts";
@@ -35,7 +35,8 @@ for (const split of [false, true]) test("Writer buffered target paints and edits
       const unit = painted.identity(offset - 1); assert.ok(unit); const end = sharedAnchorCharacterEnd(unit); assert.ok(end);
       assert.deepEqual(resolveSharedBufferedSelection(set.a, [end, end]), { anchor: expected, head: expected });
     }
-    const port = createSharedBufferedText(set.a, session.session, { target: id => sharedBufferedTarget(set.a, id), author: () => ({ id: "buffer", by: "Alice" }), readers: bufferReaders });
+    const port = createSharedBufferedText(set.a, session.session, { target: id => sharedBufferedTarget(set.a, id), author: () => ({ id: "buffer", by: "Alice" }), readers: bufferReaders,
+      stamps: bufferStamps("Alice") });
     const edit = port.open(owner, painted); assert.ok(edit); const at = split ? 3 : 4;
     edit.replace(at, at, "X"); const result = edit.commit([{ text: split ? "b cXd" : "ab cXd", marks: {} }], [at + 1, at + 1]);
     assert.equal(result.kind, "applied"); assert.ok("selection" in result);

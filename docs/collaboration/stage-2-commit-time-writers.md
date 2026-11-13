@@ -28,7 +28,7 @@ a table differ in either direction:
 | `FIELDS` | In any module under `src/`, every write of a who, when, placement or paragraph field: see below |
 | `RECORDS` | Every write of a record collection (tags, shots, people, comments, a comment's replies): replacement, a mutating array call, an indexed write, a truncation, and a call to a generic appender that pushes into its argument, listed at the call site |
 | `COMPUTED` | Every write whose field name is known only at run time, to a beat, a record, a reply or the document, or to a type one of them is assignable to, looking through casts; in the projection modules also to an open bag (`open`), and every merge or spread from one |
-| `ENGINES` | Every use of a function or port member that makes records, placement or attribution from text, and every place that provides or reads a command's shared operation list: in an object literal or a spread, as a class member under `implements`, by destructuring or by element access |
+| `ENGINES` | Every use of a function or port member that makes records, placement or attribution from text, or builds, recognises or reads a shared beat stamp, and every place that provides or reads a command's shared operation list: in an object literal or a spread, as a class member under `implements`, by destructuring or by element access |
 | `DOORS` | Every module that reaches the standalone session's `stamp`, `amend` or `noteEdit`, from the typed inventory of `session-caller-scan.ts` |
 
 A field write in `FIELDS` is any of these:
@@ -97,9 +97,8 @@ runs the whole sequence through the picker command and the session.
 
 Three more cases sit under entries whose class is determined:
 
-- Two people change one beat at the same moment. The stamp is one value, so one
-  name stays on every copy, chosen by the fixed rule of assumed rule 23, not by
-  the later clock time.
+- Two people change one beat at the same moment. One name stays on every copy:
+  the one whose stamp has the later time, then the later name ([Stamps](#stamps)).
 - A B-roll line is deleted. The shot keeps the name stored when it was created or
   last renamed by hand, not the last words of the line.
 - The same comment anchor in both columns of one beat. A normal script places the
@@ -164,11 +163,50 @@ Not built here:
 - the replica that runs these lists in the app. It must register the record
   handlers, or a commit that introduces a tag is refused as a whole.
 
+## Stamps
+
+A beat's stamp is who changed it last and when. In a shared session it is an
+explicit step of the edit's own list: a `scalar` operation on the beat's `stamp`
+field with `{at, by}`, the editor's name and the time of the commit. Writer typing
+reaches the document as one buffered commit per run of typing in a beat, so that
+commit carries one stamp, and only when it changes the text.
+`sharedBeatStamp` in `adapters/collab/stamp.ts` builds it and
+`createSharedBufferedText` appends it. A copy that receives the list writes nothing.
+
+Each copy stores its stamp under a key of its own in the beat (`stamp:` and the
+copy's writer id, so a later stamp from the same copy replaces its earlier one and
+two copies whose commands share an author id still write two keys), and the copy
+that writes it removes every stamp it has seen. The rule that decides what the beat
+shows:
+
+- A stamp replaces every stamp its copy had seen when it was written, even if its
+  clock is behind.
+- Stamps written without seeing each other are all kept. The beat shows the one
+  with the later time; at the same time, the later name; both compared as text.
+  A stored stamp under a `stamp:` key counts only if it has the form a stamp
+  operation may write (a text time, a text or empty name).
+
+The rule reads only the stamps themselves, so delivery order and the copies' client
+ids do not change which one is shown; the client id only names each copy's key. A plain scalar set would leave the native register
+winner, which depends on client ids; the stamp is the one scalar read this way.
+A beat holds at most one stamp per copy that wrote without seeing the others. The
+stamp a beat was created or hydrated with stays under `stamp` until the first stamp
+step removes it, so a beat no step has stamped is read with one lookup; after that
+the reader lists the beat's keys.
+`tests/collab/buffer-stamps.test.ts` holds the rule over four delivery orders,
+with the names swapped between the copies and with one author id on both copies.
+
+Other commands send no shared list yet; each one that does adds its stamp the same
+way.
+
 ## Stamp on undo
 
 Settled as assumed rule 35: in a shared session undo leaves the stamp as it is. The
 stamp is not part of an undo record, so undoing neither restores an earlier stamp
 nor writes a new one, and stamped typing keeps coalescing into its typing groups.
+The shared undo executor records no part for a stamp operation;
+`tests/collab/buffer-stamps.test.ts` pins that two stamped keystrokes form one
+group and that undoing it leaves the stamp on every copy.
 
 In a normal script, undo and redo stamp a beat they change through a field step,
 except a `paragraphStart` step, with the person and time of the undo. A beat that
