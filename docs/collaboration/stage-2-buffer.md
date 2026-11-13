@@ -351,6 +351,83 @@ Declared limits, each pinned by a literal in
   an existing beat its visual record and text in one list, so the first commit in
   such a cell can create it.
 
+## Scene headings in the Writer
+
+A buffered field is named by a key: a narration field by its row id, a visual
+cell by its row id, U+FFFD and `visualText` (`bufferedFieldKey`), a scene heading
+by `heading:<scene id>` (`headingFieldKey`). Row and scene ids are cleaned to
+`[A-Za-z0-9_-]`, so a key with a colon is never a beat cell's.
+`bufferedFieldTarget` in `src/application/editing/buffered-field-key.ts` turns a
+key into its owner and field, handing a key without a colon to
+`readBufferedFieldKey`, so there is one parser for every key. The painted record,
+`PaintedTextSource.read`, `sharedBufferedTarget`, the commit's change set, the
+selection after a commit and the recovery write all read the key through it. The
+binding asks the surface for a position's key (`key`) and for the position at a
+key's offset (`position`); without them it takes beats only, so the Split view is
+unchanged. The Writer gives its `.wr-heading` elements to the same binding, so
+there is still one edit per surface and one ownership walk. A heading commit
+writes the existing `text-insert` and `text-delete` on the `heading` field, with
+the change set of a scene rename (`sections`) and no beat stamp. The caret after
+it is mapped through the heading's own anchors (`collabProjectedHeadingPoint`),
+never into the next beat. The painted record holds each shown heading at every
+paint, and `PaintedTextSource.read` answers the `heading` field.
+
+Assumed rules, for the plan review (numbers as in the lane's report on #1414):
+
+- Typing, deletion and composition inside one heading go through the buffer.
+- A selection from a heading into anything else is the rule 31 case: typing is
+  settled, then the existing command runs; composition over it is refused.
+- Enter, paste, cut, formatting and Backspace at a heading's start settle typing
+  and then run their existing command. With the split and removal handlers
+  registered, Enter, paste, cut and that Backspace are applied, and formatting plans nothing.
+- A heading with no visible text is not settled: the edit stays open and holds
+  received updates while the person is in it, and the next keystroke that gives
+  it text settles as one replacement. If the edit ends while empty (settlement,
+  focus loss, another command, unmounting) the stored name is put back and the
+  person is told once (`buffer-heading-empty`). A keydown never ends the hold;
+  the hold ends on what happens: a `beforeinput` that is not an insertion or
+  composition into that heading, a command about to run (the session's
+  `beforeCommand` admission), the selection leaving the heading (`moved`, called
+  at `selectionchange` and `mouseup`, and only while a heading is held), or focus
+  loss. Each ends it the same way. A key, input, paste, cut or drop that ends the
+  hold is consumed: its default is prevented and no command runs, so it never acts
+  on the restored name the person did not see. That covers Backspace and Delete
+  (also with a target range reaching into the next beat), Enter, paste, cut, drop,
+  `historyUndo`/`historyRedo` and the undo and redo shortcuts; the surface's own
+  commands check the hold before they write. Selection leaving and focus loss have
+  nothing to consume. An insertion settles as one replacement with no report, and
+  a change adopted with no `beforeinput` or found by a paint keeps the hold. Paste
+  is not an insertion: emptying a name and then pasting a new one ends the hold
+  with the report, while selecting the name and pasting over it replaces it. A
+  removal of the heading by someone else waits behind the hold and lands once it
+  ends. A composition records
+  at `compositionstart` whether it began in a heading held empty; cancelling it
+  then puts the name back with the one report, whatever text the cancel leaves.
+  A composition that began elsewhere and is cancelled is a plain cancel.
+- In a shared session the projected scene name is the stored text, character for
+  character, spaces at its edges included, so the screen, the painted record,
+  Find and Replace, copy and every flow command count on one string. The session's
+  entry port must keep each scene name as projected: the file loader
+  (`migrateRows`) trims names, and the stand-in entry in
+  `tests/application/session/shared-session-support.ts` puts the projected names
+  back. Removing edge spaces is a write that belongs to heading finalization
+  (package 10); until then a shared name may carry them. Places that already trim
+  a name when printing it (outline, numbering, export, through `normalizeScenes`)
+  still do.
+- A keystroke that takes a heading past 200 characters is refused and put back
+  (`buffer-heading-length`); what was settled before stays.
+- Heading text the document refuses goes to recovery through the rule 29 write,
+  unchanged: one removed beat holding the name as narration, with
+  `bufferSourceOwner` the scene id, placed at the end because its source is not a
+  beat. `recovered` receives the heading's key.
+
+`tests/features/writer/buffer-heading.test.ts` holds each case, including a
+remote change mid-typing, mid-composition and while the heading is held empty,
+compared on the typist, the other copy and a late joiner. "standalone heading
+keystroke" in `tests/features/writer/buffer-cost.test.ts` pins that the
+standalone rename builds no buffer or painted record and reads no key. The
+Split view's rename form and the title are not bound yet.
+
 ## Mapping and coverage
 
 Mapping normalizes the supplied native runs once, then slices the prepared units

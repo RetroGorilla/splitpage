@@ -46,7 +46,15 @@ export function registerSplits(handle: SharedDocumentHandle): void {
 }
 
 export function enterProjection(raw: unknown): ValidatedDocument {
-  return migrateRows(structuredClone(raw), fakeMigration().ports);
+  const held = migrateRows(structuredClone(raw), fakeMigration().ports);
+  const projected = raw !== null && typeof raw === "object" ? (raw as { readonly sections?: unknown }).sections : undefined;
+  const names = new Map(Array.isArray(projected) ? projected.map((scene: { readonly id?: unknown; readonly name?: unknown } | null) => [scene?.id, scene?.name]) : []);
+  // why: a shared entry keeps each scene name as stored, edge spaces included; migrateRows trims names read from files
+  if (Array.isArray(held.sections)) for (const scene of held.sections as { id: string; name: string }[]) {
+    const name = names.get(scene.id);
+    if (typeof name === "string") scene.name = name;
+  }
+  return held;
 }
 
 export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = {}): SharedHarness {
