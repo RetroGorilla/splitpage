@@ -22,6 +22,8 @@ import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { SharedTextPreparationError } from "./executor-text-plan.ts";
 import { readSharedJoinedText, usesSharedJoinedText } from "./joined-text-routing.ts";
+import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
+import { sharedStructureReference } from "./structure-identity.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { sharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { FORMAT_MARKS } from "../../core/text/runs.ts";
@@ -89,14 +91,19 @@ function spaceFormat(handle: SharedDocumentHandle, group: string, format: Format
 }
 
 // why: a joined row keeps each piece's marks in its own text, and each space's format beside its join.
-function joinedRow(handle: SharedDocumentHandle, target: SharedTextAddress): { readonly pieces: SharedTextAddress[]; readonly groups: string[] } | null {
+function joinedRow(handle: SharedDocumentHandle, recorded: SharedTextAddress, rooted = false):
+  { readonly target: SharedTextAddress; readonly pieces: SharedTextAddress[]; readonly groups: string[] } | null {
   const prep = createSharedPreparation(handle);
   try {
+    const owner = rooted ? prep.view.resolveOwner(sharedStructureReference(prep.view, recorded.owner), "audioText") : null;
+    const geometry = owner ? readSharedJoinedTextGeometry(prep.view, owner.owner) : null, root = geometry?.root as SharedContentRef | undefined;
+    // why: a row joined into an earlier row since the command is read, and its spaces written, through that row.
+    const target = root && root !== owner?.owner ? { ...recorded, owner: root, segment: root } : recorded;
     if (!usesSharedJoinedText(prep.view, target)) return null;
     const row = readSharedJoinedText(prep.view, target), pieces = new Map<string, SharedTextAddress>();
     if (!row) return null;
     for (const span of row.spans) if (!pieces.has(span.plan.path.join("\0"))) pieces.set(span.plan.path.join("\0"), { ...span.plan.target, owner: span.owner as SharedContentRef });
-    return { pieces: [...pieces.values()], groups: row.items.flatMap(item => item.group ? [item.group] : []) };
+    return { target, pieces: [...pieces.values()], groups: row.items.flatMap(item => item.group ? [item.group] : []) };
   } catch (error) {
     if (error instanceof SharedTextPreparationError) return null;
     throw error;
@@ -105,9 +112,10 @@ function joinedRow(handle: SharedDocumentHandle, target: SharedTextAddress): { r
 
 // why: a space is changed back only while its join is still in the row and it holds what the command wrote.
 function spacesToReverse(handle: SharedDocumentHandle, part: { readonly target: SharedTextAddress; readonly mark: SharedMarkValue; readonly spaces?: readonly string[] },
-  written: boolean): string[] {
-  const format = formatOf(part.mark), row = part.spaces?.length && format ? joinedRow(handle, part.target) : null;
-  return row && format ? (part.spaces ?? []).filter(group => row.groups.includes(group) && spaceFormat(handle, group, format) === written) : [];
+  written: boolean): { readonly target: SharedTextAddress; readonly spaces: string[] } {
+  const format = formatOf(part.mark), row = part.spaces?.length && format ? joinedRow(handle, part.target, true) : null;
+  return { target: row?.target ?? part.target,
+    spaces: row && format ? (part.spaces ?? []).filter(group => row.groups.includes(group) && spaceFormat(handle, group, format) === written) : [] };
 }
 
 function spaceMark(target: SharedTextAddress, spaces: readonly string[], mark: SharedMarkValue, author: { id: string; by: string }): Record<string, unknown> {
@@ -192,8 +200,8 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       const history = historyOf(handle, part.target);
       const removed = part.added.map(entry => ({ occurrence: entry.occurrence, units: history.showing(entry.occurrence).map(unit => unit.identity) })).filter(entry => entry.units.length);
       if (removed.length) operations.push(operationOf({ kind: "mark-retract", ...author(), target: history.target, occurrences: removed.map(entry => entry.occurrence) }));
-      const spaces = spacesToReverse(handle, part, true);
-      if (spaces.length) operations.push(operationOf(spaceMark(part.target, spaces, { ...added(part.mark), value: null }, author())));
+      const { target, spaces } = spacesToReverse(handle, part, true);
+      if (spaces.length) operations.push(operationOf(spaceMark(target, spaces, { ...added(part.mark), value: null }, author())));
       return { inverse: () => ({ effective: removed.length + spaces.length > 0,
         part: { kind: "mark-remove", target: part.target, mark: part.mark, removed, ...spaces.length ? { spaces } : {} } }) };
     }
@@ -206,8 +214,8 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       }
       const command = wanted.length ? author() : null;
       if (command) operations.push(operationOf({ kind: "mark", ...command, target: history.target, observed: wanted.map(unit => unit.identity), mark }));
-      const spaces = spacesToReverse(handle, part, false);
-      if (spaces.length) operations.push(operationOf(spaceMark(part.target, spaces, mark, author())));
+      const { target, spaces } = spacesToReverse(handle, part, false);
+      if (spaces.length) operations.push(operationOf(spaceMark(target, spaces, mark, author())));
       return { inverse: after => {
         const now = command && after(part.target);
         return { effective: wanted.length + spaces.length > 0, part: { kind: "mark-add", target: part.target, mark: part.mark,

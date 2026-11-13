@@ -305,7 +305,9 @@ How the points left open by the model are met:
    39, the `scalar` part): undo writes the earlier value back only while the
    space still holds what the command wrote and its join is still in the row.
    It does so with a `mark` over the space alone (`["join-glue", group]`),
-   which writes nothing else. After an unjoin the pieces' records are still
+   which writes nothing else. When the row has since been joined into an
+   earlier row, the space is read and written through the row that now holds
+   the join. After an unjoin the pieces' records are still
    taken back and the old join's value is not written; a new join starts with
    a plain space. A space another writer cleared after the command stays
    plain through undo and redo. One case the rules leave open is pinned as it

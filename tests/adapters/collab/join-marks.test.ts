@@ -238,6 +238,21 @@ for (const order of ["D1", "rev", "dup"] as const) test(`a space another writer 
   } finally { run.close(); }
 });
 
+for (const order of ["D1", "rev", "dup"] as const) test(`a row joined into an earlier row before the undo: undo and redo reach its space through that row: ${order}`, () => {
+  const set = replicas(2, { rows: [{ id: "R0", audioText: "ab" }, { id: "R1", audioText: "cd" }, { id: "R2", audioText: "ef" }] }), handles = [set.a, set.b];
+  const incremental = handles.map(handle => captureIncrementalReplica(handle));
+  const flush = () => { set.queue.flush(order); handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); }); };
+  try {
+    handles.forEach(handle => { registerSharedJoinHandlers(handle); registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle); });
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "join", id: "join", by: "Writer", from: "R2", into: "R1", glue: " " })]), { ok: true }); flush();
+    const record = recorded(set.a, "bold", [0, 5], "b"); flush();
+    assert.deepEqual(executeSharedOperations(set.b, [operation({ kind: "join", id: "earlier", by: "Other", from: "R1", into: "R0", glue: " " })]), { ok: true }); flush();
+    agree("joined into R0", order, handles, rows, ["ab " + strong("cd ef")]);
+    const undo = reverse(set.a, record, "undo"); flush(); assert.ok(undo.ok && undo.effective); agree("undone", order, handles, rows, ["ab cd ef"]);
+    const redo = reverse(set.a, undo.inverse, "redo"); flush(); assert.ok(redo.ok && redo.effective); agree("redone", order, handles, rows, ["ab " + strong("cd ef")]);
+  } finally { incremental.forEach(value => value.projector.dispose()); set.close(); }
+});
+
 test("not settled by the rules: a space another writer cleared and then bolded again holds what the command wrote, so the undo clears it", () => {
   const run = joined("D1");
   try {
