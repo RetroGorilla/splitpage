@@ -163,9 +163,15 @@
     "tests": ["tests/core/collab/recovery-discard.test.ts"]
   }, {
     "label": "restore ignores a live namesake",
-    "file": "src/adapters/collab/record-executor.ts",
-    "find": "if (collection === \"people\" && view.has([\"deletedPeople\", key])",
-    "replace": "if (false && view.has([\"deletedPeople\", key])",
+    "file": "src/core/collab/recovery.ts",
+    "find": "if (entry.kind !== \"deleted-person\" || people.some(",
+    "replace": "if (entry.kind !== \"deleted-person\" || false && people.some(",
+    "tests": ["tests/adapters/collab/people-recovery.test.ts"]
+  }, {
+    "label": "mention counted in a removed beat",
+    "file": "src/adapters/collab/project.ts",
+    "find": "plans.filter(plan => !plan.group.removed).map(plan => ({ rowId: plan.group.root",
+    "replace": "plans.map(plan => ({ rowId: plan.group.root",
     "tests": ["tests/adapters/collab/people-recovery.test.ts"]
   }, {
     "label": "mention matched with case",

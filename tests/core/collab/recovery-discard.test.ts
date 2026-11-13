@@ -20,12 +20,13 @@ const ENTRIES: readonly SharedRecoveryEntry[] = [
 ];
 const named = (entries: readonly SharedRecoveryEntry[]) => entries.map(entry => { const name = sharedRecoveryEntryName(entry); return name.kind + " " + name.key; });
 
-test("assumed rule 54: a deleted person is listed only while an owner or an @Name refers to it, and restore is refused while a live person has its name", () => {
+test("assumed rule 54: a deleted person is listed only while an owner or an @Name refers to it, once per row, and restore is refused while a live person has its name", () => {
   const deleted = [{ person: "P1", name: "Ada", by: "Bob" }, { person: "P2", name: "Bo", by: "Bob" }, { person: "P3", name: "Cy", by: "Bob" }];
   const records = { people: [{ id: "P3", name: "Cy" }], tags: [{ id: "t2", owner: "P2" }, { id: "t1", owner: "P2" }], shots: [{ id: "S1", owner: "P2" }] };
-  const listed = projectSharedDeletedPeople(deleted, records, [{ rowId: "R2", names: readSharedWhoNames([{ value: { atom: "who", name: "ADA" }, marks: [] }]) }, { rowId: "R1", names: ["ada"] }]);
+  const listed = projectSharedDeletedPeople(deleted, records, [{ rowId: "R2", names: readSharedWhoNames([{ value: { atom: "who", name: "ADA" }, marks: [] }]) }, { rowId: "R1", names: ["ada"] },
+    { rowId: "R1", names: ["ada", "bo"] }]);
   assert.deepEqual(listed, [{ kind: "deleted-person", person: "P1", name: "Ada", by: "Bob", owners: [], mentions: ["R2", "R1"] },
-    { kind: "deleted-person", person: "P2", name: "Bo", by: "Bob", owners: [{ collection: "shots", record: "S1" }, { collection: "tags", record: "t1" }, { collection: "tags", record: "t2" }], mentions: [] }]);
+    { kind: "deleted-person", person: "P2", name: "Bo", by: "Bob", owners: [{ collection: "shots", record: "S1" }, { collection: "tags", record: "t1" }, { collection: "tags", record: "t2" }], mentions: ["R1"] }]);
   assert.deepEqual(projectSharedDeletedPeople(deleted, records, []).map(entry => entry.kind === "deleted-person" ? entry.person : ""), ["P2"]);
   const [ada] = listed; assert.ok(ada);
   assert.deepEqual(sharedRecoveryPersonRestore(ada, [], { id: "back", by: "Carol" }),
