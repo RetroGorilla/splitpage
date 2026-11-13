@@ -88,7 +88,7 @@ function spaceFormat(handle: SharedDocumentHandle, group: string, format: Format
   return collabState(handle).roots.meta.get(sharedJoinFormatRegisterField(group, format)) === true;
 }
 
-// why: a joined row keeps each piece's mark records in that piece's own text, and the format of each space beside its join.
+// why: a joined row keeps each piece's marks in its own text, and each space's format beside its join.
 function joinedRow(handle: SharedDocumentHandle, target: SharedTextAddress): { readonly pieces: SharedTextAddress[]; readonly groups: string[] } | null {
   const prep = createSharedPreparation(handle);
   try {

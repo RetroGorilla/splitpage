@@ -208,12 +208,13 @@ function reverse(handle: SharedDocumentHandle, record: SharedUndoRecord, id: str
 }
 const readSpace = (handle: SharedDocumentHandle) => ({ rows: rows(handle), space: stored(handle).space });
 const plain = { rows: ["ab cd"], space: [] }, whole = { rows: [strong("ab cd")], space: ["b"] }, gap = { rows: ["ab" + strong(" ") + "cd"], space: ["b"] };
+const marked = { rows: ["<mark>ab cd</mark>"], space: ["hl"] };
 
 for (const [name, setup, range, format, after, undone] of [
   ["bold over the whole row", null, [0, 5], "b", whole, plain],
   ["removal of bold over a row that was bold", [0, 5], [0, 5], "b", plain, whole],
   ["bold over the space only", null, [2, 3], "b", gap, plain],
-  ["highlight over the whole row", null, [0, 5], "hl", { rows: ["<mark>ab cd</mark>"], space: ["hl"] }, plain],
+  ["highlight over the whole row", null, [0, 5], "hl", marked, plain],
   ["bold over the whole row whose space was already bold", [2, 3], [0, 5], "b", whole, gap]
 ] as const) for (const order of ["D1", "rev", "dup"] as const) test(`undo and redo of ${name} of a joined row take back and reapply the pieces and the space: ${order}`, () => {
   const run = joined(order);
