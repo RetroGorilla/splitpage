@@ -380,20 +380,26 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
   received updates while the person is in it, and the next keystroke that gives
   it text settles as one replacement. If the edit ends while empty (settlement,
   focus loss, another command, unmounting) the stored name is put back and the
-  person is told once (`buffer-heading-empty`). The hold is kept by every
-  automatic path: a key that only types (`held()` with a printable key, Shift or
-  AltGraph), a change adopted with no `beforeinput`, a change found by a paint,
-  and a composition cancelled with nothing left in the heading. A cancelled
-  composition that leaves other text ends the edit through the same report.
-- In a shared session a heading shows and stores what was typed, spaces at its
-  edges included: the Writer reads it from the replica through
-  `PaintedTextSource.read`, and the painted record holds the same text. The
-  document the session projects still trims the name, so outline, numbering,
-  export and `flowOf` read it trimmed. Flow commands count offsets on that
-  trimmed name, so the Writer gives its flow ports `storedHeading`, and a traced
-  command that would touch a heading whose stored text differs from its trimmed
-  name is refused with a notice (`HEADING_EDGE_REFUSAL`) instead of writing at
-  shifted offsets.
+  person is told once (`buffer-heading-empty`). A keydown never ends the hold;
+  the hold ends on what happens: a `beforeinput` that is not an insertion or
+  composition into that heading, a command about to run (the session's
+  `beforeCommand` admission), the selection leaving the heading (`moved`, called
+  at `selectionchange` and `mouseup`), or focus loss. Each ends it the same way.
+  An insertion settles as one replacement with no report, and a change adopted
+  with no `beforeinput` or found by a paint keeps the hold. A composition records
+  at `compositionstart` whether it began in a heading held empty; cancelling it
+  then puts the name back with the one report, whatever text the cancel leaves.
+  A composition that began elsewhere and is cancelled is a plain cancel.
+- In a shared session the projected scene name is the stored text, character for
+  character, spaces at its edges included, so the screen, the painted record,
+  Find and Replace, copy and every flow command count on one string. The session's
+  entry port must keep each scene name as projected: the file loader
+  (`migrateRows`) trims names, and the stand-in entry in
+  `tests/application/session/shared-session-support.ts` puts the projected names
+  back. Removing edge spaces is a write that belongs to heading finalization
+  (package 10); until then a shared name may carry them. Places that already trim
+  a name when printing it (outline, numbering, export, through `normalizeScenes`)
+  still do.
 - A keystroke that takes a heading past 200 characters is refused and put back
   (`buffer-heading-length`); what was settled before stays.
 - Heading text the document refuses goes to recovery through the rule 29 write,

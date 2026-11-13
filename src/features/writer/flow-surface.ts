@@ -117,16 +117,11 @@ function beatHtml(runs: readonly Run[]): string {
 }
 
 export function createSurface(inputPorts: SurfacePorts): Surface {
-  const storedHeading = (sceneId: string): string | null => inputPorts.paintedText?.read(headingFieldKey(sceneId), "heading")?.text ?? null;
-  const ports: SurfacePorts = inputPorts.bufferedText
-    ? { ...inputPorts, syncBeat: () => {}, flow: { ...inputPorts.flow, storedHeading } } : inputPorts;
+  const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: () => {} } : inputPorts;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
   const paintedBeats = ports.paintedText ? createPaintedBeats(ports.paintedText) : null;
-  // why: a shared heading shows its stored text, edge spaces included, so the screen and painted record match it
-  const headingText = (scene: { readonly id: string; readonly name: string }): string =>
-    paintedBeats ? storedHeading(scene.id) ?? scene.name : scene.name;
   let composing = false;
   const queuedPastes: Pick<DataTransfer, "getData">[] = [];
   let mouseDown = false;
@@ -257,7 +252,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
           el.setAttribute("data-scene", block.scene.id);
         }
         keptHeads.delete(block.scene.id);
-        const name = emptyHeadings.get(block.scene.id) ?? headingText(block.scene);
+        const name = emptyHeadings.get(block.scene.id) ?? block.scene.name;
         if (el.textContent !== name) el.textContent = name;
         sceneLetter++;
         beatNumber = 0;
@@ -312,7 +307,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     painting = false;
     // why: the base is what this pass showed, so it is read here; a later read could describe text nobody saw
     if (paintedBeats) paintedBeats.record([...doc.rows.map(row => ({ id: row.id, text: projection(cellOf(row)) })),
-      ...flowOf(doc).flatMap(block => block.kind === "heading" ? [{ id: headingFieldKey(block.scene.id), text: emptyHeadings.get(block.scene.id) ?? headingText(block.scene) }] : [])],
+      ...flowOf(doc).flatMap(block => block.kind === "heading" ? [{ id: headingFieldKey(block.scene.id), text: emptyHeadings.get(block.scene.id) ?? block.scene.name }] : [])],
     entry => entry.text);
   }
 
@@ -405,7 +400,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
         const row = doc.rows.find(item => item.id === pos.rowId);
         return !!row && pos.offset <= cellLength(cellOf(row));
       }
-      return flowOf(doc).some(block => block.kind === "heading" && block.scene.id === pos.sceneId && pos.offset <= headingText(block.scene).length);
+      return flowOf(doc).some(block => block.kind === "heading" && block.scene.id === pos.sceneId && pos.offset <= block.scene.name.length);
     });
   }
 
@@ -446,7 +441,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       [el.classList.contains("wr-beat") ? "beat:" + el.dataset.id : "heading:" + el.dataset.scene, el]));
     const doc = ports.doc();
     const current = new Map(flowOf(doc).flatMap(block => block.kind === "heading"
-      ? [["heading:" + block.scene.id, headingText(block.scene).split("")]] as [string, readonly string[]][]
+      ? [["heading:" + block.scene.id, block.scene.name.split("")]] as [string, readonly string[]][]
       : block.beats.map(row => ["beat:" + row.id, editorKeys(cellOf(row))] as [string, readonly string[]])));
     const world = { epoch, order: [...current.keys()], keys: (id: string) => current.get(id) ?? null };
     const resolve = (anchor: FlowPos, head: FlowPos) => {
@@ -689,7 +684,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     const { from, to } = orderedRange(doc, range);
     if (to.offset !== 0) return false;
     const positions = flowOf(doc).flatMap(block => block.kind === "heading"
-      ? [{ pos: headingPos(block.scene.id, 0), length: headingText(block.scene).length }]
+      ? [{ pos: headingPos(block.scene.id, 0), length: block.scene.name.length }]
       : block.beats.map(row => ({ pos: beatPos(row.id, 0), length: cellLength(cellOf(row)) })));
     const index = positions.findIndex(item => comparePos(doc, item.pos, { ...from, offset: 0 }) === 0);
     const start = positions[index], next = positions[index + 1];
@@ -1270,7 +1265,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
 
   function sceneOf(sceneId: string): { readonly name: string } | null {
     const doc = ports.doc();
-    for (const block of flowOf(doc)) if (block.kind === "heading" && block.scene.id === sceneId) return { name: headingText(block.scene) };
+    for (const block of flowOf(doc)) if (block.kind === "heading" && block.scene.id === sceneId) return { name: block.scene.name };
     return null;
   }
 
@@ -1317,9 +1312,6 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     },
     changed: ports.changed
   }) : null;
-  // why: an empty heading stays held until a keystroke gives it text, so a key that only types must not settle it
-  const typingKey = (key: KeyboardEvent): boolean => !key.metaKey && key.ctrlKey === key.altKey
-    && (Array.from(key.key).length === 1 || ["Shift", "CapsLock", "AltGraph", "Dead"].includes(key.key));
   const ready = (event: Event): boolean => {
     if (!buffered || buffered.finish()) return true;
     event.preventDefault(); return false;
@@ -1359,8 +1351,8 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
         return;
       }
       buffered.keydown(key);
-      if (buffered.held() && typingKey(key)) return;
-      if (ready(event)) onKeydown(key);
+      // why: a held empty heading ends on what the key does (input, command, selection, focus), never on the keydown
+      if (buffered.held() || ready(event)) onKeydown(key);
     } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
       [root, "copy", clipboardActions.copy as EventListener] as [EventTarget, string, EventListener],
@@ -1373,8 +1365,8 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     [root, "focusout", buffered ? event => { if (!composing && ready(event)) onHostBlur(event); } : onHostBlur],
     ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
       [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
-    [window, "mouseup", onMouseUp],
-    [document, "selectionchange", buffered ? () => { if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
+    [window, "mouseup", buffered ? () => { buffered.moved(selection(true)); onMouseUp(); } : onMouseUp],
+    [document, "selectionchange", buffered ? () => { buffered.moved(selection(true)); if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
   ];
   const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
     [target, name, event => { buffered.native(event, () => handler(event)); }]) : listeners;

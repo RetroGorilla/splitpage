@@ -30,6 +30,7 @@ export interface BufferedFieldBinding {
   readonly canPaint: () => boolean;
   readonly dirty: () => boolean;
   readonly held: () => boolean;
+  readonly moved: (range: FlowRange | null) => void;
   readonly base: (rowId: string) => PaintedText | null;
   readonly dispose: () => boolean;
 }
@@ -62,6 +63,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   let ended = false;
   let committing = false;
   let refusedComposition = false;
+  let composedFromHold: string | null = null;
   const keyOf = surface.key ?? ((pos: FlowPos) => pos.kind === "beat" ? pos.rowId : null);
   const at = surface.position ?? beatPos;
   function one(range: FlowRange | null): string | null {
@@ -252,25 +254,26 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (!surface.composition() && !holding()) finish();
     },
     start: (event, range) => {
-      ended = false; refusedComposition = false;
+      ended = false; refusedComposition = false; composedFromHold = null;
       if (one(range) === null) {
         surface.composition(true); refusedComposition = true; refuse(event, "buffer-unsupported-target"); return;
       }
-      begin(event, range); surface.composition(true);
+      const hold = active && holding() && one(range) === active.rowId ? surface.unsettled?.(active.rowId, active.edit.text()) : null;
+      if (begin(event, range)) composedFromHold = hold?.reason ?? null;
+      surface.composition(true);
     },
     keydown: event => { if (!event.isComposing && event.keyCode !== 229) { refusedComposition = false; ended = false; } },
     end: event => {
       surface.composition(false); ended = true;
+      const heldReason = composedFromHold; composedFromHold = null;
       if (refusedComposition) return;
       if (!active) return;
       if (!event.data) {
-        const policy = active.edit.isOpen() ? surface.unsettled?.(active.rowId, active.edit.text()) : null;
-        if (policy?.hold && same(projection(surface.runs(active.beat)), active.edit.text())) { target = null; return; }
         const held = active; active = null; target = null;
         surface.reset(held.rowId);
         try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
         surface.repaint(held.rowId); surface.restore(held.rowId, undefined);
-        if (policy) ports.report({ kind: "rejected", reason: policy.reason });
+        if (heldReason !== null) ports.report({ kind: "rejected", reason: heldReason });
       } else finish();
     },
     finish,
@@ -281,6 +284,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     },
     dirty: () => active !== null,
     held: holding,
+    moved: range => { if (active && holding() && !surface.composition() && one(range) !== active.rowId) finish(); },
     base: rowId => active?.rowId === rowId ? active.base : null,
     dispose: () => {
       if (!finish()) return false;

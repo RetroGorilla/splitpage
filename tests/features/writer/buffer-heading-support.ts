@@ -14,10 +14,12 @@ export function sceneNames(doc: object | null): string[] {
 export function headedWriter(name = "Scene", command?: SurfacePorts["commit"], options: Parameters<typeof bufferedWriter>[4] = {}) {
   const page = bufferedWriter("ab", true, command, undefined, { ...options, fields: { sections: [{ id: "H1", name, firstSceneId: "R1" }] } });
   const element = () => { const found = page.root.querySelector<HTMLElement>('.wr-heading[data-scene="H1"]'); assert.ok(found); return found; };
-  function typeHeading(from: number, to: number, insert: string, type = "insertText", during?: () => void, reportInput = true): boolean {
-    const target = { anchor: headingPos("H1", from), head: headingPos("H1", to) }, key = keyOf(type, insert);
+  const press = (init: KeyboardEventInit): boolean => page.root.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+  function typeHeading(from: number, to: number, insert: string, type = "insertText", during?: () => void, reportInput = true,
+    modified?: KeyboardEventInit): boolean {
+    const target = { anchor: headingPos("H1", from), head: headingPos("H1", to) }, key = modified?.key ?? keyOf(type, insert);
     page.surface.place(target);
-    if (!pressKey(page.root, key)) return false;
+    if (!(modified ? press(modified) : pressKey(page.root, key))) return false;
     const range = page.surface.domRange(target); assert.ok(range);
     const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data: insert });
     const nativeTarget = range.cloneRange();
@@ -32,8 +34,15 @@ export function headedWriter(name = "Scene", command?: SurfacePorts["commit"], o
     releaseKey(page.root, key);
     return true;
   }
+  function selectionMoved(): void {
+    document.dispatchEvent(new window.Event("selectionchange"));
+  }
+  function leaveTo(node: Node, offset: number): void {
+    window.getSelection()?.setBaseAndExtent(node, offset, node, offset);
+    selectionMoved();
+  }
   return {
-    ...page, element, typeHeading,
+    ...page, element, typeHeading, press, selectionMoved, leaveTo,
     name: () => page.a.session.read(doc => sceneNames(doc as FlowDoc | null)[0]),
     startHeading: (from: number, to = from) => {
       page.surface.place({ anchor: headingPos("H1", from), head: headingPos("H1", to) });
