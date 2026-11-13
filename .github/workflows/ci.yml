@@ -137,7 +137,13 @@ jobs:
       - name: Install Chromium
         if: needs.changes.outputs.app == 'true'
         run: |
-          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium || {
+            # why: the hosted runners' resolver sometimes cannot find the Ubuntu package servers; a public
+            # resolver fetches the same packages, so the run still tests the same environment.
+            echo "::warning::Chromium's system packages could not be fetched; retrying with a public resolver"
+            echo "nameserver 1.1.1.1" | sudo -n tee /etc/resolv.conf > /dev/null
+            npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          }
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
           if [ -z "$exe" ]; then
             echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
@@ -227,7 +233,13 @@ jobs:
 
       - name: Install Chromium
         run: |
-          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium || {
+            # why: the hosted runners' resolver sometimes cannot find the Ubuntu package servers; a public
+            # resolver fetches the same packages, so the run still tests the same environment.
+            echo "::warning::Chromium's system packages could not be fetched; retrying with a public resolver"
+            echo "nameserver 1.1.1.1" | sudo -n tee /etc/resolv.conf > /dev/null
+            npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          }
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
           if [ -z "$exe" ]; then
             echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
@@ -346,9 +358,16 @@ jobs:
 
       - name: Xvfb and Chromium's shared libraries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb
-          npx --yes playwright@${PLAYWRIGHT_VERSION} install-deps chromium
+          packages() {
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb && npx --yes playwright@${PLAYWRIGHT_VERSION} install-deps chromium
+          }
+          packages || {
+            # why: the hosted runners' resolver sometimes cannot find the Ubuntu package servers; a public
+            # resolver fetches the same packages, so the run still tests the same environment.
+            echo "::warning::system packages could not be fetched; retrying with a public resolver"
+            echo "nameserver 1.1.1.1" | sudo -n tee /etc/resolv.conf > /dev/null
+            packages
+          }
 
       - name: Desktop smoke (dev target)
         working-directory: desktop
