@@ -293,6 +293,26 @@ How the points left open by the model are met:
    plane are deleted and restored as one value. Its birth record covers both
    units; the history follows and traces each, and the inverse of a restore
    names every unit the restore wrote (`undo-runs.test.ts`).
+8. **Formatting across a joined row.** A joined row stores each piece's mark
+   records in that piece's own text, and the format of each join space
+   (bold, italic, underline, strikethrough, highlight) as a value kept with
+   the join. A mark command on a joined row records one `mark-add` or
+   `mark-remove` part per piece, addressed to the piece's text, and, when it
+   changed a space's stored format, one more part addressed to the row with
+   no occurrences and the join groups in `spaces`. A space the command found
+   already as it left it is not recorded, so undo leaves it. The space is a
+   single value, so it follows the rule for numbers and record fields (rule
+   39, the `scalar` part): undo writes the earlier value back only while the
+   space still holds what the command wrote and its join is still in the row.
+   It does so with a `mark` over the space alone (`["join-glue", group]`),
+   which writes nothing else. After an unjoin the pieces' records are still
+   taken back and the old join's value is not written; a new join starts with
+   a plain space. A space another writer cleared after the command stays
+   plain through undo and redo. One case the rules leave open is pinned as it
+   falls out: a space another writer cleared and then set again holds what the
+   command wrote, so the undo clears it, as it would a number changed and
+   changed back. Links, tags and comments have no stored space; their undo
+   takes them off every piece the same way (`join-marks.test.ts`).
 
 ### The provenance marker
 
@@ -414,5 +434,8 @@ a status for a tag or shot that is not there, another person's comment text)
 is counted by its reason and changes nothing.
 
 Not covered yet: structure commands, which the owner refuses by name.
+Formatting across a joined row is not drawn either: the generator's rows are
+never joined and the model has no join, so it is covered by the literal tests
+in `join-marks.test.ts`.
 The adapter tests are in `tests/adapters/collab/undo-operations.test.ts` and
 `undo-records.test.ts`.
