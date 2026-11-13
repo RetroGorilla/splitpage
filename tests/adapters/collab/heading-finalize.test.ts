@@ -129,7 +129,7 @@ const split = (offset: number) => ({ kind: "split", id: "cut", by: "Bob", target
 const join = { kind: "join", id: "glue", by: "Bob", from: "R1", into: "R0", glue: " " };
 const removal = (to: number) => ({ kind: "remove", id: "gone", by: "Bob", removalKind: "beat", targets: ["R1"], observed: [base("R1", 0, to)], boundaries: ["R1"], components: [], gallery: [], at: 1 });
 const kept = (name: string, tail = "cd") => ({ rows: [["R0", "x", false], ["R1", tail, false], ["R2", "ef", false]], sections: [["Ha", name, "R1"]], recovery: [] });
-const moved = (name: string, recovery: unknown[] = []) => ({ rows: [["R0", "x", false], ["R2", "ef", false]], sections: [["Ha", name, "R2"]], recovery });
+const moved = (name: string, recovery: unknown[][] = []) => ({ rows: [["R0", "x", false], ["R2", "ef", false]], sections: [["Ha", name, "R2"]], recovery });
 const concurrent: Record<string, { readonly source: Record<string, unknown>; readonly bob: readonly unknown[]; readonly tail: boolean; readonly expected: ReturnType<typeof visible> }> = {
   "types at the line start": { source: tailed, bob: [type("Bob", "R1", 0, "Z")], tail: true, expected: kept("ZAb") },
   "types inside the name": { source: tailed, bob: [type("Bob", "R1", 3, "Z")], tail: true, expected: kept("AZb") },
