@@ -179,18 +179,41 @@ test("9e: typing right after a word someone else made bold in the visual column 
   } finally { page.close(); }
 });
 
-test("9e, declared limit: a beat split off in a shared session has no visual yet, so typing in its visual cell is refused with buffer-no-visual and writes nothing", () => {
+function splitR1(page: Page): string {
+  const split = page.a.session.run(sharedCommand("split", [operation({ kind: "split", id: "cut", by: "Alice", target: { owner: "R1", segment: "b:R1", field: "audioText" },
+    at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [], boundary: "cut-boundary", beat: "Rn", fields: { status: "todo" } })]));
+  assert.equal(split.kind, "applied");
+  const fresh = page.a.session.read(doc => doc?.rows[1]?.id); assert.ok(fresh);
+  return fresh;
+}
+
+function copies(page: Page): unknown[] {
+  page.h.queue.flush("D1"); page.h.join();
+  return [page.h.a, page.h.b, page.h.c].map(handle => projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.id, row.audioText, row.visualText]));
+}
+
+test("9e: a beat split off in a shared session has its own empty visual, so the first key in its visual cell commits on three copies", () => {
   const page = bufferedSplit([{ id: "R1", text: "abc" }], true, { structure: true });
   try {
-    const split = page.a.session.run(sharedCommand("split", [operation({ kind: "split", id: "cut", by: "Alice", target: { owner: "R1", segment: "b:R1", field: "audioText" },
-      at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [], boundary: "cut-boundary", beat: "Rn", fields: { status: "todo" } })]));
-    assert.equal(split.kind, "applied");
-    const executed = page.a.executed.length, fresh = page.a.session.read(doc => doc?.rows[1]?.id); assert.ok(fresh);
+    const fresh = splitR1(page);
+    assert.equal(type(page, 0, "V", fresh), true);
+    assert.deepEqual([page.reports, page.missing, page.caret(fresh, "visualText")], [[], [], { from: 1, to: 1 }]);
+    assert.deepEqual(copies(page), Array.from({ length: 3 }, () => [["R1", "ab", ""], [fresh, "c", "V"]]));
+  } finally { page.close(); }
+});
+
+test("9e, declared limit kept for older splits: a beat split before splits created a visual still loads, and its visual cell refuses with buffer-no-visual and writes nothing", () => {
+  const page = bufferedSplit([{ id: "R1", text: "abc" }], true, { structure: true });
+  try {
+    const fresh = splitR1(page), roots = collabState(page.h.a).roots, beat = roots.beats.get(fresh);
+    assert.ok(beat instanceof Y.Map);
+    const made = beat.get("visual"); assert.equal(typeof made, "string");
+    transactSharedDocument(page.h.a, "local-command", () => { beat.delete("visual"); roots.visuals.delete(String(made)); });
+    page.paint();
+    const executed = page.a.executed.length;
     assert.equal(type(page, 0, "V", fresh), false);
     assert.deepEqual([page.reports, page.missing, page.a.executed.length, visual(page, fresh)], [[{ kind: "rejected", reason: "buffer-no-visual" }], [], executed, ""]);
     assert.equal(page.key(fresh, 1, 1, "insertText", "N"), true);
-    page.h.queue.flush("D1"); page.h.join();
-    const rows = [page.h.a, page.h.b, page.h.c].map(handle => projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.id, row.audioText, row.visualText]));
-    assert.deepEqual(rows, Array.from({ length: 3 }, () => [["R1", "ab", ""], [fresh, "cN", ""]]));
+    assert.deepEqual(copies(page), Array.from({ length: 3 }, () => [["R1", "ab", ""], [fresh, "cN", ""]]));
   } finally { page.close(); }
 });

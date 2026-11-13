@@ -70,13 +70,14 @@ A refusal leaves both stacks as they were. The reasons:
 
 - `undo-unsupported:<kind>`: the entry has a part the executor cannot reverse.
   The executor is not called. Every structure command but a join, an unjoin, a
-  separator change, a beat removal, a heading removal without a new beat and a
-  restore of either is refused this way until its executor lands:
-  `segment-create`, `split`, `split-before`, `segment-move`, `heading-create`,
-  `heading-finalize`, and `heading-remove` with a new beat (a demotion). A
+  separator change, a split, a beat removal, a heading removal without a new
+  beat and a restore of either is refused this way until its executor lands:
+  `segment-create`, `segment-move`, `heading-create`, `heading-finalize`, and
+  `heading-remove` with a new beat (a demotion). A split whose part cannot be
+  recorded keeps the generic part, named `split` or `split-before`. A
   removal of another kind (range, became-heading) is named `remove` and
   refused by the executor with `undo-unsupported:remove`. See
-  [Undo of a join](#undo-of-a-join),
+  [Undo of a join](#undo-of-a-join), [Undo of a split](#undo-of-a-split),
   [Undo of a removal and a restore](#undo-of-a-removal-and-a-restore) and
   [Undo of a heading removal and its restore](#undo-of-a-heading-removal-and-its-restore).
 - `command-in-progress`: asked while a command is being recorded.
@@ -229,7 +230,7 @@ meanwhile and every copy agrees once both have arrived. Two literal tests in
   `executeSharedOperations` call with the origin `local-undo`, and returns the
   inverse record. `supportsSharedUndoPart` is the owner's `supports` port.
 
-An undo needs three operations a forward command never writes. Each is read by
+An undo needs five operations a forward command never writes. Each is read by
 `readOperation` like any other and has a handler registered by
 `registerSharedUndoOperationHandlers`:
 
@@ -238,6 +239,8 @@ An undo needs three operations a forward command never writes. Each is read by
 | `text-restore` | each deleted unit as a new character directly after the deleted unit, with a birth record that names the unit it restores and a copy of each mark it is given |
 | `mark-retract` | a removal that names one occurrence |
 | `status-retire` | `retiredStatus` for the standing events of one value, only while the beat shows that value and retiring changes it |
+| `split-retire` | deletes the boundary atom of one split beat; nothing when it is already gone |
+| `split-restore` | the boundary atom of one split beat again, directly after the deleted one; nothing when it is there |
 
 How the points left open by the model are met:
 
@@ -408,6 +411,75 @@ No command of the app emits `join-retire` or `join-glue` today: the app
 separates joined beats with Enter at the join point, which is a split. These
 parts are reached by operation lists that carry either operation. Literals in
 `undo-unjoin.test.ts`.
+
+### Undo of a split
+
+A split writes a boundary atom (`{b: beat}`, or `{b: beat, before: source}`
+for `split-before`) into the segment text and a record for the new beat. A
+command with a `split` or `split-before` records a `beat-split` part: the new
+beat (its writer-namespaced key), the source beat, the segment, an anchor on
+the boundary atom, and a comparison of the new beat without its characters:
+its record without its stamp, status and events, visual and gallery records,
+and its row's pieces. The stamp is left out because undo never takes a stamp
+back (rule 35): typing in the new beat and undoing that typing leaves a stamp
+that must not use the split's undo up. The comparison of a restored beat
+(below) leaves it out for the same reason. A visual is compared by its fields
+and the characters it shows with their marks, not by its mark records, so
+typing undone in the new beat's visual leaves no difference; text someone
+typed there and left uses the undo up.
+
+A split also makes the new beat's empty visual (#1545). It stays stored with
+the new beat's record while the split is undone, so it shows nowhere, not in
+recovery either, and comes back with the beat on redo. Literal in
+`split-visual.test.ts`: split, type V in the new visual, undo the typing, undo
+the split, and the document and recovery equal the start on three copies; the
+redo brings the visual back.
+
+Two operations serve only undo, as `text-restore` does. `split-retire` deletes
+the boundary atom; the new beat's characters join the source beat and its
+record stays stored; it takes out every copy of the boundary, since two
+restores made apart can leave it twice. `split-restore` writes the same
+boundary directly after the deleted one (as a restored character is written),
+so the same beat comes back with its id and record, and text typed on either
+side keeps its side; it is refused while the boundary is there. Both are read
+like any other operation, so a hand-made one from another copy is refused only
+when its beat or segment cannot be found.
+
+Whether the boundary is there is one test, the same one `split-restore` makes
+before it writes; naming the boundary by an anchor is a separate step. Undo
+writes only while the source beat is live, the boundary is there and can be
+named as the split wrote it, and the new beat compares unchanged (its record
+holds its removal flags, so a removed new beat does not compare); otherwise it
+is used up. A used-up part's inverse points the other way, so in a record with
+other parts a later redo never takes the split back. Text typed in either beat
+is not a change that uses it up: it joins the source beat and comes back to
+its side on redo. Redo writes while the boundary is gone and the source beat
+is live; a boundary that is there uses the redo up, even one no anchor can
+name (another writer made the new beat's first line a heading, which writes
+its boundary again after the heading name), so a redo is never refused. It
+does not compare the new beat: a change someone made to it without seeing the
+undo comes back into view with it. A split in a joined row is undone the same
+way and the row comes back whole (rule 36). Literals in `undo-split.test.ts`.
+
+Declared open limits, each pinned by a literal of today's result (cut 5a-2):
+when another writer, without having seen the undo, changes the new beat (a
+field, its status, a visual or gallery record) or removes it, or joins another
+beat into it, the undo still takes the split back on every copy. The change
+then sits on a beat with no row, and text that writer removed is back in the
+script with nobody restoring it; a beat joined into it stands on its own row.
+Field, removal, status and join are pinned; visual and gallery take the same
+path as status and have no literal. The fix is for `split-retire` to carry
+what it observed of the new beat, and the projection to honour the retire only
+while the beat still matches and is not removed.
+
+Declared, refused by name (`undo-unsupported:split`): a command with two
+splits (a middle selection to its own beat, where the second split names the
+first's new beat by an alias), and Enter inside a scene heading name.
+
+Not undone yet: blank-beat creation, a heading created by paste and a
+demotion. Blank creation and every pasted heading add an entry to the segment
+order, which no operation takes back yet; a demotion also needs the heading
+removal raced with it to show what its undo writes.
 
 ### Undo of a removal and a restore
 

@@ -3,7 +3,12 @@
 The full projection and its recovery variant share a pure block interpreter.
 It reads the production shapes in [structural execution](stage-2-structure-executor.md):
 an ordinary `{b:newBeat}` boundary, a prefix `{b:newBeat,before:sourceBeat}`,
-and a beat record with `segment` and `splitBy`. A prefix assigns the preceding
+and a beat record with `segment`, `splitBy` and `visual`. Since package 9e,
+`split` and `split-before` also create the new beat's empty visual in the same
+step, as `segment-create` does: the record `visuals/<id>` with `beat` and `rank`,
+its text and its mark store, where `<id>` is the structure identity of the split's
+own id and writer with the role `visual`. A beat split before that change has no
+`visual` and no record; it projects with an empty visual cell. A prefix assigns the preceding
 source fragment to the new beat and resumes the source after the boundary.
 Blank creation supplies a new physical segment. Native offsets count UTF-16
 code units and one unit per inline atom or boundary; recovery ranges exclude

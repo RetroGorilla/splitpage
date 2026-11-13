@@ -126,5 +126,5 @@ test("seeded: b-roll keys from the incremental projection equal a fresh full pro
   t.diagnostic(JSON.stringify({ histories, checkpoints, rekeyedUnscanned, scannedCells, kinds: [...kinds].sort() }));
   assert.deepEqual(violations, []);
   assert.deepEqual([...kinds].sort(), [...BROLL_KINDS].sort());
-  assert.deepEqual({ histories, checkpoints, rekeyedUnscanned, scannedCells }, { histories: 9, checkpoints: 326, rekeyedUnscanned: 59, scannedCells: 545 });
+  assert.deepEqual({ histories, checkpoints, rekeyedUnscanned, scannedCells }, { histories: 9, checkpoints: 326, rekeyedUnscanned: 59, scannedCells: 604 });
 });

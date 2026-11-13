@@ -8,6 +8,7 @@ import { registerSharedOperationFamilies } from "../../../src/adapters/collab/op
 import { registeredSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
 import { destroySharedDocument, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
+import { executeSharedCommand } from "../../../src/adapters/collab/undo-executor.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
@@ -29,7 +30,7 @@ const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   join: "join", "join-glue": "join", "join-retire": "join",
   "heading-create": "heading", "heading-finalize": "heading",
   "segment-move": "move refusal",
-  "text-restore": "undo", "mark-retract": "undo", "status-retire": "undo",
+  "text-restore": "undo", "mark-retract": "undo", "status-retire": "undo", "split-retire": "undo", "split-restore": "undo",
   scalar: "executor", status: "executor"
 };
 
@@ -58,7 +59,7 @@ test("every operation kind has one owner: a family the composition registers, or
     assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor").map(([kind]) => kind).sort());
     assert.deepEqual(registered, ["discard", "discard-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
       "mark", "mark-retract", "record-create", "record-delete", "record-set", "remove", "restore", "segment-create", "segment-move", "split",
-      "split-before", "status-retire", "text-delete", "text-insert", "text-restore"]);
+      "split-before", "split-restore", "split-retire", "status-retire", "text-delete", "text-insert", "text-restore"]);
   } finally { destroySharedDocument(handle); }
 });
 
@@ -96,6 +97,21 @@ test("seeded list, text, records, values and creation: each kind runs on a handl
     send({ kind: "segment-create", id: "k12", by, segment: "new-segment", beat: "new-beat", at: { left: null, right: null, affinity: "after" }, fields: { status: "todo" } });
     assert.deepEqual(ran, ["text-insert", "mark", "mark-retract", "text-delete", "text-restore", "scalar", "status", "status-retire",
       "record-create", "record-set", "record-delete", "split", "split-before", "segment-create"]);
+  } finally { set.close(); }
+});
+
+test("seeded list, split undo: a split's retirement and restoration run on a handle built by the composition", () => {
+  const { set, a, send, ran } = world({ rows: [{ id: "R1", audioText: "abcd" }] });
+  try {
+    const target = { owner: "R1", segment: "R1", field: "audioText" };
+    const split = operation({ kind: "split", id: "cut", by: "Alice", target, at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" },
+      observed: [], boundary: "Rs", beat: "Rs", fields: {} });
+    const done = executeSharedCommand(a, [split], { label: "split", selection: null, typing: null }, { base: readSharedRevision(a) });
+    const part = done.record?.parts[0]; assert.ok(part?.kind === "beat-split");
+    send({ kind: "split-retire", id: "out", by: "Alice", beat: part.beat });
+    const rows = projectSharedDocumentWithRecovery(a).document.rows.map(row => row.audioText);
+    send({ kind: "split-restore", id: "back", by: "Alice", target: { owner: part.source, segment: part.segment, field: "audioText" }, beat: part.beat, unit: part.boundary, before: null });
+    assert.deepEqual([ran, rows, projectSharedDocumentWithRecovery(a).document.rows.map(row => row.audioText)], [["split-retire", "split-restore"], ["abcd"], ["ab", "cd"]]);
   } finally { set.close(); }
 });
 

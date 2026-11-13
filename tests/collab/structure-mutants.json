@@ -2,8 +2,8 @@
   "mutants": [{
     "label": "duplicated identity on split",
     "file": "src/adapters/collab/split-executor.ts",
-    "find": "applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit);",
-    "replace": "applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit); applySharedTextEdit(handle, { target: description.edit.target, edit: { type: \"text\", at: 0, value: \"abcd\" }, marks: [] });",
+    "find": "applySharedTextCreation(handle, description.text); applySharedTextEdit(handle, description.edit);",
+    "replace": "applySharedTextCreation(handle, description.text); applySharedTextEdit(handle, description.edit); applySharedTextEdit(handle, { target: description.edit.target, edit: { type: \"text\", at: 0, value: \"abcd\" }, marks: [] });",
     "tests": ["tests/adapters/collab/structure-stage1.test.ts"]
   }, {
     "label": "omitted initial visual content",
@@ -149,5 +149,17 @@
     "find": "if (block.kind === \"b\" && joined.has(block.id) || block.kind === \"h\" && !heading)",
     "replace": "if (block.kind === \"h\" && !heading)",
     "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
+  }, {
+    "label": "split leaves the new beat without its visual link",
+    "file": "src/adapters/collab/split-executor.ts",
+    "find": "{ kind: \"set\", path: [...path, \"visual\"], value: visual }, ",
+    "replace": "",
+    "tests": ["tests/adapters/collab/split-visual.test.ts","tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "split creates the visual record without its text",
+    "file": "src/adapters/collab/split-executor.ts",
+    "find": "applySharedTextCreation(handle, description.text); ",
+    "replace": "",
+    "tests": ["tests/adapters/collab/split-visual.test.ts","tests/features/editing/cell-buffer-visual.test.ts"]
   }]
 }
