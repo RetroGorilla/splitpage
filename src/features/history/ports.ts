@@ -6,8 +6,10 @@ import type { SidePanels } from "../../application/side-panels.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
 
 export interface HistoryPanelPorts {
+  readonly capability: Pick<CapabilityPort, "history">;
   readonly ids: Pick<IdSource, "id">;
   readonly history: Pick<HistoryOwner, "listDocHistory">;
   readonly document: Pick<DocumentReader, "current">;

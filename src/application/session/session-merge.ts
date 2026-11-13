@@ -32,6 +32,7 @@ function startSessionMerge(ports: SessionMergeOwnerPorts) {
   const setHome = ports.location.setHome;
   const mergeUndo = function () { return ports.undo; };
   const resetProductionPanelState = ports.production.reset;
+  const historyRefused = function () { return !ports.capability.history().allowed; };
 
 function stampRow(row: Parameters<SessionMergeOwner["stampRow"]>[0]) {
   row.updatedAt = nowIso();
@@ -47,6 +48,7 @@ const RESTORE_BACKUP_ATTEMPTS = 3;
 
 async function restoreSnapshot(id: string, opts?: SnapshotRestoreRequest): Promise<SnapshotRestoreResult> {
   opts = opts || {};
+  if (historyRefused()) return "refused";
   if (restoreInFlight) return "busy";
   if (!currentDocument()) return "missing";
   restoreInFlight = true;
@@ -59,6 +61,7 @@ async function restoreSnapshot(id: string, opts?: SnapshotRestoreRequest): Promi
 
     const snap = await getHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
     if (moved()) return "changed";
+    if (historyRefused()) return "refused";
     if (!snap) return "missing";
     let parsed: unknown = null;
     try { parsed = JSON.parse(snap.stateJson as string); } catch (e) { parsed = null; }
@@ -72,6 +75,7 @@ async function restoreSnapshot(id: string, opts?: SnapshotRestoreRequest): Promi
       if (!ticket) { stored = false; break; }
       const result = await ticket.done;
       if (moved()) return "changed";
+      if (historyRefused()) return "refused";
       stored = !!(result && result.stored);
       if (currentDocument() === stateAtCapture && saveChanges() === seqAtCapture) break;
       stored = false;

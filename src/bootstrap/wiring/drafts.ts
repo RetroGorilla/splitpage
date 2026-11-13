@@ -28,6 +28,7 @@ const drafts = owned<DraftsMount>();
 
 function draftsPorts(): DraftsPorts {
   return {
+    capability: portCapabilities,
     running: presence.running,
     clock: { now: () => Date.now() },
     timers: {
