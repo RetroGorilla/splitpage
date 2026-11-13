@@ -310,6 +310,6 @@ test("Split rename: a new scene's name form is not opened in a shared session, a
     const row = page.rows.querySelector('.row[data-id="R2"]'); assert.ok(row);
     const add = row.appendChild(document.createElement("button")); add.setAttribute("data-action", "add-section"); add.setAttribute("data-id", "R2");
     add.click();
-    assert.deepEqual([document.querySelector(".section-rename"), page.commands, page.reports], [null, [], [{ kind: "rejected", reason: "not shared" }]]);
+    assert.deepEqual([document.querySelector(".section-rename") !== null, page.commands, page.reports], [false, [], [{ kind: "rejected", reason: "not shared" }]]);
   } finally { page.close(); }
 });
