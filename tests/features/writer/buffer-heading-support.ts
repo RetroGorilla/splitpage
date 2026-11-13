@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { bufferedWriter } from "./buffer-support.ts";
+import { bufferedWriter, keyOf, pressKey, releaseKey } from "./buffer-support.ts";
 import { headingPos } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
@@ -15,19 +15,21 @@ export function headedWriter(name = "Scene", command?: SurfacePorts["commit"], o
   const page = bufferedWriter("ab", true, command, undefined, { ...options, fields: { sections: [{ id: "H1", name, firstSceneId: "R1" }] } });
   const element = () => { const found = page.root.querySelector<HTMLElement>('.wr-heading[data-scene="H1"]'); assert.ok(found); return found; };
   function typeHeading(from: number, to: number, insert: string, type = "insertText", during?: () => void, reportInput = true): boolean {
-    const target = { anchor: headingPos("H1", from), head: headingPos("H1", to) };
+    const target = { anchor: headingPos("H1", from), head: headingPos("H1", to) }, key = keyOf(type, insert);
     page.surface.place(target);
+    if (!pressKey(page.root, key)) return false;
     const range = page.surface.domRange(target); assert.ok(range);
     const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data: insert });
     const nativeTarget = range.cloneRange();
     Object.defineProperty(event, "getTargetRanges", { value: () => [nativeTarget] });
-    if (!page.root.dispatchEvent(event)) return false;
+    if (!page.root.dispatchEvent(event)) { releaseKey(page.root, key); return false; }
     during?.();
     const heading = element(), value = heading.textContent ?? "";
     heading.textContent = value.slice(0, from) + insert + value.slice(to);
     const node = heading.firstChild ?? heading.appendChild(document.createTextNode(""));
     window.getSelection()?.setBaseAndExtent(node, from + insert.length, node, from + insert.length);
     if (reportInput) page.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data: insert }));
+    releaseKey(page.root, key);
     return true;
   }
   return {

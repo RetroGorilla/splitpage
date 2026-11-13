@@ -17,6 +17,7 @@ interface TracePorts {
   readonly cells: (html: string | null | undefined) => readonly Run[];
   readonly operations?: FlowOperationRequest | undefined;
   readonly trace?: FlowOperationTrace | undefined;
+  readonly storedHeading?: ((sceneId: string) => string | null) | undefined;
 }
 
 export interface FlowOperationRequest { readonly id: string; readonly by: string }
@@ -27,6 +28,7 @@ export const flowIdentity = (id: string): SharedContentRef => id as SharedConten
 export class FlowOperationTrace {
   readonly ops: SharedOperation[] = [];
   readonly moving = new Set<string>();
+  unaligned = false;
   private readonly created = new Map<string, TraceRow>();
   private readonly offsets = new Map<string, FlowObservedOffset[]>();
   private readonly base: TraceDoc;
@@ -46,6 +48,8 @@ export class FlowOperationTrace {
       const row = this.base.rows.find(row => row.id === owner);
       const scene = Array.isArray(this.base.sections) ? this.base.sections.find((scene: DocumentScene) => scene.id === owner) as DocumentScene | undefined : undefined;
       const size = field === "heading" ? scene?.name.length ?? length : row ? cellLength(this.ports.cells(row[field] as string)) : length;
+      const stored = field === "heading" && scene ? this.ports.storedHeading?.(owner) : undefined;
+      if (stored !== undefined && stored !== null && stored !== scene?.name) this.unaligned = true;
       this.offsets.set(key, Array.from({ length: size }, (_, offset) => ({ owner, offset, field })));
     }
     return this.offsets.get(key) as FlowObservedOffset[];
@@ -185,7 +189,11 @@ export class FlowOperationTrace {
   }
 }
 
-export function describeFlow<P extends TracePorts, T>(doc: TraceDoc, ports: P, run: (traced: P) => T): T {
+export const HEADING_EDGE_REFUSAL = "Remove the space at the start or end of this scene name first.";
+
+export function describeFlow<P extends TracePorts, T>(doc: TraceDoc, ports: P, run: (traced: P) => T): T | { readonly refused: string } {
   const trace = new FlowOperationTrace(doc, ports, ports.operations as FlowOperationRequest);
-  return trace.finish(run({ ...ports, operations: undefined, trace }));
+  const out = trace.finish(run({ ...ports, operations: undefined, trace }));
+  // why: flow offsets count a heading's trimmed name, so they cannot address stored text with spaces at its edges
+  return trace.unaligned ? { refused: HEADING_EDGE_REFUSAL } : out;
 }

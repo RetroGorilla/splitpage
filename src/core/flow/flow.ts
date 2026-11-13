@@ -60,6 +60,7 @@ export interface FlowPorts {
   readonly cells: (html: string | null | undefined) => readonly Run[];
   readonly newId: () => string;
   readonly hasVisual: (row: FlowRow) => boolean;
+  readonly storedHeading?: ((sceneId: string) => string | null) | undefined;
 }
 
 export interface FlowEdit {
@@ -1110,6 +1111,7 @@ export function replaceAll(doc: FlowDoc, needle: string, text: string, matchCase
 export function sentenceParagraphs(doc: FlowDoc, ports: FlowPorts): readonly FlowRow[] & { readonly ops?: readonly SharedOperation[] } {
   if (ports.operations) {
     const described = describeFlow(doc, ports, traced => ({ rows: sentenceParagraphs(doc, traced), sections: normalizedSections(doc.sections), ops: [] as readonly SharedOperation[] }));
+    if ("refused" in described) return doc.rows;
     return Object.assign(described.rows.slice(), { ops: described.ops });
   }
   if (doc.rows.some(row => row.paragraphStart)) return doc.rows;

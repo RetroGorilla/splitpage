@@ -218,8 +218,8 @@
   }, {
     "label": "adoption settles over a pending native target",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target) settle();",
-    "replace": "if ((before.adopted || after.adopted) && !surface.composition()) settle();",
+    "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target && !holding()) settle();",
+    "replace": "if ((before.adopted || after.adopted) && !surface.composition() && !holding()) settle();",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }, {
     "label": "the Split view keeps the typed cell after a recovery write",
@@ -292,6 +292,66 @@
     "file": "src/adapters/collab/buffer-selection.ts",
     "find": "if (field === \"heading\") {",
     "replace": "if (false) {",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a key that only types settles a heading held empty",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (buffered.held() && typingKey(key)) return;",
+    "replace": "if (false) return;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an adopted emptying change settles at once",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "!surface.composition() && !target && !holding()) settle();",
+    "replace": "!surface.composition() && !target) settle();",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an emptying change found by a paint settles at once",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (checked.adopted && !surface.composition() && !holding()) settle();",
+    "replace": "if (checked.adopted && !surface.composition()) settle();",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a cancelled composition closes a heading held empty",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (policy?.hold && same(",
+    "replace": "if (false && same(",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a cancelled composition ends a held edit without telling the person",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (policy) ports.report({ kind: \"rejected\", reason: policy.reason });",
+    "replace": "",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a shared heading shows its trimmed name",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "paintedBeats ? storedHeading(scene.id) ?? scene.name : scene.name;",
+    "replace": "scene.name;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the painted record keeps a heading's trimmed name",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "text: emptyHeadings.get(block.scene.id) ?? headingText(block.scene) }",
+    "replace": "text: emptyHeadings.get(block.scene.id) ?? block.scene.name }",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a caret past a heading's trimmed name counts as gone",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "pos.offset <= headingText(block.scene).length);",
+    "replace": "pos.offset <= block.scene.name.length);",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a command addresses a heading with an edge space by trimmed offsets",
+    "file": "src/core/flow/operations.ts",
+    "find": "return trace.unaligned ? { refused: HEADING_EDGE_REFUSAL } : out;",
+    "replace": "return out;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the Writer's flow commands are not given the stored heading text",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "flow: { ...inputPorts.flow, storedHeading } }",
+    "replace": "flow: inputPorts.flow }",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }]
 }

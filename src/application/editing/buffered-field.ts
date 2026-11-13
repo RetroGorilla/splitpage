@@ -29,6 +29,7 @@ export interface BufferedFieldBinding {
   readonly finish: () => boolean;
   readonly canPaint: () => boolean;
   readonly dirty: () => boolean;
+  readonly held: () => boolean;
   readonly base: (rowId: string) => PaintedText | null;
   readonly dispose: () => boolean;
 }
@@ -189,6 +190,10 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     return true;
   }
 
+  function holding(): boolean {
+    return !!active && active.edit.isOpen() && !!surface.unsettled?.(active.rowId, active.edit.text())?.hold;
+  }
+
   function finish(): boolean {
     const checked = ownership(checkpoint("settle"));
     return checked.ok && settle();
@@ -202,7 +207,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       const before = ownership(event);
       if (before.ok || event.type === "compositionend") dispatch();
       const after = ownership(event);
-      if ((before.adopted || after.adopted) && !surface.composition() && !target) settle();
+      if ((before.adopted || after.adopted) && !surface.composition() && !target && !holding()) settle();
     },
     beforeInput: (event, range, native) => {
       const type = event.inputType, intended = native ?? range;
@@ -244,7 +249,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
         const [from, to] = target, kept = active.edit.text().slice(from, to);
         active.edit.replace(from, to, surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept); target = null;
       }
-      if (!surface.composition() && !surface.unsettled?.(active.rowId, active.edit.text())?.hold) finish();
+      if (!surface.composition() && !holding()) finish();
     },
     start: (event, range) => {
       ended = false; refusedComposition = false;
@@ -259,19 +264,23 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (refusedComposition) return;
       if (!active) return;
       if (!event.data) {
+        const policy = active.edit.isOpen() ? surface.unsettled?.(active.rowId, active.edit.text()) : null;
+        if (policy?.hold && same(projection(surface.runs(active.beat)), active.edit.text())) { target = null; return; }
         const held = active; active = null; target = null;
         surface.reset(held.rowId);
         try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
         surface.repaint(held.rowId); surface.restore(held.rowId, undefined);
+        if (policy) ports.report({ kind: "rejected", reason: policy.reason });
       } else finish();
     },
     finish,
     canPaint: () => {
       const checked = ownership(checkpoint("paint"));
-      if (checked.adopted && !surface.composition()) settle();
+      if (checked.adopted && !surface.composition() && !holding()) settle();
       return checked.ok && !active && !surface.composition();
     },
     dirty: () => active !== null,
+    held: holding,
     base: rowId => active?.rowId === rowId ? active.base : null,
     dispose: () => {
       if (!finish()) return false;

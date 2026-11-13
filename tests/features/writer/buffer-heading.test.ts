@@ -8,6 +8,8 @@ import { transactSharedDocument } from "../../../src/adapters/collab/document.ts
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
+import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
+import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { registerSplits, sharedCommand } from "../../application/session/shared-session-support.ts";
 import { ref } from "../../adapters/collab/executor-support.ts";
 import { headingPos } from "../../../src/core/flow/flow.ts";
@@ -21,6 +23,10 @@ const caret = (offset: number): FlowRange => ({ anchor: headingPos("H1", offset)
 function remote(page: HeadedPage, at: number, text: string): void {
   const right = createSharedAnchor(page.h.b, HEADING, at, "after"); assert.ok(right);
   page.h.execute("B", [page.h.command("B", { kind: "text-insert", target: HEADING, at: { left: null, right, affinity: "before" }, content: [{ value: text, marks: [] }] })]);
+}
+
+function stored(page: HeadedPage): string | undefined {
+  return readSharedPaintedText(page.h.a, sharedBufferedTarget(page.h.a, "heading:H1"))?.text;
 }
 
 function names(handle: SharedDocumentHandle) {
@@ -122,6 +128,111 @@ test("rule 4: an emptied heading stays held and unsettled, then the next keystro
       { kind: "text-delete", target: { owner: "H1", segment: "H1", field: "heading" }, observed: 5 }
     ]]);
     copies(page, ["N"]);
+  } finally { page.close(); }
+});
+
+test("rule 4: a Shift press before the first letter keeps the emptied heading held, so the letter replaces the name once", () => {
+  const page = headedWriter();
+  try {
+    page.typeHeading(0, 5, "", "deleteContentBackward");
+    page.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Shift", shiftKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual([page.name(), page.element().textContent, page.reports], ["Scene", "", []]);
+    page.typeHeading(0, 0, "N");
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, page.a.executed.length], ["N", "N", [], 1]);
+  } finally { page.close(); }
+});
+
+test("rule 4: an emptying change that arrives with no beforeinput is held too, not put back", () => {
+  const page = headedWriter();
+  try {
+    page.element().textContent = "";
+    page.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, page.a.executed.length], ["Scene", "", [], 0]);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
+    page.typeHeading(0, 0, "N");
+    assert.deepEqual([page.name(), page.element().textContent, page.reports], ["N", "N", []]);
+    assert.deepEqual(written(page), [[
+      { kind: "text-insert", target: { owner: "H1", segment: "H1", field: "heading" }, content: [{ value: "N", marks: [] }] },
+      { kind: "text-delete", target: { owner: "H1", segment: "H1", field: "heading" }, observed: 5 }
+    ]]);
+  } finally { page.close(); }
+});
+
+test("rule 4: an emptying change first found by a paint is held too", () => {
+  const page = headedWriter();
+  try {
+    page.element().textContent = "";
+    page.surface.paint();
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, [...collabState(page.h.a).ingress.holds]], ["Scene", "", [], ["buffer"]]);
+  } finally { page.close(); }
+});
+
+test("rule 4: a cancelled composition that leaves other text in a heading held empty puts the name back and tells the person once", () => {
+  const page = headedWriter();
+  try {
+    page.typeHeading(0, 5, "", "deleteContentBackward");
+    page.startHeading(0);
+    page.element().textContent = "x";
+    page.end("");
+    assert.deepEqual([page.name(), page.element().textContent, page.a.executed.length], ["Scene", "Scene", 0]);
+    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "buffer-heading-empty" }]);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+  } finally { page.close(); }
+});
+
+test("rule 4: a composition cancelled in a heading held empty keeps the hold; ending it later tells the person once", () => {
+  const page = headedWriter();
+  try {
+    page.typeHeading(0, 5, "", "deleteContentBackward");
+    page.startHeading(0);
+    page.end("");
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, page.a.executed.length], ["Scene", "", [], 0]);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
+    assert.equal(page.surface.settle?.(), true);
+    assert.deepEqual([page.name(), page.element().textContent], ["Scene", "Scene"]);
+    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "buffer-heading-empty" }]);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+  } finally { page.close(); }
+});
+
+test("rule 8: a typed space at a heading's edge is stored and shown as typed, and typing goes on after it", () => {
+  const page = headedWriter();
+  try {
+    page.typeHeading(5, 5, " ");
+    assert.deepEqual([stored(page), page.element().textContent, page.surface.paintedBase("heading:H1")?.text, page.name()], ["Scene ", "Scene ", "Scene ", "Scene"]);
+    page.surface.paint();
+    assert.equal(page.element().textContent, "Scene ");
+    for (const [at, letter] of [[6, "t"], [7, "w"], [8, "o"]] as const) assert.equal(page.typeHeading(at, at, letter), true);
+    page.typeHeading(0, 0, " ");
+    assert.deepEqual([stored(page), page.element().textContent, page.reports, page.missing], [" Scene two", " Scene two", [], []]);
+    assert.deepEqual([page.name(), page.surface.selection()], ["Scene two", caret(1)]);
+    copies(page, [" Scene two"]);
+  } finally { page.close(); }
+});
+
+test("rule 8: a selection reaching a heading's stored edge space survives a repaint", () => {
+  const page = headedWriter();
+  try {
+    page.typeHeading(5, 5, " ");
+    const range: FlowRange = { anchor: headingPos("H1", 2), head: headingPos("H1", 6) };
+    page.surface.place(range);
+    page.surface.repaint();
+    assert.deepEqual([page.element().textContent, page.surface.selection()], ["Scene ", range]);
+  } finally { page.close(); }
+});
+
+test("rule 8: a command over a heading whose stored text has an edge space is refused and the person is told", () => {
+  const holder: { page?: HeadedPage } = {};
+  const page = headedWriter("Scene", (name, operation) => {
+    const edited = operation(holder.page?.a.session.read(doc => { assert.ok(doc); return doc as FlowDoc; }) as FlowDoc);
+    return edited && "refused" in edited ? edited : null;
+  }); holder.page = page;
+  try {
+    page.typeHeading(5, 5, " ");
+    page.surface.place(caret(3));
+    page.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    assert.deepEqual([stored(page), page.element().textContent, page.reports, page.a.executed.length], ["Scene ", "Scene ", [], 1]);
+    assert.deepEqual(page.notices, ["Remove the space at the start or end of this scene name first."]);
   } finally { page.close(); }
 });
 
