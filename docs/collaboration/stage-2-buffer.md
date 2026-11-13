@@ -426,7 +426,39 @@ remote change mid-typing, mid-composition and while the heading is held empty,
 compared on the typist, the other copy and a late joiner. "standalone heading
 keystroke" in `tests/features/writer/buffer-cost.test.ts` pins that the
 standalone rename builds no buffer or painted record and reads no key. The
-Split view's rename form and the title are not bound yet.
+title is not bound yet.
+
+### The Split view's rename form (package 9d, cut 1b)
+
+In a shared session the Split view's rename form binds its input to the same
+buffered field under the heading's key (`bindSceneName` in
+`src/features/rows/scene-name-buffer.ts`, given by `sharedSceneNamePorts` in the
+wiring). Each keystroke settles as the heading's `text-insert` or `text-delete`;
+the form runs no rename command, and closing it (Enter, Escape, focus loss)
+closes it over what is already shared and repaints the rows once. The form shows
+the stored name (`storedSceneName`, edge spaces included), and the empty and
+200-character verdicts are the Writer's (`unsettledHeading`). Assumed rules, for
+the plan review:
+
+- An input gives no target range, so a collapsed Backspace or Delete is left to
+  the browser and adopted at its `input` event. Paste, drop and other input types
+  are refused with `buffer-unsupported-input`, after settling typing. A paste or
+  drop into a name held empty is an insertion into it, so it is refused without
+  ending the hold.
+- A name held empty ends as in the Writer: a command admitted, focus loss, or a
+  cancelled composition that began held, each with the stored name back and one
+  report. Submitting it (Enter) keeps the form open and held, as the standalone
+  form keeps an empty name open; Escape closes it with the one report.
+- A paint during an edit re-homes the form into the rebuilt header and keeps the
+  caret, moved past text others inserted before it.
+- Adding a scene, or naming an automatic one, opens no form in a shared session
+  and tells the person (`not shared`): scene creation has no shared operation yet.
+- Name text the document refuses goes to recovery through the rule 29 write, as
+  in the Writer.
+
+`tests/features/rows/scene-name-buffer.test.ts` holds each case, compared on
+the typist, the other copy and a late joiner; `tests/features/rows/scene-controls.test.ts`
+pins the standalone form, which binds nothing.
 
 ## Mapping and coverage
 

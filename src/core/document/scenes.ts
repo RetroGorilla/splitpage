@@ -46,6 +46,16 @@ export function normalizeScenes(value: unknown): DocumentScene[] | undefined {
   return out.length ? out : undefined;
 }
 
+export function storedSceneName(doc: SceneDocument, sceneId: string): string | null {
+  const sections: readonly unknown[] = Array.isArray(doc.sections) ? doc.sections : [];
+  for (const item of sections) {
+    if (!item || typeof item !== "object" || (item as { readonly id?: unknown }).id !== sceneId) continue;
+    const name = (item as { readonly name?: unknown }).name;
+    return typeof name === "string" ? name : null;
+  }
+  return null;
+}
+
 export function sceneGroups(doc: SceneDocument): SceneGroup[] {
   const scenes = normalizeScenes(doc.sections);
   if (!scenes) return [];

@@ -1,5 +1,5 @@
 import {
-  backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown, SCENE_NAME_MAX,
+  backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown,
   isCollapsed, isPendingHeading, joinWithPrevious, lineBreakAt, logicalText, orderedRange, pasteText, renameHeading, replaceRange,
   setMarkAcross, selectionToOwnBeat, startParagraph, stepFrom, typeWithMarks, withinOneBeat
 } from "../../core/flow/flow.ts";
@@ -16,8 +16,7 @@ import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import { createWriterBuffer } from "./flow-buffer.ts";
-import { bufferedFieldTarget, headingFieldKey } from "../../application/editing/buffered-field-key.ts";
-import { cappedText } from "../../core/document/text-policy.ts";
+import { bufferedFieldTarget, headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
@@ -1304,9 +1303,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       const el = beatEl(rowId); if (el) rendered.delete(el);
       repaint();
     },
-    unsettled: (key, text) => bufferedFieldTarget(key)?.field !== "heading" ? null
-      : !cappedText(text, SCENE_NAME_MAX) ? { reason: "buffer-heading-empty", hold: true }
-        : Array.from(text).length > SCENE_NAME_MAX ? { reason: "buffer-heading-length", hold: false } : null,
+    unsettled: (key, text) => bufferedFieldTarget(key)?.field !== "heading" ? null : unsettledHeading(text),
     composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (rowId, offsets) => {
       const heading = bufferedFieldTarget(rowId);

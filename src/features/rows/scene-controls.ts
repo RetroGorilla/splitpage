@@ -7,10 +7,13 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import { addSceneCommand, moveSceneCommand, removeSceneCommand, renameSceneCommand } from "../../application/commands/scenes.ts";
 import { moveBeatCommand } from "../../application/commands/rows.ts";
-import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, sceneGroups } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, sceneGroups, storedSceneName } from "../../core/document/scenes.ts";
 import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { NOT_SHARED } from "../../application/session/shared-session.ts";
 import { closeRowMenus } from "./row-menu.ts";
+import { bindSceneName } from "./scene-name-buffer.ts";
+import type { SceneNameBuffer, SceneNameBufferPorts } from "./scene-name-buffer.ts";
 
 export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current" | "numbering">;
@@ -22,6 +25,7 @@ export interface SceneControlsPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly scroll: (x: number, y: number) => void;
   readonly stopScroll: () => void;
+  readonly sharedNames?: SceneNameBufferPorts;
 }
 
 export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
@@ -37,6 +41,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     readonly line: HTMLFormElement;
     readonly returnTo: HTMLElement | null;
     readonly settle: (focus: boolean) => void;
+    readonly bound: SceneNameBuffer | null;
   } | null = null;
   let pointerAway = false;
   const animations = new Map<HTMLElement, Animation>();
@@ -79,8 +84,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     };
   }
   function cancelName(motion = false, restoreFocus = true): void {
-    const line = naming?.line;
-    const returnTo = naming?.returnTo;
+    if (naming?.bound && !naming.bound.dispose()) return;
+    const line = naming?.line, sceneId = naming?.bound ? naming.sceneId : null;
+    const returnTo = sceneId !== null && sceneId !== undefined && !naming?.returnTo?.isConnected
+      ? header(sceneId)?.querySelector<HTMLElement>(".section-name") : naming?.returnTo;
     naming = null;
     const restore = (): void => {
       if (restoreFocus && !naming && returnTo?.isConnected &&
@@ -93,9 +100,11 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     }
     if (restoreFocus && returnTo?.isConnected && !motion) returnTo.focus();
   }
-  function nameAt(parent: Element, sceneId: string | null, beatId: string, value: string, save: (name: string, focus: boolean) => void): void {
+  function nameAt(parent: Element, sceneId: string | null, beatId: string, value: string, save: (name: string, focus: boolean) => void,
+    shared?: SceneNameBufferPorts): void {
     if (!parent.isConnected) return;
     cancelName();
+    if (naming) return;
     const returnTo = doc.activeElement as HTMLElement | null;
     const made = doc.createElement("form");
     made.className = "section-rename";
@@ -106,6 +115,12 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     function settle(focus: boolean): void {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
+      if (bound) {
+        if (focus && bound.held() || !bound.finish()) return;
+        cancelName(false, false);
+        if (focus && sceneId !== null) header(sceneId)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
+        return;
+      }
       if (!input.value.trim()) { if (!focus) cancelName(true, false); return; }
       if (!ports.edits.allowed()) return;
       const name = input.value;
@@ -124,7 +139,16 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     });
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
     if (heading) heading.append(made); else parent.before(made);
-    naming = { sceneId, beatId, line: made, returnTo, settle };
+    const place = (): void => {
+      const at = sceneId !== null ? header(sceneId)?.querySelector('[role="heading"]') : null;
+      if (at && !at.contains(made)) at.append(made);
+    };
+    const name = (): string | null => {
+      const state = ports.document.current();
+      return state && sceneId !== null ? storedSceneName(state, sceneId) : null;
+    };
+    const bound = shared && sceneId !== null ? bindSceneName({ input, sceneId, name, place }, shared) : null;
+    naming = { sceneId, beatId, line: made, returnTo, settle, bound };
     animateName(made, false);
     input.focus(); input.select();
   }
@@ -135,7 +159,12 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     nameAt(parent, id, sceneFirstBeatId(scene), scene.name, (name, focus) => {
       ports.edits.run(renameSceneCommand(id, name));
       if (focus) header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-    });
+    }, ports.sharedNames);
+  }
+  function newScene(): boolean {
+    if (!ports.sharedNames) return true;
+    ports.sharedNames.report({ kind: "rejected", reason: NOT_SHARED });
+    return false;
   }
   function reset(): void {
     cancelName();
@@ -196,6 +225,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       beat?.querySelector<HTMLElement>(".row-more")?.focus();
       const existing = sceneBeforeBeat(state, row.id);
       if (existing) { const parent = header(existing.id); if (parent) rename(existing.id, parent); return; }
+      if (!newScene()) return;
       nameAt(beat ?? add.parentElement ?? add, null, row.id, "", (name, focus) => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(row.id, created, name));
@@ -206,7 +236,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (action === "name-automatic" && divider) {
       const automatic = ports.document.numbering().scenes.find(scene => scene.id === null);
       const first = automatic && state.rows[automatic.start];
-      if (!first) return;
+      if (!first || !newScene()) return;
       nameAt(divider, null, first.id, "", (name, focus) => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(first.id, created, name));

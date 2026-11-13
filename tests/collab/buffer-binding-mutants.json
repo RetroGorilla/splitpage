@@ -247,22 +247,22 @@
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
     "label": "an emptied heading settles at once",
-    "file": "src/features/writer/flow-surface.ts",
+    "file": "src/application/editing/buffered-field-key.ts",
     "find": "{ reason: \"buffer-heading-empty\", hold: true }",
     "replace": "{ reason: \"buffer-heading-empty\", hold: false }",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+    "tests": ["tests/features/writer/buffer-heading.test.ts", "tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "an emptied heading is written empty",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": ": !cappedText(text, SCENE_NAME_MAX) ? { reason:",
-    "replace": ": false ? { reason:",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "if (!cappedText(text, SCENE_NAME_MAX)) return",
+    "replace": "if (false) return",
+    "tests": ["tests/features/writer/buffer-heading.test.ts", "tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a heading over 200 characters settles",
-    "file": "src/features/writer/flow-surface.ts",
+    "file": "src/application/editing/buffered-field-key.ts",
     "find": "Array.from(text).length > SCENE_NAME_MAX ?",
     "replace": "false ?",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+    "tests": ["tests/features/writer/buffer-heading.test.ts", "tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "an unsettled edit is committed anyway",
     "file": "src/application/editing/buffered-field.ts",
@@ -383,6 +383,54 @@
     "find": "if (typeof name === \"string\") scene.name = name;",
     "replace": "void name;",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the Split rename form reads the trimmed name",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "return state && sceneId !== null ? storedSceneName(state, sceneId) : null;",
+    "replace": "return state && sceneId !== null ? sceneGroups(state).find(group => group.scene.id === sceneId)?.scene.name ?? null : null;",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "a paste into a held Split rename ends the hold",
+    "file": "src/features/rows/scene-name-buffer.ts",
+    "find": "const refusedInsertion = binding.held() &&",
+    "replace": "const refusedInsertion = false &&",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "a collapsed delete in the Split rename form is buffered without a target",
+    "file": "src/features/rows/scene-name-buffer.ts",
+    "find": "if (type.startsWith(\"delete\") && type !== \"deleteByCut\" && type !== \"deleteByDrag\" && input.selectionStart === input.selectionEnd) return;",
+    "replace": "",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "the Split rename form stays in a header that a paint replaced",
+    "file": "src/features/rows/scene-name-buffer.ts",
+    "find": "    form.place();\n",
+    "replace": "",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "the Split rename caret is not moved past someone else's text",
+    "file": "src/features/rows/scene-name-buffer.ts",
+    "find": "input.setSelectionRange(movedCaret(before, input.value, caret[0]), movedCaret(before, input.value, caret[1]));",
+    "replace": "input.setSelectionRange(caret[0], caret[1]);",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "submitting a held empty Split rename closes it",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (focus && bound.held() || !bound.finish()) return;",
+    "replace": "if (!bound.finish()) return;",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "a new scene's name form opens in a shared session",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (!ports.sharedNames) return true;",
+    "replace": "if (ports) return true;",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "closing a Split rename does not repaint the rows",
+    "file": "src/features/rows/scene-name-buffer.ts",
+    "find": "      ports.repaintRows();\n",
+    "replace": "",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a visual commit addressed to the narration",
     "file": "src/adapters/collab/buffer.ts",
