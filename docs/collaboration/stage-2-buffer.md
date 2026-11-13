@@ -261,7 +261,11 @@ Nothing in the running app calls it yet (package 14); a test pins that.
   received update replaces it. The hook has no subscriber in a standalone session
   and is never reached by a standalone keystroke.
 - A visual cell is a field of the same binding under its own key: the row id,
-  U+FFFD and `visualText` (`bufferedFieldKey`; a stable id never holds U+FFFD).
+  U+FFFD and `visualText` (`bufferedFieldKey`). `readBufferedFieldKey` reads the
+  text after the last U+FFFD as the field and accepts only `visualText`; any other
+  key is a narration row id. A row id that holds U+FFFD fails
+  `isStableSharedIdentity`, so every target built from such a key is refused by
+  the executor; the parser relies on that refusal, not on such ids being absent.
   So there is one open edit, one composition and one admission gate across both
   columns. The adapter reads the field from the key: the text address is
   `{ owner: row, segment: row, field: "visualText" }`, which resolves to the
@@ -329,9 +333,19 @@ else a commit derives from the visual text, per
 - A tag's owner from an `@Name` pairing and a sound cue's entry following its
   words stay off; both are undetermined.
 
-Declared limit: the visual cell of a joined row shows both visuals, and its
-painted record is one visual, so typing there is refused and repainted, as rule
-27 does, until a later cut binds a joined visual.
+Declared limits, each pinned by a literal in
+`tests/features/editing/cell-buffer-visual.test.ts`:
+
+- The visual cell of a joined row shows both visuals, and its painted record is
+  one visual, so typing there is refused and repainted, as rule 27 does, until a
+  later cut binds a joined visual.
+- A beat split off in a shared session has no visual yet: `split` creates none,
+  and no existing operation gives an existing beat its visual text
+  (`record-create` on `visuals` refuses the `text` field). Typing in that visual
+  cell is refused with `buffer-no-visual`, reported to the person, and writes
+  nothing; the beat's narration takes typing. Follow-up: an operation that gives
+  an existing beat its visual record and text in one list, so the first commit in
+  such a cell can create it.
 
 ## Mapping and coverage
 

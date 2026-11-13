@@ -22,7 +22,7 @@ export function bufferedNativeReplacement(before: string, after: string): Buffer
 }
 
 function spaceForm(text: string): string {
-  return text.indexOf(" ") === -1 ? text : text.replaceAll(" ", " ");
+  return text.indexOf("\u00a0") === -1 ? text : text.replaceAll("\u00a0", " ");
 }
 
 export function sameUpToSpaceForm(a: string, b: string): boolean {

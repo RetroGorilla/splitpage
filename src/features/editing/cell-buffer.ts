@@ -106,6 +106,9 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     if (event.type === "focusout") { if (!composing) binding.finish(); return; }
     if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
     if (event.type === "input") { if (text) binding.input(); return; }
+    if (text && (event.type === "compositionstart" || event.type === "beforeinput") && !ports.painted.base(keyOf(text)) && !ports.readable(keyOf(text))) {
+      refuse(event, "buffer-no-visual"); return;
+    }
     if (event.type === "compositionstart") { if (text) binding.start(event, at(keyOf(text), ports.page.selection(text))); return; }
     if (event.type === "beforeinput" && text) {
       const input = event as InputEvent;

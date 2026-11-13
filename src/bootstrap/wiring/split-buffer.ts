@@ -8,6 +8,7 @@ import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
 import { createCellPage } from "../../features/editing/cell-page.ts";
 import { noteFieldPainted, onBeforePaint, onPainted, paintedFromRow, render } from "../../features/rows/render.ts";
 import { fromHtml, storedHtmlFromDom } from "../richtext.ts";
+import { readBufferedFieldKey } from "../../core/collab/buffer.ts";
 import { paintGuard } from "./editor-owners.ts";
 import { currentDocument } from "./session-owner.ts";
 
@@ -28,7 +29,8 @@ export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTe
       shown: edit => paintGuard().whileShown(edit),
       repaintRows: render,
       onPainted,
-      beforePaint: onBeforePaint
+      beforePaint: onBeforePaint,
+      readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null
     }
   });
 }

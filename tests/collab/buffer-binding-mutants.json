@@ -245,5 +245,17 @@
     "find": "fields: { [snapshot.field ?? \"audioText\"]: snapshot.html,",
     "replace": "fields: { audioText: snapshot.html,",
     "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "the visual caret resolved as narration",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "target.field === \"visualText\" ? { key: rowId, target } : undefined",
+    "replace": "undefined",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "a visual cell with no visual is left to the silent repaint",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "      refuse(event, \"buffer-no-visual\"); return;",
+    "replace": "      void event;",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
   }]
 }

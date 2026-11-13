@@ -12,6 +12,7 @@ import { createCellPage } from "../../../src/features/editing/cell-page.ts";
 import { posToDom } from "../../../src/features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../../src/features/common/cell-selection.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
+import { readBufferedFieldKey } from "../../../src/core/collab/buffer.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { registerSplits } from "../../application/session/shared-session-support.ts";
@@ -69,7 +70,8 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
     notePainted: (_cell, field, row) => { shown.set(row.id + "/" + field, row[field as Field] ?? ""); },
     shown: edit => guard.whileShown(edit), repaintRows: paint,
     onPainted: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    beforePaint: check => { checks.add(check); return () => { checks.delete(check); }; }
+    beforePaint: check => { checks.add(check); return () => { checks.delete(check); }; },
+    readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null
   } });
   function key(rowId: string, from: number, to: number, inputType: string, data: string | null,
     options: { readonly field?: Field; readonly during?: () => void; readonly shown?: (cell: HTMLElement) => void; readonly input?: false } = {}): boolean {

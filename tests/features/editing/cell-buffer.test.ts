@@ -5,7 +5,7 @@ import { bufferOracles } from "../../collab/oracles/buffer-oracles.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { setCellSelection } from "../../../src/features/common/cell-selection.ts";
 
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 function trailingNbsp(cell: HTMLElement): void {
   const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);

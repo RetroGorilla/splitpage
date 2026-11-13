@@ -9,7 +9,7 @@ import { beatPos } from "../../../src/core/flow/flow.ts";
 import { projection } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 interface Field { readonly rowId: string; shown: string }
 

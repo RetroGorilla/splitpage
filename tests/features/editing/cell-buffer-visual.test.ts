@@ -9,10 +9,16 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { sharedCommand } from "../../application/session/shared-session-support.ts";
 import { setCellSelection } from "../../../src/features/common/cell-selection.ts";
 import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
+import { bufferedFieldKey } from "../../../src/core/collab/buffer.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
+import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
+import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
+import { operation } from "../../adapters/collab/executor-support.ts";
 
 type Page = ReturnType<typeof bufferedSplit>;
 
-const NBSP = " ", VISUAL_KEY = "R1�visualText";
+const NBSP = "\u00a0", VISUAL_KEY = bufferedFieldKey("R1", "visualText");
 
 function visual(page: Page, rowId = "R1"): unknown {
   return page.a.session.read(doc => doc?.rows.find(row => row.id === rowId)?.visualText);
@@ -134,5 +140,57 @@ test("9e: a sound cue typed in the visual column stays plain text and registers 
     assert.equal(type(page, 0, "SFX: bang"), true);
     assert.deepEqual([visual(page), page.a.session.read(doc => doc?.productionTags.length), operations(page), page.reports],
       ["SFX: bang", 0, [["text-insert", "scalar"]], []]);
+  } finally { page.close(); }
+});
+
+function bobVisual(page: Page, op: Record<string, unknown>): void {
+  assert.deepEqual(executeSharedOperations(page.h.b, [operation(op)], { base: readSharedRevision(page.h.b) }), { ok: true });
+}
+
+test("9e: the caret after a visual commit follows the visual's own characters through someone else's held insertion", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }]);
+  try {
+    assert.equal(type(page, 0, "hello"), true);
+    page.h.queue.flush("D1");
+    const target = { owner: "R1" as SharedContentRef, segment: "R1" as SharedContentRef, field: "visualText" as const };
+    assert.equal(page.key("R1", 5, 5, "insertText", "X", { field: "visualText", during: () => {
+      const first = createSharedAnchor(page.h.b, target, 0, "after"); assert.ok(first);
+      bobVisual(page, { kind: "text-insert", id: "bob-qq", by: "Bob", target, at: { left: null, right: first, affinity: "before" }, content: [{ value: "QQ", marks: [] }] });
+      page.h.queue.deliverFrom("B", "D3");
+    } }), true);
+    assert.deepEqual([visual(page), page.caret("R1", "visualText"), page.reports], ["QQhelloX", { from: 8, to: 8 }, []]);
+  } finally { page.close(); }
+});
+
+test("9e: typing right after a word someone else made bold in the visual column commits, and every copy agrees on the result", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }]);
+  try {
+    assert.equal(type(page, 0, "ab"), true);
+    page.h.queue.flush("D1");
+    const target = { owner: "R1" as SharedContentRef, segment: "R1" as SharedContentRef, field: "visualText" as const };
+    const units = [0, 1].map(offset => createSharedAnchor(page.h.b, target, offset, "after"));
+    bobVisual(page, { kind: "mark", id: "bob-bold", by: "Bob", target, observed: units, mark: { kind: "b", value: true } });
+    page.h.queue.deliverFrom("B", "D1");
+    assert.equal(visual(page), "<strong>ab</strong>");
+    assert.equal(type(page, 2, "c"), true);
+    page.h.queue.flush("D1"); page.h.join();
+    const shown = [page.h.a, page.h.b, page.h.c].map(handle => projectSharedDocumentWithRecovery(handle).document.rows.find(row => row.id === "R1")?.visualText);
+    assert.deepEqual([shown, page.reports], [["<strong>abc</strong>", "<strong>abc</strong>", "<strong>abc</strong>"], []]);
+  } finally { page.close(); }
+});
+
+test("9e, declared limit: a beat split off in a shared session has no visual yet, so typing in its visual cell is refused with buffer-no-visual and writes nothing", () => {
+  const page = bufferedSplit([{ id: "R1", text: "abc" }], true, { structure: true });
+  try {
+    const split = page.a.session.run(sharedCommand("split", [operation({ kind: "split", id: "cut", by: "Alice", target: { owner: "R1", segment: "b:R1", field: "audioText" },
+      at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" }, observed: [], boundary: "cut-boundary", beat: "Rn", fields: { status: "todo" } })]));
+    assert.equal(split.kind, "applied");
+    const executed = page.a.executed.length, fresh = page.a.session.read(doc => doc?.rows[1]?.id); assert.ok(fresh);
+    assert.equal(type(page, 0, "V", fresh), false);
+    assert.deepEqual([page.reports, page.missing, page.a.executed.length, visual(page, fresh)], [[{ kind: "rejected", reason: "buffer-no-visual" }], [], executed, ""]);
+    assert.equal(page.key(fresh, 1, 1, "insertText", "N"), true);
+    page.h.queue.flush("D1"); page.h.join();
+    const rows = [page.h.a, page.h.b, page.h.c].map(handle => projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.id, row.audioText, row.visualText]));
+    assert.deepEqual(rows, Array.from({ length: 3 }, () => [["R1", "ab", ""], [fresh, "cN", ""]]));
   } finally { page.close(); }
 });
