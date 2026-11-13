@@ -206,3 +206,69 @@ test("seeded heading creations agree with a literal model through typing, a riva
   assert.deepEqual({ histories, checkpoints, commands, inline, rivals, headingRemovals }, { histories: 48, checkpoints: 122, commands: 301, inline: 23, rivals: 14, headingRemovals: 20 });
   t.diagnostic(JSON.stringify({ seed: "0x4d0c", histories, checkpoints, commands, inline, rivals, headingRemovals, declaredLimits: headingCreationLimits }));
 });
+
+const headingFinalizationLimits: readonly string[] = [];
+
+test("seeded heading finalizations agree with a literal model through typing in the line, a rival finalization, removals, restores and a late joiner", t => {
+  let seed = 0x4d10, histories = 0, checkpoints = 0, commands = 0, inline = 0, rivals = 0, headingRemovals = 0;
+  const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 16) % n; }, violations = new Set<string>();
+  const runtime = createFlowLoadRuntime(), hex = (value: string) => value.split("").map(unit => unit.charCodeAt(0).toString(16).padStart(4, "0")).join("");
+  const native = (writer: number, operation: string, role: string) => "structure_" + (writer + 1) + "_" + hex(operation) + "_" + role + "_0";
+  for (let sample = 0; sample < 8; sample++) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
+    const tail = random(2) === 0, split = random(3) === 0, line = tail ? "# Ab\ncd" : "# Ab", finalizer = random(copies);
+    const set = replicas(copies, { rows: [{ id: "R0", audioText: split ? "x" + line.replace("\n", "<br>") : "x" }, ...split ? [] : [{ id: "R1", audioText: line.replace("\n", "<br>"), paragraphStart: true }],
+      { id: "R2", audioText: "ef", paragraphStart: true }] });
+    const handles = [set.a, set.b, set.c].slice(0, copies), target = split ? native(finalizer, "cut", "beat") : "R1";
+    const rival = !split && !tail && random(3) === 0 ? (finalizer + 1) % copies : null, winner = Math.max(finalizer, rival ?? -1), byHeading = !tail || random(2) === 0;
+    const remover = random(copies), restorer = random(copies), early = random(2) === 0, heading = native(winner, "fin_o_0", "heading");
+    const typed = handles.flatMap((_, writer) => writer === finalizer || writer === rival ? [] : [{ writer, letter: "PQR".charAt(writer), offset: random(line.length + 1) }]);
+    const shown = new Map([[target, "S"], [heading, "H"]]), show = (id: string) => shown.get(id) ?? id;
+    const units = Array.from({ length: line.length + 1 }, (_, at) => [...typed.filter(item => item.offset === at).sort((a, b) => a.writer - b.writer).map(item => ({ ch: item.letter, at, typed: true, writer: item.writer })),
+      ...at < line.length ? [{ ch: line.charAt(at), at, typed: false, writer: -1 }] : []]).flat();
+    const inName = (unit: typeof units[number]) => unit.at < 5 || unit.typed && unit.at === 5 && unit.writer < finalizer;
+    const name = units.filter(unit => inName(unit) && (unit.typed || unit.at >= 2 && unit.at < 4)).map(unit => unit.ch).join("");
+    const rest = tail ? units.filter(unit => !inName(unit) && (unit.typed || unit.at > 4)).map(unit => unit.ch).join("") : null;
+    const send = (handle: typeof set.a, ops: unknown[]) => { assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true }); commands += ops.length; };
+    const ref = (from: number, to = from) => flowBaseReference(target, "audioText", from, to);
+    const finalize = (writer: number) => [{ kind: "heading-finalize", id: "fin_o_0", by: "Writer" + writer, target: { owner: target, segment: target, field: "audioText" }, heading: "Hn",
+      prefix: [ref(0, 2)], name: [ref(2, 4)], separator: tail ? [ref(4, 5)] : [], retainedBeat: tail ? target : "R2", emptyBeat: null,
+      tail: tail ? { left: null, right: ref(5), affinity: "before" } : { left: ref(3), right: null, affinity: "after" } },
+    ...tail ? [] : [{ kind: "remove", id: "fin_o_1", by: "Writer" + writer, removalKind: "became-heading", targets: [target], observed: [ref(0, 4)], boundaries: [target], components: [], gallery: [], at: 1 }]];
+    const { projector } = captureIncrementalReplica(set.a);
+    const checkpoint = (headingRemoved: boolean, beatRemoved: boolean) => {
+      set.queue.flush(order); assertIncremental(set.a, projector); checkpoints++;
+      const rows = [["R0", "x"], ...rest !== null && !beatRemoved ? [[show(target), rest]] : [], ["R2", "ef"]], recovery: string[][] = [];
+      if (headingRemoved) recovery.push(["removed-heading", "H", name]);
+      if (beatRemoved) recovery.push(["removed-beat", "S", rest ?? ""]);
+      const expected = { rows, sections: headingRemoved ? [] : [["H", name, rest !== null && !beatRemoved ? show(target) : "R2"]], recovery: recovery.map(entry => JSON.stringify(entry)) };
+      agree("seed=" + seed, order, handles, handle => {
+        const projected = projectSharedDocumentWithRecovery(handle), loaded = runtime.load(projected.document);
+        const result = { rows: loaded.rows.map(row => [show(row.id), row.audioText]), sections: ((loaded.sections ?? []) as DocumentScene[]).map(scene => [show(scene.id), scene.name, show(scene.firstSceneId)]),
+          recovery: projected.recovery.map(entry => JSON.stringify(entry.kind === "removed-beat" ? [entry.kind, show(String(entry.row.id)), entry.row.audioText] : entry.kind === "removed-heading" || entry.kind === "scene-with-no-beats"
+            ? [entry.kind, show(String(entry.heading.id)), entry.heading.name] : [entry.kind])) };
+        try { assert.deepEqual(result, expected); } catch (error) { violations.add(String(error)); }
+        return result;
+      });
+    };
+    try {
+      for (const handle of handles) { registerSharedRemovalHandlers(handle); registerSharedSplitHandlers(handle, runtime); registerSharedTextOperationHandlers(handle); registerSharedHeadingHandlers(handle); }
+      const author = handles[finalizer]; assert.ok(author);
+      if (split) { send(author, [{ kind: "split", id: "cut", by: "Writer", target: { owner: "R0", segment: "R0", field: "audioText" }, at: { left: flowBaseReference("R0", "audioText", 0), right: null, affinity: "after" },
+        observed: [], boundary: "Sn", beat: "Sn", fields: {} }]); set.queue.flush(order); inline++; }
+      for (const item of typed) { const handle = handles[item.writer]; assert.ok(handle); send(handle, [{ kind: "text-insert", id: "typed", by: "Writer", target: { owner: target, segment: target, field: "audioText" },
+        at: item.offset ? { left: ref(item.offset - 1), right: null, affinity: "after" } : { left: null, right: ref(0), affinity: "before" }, content: [{ value: item.letter, marks: [] }] }]); }
+      send(author, finalize(finalizer));
+      if (rival !== null) { const handle = handles[rival]; assert.ok(handle); send(handle, finalize(rival)); rivals++; }
+      checkpoint(false, false);
+      const actor = handles[remover], removal = native(remover, byHeading ? "unhead" : "gone", "removal"); assert.ok(actor);
+      if (byHeading) { send(actor, [{ kind: "heading-remove", id: "unhead", by: "Writer", heading, observed: [flowBaseReference(heading, "heading", 0, name.length)], newBeat: null, nextBeat: null }]); headingRemovals++; }
+      else send(actor, [{ kind: "remove", id: "gone", by: "Writer", removalKind: "beat", targets: [target], observed: [], boundaries: [target], components: [], gallery: [], at: 1 }]);
+      const restore = (handle: typeof set.a) => send(handle, [{ kind: "restore", id: "back", by: "Writer", removals: [removal] }]);
+      if (early) restore(actor); else { checkpoint(byHeading, !byHeading); const handle = handles[restorer]; assert.ok(handle); restore(handle); }
+      checkpoint(false, false); histories++;
+    } finally { set.close(); }
+  }
+  assert.deepEqual([...violations], headingFinalizationLimits);
+  assert.deepEqual({ histories, checkpoints, commands, inline, rivals, headingRemovals }, { histories: 48, checkpoints: 122, commands: 263, inline: 15, rivals: 6, headingRemovals: 38 });
+  t.diagnostic(JSON.stringify({ seed: "0x4d10", histories, checkpoints, commands, inline, rivals, headingRemovals, declaredLimits: headingFinalizationLimits }));
+});
