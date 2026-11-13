@@ -7,7 +7,7 @@ import type { GalleryVideoPorts } from "../../../src/features/gallery/ports.ts";
 import type { Step } from "../../../src/core/text/steps.ts";
 import { startGalleryVideo as mountVideo } from "../../../src/features/gallery/video.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
+import { fakeCapabilities, fakeDocument, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
 
 const VIMEO = "https://vimeo.com/123456789";
 
@@ -48,6 +48,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
       })
     },
     bundles: {
+      capability: fakeCapabilities(),
       create: { planCreate: async () => null, bundlePath: async () => null },
       place: { writtenOut: () => false, onChange: () => () => {} },
       window: window,

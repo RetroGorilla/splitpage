@@ -13,11 +13,14 @@ import type { VideoBundlePorts } from "../../../src/features/gallery/ports.ts";
 import { BUNDLE_WARN_BYTES, bundlePromptText, exportFilesText, saveCopyPromptText, startVideoBundles } from "../../../src/features/gallery/video-bundles.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices, fakeOwnership } from "../fakes.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 
 const PAGE = readFileSync(new URL("../../../src/page.html", import.meta.url), "utf8");
 const MARKUP = /<div class="modal-backdrop" id="bundle-modal"[\s\S]*?<div class="bundle-progress"[\s\S]*?<\/div>\s*<button[^>]*id="bundle-indicator"[^>]*><\/button>/.exec(PAGE)?.[0] ?? "";
 const DROP = { name: "take one.mp4", size: 9, path: "C:\\Drops\\take one.mp4" };
 const ENTRY = { steps: [] } as unknown as UndoEntry;
+const COMMON = { edit: () => ({ allowed: true }) as const, comment: () => ({ allowed: true }) as const };
+const MODES = { standalone: createSessionCapabilities("standalone", COMMON), shared: createSessionCapabilities("shared", COMMON) };
 
 interface Setup {
   written?: boolean;
@@ -31,11 +34,12 @@ interface Setup {
   chosen?: readonly BundledPathLink[] | null | Error;
   exportPlan?: DesktopBundleExportPlan | null;
   picked?: { id: string; name: string } | null;
+  pickWait?: Promise<void> | undefined;
   exported?: (job: string, fileId: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleExport | null>;
 }
 
 function setup(opts: Setup = {}) {
-  const at = { script: opts.script === undefined ? "Episode 12.splitpage" : opts.script, written: opts.written !== false };
+  const at = { script: opts.script === undefined ? "Episode 12.splitpage" : opts.script, written: opts.written !== false, mode: "standalone" as keyof typeof MODES };
   let heard: ((note: DesktopBundleCarry) => void) | null = null;
   document.body.innerHTML = '<div id="toast-host"></div>' + MARKUP + (/<div class="update-bar" id="bundle-outside-bar"[\s\S]*?<\/div>/.exec(PAGE)?.[0] ?? "");
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ name: DROP.name, size: DROP.size, location: { kind: "path", path: DROP.path }, poster: true }] }] }, fakeMigration().ports);
@@ -54,6 +58,7 @@ function setup(opts: Setup = {}) {
   const choices: { handle: unknown; choice: string }[] = [];
   const exportCalls: unknown[][] = [];
   const ports: VideoBundlePorts = {
+    capability: { folders: () => MODES[at.mode].folders(), bundles: () => MODES[at.mode].bundles() },
     create: {
       planCreate: opts.createPlan ?? (async () => null),
       bundlePath: (path, job, choice, progress) => {
@@ -90,7 +95,7 @@ function setup(opts: Setup = {}) {
         exportCalls.push(["plan", job, scriptName, body, script]);
         return opts.exportPlan === undefined ? { files: 2, bytes: 2048, left: 0 } : opts.exportPlan;
       },
-      pick: async (name, job) => { exportCalls.push(["pick", name, job]); return opts.picked === undefined ? { id: "zip1", name } : opts.picked; },
+      pick: async (name, job) => { exportCalls.push(["pick", name, job]); await opts.pickWait; return opts.picked === undefined ? { id: "zip1", name } : opts.picked; },
       run: (job, fileId, onProgress) => {
         exportCalls.push(["run", job, fileId]);
         return opts.exported ? opts.exported(job, fileId, onProgress) : Promise.resolve({ ok: true, files: 2, left: 0 });
@@ -111,7 +116,7 @@ function setup(opts: Setup = {}) {
   };
   return { at, doc, notices, ownership, calls, moves, cancels, carry, folds, edits, plans, choices, exportCalls, owner, el, pathCalls, forgotten,
     firstSave: () => { at.script = "Episode 12.splitpage"; at.written = true; placeListeners.forEach((listener) => listener("writtenOut")); },
-    reopen: () => { ownership.replace(); reader.replace(doc); },
+    reopen: () => { ownership.replace(); reader.replace(doc); }, share: () => { at.mode = "shared"; },
     location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
 }
 
@@ -916,3 +921,99 @@ test("the Export dialog's line about the files gives their count and size, and t
     "To include files outside the folder, use File > Create bundle… first. " +
     "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.");
 });
+
+const FOLDERS = "Local folders cannot be attached to a shared session.";
+const BUNDLES = "File bundles are not available in a shared session.";
+
+test("a shared session offers nothing for a drop, inspects no folder and plans no export with files, silently", async () => {
+  const planned: string[][] = [];
+  const h = setup({ createPlan: async (paths) => { planned.push([...paths]); return CREATE_PLAN; } });
+  h.share();
+  await settle();
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.equal(h.el("bundle-outside-bar").hidden, true);
+  assert.equal(await h.owner.exportPlan("{\"rows\":[]}", null), null);
+  h.firstSave();
+  await settle();
+  assert.deepEqual(planned, []);
+  assert.deepEqual(h.exportCalls, []);
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.notices.shown, []);
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  h.owner.dispose();
+});
+
+test("in a shared session Create bundle and Export with files show the reason once each and touch no file", async () => {
+  const planned: string[][] = [];
+  const h = setup({ createPlan: async (paths) => { planned.push([...paths]); return CREATE_PLAN; } });
+  h.share();
+  await settle();
+  await h.owner.createBundle();
+  assert.equal(await h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{\"rows\":[]}", null), false);
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.deepEqual(planned, []);
+  assert.deepEqual(h.exportCalls, []);
+  assert.deepEqual(h.pathCalls, []);
+  assert.deepEqual(h.notices.shown.map((n) => [n.message, n.kind]), [[BUNDLES, "warn"], [BUNDLES, "warn"]]);
+  h.owner.dispose();
+});
+
+test("a drop prompt answered after the session became shared copies nothing and says why", () => {
+  const h = setup();
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  assert.equal(h.el("bundle-modal").hidden, false);
+  h.share();
+  h.el("bundle-accept").click();
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.moves, []);
+  assert.deepEqual(h.notices.shown.map((n) => [n.message, n.kind]), [[FOLDERS, "warn"]]);
+  h.owner.dispose();
+});
+
+test("a copy that lands after the session became shared leaves the live link where it was", async () => {
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  h.el("bundle-accept").click();
+  assert.equal(h.calls.length, 1);
+  h.share();
+  finish?.({ ok: true, name: "take one (2).mp4" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  assert.deepEqual(h.folds, []);
+  assert.deepEqual(h.edits, []);
+  assert.deepEqual(h.notices.shown.map((n) => n.message), ["Copied “take one.mp4” to “Episode 12 files”."]);
+  h.owner.dispose();
+});
+
+test("a Create bundle dialog answered after the session became shared moves nothing and says why", async () => {
+  const h = setup({ createPlan: async () => CREATE_PLAN });
+  await settle();
+  await h.owner.createBundle();
+  assert.equal(h.el("bundle-modal").hidden, false);
+  h.share();
+  h.el("bundle-accept").click();
+  await settle();
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.deepEqual(h.pathCalls, []);
+  assert.deepEqual(h.notices.shown.map((n) => [n.message, n.kind]), [[BUNDLES, "warn"]]);
+  h.owner.dispose();
+});
+
+for (const phase of ["plan", "pick"] as const) {
+  test("an export with files whose session becomes shared during its " + phase + " writes nothing and says why", async () => {
+    let release: () => void = () => {};
+    const h = setup({ pickWait: phase === "pick" ? new Promise<void>((resolve) => { release = resolve; }) : undefined });
+    const running = h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{\"rows\":[]}", null);
+    if (phase === "pick") await settle();
+    h.share();
+    release();
+    assert.equal(await running, false);
+    assert.deepEqual(h.exportCalls.map((c) => c[0]), phase === "plan" ? ["plan"] : ["plan", "pick"]);
+    assert.equal(h.el("bundle-progress").hidden, true);
+    assert.deepEqual(h.notices.shown.map((n) => [n.message, n.kind]), [[BUNDLES, "warn"]]);
+    h.owner.dispose();
+  });
+}
