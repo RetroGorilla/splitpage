@@ -60,6 +60,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
       revision: replica.revision,
       project: () => { log.push("project"); return replica.project(); },
       changes: replica.changes,
+      recovery: replica.recovery,
       execute: (operations, options) => { log.push("execute"); executed.push({ operations, base: options.base }); return replica.execute(operations, options); },
       observe: replica.observe
     },
@@ -100,6 +101,7 @@ export function fakeReplica(initial: Record<string, unknown> | null = null): Fak
       revision: () => revision,
       project: () => { if (failing) throw failing; return JSON.parse(JSON.stringify(held)) as unknown; },
       changes: () => compareSharedProjections(before, held),
+      recovery: () => [],
       execute: (operations, options) => options.base === revision ? script(operations) : { ok: false, reason: "stale-base" },
       observe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }
     },
