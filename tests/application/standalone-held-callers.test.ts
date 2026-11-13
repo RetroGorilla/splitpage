@@ -34,17 +34,15 @@ const HELD_TYPES = {
   "application/editing/undo/undo.ts": 1,
   "application/production/broll-records.ts": 1,
   "application/save/project-files.ts": 1,
-  "application/session/session-merge-ports.ts": 1,
-  "application/transitions/ports.ts": 1
+  "application/session/session-merge-ports.ts": 1
 };
 
 const BROLL_AND_UNDO = {
-  "bootstrap/wiring/broll.ts": 3,
+  "bootstrap/wiring/broll.ts": 2,
   "bootstrap/wiring/undo.ts": 2
 };
 
 const TRANSITIONS_AND_MERGE = {
-  "bootstrap/wiring/document-identity.ts": 2,
   "bootstrap/wiring/ports/project-files.ts": 2,
   "bootstrap/wiring/ports/session-merge.ts": 2,
   "bootstrap/wiring/startup.ts": 2

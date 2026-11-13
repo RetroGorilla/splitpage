@@ -4,6 +4,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
+import { discover, selectFiles } from "./run-tests.mjs";
 
 const DEFAULT_TIMEOUT_MS = 300000;
 
@@ -39,16 +40,56 @@ export function applyEdit(source, find, replace) {
 }
 
 export function summarize(results) {
-  const caught = results.filter((r) => r.status === "caught").length;
-  const survived = results.filter((r) => r.status === "survived").length;
-  const errors = results.filter((r) => r.status === "error").length;
-  const line = `Mutants caught: ${caught}/${results.length}` + (errors ? ` (${errors} could not run)` : "");
-  return { caught, survived, errors, line };
+  const count = (status) => results.filter((r) => r.status === status).length;
+  const caught = count("caught"), survived = count("survived"), inconclusive = count("inconclusive"), errors = count("error");
+  const notes = [inconclusive ? `${inconclusive} inconclusive` : "", errors ? `${errors} could not run` : ""].filter(Boolean);
+  const line = `Mutants caught: ${caught}/${results.length}` + (notes.length ? ` (${notes.join(", ")})` : "");
+  return { caught, survived, inconclusive, errors, line };
 }
 
 export function exitCode(summary, failOnSurvivor) {
   if (summary.errors > 0) return 2;
-  return failOnSurvivor && summary.survived > 0 ? 1 : 0;
+  return failOnSurvivor && summary.survived + summary.inconclusive > 0 ? 1 : 0;
+}
+
+export function unitTestFiles(files) {
+  return discover(files).groups.filter((entry) => entry.group.set === "unit").flatMap((entry) => entry.files).sort();
+}
+
+export function resolveTests(unitFiles, filters) {
+  if (!filters.length) return { files: unitFiles, unmatched: [] };
+  const unmatched = filters.filter((filter) => selectFiles(unitFiles, [filter]).length === 0);
+  return { files: selectFiles(unitFiles, filters), unmatched };
+}
+
+export function verdict(run, events, selected) {
+  if (run.error) return { status: "error", detail: `could not start the test run: ${run.error}` };
+  const chosen = new Set(selected);
+  const counted = events.filter((e) => !e.skip && !e.todo);
+  const fails = counted.filter((e) => e.type === "fail");
+  const asserted = fails.filter((e) => e.assertion && e.failureType === "testCodeFailure" && !e.fileLevel && chosen.has(e.file));
+  if (asserted.length) {
+    const more = asserted.length > 1 ? ` and ${asserted.length - 1} more` : "";
+    return { status: "caught", detail: `assertion failed in ${JSON.stringify(asserted[0].name)}${more}${run.timedOut ? ", then the run timed out" : ""}` };
+  }
+  if (run.timedOut) return { status: "inconclusive", detail: "timeout" };
+  const failure = fails.find((e) => e.failureType !== "subtestsFailed" && e.failureType !== "cancelledByParent") ?? fails[0];
+  if (failure) {
+    if (failure.fileLevel) return { status: "inconclusive", detail: `${failure.file} failed outside its tests (load, syntax or exit)` };
+    if (!chosen.has(failure.file)) return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} in ${failure.file}, which was not chosen, failed` };
+    if (failure.failureType === "testTimeoutFailure") return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} timed out` };
+    if (failure.failureType === "hookFailed") return { status: "inconclusive", detail: `a hook of ${JSON.stringify(failure.name)} failed: ${failure.cause ?? "no cause"}` };
+    return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} failed without an assertion: ${failure.cause ?? failure.failureType}` };
+  }
+  if (run.code !== 0) return { status: "inconclusive", detail: `test process exited ${run.code} with no failed test` };
+  if (!counted.some((e) => e.type === "pass" && !e.fileLevel && chosen.has(e.file))) return { status: "inconclusive", detail: "no chosen test ran" };
+  return { status: "survived", detail: "" };
+}
+
+export function readEvents(text) {
+  return text.split("\n").flatMap((line) => {
+    try { return line ? [JSON.parse(line)] : []; } catch { return []; }
+  });
 }
 
 export function formatTable(results) {
@@ -60,21 +101,36 @@ export function formatTable(results) {
 }
 
 const CHILD = `
-import { spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { readFileSync } from "node:fs";
-const [, scratch, filesPath, onlyJson] = process.argv;
-const { runTests } = await import(pathToFileURL(scratch + "/tools/run-tests.mjs").href);
-const quiet = () => {};
-process.exitCode = runTests({
-  repo: scratch,
-  files: JSON.parse(readFileSync(filesPath, "utf8")),
-  sets: ["unit"],
-  only: JSON.parse(onlyJson),
-  print: quiet,
-  printError: quiet,
-  spawn: (cmd, args, opts) => spawnSync(cmd, args, { ...opts, stdio: "ignore" })
-});
+import { run } from "node:test";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
+import { basename, relative, resolve } from "node:path";
+const [, , filesPath, eventsPath] = process.argv;
+const files = JSON.parse(readFileSync(filesPath, "utf8"));
+writeFileSync(eventsPath, "");
+let failed = false, next = 0;
+const marked = (flag) => flag !== undefined && flag !== false;
+const record = (event) => {
+  const data = event.data, error = data.details?.error, cause = error?.cause;
+  const file = data.file ? relative(process.cwd(), data.file).replace(/\\\\/g, "/") : null;
+  const named = cause instanceof Error, name = String(data.name);
+  if (event.type === "test:fail" && !marked(data.todo)) failed = true;
+  appendFileSync(eventsPath, JSON.stringify({
+    type: event.type === "test:fail" ? "fail" : "pass", name: data.name, nesting: data.nesting, file,
+    skip: marked(data.skip), todo: marked(data.todo),
+    failureType: error?.failureType ?? null, assertion: cause !== null && typeof cause === "object" && cause.code === "ERR_ASSERTION",
+    fileLevel: !named && data.nesting === 0 && file !== null && (name === basename(file) || name.replace(/\\\\/g, "/") === file || resolve(name) === resolve(file)),
+    cause: named ? cause.name + ": " + String(cause.message).split("\\n")[0].slice(0, 200) : cause === undefined ? null : String(cause).slice(0, 200)
+  }) + "\\n");
+};
+const lane = async () => {
+  while (next < files.length) {
+    const file = files[next++];
+    for await (const event of run({ files: [file] })) if (event.type === "test:fail" || event.type === "test:pass") record(event);
+  }
+};
+await Promise.all(Array.from({ length: Math.min(Math.max(2, availableParallelism() - 1), files.length) }, lane));
+process.exitCode = failed ? 1 : 0;
 `;
 
 export function confinedPath(root, file) {
@@ -121,28 +177,38 @@ function childEnv() {
   return env;
 }
 
-export function runChild(scratch, files, only, timeoutMs, node) {
+export function runChild(scratch, testFiles, timeoutMs, node) {
   return new Promise((resolveRun) => {
     let child;
+    const eventsPath = join(dirname(scratch), `${basename(scratch)}-events.jsonl`);
+    const finish = (result) => {
+      let text = "";
+      try { text = readFileSync(eventsPath, "utf8"); } catch {}
+      rmSync(eventsPath, { force: true });
+      resolveRun({ ...result, events: readEvents(text) });
+    };
     try {
       const filesPath = join(dirname(scratch), `${basename(scratch)}-files.json`);
-      writeFileSync(filesPath, JSON.stringify(files));
-      child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, filesPath, JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
+      const childPath = join(dirname(scratch), `${basename(scratch)}-child.mjs`);
+      writeFileSync(filesPath, JSON.stringify(testFiles));
+      // why: node:test's run() passes the parent's execArgv to every test process, so the child is a file, not -e.
+      writeFileSync(childPath, CHILD);
+      child = spawn(node, [childPath, filesPath, eventsPath], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
     } catch (e) {
-      resolveRun({ code: -1, timedOut: false, error: e.message });
+      finish({ code: -1, timedOut: false, error: e.message });
       return;
     }
     running.add(child);
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
-    child.on("error", (e) => { running.delete(child); clearTimeout(timer); resolveRun({ code: -1, timedOut, error: e.message }); });
-    child.on("close", (code) => { running.delete(child); clearTimeout(timer); resolveRun({ code, timedOut }); });
+    child.on("error", (e) => { running.delete(child); clearTimeout(timer); finish({ code: -1, timedOut, error: e.message }); });
+    child.on("close", (code) => { running.delete(child); clearTimeout(timer); finish({ code, timedOut }); });
   });
 }
 
 export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, keep }) {
   const started = Date.now();
-  const done = (status, detail, extra = {}) => ({ label: mutant.label, status, detail, ms: Date.now() - started, ...extra });
+  const done = (status, detail) => ({ label: mutant.label, status, detail, ms: Date.now() - started });
   let scratch;
   try {
     const original = confinedPath(repo, mutant.file);
@@ -152,12 +218,9 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
     if (edit.error) return done("error", edit.error);
     scratch = makeScratch(repo, parent, files);
     writeFileSync(join(scratch, mutant.file), edit.text);
-    const run = await runChild(scratch, files, mutant.tests, timeoutMs, node);
-    if (run.error) return done("error", `could not start the test run: ${run.error}`);
-    if (run.timedOut) return done("caught", "timeout");
-    if (run.code === 0) return done("survived", "");
-    if (run.code === 1) return done("caught", "");
-    return done("error", `test run exited ${run.code}`);
+    const run = await runChild(scratch, mutant.testFiles, timeoutMs, node);
+    const result = verdict(run, run.events, mutant.testFiles);
+    return done(result.status, result.detail);
   } catch (e) {
     return done("error", e.message);
   } finally {
@@ -165,12 +228,15 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
   }
 }
 
-export async function baselinePasses({ repo, files, parent, timeoutMs, node, tests }) {
+export async function baseline({ repo, files, parent, timeoutMs, node, testFiles }) {
   const scratch = makeScratch(repo, parent, files);
+  const started = Date.now();
   try {
-    const run = await runChild(scratch, files, tests, timeoutMs, node);
-    if (run.error) throw new Error(`could not start the test run: ${run.error}`);
-    return run.code === 0 && !run.timedOut;
+    const run = await runChild(scratch, testFiles, timeoutMs, node);
+    const result = verdict(run, run.events, testFiles);
+    const failures = run.events.filter((e) => e.type === "fail" && !e.todo && e.failureType !== "subtestsFailed")
+      .map((e) => `${e.file ?? "?"}: ${e.fileLevel ? "failed outside its tests" : JSON.stringify(e.name)}${e.cause ? ` (${e.cause})` : ""}`);
+    return { ok: result.status === "survived", detail: result.detail, failures, ms: Date.now() - started };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -211,7 +277,7 @@ export function loadMutantFiles(entries) {
 }
 
 export function parseArgs(args) {
-  const opts = { files: [], concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, keep: false, baseline: true, failOnSurvivor: false, shard: null };
+  const opts = { files: [], concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, baselineTimeoutMs: null, keep: false, baseline: true, failOnSurvivor: false, shard: null };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     const value = (name) => {
@@ -226,18 +292,27 @@ export function parseArgs(args) {
       const n = Number(value("--timeout"));
       if (!Number.isFinite(n) || n <= 0) return { error: "--timeout needs a number of seconds above 0" };
       opts.timeoutMs = n * 1000;
+    } else if (a === "--baseline-timeout" || a.startsWith("--baseline-timeout=")) {
+      const n = Number(value("--baseline-timeout"));
+      if (!Number.isFinite(n) || n <= 0) return { error: "--baseline-timeout needs a number of seconds above 0" };
+      opts.baselineTimeoutMs = n * 1000;
     } else if (a === "--shard" || a.startsWith("--shard=")) {
       const m = /^(\d+)\/(\d+)$/.exec(value("--shard") ?? "");
       const index = m ? Number(m[1]) : 0, count = m ? Number(m[2]) : 0;
-      if (!m || count < 1 || index < 1 || index > count) return { error: "--shard needs K/N with 1 <= K <= N" };
+      if (!m || !Number.isSafeInteger(index) || !Number.isSafeInteger(count) || count < 1 || index < 1 || index > count) {
+        return { error: "--shard needs K/N with whole numbers 1 <= K <= N" };
+      }
       opts.shard = { index, count };
     } else if (a === "--keep") opts.keep = true;
     else if (a === "--no-baseline") opts.baseline = false;
     else if (a === "--fail-on-survivor") opts.failOnSurvivor = true;
-    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --shard, --keep, --no-baseline or --fail-on-survivor` };
+    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --baseline-timeout, --shard, --keep, --no-baseline or --fail-on-survivor` };
     else opts.files.push(a);
   }
-  if (!opts.files.length) return { error: "usage: node tools/mutants.mjs <mutants.json>... [--concurrency N] [--timeout SECONDS] [--shard K/N] [--keep] [--no-baseline] [--fail-on-survivor]" };
+  if (!opts.files.length) {
+    return { error: "usage: node tools/mutants.mjs <mutants.json>... [--concurrency N] [--timeout SECONDS] [--baseline-timeout SECONDS] [--shard K/N] [--keep] [--no-baseline] [--fail-on-survivor]" };
+  }
+  opts.baselineTimeoutMs ??= opts.timeoutMs;
   return opts;
 }
 
@@ -253,6 +328,17 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   }
   if (!mutants.length) { print("no mutants in this shard"); return 0; }
   const files = listRepoFiles(repo).filter((p) => existsSync(join(repo, p)));
+  const unitFiles = unitTestFiles(files);
+  const unmatched = [];
+  mutants = mutants.map((m) => {
+    const tests = resolveTests(unitFiles, m.tests);
+    for (const filter of tests.unmatched) unmatched.push(`${m.label}: test filter ${JSON.stringify(filter)} matches no unit test file`);
+    return { ...m, testFiles: tests.files };
+  });
+  if (unmatched.length) {
+    for (const line of unmatched) printError(`mutants: ${line}`);
+    return 2;
+  }
   const parent = mkdtempSync(join(tmpdir(), "splitpage-mutants-"));
   const interrupt = (signal, code) => () => {
     killRunning();
@@ -269,15 +355,21 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   const base = { repo, files, parent, timeoutMs: opts.timeoutMs, node, keep: opts.keep };
   try {
     if (opts.baseline) {
-      const scope = [...new Set(mutants.flatMap((m) => m.tests))];
-      let ok;
+      // why: a mutant without a filter runs every unit test, so the baseline must cover them all as well.
+      const scope = mutants.some((m) => !m.tests.length) ? unitFiles : [...new Set(mutants.flatMap((m) => m.testFiles))].sort();
+      let result;
       try {
-        ok = await baselinePasses({ ...base, tests: scope });
+        result = await baseline({ ...base, timeoutMs: opts.baselineTimeoutMs, testFiles: scope });
       } catch (e) {
         printError(`mutants: ${e.message}`);
         return 2;
       }
-      if (!ok) { printError("mutants: the unmutated copy fails its tests, so every mutant would count as caught; fix that first (or pass --no-baseline)"); return 2; }
+      print(`baseline: ${scope.length} test files, ${result.ok ? "passed" : "FAILED"} in ${(result.ms / 1000).toFixed(1)}s`);
+      if (!result.ok) {
+        printError(`mutants: the unmutated copy does not pass its tests (${result.detail}), so no verdict would mean anything; fix that first (or pass --no-baseline)`);
+        for (const line of result.failures) printError(`  ${line}`);
+        return 2;
+      }
     }
     print(`running ${mutants.length} mutants, ${Math.min(opts.concurrency, mutants.length)} at a time`);
     const results = await runAll(mutants, { ...base, concurrency: opts.concurrency, onResult: (r) => print(`  ${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ""}`) });
@@ -287,6 +379,7 @@ export async function main(args, { repo = REPO, print = console.log, printError 
     print("");
     print(s.line);
     for (const r of results.filter((x) => x.status === "survived")) print(`survived: ${r.label} (record why it was accepted, or add a test)`);
+    for (const r of results.filter((x) => x.status === "inconclusive")) print(`inconclusive: ${r.label}: ${r.detail} (no assertion failed in a named test)`);
     for (const r of results.filter((x) => x.status === "error")) print(`error: ${r.label}: ${r.detail}`);
     return exitCode(s, opts.failOnSurvivor);
   } finally {

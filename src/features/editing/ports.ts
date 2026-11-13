@@ -26,4 +26,5 @@ export interface CellBufferPorts {
   readonly repaintRows: () => void;
   readonly onPainted: (listener: () => void) => () => void;
   readonly beforePaint: (check: () => void) => () => void;
+  readonly readable: (key: string) => boolean;
 }

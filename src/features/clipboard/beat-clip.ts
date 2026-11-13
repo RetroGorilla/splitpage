@@ -22,7 +22,7 @@ interface ParsedBeatClipboard extends BeatWireData {
 type BeatPayloadInput = { [K in keyof BeatWirePayload]?: unknown };
 interface BeatInsertOptions {
   preserveBrollDetails?: boolean | undefined;
-  state?: ValidatedDocument | null | undefined;
+  state: ValidatedDocument;
   rowMap?: Record<string, string> | undefined;
   afterRowId?: string | null | undefined;
   replaceRowId?: string | null | undefined;
@@ -350,9 +350,8 @@ export function beatPaste(clip: BeatClip, opts?: BeatPasteOptions) {
   };
 }
 
-export function insertBeats(clip: BeatClip, opts?: BeatInsertOptions) {
-  opts = opts || {};
-  const state = opts.state || (ports as BeatClipPorts).document.current();
+export function insertBeats(clip: BeatClip, opts: BeatInsertOptions) {
+  const state = opts.state;
   const mint = opts.mint || (ports as BeatClipPorts).ids.id;
   const move = !!opts.move && beatsAway(clip, state);
   const list = function <K extends keyof BeatWireData>(k: K): ValidatedDocument[K] { if (!Array.isArray((state as ValidatedDocument)[k])) (state as ValidatedDocument)[k] = []; return (state as ValidatedDocument)[k]; };

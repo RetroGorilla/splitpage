@@ -19,7 +19,7 @@ import { edits as portEdits } from "./ports/editing.ts";
 import { production as portProduction } from "./ports/production.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
-import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../../adapters/production/broll-anchors.ts";
+import { anchorBrollInGivenRows, brollHtmlLines, brollKeyHtml } from "../../adapters/production/broll-anchors.ts";
 import type { BrollRecordsMount } from "../../features/broll/ports.ts";
 import { createBrollRecords } from "../../features/broll/records.ts";
 import { domToPos } from "../../features/common/cell-dom.ts";
@@ -35,7 +35,7 @@ export function mountBrollFeature(): BrollRecordsMount {
   return broll.replace(() => {
     const text = portText;
     const records = createBrollRecords({
-      document: { current: currentDocument, read: portDocument.read, numbering: portDocument.numbering },
+      document: { current: portDocument.current, read: portDocument.read, numbering: portDocument.numbering },
       edits: portEdits,
       cells: { edit: (cell, change) => cellEditing().edit(cell, change) },
       paint: { whileShown: (edit) => paintGuard().whileShown(edit) },
@@ -45,7 +45,7 @@ export function mountBrollFeature(): BrollRecordsMount {
       caretSpot: ensureTrailingCaretSpot,
       position: domToPos,
       anchors: {
-        inRows: (rows) => anchorBrollInRows(heldDocument(), rows, { readers: text.productionReaders, ids: randomIds, cellOf: text.cellOf, inertBody: text.inertBody, sanitize: text.sanitizeHtml, declined: brollAnchoring.declined }),
+        inRows: (rows) => anchorBrollInGivenRows(portDocument.current(), rows, { readers: text.productionReaders, ids: randomIds, cellOf: text.cellOf, inertBody: text.inertBody, sanitize: text.sanitizeHtml, declined: brollAnchoring.declined }),
         htmlLines: brollHtmlLines,
         keyHtml: brollKeyHtml
       },

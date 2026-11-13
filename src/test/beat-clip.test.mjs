@@ -211,7 +211,7 @@ test("a copy pasted into another document: every id its own, the details that be
   loadTestDocument(target());
   const c = clip(buildBeatPayload(source(), ["r2", "r3"]));
   n = 0;
-  const res = insertBeats(c, { afterRowId: "t1", mint });
+  const res = insertBeats(c, { state: currentDocument(), afterRowId: "t1", mint });
   const rows = currentDocument().rows;
   assert.deepEqual(rows.map((r) => r.id), ["t1", "rnew1", "rnew2", "t2"], "after the caret's scene");
   assert.deepEqual(res.rowIds, ["rnew1", "rnew2"]);
@@ -256,7 +256,7 @@ test("a copy pasted into its own document: a new b-roll shot, new comments, the 
   const before = JSON.stringify(currentDocument().rows.find((r) => r.id === "r2"));
   const c = clip(buildBeatPayload(currentDocument(), ["r2"]));
   n = 0;
-  const res = insertBeats(c, { afterRowId: "r4", mint });
+  const res = insertBeats(c, { state: currentDocument(), afterRowId: "r4", mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4", "rnew1"]);
   assert.equal(JSON.stringify(currentDocument().rows.find((r) => r.id === "r2")), before);
   assert.equal(res.broll.kept.length, 0);
@@ -285,7 +285,7 @@ test("a cut then its paste in the same document is a move: ids kept, comments no
   assert.equal(isMove(c, currentDocument()), true);
   assert.equal(isMove(c, target()), false, "another document: a copy");
   n = 0;
-  const res = insertBeats(c, { afterRowId: "r4", move: true, mint });
+  const res = insertBeats(c, { state: currentDocument(), afterRowId: "r4", move: true, mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4", "r2", "r3"]);
   assert.equal(res.comments, 0);
   assert.equal(currentDocument().comments.length, 4);
@@ -302,7 +302,7 @@ test("a move whose rows came back meanwhile (the cut undone) is a copy where it 
   const built = buildBeatPayload(currentDocument(), ["r2"], { cut: "cd34" });
   setLiveCut("cd34", currentDocument().docId);
   n = 0;
-  insertBeats(clip(built), { afterRowId: "r4", move: true, mint });
+  insertBeats(clip(built), { state: currentDocument(), afterRowId: "r4", move: true, mint });
   const ids = currentDocument().rows.map((r) => r.id);
   assert.deepEqual(ids, ["r1", "r2", "r3", "r4", "rnew1"], "r2 is still here, so the paste is a new row");
   assert.equal(new Set(ids).size, ids.length);
@@ -335,14 +335,14 @@ test("the live cut follows undo: the move's paste undone, the next paste is the 
   assert.equal(isMove(c, currentDocument()), true);
   base = JSON.parse(JSON.stringify(currentDocument()));
   n = 0;
-  insertBeats(c, { afterRowId: "r4", move: isMove(c, currentDocument()), mint });
+  insertBeats(c, { state: currentDocument(), afterRowId: "r4", move: isMove(c, currentDocument()), mint });
   history.record(diffStates(base, currentDocument()), Date.now());
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4", "r2", "r3"]);
   assert.equal(isMove(c, currentDocument()), false, "its scenes are back: another paste is a copy");
   assert.equal(history.undo(currentDocument()).ok, true);
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4"]);
   assert.equal(isMove(c, currentDocument()), true, "the undo put the cut back");
-  const res = insertBeats(c, { afterRowId: "r1", move: isMove(c, currentDocument()), mint });
+  const res = insertBeats(c, { state: currentDocument(), afterRowId: "r1", move: isMove(c, currentDocument()), mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   assert.equal(res.comments, 0);
   assert.deepEqual(currentDocument().comments.map((x) => x.id + "@" + x.rowId).sort(), ["c1@r2", "c2@r3", "c4@r4", "c9@r3"]);
@@ -364,7 +364,7 @@ test("the cut undone, its paste is a copy: comments and b-roll records of its ow
   const c = clip(built);
   assert.equal(isMove(c, currentDocument()), false, "the scenes came back with the undo");
   n = 0;
-  const res = insertBeats(c, { afterRowId: "r4", move: isMove(c, currentDocument()), mint });
+  const res = insertBeats(c, { state: currentDocument(), afterRowId: "r4", move: isMove(c, currentDocument()), mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4", "rnew1", "rnew2"]);
   assert.equal(res.comments, 3);
   assert.equal(currentDocument().comments.length, 7);
@@ -402,7 +402,7 @@ test("a paste onto a blank scene takes its place, and its comments land with it"
   assert.equal(isBlankBeat(t, t.rows[0], { cellOf }), false);
   loadTestDocument(t);
   n = 0;
-  const res = insertBeats(clip(buildBeatPayload(source(), ["r2"])), { replaceRowId: "t2", mint });
+  const res = insertBeats(clip(buildBeatPayload(source(), ["r2"])), { state: currentDocument(), replaceRowId: "t2", mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["t1", "rnew1"]);
   assert.equal(currentDocument().comments.length, 1);
   assert.equal(currentDocument().comments[0].rowId, "rnew1");
@@ -414,7 +414,7 @@ test("a paste, a cut and a delete are each one undo entry that puts the document
   const history = createUndoHistory(cellRuns);
   let base = JSON.parse(JSON.stringify(currentDocument()));
   const c = clip(buildBeatPayload(source(), ["r2", "r3"]));
-  insertBeats(c, { afterRowId: "t1" });
+  insertBeats(c, { state: currentDocument(), afterRowId: "t1" });
   history.record(diffStates(base, currentDocument()), Date.now());
   assert.equal(history.sizes().undo, 1);
   const r = history.undo(currentDocument());
