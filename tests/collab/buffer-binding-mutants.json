@@ -540,6 +540,30 @@
     "replace": "runs: () => [{ text: typing().value, marks: {} }],",
     "tests": ["tests/features/title/title-buffer.test.ts"]
   }, {
+    "label": "a shared title has no length verdict",
+    "file": "src/features/title/routes.ts",
+    "find": "      unsettled: text => unsettledTitle(text, stored() ?? \"\"),\n",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a shared title is read from the capped session view",
+    "file": "src/features/title/routes.ts",
+    "find": "stored = () => painted.stored(TITLE_FIELD_KEY);",
+    "replace": "stored = ports.current;",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a title past the cap cannot be shortened",
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "units > TITLE_MAX && units > Array.from(stored).length",
+    "replace": "units > TITLE_MAX",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a title past the cap is held instead of refused",
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "{ reason: \"buffer-title-length\", hold: false }",
+    "replace": "{ reason: \"buffer-title-length\", hold: true }",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
     "label": "closing the shared title routes does not settle",
     "file": "src/features/title/routes.ts",
     "find": "if (open && bound.dispose()) open = false;",

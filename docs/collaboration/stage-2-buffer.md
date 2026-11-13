@@ -496,20 +496,32 @@ In a shared session `mountTitleRoutes` binds both title inputs (`#doc-title` and
 `bindBufferedInput`; it runs no `set-title` command. Each keystroke settles as a
 `text-insert` or `text-delete` on the document's title text, with no beat stamp.
 The input being typed in is the field; a settle or a repaint writes the stored
-title into both inputs and updates the page title. Assumed rules, for the plan
+title into both inputs and updates the page title. The stored title is the
+replica's text (`PaintedBeats.stored`), not the session view, which caps a title
+at `TITLE_MAX` (300 code points) as loading does. Assumed rules, for the plan
 review:
 
-- The title has no unsettled verdict: an emptied title is written empty at once,
-  with no hold and no report, as a local title may be empty. Typing has no length
-  stop, as locally; loading still caps a title at 300 units.
+- An emptied title is written empty at once, with no hold and no report, as a
+  local title may be empty.
+- A settle that would leave the title over `TITLE_MAX` and longer than the stored
+  title is refused and put back (`unsettledTitle`, `buffer-title-length`, no
+  hold); what was settled before stays. This covers typing and a composition.
+  Two writers each typing at the cap at the same moment can still
+  leave the replica over it: every session view then shows the first 300 units,
+  the title inputs show the whole stored title, typing that lengthens it is
+  refused, and any deletion is written, so the title can be brought back under
+  the cap.
 - Shared typing leaves `titleOrigin` and `titleVersion` as they are. Saving is
   refused in a shared session, so the first-save rename from the file name cannot
   overwrite a typed title yet; this needs a rule when shared saving lands.
-- Paste, drop, `historyUndo`, `historyRedo` and other input types are refused
-  with `buffer-unsupported-input`, after settling typing, as in the rename form.
-  Enter changes nothing.
+- Paste, cut, drop, `historyUndo`, `historyRedo` and other input types are
+  refused with `buffer-unsupported-input`, after settling typing, as in the
+  rename form. Enter changes nothing.
 - A paint keeps the caret and selection, with their direction, on the same
   shared units, as in the rename form.
+- For the wiring cut: `paintSessionChange` in `src/features/rows/render.ts`
+  writes the title inputs only when `titleVersion` changes or on replay, so it
+  must be checked that a remote change to the title alone reaches `onPainted`.
 
 `tests/features/title/title-buffer.test.ts` holds each case through
 `tests/features/edge-input.ts`, compared on the typist, the other copy and a late

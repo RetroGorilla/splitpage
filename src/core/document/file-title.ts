@@ -11,6 +11,8 @@ export interface FileTitleChange {
   readonly titleVersion: string | undefined;
 }
 
+export const TITLE_MAX = 300;
+
 export function normalizeTitleOrigin(value: unknown): "file" | "user" | undefined {
   return value === "file" || value === "user" ? value : undefined;
 }
@@ -29,7 +31,7 @@ export function fileTitleChange(doc: FileTitleState, filename: string, firstSave
   const stem = filename.replace(/\.[^.]+$/, "").trim();
   if (/^[ _-]*v\d+$/i.test(stem)) return null;
   const version = /[ _-]+v(\d+)$/i.exec(stem);
-  const title = fromFile ? doc.title : (version ? stem.slice(0, version.index) : stem).trim().slice(0, 300);
+  const title = fromFile ? doc.title : (version ? stem.slice(0, version.index) : stem).trim().slice(0, TITLE_MAX);
   if (!title) return null;
   const titleVersion = version ? "v" + version[1] : undefined;
   if (fromFile && title === doc.title && titleVersion === doc.titleVersion) return null;

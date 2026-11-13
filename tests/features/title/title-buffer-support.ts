@@ -47,7 +47,7 @@ export function sharedTitle(title = "Draft", fields: Record<string, unknown> = {
     }
   });
   const stored = () => readSharedPaintedText(h.a, sharedBufferedTarget(h.a, TITLE_FIELD_KEY))?.text;
-  return { h, a, main, writer, routes, reports, recovered, commands, stored, paint,
+  return { h, a, main, writer, routes, reports, recovered, commands, stored, paint, viewTitle: current,
     edge: edgeInput(() => main), writerEdge: edgeInput(() => writer),
     target: () => sharedBufferedTarget(h.a, TITLE_FIELD_KEY),
     repaints: () => repaints, pageTitles: () => pageTitles, shownDepth: () => depth,
