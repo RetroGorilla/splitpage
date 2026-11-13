@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import type { SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
-import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
+import { sharedJoinGlueRegisterField, isSharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
@@ -54,7 +54,7 @@ export class SharedProjectionSource {
           for (const id of this.joinReaders.get(key) ?? []) {
             const scope = JSON.stringify(["join-glue", id]); this.versions.set(scope, this.version(scope) + 1);
           }
-          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !key.startsWith(sharedJoinEndpointField("")))
+          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !isSharedJoinFormatRegisterField(key) && !key.startsWith(sharedJoinEndpointField("")))
             this.versions.set("meta-fields", this.version("meta-fields") + 1);
         }
       }
