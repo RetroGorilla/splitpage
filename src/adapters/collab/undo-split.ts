@@ -37,7 +37,7 @@ function checkAuthor(operation: { readonly id: string; readonly by: string }): v
   if (!isStableSharedIdentity(operation.id) || !isStableSharedIdentity(operation.by)) throw new SharedTextPreparationError("unstable-identity");
 }
 
-// why: undoing a split takes its boundary out of the text; the new beat's record stays, so a redo can put the same beat back.
+// why: undoing a split takes its boundary out; the new beat's record stays, so a redo can bring the same beat back.
 export function prepareSharedSplitRetire(operation: SharedSplitRetire, view: SharedPreparationView): SharedTextOperationPreparation {
   return preparedTextOperation(() => {
     checkAuthor(operation);
@@ -69,7 +69,7 @@ function boundaryAnchor(handle: SharedDocumentHandle, source: string, beat: stri
   const prep = createSharedPreparation(handle);
   try {
     const found = located(prep.view, source, beat), segment = segmentOf(prep.view, beat);
-    // why: a boundary written before its source (split-before) lies outside the source's text, so it is named through the new beat.
+    // why: a split-before boundary lies outside the source's text, so it is named through the new beat.
     const anchor = found && segment ? [source, beat].map(owner => createSharedAnchor(handle, { owner: owner as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" },
       found.index, "after")).find(value => value !== null) : null;
     return anchor && segment ? { segment, anchor } : null;
