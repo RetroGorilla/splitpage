@@ -116,32 +116,23 @@ it fails, because the adapter refuses the write.
 
 ## The entry port
 
-The tests use `migrateRows`, the only producer of a `ValidatedDocument`. It was
-written for files, and it is not the identity on a projection. What it does today
-to a projected document:
+A shared session enters a projection through `enterSharedDocument` in
+`src/core/migrate.ts` (D1 of the [composition plan](stage-2-composition-plan.md)).
+It checks that it was given a document object with a `rows` array and returns
+that same object as the held document. It rewrites no id, creates no record from
+text, fills no default and copies nothing, so the change set and the row report
+name every row the same way (D2), and a scene name is held exactly as projected,
+edge spaces and all (assumed rule 59), and in full when it is longer than 200
+characters (assumed rule 61; the notice that rule asks for is not built here).
+`migrateRows` stays the standalone entry: on a projection it would clean ids
+(and so orphan a scene that started at a cleaned beat), trim and cut names,
+re-mint invalid tag ids, normalize galleries and give a received `B-roll:` line
+a minted `bs-load-...` shot. `tests/application/session/shared-entry.test.ts`
+holds both sides as literals.
 
-- The adapter's writer-scoped structural ids survive unchanged, as pinned by the
-  split literal. Legacy beat ids can lose punctuation; missing beat fields get defaults.
-- A heading whose id fails scene normalization disappears; a heading anchored to a
-  rewritten beat can be orphaned.
-- People, comment, reply and shot ids pass through id cleaning; comment references
-  are cleaned and owner references can be cleared.
-- Invalid tag ids are minted again.
-- Gallery fields are normalized, de-duplicated and limited.
-- Records are created from text: a received `B-roll:` line in a visual leaves the
-  shared shot collection empty but gives the held document a shot with a generated
-  `bs-load-...` id, and the change names `brollShots`.
-
-Change sets are keyed by the held ids. A later command aimed at a rewritten id
-would not find it in the replica. `shared-session-replicas.test.ts` pins the preserved
-split id and the minted shot, the latter as a declared limit; the other entries are
-as found in the review of this owner and have no test here.
-
-Prerequisite for package 14: an entry that is safe for shared state. It creates no
-record from text and rewrites no id, and it keeps each scene name exactly as
-projected, edge spaces included; `migrateRows` trims names, so the tests' entry
-puts the projected names back ([Scene headings in the Writer](stage-2-buffer.md#scene-headings-in-the-writer)). This owner is the same whichever entry it is
-given; it is not built here.
+A beat the shared session created and never stamped has no `updatedAt` or
+`updatedBy`; the row type makes both optional and every reader treats them as
+falsy. The tests' harness uses the same entry.
 
 ## Commands
 

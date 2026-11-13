@@ -15,7 +15,8 @@ import { createMonitoredSharedDocument, deliveryReplica } from "../../adapters/c
 import { recordReplicas } from "../../adapters/collab/record-support.ts";
 import { writesOutside } from "../session-fakes.ts";
 import { namesUnchanged } from "./change-set-checks.ts";
-import { adapterReplica, enterProjection, registerSplits, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { adapterReplica, registerSplits, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import type { SharedHarness } from "./shared-session-support.ts";
 
 const DECLARED_LIMITS: readonly { readonly name: string; readonly violation: RegExp }[] = [];
@@ -137,7 +138,7 @@ for (const [writers, order] of [[2, "D1"], [2, "rev"], [2, "dup"], [2, "late-C"]
       for (const made of all) {
         const held = snapshot(made.h);
         assert.ok(held);
-        assert.deepEqual(held, JSON.parse(JSON.stringify(enterProjection(projectSharedDocument(made.handle)))), `${made.name} holds its replica's projection as the entry port returns it`);
+        assert.deepEqual(held, JSON.parse(JSON.stringify(enterSharedDocument(projectSharedDocument(made.handle)))), `${made.name} holds its replica's projection as the entry port returns it`);
         const ids = (held.rows as Bag[]).map(row => row.id);
         assert.equal(ids.length, new Set(ids).size, `${made.name} holds each beat id once`);
         assert.equal(made.h.published.length, made.updates, `${made.name}: one change per applied transaction`);

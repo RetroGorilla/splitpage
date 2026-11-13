@@ -385,6 +385,11 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   return s as ValidatedDocument;
 }
 
+export function enterSharedDocument(projected: unknown): ValidatedDocument {
+  if (!isDocumentObject(projected) || !Array.isArray(projected.rows)) throw new TypeError("A shared session enters only a projected document");
+  return projected as ValidatedDocument;
+}
+
 export function migrateDocument(raw: unknown, origin: DocumentOrigin | null | undefined, ports: MigratePorts): ValidatedDocument {
   const from = origin || { kind: "fresh" };
   const embedded = docIdEmbeddedIn(raw);

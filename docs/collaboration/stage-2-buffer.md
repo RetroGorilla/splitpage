@@ -407,10 +407,8 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
 - In a shared session the projected scene name is the stored text, character for
   character, spaces at its edges included, so the screen, the painted record,
   Find and Replace, copy and every flow command count on one string. The session's
-  entry port must keep each scene name as projected: the file loader
-  (`migrateRows`) trims names, and the stand-in entry in
-  `tests/application/session/shared-session-support.ts` puts the projected names
-  back. Removing edge spaces is a write that belongs to heading finalization
+  entry port (`enterSharedDocument`) keeps each scene name as projected; the
+  file loader (`migrateRows`) trims names and is not used for shared entry. Removing edge spaces is a write that belongs to heading finalization
   (package 10); until then a shared name may carry them. Places that already trim
   a name when printing it (outline, numbering, export, through `normalizeScenes`)
   still do.
