@@ -211,3 +211,30 @@ group and that undoing it leaves the stamp on every copy.
 In a normal script, undo and redo stamp a beat they change through a field step,
 except a `paragraphStart` step, with the person and time of the undo. A beat that
 undo puts back is not stamped.
+
+## Comment stamps
+
+Assumed rule 49 on #1414: a comment's resolution follows the stamp rule. In a
+shared session the comment commands in `application/commands/comments.ts` send
+their own record operations when given a shared author; their callers in
+`features/comments` pass none yet (package 14).
+
+- Adding a comment or a reply is one `record-create` each. `createdAt` is written
+  once with the record; the record executor refuses any later change to it.
+- Resolve and reopen send a `record-set` of the comment's `resolution-stamp` with
+  `{at, by, resolution}`. The record executor stores it as `resolution:` and the
+  copy's writer id, removing every resolution it has seen, as a beat stamp does,
+  and the record reader shows the later time, then the later name. A stored entry
+  counts only if a step could have written it. The hydrated `resolution` stays
+  until the first such step.
+- A reply, an assignee change and a resolve or reopen also set `updatedAt`. No
+  command edits a comment's body, so `updatedAt` is a plain field: of two written
+  without seeing each other, the stored-field winner shows, as for any record
+  field, not the later time. If a body edit command is added, this needs the
+  stamp rule too.
+- `updatedAt` and the resolution are left out of the undo record (assumed rule 35).
+  Undo after a resolve does nothing in a shared session; undo after an assignee
+  change puts the assignee back and leaves both.
+
+`tests/adapters/collab/comment-stamps.test.ts` holds these over four delivery
+orders.

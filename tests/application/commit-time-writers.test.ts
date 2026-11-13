@@ -12,8 +12,10 @@ const RULES: WriterScanRules = {
   collections: ["productionTags", "brollShots", "people", "comments", "comments.replies"],
   projections: ["core/collab/projection/", "adapters/collab/project.ts", "adapters/collab/projection-reader.ts"],
   engines: [
+    "adapters/collab/stamp.ts#readSharedResolution",
     "adapters/collab/stamp.ts#readSharedStamp",
     "adapters/collab/stamp.ts#sharedBeatStamp",
+    "adapters/collab/stamp.ts#sharedResolutionOperation",
     "adapters/collab/stamp.ts#sharedStampOperation",
     "adapters/production/broll-anchors.ts#anchorBrollInRows",
     "application/production/broll-records.ts#recordPastedBroll",
@@ -62,11 +64,11 @@ const WRITERS = {
   },
   "comment-stamp": {
     family: "attribution", shared: "operation",
-    reason: "Who and when on a comment or reply (createdAt, updatedAt, the resolution) are fields of the comment command's own record operations; a later resolve or reopen wins (decided)."
+    reason: "Who and when on a comment or reply (createdAt, updatedAt, the resolution) are fields of the comment command's own record operations; createdAt is written once with the record. A resolve or reopen is a stamp {at, by, resolution} that replaces the ones its copy has seen (assumed rule 49); neither it nor updatedAt enters the undo record (assumed rule 35)."
   },
   "comment-stamp-read": {
     family: "attribution", shared: "derivation",
-    reason: "The projection shows a comment's stored resolution as resolved, resolvedAt and resolvedBy."
+    reason: "The projection shows a comment's stored resolution as resolved, resolvedAt and resolvedBy; of resolutions written without seeing each other it shows the later time, then the later name."
   },
   "save-stamp": {
     family: "attribution", shared: "not applicable",
@@ -202,7 +204,7 @@ const FIELDS: readonly Site[] = [
   ["application/commands/comments.ts#addReplyCommand", "updatedAt 1", "comment-stamp"],
   ["application/commands/comments.ts#restoreConflictCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/comments.ts#setCommentAssigneeCommand", "updatedAt 1", "comment-stamp"],
-  ["application/commands/comments.ts#toggleResolveCommand", "resolvedAt 2, resolvedBy 2, updatedAt 1", "comment-stamp"],
+  ["application/commands/comments.ts#toggleResolveCommand", "resolvedAt 4, resolvedBy 4, updatedAt 1", "comment-stamp"],
   ["application/commands/document-edit.ts#applyRewrites", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/flow.ts#flowCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/flow.ts#initializeFlowParagraphs", "paragraphStart 1, paragraphsDecided 1", "paragraph-start"],
@@ -320,11 +322,17 @@ const ENGINES: readonly Site[] = [
   ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2, sharedBeatStamp 1, sharedTagsIntroducedByText 1", "stated-write", "recovery-write", "tag-from-text",
     "beat-stamp"],
   ["adapters/collab/projection-reader.ts#readProjectionFields", "readSharedStamp 1", "beat-stamp-read"],
+  ["adapters/collab/record-codec.ts#readRecordFields", "readSharedResolution 1", "comment-stamp-read"],
+  ["adapters/collab/record-executor.ts#prepareSet", "sharedResolutionOperation 1", "comment-stamp"],
   ["adapters/collab/scalar-executor.ts#prepareScalar", "sharedStampOperation 1", "beat-stamp"],
   ["adapters/collab/scalar-reader.ts#readSharedScalars", "readSharedStamp 1", "beat-stamp-read"],
   ["adapters/collab/undo-executor.ts#executeCommand", "sharedStampOperation 1", "undo-stamp"],
   ["adapters/production/broll-anchors.ts#anchorBrollInRows", "planBrollAnchors 1", "broll-key"],
   ["application/commands/broll-records.ts#addShotCommand", "addBrollRecord 1", "record-stated"],
+  ["application/commands/comments.ts#addCommentCommand", "Plan.shared (provided) 2", "record-stated", "comment-stamp"],
+  ["application/commands/comments.ts#addReplyCommand", "Plan.shared (provided) 2", "record-stated", "comment-stamp"],
+  ["application/commands/comments.ts#setCommentAssigneeCommand", "Plan.shared (provided) 2", "stated-write", "comment-stamp"],
+  ["application/commands/comments.ts#toggleResolveCommand", "Plan.shared (provided) 2", "comment-stamp"],
   ["application/commands/production-records.ts#addPersonCommand", "addPerson 1", "record-stated"],
   ["application/commands/production-records.ts#chosenOwner", "addPerson 1", "record-stated"],
   ["application/commands/production-records.ts#registerTagCommand", "addRegistryTag 1", "record-stated"],

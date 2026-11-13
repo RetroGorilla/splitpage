@@ -7,6 +7,7 @@ import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { sharedResolutionEntryAccepted, sharedResolutionOperation, sharedResolutionWrites } from "./stamp.ts";
 import { prepareSharedCreatedAttachment, sharedPendingAttachmentKeys } from "./structure-content.ts";
 import { reserveSharedCommandIdentities } from "./structure-identity.ts";
 
@@ -110,7 +111,10 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
   if (field === "id" || immutable.includes(field)) return { ok: false, reason: "immutable-record-field" };
   if ((collection === "comments" || collection === "replies") && field === "text" && value.author !== operation.by) return { ok: false, reason: "foreign-author" };
   const writes: SharedPreparedWrite[] = [];
-  if (operation.clear) { if (view.keys(path).includes(field)) writes.push({ path: [...path, field], kind: "delete" }); }
+  if (sharedResolutionOperation(operation)) {
+    if (operation.clear || !sharedResolutionEntryAccepted(operation.value)) return { ok: false, reason: "invalid-record-field" };
+    writes.push(...sharedResolutionWrites(view.keys(path), key => view.get([...path, key]), view.writer, operation.value).map(({ key, ...write }) => ({ ...write, path: [...path, key] })));
+  } else if (operation.clear) { if (view.keys(path).includes(field)) writes.push({ path: [...path, field], kind: "delete" }); }
   else if (isSharedRecordNestedField(collection, field)) {
     if (!nestedWrites(view, writes, [...path, field], field, operation.value, value[field] as readonly { readonly key: string }[] | undefined)) return { ok: false, reason: "invalid-record-field" };
   } else {
