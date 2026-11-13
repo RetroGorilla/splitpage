@@ -28,9 +28,12 @@ import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { sharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { FORMAT_MARKS } from "../../core/text/runs.ts";
 import type { FormatMark } from "../../core/text/runs.ts";
+import { sharedJoinRetirementGroup } from "./join-record.ts";
+import { isSharedJoinRetired, nextSharedJoinGeneration, readSharedJoinOf, readSharedJoinPlace, recordSharedJoin } from "./undo-join.ts";
+import type { SharedJoinUndoPart } from "./undo-join.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field"]);
+  "record-create", "record-delete", "record-field", "join"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -256,8 +259,27 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       if (effective) operations.push(operationOf({ kind: "record-set", ...author(), target: part.target, field: part.field, ...part.prior }));
       return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
     }
+    case "join": return planJoin(handle, part, author, operations);
     default: throw new SharedUndoRefusal("undo-unsupported:" + part.kind);
   }
+}
+
+function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author: () => { id: string; by: string }, operations: SharedOperation[]): Planned {
+  const place = readSharedJoinPlace(handle, part.from, part.into), group = sharedJoinRetirementGroup(part.from, part);
+  if (!part.retired) {
+    const effective = !place.removed && place.joined !== null && !isSharedJoinRetired(handle, part.join, group), formats = effective ? FORMAT_MARKS.filter(format => spaceFormat(handle, group, format)) : [];
+    if (effective) operations.push(operationOf({ kind: "join-retire", ...author(), joins: [part.join] }));
+    return { inverse: () => ({ effective, part: { ...part, retired: true, glue: place.joined?.glue ?? part.glue, ...formats.length ? { formats } : {} } }) };
+  }
+  // why: the same two beats joined again meanwhile are someone else's change, so the redo is used up.
+  const join = !place.removed && !place.joined ? author() : null;
+  if (join) {
+    const generation = nextSharedJoinGeneration(handle, part.from, part.into, part.glue), target = { owner: place.root, segment: place.root, field: "audioText" } as SharedTextAddress;
+    const space = sharedJoinRetirementGroup(part.from, { into: part.into, glue: part.glue, generation });
+    operations.push(operationOf({ kind: "join", ...join, from: part.from, into: part.into, glue: part.glue }));
+    for (const format of part.formats ?? []) operations.push(operationOf(spaceMark(target, [space], { kind: format, value: true }, author())));
+  }
+  return { inverse: () => ({ effective: join !== null, part: join && readSharedJoinOf(handle, part.from, join.id) || part }) };
 }
 
 // why: a record holds only what its own command wrote, so it is read before the updates held meanwhile are applied.
@@ -397,6 +419,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
         const prior = recordField(was, field), written = recordField(is, field);
         if (!same(prior, written)) parts.push({ kind: "record-field", target: operation.target, field, prior, written });
       }
+    } else if (operation.kind === "join") {
+      parts.push(recordSharedJoin(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
