@@ -19,7 +19,7 @@ import { applySharedTextEdit } from "./text-edit.ts";
 import type { SharedTextWritePlan, CollabTextMutation } from "./text-edit.ts";
 import { sharedTextCommandPlan, spliceSharedTextPlan, addSharedTextSource, sharedTextOverlay, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { sharedStructureSpans } from "./structure-spans.ts";
-import { planSharedStructureHead, planSharedHeadingCreation, planSharedHeadingFinalization, planSharedStructureOwner } from "./structure-plan.ts";
+import { planSharedStructureHead, planSharedHeadingCreation, planSharedHeadingFinalization, planSharedStructureOwner, planSharedConvertedBeat } from "./structure-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { sharedFollowingBeat } from "./removal-executor.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
@@ -105,13 +105,14 @@ function finalizeHeading(operation: SharedHeadingFinalize, view: SharedPreparati
   // why: boundaries go in before any character is deleted, so each sits beside visible characters
   // and typing at the end of the name by another writer stays in the name.
   if (keep) insert(end, { b: owner });
-  if (!keep) insert(span.positions[prefix.length] ?? end, { h: heading });
-  else if (embed) insert(span.from - 1, { h: heading });
+  if (embed) insert(span.from - 1, { h: heading });
   else {
-    writes.push({ kind: "set", path: ["segments", segment, "head"], value: { h: heading } }, { kind: "set", path: ["beats", owner, "segment"], value: segment });
-    planSharedStructureHead(view, segment, { h: heading }); planSharedStructureOwner(view, owner, segment);
+    writes.push({ kind: "set", path: ["segments", segment, "head"], value: { h: heading } });
+    planSharedStructureHead(view, segment, { h: heading });
+    if (keep) { writes.push({ kind: "set", path: ["beats", owner, "segment"], value: segment }); planSharedStructureOwner(view, owner, segment); }
   }
-  const doomed = new Set([...prefix, ...separator, ...keep && embed ? [embed] : []]);
+  if (!keep) planSharedConvertedBeat(view, owner, segment);
+  const doomed = new Set([...prefix, ...separator, ...embed ? [embed] : []]);
   for (let index = plan.units.length - 1; index >= 0; index--) if (doomed.has(plan.units[index] as typeof plan.units[number])) {
     spliceSharedTextPlan(plan, index, index + 1, []); edits.push({ type: "delete", from: index, to: index + 1 });
   }

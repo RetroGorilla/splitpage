@@ -8,7 +8,7 @@ import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision, encodeSharedState, encodeSharedStateVector } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
@@ -21,6 +21,7 @@ const scene = [{ id: "H1", name: "One", firstSceneId: "R0" }];
 const places: Record<string, { readonly source: Record<string, unknown>; readonly row: string; readonly enter: number | null; readonly split?: number }> = {
   "first beat, follower": { source: { rows: [{ id: "R1", audioText: "# Ab" }, { id: "R2", audioText: "cd", paragraphStart: true }] }, row: "R1", enter: null },
   "first beat, tail": { source: { rows: [{ id: "R1", audioText: "# Ab<br>cd" }, { id: "R2", audioText: "ef" }] }, row: "R1", enter: null },
+  "only beat, empty first beat": { source: { rows: [{ id: "R1", audioText: "# Ab" }] }, row: "R1", enter: null },
   "first beat, Enter": { source: { rows: [{ id: "R1", audioText: "# Abcd" }] }, row: "R1", enter: 4 },
   "mid scene, follower": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }, { id: "R2", audioText: "cd", paragraphStart: true }], sections: scene }, row: "R1", enter: null },
   "mid scene, tail": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "#  Ab <br>cd", paragraphStart: true }, { id: "R2", audioText: "ef" }], sections: scene }, row: "R1", enter: null },
@@ -71,6 +72,24 @@ test("complete finalization lists agree with app rows, scene ids, names and firs
       });
     } finally { set.close(); }
   }
-  assert.deepEqual({ calls, executed, finalized, removed, creates }, { calls: 39, executed: 84, finalized: 30, removed: 12, creates: 6 });
+  assert.deepEqual({ calls, executed, finalized, removed, creates }, { calls: 42, executed: 93, finalized: 33, removed: 15, creates: 9 });
   t.diagnostic(JSON.stringify({ calls, executed, finalized, removed, creates, skipped: 0, deferred: 0, limits: [] }));
+});
+
+const declaredLimits = Object.freeze(["an empty first beat the app places before the line it finalizes, after an earlier beat: refused with misplaced-heading-beat"]);
+test("declared limit: the empty first beat of a finalized last line lands before the line, so the complete list is refused and nothing is written", t => {
+  const runtime = createFlowLoadRuntime(), source = validatedFixture({ rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }] });
+  let next = 0;
+  const outcome = finalizeHeading({ rows: source.rows, sections: source.sections, comments: [] }, "R1", null, null, { ...runtime.ports, newId: () => "fresh" + ++next, operations: { id: "fin", by: "Writer" } });
+  assert.ok(outcome && "rows" in outcome && outcome.ops);
+  assert.deepEqual(outcome.ops.map(op => op.kind), ["segment-create", "heading-finalize", "remove"]);
+  const set = replicas(2, source);
+  try {
+    registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a); registerSharedHeadingHandlers(set.a);
+    const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
+    const result = executeSharedOperations(set.a, outcome.ops, { base: revision });
+    assert.ok(!result.ok && "index" in result); assert.deepEqual([result.reason, result.index], ["misplaced-heading-beat", 1]);
+    assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], [bytes, vector, revision]);
+  } finally { set.close(); }
+  t.diagnostic(JSON.stringify({ limits: declaredLimits }));
 });
