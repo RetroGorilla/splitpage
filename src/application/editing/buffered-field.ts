@@ -27,6 +27,7 @@ export interface BufferedFieldBinding {
   readonly keydown: (event: { readonly isComposing: boolean; readonly keyCode: number }) => void;
   readonly end: (event: { readonly data: string }) => void;
   readonly finish: () => boolean;
+  readonly settledFor: (event: BufferedFieldEvent) => boolean;
   readonly canPaint: () => boolean;
   readonly dirty: () => boolean;
   readonly held: () => boolean;
@@ -201,6 +202,13 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     return checked.ok && settle();
   }
 
+  function settledFor(event: BufferedFieldEvent): boolean {
+    // why: input that ends a held empty heading would act on the name the person did not see, so it is consumed
+    const held = holding();
+    if (finish() && !held) return true;
+    event.preventDefault(); return false;
+  }
+
   const stopAdmission = ports.beforeCommand(() => committing || finish());
 
   return {
@@ -218,12 +226,11 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (ended && /Composition/.test(type)) { event.preventDefault(); return true; }
       ended = false;
       if (type === "deleteByCut" || type === "deleteByDrag" || !/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type)) {
-        if (!finish()) { event.preventDefault(); return true; }
-        return false;
+        return !settledFor(event);
       }
       const ends = intended ? [keyOf(intended.anchor), keyOf(intended.head)] : [];
       if (!event.isComposing && !/Composition/.test(type) && ends[0] && ends[1] && ends[0] !== ends[1]) {
-        if (!finish()) { event.preventDefault(); return true; }
+        if (!settledFor(event)) return true;
         const missing = ends.find(key => key && !surface.base(key));
         if (missing) { event.preventDefault(); ports.missingBase(missing); surface.repaint(missing); return true; }
         return false;
@@ -234,8 +241,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
         if (!base) { begin(event, intended); return true; }
         const length = active?.rowId === rowId ? active.edit.text().length : base.text.length, offset = intended.head.offset;
         if (type === "deleteContentBackward" && offset === 0 || type === "deleteContentForward" && offset === length) {
-          if (!finish()) { event.preventDefault(); return true; }
-          return false;
+          return !settledFor(event);
         }
         refuse(event, "buffer-native-target"); return true;
       }
@@ -277,6 +283,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       } else finish();
     },
     finish,
+    settledFor,
     canPaint: () => {
       const checked = ownership(checkpoint("paint"));
       if (checked.adopted && !surface.composition() && !holding()) settle();

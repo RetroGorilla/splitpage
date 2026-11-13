@@ -481,7 +481,14 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     else root.focus({ preventScroll: true });
   }
 
+  function endsHold(): boolean {
+    // why: a write aimed at a held empty heading would land on the name the person did not see; it only ends the hold
+    if (!buffered?.held()) return false;
+    buffered.finish(); return true;
+  }
+
   function apply(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null, focus = true): FlowOutcome {
+    if (endsHold()) return null;
     const outcome = ports.commit(name, operation, before ?? selection());
     if (!outcome) return null;
     if ("refused" in outcome) { ports.notice(outcome.refused); return outcome; }
@@ -943,12 +950,12 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     const ctrl = event.ctrlKey || event.metaKey;
     if (ctrl && !event.altKey && (key === "z" || key === "Z")) {
       event.preventDefault();
-      ports.undo(event.shiftKey ? "redo" : "undo");
+      if (!endsHold()) ports.undo(event.shiftKey ? "redo" : "undo");
       return;
     }
     if (ctrl && !event.altKey && (key === "y" || key === "Y")) {
       event.preventDefault();
-      ports.undo("redo");
+      if (!endsHold()) ports.undo("redo");
       return;
     }
     if (ctrl && !event.altKey && (key === "f" || key === "F")) {
@@ -1312,10 +1319,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     },
     changed: ports.changed
   }) : null;
-  const ready = (event: Event): boolean => {
-    if (!buffered || buffered.finish()) return true;
-    event.preventDefault(); return false;
-  };
+  const ready = (event: Event): boolean => !buffered || buffered.settledFor(event);
   const clipboardActions = {
     copy: buffered ? (event: ClipboardEvent) => {
       if (composing) {
@@ -1362,11 +1366,14 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
     [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
     [root, "mousedown", onMouseDown],
-    [root, "focusout", buffered ? event => { if (!composing && ready(event)) onHostBlur(event); } : onHostBlur],
+    [root, "focusout", buffered ? event => { if (!composing && buffered.finish()) onHostBlur(event); } : onHostBlur],
     ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
       [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
-    [window, "mouseup", buffered ? () => { buffered.moved(selection(true)); onMouseUp(); } : onMouseUp],
-    [document, "selectionchange", buffered ? () => { buffered.moved(selection(true)); if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
+    [window, "mouseup", buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp],
+    [document, "selectionchange", buffered ? () => {
+      if (buffered.held()) buffered.moved(selection(true));
+      if (!buffered.dirty()) onSelectionChange();
+    } : onSelectionChange]
   ];
   const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
     [target, name, event => { buffered.native(event, () => handler(event)); }]) : listeners;

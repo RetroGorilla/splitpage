@@ -4,14 +4,16 @@ import assert from "node:assert/strict";
 import { headedWriter, sceneNames } from "./buffer-heading-support.ts";
 import type { HeadedPage } from "./buffer-heading-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { registerSplits, sharedCommand } from "../../application/session/shared-session-support.ts";
-import { ref } from "../../adapters/collab/executor-support.ts";
+import { operation, ref } from "../../adapters/collab/executor-support.ts";
+import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { beatPos, headingPos } from "../../../src/core/flow/flow.ts";
 import { replaceFlowMatches } from "../../../src/core/flow/find-replace.ts";
 import { searchFlow } from "../../../src/features/writer/flow-find.ts";
@@ -208,15 +210,61 @@ for (const [label, act, text] of HOLDING_KEYS) {
   });
 }
 
-test("rule 4: after emptying a heading, Enter runs its command, which ends the hold first: the name comes back and the person is told once", () => {
-  const seen: unknown[] = [], holder: { page?: HeadedPage } = {};
-  const page = emptied(commandPort(holder, seen)); holder.page = page;
-  registerSplits(page.h.a);
+function clipboard(page: HeadedPage, type: string): boolean {
+  page.surface.place(caret(0));
+  const event = new window.Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { getData: () => "Q", setData: () => {}, types: ["text/plain"] } });
+  return page.root.dispatchEvent(event);
+}
+
+function heldInput(page: HeadedPage, type: string, reach?: FlowRange): boolean {
+  page.surface.place(caret(0));
+  const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type });
+  const target = reach ? page.surface.domRange(reach) : null;
+  if (target) Object.defineProperty(event, "getTargetRanges", { value: () => [target] });
+  return page.root.dispatchEvent(event);
+}
+
+const HELD_ENDINGS: readonly (readonly [string, (page: HeadedPage) => boolean])[] = [
+  ["Backspace", page => page.typeHeading(0, 0, "", "deleteContentBackward")],
+  ["Delete", page => page.typeHeading(0, 0, "", "deleteContentForward")],
+  ["Delete with a target range reaching into the next beat", page => heldInput(page, "deleteContentForward", { anchor: headingPos("H1", 0), head: beatPos("R1", 1) })],
+  ["paste", page => clipboard(page, "paste")],
+  ["cut", page => clipboard(page, "cut")],
+  ["drop", page => page.root.dispatchEvent(new window.Event("drop", { bubbles: true, cancelable: true }))],
+  ["Enter", page => page.press({ key: "Enter" })],
+  ["Ctrl+Z", page => page.press({ key: "z", ctrlKey: true })],
+  ["Ctrl+Y", page => page.press({ key: "y", ctrlKey: true })],
+  ["historyUndo", page => heldInput(page, "historyUndo")]
+];
+
+for (const [label, act] of HELD_ENDINGS) {
+  test(`rule 4: after emptying a heading, ${label} only ends the hold: consumed, no command, the name comes back and the person is told once`, () => {
+    const seen: unknown[] = [], holder: { page?: HeadedPage } = {};
+    const page = emptied(commandPort(holder, seen)); holder.page = page;
+    registerSplits(page.h.a); registerSharedRemovalHandlers(page.h.a);
+    try {
+      assert.equal(act(page), false);
+      endedOnce(page);
+      assert.deepEqual([stored(page), seen, written(page), page.notices], ["Scene", [], [], []]);
+      copies(page, ["Scene"]);
+    } finally { page.close(); }
+  });
+}
+
+test("rule 4: someone else removing a heading while it is held empty lands once the hold ends, and the hold ends as told", () => {
+  const page = emptied();
+  registerSharedRemovalHandlers(page.h.b);
   try {
-    page.press({ key: "Enter" });
-    assert.deepEqual(seen, [["enter-heading", "applied"]]);
-    endedOnce(page);
-    assert.deepEqual(page.a.executed.map(command => command.operations.some(op => op.kind === "text-delete" && op.target.field === "heading")), [false]);
+    assert.deepEqual(executeSharedOperations(page.h.b, [operation({ kind: "heading-remove", id: "unhead", by: "Bob", heading: "H1",
+      observed: [flowBaseReference("H1", "heading", 0, 5)], newBeat: null, nextBeat: null })], { base: readSharedRevision(page.h.b) }), { ok: true });
+    page.h.queue.flush("dup");
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, [...collabState(page.h.a).ingress.holds]], ["Scene", "", [], ["buffer"]]);
+    page.root.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+    page.surface.paint();
+    assert.deepEqual([page.name(), page.reports, [...collabState(page.h.a).ingress.holds], page.a.executed.length], [undefined, EMPTY_REPORT, [], 0]);
+    assert.equal(page.root.querySelector('.wr-heading[data-scene="H1"]'), null);
+    copies(page, []);
   } finally { page.close(); }
 });
 
@@ -231,25 +279,27 @@ test("rule 4: after emptying a heading, an arrow that takes the caret into the n
 });
 
 test("rule 4: after emptying a heading, a click in a narration beat of the Writer ends the hold once and keeps the caret there", () => {
-  const page = emptied();
+  const page = emptied(), proto = window.Range.prototype as unknown as { getBoundingClientRect: () => unknown }, original = proto.getBoundingClientRect;
+  proto.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0 });
   try {
-    page.beat().dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+    assert.equal(page.beat().dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true })), true);
     const text = page.beat().firstChild; assert.ok(text);
     window.getSelection()?.setBaseAndExtent(text, 1, text, 1);
     window.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true }));
     endedOnce(page);
     assert.deepEqual(page.surface.selection(), { anchor: beatPos("R1", 1), head: beatPos("R1", 1) });
-  } finally { page.close(); }
+  } finally { proto.getBoundingClientRect = original; page.close(); }
 });
 
-test("rule 4: after emptying a heading, a click outside the Writer ends the hold once", () => {
+test("rule 4: after emptying a heading, a click outside the Writer ends the hold once when the selection leaves", () => {
   const page = emptied(), outside = document.body.appendChild(document.createElement("p"));
   try {
     outside.textContent = "elsewhere";
     const text = outside.firstChild; assert.ok(text);
     page.leaveTo(text, 2);
-    page.root.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+    endedOnce(page);
     window.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true }));
+    page.root.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
     endedOnce(page);
   } finally { outside.remove(); page.close(); }
 });

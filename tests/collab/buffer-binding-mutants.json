@@ -314,7 +314,7 @@
   }, {
     "label": "a mouseup landing outside a heading held empty is not checked",
     "file": "src/features/writer/flow-surface.ts",
-    "find": "buffered ? () => { buffered.moved(selection(true)); onMouseUp(); } : onMouseUp",
+    "find": "buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp",
     "replace": "onMouseUp",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
@@ -346,6 +346,36 @@
     "file": "src/application/editing/buffered-field.ts",
     "find": "if (heldReason !== null) ports.report({ kind: \"rejected\", reason: heldReason });",
     "replace": "if (surface.unsettled) ports.report({ kind: \"rejected\", reason: heldReason ?? \"buffer-heading-empty\" });",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "input that ends a held heading still acts",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (finish() && !held) return true;",
+    "replace": "if (finish()) return true;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "clipboard in a held heading ends the hold and still acts",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "const ready = (event: Event): boolean => !buffered || buffered.settledFor(event);",
+    "replace": "const ready = (event: Event): boolean => !buffered || buffered.finish();",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a Writer command aimed at a held heading still runs",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (endsHold()) return null;",
+    "replace": "",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the undo shortcut runs in a held heading",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (!endsHold()) ports.undo(event.shiftKey ? \"redo\" : \"undo\");",
+    "replace": "ports.undo(event.shiftKey ? \"redo\" : \"undo\");",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the redo shortcut runs in a held heading",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (!endsHold()) ports.undo(\"redo\");",
+    "replace": "ports.undo(\"redo\");",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
     "label": "the shared entry trims scene names",

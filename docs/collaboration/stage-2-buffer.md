@@ -384,9 +384,19 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
   the hold ends on what happens: a `beforeinput` that is not an insertion or
   composition into that heading, a command about to run (the session's
   `beforeCommand` admission), the selection leaving the heading (`moved`, called
-  at `selectionchange` and `mouseup`), or focus loss. Each ends it the same way.
-  An insertion settles as one replacement with no report, and a change adopted
-  with no `beforeinput` or found by a paint keeps the hold. A composition records
+  at `selectionchange` and `mouseup`, and only while a heading is held), or focus
+  loss. Each ends it the same way. A key, input, paste, cut or drop that ends the
+  hold is consumed: its default is prevented and no command runs, so it never acts
+  on the restored name the person did not see. That covers Backspace and Delete
+  (also with a target range reaching into the next beat), Enter, paste, cut, drop,
+  `historyUndo`/`historyRedo` and the undo and redo shortcuts; the surface's own
+  commands check the hold before they write. Selection leaving and focus loss have
+  nothing to consume. An insertion settles as one replacement with no report, and
+  a change adopted with no `beforeinput` or found by a paint keeps the hold. Paste
+  is not an insertion: emptying a name and then pasting a new one ends the hold
+  with the report, while selecting the name and pasting over it replaces it. A
+  removal of the heading by someone else waits behind the hold and lands once it
+  ends. A composition records
   at `compositionstart` whether it began in a heading held empty; cancelling it
   then puts the name back with the one report, whatever text the cancel leaves.
   A composition that began elsewhere and is cancelled is a plain cancel.
