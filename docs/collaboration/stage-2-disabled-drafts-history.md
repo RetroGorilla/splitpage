@@ -35,12 +35,28 @@ cannot replace the shared session.
   write and their retries; only new captures are refused.
 - A keep flush (closing a file tab whose file is gone) answers as a store that
   cannot write. A shared instance needs its own tab source, which package 14 adds.
-- App-data history import (`importHistoryBundle`) and the startup migration of
-  legacy snapshots (`startHistoryMigration`) are app-wide and do not touch the live
-  document; they are not guarded.
 - A history copy for a standalone save that lands after the session became shared
   follows the current session, so it is not made; the snapshots stay under the old
   id. Package 14 decides captured-save effects together with the session owner.
+
+Open for package 14, from the review of #1519 (assumed rule 53 on #1414). None can
+happen until a shared session is composed in the app:
+
+1. Two waits in a file-draft restore can still show the "kept" message if the
+   session becomes shared meanwhile (`drafts.ts`, the superseded check and the
+   refused merge).
+2. A draft found at startup and refused leaves the restore marked as pending for the
+   life of the page, so a tab that later turns standalone writes no crash drafts.
+   This matters only if a shared session can exist at startup.
+3. A tab that goes shared and back to standalone with a clean document deletes the
+   draft from before the shared stretch at its first flush. That is correct only if
+   entering the shared session dealt with that unsaved work.
+4. Closing a tab whose file is gone, in a shared session that still has an older
+   standalone draft, closes without the unsaved question; the old draft is kept.
+5. App-data import of history (`importHistoryBundle`) and the legacy snapshot
+   migration (`startHistoryMigration`) are not guarded; neither touches the open
+   document.
+6. Whether a shared session should take snapshots after all: the plan permits it.
 
 ## Inventory
 

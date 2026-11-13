@@ -201,8 +201,9 @@ local person's. This owner answers for itself; the rest is named for its package
 Package 14 also follows the session-mode and captured-save lifetime obligations
 in [Shared sessions and local file saving](stage-2-disabled-file-saving.md#package-14-obligations),
 and the entries left to it in
-[Shared sessions and local merge, stash and reload](stage-2-disabled-merge-stash.md#limits)
-and [Shared sessions, drafts and version history](stage-2-disabled-drafts-history.md#limits).
+[Shared sessions and local merge, stash and reload](stage-2-disabled-merge-stash.md#limits),
+[Shared sessions, drafts and version history](stage-2-disabled-drafts-history.md#limits)
+and [Shared sessions, the script's folder and file bundles](stage-2-disabled-folders-bundles.md#limits).
 
 `tests/collab/shared-session-mutants.json` holds twenty-two, each listed in
 `tests/collab/mutants.md` with the test that fails.
