@@ -59,8 +59,9 @@ binding. The named tests below are in `tests/features/writer/buffer-binding.test
    text is unchanged" cover both text changes and replacement of equal letters.
 3. **Closed:** the empty beat records its native zero gap with `before` affinity;
    "empty beat native typing uses the painted zero gap" commits its first letter.
-4. **Declared:** the visual box and title remain packages 9d and 9e, whose field
-   bindings have not been migrated. Writer headings are bound since 9d.
+4. **Declared:** the Writer's visual box and the title are not bound. Package 9e
+   binds the Split view's visual cells only (one record per visual cell, keyed by
+   `bufferedFieldKey`); package 9d binds Writer headings (keyed by `headingFieldKey`).
 5. **Closed for this binding:** while dirty, paint/repaint/refresh keep the native
    DOM and its original base. "paint during a dirty composition keeps the typed
    DOM and its original identities until commit" and "orphan repair keeps the

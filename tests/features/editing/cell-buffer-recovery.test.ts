@@ -89,7 +89,7 @@ test("rules 29 and 55: the recovery entry keeps the cell as shown, so a typed sp
   const page = recovering("ab");
   try {
     assert.equal(page.key("R1", 2, 2, "insertText", " ", { during: () => { stale(page); }, shown: cell => {
-      const node = [...cell.childNodes].find(child => child instanceof window.Text && child.data === " "); assert.ok(node instanceof window.Text); node.data = " ";
+      const node = [...cell.childNodes].find(child => child instanceof window.Text && child.data === " "); assert.ok(node instanceof window.Text); node.data = "\u00a0";
     } }), true);
     assert.deepEqual([page.recovered, page.reports, page.text()], [["R1"], [], "ab"]);
     copies(page, { rows: [{ id: "R1", text: "ab" }, { id: "R2", text: "next" }], recovery: [{ id: BEAT, text: "ab&nbsp;", members: [BEAT], buffer: SOURCE }] });

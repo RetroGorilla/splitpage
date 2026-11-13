@@ -1,9 +1,8 @@
-import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { DocumentReader } from "../../../application/session/document-reader.ts";
 import type { CommonDocumentSession, StandaloneDocumentSession } from "../../../application/session/document-session.ts";
 import { cancelRefresh, currentDocument, documentNumbering, liveSession, noteSessionEdit, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../session-owner.ts";
 
-export const documentReader: DocumentReader<ValidatedDocument> = {
+export const documentReader: DocumentReader = {
   numbering: documentNumbering,
   current: currentDocument,
   read: readSession,

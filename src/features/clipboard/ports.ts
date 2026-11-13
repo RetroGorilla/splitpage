@@ -36,7 +36,6 @@ interface BeatTag {
 }
 
 export interface BeatClipPorts {
-  readonly document: Pick<DocumentReader<ValidatedDocument>, "current">;
   readonly ids: Pick<IdSource, "id">;
   readonly pictures: Pick<PictureStore, "dataUrlFor" | "internDataUrl" | "queuePersist">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "fromHtml" | "inertBody">;

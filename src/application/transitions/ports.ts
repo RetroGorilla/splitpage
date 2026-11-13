@@ -1,5 +1,6 @@
 import type { HomeFields } from "../location/document-location.ts";
 import type { DocumentView } from "../session/document-session.ts";
+import type { DocumentReader } from "../session/document-reader.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { StandaloneDocumentSession } from "../session/document-session.ts";
 import type { DocumentEntry } from "../session/ports.ts";
@@ -12,7 +13,7 @@ export interface DocumentDestination {
 export const NO_DESTINATION: DocumentDestination = Object.freeze({ kind: "none" });
 
 export interface LiveDocumentPort {
-  readonly current: StandaloneDocumentSession["held"];
+  readonly current: DocumentReader["current"];
   readonly assign: (doc: NonNullable<ReturnType<StandaloneDocumentSession["adopt"]>>) => void;
 }
 

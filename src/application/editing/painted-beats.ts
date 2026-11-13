@@ -14,7 +14,7 @@ export function createPaintedBeats(source: PaintedTextSource): PaintedBeats {
   let texts = new Map<string, string>();
   const readField = (key: string): PaintedText | null => {
     const target = bufferedFieldTarget(key);
-    return target ? source.read(target.owner, target.field) : null;
+    return target ? source.read(key, target.field) : null;
   };
   function field(rowId: string, text: string): void {
     texts.set(rowId, text);

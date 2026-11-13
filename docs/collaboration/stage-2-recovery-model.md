@@ -260,7 +260,7 @@ These keep work, but locally, on one copy, and are not in the list:
 12. **Closed by cut 2.** Removed headings were rebuilt on every projection step (open item 3 from #1501); the entry is now cached.
 13. **Retained recovery content is never compacted.** Removal records and removed text stay for the life of the instance; budgets and limits are Stage 3 (1a decision, carry-overs).
 14. **The movement oracles assigned here (`MOVE delete`, `MOVE delete undo`) cannot run**: moving a beat is refused in a shared session (assumed rule 40). They stay pending, declared.
-15. **One recovery defect is no longer caught**: `duplicate fragment not recovered` in `tests/collab/projection-mutants.json` survives (open item from #1498, package 15).
+15. **Closed in package 15: the mutant `duplicate fragment not recovered` was removed as equivalent.** It deleted `seen.has(key)` from the duplicate check in `projectSharedBlocks` (`src/core/collab/projection/blocks.ts`). Every boundary that check records is also recorded in `headings` (a heading) or `beats` (a beat, by cleaned id), and both are checked first with the same reason, `duplicate-boundary`, so no projection reaches a state where `seen` decides; the document-wide beat check (commit 935e6b691) made it redundant. Recovery of duplicate fragments stays tested in `tests/adapters/collab/projection-split-recovery.test.ts`.
 
 ## Assumed rules
 

@@ -117,7 +117,7 @@ function beatHtml(runs: readonly Run[]): string {
 }
 
 export function createSurface(inputPorts: SurfacePorts): Surface {
-  const storedHeading = (sceneId: string): string | null => inputPorts.paintedText?.read(sceneId, "heading")?.text ?? null;
+  const storedHeading = (sceneId: string): string | null => inputPorts.paintedText?.read(headingFieldKey(sceneId), "heading")?.text ?? null;
   const ports: SurfacePorts = inputPorts.bufferedText
     ? { ...inputPorts, syncBeat: () => {}, flow: { ...inputPorts.flow, storedHeading } } : inputPorts;
   const root = ports.root;

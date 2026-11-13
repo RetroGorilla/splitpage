@@ -2,7 +2,7 @@ import { createShotHiding } from "../../application/shot-hiding.ts";
 import type { ShotHiding, ShotHidingPorts } from "../../application/shot-hiding.ts";
 import type { TimerPort } from "../../application/session/ports.ts";
 import { preferences, viewFlags } from "./preferences-owner.ts";
-import { currentDocument } from "./session-owner.ts";
+import { documentReader } from "./ports/document.ts";
 
 let started: ShotHiding | null = null;
 
@@ -14,7 +14,7 @@ export function shotHidingPorts(timers: Pick<TimerPort, "start" | "stop">): Shot
     }),
     remember: function (on: boolean) { preferences().setHideShot(on); },
     rows: function () {
-      const doc = currentDocument();
+      const doc = documentReader.current();
       return doc ? doc.rows : null;
     },
     timers: timers

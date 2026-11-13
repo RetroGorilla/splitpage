@@ -22,7 +22,7 @@ export function bufferedNativeReplacement(before: string, after: string): Buffer
 }
 
 function spaceForm(text: string): string {
-  return text.indexOf(" ") === -1 ? text : text.replaceAll(" ", " ");
+  return text.indexOf("\u00a0") === -1 ? text : text.replaceAll("\u00a0", " ");
 }
 
 export function sameUpToSpaceForm(a: string, b: string): boolean {
@@ -58,6 +58,15 @@ export function alignSpaceForm(runs: readonly Run[], text: string): readonly Run
   });
   if (projection(aligned) !== text) return null;
   return changed ? aligned : runs;
+}
+
+export function bufferedFieldKey(rowId: string, field: "audioText" | "visualText"): string {
+  return field === "audioText" ? rowId : rowId + "\ufffd" + field;
+}
+
+export function readBufferedFieldKey(key: string): { readonly rowId: string; readonly field: "audioText" | "visualText" } {
+  const at = key.lastIndexOf("\ufffd");
+  return at !== -1 && key.slice(at + 1) === "visualText" ? { rowId: key.slice(0, at), field: "visualText" } : { rowId: key, field: "audioText" };
 }
 
 export interface BufferedCommit {

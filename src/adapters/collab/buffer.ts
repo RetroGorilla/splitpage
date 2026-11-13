@@ -69,7 +69,7 @@ export function createSharedBufferedText(
             const commit = buffer.plan(), author = ports.author(), operations = bufferedTextOperations(commit, painted, target, runs, author);
             outcome = session.run({ name: "buffered-text", needs: "edit", plan: doc => {
               planned = true;
-              const field = target.field, row = doc.rows.find(entry => entry.id === rowId);
+              const field = target.field, row = doc.rows.find(entry => entry.id === target.owner);
               const tags = field === "audioText" || field === "visualText" ? sharedTagsIntroducedByText({ field, before: row?.[field],
                 after: toHtml(runs), registry: doc.productionTags }, ports.readers, author) : [];
               const stamp = operations.length && field !== "heading" && field !== "title" ? [sharedBeatStamp(target.owner, author, ports.stamps)] : [];
@@ -94,7 +94,7 @@ export function createSharedBufferedText(
               outcome = outcome.kind === "noop" ? { kind: "failed", error }
                 : { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
             }
-            const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field) : undefined;
+            const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "audioText" ? undefined : { key: rowId, target }) : undefined;
             return restored ? { ...outcome, selection: restored } : outcome;
           }
           return outcome;
@@ -105,8 +105,8 @@ export function createSharedBufferedText(
           let outcome: CommandOutcome;
           try {
             const author = ports.author(), visual = sharedStructureIdentity(String(collabState(handle).doc.clientID), author.id, "visual");
-            const snapshot = { owner: target.owner, base: painted.revision, html: toHtml(runs), units: cellLength(runs) };
-            const segment = target.field === "audioText" ? sharedBufferSourceSegment(handle, rowId) : null;
+            const snapshot = { owner: target.owner, base: painted.revision, html: toHtml(runs), units: cellLength(runs), field: target.field === "visualText" ? "visualText" as const : "audioText" as const };
+            const segment = target.field === "audioText" || target.field === "visualText" ? sharedBufferSourceSegment(handle, target.owner) : null;
             outcome = session.run({ name: "buffered-text-recovery", needs: "edit", plan: doc => ({
               changes: NO_CHANGES,
               apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },

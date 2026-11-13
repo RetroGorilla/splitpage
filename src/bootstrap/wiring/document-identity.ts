@@ -2,7 +2,8 @@ import { createDocumentIdentityOwner } from "../../application/identity/document
 import type { DocumentIdentityOwner, DocumentIdentityPorts } from "../../application/identity/ports.ts";
 import type { IdentityPort } from "../../application/transitions/ports.ts";
 import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";
-import { heldDocument, currentDocument } from "./session-owner.ts";
+import { heldDocument } from "./session-owner.ts";
+import { documentReader } from "./ports/document.ts";
 import { startStandaloneHtml } from "../../adapters/page/standalone-html.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentityPorts } from "./ports/document-identity.ts";
@@ -32,7 +33,7 @@ export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = docume
     on: function () { return documentGuardOn(); },
     viewed: function () { const doc = heldDocument(); return doc !== null && documentView(doc) !== doc; },
     writes: function () {
-      const view = currentDocument();
+      const view = documentReader.current();
       if (!view) throw new Error("There is no document to probe");
       return [
         function () { Reflect.set(view, "title", view.title); },

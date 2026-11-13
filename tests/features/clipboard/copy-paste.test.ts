@@ -331,7 +331,6 @@ test("scene selection: Delete removes the selected scenes through the edits port
 test("scene clipboard: a fallback cut that finishes after the document has gone removes nothing and throws nothing", async () => {
   const { owner, edits, held } = beatSelect();
   const clip = mountBeatClip({
-    document: held.document,
     ids: { id: (prefix) => prefix + "1" },
     pictures: fakePictures().pictures,
     text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body") },
@@ -364,7 +363,6 @@ test("scene clipboard: a fallback cut that finishes after the document has gone 
 async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge" | "save-as") {
   const { owner, edits, held, calls } = beatSelect();
   const clip = mountBeatClip({
-    document: held.document,
     ids: { id: (prefix) => prefix + "1" },
     pictures: fakePictures().pictures,
     text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body") },
@@ -431,7 +429,6 @@ test("scene clipboard: a pasted payload's pictures go through the picture port a
   const pictures = fakePictures();
   const migrated: object[] = [];
   const ports: BeatClipPorts = {
-    document: fakeDocument(scriptDoc()).document,
     ids: { id: (prefix) => prefix + "1" },
     pictures: pictures.pictures,
     text: { cellOf: () => [], fromHtml: () => [], inertBody: (html) => { const body = document.createElement("body"); body.innerHTML = String(html); return body; } },
