@@ -394,7 +394,8 @@ again. It is used up when either beat is removed, when the two beats are
 already joined again by anyone, or when the source beat is no longer the next
 beat after the target's own row in the order (a split, a new beat or a heading
 between them). The neighbour check also applies to the redo of an undone join.
-A `join-retire` of a join that is already retired records nothing.
+A `join-retire` of a join that is already retired records nothing, and a join
+retired twice in one command is recorded once.
 
 A command with `join-glue` on a join that stood before the command records a
 `join-glue` part with the separator before and after. Its undo sets the

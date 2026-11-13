@@ -298,8 +298,8 @@ function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author
     if (effective) operations.push(operationOf({ kind: "join-retire", ...author(), joins: [part.join] }));
     return { inverse: () => ({ effective, part: { ...part, retired: true, glue: place.joined?.glue ?? part.glue, ...formats.length ? { formats } : {} } }) };
   }
-  // why: the same two beats joined again meanwhile are someone else's change, so the redo is used up.
-  // why: removed beats are not in the order the neighbour check walks, so a removed source or target uses the redo up.
+  // why: the same two beats joined again meanwhile are someone else's change, so the redo is used up; removed beats
+  // are not in the order the neighbour check walks, so a removed source or target uses it up too.
   const join = !place.joined && readSharedJoinNeighbours(handle, part.from, part.into) ? author() : null;
   if (join) {
     const generation = nextSharedJoinGeneration(handle, part.from, part.into, part.glue), target = { owner: place.root, segment: place.root, field: "audioText" } as SharedTextAddress;
@@ -395,6 +395,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   const result = executeSharedOperations(handle, operations, options);
   if (!result.ok) return { result, record: null };
   const parts: SharedUndoPart[] = [], described = new Set<string>(), spaced = new Set<string>(), after = new Map<string, SharedTextHistory | null>();
+  const unjoined = new Set<string>();
   const now = (target: SharedTextAddress): SharedTextHistory | null => {
     if (!after.has(textKey(target))) after.set(textKey(target), readSharedTextHistory(handle, target));
     return after.get(textKey(target)) ?? null;
@@ -460,7 +461,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (operation.kind === "split" || operation.kind === "split-before") {
       parts.push(recordSharedSplit(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join-retire") {
-      for (const part of unjoins.get(operation) ?? []) if (part && isSharedJoinRetired(handle, part.join, sharedJoinRetirementGroup(part.from, part))) parts.push(part);
+      for (const part of unjoins.get(operation) ?? []) if (part && !unjoined.has(part.join)) { unjoined.add(part.join); parts.push(part); }
     } else if (operation.kind === "join-glue") {
       const seen = glues.get(operation) ?? [];
       // why: a separator set on a join made in the same command has no earlier value, so the command stays refused.
