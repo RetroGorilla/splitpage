@@ -221,5 +221,17 @@
     "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target) settle();",
     "replace": "if ((before.adopted || after.adopted) && !surface.composition()) settle();",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "the Split view keeps the typed cell after a recovery write",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (!shown || toHtml(shown) !== toHtml(painted)) ports.page.write(cell, html);",
+    "replace": "void shown;",
+    "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
+  }, {
+    "label": "the Split view unmounts over a refused recovery write",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (!ports.shown(() => binding.dispose())) return false;",
+    "replace": "ports.shown(() => binding.dispose());",
+    "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
   }]
 }

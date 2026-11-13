@@ -14,15 +14,19 @@ import { cellSelection, setCellSelection } from "../../../src/features/common/ce
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
+import { registerSplits } from "../../application/session/shared-session-support.ts";
+import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 
 type Field = "visualText" | "audioText";
 
-export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceReady = true) {
+export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceReady = true,
+  options: { readonly author?: (serial: number) => string; readonly structure?: boolean } = {}) {
   const h = new Stage1ExecutorHarness(seed), a = sharedHarness(adapterReplica(h.a));
+  if (options.structure) { registerSplits(h.a); registerSharedRemovalHandlers(h.a); }
   const { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   let serial = 0, ready = sourceReady;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
-    author: () => ({ id: "split:" + ++serial, by: "Alice" }) });
+    author: () => { const next = ++serial; return { id: options.author?.(next) ?? "split:" + next, by: "Alice" }; } });
   const guard = createPaintGuard(), shown = new Map<string, string>(), listeners = new Set<() => void>(), checks = new Set<() => void>();
   const root = document.body.appendChild(document.createElement("div"));
   const doc = () => a.session.read(view => view) as DocumentView | null;
@@ -31,6 +35,10 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
   };
   function paint(): void {
     const view = doc(); assert.ok(view);
+    for (const rowEl of root.querySelectorAll<HTMLElement>(".row")) {
+      if (view.rows.some(row => row.id === rowEl.dataset.id)) continue;
+      rowEl.remove(); shown.delete(rowEl.dataset.id + "/visualText"); shown.delete(rowEl.dataset.id + "/audioText");
+    }
     for (const row of view.rows) {
       if (!root.querySelector('.row[data-id="' + row.id + '"]')) {
         root.insertAdjacentHTML("beforeend", '<div class="row" data-id="' + row.id + '"><div class="cell visual-cell"></div><div class="cell audio-cell"></div></div>');
@@ -64,7 +72,7 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
     beforePaint: check => { checks.add(check); return () => { checks.delete(check); }; }
   } });
   function key(rowId: string, from: number, to: number, inputType: string, data: string | null,
-    options: { readonly field?: Field; readonly during?: () => void; readonly shown?: (cell: HTMLElement) => void } = {}): boolean {
+    options: { readonly field?: Field; readonly during?: () => void; readonly shown?: (cell: HTMLElement) => void; readonly input?: false } = {}): boolean {
     const target = cell(rowId, options.field); target.focus();
     const start = posToDom(target, from), end = posToDom(target, to), range = document.createRange();
     range.setStart(start.node, start.offset); range.setEnd(end.node, end.offset);
@@ -78,7 +86,7 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
     if (data) range.insertNode(document.createTextNode(data));
     options.shown?.(target);
     setCellSelection(target, from + (data?.length ?? 0));
-    target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType, data }));
+    if (options.input !== false) target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType, data }));
     return true;
   }
   return { h, a, root, buffer, painted, cell, key, paint, reports, missing, recovered,
