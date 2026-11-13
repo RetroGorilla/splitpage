@@ -38,12 +38,11 @@ const HELD_TYPES = {
 };
 
 const BROLL_AND_UNDO = {
-  "bootstrap/wiring/broll.ts": 3,
+  "bootstrap/wiring/broll.ts": 2,
   "bootstrap/wiring/undo.ts": 2
 };
 
 const TRANSITIONS_AND_MERGE = {
-  "bootstrap/wiring/document-identity.ts": 2,
   "bootstrap/wiring/ports/project-files.ts": 2,
   "bootstrap/wiring/ports/session-merge.ts": 2,
   "bootstrap/wiring/startup.ts": 2
