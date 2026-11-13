@@ -30,12 +30,13 @@ import { sharedJoinFormatRegisterField } from "../../core/collab/projection/join
 import { FORMAT_MARKS } from "../../core/text/runs.ts";
 import type { FormatMark } from "../../core/text/runs.ts";
 import { sharedJoinRetirementGroup } from "./join-record.ts";
-import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, readSharedJoinOf, readSharedJoinPlace, recordSharedJoin } from "./undo-join.ts";
+import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, planSharedJoinGlueUndo, readSharedJoinBeforeRetire, readSharedJoinNeighbours, readSharedJoinOf,
+  readSharedJoinPlace, readSharedJoinSeparator, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -262,6 +263,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
     }
     case "join": return planJoin(handle, part, author, operations);
+    case "join-glue": {
+      const effective = planSharedJoinGlueUndo(handle, part, glue => { operations.push(operationOf({ kind: "join-glue", ...author(), joins: [part.join], glue })); });
+      return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
+    }
     case "remove": case "restore": {
       const plan = planSharedRemovalUndo(handle, part, author, raw => { const operation = operationOf(raw); operations.push(operation); return operation; });
       return { inverse: () => ({ effective: plan.effective, part: plan.inverse() }) };
@@ -288,8 +293,9 @@ function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author
     if (effective) operations.push(operationOf({ kind: "join-retire", ...author(), joins: [part.join] }));
     return { inverse: () => ({ effective, part: { ...part, retired: true, glue: place.joined?.glue ?? part.glue, ...formats.length ? { formats } : {} } }) };
   }
-  // why: the same two beats joined again meanwhile are someone else's change, so the redo is used up.
-  const join = !place.removed && !place.joined ? author() : null;
+  // why: the same two beats joined again meanwhile are someone else's change, so the redo is used up; removed beats
+  // are not in the order the neighbour check walks, so a removed source or target uses it up too.
+  const join = !place.joined && readSharedJoinNeighbours(handle, part.from, part.into) ? author() : null;
   if (join) {
     const generation = nextSharedJoinGeneration(handle, part.from, part.into, part.glue), target = { owner: place.root, segment: place.root, field: "audioText" } as SharedTextAddress;
     const space = sharedJoinRetirementGroup(part.from, { into: part.into, glue: part.glue, generation });
@@ -376,11 +382,15 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     }
   }
   const removals = operations.filter(operation => operation.kind === "remove" || operation.kind === "restore" || operation.kind === "heading-remove");
+  const unjoins = new Map(operations.flatMap(operation => operation.kind === "join-retire" ? [[operation, operation.joins.map(join => readSharedJoinBeforeRetire(handle, join))] as const] : []));
+  const glues = new Map(operations.flatMap(operation => operation.kind === "join-glue"
+    ? [[operation, operation.joins.map(join => { const found = readSharedJoinSeparator(handle, join); return found && { join, ...found }; })] as const] : []));
   // why: which beats a removal or a restore took away or brought back is read from the live beats around it.
   const live = removals.length === 1 ? readSharedLiveStructure(handle) : null;
   const result = executeSharedOperations(handle, operations, options);
   if (!result.ok) return { result, record: null };
   const parts: SharedUndoPart[] = [], described = new Set<string>(), spaced = new Set<string>(), after = new Map<string, SharedTextHistory | null>();
+  const unjoined = new Set<string>();
   const now = (target: SharedTextAddress): SharedTextHistory | null => {
     if (!after.has(textKey(target))) after.set(textKey(target), readSharedTextHistory(handle, target));
     return after.get(textKey(target)) ?? null;
@@ -443,6 +453,16 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       }
     } else if ((operation.kind === "remove" || operation.kind === "restore" || operation.kind === "heading-remove" && operation.newBeat === null) && live) {
       parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
+    } else if (operation.kind === "join-retire") {
+      for (const part of unjoins.get(operation) ?? []) if (part && !unjoined.has(part.join)) { unjoined.add(part.join); parts.push(part); }
+    } else if (operation.kind === "join-glue") {
+      const seen = glues.get(operation) ?? [];
+      // why: a separator set on a join made in the same command has no earlier value, so the command stays refused.
+      if (seen.some(item => !item)) { parts.push({ kind: "structure", command: operation.kind, operation: operation.id }); continue; }
+      for (const item of seen) {
+        const now = item && readSharedJoinSeparator(handle, item.join);
+        if (item && now && now.separator !== item.separator) parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
+      }
     } else if (operation.kind === "join") {
       parts.push(recordSharedJoin(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "discard") {

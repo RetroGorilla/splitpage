@@ -5,7 +5,11 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
-import { readSharedStructureRemoval } from "./structure-plan.ts";
+import { interpretSharedStructure, readSharedStructureRemoval, readSharedStructureStream, sharedStructurePlanIndex } from "./structure-plan.ts";
+import { readPlannedStructureIndex, sharedOrderPlan } from "./structure-order-index.ts";
+import { sharedPlannedSegmentAt } from "./structure-order.ts";
+import { projectSharedJoinGlue, sharedJoinFormatRegisterField, sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
+import { FORMAT_MARKS } from "../../core/text/runs.ts";
 import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 
@@ -68,5 +72,67 @@ export function readSharedJoinPlace(handle: SharedDocumentHandle, from: string, 
     const groups = new Set(liveJoins(handle, from, into).map(item => sharedJoinRetirementGroup(from, item)));
     const part = parts.find((part, index) => part.owner === from && part.group !== null && groups.has(part.group) && parts.slice(0, index).some(other => other.owner === into));
     return { removed, joined: part ? { glue: part.glue } : null, root: readSharedJoinedTextGeometry(prep.view, into)?.root ?? into };
+  } finally { prep.close(); }
+}
+
+function findSharedJoin(handle: SharedDocumentHandle, join: string): { readonly from: string; readonly entry: StoredJoin } | null {
+  for (const from of collabState(handle).roots.beats.keys()) {
+    const entry = storedJoins(handle, from).find(item => item.id === join);
+    if (entry) return { from, entry };
+  }
+  return null;
+}
+
+function shownSeparator(handle: SharedDocumentHandle, from: string, entry: StoredJoin): "" | " " {
+  return projectSharedJoinGlue(entry.glue, collabState(handle).roots.meta.get(sharedJoinGlueRegisterField(sharedJoinRetirementGroup(from, entry))));
+}
+
+// why: an unjoin is recorded as the join it retired, with its separator and space formats, so its undo joins again.
+export function readSharedJoinBeforeRetire(handle: SharedDocumentHandle, join: string): SharedJoinUndoPart | null {
+  const found = findSharedJoin(handle, join);
+  if (!found) return null;
+  const { from, entry } = found, group = sharedJoinRetirementGroup(from, entry), meta = collabState(handle).roots.meta;
+  if (isSharedJoinRetired(handle, entry.id, group)) return null;
+  const formats = FORMAT_MARKS.filter(format => meta.get(sharedJoinFormatRegisterField(group, format)) === true);
+  return { kind: "join", join: entry.id, from: from as SharedContentRef, into: entry.into as SharedContentRef, glue: shownSeparator(handle, from, entry),
+    generation: entry.generation, retired: true, ...formats.length ? { formats } : {} };
+}
+
+export function readSharedJoinSeparator(handle: SharedDocumentHandle, join: string): { readonly from: string; readonly separator: "" | " " } | null {
+  const found = findSharedJoin(handle, join);
+  return found ? { from: found.from, separator: shownSeparator(handle, found.from, found.entry) } : null;
+}
+
+// why: a separator change is taken back only while its join stands and still shows what the change wrote (rule 28).
+export function planSharedJoinGlueUndo(handle: SharedDocumentHandle, part: Extract<SharedUndoPart, { kind: "join-glue" }>, push: (glue: "" | " ") => void): boolean {
+  const entry = storedJoins(handle, part.from).find(item => item.id === part.join);
+  const effective = !!entry && !isSharedJoinRetired(handle, entry.id, sharedJoinRetirementGroup(part.from, entry)) && shownSeparator(handle, part.from, entry) === part.written;
+  if (effective) push(part.prior);
+  return effective;
+}
+
+// why: a join puts the source after the target's own row, so it is made again only while the source is next there.
+export function readSharedJoinNeighbours(handle: SharedDocumentHandle, from: string, into: string): boolean {
+  const prep = createSharedPreparation(handle);
+  try {
+    const view = prep.view;
+    if (!view.resolveOwner(into, "audioText")) return false;
+    const geometry = readSharedJoinedTextGeometry(view, into), parts = geometry?.root === into ? geometry.parts : geometry?.parts.filter(part => part.owner === into) ?? [];
+    const last = parts.at(-1);
+    if (!last) return false;
+    const order = sharedStructurePlanIndex(view).order, length = sharedOrderPlan(view, order).length;
+    let after = false;
+    const first = readPlannedStructureIndex(view, order, last.segment);
+    if (first < 0) return false;
+    for (let index = first; index < length; index++) {
+      const segment = sharedPlannedSegmentAt(view, order, index), stream = segment === undefined ? undefined : readSharedStructureStream(view, segment);
+      if (!stream) continue;
+      for (const block of interpretSharedStructure(view, [], stream)) {
+        if (block.segment !== segment || block.reason || block.id === null) continue;
+        if (after) return block.kind === "b" && block.id === from;
+        after = block.kind === "b" && block.id === last.owner;
+      }
+    }
+    return false;
   } finally { prep.close(); }
 }
