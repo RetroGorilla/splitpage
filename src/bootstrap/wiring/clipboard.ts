@@ -45,7 +45,6 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       brollSeed: (row) => brollSeedOf(row, portText)
     };
     const clipPorts: BeatClipPorts = {
-      document: portDocument,
       ids: randomIds,
       pictures: portPictures,
       text: portText,
