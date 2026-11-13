@@ -81,9 +81,6 @@ export type SharedUndoPart =
     readonly kind: "beat-split";
     readonly beat: SharedContentRef;
     readonly source: SharedContentRef;
-    readonly segment: SharedContentRef;
-    readonly boundary: SharedContentRef;
-    readonly before: SharedContentRef | null;
     readonly retired: boolean;
     readonly content: string;
   }

@@ -106,7 +106,7 @@ function check(run: ReturnType<typeof splitReplicas>, scenario: typeof scenarios
     const roots = collabState(handle).roots, prep = createSharedPreparation(handle);
     try {
       prep.view.resolveOwner("R1", "audioText");
-      const expected = readProjectionBlocks(roots.order, roots.segments, roots.beats, container => readProjectionUnits(handle, container.get("text"), container.get("markRecords")))
+      const expected = readProjectionBlocks(roots, container => readProjectionUnits(handle, container.get("text"), container.get("markRecords")))
         .filter(block => block.kind === "b" && !block.reason).map(block => ({ owner: block.id, segment: block.segment, from: block.from, to: block.to, values: block.units.map(unit => unit.value) }));
       const actual = roots.order.toArray().flatMap(segment => {
         const text = prep.view.text(["segments", segment, "text"]); if (!text) return [];
