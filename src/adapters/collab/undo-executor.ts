@@ -19,6 +19,15 @@ import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords } from "./record-reader.ts";
 import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
+import { createSharedPreparation } from "./prepare.ts";
+import { SharedTextPreparationError } from "./executor-text-plan.ts";
+import { readSharedJoinedText, usesSharedJoinedText } from "./joined-text-routing.ts";
+import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
+import { sharedStructureReference } from "./structure-identity.ts";
+import { sharedJoinGlueReference } from "./join-glue-reference.ts";
+import { sharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
+import { FORMAT_MARKS } from "../../core/text/runs.ts";
+import type { FormatMark } from "../../core/text/runs.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
   "record-create", "record-delete", "record-field"]);
@@ -74,6 +83,43 @@ function undoUnits(units: readonly SharedHistoryUnit[]): SharedUndoUnit[] {
 function occurrencesOf(history: SharedTextHistory, operation: string): SharedUndoMarkOccurrence[] {
   return history.records.filter(item => item.record.type === "add" && namedBy(item.record.operation, "range-mark", operation))
     .map(item => ({ occurrence: item.identity, units: history.showing(item.identity).map(unit => unit.identity) }));
+}
+
+function formatOf(mark: SharedMarkValue): FormatMark | null { return FORMAT_MARKS.find(kind => kind === mark.kind) ?? null; }
+function spaceFormat(handle: SharedDocumentHandle, group: string, format: FormatMark): boolean {
+  return collabState(handle).roots.meta.get(sharedJoinFormatRegisterField(group, format)) === true;
+}
+
+// why: a joined row keeps each piece's marks in its own text, and each space's format beside its join.
+function joinedRow(handle: SharedDocumentHandle, recorded: SharedTextAddress, rooted = false):
+  { readonly target: SharedTextAddress; readonly pieces: SharedTextAddress[]; readonly groups: string[] } | null {
+  const prep = createSharedPreparation(handle);
+  try {
+    const owner = rooted ? prep.view.resolveOwner(sharedStructureReference(prep.view, recorded.owner), "audioText") : null;
+    const geometry = owner ? readSharedJoinedTextGeometry(prep.view, owner.owner) : null, root = geometry?.root as SharedContentRef | undefined;
+    // why: a row joined into an earlier row since the command is read, and its spaces written, through that row.
+    const target = root && root !== owner?.owner ? { ...recorded, owner: root, segment: root } : recorded;
+    if (!usesSharedJoinedText(prep.view, target)) return null;
+    const row = readSharedJoinedText(prep.view, target), pieces = new Map<string, SharedTextAddress>();
+    if (!row) return null;
+    for (const span of row.spans) if (!pieces.has(span.plan.path.join("\0"))) pieces.set(span.plan.path.join("\0"), { ...span.plan.target, owner: span.owner as SharedContentRef });
+    return { target, pieces: [...pieces.values()], groups: row.items.flatMap(item => item.group ? [item.group] : []) };
+  } catch (error) {
+    if (error instanceof SharedTextPreparationError) return null;
+    throw error;
+  } finally { prep.close(); }
+}
+
+// why: a space is changed back only while its join is still in the row and it holds what the command wrote.
+function spacesToReverse(handle: SharedDocumentHandle, part: { readonly target: SharedTextAddress; readonly mark: SharedMarkValue; readonly spaces?: readonly string[] },
+  written: boolean): { readonly target: SharedTextAddress; readonly spaces: string[] } {
+  const format = formatOf(part.mark), row = part.spaces?.length && format ? joinedRow(handle, part.target, true) : null;
+  return { target: row?.target ?? part.target,
+    spaces: row && format ? (part.spaces ?? []).filter(group => row.groups.includes(group) && spaceFormat(handle, group, format) === written) : [] };
+}
+
+function spaceMark(target: SharedTextAddress, spaces: readonly string[], mark: SharedMarkValue, author: { id: string; by: string }): Record<string, unknown> {
+  return { kind: "mark", ...author, target, observed: spaces.map(group => sharedJoinGlueReference(group)), mark };
 }
 
 
@@ -154,7 +200,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       const history = historyOf(handle, part.target);
       const removed = part.added.map(entry => ({ occurrence: entry.occurrence, units: history.showing(entry.occurrence).map(unit => unit.identity) })).filter(entry => entry.units.length);
       if (removed.length) operations.push(operationOf({ kind: "mark-retract", ...author(), target: history.target, occurrences: removed.map(entry => entry.occurrence) }));
-      return { inverse: () => ({ effective: removed.length > 0, part: { kind: "mark-remove", target: part.target, mark: part.mark, removed } }) };
+      const { target, spaces } = spacesToReverse(handle, part, true);
+      if (spaces.length) operations.push(operationOf(spaceMark(target, spaces, { ...added(part.mark), value: null }, author())));
+      return { inverse: () => ({ effective: removed.length + spaces.length > 0,
+        part: { kind: "mark-remove", target: part.target, mark: part.mark, removed, ...spaces.length ? { spaces } : {} } }) };
     }
     case "mark-remove": {
       const history = historyOf(handle, part.target), mark = added(part.mark), wanted: SharedHistoryUnit[] = [];
@@ -165,10 +214,12 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       }
       const command = wanted.length ? author() : null;
       if (command) operations.push(operationOf({ kind: "mark", ...command, target: history.target, observed: wanted.map(unit => unit.identity), mark }));
+      const { target, spaces } = spacesToReverse(handle, part, false);
+      if (spaces.length) operations.push(operationOf(spaceMark(target, spaces, mark, author())));
       return { inverse: after => {
         const now = command && after(part.target);
-        return { effective: wanted.length > 0, part: { kind: "mark-add", target: part.target, mark: part.mark,
-          added: now && command ? occurrencesOf(now, command.id) : [] } };
+        return { effective: wanted.length + spaces.length > 0, part: { kind: "mark-add", target: part.target, mark: part.mark,
+          added: now && command ? occurrencesOf(now, command.id) : [], ...spaces.length ? { spaces } : {} } };
       } };
     }
     case "scalar": {
@@ -260,9 +311,20 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   const records = new Map<string, SharedJsonFields | null>(), recorded = new Set<string>();
   const recordKey = (target: SharedRecordAddress): string => JSON.stringify([target.collection, target.record]);
   const inserts = new Set(operations.flatMap(operation => operation.kind === "text-insert" ? [textKey(operation.target)] : []));
+  const scopes = new Map<SharedOperation, { readonly pieces: readonly SharedTextAddress[]; readonly spaces: ReadonlyMap<string, boolean> }>();
+  for (const operation of operations) if (operation.kind === "mark") {
+    const row = joinedRow(handle, operation.target), format = formatOf(operation.mark);
+    scopes.set(operation, { pieces: row?.pieces ?? [operation.target], spaces: new Map(row && format ? row.groups.map(group => [group, spaceFormat(handle, group, format)]) : []) });
+  }
   for (const operation of operations) if (operation.kind === "text-delete" || operation.kind === "mark") inserts.delete(textKey(operation.target));
+  for (const scope of scopes.values()) for (const piece of scope.pieces) inserts.delete(textKey(piece));
   for (const operation of operations) {
-    if (operation.kind === "text-insert" || operation.kind === "text-delete" || operation.kind === "mark") {
+    if (operation.kind === "mark") {
+      for (const piece of scopes.get(operation)?.pieces ?? []) {
+        const key = textKey(piece);
+        if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, piece));
+      }
+    } else if (operation.kind === "text-insert" || operation.kind === "text-delete") {
       const key = textKey(operation.target), visible = inserts.has(key) && !typed.has(key) ? readSharedVisibleUnits(handle, operation.target) : null;
       if (visible) typed.set(key, visible);
       else if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, operation.target));
@@ -276,7 +338,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   }
   const result = executeSharedOperations(handle, operations, options);
   if (!result.ok) return { result, record: null };
-  const parts: SharedUndoPart[] = [], described = new Set<string>(), after = new Map<string, SharedTextHistory | null>();
+  const parts: SharedUndoPart[] = [], described = new Set<string>(), spaced = new Set<string>(), after = new Map<string, SharedTextHistory | null>();
   const now = (target: SharedTextAddress): SharedTextHistory | null => {
     if (!after.has(textKey(target))) after.set(textKey(target), readSharedTextHistory(handle, target));
     return after.get(textKey(target)) ?? null;
@@ -292,18 +354,29 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       const deleted = was ? undoUnits(was.units.filter(unit => !is.live(unit.unit))) : [];
       if (inserted.length || deleted.length) parts.push({ kind: "text", target: operation.target, inserted, deleted });
     } else if (operation.kind === "mark") {
-      const was = before.get(textKey(operation.target)), is = now(operation.target);
-      if (!was || !is) continue;
-      if (operation.mark.value !== null) {
-        const occurrences = occurrencesOf(is, operation.id);
-        if (occurrences.length) parts.push({ kind: "mark-add", target: operation.target, mark: operation.mark, added: occurrences });
-        continue;
+      const scope = scopes.get(operation);
+      for (const piece of scope?.pieces ?? []) {
+        const was = before.get(textKey(piece)), is = now(piece);
+        if (!was || !is) continue;
+        if (operation.mark.value !== null) {
+          const occurrences = occurrencesOf(is, operation.id);
+          if (occurrences.length) parts.push({ kind: "mark-add", target: piece, mark: operation.mark, added: occurrences });
+          continue;
+        }
+        const observed = [...new Set(is.records.filter(item => item.record.type === "remove" && namedBy(item.record.operation, "range-mark", operation.id))
+          .flatMap(item => item.record.type === "remove" ? item.record.observed : []))];
+        const removed = observed.map(occurrence => ({ occurrence, units: was.showing(occurrence).filter(unit => !is.showing(occurrence).some(other => other.identity === unit.identity))
+          .map(unit => unit.identity) })).filter(entry => entry.units.length);
+        if (removed.length) parts.push({ kind: "mark-remove", target: piece, mark: operation.mark, removed });
       }
-      const observed = [...new Set(is.records.filter(item => item.record.type === "remove" && namedBy(item.record.operation, "range-mark", operation.id))
-        .flatMap(item => item.record.type === "remove" ? item.record.observed : []))];
-      const removed = observed.map(occurrence => ({ occurrence, units: was.showing(occurrence).filter(unit => !is.showing(occurrence).some(other => other.identity === unit.identity))
-        .map(unit => unit.identity) })).filter(entry => entry.units.length);
-      if (removed.length) parts.push({ kind: "mark-remove", target: operation.target, mark: operation.mark, removed });
+      const format = formatOf(operation.mark), spaces = format ? [...scope?.spaces ?? []].filter(([group, prior]) => {
+        const field = sharedJoinFormatRegisterField(group, format), changed = !spaced.has(field) && prior !== spaceFormat(handle, group, format);
+        spaced.add(field);
+        return changed;
+      }).map(([group]) => group) : [];
+      // why: the spaces of a row are addressed through the row, so they get a part of their own with the command's target.
+      if (spaces.length) parts.push(operation.mark.value === null ? { kind: "mark-remove", target: operation.target, mark: operation.mark, removed: [], spaces }
+        : { kind: "mark-add", target: operation.target, mark: operation.mark, added: [], spaces });
     } else if (operation.kind === "scalar") {
       const prior = priors.get(operation), record = scalarTarget(handle, operation.target);
       const written: SharedFieldValue | null = !record ? null : record.has(operation.field)

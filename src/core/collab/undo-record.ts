@@ -32,12 +32,14 @@ export type SharedUndoPart =
     readonly target: SharedTextAddress;
     readonly mark: SharedMarkValue;
     readonly added: readonly SharedUndoMarkOccurrence[];
+    readonly spaces?: readonly string[];
   }
   | {
     readonly kind: "mark-remove";
     readonly target: SharedTextAddress;
     readonly mark: SharedMarkValue;
     readonly removed: readonly SharedUndoMarkOccurrence[];
+    readonly spaces?: readonly string[];
   }
   | {
     readonly kind: "scalar";
