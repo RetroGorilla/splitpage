@@ -243,7 +243,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.mutants == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -261,7 +261,7 @@ jobs:
         run: npm ci
 
       - name: Every collaboration mutant is caught
-        run: node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --fail-on-survivor
+        run: node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --baseline-timeout 1500 --fail-on-survivor
 
   gate:
     needs: [changes, checks, tests, desktop-smoke, mutants]

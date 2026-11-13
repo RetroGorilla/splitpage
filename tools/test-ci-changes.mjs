@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsCollabMutants, needsRootTests, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsCollabMutants, collabMutantTriggers, needsRootTests, changedFiles } from "./ci-changes.mjs";
+import { loadMutants, resolveTests, unitTestFiles } from "./mutants.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -81,11 +82,48 @@ for (const files of [null, [], [".github/workflows/ci.yml"]]) eq("unknown diffs 
 eq("app-only changes do not run prototype tests", needsCollabChecks(["src/bootstrap/main.ts"]), false);
 console.log("\nneedsCollabMutants():\n");
 
-for (const path of ["src/adapters/collab/undo-executor.ts", "src/core/collab/undo-record.ts", "src/application/editing/buffered-field.ts", "tests/collab/undo-mutants.json",
-  "tests/collab/undo/generator.test.ts", "tools/mutants.mjs", ".github/workflows/ci.yml"]) eq(`${path} runs the mutants`, needsCollabMutants(["README.md", path]), true);
-for (const files of [null, []]) eq("an unknown diff runs the mutants", needsCollabMutants(files), true);
-for (const path of ["src/bootstrap/main.ts", "src/application/session/shared-session.ts", "src/features/writer/flow-surface.ts", "tests/collab/mutants.md",
-  "prototypes/collab/src/probe.ts", ".github/workflows/nightly.yml"]) eq(`${path} alone does not run the mutants`, needsCollabMutants([path]), false);
+{
+  const triggers = collabMutantTriggers();
+  const units = unitTestFiles(listRepoFiles());
+  const skipped = [];
+  for (const name of readdirSync("tests/collab").filter((n) => n.endsWith("-mutants.json"))) {
+    for (const mutant of loadMutants(readFileSync(join("tests/collab", name), "utf8"))) {
+      if (!needsCollabMutants([mutant.file], triggers)) skipped.push(`${name}: ${mutant.file}`);
+      for (const test of resolveTests(units, mutant.tests).files) if (!needsCollabMutants([test], triggers)) skipped.push(`${name}: ${test}`);
+    }
+  }
+  eq("every file a collaboration mutant edits and every test file it names runs the mutants", [...new Set(skipped)], []);
+  for (const path of ["tools/mutants.mjs", "tools/run-tests.mjs", "tools/source-scan.mjs", "tools/main-module.mjs", ".github/workflows/ci.yml", "tests/collab/undo-mutants.json", "tests/collab/agreement.ts"]) {
+    eq(`${path} runs the mutants`, needsCollabMutants(["README.md", path], triggers), true);
+  }
+  for (const files of [null, []]) eq("an unknown diff runs the mutants", needsCollabMutants(files, triggers), true);
+  eq("unreadable manifests run the mutants", needsCollabMutants(["src/bootstrap/main.ts"], null), true);
+  for (const path of ["src/bootstrap/main.ts", "src/features/find/find.ts", "tests/collab/mutants.md", "prototypes/collab/src/probe.ts", ".github/workflows/nightly.yml"]) {
+    eq(`${path} alone does not run the mutants`, needsCollabMutants([path], triggers), false);
+  }
+}
+
+{
+  const fixture = mkdtempSync(join(tmpdir(), "splitpage-mutant-triggers-"));
+  try {
+    mkdirSync(join(fixture, "tests", "collab"), { recursive: true });
+    writeFileSync(join(fixture, "tests", "collab", "a-mutants.json"), JSON.stringify({ tests: ["./tests/shared.test.ts"], mutants: [
+      { label: "x", file: "src/elsewhere/x.ts", find: "a", replace: "b" },
+      { label: "y", file: "src/elsewhere/y.ts", find: "a", replace: "b", tests: ["tests\\features\\y.test.ts"] }
+    ] }));
+    const triggers = collabMutantTriggers(fixture);
+    eq("a mutant's file outside the collaboration folders runs the mutants", needsCollabMutants(["src/elsewhere/x.ts"], triggers), true);
+    eq("a file-wide test filter runs the mutants", needsCollabMutants(["tests/shared.test.ts"], triggers), true);
+    eq("a mutant's own filter runs the mutants, written with backslashes", needsCollabMutants(["tests/features/y.test.ts"], triggers), true);
+    eq("an unnamed source does not", needsCollabMutants(["src/elsewhere/z.ts"], triggers), false);
+    writeFileSync(join(fixture, "tests", "collab", "b-mutants.json"), JSON.stringify([{ label: "z", file: "src/z.ts", find: "a", replace: "b" }]));
+    eq("a mutant with no filter runs every unit test, so any change runs the mutants", needsCollabMutants(["src/elsewhere/z.ts"], collabMutantTriggers(fixture)), true);
+    writeFileSync(join(fixture, "tests", "collab", "b-mutants.json"), "{");
+    eq("a manifest that does not parse gives no triggers", collabMutantTriggers(fixture), null);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+}
 
 eq("a mixed change still runs every affected check", [needsChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsCollabChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsDesktopChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"])], [true, true, true]);
 

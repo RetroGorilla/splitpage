@@ -553,12 +553,6 @@ file the mutants name, or every unit test when any mutant has no filter.
 | `--shard K/N` | Every mutant; with it, only every Nth mutant of the combined list, starting with the Kth |
 | `--fail-on-survivor` | Survivors and inconclusive mutants exit 0; with it, either makes the exit code 1 |
 | `--keep` | Delete the scratch copies when done; this keeps them for inspection |
-| `--shard K/N` | Every mutant; with it, only every Nth mutant of the combined list, starting with the Kth |
-| `--fail-on-survivor` | A survivor exits 0; with it, a survivor makes the exit code 1 |
-
-Several files can be given at once. Their mutants are run as one list, each
-label prefixed with its file's name, and one baseline run covers the tests of
-the whole list (or of the shard).
 
 Several files can be given at once. Their mutants are run as one list, each
 label prefixed with its file's name, with one baseline run for the list (or
@@ -579,29 +573,26 @@ Every `tests/collab/*-mutants.json` file runs in PR CI, in the job
 "Collaboration mutants", as four shards in parallel:
 
 ```
-node tools/mutants.mjs tests/collab/*-mutants.json --shard K/4 --concurrency 4 --fail-on-survivor
+node tools/mutants.mjs tests/collab/*-mutants.json --shard K/4 --concurrency 4 --baseline-timeout 1500 --fail-on-survivor
 ```
 
-A survivor or a mutant that cannot be applied fails the shard, and the gate
-requires every shard. The job runs only when the change touches
-`src/adapters/collab/`, `src/core/collab/`, `src/application/editing/`,
-`tests/collab/` (other than Markdown), `tools/mutants.mjs` or `ci.yml`, or when
-the diff is unknown (`needsCollabMutants` in `tools/ci-changes.mjs`). A mutant
-that edits a file outside those folders is still run whenever the job runs, but
-a change to only that file does not start the job, and the nightly run does not
-cover it either.
+A survivor, an inconclusive mutant or a mutant that cannot be applied fails the
+shard, and the gate requires every shard. Each shard first runs its own
+baseline: every test file its mutants name, which with every fourth mutant is
+nearly all of them. The baseline has its own time budget (`--baseline-timeout`),
+and when it fails the shard's log lists the failing tests.
 
-Measured on 2026-11-13 on a Windows workstation with `--concurrency 4`, one
-file at a time, baseline included: all fifteen files,
-338 mutants, took 1489 s. The largest were `undo-mutants.json` (96 mutants,
-682 s; its twelve generator mutants take about two minutes each),
-`projection-mutants.json` (49, 184 s), `buffer-binding-mutants.json` (42, 121 s)
-and `structure-mutants.json` (25, 94 s); every other file took 11 to 81 s. Four
-shards come to about six to seven minutes of mutants each at that speed, and
-they run beside the unit test shards, so PR CI's wall time (12 to 15 minutes
-before the job) is meant to stay where it was. Shards take every fourth mutant, which spreads the slow
-generator mutants across all four. If a shard grows past the unit test shards,
-add shards before moving the job to the nightly run.
+The job runs when the change touches a file that a mutant edits, a test file
+that a mutant's `tests` filter selects, anything under `tests/collab/` other
+than Markdown, the runner (`tools/mutants.mjs` and the modules it imports) or
+`ci.yml`, or when the diff is unknown. `needsCollabMutants` in
+`tools/ci-changes.mjs` reads these from the mutants files themselves, so a new
+entry brings its paths with it; a mutant with no filter runs every unit test, so
+it makes every change start the job. `tools/test-ci-changes.mjs` fails if any
+path a mutants file names would not start the job. A test helper outside
+`tests/collab/` that a named test imports is not a trigger: the unit test shards
+still run it, and the next change that starts the job runs the mutants against
+it.
 
 When you add a mutants file under `tests/collab/`, CI picks it up by name; list
 its mutants in `tests/collab/mutants.md` as before. A survivor needs a test, or

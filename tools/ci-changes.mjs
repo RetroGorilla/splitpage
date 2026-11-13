@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendFileSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMain } from "./main-module.mjs";
 import { COLLAB_ORACLE_COPIES } from "./collab-oracle-copies.mjs";
@@ -37,11 +37,33 @@ export function needsCollabChecks(files) {
   return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml");
 }
 
-const MUTANT_SOURCES = [/^src\/adapters\/collab\//, /^src\/core\/collab\//, /^src\/application\/editing\//, /^tests\/collab\//, /^tools\/mutants\.mjs$/, /^\.github\/workflows\/ci\.yml$/];
+const MUTANT_RUNNER = new Set(["tools/mutants.mjs", "tools/run-tests.mjs", "tools/source-scan.mjs", "tools/main-module.mjs", ".github/workflows/ci.yml"]);
 
-export function needsCollabMutants(files) {
-  if (files === null || files.length === 0) return true;
-  return files.some((f) => !f.endsWith(".md") && MUTANT_SOURCES.some((re) => re.test(f)));
+export function collabMutantTriggers(repo = REPO) {
+  try {
+    const dir = join(repo, "tests", "collab");
+    const files = new Set(), filters = new Set();
+    let unfiltered = false;
+    for (const name of readdirSync(dir).filter((n) => n.endsWith("-mutants.json")).sort()) {
+      const data = JSON.parse(readFileSync(join(dir, name), "utf8"));
+      const shared = Array.isArray(data) ? [] : data.tests ?? [];
+      for (const mutant of Array.isArray(data) ? data : data.mutants) {
+        files.add(mutant.file);
+        const tests = mutant.tests ?? shared;
+        if (!tests.length) unfiltered = true;
+        for (const filter of tests) filters.add(filter.replace(/\\/g, "/").replace(/^\.\//, ""));
+      }
+    }
+    return { files, filters: [...filters], unfiltered };
+  } catch {
+    return null;
+  }
+}
+
+export function needsCollabMutants(files, triggers) {
+  if (files === null || files.length === 0 || triggers === null || triggers.unfiltered) return true;
+  return files.some((f) => MUTANT_RUNNER.has(f) || (f.startsWith("tests/collab/") && !f.endsWith(".md"))
+    || triggers.files.has(f) || triggers.filters.some((filter) => f.includes(filter)));
 }
 
 export function needsRootTests(files) {
@@ -77,7 +99,7 @@ if (isMain(import.meta.url)) {
   const desktop = needsDesktopChecks(files);
   const collab = needsCollabChecks(files);
   const rootTests = needsRootTests(files);
-  const mutants = needsCollabMutants(files);
+  const mutants = needsCollabMutants(files, collabMutantTriggers());
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);

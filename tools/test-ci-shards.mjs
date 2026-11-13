@@ -53,7 +53,7 @@ assert.equal(mutants["runs-on"], tests["runs-on"]);
 assert.deepEqual(mutants.strategy.matrix.shard, [1, 2, 3, 4]);
 assert.equal(mutants.strategy["fail-fast"], false);
 assert.equal(mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run,
-  'node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --fail-on-survivor');
+  'node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --baseline-timeout 1500 --fail-on-survivor');
 assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke", "mutants"]);
 assert.equal(gate.if, "always()");
 const step = gate.steps[0];
