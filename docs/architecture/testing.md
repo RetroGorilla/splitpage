@@ -562,6 +562,10 @@ through them `mergeStates`. `mergeStates`, `mergeStateFields`,
 `syncCommentAnchors`, `deriveProductionIndex`, `planRegistryHealing`,
 `planQuickAdd`, `brollEntries` and `planBrollAnchors` take only that type. The
 brand changes no bytes; `checkJs` is off, so it constrains `.ts` callers only.
+`planBrollAnchorsInState` and `planBrollRecordsInState` are the unguarded bodies
+of `planBrollAnchors` and `planBrollRecords`. They take the rows and shots alone,
+for `sharedBrollIntroducedByText`, which plans on a shared projection with one
+cell replaced, not on a migrated document.
 
 A type carries the brand when the brand's property or its `unique symbol` key
 is reachable from it, directly or through an alias, a union, an intersection,

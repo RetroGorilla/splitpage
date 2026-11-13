@@ -157,11 +157,36 @@ Declared consequences:
 
 Not built here:
 
-- people from `@Name`, shots from B-roll lines and owners from pairings. They are
-  read only from the visual column, which Writer typing does not edit.
+- people from `@Name` and owners from pairings. They are read only from the
+  visual column, which Writer typing does not edit. Shots from B-roll lines have a
+  builder (next section) with no caller yet.
 - renaming a sound cue's entry when its words change, which is undetermined.
 - the replica that runs these lists in the app. It must register the record
   handlers, or a commit that introduces a tag is refused as a whole.
+
+## Shots and keys from B-roll lines
+
+`sharedBrollIntroducedByText` in `core/collab/text-records.ts` takes one edit of a
+beat's visual cell: the cell before, the cell after, and the document's rows, shots
+and tags. It returns the cell with its B-roll keys and a `record-create` for each
+shot the edit introduced. Both come from the functions a normal script runs on
+commit, so they give the same ids and fields:
+
+- An unkeyed marker line gets a key from the body of `planBrollAnchors`
+  (`planBrollAnchorsInState`): the id of an unclaimed shot with the line's name
+  that no other line holds, or a new id.
+- A keyed line in the cell gets a shot from the body of `planBrollRecords`
+  (`planBrollRecordsInState`), with the id of its
+  key and fields seeded from the beat, if no shot has that id and the cell did not
+  hold that key before the edit. A key the cell already held is left to the copy
+  that brought it, as a tag the cell already showed is.
+
+It writes nothing and has no caller yet. Its callers come with package 14: they
+send the keyed cell as text operations and the records in the same list. A key
+repeated across copies is settled by the projection (assumed rules 14 and 15).
+Two copies that type the same new line at once mint two keys and two shots, as two
+copies typing the same new `@Name` give two people. `tests/collab/broll-text-records.test.ts`
+holds the cases.
 
 ## Stamps
 
