@@ -49,8 +49,11 @@ write keeps the stated end even for that boundary violation.
 
 ## Native binding
 
-`sharedWriterBufferPorts` explicitly builds the painted source and buffer ports;
-no running-app wiring calls it. The surface chooses shared handlers at creation;
+`sharedBufferPorts` explicitly builds the painted source and buffer ports;
+no running-app wiring calls it. The binding itself is `createBufferedField` in
+`src/application/editing/buffered-field.ts`; it reads the shown fields only
+through its surface port, and the Writer supplies its beats through
+`createWriterBuffer` in `src/features/writer/flow-buffer.ts`. The surface chooses shared handlers at creation;
 standalone listeners keep their existing handler functions. Native `beforeinput`
 records its target and closes the buffer reason before the DOM changes. `input`
 checks the unchanged prefix and suffix against that target and records the native

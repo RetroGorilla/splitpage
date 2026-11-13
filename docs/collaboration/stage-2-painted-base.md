@@ -7,9 +7,9 @@ An identity is a `SharedContentRef` that names the unit itself, so it resolves
 to the same character, or to the gap it left, after other people's edits.
 
 The port is `PaintedTextSource` in `src/application/editing/ports.ts`. The record
-lives in `src/features/writer/flow-painted-base.ts`. The adapter-side supplier is
+lives in `src/application/editing/painted-beats.ts`. The adapter-side supplier is
 `readSharedPaintedText` in `src/adapters/collab/paint-base.ts`. The explicit
-`sharedWriterBufferPorts` factory builds this port with the buffer port; no
+`sharedBufferPorts` factory builds this port with the buffer port; no
 running-app wiring calls it, so the running app creates no record and reads nothing.
 
 ## What the wiring must supply

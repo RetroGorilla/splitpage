@@ -3,17 +3,17 @@ import { readSharedPaintedText } from "../../../adapters/collab/paint-base.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
 import type { PaintedTextSource } from "../../../application/editing/ports.ts";
-import type { WriterBufferPorts } from "../../../features/writer/flow-buffer.ts";
+import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
 import type { ProductionReaders } from "../../../core/production/ports.ts";
 import type { StampPorts } from "../../../application/session/ports.ts";
 
-export function sharedWriterBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
-  effects: Pick<WriterBufferPorts, "missingBase" | "recovered" | "report"> & {
+export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
+  effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report"> & {
     readonly author: () => { readonly id: string; readonly by: string };
     readonly readers: ProductionReaders;
     readonly stamps: StampPorts;
   }
-): { readonly paintedText: PaintedTextSource; readonly bufferedText: WriterBufferPorts } {
+): { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts } {
   const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers,
     stamps: effects.stamps });
   return {
