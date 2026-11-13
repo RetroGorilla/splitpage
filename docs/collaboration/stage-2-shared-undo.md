@@ -69,10 +69,11 @@ makes the change and returns its record, or `null` when it changed nothing.
 A refusal leaves both stacks as they were. The reasons:
 
 - `undo-unsupported:<kind>`: the entry has a part the executor cannot reverse.
-  The executor is not called. Every structure command is refused this way until
-  its executor lands: `segment-create`, `split`, `split-before`, `join`,
+  The executor is not called. Every structure command but a join is refused
+  this way until its executor lands: `segment-create`, `split`, `split-before`,
   `join-glue`, `remove`, `restore`, `segment-move`, `heading-create`,
-  `heading-finalize`, `heading-remove`.
+  `heading-finalize`, `heading-remove`. A join is undone as described in
+  [Undo of a join](#undo-of-a-join).
 - `command-in-progress`: asked while a command is being recorded.
 - `undo-in-progress`: asked from inside an undo.
 - `held`: a hold is open.
@@ -316,6 +317,68 @@ How the points left open by the model are met:
    changed back. Links, tags and comments have no stored space; their undo
    takes them off every piece the same way (`join-marks.test.ts`).
 
+### Undo of a join
+
+A `join` command records a `join` part: the native id of the join entry, the
+source and target beats, the separator it wrote and its generation. Its group
+is `sharedJoinRetirementGroup` of those, so it is not stored twice. The part
+says whether it stands for the join (`retired: false`) or for its undo
+(`retired: true`). `SHARED_UNDO_PARTS` names it, so the owner no longer refuses
+it; any other structure part in the same record still refuses the whole entry
+by name.
+
+The part names the entry by the key this copy's join wrote
+(`sharedStructureIdentity` of the writer and the operation id), since an
+operation id is unique only per writer.
+
+The two beats count as joined when, in the row that holds the source beat, the
+source beat's part is attached through a live join of these two beats and a
+part of the target beat comes before it (`readSharedJoinPlace` in
+`undo-join.ts`). A join puts the source after the whole row, so on a row that
+was already joined the source follows the row's last beat, not the target.
+
+Undo runs `join-retire` on the entry (#1490). It writes only while all of these
+hold: the join is not yet retired, neither beat is removed, the two beats count
+as joined, and no live join of the same two beats with the same separator and a
+later generation exists. Otherwise it is used up and writes nothing. Redo is a
+fresh `join` of the same two beats with the separator the join showed when it
+was undone, and a `mark` over the new join's space for each format the space
+carried then. It is used up when either beat is removed or the two beats count
+as joined.
+
+Assumed rule 48 on #1414 settles the cases rule 34 leaves open. Each has a
+literal in `undo-join.test.ts` over in-order, reversed and duplicated delivery
+and a late joiner:
+
+- The same join made apart by another writer is retired with ours (rule 34).
+  Undoing a join made after seeing ours leaves ours in place.
+- While a later join of the same two beats by someone else is live, our undo is
+  used up and the row stays joined. The cost: if that person then undoes their
+  join, ours remains and the row stays joined.
+- A join onto a row that is already joined is undone and redone like any other.
+- Ours already retired with the same join made apart, and the beats joined
+  again since: the undo is used up.
+- Another writer changed the separator since: the undo separates; the redo
+  uses the separator the join showed.
+- Another writer formatted across the join since: the undo separates, each
+  piece keeps its own marks, and the space's format goes with the join; the
+  redo brings that format back on the new space.
+- Another writer typed in either piece since: the undo separates and the
+  typing stays where it is.
+- Either beat removed, or the first beat split so that the joined part follows
+  the new beat: the undo is used up.
+- Another writer joined the same two beats again after the undo, or either beat
+  was removed: the redo is used up.
+
+Declared limits:
+
+- Undoing a join made after seeing a matching one retires only that join. The
+  row looks the same and the undo counts as effective.
+- A redo when the source beat was joined into another beat meanwhile writes the
+  join, and the join interpreter decides which one shows.
+- The later-join guard compares joins with the same separator; a later join of
+  the same two beats with another separator does not stop the undo.
+
 ### The provenance marker
 
 Retractions and copies are rare; typing is not. A text's mark store therefore
@@ -435,7 +498,9 @@ second creation of a record that is there, a change to a record that is not,
 a status for a tag or shot that is not there, another person's comment text)
 is counted by its reason and changes nothing.
 
-Not covered yet: structure commands, which the owner refuses by name.
+Not covered yet: structure commands other than a join, which the owner refuses
+by name. A join is not drawn either: the model has no join, and adding a command
+changes the draw and so every pinned count.
 Formatting across a joined row is not drawn either: the generator's rows are
 never joined and the model has no join, so it is covered by the literal tests
 in `join-marks.test.ts`.

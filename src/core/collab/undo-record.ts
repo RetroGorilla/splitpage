@@ -2,6 +2,7 @@ import type {
   SharedContentRef, SharedFieldValue, SharedInlineValue, SharedJsonFields, SharedMarkValue, SharedOperation,
   SharedRecordAddress, SharedScalarAddress, SharedStatusEvent, SharedTextAddress
 } from "./operations.ts";
+import type { FormatMark } from "../text/runs.ts";
 
 export interface SharedUndoUnit {
   readonly identity: SharedContentRef;
@@ -65,6 +66,16 @@ export type SharedUndoPart =
     readonly field: string;
     readonly prior: SharedFieldValue;
     readonly written: SharedFieldValue;
+  }
+  | {
+    readonly kind: "join";
+    readonly join: SharedContentRef;
+    readonly from: SharedContentRef;
+    readonly into: SharedContentRef;
+    readonly glue: "" | " ";
+    readonly generation: number;
+    readonly retired: boolean;
+    readonly formats?: readonly FormatMark[];
   }
   | {
     readonly kind: "structure";
