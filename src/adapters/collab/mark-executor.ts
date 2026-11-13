@@ -28,7 +28,8 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
       writes.push(...planned.writes); steps.push(...planned.steps);
     }
     const format = FORMAT_MARKS.find(kind => kind === operation.mark.kind);
-    // why: a removal deletes only the value it saw, so a concurrent add wins on the space as it does on the pieces.
+    // why: a removal deletes only the value it saw, so a set made at the same time survives it;
+    // of two sets made at the same time, one value wins.
     const spaces: SharedPreparedWrite[] = format ? selected.groups.flatMap((group): SharedPreparedWrite[] => {
       const path = ["meta", sharedJoinFormatRegisterField(group, format)];
       return operation.mark.value === true ? [{ kind: "set", path, value: true }] : view.has(path) ? [{ kind: "delete", path }] : [];

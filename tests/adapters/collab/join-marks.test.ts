@@ -96,8 +96,8 @@ test("native anchors in both fragments mark the later fragment and the join poin
 
 const runtime = createFlowLoadRuntime(), box = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Box" contenteditable="false">';
 const pieces = { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }], productionTags: [{ id: "t_box", cat: "prop", name: "Box", status: "needed" }] };
-function joined(order: "D1" | "rev" | "dup") {
-  const set = replicas(2, pieces), handles = [set.a, set.b], incremental = handles.map(handle => captureIncrementalReplica(handle));
+function joined(order: "D1" | "rev" | "dup", copies: 2 | 3 = 2) {
+  const set = replicas(copies, pieces), handles = [set.a, set.b, set.c].slice(0, copies), incremental = handles.map(handle => captureIncrementalReplica(handle));
   handles.forEach(handle => { registerSharedJoinHandlers(handle); registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle); });
   assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "join", id: "join", by: "Writer", from: "R2", into: "R1", glue: " " })]), { ok: true });
   const flush = () => { set.queue.flush(order); handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); }); };
@@ -173,6 +173,17 @@ for (const order of ["D1", "rev", "dup"] as const) test(`an unjoin keeps each pi
     agree("joined again", order, run.handles, rows, [strong("ab") + " " + strong("cd")]);
   } finally { run.close(); }
 });
+
+for (const [seen, added, space] of [["B", strong("ab") + " " + strong("cd"), []], ["A", strong("ab cd"), ["b"]]] as const)
+  for (const order of ["D1", "rev", "dup"] as const) test(`declared limit: two bolds at once and a removal that saw only ${seen === "B" ? "the higher writer's leave the space plain" : "the lower writer's keep the row bold"}: ${order}`, () => {
+    const run = joined(order, 3);
+    try {
+      press(run.set.a, "bold-a", [0, 5], "b"); press(run.set.b, "bold-b", [0, 5], "b");
+      for (const message of run.set.queue.pending.filter(item => item.from === seen && item.to === "C")) run.set.queue.deliver(message.id, order === "dup" ? 2 : 1);
+      assert.deepEqual(press(run.set.c, "clear-c", [0, 5], "b"), [null]); run.flush();
+      agree("two bolds and a removal", order, run.handles, handle => ({ rows: rows(handle), space: stored(handle).space }), { rows: [added], space: [...space] });
+    } finally { run.close(); }
+  });
 
 test("undo of bold over a whole joined row retracts only the first piece's records and leaves the later piece and the space bold", () => {
   const run = joined("D1");
