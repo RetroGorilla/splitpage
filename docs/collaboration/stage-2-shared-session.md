@@ -134,6 +134,39 @@ A beat the shared session created and never stamped has no `updatedAt` or
 `updatedBy`; the row type makes both optional and every reader treats them as
 falsy. The tests' harness uses the same entry.
 
+## The session bridge
+
+`src/bootstrap/wiring/session-owner.ts` holds either owner (C3 of the
+[composition plan](stage-2-composition-plan.md); nothing in `main.ts` calls it
+yet). Every step below has a literal in
+`tests/application/session/session-bridge-shared.test.ts`.
+
+- **Entering.** `adoptShared(build, capability)` captures the shared
+  capabilities. It then calls `build` with them, an entry built on
+  `enterSharedDocument` and the old owner's counters as `after` (D3, D37).
+  - It refuses an owner that already holds a document, disposing it, so the
+    app's listeners hear the adopt change of hydration. The switch module (C4)
+    therefore hydrates after the replacement.
+  - It subscribes numbering and the app's listeners to the new owner, but not
+    the b-roll reconciler (D36). It disposes the standalone owner and announces
+    the replacement.
+  - Entering twice is refused.
+- **While shared.** `sharedSession()` answers `true`.
+  - The common members (`read`, `run`, `refresh`, `subscribe`, the
+    counters) go to the shared owner.
+  - `held`, `adopt`, the four `absorb` members, `settle` and
+    `noteEdit` throw "standalone only while the session is shared: <member>".
+    `replay`, `amend` and `stamp` return a rejected outcome with that
+    reason, and so does the undo route, before planning (D6).
+  - `heldDocument()` refuses the same way. `currentDocument()` returns a
+    view of the projection: the bridge keeps each document its entry made, so
+    readers get the session's own object (D7).
+- **Leaving.** `adoptReplacement(doc, capability)` takes the standalone
+  capabilities; without them it refuses while shared.
+  - The standalone owner starts from the shared owner's counters (D37), and
+    its adopt change resyncs the b-roll reconciler with the whole document
+    (D36).
+
 ## Commands
 
 `run(command)` plans against the held projection. A plan without `shared` is rejected
