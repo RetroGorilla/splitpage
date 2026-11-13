@@ -180,7 +180,11 @@ The operation id is the `author` port's id and the removal's is that id with
 `_remove`; `draft_<id>` and `draft_segment_<id>` are aliases that exist only inside
 the list. The author id must therefore be one the structure executor accepts as an
 operation id (letters, digits, `_` and `-`); another id refuses the write with
-`invalid-structure-operation-id` and keeps the edit. `audioText` is the whole
+`invalid-structure-operation-id` and keeps the edit. The composition's author port
+(`sharedAuthorPort` in `src/bootstrap/wiring/ports/shared-author.ts`) gives
+`w<client number>_<serial>`: the replica's sync-library client number, so two
+copies never give the same id, and `by` is the editor name. It answers null in a
+standalone session. `audioText` is the whole
 native field as stored HTML, with its formatting and inline markers; an emptied
 field writes an empty entry and observes nothing. The component is the creation's
 own visual id for this writer and operation, supplied as a checked observation.
