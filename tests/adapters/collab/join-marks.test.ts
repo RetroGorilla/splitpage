@@ -18,6 +18,7 @@ import { executeSharedCommand, reverseSharedUndoRecord } from "../../../src/adap
 import { beatPos, joinWithPrevious, setMarkAcross } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import type { MarkName } from "../../../src/core/text/runs.ts";
+import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 
 const target = { owner: "R1", segment: "R1", field: "audioText" };
@@ -185,7 +186,7 @@ for (const [seen, added, space] of [["B", strong("ab") + " " + strong("cd"), []]
     } finally { run.close(); }
   });
 
-test("undo of bold over a whole joined row retracts only the first piece's records and leaves the later piece and the space bold", () => {
+test("undo of bold over a whole joined row retracts every piece's records and clears the space", () => {
   const run = joined("D1");
   try {
     const execution = executeSharedCommand(run.set.a, appMark(run.set.a, "bold", [0, 5], "b").ops, { label: "bold", selection: null, typing: null },
@@ -193,6 +194,81 @@ test("undo of bold over a whole joined row retracts only the first piece's recor
     assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record);
     const undone = reverseSharedUndoRecord(run.set.a, execution.record, { by: "Writer", nextId: () => "undo" }); run.flush();
     assert.ok(undone.ok && undone.effective);
-    agree("undone", "D1", run.handles, handle => ({ rows: rows(handle), space: stored(handle).space }), { rows: ["ab" + strong(" cd")], space: ["b"] });
+    agree("undone", "D1", run.handles, handle => ({ rows: rows(handle), space: stored(handle).space }), { rows: ["ab cd"], space: [] });
+  } finally { run.close(); }
+});
+
+function recorded(handle: SharedDocumentHandle, id: string, range: readonly [number, number], name: MarkName) {
+  const execution = executeSharedCommand(handle, appMark(handle, id, range, name).ops, { label: name, selection: null, typing: null }, { base: readSharedRevision(handle) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); return execution.record;
+}
+function reverse(handle: SharedDocumentHandle, record: SharedUndoRecord, id: string) {
+  let count = 0;
+  const done = reverseSharedUndoRecord(handle, record, { by: "Writer", nextId: () => id + ++count }); assert.ok(done.ok); return done;
+}
+const readSpace = (handle: SharedDocumentHandle) => ({ rows: rows(handle), space: stored(handle).space });
+const plain = { rows: ["ab cd"], space: [] }, whole = { rows: [strong("ab cd")], space: ["b"] }, gap = { rows: ["ab" + strong(" ") + "cd"], space: ["b"] };
+
+for (const [name, setup, range, format, after, undone] of [
+  ["bold over the whole row", null, [0, 5], "b", whole, plain],
+  ["removal of bold over a row that was bold", [0, 5], [0, 5], "b", plain, whole],
+  ["bold over the space only", null, [2, 3], "b", gap, plain],
+  ["highlight over the whole row", null, [0, 5], "hl", { rows: ["<mark>ab cd</mark>"], space: ["hl"] }, plain],
+  ["bold over the whole row whose space was already bold", [2, 3], [0, 5], "b", whole, gap]
+] as const) for (const order of ["D1", "rev", "dup"] as const) test(`undo and redo of ${name} of a joined row take back and reapply the pieces and the space: ${order}`, () => {
+  const run = joined(order);
+  try {
+    if (setup) { press(run.set.a, "setup", setup, "b"); run.flush(); }
+    const record = recorded(run.set.a, "command", range, format); run.flush(); agree(name, order, run.handles, readSpace, after);
+    const undo = reverse(run.set.a, record, "undo"); run.flush(); assert.ok(undo.ok && undo.effective); agree(name + " undone", order, run.handles, readSpace, undone);
+    const redo = reverse(run.set.a, undo.inverse, "redo"); run.flush(); assert.ok(redo.ok && redo.effective); agree(name + " redone", order, run.handles, readSpace, after);
+    const again = reverse(run.set.a, redo.inverse, "again"); run.flush(); assert.ok(again.ok && again.effective); agree(name + " undone again", order, run.handles, readSpace, undone);
+  } finally { run.close(); }
+});
+
+for (const order of ["D1", "rev", "dup"] as const) test(`a space another writer cleared after the command stays plain through undo and redo; the pieces follow the undo: ${order}`, () => {
+  const run = joined(order);
+  try {
+    const record = recorded(run.set.a, "bold", [0, 5], "b"); run.flush();
+    press(run.set.b, "space", [2, 3], "b"); run.flush(); agree("space cleared", order, run.handles, readSpace, { rows: [strong("ab") + " " + strong("cd")], space: [] });
+    const undo = reverse(run.set.a, record, "undo"); run.flush(); assert.ok(undo.ok && undo.effective); agree("undone", order, run.handles, readSpace, plain);
+    const redo = reverse(run.set.a, undo.inverse, "redo"); run.flush(); assert.ok(redo.ok && redo.effective);
+    agree("redone", order, run.handles, readSpace, { rows: [strong("ab") + " " + strong("cd")], space: [] });
+  } finally { run.close(); }
+});
+
+test("not settled by the rules: a space another writer cleared and then bolded again holds what the command wrote, so the undo clears it", () => {
+  const run = joined("D1");
+  try {
+    const record = recorded(run.set.a, "bold", [0, 5], "b"); run.flush();
+    press(run.set.b, "clear", [0, 5], "b"); run.flush(); press(run.set.b, "space", [2, 3], "b"); run.flush(); agree("space bold again", "D1", run.handles, readSpace, gap);
+    const undo = reverse(run.set.a, record, "undo"); run.flush(); assert.ok(undo.ok && undo.effective); agree("undone", "D1", run.handles, readSpace, plain);
+  } finally { run.close(); }
+});
+
+for (const [name, value, after] of [
+  ["comment", comment, anchored("ab cd")], ["link", link, '<a href="https://v/1" target="_blank" rel="noopener">ab cd</a>'],
+  ["tag", { kind: "tag", id: "t_box", value: "t_box" }, box + "ab</span> " + box + "cd</span>"]
+] as const) for (const order of ["D1", "rev", "dup"] as const) test(`undo of a ${name} over the whole joined row takes it off both pieces: ${order}`, () => {
+  const run = joined(order);
+  try {
+    const execution = executeSharedCommand(run.set.a, [mark(name, [0, 5], value)], { label: name, selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+    assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); run.flush(); agree(name, order, run.handles, rows, [after]);
+    const undo = reverse(run.set.a, execution.record, "undo"); run.flush(); assert.ok(undo.ok && undo.effective); agree(name + " undone", order, run.handles, readSpace, plain);
+  } finally { run.close(); }
+});
+
+for (const order of ["D1", "rev", "dup"] as const) test(`an unjoin before the undo: the pieces' bold is taken back, the old space is not written and a new join is plain: ${order}`, () => {
+  const run = joined(order);
+  try {
+    const record = recorded(run.set.a, "bold", [0, 5], "b"); run.flush();
+    assert.deepEqual(record.parts.map(part => [part.kind, "spaces" in part ? part.spaces?.length : 0]), [["mark-add", 0], ["mark-add", 0], ["mark-add", 1]]);
+    assert.deepEqual(executeSharedOperations(run.set.b, [operation({ kind: "join-retire", id: "apart", by: "Other", joins: ["structure_1_006a006f0069006e_join_0"] })]), { ok: true });
+    run.flush(); agree("unjoined", order, run.handles, readSpace, { rows: [strong("ab"), strong("cd")], space: ["b"] });
+    const undo = reverse(run.set.a, record, "undo"); run.flush(); assert.ok(undo.ok && undo.effective);
+    assert.deepEqual(undo.inverse.parts.map(part => "spaces" in part), [false, false, false]);
+    agree("undone", order, run.handles, readSpace, { rows: ["ab", "cd"], space: ["b"] });
+    assert.deepEqual(executeSharedOperations(run.set.a, [operation({ kind: "join", id: "rejoin", by: "Writer", from: "R2", into: "R1", glue: " " })]), { ok: true });
+    run.flush(); agree("joined again", order, run.handles, readSpace, { rows: ["ab cd"], space: ["b"] });
   } finally { run.close(); }
 });
