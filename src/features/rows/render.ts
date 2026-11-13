@@ -719,6 +719,16 @@ export function onPainted(listener: (kind: PaintKind) => void): () => void {
   };
 }
 
+const paintChecks: (() => void)[] = [];
+
+export function onBeforePaint(check: () => void): () => void {
+  paintChecks.push(check);
+  return function () {
+    const at = paintChecks.indexOf(check);
+    if (at !== -1) paintChecks.splice(at, 1);
+  };
+}
+
 function announcePainted(kind: PaintKind): void {
   paintedListeners.slice().forEach(function (listener) { listener(kind); });
 }
@@ -931,6 +941,7 @@ function paintSessionChange(change: ScreenChange): void {
     }
     return;
   }
+  for (const check of paintChecks.slice()) check();
   if (change.kind === "replay") { ports.editing.undo().whileApplying(render); return; }
   if (paintsWhole(change)) { render(); return; }
   const rows = rowsTouched(c.cells, null);

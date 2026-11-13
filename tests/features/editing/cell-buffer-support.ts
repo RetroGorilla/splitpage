@@ -23,7 +23,7 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
   let serial = 0, ready = sourceReady;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => ({ id: "split:" + ++serial, by: "Alice" }) });
-  const guard = createPaintGuard(), shown = new Map<string, string>(), listeners = new Set<() => void>();
+  const guard = createPaintGuard(), shown = new Map<string, string>(), listeners = new Set<() => void>(), checks = new Set<() => void>();
   const root = document.body.appendChild(document.createElement("div"));
   const doc = () => a.session.read(view => view) as DocumentView | null;
   const cell = (rowId: string, field: Field = "audioText") => {
@@ -50,7 +50,7 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
     for (const listener of listeners) listener();
   }
   paint();
-  const stopPaint = a.session.subscribe(() => { if (!guard.shown()) paint(); });
+  const stopPaint = a.session.subscribe(() => { if (guard.shown()) return; for (const check of checks) check(); paint(); });
   const painted = createPaintedBeats({ documentRevision: shared.paintedText.documentRevision,
     read: (rowId, field) => ready ? shared.paintedText.read(rowId, field) : null });
   const buffer = mountCellBuffer({ root, ports: {
@@ -60,7 +60,8 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
     paintedFrom: (_cell, field, row) => shown.get(row.id + "/" + field) === (row[field as Field] ?? ""),
     notePainted: (_cell, field, row) => { shown.set(row.id + "/" + field, row[field as Field] ?? ""); },
     shown: edit => guard.whileShown(edit), repaintRows: paint,
-    onPainted: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }
+    onPainted: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    beforePaint: check => { checks.add(check); return () => { checks.delete(check); }; }
   } });
   function key(rowId: string, from: number, to: number, inputType: string, data: string | null,
     options: { readonly field?: Field; readonly during?: () => void; readonly shown?: (cell: HTMLElement) => void } = {}): boolean {

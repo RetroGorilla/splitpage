@@ -186,7 +186,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       const before = ownership(event);
       if (before.ok || event.type === "compositionend") dispatch();
       const after = ownership(event);
-      if ((before.adopted || after.adopted) && !surface.composition()) settle();
+      if ((before.adopted || after.adopted) && !surface.composition() && !target) settle();
     },
     beforeInput: (event, range, native) => {
       const type = event.inputType, intended = native ?? range;

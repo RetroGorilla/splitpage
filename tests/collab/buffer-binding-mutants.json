@@ -179,5 +179,47 @@
     "find": "ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });",
     "replace": "binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); });",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "the Split narration scan is skipped",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "    fields: () => root.querySelectorAll<HTMLElement>(NARRATION),",
+    "replace": "    fields: () => [],",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "Split paste, cut, drop and focus loss do not settle first",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "    if (event.type !== \"beforeinput\" && !binding.finish()) event.preventDefault();",
+    "replace": "",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "Split non-text input refused before settling",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "      if (binding.beforeInput(input, at(text, ports.page.selection(text)), target(input, text))) return;",
+    "replace": "      if (!/^(insert|delete)/.test(input.inputType)) { refuse(event, \"buffer-unsupported-input\"); return; }\n      if (binding.beforeInput(input, at(text, ports.page.selection(text)), target(input, text))) return;",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "Split focus loss settles during a composition",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "    if (event.type === \"focusout\") { if (!composing) binding.finish(); return; }",
+    "replace": "    if (event.type === \"focusout\") { binding.finish(); return; }",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "Split paint runs without checking the cells",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "stopCheck = ports.beforePaint(() => { binding.canPaint(); });",
+    "replace": "stopCheck = () => {};",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "Split visual cells left out of the scan",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "    normalize,\n",
+    "replace": "    normalize: () => {},\n",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+  }, {
+    "label": "adoption settles over a pending native target",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target) settle();",
+    "replace": "if ((before.adopted || after.adopted) && !surface.composition()) settle();",
+    "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }]
 }

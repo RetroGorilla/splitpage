@@ -25,4 +25,5 @@ export interface CellBufferPorts {
   readonly shown: PaintGuard["whileShown"];
   readonly repaintRows: () => void;
   readonly onPainted: (listener: () => void) => () => void;
+  readonly beforePaint: (check: () => void) => () => void;
 }

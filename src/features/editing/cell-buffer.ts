@@ -20,7 +20,7 @@ export interface CellBuffer {
 
 export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly ports: CellBufferPorts }): CellBuffer {
   const { root, ports } = mount;
-  let composing = false;
+  let composing = false, visualComposing: Element | null = null;
   const narration = (rowId: string) => root.querySelector<HTMLElement>(NARRATION + '[data-id="' + cssAttr(rowId) + '"]');
   const shownRow = (rowId: string) => ports.document()?.rows.find(row => row.id === rowId);
   const runs = (cell: Element) => ports.decode(ports.page.html(cell));
@@ -59,6 +59,14 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     ports.painted.record(painted, row => projection(ports.decode(stored(row))));
   }
 
+  function normalize(): void {
+    for (const cell of root.querySelectorAll(VISUAL)) {
+      const row = shownRow(cell.getAttribute("data-id") ?? "");
+      if (cell === visualComposing || !row || projection(runs(cell)) === projection(ports.decode(row.visualText ?? ""))) continue;
+      resetVisual(cell); ports.report({ kind: "rejected", reason: "buffer-visual-column" });
+    }
+  }
+
   const binding = ports.field({
     foldSpaceForm: true,
     fields: () => root.querySelectorAll<HTMLElement>(NARRATION),
@@ -66,7 +74,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     rowId: cell => cell.getAttribute("data-id") ?? "",
     base: rowId => ports.painted.base(rowId),
     painted: rowId => ports.painted.text(rowId),
-    normalize: () => {},
+    normalize,
     reset, runs, repaint,
     selection: () => {
       const active = root.ownerDocument.activeElement;
@@ -100,12 +108,17 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   }
 
   function step(event: Event, cell: Element | null): void {
-    const visual = cell?.matches(VISUAL) === true, text = cell?.matches(NARRATION) === true ? cell : null;
+    const visual = cell?.matches(VISUAL) === true ? cell : null, text = cell?.matches(NARRATION) === true ? cell : null;
     if (event.type === "keydown") { binding.keydown(event as KeyboardEvent); return; }
     if (event.type === "focusout") { if (!composing) binding.finish(); return; }
-    if (event.type === "compositionend") { binding.end(event as CompositionEvent); if (visual && cell) resetVisual(cell); return; }
-    if (visual && event.type !== "input") { refuse(event, "buffer-visual-column"); return; }
-    if (event.type === "input") { if (text) binding.input(); else if (visual && cell && !composing) resetVisual(cell); return; }
+    if (event.type === "compositionend") { binding.end(event as CompositionEvent); if (visual) { visualComposing = null; resetVisual(visual); } return; }
+    if (visual) {
+      if (event.type === "input") return;
+      if (visualComposing === visual) event.preventDefault(); else refuse(event, "buffer-visual-column");
+      if (event.type === "compositionstart") visualComposing = visual;
+      return;
+    }
+    if (event.type === "input") { if (text) binding.input(); return; }
     if (event.type === "compositionstart") { if (text) binding.start(event, at(text, ports.page.selection(text))); return; }
     if (event.type === "beforeinput" && text) {
       const input = event as InputEvent;
@@ -123,13 +136,13 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   }
 
   for (const type of TYPES) root.addEventListener(type, listener, true);
-  const stopPainted = ports.onPainted(record);
+  const stopPainted = ports.onPainted(record), stopCheck = ports.beforePaint(() => { binding.canPaint(); });
   record();
   return {
     binding,
     dispose: () => {
       if (!ports.shown(() => binding.dispose())) return false;
-      stopPainted();
+      stopPainted(); stopCheck();
       for (const type of TYPES) root.removeEventListener(type, listener, true);
       ports.painted.clear();
       return true;

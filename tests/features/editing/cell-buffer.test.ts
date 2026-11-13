@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { bufferedSplit } from "./cell-buffer-support.ts";
 import { bufferOracles } from "../../collab/oracles/buffer-oracles.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
+import { setCellSelection } from "../../../src/features/common/cell-selection.ts";
 
 const NBSP = " ";
 
@@ -91,5 +92,94 @@ test("a received update is held while a cell is composing and applied when the c
     assert.deepEqual([page.text(), [...collabState(page.h.a).ingress.holds]], ["abc", ["buffer"]]);
     cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "x" }));
     assert.deepEqual([page.text(), page.cell("R1").textContent, page.caret(), page.reports], ["Qabcx", "Qabcx", { from: 5, to: 5 }, []]);
+  } finally { page.close(); }
+});
+
+function composing(page: ReturnType<typeof bufferedSplit>, rowId: string, at: number, data: string): HTMLElement {
+  const cell = page.cell(rowId); cell.focus(); setCellSelection(cell, at);
+  cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+  assert.equal(page.key(rowId, at, at, "insertCompositionText", data), true);
+  return cell;
+}
+
+test("a cell changed outside the binding is checked before a received update paints it: the change is reported and the cell shows the document", () => {
+  const page = bufferedSplit([{ id: "R1", text: "abc" }]);
+  try {
+    page.cell("R1").append("X");
+    page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 0, "after"), "Q")], ["b1"]);
+    page.h.queue.deliverFrom("B", "D1");
+    assert.deepEqual([page.reports, page.text(), page.cell("R1").textContent], [[{ kind: "rejected", reason: "buffer-unavailable" }], "Qabc", "Qabc"]);
+  } finally { page.close(); }
+});
+
+test("rule 55, R2: a visual cell changed with no input event is put back at the next native event in a narration cell, and that key works", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }]);
+  try {
+    const visual = page.cell("R1", "visualText"), before = visual.innerHTML;
+    visual.append("typed");
+    assert.equal(page.key("R1", 2, 2, "insertText", "Z"), true);
+    assert.deepEqual([visual.innerHTML, page.text(), page.reports], [before, "abZ", [{ kind: "rejected", reason: "buffer-visual-column" }]]);
+  } finally { page.close(); }
+});
+
+test("rule 55, R2: a composition in a visual cell is refused once and its text is put back when it ends", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }]);
+  try {
+    const visual = page.cell("R1", "visualText"), before = visual.innerHTML;
+    visual.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    assert.equal(page.key("R1", 0, 0, "insertCompositionText", "x", { field: "visualText" }), false);
+    assert.equal(page.key("R1", 0, 0, "insertCompositionText", "y", { field: "visualText" }), false);
+    visual.append("xy");
+    visual.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "xy" }));
+    assert.deepEqual([visual.innerHTML, page.reports, page.a.executed.length], [before, [{ kind: "rejected", reason: "buffer-visual-column" }], 0]);
+  } finally { page.close(); }
+});
+
+test("a second narration cell changed outside the binding is adopted into its own beat at the next native event", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }, { id: "R2", text: "next" }]);
+  try {
+    page.cell("R2").append("Z");
+    assert.equal(page.key("R1", 2, 2, "insertText", "Y"), true);
+    assert.deepEqual([page.text("R2"), page.text("R1"), page.reports], ["nextZ", "abY", []]);
+  } finally { page.close(); }
+});
+
+test("a second narration cell changed outside the binding is put back while another cell's edit is open", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }, { id: "R2", text: "next" }]);
+  try {
+    const cell = composing(page, "R1", 2, "x");
+    page.cell("R2").append("Z");
+    cell.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "y", keyCode: 229, isComposing: true }));
+    assert.deepEqual([page.cell("R2").textContent, page.text("R2"), page.reports], ["next", "next", [{ kind: "rejected", reason: "buffer-pending" }]]);
+    cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "x" }));
+    assert.deepEqual([page.text("R1"), page.text("R2")], ["abx", "next"]);
+  } finally { page.close(); }
+});
+
+test("with a composition pending, Ctrl+B, Enter, paste, cut and drop each keep the composed text, report the refusal and write nothing", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }]);
+  try {
+    const cell = composing(page, "R1", 2, "x");
+    const events = [
+      new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "formatBold" }),
+      new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertParagraph" }),
+      ...["paste", "cut", "drop"].map(type => new window.Event(type, { bubbles: true, cancelable: true }))
+    ];
+    assert.deepEqual(events.map(event => cell.dispatchEvent(event)), [false, false, false, false, false]);
+    assert.deepEqual(page.reports, Array.from({ length: 5 }, () => ({ kind: "rejected", reason: "buffer-composition" })));
+    assert.deepEqual([cell.textContent, page.text(), page.a.executed.length], ["abx", "ab", 0]);
+    cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "x" }));
+    assert.deepEqual([page.text(), page.a.executed.length], ["abx", 1]);
+  } finally { page.close(); }
+});
+
+test("focus leaving a cell during a composition keeps the composition: nothing is settled, written or reported", () => {
+  const page = bufferedSplit([{ id: "R1", text: "ab" }]);
+  try {
+    const cell = composing(page, "R1", 2, "x");
+    cell.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+    assert.deepEqual([page.reports, page.a.executed.length, [...collabState(page.h.a).ingress.holds], cell.textContent], [[], 0, ["buffer"], "abx"]);
+    cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "x" }));
+    assert.deepEqual([page.text(), page.reports], ["abx", []]);
   } finally { page.close(); }
 });
