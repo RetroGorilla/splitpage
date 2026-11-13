@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import type { SharedContentRef, SharedOperation, SharedRestore, SharedSoftRemove, SharedTextAddress } from "../../core/collab/operations.ts";
+import type { SharedContentRef, SharedHeadingRemove, SharedOperation, SharedRestore, SharedSoftRemove, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedUndoPart } from "../../core/collab/undo-record.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
@@ -9,7 +9,8 @@ import { bindSharedStructurePlan, readSharedStructureRemoval } from "./structure
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { readSharedRemovalCommand } from "./removal-record.ts";
 import type { SharedStoredRemovalCommand } from "./removal-record.ts";
-import { readSharedRemovalState } from "./removal-state.ts";
+import { readSharedHeadingRemovalState, readSharedRemovalState, sharedHeadingRemovalField } from "./removal-state.ts";
+import { sharedFollowingBeat } from "./removal-executor.ts";
 import { readSharedTextHistory } from "./text-history.ts";
 import { captureSharedTextRange } from "./executor-references.ts";
 import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
@@ -28,11 +29,18 @@ function storedRemoval(handle: SharedDocumentHandle, key: string): SharedStoredR
   return readSharedRemovalCommand(key, collabState(handle).roots.removalRecords.get(key));
 }
 
-export function readSharedLiveBeats(handle: SharedDocumentHandle): ReadonlySet<string> {
-  const prep = createSharedPreparation(handle);
+export interface SharedLiveStructure { readonly beats: ReadonlySet<string>; readonly headings: ReadonlySet<string> }
+
+function headingRemoved(record: unknown): boolean {
+  return record instanceof Y.Map && readSharedHeadingRemovalState(record.keys(), key => record.get(key)).removed;
+}
+
+export function readSharedLiveStructure(handle: SharedDocumentHandle): SharedLiveStructure {
+  const prep = createSharedPreparation(handle), roots = collabState(handle).roots;
   try {
     bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
-    return new Set([...collabState(handle).roots.beats.keys()].filter(beat => !readSharedStructureRemoval(prep.view, beat)));
+    return { beats: new Set([...roots.beats.keys()].filter(beat => !readSharedStructureRemoval(prep.view, beat))),
+      headings: new Set([...roots.headings.entries()].filter(([, record]) => !headingRemoved(record)).map(([key]) => key)) };
   } finally { prep.close(); }
 }
 
@@ -72,30 +80,62 @@ export function readSharedBeatContent(handle: SharedDocumentHandle, beats: reado
 }
 
 function textLength(handle: SharedDocumentHandle, target: SharedTextAddress): number {
-  return readSharedPaintedText(handle, target)?.text.length ?? 0;
+  return target.field === "heading" ? readSharedTextHistory(handle, target)?.units.length ?? 0 : readSharedPaintedText(handle, target)?.text.length ?? 0;
 }
 
-export function recordSharedRemoval(handle: SharedDocumentHandle, operation: SharedSoftRemove | SharedRestore, before: ReadonlySet<string>): SharedRemovalUndoPart | null {
-  const role = operation.kind === "remove" ? "removal" : "restore", key = sharedOwnStructureKey(handle, operation.id, role), record = storedRemoval(handle, key);
+function headingPlace(handle: SharedDocumentHandle, heading: string): { readonly segment: string; readonly first: string | null } | null {
+  const prep = createSharedPreparation(handle);
+  try {
+    const owner = prep.view.resolveOwner(heading, "heading");
+    return owner ? { segment: owner.segment, first: sharedFollowingBeat(prep.view, owner) } : null;
+  } finally { prep.close(); }
+}
+
+// why: a heading is removed again only if nothing stored for it or for its scene's first beat changed since the restore.
+function readSharedHeadingContent(handle: SharedDocumentHandle, headings: readonly string[]): unknown[] {
+  return headings.map(heading => {
+    const stored = collabState(handle).roots.headings.get(heading), place = headingPlace(handle, heading);
+    const history = place ? readSharedTextHistory(handle, { owner: heading as SharedContentRef, segment: place.segment as SharedContentRef, field: "heading" }) : null;
+    return [heading, stored instanceof Y.Map ? stored.toJSON() : null, history?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null,
+      place?.first ?? null, place?.first ? readSharedBeatContent(handle, [place.first]) : null];
+  });
+}
+
+function restoredContent(handle: SharedDocumentHandle, beats: readonly string[], headings: readonly string[]): string {
+  return headings.length ? JSON.stringify([readSharedBeatContent(handle, beats), readSharedHeadingContent(handle, headings)]) : readSharedBeatContent(handle, beats);
+}
+
+export function recordSharedRemoval(handle: SharedDocumentHandle, operation: SharedSoftRemove | SharedRestore | SharedHeadingRemove, before: SharedLiveStructure): SharedRemovalUndoPart | null {
+  const role = operation.kind === "restore" ? "restore" : "removal", key = sharedOwnStructureKey(handle, operation.id, role), record = storedRemoval(handle, key);
   return record ? describeSharedRemoval(handle, key, record, before) : null;
 }
 
-function describeSharedRemoval(handle: SharedDocumentHandle, key: SharedContentRef, record: SharedStoredRemovalCommand, before: ReadonlySet<string>): SharedRemovalUndoPart | null {
-  const after = readSharedLiveBeats(handle);
+function describeSharedRemoval(handle: SharedDocumentHandle, key: SharedContentRef, record: SharedStoredRemovalCommand, before: SharedLiveStructure): SharedRemovalUndoPart | null {
+  const after = readSharedLiveStructure(handle);
+  const gone = (from: ReadonlySet<string>, to: ReadonlySet<string>) => [...from].filter(item => !to.has(item)).sort() as SharedContentRef[];
   if (record.kind === "remove") {
-    return record.removalKind === "beat" ? { kind: "remove", removal: key, beats: [...before].filter(beat => !after.has(beat)).sort() as SharedContentRef[] } : null;
+    if (record.removalKind === "beat") return { kind: "remove", removal: key, beats: gone(before.beats, after.beats) };
+    const headings = gone(before.headings, after.headings);
+    return record.removalKind === "header" && headings.length === 1 ? { kind: "remove", removal: key, beats: [], headings } : null;
   }
   const removals = record.removals.map(removal => storedRemoval(handle, removal));
-  const first = removals[0];
-  if (!first || removals.some(removal => removal?.kind !== "remove" || removal.removalKind !== "beat") || first.kind !== "remove") return null;
-  const beats = [...after].filter(beat => !before.has(beat)).sort() as SharedContentRef[];
-  return { kind: "restore", restore: key, beats, at: first.at, content: readSharedBeatContent(handle, beats) };
+  const first = removals[0], kind = first?.kind === "remove" ? first.removalKind : null;
+  if (!first || first.kind !== "remove" || kind !== "beat" && kind !== "header" || removals.some(removal => removal?.kind !== "remove" || removal.removalKind !== kind)) return null;
+  const beats = gone(after.beats, before.beats), headings = gone(after.headings, before.headings);
+  if (kind === "beat") return { kind: "restore", restore: key, beats, at: first.at, content: restoredContent(handle, beats, []) };
+  return headings.length === 1 && !beats.length ? { kind: "restore", restore: key, beats: [], headings, at: first.at, content: restoredContent(handle, [], headings) } : null;
 }
 
 // why: a removal is undone only while it is the one the beat shows; a restore or a later removal by anyone uses it up.
 function activeRemoval(handle: SharedDocumentHandle, key: string): boolean {
   const record = storedRemoval(handle, key);
   return record?.kind === "remove" && record.targets.some(target => {
+    if (record.removalKind === "header") {
+      const heading = collabState(handle).roots.headings.get(target.beat);
+      if (!(heading instanceof Y.Map) || !heading.has(sharedHeadingRemovalField(key))) return false;
+      const state = readSharedHeadingRemovalState(heading.keys(), field => heading.get(field));
+      return state.removed && state.generation === target.generation;
+    }
     const beat = collabState(handle).roots.beats.get(target.beat), flags = beat instanceof Y.Map ? beat.get("removals") : null;
     if (!(flags instanceof Y.Map) || !flags.has(key)) return false;
     const state = readSharedRemovalState([...flags.entries()]);
@@ -107,7 +147,7 @@ export interface SharedRemovalUndoPlan { readonly effective: boolean; readonly i
 
 export function planSharedRemovalUndo(handle: SharedDocumentHandle, part: SharedRemovalUndoPart, author: () => { id: string; by: string },
   push: (raw: Record<string, unknown>) => SharedOperation): SharedRemovalUndoPlan {
-  const before = readSharedLiveBeats(handle);
+  const before = readSharedLiveStructure(handle);
   if (part.kind === "remove") {
     if (!activeRemoval(handle, part.removal)) return { effective: false, inverse: () => part };
     const command = author();
@@ -117,14 +157,18 @@ export function planSharedRemovalUndo(handle: SharedDocumentHandle, part: Shared
       return (record && describeSharedRemoval(handle, key, record, before)) ?? part;
     } };
   }
-  const unchanged = part.beats.length > 0 && part.beats.every(beat => before.has(beat)) && readSharedBeatContent(handle, part.beats) === part.content;
+  const headings = part.headings ?? [], unchanged = part.beats.length + headings.length > 0 && part.beats.every(beat => before.beats.has(beat))
+    && headings.every(heading => before.headings.has(heading)) && restoredContent(handle, part.beats, headings) === part.content;
   if (!unchanged) return { effective: false, inverse: () => part };
-  const command = author(), observed = part.beats.flatMap(beat => {
-    const segment = segmentOf(handle, beat), target = segment ? { owner: beat as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" } as const : null;
+  const spans = (owner: string, segment: string | null | undefined, field: "audioText" | "heading") => {
+    const target = segment ? { owner: owner as SharedContentRef, segment: segment as SharedContentRef, field } as const : null;
     const span = target && captureSharedTextRange(handle, target, 0, textLength(handle, target));
     return span ? [span] : [];
-  });
-  push({ kind: "remove", ...command, removalKind: "beat", targets: part.beats, observed, boundaries: part.beats, components: [], gallery: [], at: part.at });
+  };
+  const command = author(), heading = headings[0];
+  if (heading) push({ kind: "heading-remove", ...command, heading, observed: spans(heading, headingPlace(handle, heading)?.segment, "heading"), newBeat: null, nextBeat: null });
+  else push({ kind: "remove", ...command, removalKind: "beat", targets: part.beats, observed: part.beats.flatMap(beat => spans(beat, segmentOf(handle, beat), "audioText")),
+    boundaries: part.beats, components: [], gallery: [], at: part.at });
   return { effective: true, inverse: () => {
     const key = sharedOwnStructureKey(handle, command.id, "removal"), record = storedRemoval(handle, key);
     return (record && describeSharedRemoval(handle, key, record, before)) ?? part;

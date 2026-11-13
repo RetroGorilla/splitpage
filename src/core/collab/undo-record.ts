@@ -81,11 +81,13 @@ export type SharedUndoPart =
     readonly kind: "remove";
     readonly removal: SharedContentRef;
     readonly beats: readonly SharedContentRef[];
+    readonly headings?: readonly SharedContentRef[];
   }
   | {
     readonly kind: "restore";
     readonly restore: SharedContentRef;
     readonly beats: readonly SharedContentRef[];
+    readonly headings?: readonly SharedContentRef[];
     readonly at: number;
     readonly content: string;
   }
