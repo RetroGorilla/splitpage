@@ -79,6 +79,13 @@ export function readSharedBeatContent(handle: SharedDocumentHandle, beats: reado
   }));
 }
 
+// why: a split is taken back only while nothing stored for the new beat changed; its characters join the source beat.
+export function readSharedBeatShape(handle: SharedDocumentHandle, beat: string): string {
+  const stored = collabState(handle).roots.beats.get(beat), status = { scope: "beat", record: beat as SharedContentRef } as const;
+  return JSON.stringify([stored instanceof Y.Map ? stored.toJSON() : null, readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat),
+    rowPieces(handle, beat).map(({ owner, segment, group }) => [owner, segment, group])]);
+}
+
 function textLength(handle: SharedDocumentHandle, target: SharedTextAddress): number {
   return target.field === "heading" ? readSharedTextHistory(handle, target)?.units.length ?? 0 : readSharedPaintedText(handle, target)?.text.length ?? 0;
 }

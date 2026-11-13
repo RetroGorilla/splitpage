@@ -33,10 +33,11 @@ import { sharedJoinRetirementGroup } from "./join-record.ts";
 import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, planSharedJoinGlueUndo, readSharedJoinBeforeRetire, readSharedJoinNeighbours, readSharedJoinOf,
   readSharedJoinPlace, readSharedJoinSeparator, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
+import { planSharedSplitUndo, recordSharedSplit } from "./undo-split.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -263,6 +264,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
     }
     case "join": return planJoin(handle, part, author, operations);
+    case "beat-split": {
+      const plan = planSharedSplitUndo(handle, part, author, raw => { operations.push(operationOf(raw)); });
+      return { inverse: () => ({ effective: plan.effective, part: plan.inverse() }) };
+    }
     case "join-glue": {
       const effective = planSharedJoinGlueUndo(handle, part, glue => { operations.push(operationOf({ kind: "join-glue", ...author(), joins: [part.join], glue })); });
       return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
@@ -452,6 +457,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       }
     } else if ((operation.kind === "remove" || operation.kind === "restore" || operation.kind === "heading-remove" && operation.newBeat === null) && live) {
       parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
+    } else if (operation.kind === "split" || operation.kind === "split-before") {
+      parts.push(recordSharedSplit(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join-retire") {
       for (const part of unjoins.get(operation) ?? []) if (part && isSharedJoinRetired(handle, part.join, sharedJoinRetirementGroup(part.from, part))) parts.push(part);
     } else if (operation.kind === "join-glue") {
@@ -466,7 +473,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push(recordSharedJoin(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "discard") {
       parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
-    } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire") {
+    } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
+      && operation.kind !== "split-retire" && operation.kind !== "split-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }
