@@ -150,7 +150,9 @@ export function toggleResolveCommand(commentId: string, stamps: StampPorts, shar
           if (c.resolved) { c.resolvedBy = stamps.editor.name(); c.resolvedAt = c.updatedAt; }
           else { c.resolvedBy = null; c.resolvedAt = null; }
         },
-        ...by ? { shared: { operations: [commentSet(by, commentId, "resolution-stamp", { at, by: name, resolution }), commentSet(by, commentId, "updatedAt", at)] } } : {}
+        // why: assumed rule 35 on #1414: the list holds only stamps, which undo leaves, so it records no undo entry.
+        ...by ? { shared: { operations: [commentSet(by, commentId, "resolution-stamp", { at, by: name, resolution }), commentSet(by, commentId, "updatedAt", at)],
+          undo: false as const } } : {}
       };
     }
   };

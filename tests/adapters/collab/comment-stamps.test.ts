@@ -98,6 +98,23 @@ test("concurrent assignee changes: updatedAt follows the stored field, as today,
   }
 });
 
+test("a plain resolution set beside a resolve step shows instead of it, whatever its time, until the next resolve or reopen step", () => {
+  for (const order of ORDERS) {
+    const run = recordReplicas(2, SOURCE), a = copy(run.a, "Alice", 5);
+    try {
+      assert.equal(a.toggle(), "applied");
+      assert.deepEqual(executeSharedOperations(run.b, [operation({ kind: "record-set", id: "plain", by: "Bob", target: { collection: "comments", record: "C1" },
+        field: "resolution", value: { resolved: true, resolvedAt: at(1), resolvedBy: "Bob" } })]), { ok: true });
+      run.queue.flush(order);
+      agree("plain beside a stamp", order, [run.a, run.b], handle => ({ shown: resolution(handle), stored: stored(handle) }),
+        { shown: { resolved: true, resolvedAt: at(1), resolvedBy: "Bob" }, stored: ["resolution", "resolution:1"] });
+      assert.equal(a.toggle(), "applied");
+      run.queue.flush(order);
+      agree("next step", order, [run.a, run.b], handle => ({ shown: resolution(handle), stored: stored(handle) }), { shown: OPEN, stored: ["resolution:1"] });
+    } finally { a.dispose(); run.close(); }
+  }
+});
+
 test("a stored resolution that a resolve step could not write never hides a valid one, and a step carrying one is refused", () => {
   const run = recordReplicas(2, SOURCE), a = copy(run.a, "Alice", 5), loaded = createMonitoredSharedDocument();
   try {
@@ -139,7 +156,9 @@ test("undo of a comment edit puts the edit back and leaves updatedAt and the res
     };
     const author = { author: () => ({ id: "Alice:1", by: "Alice" }) };
     assert.equal(executed(toggleResolveCommand("C1", bufferStamps("Alice", () => at(1)), author)), null);
+    assert.equal(harness.undo.length, 0);
     const edit = executed(setCommentAssigneeCommand("C1", "Jo", { nowIso: () => at(2) }, author)); assert.ok(edit);
+    assert.equal(harness.undo.length, 1);
     assert.deepEqual(edit.parts.map(part => part.kind === "record-field" ? [part.kind, part.field] : [part.kind]), [["record-field", "assignee"]]);
     let serial = 0;
     const undoer = { by: "Alice", nextId: () => "undo:" + ++serial };

@@ -226,14 +226,16 @@ their own record operations when given a shared author; their callers in
   copy's writer id, removing every resolution it has seen, as a beat stamp does,
   and the record reader shows the later time, then the later name. A stored entry
   counts only if a step could have written it. The hydrated `resolution` stays
-  until the first such step.
+  until the first such step. A plain `resolution` beside stamp keys shows instead
+  of them, until the next resolve or reopen step; no command sends one today.
 - A reply, an assignee change and a resolve or reopen also set `updatedAt`. No
   command edits a comment's body, so `updatedAt` is a plain field: of two written
   without seeing each other, the stored-field winner shows, as for any record
   field, not the later time. If a body edit command is added, this needs the
   stamp rule too.
 - `updatedAt` and the resolution are left out of the undo record (assumed rule 35).
-  Undo after a resolve does nothing in a shared session; undo after an assignee
+  A resolve or reopen holds only these, so its plan declares `undo: false` and the
+  session records no undo entry for it; undo after an assignee
   change puts the assignee back and leaves both.
 
 `tests/adapters/collab/comment-stamps.test.ts` holds these over four delivery
