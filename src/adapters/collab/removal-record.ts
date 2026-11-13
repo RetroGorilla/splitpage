@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import type { SharedSoftRemove, SharedTextAddress } from "../../core/collab/operations.ts";
 import { readTextInsert } from "../../core/collab/read-operation.ts";
 import { readSharedBufferRecoveryMetadata } from "../../core/collab/removal-state.ts";
-import type { SharedBufferRecoveryMetadata } from "../../core/collab/removal-state.ts";
+import type { SharedRemovalBufferSource } from "../../core/collab/removal-state.ts";
 import type { SharedTextIdentity } from "./mark-record.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { sharedStructureIdentity } from "./structure-identity.ts";
@@ -12,7 +12,6 @@ import type { CollabReadCaches } from "./read-cache.ts";
 
 export interface SharedRemovalTarget { readonly beat: string; readonly segment: string; readonly generation: number }
 export interface SharedRemovalObservation { readonly target: SharedTextAddress; readonly identities: readonly SharedTextIdentity[] }
-export interface SharedRemovalBufferSource { readonly beat: string; readonly metadata: SharedBufferRecoveryMetadata }
 export type SharedStoredRemovalCommand = {
   readonly writer: string; readonly operation: string; readonly by: string; readonly targets: readonly SharedRemovalTarget[];
 } & ({ readonly kind: "restore"; readonly removals: readonly string[] } | {

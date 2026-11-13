@@ -9,14 +9,11 @@ import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts
 import type { SharedDocumentHandle } from "./types.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
 import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
-import type { SharedTagProjectionRejection } from "../../core/collab/projection/tag-extents.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { SharedProjectionCache } from "./projection-cache.ts";
-import type { SharedProjectionFragmentReason } from "../../core/collab/projection/blocks.ts";
 import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
-import type { SharedProjectionGalleryOverflow } from "../../core/collab/projection/gallery.ts";
+import type { SharedRecoveryEntry } from "../../core/collab/recovery.ts";
 import { readSharedRemovalBufferSources } from "./removal-record.ts";
-import type { SharedRemovalBufferSource } from "./removal-record.ts";
 import { collabState } from "./state.ts";
 import { compareSharedProjections } from "../../core/collab/projection/changes.ts";
 import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
@@ -32,13 +29,7 @@ export function projectSharedDocument(handle: SharedDocumentHandle): DocumentSha
 
 export interface SharedDocumentProjectionResult {
   readonly document: DocumentShape;
-  readonly recovery: readonly ((SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
-    | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
-    | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly buffer?: readonly SharedRemovalBufferSource[] }
-    | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
-      readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
-    | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
-    | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>> })[];
+  readonly recovery: readonly SharedRecoveryEntry[];
 }
 
 export interface SharedDocumentProjectionStep extends SharedDocumentProjectionResult {
@@ -73,7 +64,7 @@ function projectSharedBrollCells(cache: SharedProjectionCache, cells: readonly S
 export function assembleSharedDocument(source: SharedProjectionSource, previous: DocumentShape | null): SharedDocumentProjectionStep {
   source.begin();
   const cache = source.cache;
-  const recovery: SharedDocumentProjectionResult["recovery"][number][] = [];
+  const recovery: SharedRecoveryEntry[] = [];
   const fields = assembleSharedDocumentFields(source), out = { ...fields.document };
   const tags = out.productionTags as Record<string, unknown>[], comments = (out.comments as Record<string, unknown>[]).map(comment => ({ ...comment }));
   out.comments = comments;
