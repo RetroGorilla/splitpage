@@ -12,6 +12,7 @@ export interface BufferedRecoverySnapshot {
   readonly html: string;
   readonly units: number;
   readonly segment?: string | null;
+  readonly field?: "audioText" | "visualText";
 }
 
 export function bufferedRecoveryOperations(
@@ -23,9 +24,9 @@ export function bufferedRecoveryOperations(
   return [
     { kind: "segment-create", id, by: author.by, segment: ("draft_segment_" + author.id) as SharedContentRef, beat,
       at: { left: (snapshot.segment ?? null) as SharedContentRef | null, right: null, affinity: "after" },
-      fields: { audioText: snapshot.html, bufferSourceOwner: snapshot.owner, bufferPaintedBase: snapshot.base } },
+      fields: { [snapshot.field ?? "audioText"]: snapshot.html, bufferSourceOwner: snapshot.owner, bufferPaintedBase: snapshot.base } },
     { kind: "remove", id: (author.id + "_remove") as SharedContentRef, by: author.by, removalKind: "beat", targets: [beat],
-      observed: snapshot.units ? [flowBaseReference(beat, "audioText", 0, snapshot.units)] : [],
+      observed: snapshot.units && snapshot.field !== "visualText" ? [flowBaseReference(beat, "audioText", 0, snapshot.units)] : [],
       boundaries: [beat], components: [observed.visual as SharedContentRef], gallery: [], comments: [], at: observed.rows }
   ];
 }

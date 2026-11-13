@@ -1,5 +1,6 @@
 import { createSharedBufferedText, sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
 import { readSharedPaintedText } from "../../../adapters/collab/paint-base.ts";
+import { readBufferedFieldKey } from "../../../core/collab/buffer.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
 import type { PaintedTextSource } from "../../../application/editing/ports.ts";
@@ -19,7 +20,7 @@ export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<Sh
   return {
     paintedText: {
       documentRevision: () => session.readAt((_doc, revision) => revision),
-      read: (rowId, field) => field === "audioText" ? readSharedPaintedText(handle, sharedBufferedTarget(handle, rowId)) : null
+      read: (key, field) => field === readBufferedFieldKey(key).field ? readSharedPaintedText(handle, sharedBufferedTarget(handle, key)) : null
     },
     bufferedText: { open: commit.open, beforeCommand: session.beforeCommand, missingBase: effects.missingBase, recovered: effects.recovered, report: effects.report }
   };

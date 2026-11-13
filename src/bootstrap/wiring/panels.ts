@@ -1,5 +1,6 @@
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
-import { currentDocument, onRefresh, onSessionChange } from "./session-owner.ts";
+import { onRefresh, onSessionChange } from "./session-owner.ts";
+import { documentReader } from "./ports/document.ts";
 import { onPreferenceChange, preferences, viewFlags } from "./preferences-owner.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./beat-status.ts";
 import { historyOwner } from "./history.ts";
@@ -34,7 +35,7 @@ function refreshTagViews(): void {
 function clockChanged(change: { key: string }): void {
   if (preferences().nameOf(change.key) !== "clock") return;
   renderHistoryPanel();
-  if (currentDocument()) renderComments();
+  if (documentReader.current()) renderComments();
 }
 
 function renderHistoryPanel(): void {
@@ -49,7 +50,7 @@ export function mountPanelListenersFeature(): void {
   stopPanelListenersFeature();
   const stops: (() => void)[] = [
     onPainted((kind: string) => {
-      if (kind === "rows") syncAnchorResolvedClasses(currentDocument(), document);
+      if (kind === "rows") syncAnchorResolvedClasses(documentReader.current(), document);
       else if (kind === "screen") {
         const writer = writerControls();
         if (viewFlags().writerOpen() && writer) writer.paintWriterDraw(writer.drawWriter());
@@ -79,7 +80,7 @@ export function mountPanelListenersFeature(): void {
     onSessionChange(statsFollowChange),
     onSessionChange(refreshAnnotator),
     onRefresh((jobs) => {
-      if (!currentDocument()) return;
+      if (!documentReader.current()) return;
       if (jobs.has("production")) {
         if (productionPanelsOpen()) renderProduction();
         else updateTagBadges();

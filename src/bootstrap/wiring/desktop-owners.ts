@@ -6,7 +6,7 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
 import { draftResume, recoveryStarted } from "./recovery-owners.ts";
 import { unsavedChanges } from "./save-owners.ts";
-import { currentDocument } from "./session-owner.ts";
+import { documentReader } from "./ports/document.ts";
 import { currentHome } from "./location-owner.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
@@ -16,7 +16,7 @@ export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristi
   return Object.freeze({
     facts: Object.freeze({
       running: presence.running,
-      document: function () { return currentDocument(); },
+      document: function () { return documentReader.current(); },
       restoring: function () { return recoveryStarted() && draftResume().restorePending(); },
       unsaved: function () { return unsavedChanges(); },
       pristine: function () { return history.isPristineSeedDocument(); },

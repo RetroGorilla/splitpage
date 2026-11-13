@@ -38,22 +38,24 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
       const rows = Array.from({ length: size }, (_, index) => ({ id: "r" + index, visualText: "Wide", audioText: "Alpha", status: "todo" }));
       const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows({ schema: 2, paragraphsDecided: true, title: "Cost", rows })))], "cost-" + size + ".splitpage", { lastModified: size });
       await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
-      const cell = document.querySelector('#rows .cell-editable[data-id="r0"][data-field="audioText"]'); assert.ok(cell);
-      assert.equal(paintedFromRow(cell, "audioText", currentDocument().rows[0]), true);
-      assert.equal(paintedFromRow(cell, "audioText", { ...currentDocument().rows[0], audioText: "Other" }), false);
-      cell.focus();
-      const walker = document.createTreeWalker(cell, 4); let node = null;
-      while (walker.nextNode()) node = walker.currentNode;
-      const changes = [], stop = liveSession().subscribe(change => { changes.push(change.kind); });
-      const before = { decodes, checks, painted: window.__renderTest.counts() };
-      assert.equal(cell.dispatchEvent(new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "s" })), true);
-      node.data += "s";
-      const range = document.createRange(); range.setStart(node, node.data.length); range.collapse(true);
-      window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
-      cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "s" }));
-      const after = window.__renderTest.counts(); stop();
-      assert.equal(currentDocument().rows[0].audioText, "Alphas");
-      counts.push([size, changes, decodes - before.decodes, checks - before.checks, after.rowsPainted - before.painted.rowsPainted, after.cellsPainted - before.painted.cellsPainted]);
+      for (const [field, typed] of [["audioText", "Alphas"], ["visualText", "Wides"]]) {
+        const cell = document.querySelector('#rows .cell-editable[data-id="r0"][data-field="' + field + '"]'); assert.ok(cell);
+        assert.equal(paintedFromRow(cell, field, currentDocument().rows[0]), true);
+        assert.equal(paintedFromRow(cell, field, { ...currentDocument().rows[0], [field]: "Other" }), false);
+        cell.focus();
+        const walker = document.createTreeWalker(cell, 4); let node = null;
+        while (walker.nextNode()) node = walker.currentNode;
+        const changes = [], stop = liveSession().subscribe(change => { changes.push(change.kind); });
+        const before = { decodes, checks, painted: window.__renderTest.counts() };
+        assert.equal(cell.dispatchEvent(new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "s" })), true);
+        node.data += "s";
+        const range = document.createRange(); range.setStart(node, node.data.length); range.collapse(true);
+        window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+        cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "s" }));
+        const after = window.__renderTest.counts(); stop();
+        assert.equal(currentDocument().rows[0][field], typed);
+        counts.push([size, field, changes, decodes - before.decodes, checks - before.checks, after.rowsPainted - before.painted.rowsPainted, after.cellsPainted - before.painted.cellsPainted]);
+      }
     }
     stopCheck();
     console.log(JSON.stringify({ counts, built, records, mounts }));
@@ -63,8 +65,8 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
     { cwd: REPO, encoding: "utf8", windowsHide: true });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const line = result.stdout.trim().split("\n").at(-1) ?? "";
-  assert.deepEqual(JSON.parse(line), { counts: [[2, ["edit"], 1, 0, 0, 0], [50, ["edit"], 1, 0, 0, 0]], built: 0, records: 0, mounts: 0 });
-  context.diagnostic("2 and 50 rows: one edit, one decode, no paint check and no repaint per native key; no buffered field, painted record or cell buffer");
+  assert.deepEqual(JSON.parse(line), { counts: [[2, "audioText", ["edit"], 1, 0, 0, 0], [2, "visualText", ["edit"], 1, 0, 0, 0], [50, "audioText", ["edit"], 1, 0, 0, 0], [50, "visualText", ["edit"], 1, 0, 0, 0]], built: 0, records: 0, mounts: 0 });
+  context.diagnostic("2 and 50 rows, narration and visual: one edit, one decode, no paint check and no repaint per native key; no buffered field, painted record or cell buffer");
 });
 
 test("the shared Split wiring is not called by the running app", () => {
