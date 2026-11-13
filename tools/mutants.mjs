@@ -62,20 +62,27 @@ export function resolveTests(unitFiles, filters) {
   return { files: selectFiles(unitFiles, filters), unmatched };
 }
 
-export function verdict(run, events) {
+export function verdict(run, events, selected) {
   if (run.error) return { status: "error", detail: `could not start the test run: ${run.error}` };
+  const chosen = new Set(selected);
+  const counted = events.filter((e) => !e.skip && !e.todo);
+  const fails = counted.filter((e) => e.type === "fail");
+  const asserted = fails.filter((e) => e.assertion && e.failureType === "testCodeFailure" && !e.fileLevel && chosen.has(e.file));
+  if (asserted.length) {
+    const more = asserted.length > 1 ? ` and ${asserted.length - 1} more` : "";
+    return { status: "caught", detail: `assertion failed in ${JSON.stringify(asserted[0].name)}${more}${run.timedOut ? ", then the run timed out" : ""}` };
+  }
   if (run.timedOut) return { status: "inconclusive", detail: "timeout" };
-  const fails = events.filter((e) => e.type === "fail");
-  const asserted = fails.filter((e) => e.assertion);
-  if (asserted.length) return { status: "caught", detail: `assertion failed in ${JSON.stringify(asserted[0].name)}${asserted.length > 1 ? ` and ${asserted.length - 1} more` : ""}` };
   const failure = fails.find((e) => e.failureType !== "subtestsFailed" && e.failureType !== "cancelledByParent") ?? fails[0];
   if (failure) {
     if (failure.fileLevel) return { status: "inconclusive", detail: `${failure.file} failed outside its tests (load, syntax or exit)` };
+    if (!chosen.has(failure.file)) return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} in ${failure.file}, which was not chosen, failed` };
     if (failure.failureType === "testTimeoutFailure") return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} timed out` };
+    if (failure.failureType === "hookFailed") return { status: "inconclusive", detail: `a hook of ${JSON.stringify(failure.name)} failed: ${failure.cause ?? "no cause"}` };
     return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} failed without an assertion: ${failure.cause ?? failure.failureType}` };
   }
   if (run.code !== 0) return { status: "inconclusive", detail: `test process exited ${run.code} with no failed test` };
-  if (!events.some((e) => e.type === "pass" && !e.fileLevel)) return { status: "inconclusive", detail: "no test ran" };
+  if (!counted.some((e) => e.type === "pass" && !e.fileLevel && chosen.has(e.file))) return { status: "inconclusive", detail: "no chosen test ran" };
   return { status: "survived", detail: "" };
 }
 
@@ -96,23 +103,33 @@ export function formatTable(results) {
 const CHILD = `
 import { run } from "node:test";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, relative } from "node:path";
+import { availableParallelism } from "node:os";
+import { basename, relative, resolve } from "node:path";
 const [, , filesPath, eventsPath] = process.argv;
+const files = JSON.parse(readFileSync(filesPath, "utf8"));
 writeFileSync(eventsPath, "");
-let failed = false;
-for await (const event of run({ files: JSON.parse(readFileSync(filesPath, "utf8")), concurrency: true })) {
-  if (event.type !== "test:fail" && event.type !== "test:pass") continue;
+let failed = false, next = 0;
+const marked = (flag) => flag !== undefined && flag !== false;
+const record = (event) => {
   const data = event.data, error = data.details?.error, cause = error?.cause;
   const file = data.file ? relative(process.cwd(), data.file).replace(/\\\\/g, "/") : null;
-  const named = cause instanceof Error;
-  if (event.type === "test:fail") failed = true;
+  const named = cause instanceof Error, name = String(data.name);
+  if (event.type === "test:fail" && !marked(data.todo)) failed = true;
   appendFileSync(eventsPath, JSON.stringify({
     type: event.type === "test:fail" ? "fail" : "pass", name: data.name, nesting: data.nesting, file,
-    failureType: error?.failureType ?? null, assertion: named && (cause.code === "ERR_ASSERTION" || cause.name === "AssertionError"),
-    fileLevel: !named && data.nesting === 0 && file !== null && (data.name === basename(file) || String(data.name).replace(/\\\\/g, "/") === file),
+    skip: marked(data.skip), todo: marked(data.todo),
+    failureType: error?.failureType ?? null, assertion: cause !== null && typeof cause === "object" && cause.code === "ERR_ASSERTION",
+    fileLevel: !named && data.nesting === 0 && file !== null && (name === basename(file) || name.replace(/\\\\/g, "/") === file || resolve(name) === resolve(file)),
     cause: named ? cause.name + ": " + String(cause.message).split("\\n")[0].slice(0, 200) : cause === undefined ? null : String(cause).slice(0, 200)
   }) + "\\n");
-}
+};
+const lane = async () => {
+  while (next < files.length) {
+    const file = files[next++];
+    for await (const event of run({ files: [file] })) if (event.type === "test:fail" || event.type === "test:pass") record(event);
+  }
+};
+await Promise.all(Array.from({ length: Math.min(Math.max(2, availableParallelism() - 1), files.length) }, lane));
 process.exitCode = failed ? 1 : 0;
 `;
 
@@ -202,7 +219,7 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
     scratch = makeScratch(repo, parent, files);
     writeFileSync(join(scratch, mutant.file), edit.text);
     const run = await runChild(scratch, mutant.testFiles, timeoutMs, node);
-    const result = verdict(run, run.events);
+    const result = verdict(run, run.events, mutant.testFiles);
     return done(result.status, result.detail);
   } catch (e) {
     return done("error", e.message);
@@ -216,8 +233,8 @@ export async function baseline({ repo, files, parent, timeoutMs, node, testFiles
   const started = Date.now();
   try {
     const run = await runChild(scratch, testFiles, timeoutMs, node);
-    const result = verdict(run, run.events);
-    const failures = run.events.filter((e) => e.type === "fail" && e.failureType !== "subtestsFailed")
+    const result = verdict(run, run.events, testFiles);
+    const failures = run.events.filter((e) => e.type === "fail" && !e.todo && e.failureType !== "subtestsFailed")
       .map((e) => `${e.file ?? "?"}: ${e.fileLevel ? "failed outside its tests" : JSON.stringify(e.name)}${e.cause ? ` (${e.cause})` : ""}`);
     return { ok: result.status === "survived", detail: result.detail, failures, ms: Date.now() - started };
   } finally {

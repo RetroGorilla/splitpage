@@ -507,7 +507,9 @@ For each mutant the script copies the repository's files (the ones git lists,
 tracked or not ignored, so no `.git` and no nested `node_modules`) into its own
 temporary folder, links the root `node_modules` rather than copying it, applies
 the one edit there, and runs the chosen unit test files with `node:test`'s
-`run()` in a child process, which records every passed and failed test. The
+`run()` in a child process, which records every passed and failed test as it
+arrives. The child gives each file its own `run()`, at least two files at a
+time, so a file that hangs cannot hold back the results of the others. The
 test file list is written to a JSON file next to each copy and the child reads
 it from there, because the list can be too long for a Windows command line.
 Each filter in `tests` must match at least one discovered unit test file;
@@ -518,9 +520,21 @@ Every mutant gets one verdict:
 
 | Verdict | When |
 | --- | --- |
-| **caught** | An assertion (`AssertionError`) failed in a named test |
-| **survived** | Every chosen test ran and passed |
-| **inconclusive** | Anything else that is not a pass: the run passed the timeout, a test file failed outside its tests (a syntax or load error, or `process.exit`), a test failed with an error that is not an assertion, a test timed out, or no test ran |
+| **caught** | An assertion failed in the body of a named test in a chosen file. This still holds when the run times out later |
+| **survived** | Every chosen test ran and passed, and at least one ran |
+| **inconclusive** | Anything else that is not a pass: the run passed the timeout before any assertion failed, a test file failed outside its tests (a syntax or load error, or `process.exit`), a hook (`before`, `after`, `beforeEach`, `afterEach`) failed, a test failed with an error that is not an assertion, a test in a file that was not chosen failed, a test timed out, or no chosen test ran |
+
+An assertion is an error whose own `code` is `ERR_ASSERTION`, which is what
+every `node:assert` failure carries. Nothing else counts: not an error merely
+named `AssertionError`, and not an error whose `cause` is an assertion, since
+the code that wrapped it decided to throw something else. A plain `Error` given
+`code: "ERR_ASSERTION"` does count, so test helpers should fail through
+`node:assert` rather than set that code by hand.
+
+Tests marked `skip` or `todo` count for nothing: they are not among "every
+chosen test" above, a skipped body never runs, and a failing `todo` test does
+not fail a normal run, so its assertion is not evidence either. A file of only
+skipped tests therefore leaves the mutant inconclusive.
 | **error** | The mutant could not be applied (missing or ambiguous `find`, a `file` outside the repository or under `node_modules`) or the test process could not be started; this makes the exit code 2 |
 
 A timed-out mutant's whole process tree is killed, and so is every running

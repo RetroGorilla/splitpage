@@ -131,6 +131,7 @@ const handoff = mkdtempSync(join(tmpdir(), "mutants-handoff-"));
 try {
   const scratch = join(handoff, "mutant-x");
   mkdirSync(join(scratch, "tests"), { recursive: true });
+  const hooks = 'import test, { before, after, beforeEach, afterEach } from "node:test"; import assert from "node:assert/strict";\n';
   const fixtures = {
     "pass.test.mjs": 'import test from "node:test"; test("passes", () => {});\n',
     "assert.test.mjs": 'import test from "node:test"; import assert from "node:assert/strict"; test("asserts", () => { assert.equal(1, 2); });\n',
@@ -139,12 +140,26 @@ try {
     "exit-inside.test.mjs": 'import test from "node:test"; test("exits", () => { process.exit(1); });\n',
     "throw.test.mjs": 'import test from "node:test"; test("throws", () => { null.x; });\n',
     "loop.test.mjs": 'import test from "node:test"; test("spins", () => { for (;;) {} });\n',
-    "empty.test.mjs": "export {};\n"
+    "empty.test.mjs": "export {};\n",
+    "before.test.mjs": hooks + 'before(() => { assert.equal(1, 2); }); test("body", () => {});\n',
+    "after.test.mjs": hooks + 'after(() => { assert.equal(1, 2); }); test("body", () => {});\n',
+    "before-each.test.mjs": hooks + 'beforeEach(() => { assert.equal(1, 2); }); test("body", () => {});\n',
+    "after-each.test.mjs": hooks + 'afterEach(() => { assert.equal(1, 2); }); test("body", () => {});\n',
+    "skip.test.mjs": hooks + 'test("skipped", { skip: true }, () => { assert.equal(1, 2); }); test.skip("also skipped", () => {});\n',
+    "skip-assert.test.mjs": hooks + 'test.skip("skipped", () => { assert.equal(1, 2); }); test("runs", () => {});\n',
+    "todo.test.mjs": hooks + 'test.todo("todo", () => { assert.equal(1, 2); }); test("runs", () => {});\n',
+    "imports.test.mjs": hooks + 'import "./unselected.test.mjs"; test("selected passes", () => {});\n',
+    "unselected.test.mjs": hooks + 'test("unselected fails", () => { assert.equal(1, 2); });\n',
+    "assert-hang.test.mjs": hooks + 'test("asserts", () => { assert.equal(1, 2); }); test("hangs", () => new Promise(() => { setInterval(() => {}, 1000); }));\n',
+    "cause.test.mjs": hooks + 'test("wrapped", () => { try { assert.equal(1, 2); } catch (e) { throw new Error("wrapped", { cause: e }); } });\n',
+    "named.test.mjs": hooks + 'test("named", () => { const e = new Error("x"); e.name = "AssertionError"; throw e; });\n',
+    "coded.test.mjs": hooks + 'test("coded", () => { const e = new Error("x"); e.code = "ERR_ASSERTION"; throw e; });\n'
   };
   for (const [name, text] of Object.entries(fixtures)) writeFileSync(join(scratch, "tests", name), text);
   const judge = async (names, timeoutMs = 60000) => {
-    const run = await runChild(scratch, names.map((name) => `tests/${name}`), timeoutMs, process.execPath);
-    return verdict(run, run.events);
+    const chosen = names.map((name) => `tests/${name}`);
+    const run = await runChild(scratch, chosen, timeoutMs, process.execPath);
+    return verdict(run, run.events, chosen);
   };
   const expect = async (name, names, status, detail, timeoutMs) => {
     const got = await judge(names, timeoutMs);
@@ -157,8 +172,21 @@ try {
   await expect("process.exit(1) inside a test is inconclusive", ["exit-inside.test.mjs"], "inconclusive", "failed outside its tests");
   await expect("an error that is not an assertion is inconclusive", ["throw.test.mjs"], "inconclusive", "TypeError");
   await expect("an endless loop is inconclusive by timeout", ["loop.test.mjs"], "inconclusive", "timeout", 5000);
-  await expect("a file without tests is inconclusive", ["empty.test.mjs"], "inconclusive", "no test ran");
+  await expect("a file without tests is inconclusive", ["empty.test.mjs"], "inconclusive", "no chosen test ran");
   await expect("an assertion beside a crash in another file is still caught", ["syntax.test.mjs", "assert.test.mjs"], "caught", '"asserts"');
+  await expect("an assertion in before is inconclusive, since no body ran", ["before.test.mjs"], "inconclusive", "a hook of");
+  await expect("an assertion in after is inconclusive", ["after.test.mjs"], "inconclusive", "a hook of");
+  await expect("an assertion in beforeEach is inconclusive", ["before-each.test.mjs"], "inconclusive", "a hook of");
+  await expect("an assertion in afterEach is inconclusive", ["after-each.test.mjs"], "inconclusive", "a hook of");
+  await expect("a file with only skipped tests is inconclusive", ["skip.test.mjs"], "inconclusive", "no chosen test ran");
+  await expect("a skipped test's body is no evidence", ["skip-assert.test.mjs"], "survived", "");
+  await expect("an assertion in a failing todo test is no evidence and fails nothing", ["todo.test.mjs"], "survived", "");
+  await expect("an assertion from a test file that was not chosen is inconclusive", ["imports.test.mjs"], "inconclusive", "which was not chosen");
+  await expect("an assertion stays caught when the run later times out", ["assert-hang.test.mjs"], "caught", "then the run timed out", 5000);
+  await expect("a hanging file does not hide a later file's assertion", ["loop.test.mjs", "assert.test.mjs"], "caught", '"asserts"', 5000);
+  await expect("an Error whose cause is an assertion is inconclusive", ["cause.test.mjs"], "inconclusive", "Error: wrapped");
+  await expect("an Error merely named AssertionError is inconclusive", ["named.test.mjs"], "inconclusive", "AssertionError: x");
+  await expect("an Error with code ERR_ASSERTION is caught", ["coded.test.mjs"], "caught", '"coded"');
   check("the file list reaches the child through a file", existsSync(join(handoff, "mutant-x-files.json")));
   check("the event file is removed after the run", !existsSync(join(handoff, "mutant-x-events.jsonl")));
 
