@@ -25,7 +25,7 @@ import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 
 const runtime = createFlowLoadRuntime();
 const headingA = structureIdentityFixture("1", "fin_o_0", "heading"), headingB = structureIdentityFixture("2", "fin_o_0", "heading");
-const names = new Map([[headingA, "Ha"], [headingB, "Hb"], [structureIdentityFixture("2", "cut", "beat"), "Rs"], [structureIdentityFixture("2", "unhead", "beat"), "Rn"]]);
+const names = new Map([[headingA, "Ha"], [headingB, "Hb"], [structureIdentityFixture("3", "fin_o_0", "heading"), "Hc"], [structureIdentityFixture("2", "cut", "beat"), "Rs"], [structureIdentityFixture("2", "unhead", "beat"), "Rn"]]);
 const shown = (id: string) => names.get(id) ?? id;
 const base = (owner: string, from: number, to = from) => flowBaseReference(owner, "audioText", from, to);
 const tailed = { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab<br>cd", paragraphStart: true }, { id: "R2", audioText: "ef" }] };
@@ -212,5 +212,15 @@ for (const order of ["D1", "rev", "dup"] as const) test(`declared limit: a line 
     send(set.a, ...finalize("Alice", "R1", 1, null, "R2")); set.queue.flush(order); assertIncremental(set.c, projector);
     agree("lone half", order, handles, visible, { rows: [["R0", "x", false], ["R2", "ef", false]], sections: [["Ha", "�", "R2"]], recovery: [] });
     assert.equal(runtime.load({ rows: [{ id: "R0", audioText: "x" }, { id: "R2", audioText: "ef" }], sections: [{ id: "Hn", name: "\uD800", firstSceneId: "R2" }] }).sections, undefined);
+  } finally { set.close(); }
+});
+
+for (const order of ["D1", "rev", "dup"] as const) test(`two writers finalize a line with a tail while a third, whose id lies between theirs, types at the tail start: the tail after that typing goes to recovery: ${order}`, () => {
+  const { set, handles } = setup(3);
+  try {
+    const { projector } = captureIncrementalReplica(set.b);
+    send(set.a, ...finalize("Alice", "R1", 2, "cd", "")); send(set.c, ...finalize("Carol", "R1", 2, "cd", "")); send(set.b, type("Bob", "R1", 5, "Z"));
+    set.queue.flush(order); assertIncremental(set.b, projector);
+    agree("between", order, handles, visible, { rows: [["R0", "x", false], ["R1", "Z", false], ["R2", "ef", false]], sections: [["Hc", "Ab", "R1"]], recovery: [["unprojectable-fragment"]] });
   } finally { set.close(); }
 });
