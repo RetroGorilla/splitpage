@@ -75,7 +75,7 @@ test("an empty first beat whose emitted left beat is not directly followed by th
     const app = lines(source, "Alice", finish), [created, ...rest] = app; assert.ok(created?.kind === "segment-create");
     assert.deepEqual(created.at, { left: "Rm", right: null, affinity: "after" });
     const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
-    const result = executeSharedOperations(set.a, [{ ...created, at: { ...created.at, left: "R0" } }, ...rest], { base: revision });
+    const result = executeSharedOperations(set.a, [operation({ ...created, at: { ...created.at, left: "R0" } }), ...rest], { base: revision });
     assert.ok(!result.ok && "index" in result); assert.deepEqual([result.reason, result.index], ["misplaced-heading-beat", 1]);
     assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], [bytes, vector, revision]);
   } finally { set.close(); }
