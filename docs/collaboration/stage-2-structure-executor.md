@@ -376,7 +376,9 @@ uses it for the name: at the end of the list the created heading's name must kee
 some text under `cappedText(name, 200)`, the rule the app's scene loader applies.
 A blank or missing name refuses the whole list with `invalid-heading-name`, leaving
 bytes, state vector and revision unchanged. A heading removed later in the same
-list is not checked.
+list is not checked. Declared limit: the operation reader turns a name of half a
+surrogate pair into U+FFFD before the check, so that name is accepted and every
+copy loads a scene the app itself would drop.
 
 Two writers creating a heading before the same beat at once both keep their
 headings; the lower writer id comes first. Its scene has no beats, so it appears in
@@ -384,6 +386,10 @@ recovery as `scene-with-no-beats`, and the other heading owns the beat. Before a
 inline beat, text typed concurrently at the end of the previous beat is ordered
 against the new boundary by writer id: from a writer whose id is higher than the
 creator's it joins the new name. Text typed in the first beat itself stays there.
+A concurrent join of the first beat into the beat before it depends on placement:
+when the first beat heads its segment the join wins and the heading goes to recovery
+as `scene-with-no-beats`; when it is inline the join has no effect and leaves no
+recovery entry, and the heading owns the beat.
 
 Evidence: complete paste lists from the app at seven places and four header shapes,
 including selections across a scene boundary, executed under three delivery orders

@@ -128,3 +128,33 @@ test("heading creation refuses a later part of a joined row, a refused or missin
     assert.deepEqual(visible(set.a), { rows: [["R0", "x"], ["R1", "ab cd"]], sections: [["Ha", "New", "R1"]], recovery: [] });
   } finally { set.close(); }
 });
+
+for (const order of ["D1", "rev", "dup"] as const) test(`declared limit: a name of half a surrogate pair is read as U+FFFD and accepted; every copy loads that scene, which the app drops: ${order}`, () => {
+  const { set, handles } = setup(3);
+  try {
+    const { projector } = captureIncrementalReplica(set.c);
+    send(set.a, ...create("Alice", "R0", "\uD800")); set.queue.flush(order); assertIncremental(set.c, projector);
+    agree("lone half", order, handles, handle => {
+      const document = projectSharedDocumentWithRecovery(handle).document, sections = (document.sections ?? []) as DocumentScene[];
+      return { sections: sections.map(scene => [shown(scene.id), scene.name, shown(scene.firstSceneId)]), loaded: ((runtime.load(document).sections ?? []) as DocumentScene[]).map(scene => [shown(scene.id), scene.name]) };
+    }, { sections: [["Ha", "\uFFFD", "R0"]], loaded: [["Ha", "\uFFFD"]] });
+    assert.equal(runtime.load({ ...source, sections: [{ id: "Hn", name: "\uD800", firstSceneId: "R0" }] }).sections, undefined);
+  } finally { set.close(); }
+});
+
+const joins = {
+  head: { rows: [["R0", "x"], ["R1", "ab cd"]], sections: [], recovery: [["scene-with-no-beats", "Ha", "New"]] },
+  inline: { rows: [["R0", "x"], ["R1", "a"], ["Rs", "b"], ["R2", "cd"]], sections: [["Ha", "New", "Rs"]], recovery: [] }
+};
+for (const place of ["head", "inline"] as const) for (const order of ["D1", "rev", "dup"] as const) test(`a heading created while another writer joins its first beat into the beat before, first beat ${place === "head" ? "heading its segment: the join wins and the name goes to recovery" : "inline: the join has no effect and leaves no recovery entry"}: ${order}`, () => {
+  const { set, handles } = setup(3);
+  try {
+    registerSharedJoinHandlers(set.b);
+    let first = "R2";
+    if (place === "inline") { send(set.a, split("Alice", "R1", 1, "Rs")); set.queue.flush(order); first = structureIdentityFixture("1", "cut", "beat"); }
+    const { projector } = captureIncrementalReplica(set.c);
+    send(set.b, { kind: "join", id: "glue", by: "Bob", from: first, into: "R1", glue: place === "head" ? " " : "" }); send(set.a, ...create("Alice", first, "New"));
+    set.queue.flush(order); assertIncremental(set.c, projector);
+    agree("join " + place, order, handles, visible, joins[place]);
+  } finally { set.close(); }
+});
