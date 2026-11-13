@@ -294,7 +294,7 @@ function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author
     return { inverse: () => ({ effective, part: { ...part, retired: true, glue: place.joined?.glue ?? part.glue, ...formats.length ? { formats } : {} } }) };
   }
   // why: the same two beats joined again meanwhile are someone else's change, so the redo is used up.
-  // why: the neighbour check skips removed beats, so a removed source or target also uses the redo up.
+  // why: removed beats are not in the order the neighbour check walks, so a removed source or target uses the redo up.
   const join = !place.joined && readSharedJoinNeighbours(handle, part.from, part.into) ? author() : null;
   if (join) {
     const generation = nextSharedJoinGeneration(handle, part.from, part.into, part.glue), target = { owner: place.root, segment: place.root, field: "audioText" } as SharedTextAddress;
