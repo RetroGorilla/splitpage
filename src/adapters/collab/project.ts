@@ -107,7 +107,7 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     return [cache.read(["group", group.root], [JSON.stringify(group), root, tags, ...memberRows, ...memberUnits,
       ...memberVisuals, ...visualCells.map(cell => cell.units), ...relevantGallery], () => {
       const projected = projectSharedJoinedFields(root, memberRows, gallery);
-      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue, ...(member.glueSet ? { glueSet: true as const } : {}) })), tags, group.cyclic);
+      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue, ...(member.glueSet ? { glueSet: true as const } : {}), ...(member.formats ? { formats: member.formats } : {}) })), tags, group.cyclic);
       return { group, members, ...projected, audio: { key: JSON.stringify([group.root, "audioText"]), units: narration }, visualCells };
     }, "group")];
   });

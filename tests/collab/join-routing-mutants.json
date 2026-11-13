@@ -50,14 +50,26 @@
   }, {
     "label": "joined mark covers only its first fragment",
     "file": "src/adapters/collab/mark-executor.ts",
-    "find": "sharedJoinedSelected(view, row, operation.observed).physical)",
-    "replace": "sharedJoinedSelected(view, row, operation.observed).physical.slice(0, 1))",
+    "find": "for (const part of selected.physical) {",
+    "replace": "for (const part of selected.physical.slice(0, 1)) {",
     "tests": ["tests/adapters/collab/join-marks.test.ts"]
   }, {
     "label": "joined mark writes every fragment into the first text",
     "file": "src/adapters/collab/mark-executor.ts",
     "find": "markSteps(operation, view, part.plan, unitRanges(view, part.plan, part.units)",
     "replace": "markSteps(operation, view, row.plans[0] ?? part.plan, unitRanges(view, part.plan, part.units)",
+    "tests": ["tests/adapters/collab/join-marks.test.ts"]
+  }, {
+    "label": "join space ignores its stored formats",
+    "file": "src/core/collab/projection/joins.ts",
+    "find": "for (const format of part.formats ?? [])",
+    "replace": "for (const format of [])",
+    "tests": ["tests/adapters/collab/join-marks.test.ts"]
+  }, {
+    "label": "join space keeps a removed format",
+    "file": "src/adapters/collab/mark-executor.ts",
+    "find": "view.has(path) ? [{ kind: \"delete\", path }] : []",
+    "replace": "[]",
     "tests": ["tests/adapters/collab/join-marks.test.ts"]
   }]
 }
