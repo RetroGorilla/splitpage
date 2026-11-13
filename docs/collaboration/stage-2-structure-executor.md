@@ -427,13 +427,19 @@ end of the list the name must pass `cappedText(name, 200)`, the scene loader's r
 (`invalid-heading-name`), and the first unmasked beat after the heading must be the
 retained beat (`misplaced-heading-beat`). A beat created with affinity `before`
 next to that retained beat goes before the finalized heading, because the app
-chooses scene intent before it adds the scene; this places the existing-scene repair.
+chooses scene intent before it adds the scene (assumed rule 46); this places the
+existing-scene repair.
 A joined row, root or later part, refuses with `joined-heading`. Every refusal
 leaves bytes, state vector and revision unchanged.
 
-Declared limits: when the line is the last beat after another beat, the app creates
-an empty first beat whose emitted gap puts it before the line, and the whole list is
-refused with `misplaced-heading-beat`. A name of half a surrogate pair never reaches
+Declared limits: when the app creates an empty first beat after an earlier beat (the
+line has no tail and no visual, and either no follower or a follower that already
+starts a scene), that beat's emitted gap puts it before the line, and the whole list
+is refused with `misplaced-heading-beat`. This limit is the next cut: the list stays
+as emitted and nothing is moved; one list-level step before per-operation preparation
+notes that a created beat is the empty first beat of a later `heading-finalize` of
+line T, and placement puts it after T's span when the gap's left beat is directly
+followed by T. A name of half a surrogate pair never reaches
 the executor: hydration and the operation reader store U+FFFD, which passes the
 check, so that list is accepted and every copy loads a scene the app itself drops.
 Pinned concurrent outcomes: two writers finalizing the same line keep the higher
@@ -444,14 +450,22 @@ recovery as an unprojectable fragment. A concurrent join of the line into the be
 above joins its tail to that row; a concurrent removal sends the tail to recovery.
 In both, the heading moves to the next beat. A split inside the name makes the rest
 of the name the first beat. Demotion returns the name, with its marks, as narration,
-and restore keeps the demotion.
+and restore keeps the demotion. A line break and text typed into the line make a
+scene name with a line break, which the app itself never produces. Typing that takes
+the name past 200 characters gives a projected name the loader cuts; this is the
+carried Stage 0 item "scene name over 200 after merge: shown in full with a notice"
+([schema hypotheses](stage-0/8-schema-hypotheses.md)), not built in Stage 2 yet. A
+heading pasted with the line as its first beat is left with no beats and is listed
+in recovery as `scene-with-no-beats`. When one writer keeps a typed tail and the
+other finalizes the whole line, the tail goes to recovery as a removed beat.
 
 Evidence: the copied T08 create and T08 race results with literal identities under
 three delivery orders and an encoded late joiner; complete app lists at 14 places,
 including the first beat, a beat mid-scene, the first beat of an existing scene, a
 beat split off inline and formatted names (42 calls, 93 operations, 33 finalizations,
 none skipped or deferred), compared with the app's rows, scene ids, names and first
-beats; two-writer literals; a seeded model of 48 histories, 122 checkpoints and 263
+beats; the app's lists at the two declared-limit places, refused unchanged; two-writer
+literals; a seeded model of 48 histories, 122 checkpoints and 263
 commands with literal declared limits `[]`; and two structure mutants.
 
 ## Moving beats and scenes

@@ -25,7 +25,7 @@ import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 
 const runtime = createFlowLoadRuntime();
 const headingA = structureIdentityFixture("1", "fin_o_0", "heading"), headingB = structureIdentityFixture("2", "fin_o_0", "heading");
-const names = new Map([[headingA, "Ha"], [headingB, "Hb"], [structureIdentityFixture("3", "fin_o_0", "heading"), "Hc"], [structureIdentityFixture("2", "cut", "beat"), "Rs"], [structureIdentityFixture("2", "unhead", "beat"), "Rn"]]);
+const names = new Map([[headingA, "Ha"], [headingB, "Hb"], [structureIdentityFixture("3", "fin_o_0", "heading"), "Hc"], [structureIdentityFixture("2", "head", "heading"), "Hp"], [structureIdentityFixture("2", "cut", "beat"), "Rs"], [structureIdentityFixture("2", "unhead", "beat"), "Rn"]]);
 const shown = (id: string) => names.get(id) ?? id;
 const base = (owner: string, from: number, to = from) => flowBaseReference(owner, "audioText", from, to);
 const tailed = { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab<br>cd", paragraphStart: true }, { id: "R2", audioText: "ef" }] };
@@ -222,5 +222,23 @@ for (const order of ["D1", "rev", "dup"] as const) test(`two writers finalize a 
     send(set.a, ...finalize("Alice", "R1", 2, "cd", "")); send(set.c, ...finalize("Carol", "R1", 2, "cd", "")); send(set.b, type("Bob", "R1", 5, "Z"));
     set.queue.flush(order); assertIncremental(set.b, projector);
     agree("between", order, handles, visible, { rows: [["R0", "x", false], ["R1", "Z", false], ["R2", "ef", false]], sections: [["Hc", "Ab", "R1"]], recovery: [["unprojectable-fragment"]] });
+  } finally { set.close(); }
+});
+
+const pasted = [{ kind: "heading-create", id: "head", by: "Bob", segment: "Hp", heading: "Hp", firstBeat: "R1", at: { left: null, right: "R1", affinity: "before" } },
+  { kind: "text-insert", id: "name", by: "Bob", target: { owner: "Hp", segment: "Hp", field: "heading" }, at: { left: null, right: flowBaseReference("Hp", "heading", 0), affinity: "before" }, content: [{ value: "New", marks: [] }] }];
+const outcomes: Record<string, { readonly bob: readonly (readonly unknown[])[]; readonly expected: ReturnType<typeof visible> }> = {
+  "types a line break and text at the end of a whole line: the name holds the line break": { bob: [[type("Bob", "R1", 4, "\ncd")]], expected: moved("Ab\ncd") },
+  "pastes a heading whose first beat is the line: that heading is left with no beats": { bob: [pasted], expected: moved("Ab", [["scene-with-no-beats", "Hp", "New"]]) },
+  "types a tail and finalizes the line with it: the tail goes to recovery as a removed beat": { bob: [[type("Bob", "R1", 4, "\ncd")], finalize("Bob", "R1", 2, "cd", "")],
+    expected: { rows: [["R0", "x", false], ["R2", "ef", false]], sections: [["Hb", "Ab", "R2"]], recovery: [["removed-beat", "cd"]] } }
+};
+for (const [name, scenario] of Object.entries(outcomes)) for (const order of ["D1", "rev", "dup"] as const) test(`a whole line finalized while another writer ${name}: ${order}`, () => {
+  const { set, handles } = setup(3, whole);
+  try {
+    const { projector } = captureIncrementalReplica(set.c);
+    for (const ops of scenario.bob) send(set.b, ...ops);
+    send(set.a, ...finalize("Alice", "R1", 2, null, "R2")); set.queue.flush(order); assertIncremental(set.c, projector);
+    agree(name, order, handles, visible, scenario.expected);
   } finally { set.close(); }
 });
