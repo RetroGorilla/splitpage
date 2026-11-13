@@ -97,6 +97,8 @@ for (const [name, before, after, from, to, data, expected] of [
   ["with no native data the shown form is stored", "the", "the" + NBSP, 3, 3, null, { from: 3, to: 3, insert: NBSP }],
   ["data that does not match the shown text is ignored", "the", "thex", 3, 3, "q", { from: 3, to: 3, insert: "x" }],
   ["a U+00A0 the browser turns back into a space before the target keeps its stored form", "the" + NBSP, "the x", 4, 4, "x", { from: 4, to: 4, insert: "x" }],
+  ["a U+00A0 after the target that the browser shows as a space keeps its stored form", "a" + NBSP + "b", "ax b", 1, 1, "x", { from: 1, to: 1, insert: "x" }],
+  ["a space after the target that the browser shows as U+00A0 keeps its stored form", "a b", "ax" + NBSP + "b", 1, 1, "x", { from: 1, to: 1, insert: "x" }],
   ["a letter changed outside the target is refused", "the t", "thX" + NBSP, 4, 5, null, null],
   ["only U+00A0 stands for a space: a tab outside the target is refused", "a b", "a\tbX", 3, 3, "X", null],
   ["a target that would insert a negative length is refused", "abc", "a", 1, 2, null, null]

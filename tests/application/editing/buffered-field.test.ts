@@ -13,9 +13,9 @@ const NBSP = " ";
 
 interface Field { readonly rowId: string; shown: string }
 
-function fieldBinding(text: string, foldSpaceForm: boolean | undefined) {
+function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: () => void) {
   const field: Field = { rowId: "R1", shown: text };
-  let painted = text, revision = 1, composing = false;
+  let painted = text, stored = text, revision = 1, composing = false, resets = 0;
   const reports: CommandOutcome[] = [], replaced: [number, number, string][][] = [], committed: string[] = [];
   const base = (): PaintedText => ({ revision, text: painted, identity: index => index < painted.length ? ("u" + index) as SharedContentRef : null });
   const binding = createBufferedField({
@@ -27,7 +27,7 @@ function fieldBinding(text: string, foldSpaceForm: boolean | undefined) {
         isOpen: () => open,
         text: () => value,
         replace: (start, end, insert) => { calls.push([start, end, insert]); value = value.slice(0, start) + insert + value.slice(end); },
-        commit: (runs: readonly Run[]) => { committed.push(projection(runs)); painted = value; revision++; open = false; return { kind: "noop" }; },
+        commit: (runs: readonly Run[]) => { committed.push(projection(runs)); stored = value; open = false; drain?.(); painted = value; revision++; return { kind: "noop" }; },
         recover: () => null,
         cancel: () => { open = false; }
       };
@@ -44,7 +44,7 @@ function fieldBinding(text: string, foldSpaceForm: boolean | undefined) {
     base: () => base(),
     painted: () => painted,
     normalize: () => {},
-    reset: () => { field.shown = painted; },
+    reset: () => { resets++; field.shown = stored; },
     runs: shown => [{ text: shown.shown, marks: {} }],
     selection: () => null,
     composition: value => { if (value !== undefined) composing = value; return composing; },
@@ -64,7 +64,7 @@ function fieldBinding(text: string, foldSpaceForm: boolean | undefined) {
     binding.native(event("input", { inputType, data }), () => { binding.input(); });
     return true;
   }
-  return { binding, field, key, reports, replaced, committed, painted: () => painted, adopt: (after: string) => {
+  return { binding, field, key, reports, replaced, committed, painted: () => painted, resets: () => resets, adopt: (after: string) => {
     field.shown = after;
     return binding.finish();
   } };
@@ -124,4 +124,23 @@ test("rule 55: a field whose only difference is the space form is neither adopte
   const page = fieldBinding("the ", true);
   assert.equal(page.adopt("the" + NBSP), true);
   assert.deepEqual([page.replaced, page.field.shown, page.reports], [[], "the" + NBSP, []]);
+});
+
+test("rule 55: a space typed over a selected U+00A0 is stored as a space, though the shown text compares the same", () => {
+  const page = fieldBinding("a" + NBSP + "b", true);
+  assert.equal(page.key(1, 2, "a b", "insertText", " "), true);
+  assert.deepEqual([page.replaced, page.committed, page.painted(), page.reports], [[[[1, 2, " "]]], ["a b"], "a b", []]);
+});
+
+test("rule 55: a U+00A0 typed over a selected space is stored as U+00A0", () => {
+  const page = fieldBinding("a b", true);
+  assert.equal(page.key(1, 2, "a" + NBSP + "b", "insertText", NBSP), true);
+  assert.deepEqual([page.replaced, page.committed, page.painted(), page.reports], [[[[1, 2, NBSP]]], ["a" + NBSP + "b"], "a" + NBSP + "b", []]);
+});
+
+test("rule 55: a paint during the drain of a commit resets a field shown in the other space form and reports nothing", () => {
+  let page: ReturnType<typeof fieldBinding> | null = null;
+  page = fieldBinding("the t", true, () => { assert.ok(page); assert.equal(page.binding.canPaint(), false); });
+  assert.equal(page.key(4, 5, "the" + NBSP, "deleteContentBackward", null), true);
+  assert.deepEqual([page.committed, page.resets(), page.reports], [["the "], 1, []]);
 });

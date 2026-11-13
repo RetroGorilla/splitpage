@@ -110,7 +110,7 @@ drain is reported, repainted and forgotten, so the next key opens a fresh edit.
 
 ## Native ownership and composition invariants
 
-Every shared native listener enters and leaves through `WriterBufferBinding.native`,
+Every shared native listener enters and leaves through `BufferedFieldBinding.native`,
 including mounted clipboard handlers, focus, pointer and selection events. Paint
 and programmatic settlement also use the ownership checkpoint. It compares every
 shown beat with its last painted text; that text is retained even when no valid
@@ -225,8 +225,10 @@ the painted text counting U+0020 and U+00A0 as one character
   whatever form the browser shows (`foldedNativeSplice`, and
   `foldedNativeReplacement` for input without a target);
 - typed text is stored as the native data when the two differ only in space
-  form, so a typed space is U+0020 and a typed U+00A0 stays U+00A0; with no
-  data, it is stored as the browser shows it;
+  form, so a typed space is U+0020 and a typed U+00A0 stays U+00A0, also when
+  it is typed over a selected space of the other form. Input with no native data
+  (a spellcheck replacement, or input without `beforeinput`) is stored as the
+  browser shows it, U+00A0 included;
 - the runs a commit sends are aligned to the buffered text (`alignSpaceForm`),
   so the mapper's evidence check holds. The rule 29 recovery write keeps the
   field as shown.

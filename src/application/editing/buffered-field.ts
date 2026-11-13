@@ -159,8 +159,10 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       && range.anchor.rowId === held.rowId && range.head.rowId === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
     let outcome: ReturnType<BufferedTextEdit["commit"]>;
     committing = true;
-    const runs = surface.runs(held.beat);
-    try { outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection); }
+    try {
+      const runs = surface.runs(held.beat);
+      outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection);
+    }
     catch (error) { outcome = { kind: "failed", error }; }
     finally { committing = false; }
     if (held.edit.isOpen()) return recover(held, outcome, selection);
@@ -225,8 +227,8 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (!active || !active.edit.isOpen()) return;
       reconcile();
       if (target && !active.fault && same(projection(surface.runs(active.beat)), active.edit.text())) {
-        const [from, to] = target;
-        active.edit.replace(from, to, active.edit.text().slice(from, to)); target = null;
+        const [from, to] = target, kept = active.edit.text().slice(from, to);
+        active.edit.replace(from, to, surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept); target = null;
       }
       if (!surface.composition()) finish();
     },
