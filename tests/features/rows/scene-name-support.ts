@@ -57,7 +57,7 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
       shown: edit => { depth++; try { return edit(); } finally { depth--; } },
-      repaintRows: () => { repaints++; paint(); },
+      repaint: () => { repaints++; paint(); },
       onPainted: listener => watch(listeners, listener),
       beforePaint: check => watch(checks, check)
     }

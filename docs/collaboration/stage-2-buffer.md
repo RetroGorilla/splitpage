@@ -425,15 +425,14 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
 remote change mid-typing, mid-composition and while the heading is held empty,
 compared on the typist, the other copy and a late joiner. "standalone heading
 keystroke" in `tests/features/writer/buffer-cost.test.ts` pins that the
-standalone rename builds no buffer or painted record and reads no key. The
-title is not bound yet.
+standalone rename builds no buffer or painted record and reads no key.
 
 ### The Split view's rename form (package 9d, cut 1b)
 
 In a shared session the Split view's rename form binds its input to the same
-buffered field under the heading's key (`bindSceneName` in
-`src/features/rows/scene-name-buffer.ts`, given by `sharedSceneNamePorts` in the
-wiring). Each keystroke settles as the heading's `text-insert` or `text-delete`;
+buffered field under the heading's key (`bindBufferedInput` in
+`src/features/common/buffered-input.ts`, given by `sharedBufferedInputPorts` in
+the wiring). Each keystroke settles as the heading's `text-insert` or `text-delete`;
 the form runs no rename command, and closing it (Enter, Escape, focus loss)
 closes it over what is already shared and repaints the rows once. The form shows
 the stored name (`storedSceneName`, edge spaces included), and the empty and
@@ -482,6 +481,32 @@ sequence Edge sends for an `<input>`; the test file's `EDGE_SEQUENCES` table hol
 the sequences recorded in Edge 157 and checks each helper against it on a plain
 input; `tests/features/rows/scene-controls.test.ts`
 pins the standalone form, which binds nothing.
+
+### The script title (package 9d, cut 2)
+
+In a shared session `mountTitleRoutes` binds both title inputs (`#doc-title` and
+`#writer-title`) to one buffered field under `TITLE_FIELD_KEY`, through the same
+`bindBufferedInput`; it runs no `set-title` command. Each keystroke settles as a
+`text-insert` or `text-delete` on the document's title text, with no beat stamp.
+The input being typed in is the field; a settle or a repaint writes the stored
+title into both inputs and updates the page title. Assumed rules, for the plan
+review:
+
+- The title has no unsettled verdict: an emptied title is written empty at once,
+  with no hold and no report, as a local title may be empty. Typing has no length
+  stop, as locally; loading still caps a title at 300 units.
+- Shared typing leaves `titleOrigin` and `titleVersion` as they are. Saving is
+  refused in a shared session, so the first-save rename from the file name cannot
+  overwrite a typed title yet; this needs a rule when shared saving lands.
+- Paste, drop, `historyUndo`, `historyRedo` and other input types are refused
+  with `buffer-unsupported-input`, after settling typing, as in the rename form.
+  Enter changes nothing.
+- A paint keeps the caret and selection, with their direction, on the same
+  shared units, as in the rename form.
+
+`tests/features/title/title-buffer.test.ts` holds each case through
+`tests/features/edge-input.ts`, compared on the typist, the other copy and a late
+joiner; `tests/features/title/routes.test.ts` pins the standalone routes.
 
 ## Mapping and coverage
 
