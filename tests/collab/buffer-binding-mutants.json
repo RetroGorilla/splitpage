@@ -1,5 +1,5 @@
 {
-  "tests": ["tests/features/writer/buffer-binding.test.ts", "tests/features/writer/buffer-review.test.ts", "tests/features/writer/buffer-invariants.test.ts"],
+  "tests": ["tests/features/writer/buffer-binding.test.ts","tests/features/writer/buffer-review.test.ts","tests/features/writer/buffer-invariants.test.ts"],
   "mutants": [{
     "label": "local command admitted before dirty native typing",
     "file": "src/application/editing/buffered-field.ts",
@@ -182,7 +182,7 @@
   }, {
     "label": "the Split narration scan is skipped",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "    fields: () => root.querySelectorAll<HTMLElement>(NARRATION),",
+    "find": "    fields: () => root.querySelectorAll<HTMLElement>(CELLS),",
     "replace": "    fields: () => [],",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }, {
@@ -194,8 +194,8 @@
   }, {
     "label": "Split non-text input refused before settling",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "      if (binding.beforeInput(input, at(text, ports.page.selection(text)), target(input, text))) return;",
-    "replace": "      if (!/^(insert|delete)/.test(input.inputType)) { refuse(event, \"buffer-unsupported-input\"); return; }\n      if (binding.beforeInput(input, at(text, ports.page.selection(text)), target(input, text))) return;",
+    "find": "      if (binding.beforeInput(input, at(keyOf(text), ports.page.selection(text)), target(input, text))) return;",
+    "replace": "      if (!/^(insert|delete)/.test(input.inputType)) { refuse(event, \"buffer-unsupported-input\"); return; }\n      if (binding.beforeInput(input, at(keyOf(text), ports.page.selection(text)), target(input, text))) return;",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }, {
     "label": "Split focus loss settles during a composition",
@@ -210,11 +210,11 @@
     "replace": "stopCheck = () => {};",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }, {
-    "label": "Split visual cells left out of the scan",
+    "label": "Split visual cells left out of the binding",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "    normalize,\n",
-    "replace": "    normalize: () => {},\n",
-    "tests": ["tests/features/editing/cell-buffer.test.ts"]
+    "find": "const CELLS = '.cell-editable[data-field=\"audioText\"], .cell-editable[data-field=\"visualText\"]';",
+    "replace": "const CELLS = '.cell-editable[data-field=\"audioText\"]';",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
   }, {
     "label": "adoption settles over a pending native target",
     "file": "src/application/editing/buffered-field.ts",
@@ -224,8 +224,8 @@
   }, {
     "label": "the Split view keeps the typed cell after a recovery write",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "if (!shown || toHtml(shown) !== toHtml(painted)) ports.page.write(cell, html);",
-    "replace": "void shown;",
+    "find": "if (!current || toHtml(current) !== toHtml(painted)) ports.page.write(found.cell, found.html);",
+    "replace": "void current;",
     "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
   }, {
     "label": "the Split view unmounts over a refused recovery write",
@@ -233,5 +233,29 @@
     "find": "if (!ports.shown(() => binding.dispose())) return false;",
     "replace": "ports.shown(() => binding.dispose());",
     "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
+  }, {
+    "label": "a visual commit addressed to the narration",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "  return { owner, segment: owner, field };",
+    "replace": "  return { owner, segment: owner, field: \"audioText\" as const };",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "a visual recovery draft written to the narration",
+    "file": "src/core/collab/buffer-operations.ts",
+    "find": "fields: { [snapshot.field ?? \"audioText\"]: snapshot.html,",
+    "replace": "fields: { audioText: snapshot.html,",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "the visual caret resolved as narration",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "target.field === \"visualText\" ? { key: rowId, target } : undefined",
+    "replace": "undefined",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "a visual cell with no visual is left to the silent repaint",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "      refuse(event, \"buffer-no-visual\"); return;",
+    "replace": "      void event;",
+    "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
   }]
 }

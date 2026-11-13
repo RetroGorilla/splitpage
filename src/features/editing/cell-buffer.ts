@@ -1,6 +1,6 @@
 import type { BufferedFieldBinding } from "../../application/editing/buffered-field.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
-import { alignSpaceForm } from "../../core/collab/buffer.ts";
+import { alignSpaceForm, bufferedFieldKey, readBufferedFieldKey } from "../../core/collab/buffer.ts";
 import { beatPos } from "../../core/flow/flow.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -9,9 +9,9 @@ import { domToPos } from "../common/cell-dom.ts";
 import { cssAttr } from "../common/dom.ts";
 import type { CellBufferPorts } from "./ports.ts";
 
-const NARRATION = '.cell-editable[data-field="audioText"]';
-const VISUAL = '.cell-editable[data-field="visualText"]';
+const CELLS = '.cell-editable[data-field="audioText"], .cell-editable[data-field="visualText"]';
 const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop", "focusout"] as const;
+const FIELDS = ["audioText", "visualText"] as const;
 
 export interface CellBuffer {
   readonly binding: BufferedFieldBinding;
@@ -20,31 +20,37 @@ export interface CellBuffer {
 
 export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly ports: CellBufferPorts }): CellBuffer {
   const { root, ports } = mount;
-  let composing = false, visualComposing: Element | null = null;
-  const narration = (rowId: string) => root.querySelector<HTMLElement>(NARRATION + '[data-id="' + cssAttr(rowId) + '"]');
+  let composing = false;
+  const cellOf = (key: string) => {
+    const { rowId, field } = readBufferedFieldKey(key);
+    return root.querySelector<HTMLElement>('.cell-editable[data-field="' + field + '"][data-id="' + cssAttr(rowId) + '"]');
+  };
+  const keyOf = (cell: Element) => bufferedFieldKey(cell.getAttribute("data-id") ?? "", cell.getAttribute("data-field") === "visualText" ? "visualText" : "audioText");
   const shownRow = (rowId: string) => ports.document()?.rows.find(row => row.id === rowId);
   const runs = (cell: Element) => ports.decode(ports.page.html(cell));
-  const stored = (row: { readonly audioText?: string | null | undefined }) => row.audioText ?? "";
-  const at = (cell: Element, range: CellRange | null): FlowRange | null => {
-    const rowId = cell.getAttribute("data-id");
-    return rowId && range ? { anchor: beatPos(rowId, range.from), head: beatPos(rowId, range.to) } : null;
-  };
+  const stored = (row: { readonly audioText?: string | null | undefined; readonly visualText?: string | null | undefined }, field: typeof FIELDS[number]) => row[field] ?? "";
+  const at = (key: string, range: CellRange | null): FlowRange | null => range ? { anchor: beatPos(key, range.from), head: beatPos(key, range.to) } : null;
 
-  function reset(rowId: string): void {
-    const cell = narration(rowId), row = shownRow(rowId);
-    if (!cell || !row) return;
-    ports.page.write(cell, stored(row));
-    ports.notePainted(cell, "audioText", row);
-    ports.painted.field(rowId, projection(ports.decode(stored(row))));
+  function shown(key: string) {
+    const { rowId, field } = readBufferedFieldKey(key), cell = cellOf(key), row = shownRow(rowId);
+    return cell && row ? { cell, row, field, html: stored(row, field) } : null;
   }
 
-  function repaint(rowId: string): void {
-    const cell = narration(rowId), row = shownRow(rowId);
-    if (cell && row) {
-      const html = stored(row), painted = ports.decode(html), text = projection(painted), shown = alignSpaceForm(runs(cell), text);
-      if (!shown || toHtml(shown) !== toHtml(painted)) ports.page.write(cell, html);
-      ports.notePainted(cell, "audioText", row);
-      ports.painted.field(rowId, text);
+  function reset(key: string): void {
+    const found = shown(key);
+    if (!found) return;
+    ports.page.write(found.cell, found.html);
+    ports.notePainted(found.cell, found.field, found.row);
+    ports.painted.field(key, projection(ports.decode(found.html)));
+  }
+
+  function repaint(key: string): void {
+    const found = shown(key);
+    if (found) {
+      const painted = ports.decode(found.html), text = projection(painted), current = alignSpaceForm(runs(found.cell), text);
+      if (!current || toHtml(current) !== toHtml(painted)) ports.page.write(found.cell, found.html);
+      ports.notePainted(found.cell, found.field, found.row);
+      ports.painted.field(key, text);
     }
     ports.repaintRows();
   }
@@ -52,37 +58,29 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   function record(): void {
     const doc = ports.document();
     if (!doc) { ports.painted.clear(); return; }
-    const painted = doc.rows.filter(row => {
-      const cell = narration(row.id);
-      return cell !== null && ports.paintedFrom(cell, "audioText", row);
-    });
-    ports.painted.record(painted, row => projection(ports.decode(stored(row))));
-  }
-
-  function normalize(): void {
-    for (const cell of root.querySelectorAll(VISUAL)) {
-      const row = shownRow(cell.getAttribute("data-id") ?? "");
-      if (cell === visualComposing || !row || projection(runs(cell)) === projection(ports.decode(row.visualText ?? ""))) continue;
-      resetVisual(cell); ports.report({ kind: "rejected", reason: "buffer-visual-column" });
-    }
+    const painted = doc.rows.flatMap(row => FIELDS.flatMap(field => {
+      const id = bufferedFieldKey(row.id, field), cell = cellOf(id);
+      return cell !== null && ports.paintedFrom(cell, field, row) ? [{ id, html: stored(row, field) }] : [];
+    }));
+    ports.painted.record(painted, entry => projection(ports.decode(entry.html)));
   }
 
   const binding = ports.field({
     foldSpaceForm: true,
-    fields: () => root.querySelectorAll<HTMLElement>(NARRATION),
-    field: narration,
-    rowId: cell => cell.getAttribute("data-id") ?? "",
-    base: rowId => ports.painted.base(rowId),
-    painted: rowId => ports.painted.text(rowId),
-    normalize,
+    fields: () => root.querySelectorAll<HTMLElement>(CELLS),
+    field: cellOf,
+    rowId: keyOf,
+    base: key => ports.painted.base(key),
+    painted: key => ports.painted.text(key),
+    normalize: () => {},
     reset, runs, repaint,
     selection: () => {
       const active = root.ownerDocument.activeElement;
-      return active instanceof HTMLElement && root.contains(active) && active.matches(NARRATION) ? at(active, ports.page.selection(active)) : null;
+      return active instanceof HTMLElement && root.contains(active) && active.matches(CELLS) ? at(keyOf(active), ports.page.selection(active)) : null;
     },
     composition: value => { if (value !== undefined) composing = value; return composing; },
-    restore: (rowId, range) => {
-      const cell = narration(rowId);
+    restore: (key, range) => {
+      const cell = cellOf(key);
       if (!cell || range?.anchor.kind !== "beat" || range.head.kind !== "beat") return;
       const from = Math.min(range.anchor.offset, range.head.offset), to = Math.max(range.anchor.offset, range.head.offset);
       ports.page.focus(cell, { from, to });
@@ -95,34 +93,26 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     ports.report({ kind: "rejected", reason });
   }
 
-  function resetVisual(cell: Element): void {
-    const row = shownRow(cell.getAttribute("data-id") ?? "");
-    if (row) ports.page.write(cell, row.visualText);
-  }
-
   function target(event: InputEvent, cell: Element): FlowRange | null {
     const range = typeof event.getTargetRanges === "function" ? event.getTargetRanges()[0] : undefined;
     if (!range) return null;
     const from = domToPos(cell, range.startContainer, range.startOffset), to = domToPos(cell, range.endContainer, range.endOffset);
-    return from === null || to === null ? null : at(cell, { from: Math.min(from, to), to: Math.max(from, to) });
+    return from === null || to === null ? null : at(keyOf(cell), { from: Math.min(from, to), to: Math.max(from, to) });
   }
 
   function step(event: Event, cell: Element | null): void {
-    const visual = cell?.matches(VISUAL) === true ? cell : null, text = cell?.matches(NARRATION) === true ? cell : null;
+    const text = cell?.matches(CELLS) === true ? cell : null;
     if (event.type === "keydown") { binding.keydown(event as KeyboardEvent); return; }
     if (event.type === "focusout") { if (!composing) binding.finish(); return; }
-    if (event.type === "compositionend") { binding.end(event as CompositionEvent); if (visual) { visualComposing = null; resetVisual(visual); } return; }
-    if (visual) {
-      if (event.type === "input") return;
-      if (visualComposing === visual) event.preventDefault(); else refuse(event, "buffer-visual-column");
-      if (event.type === "compositionstart") visualComposing = visual;
-      return;
-    }
+    if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
     if (event.type === "input") { if (text) binding.input(); return; }
-    if (event.type === "compositionstart") { if (text) binding.start(event, at(text, ports.page.selection(text))); return; }
+    if (text && (event.type === "compositionstart" || event.type === "beforeinput") && !ports.painted.base(keyOf(text)) && !ports.readable(keyOf(text))) {
+      refuse(event, "buffer-no-visual"); return;
+    }
+    if (event.type === "compositionstart") { if (text) binding.start(event, at(keyOf(text), ports.page.selection(text))); return; }
     if (event.type === "beforeinput" && text) {
       const input = event as InputEvent;
-      if (binding.beforeInput(input, at(text, ports.page.selection(text)), target(input, text))) return;
+      if (binding.beforeInput(input, at(keyOf(text), ports.page.selection(text)), target(input, text))) return;
       if (input.inputType.startsWith("delete")) event.preventDefault();
       else refuse(event, "buffer-unsupported-input");
       return;
