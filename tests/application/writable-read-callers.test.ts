@@ -61,7 +61,8 @@ const VIEW_PORT_USERS = {
   "bootstrap/wiring/ports/document-identity.ts": 2,
   "bootstrap/wiring/ports/person-colors.ts": 2,
   "bootstrap/wiring/ports/shot-hiding.ts": 2,
-  "bootstrap/wiring/shot-hiding.ts": 2
+  "bootstrap/wiring/shot-hiding.ts": 2,
+  "bootstrap/wiring/split-buffer.ts": 2
 };
 
 const BEAT_INSERTS = {
