@@ -18,7 +18,7 @@ const BEAT = "structure_1_007200310037_beat_0", VISUAL = "structure_1_0072003100
 const REMOVE = "structure_1_007200310037005f00720065006d006f00760065_removal_0";
 const recoveryList = [
   { kind: "segment-create", id: "r17", by: "Alice", segment: "draft_segment_17", beat: "draft_17",
-    at: { left: null, right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 7 } },
+    at: { left: "b:R1", right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 7 } },
   { kind: "remove", id: "r17_remove", by: "Alice", removalKind: "beat", targets: ["draft_17"], observed: ['["flow-base","draft_17","audioText",0,3]'],
     boundaries: ["draft_17"], components: [VISUAL], gallery: [], comments: [], at: 2 }
 ].map(operation);
@@ -61,11 +61,11 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
       assert.deepEqual(record.observed.map(value => ({ field: value.target.field, units: value.identities.length })), [{ field: "audioText", units: 3 }, { field: "visualText", units: 0 }]);
       assert.deepEqual(executeSharedOperations(run.a, [operation({ kind: "restore", id: "back", by: "Alice", removals: [REMOVE] })], { base: readSharedRevision(run.a) }), { ok: true });
       run.queue.flush(order);
-      agree("restored recovery has no exported bookkeeping", order, handles, read, { rows: [{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }, { id: BEAT, text: "aZd" }], recovery: [] });
+      agree("restored recovery has no exported bookkeeping", order, handles, read, { rows: [{ id: "R1", text: "ab" }, { id: BEAT, text: "aZd" }, { id: "R2", text: "cd" }], recovery: [] });
       compare();
       const loaded = runtime.load(projectSharedDocumentWithRecovery(run.a).document);
-      assert.equal(loaded.rows.at(-1)?.id, BEAT); assert.equal(loaded.rows.at(-1)?.audioText, "aZd");
-      assert.equal(Object.hasOwn(loaded.rows.at(-1) ?? {}, "bufferSourceOwner"), false);
+      assert.equal(loaded.rows[1]?.id, BEAT); assert.equal(loaded.rows[1]?.audioText, "aZd");
+      assert.equal(Object.hasOwn(loaded.rows[1] ?? {}, "bufferSourceOwner"), false);
     } finally { for (const projector of projectors) projector.dispose(); run.close(); }
   });
 

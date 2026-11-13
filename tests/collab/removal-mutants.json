@@ -107,5 +107,11 @@
     "find": "const words = new Set(anchored);",
     "replace": "const words = new Set<string>();",
     "tests": ["tests/adapters/collab/comment-recovery.test.ts"]
+  }, {
+    "label": "draft placed at the end of the order",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "segment: sharedBufferSourceSegment(handle, rowId) }",
+    "replace": "segment: null }",
+    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }]
 }

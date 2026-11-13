@@ -56,7 +56,7 @@ test("rule 29: a composition that cannot be committed is kept in recovery once, 
     assert.deepEqual(page.a.executed.map(command => command.base), [1, 2]);
     assert.deepEqual(page.a.executed[1]?.operations, [
       { kind: "segment-create", id: "r17", by: "Alice", segment: "draft_segment_r17", beat: "draft_r17",
-        at: { left: null, right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 1 } },
+        at: { left: "b:R1", right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 1 } },
       { kind: "remove", id: "r17_remove", by: "Alice", removalKind: "beat", targets: ["draft_r17"], observed: ['["flow-base","draft_r17","audioText",0,3]'],
         boundaries: ["draft_r17"], components: [VISUAL], gallery: [], comments: [], at: 2 }
     ]);
