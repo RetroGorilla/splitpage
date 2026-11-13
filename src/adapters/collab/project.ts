@@ -12,8 +12,8 @@ import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { SharedProjectionCache } from "./projection-cache.ts";
 import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
-import { projectSharedRecoveryRemoval } from "../../core/collab/recovery.ts";
-import type { SharedRecoveryEntry } from "../../core/collab/recovery.ts";
+import { projectSharedCoveredBeats, projectSharedRecoveryRemoval } from "../../core/collab/recovery.ts";
+import type { SharedCoverageBlock, SharedRecoveryEntry, SharedRecoveryRemovalSource } from "../../core/collab/recovery.ts";
 import { readSharedActiveRemovalSources, readSharedRemovalBufferSources, readSharedRemovalSources } from "./removal-record.ts";
 import { collabState } from "./state.ts";
 import { compareSharedProjections } from "../../core/collab/projection/changes.ts";
@@ -84,7 +84,10 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     owner: fragment.id, segment: fragment.segment, field: fragment.kind === "h" ? "heading" : "audioText", from: fragment.from, to: fragment.to,
     html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", JSON.stringify([fragment.segment, fragment.from, fragment.to])) });
   const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
-  const order = sourceRows.map(row => String(row.id)), groups = projectSharedJoinedLayout(blocks.filter(block => block.kind === "b"), order.map(id => source.structure(id)));
+  const order = sourceRows.map(row => String(row.id)), beatBlocks = blocks.filter(block => block.kind === "b"), structures = order.map(id => source.structure(id));
+  const covered = coveredSharedBeats(source, beatBlocks, structures);
+  const groups = projectSharedJoinedLayout(beatBlocks, structures.map(value => covered.has(value.id) && !value.removed
+    ? cache.read(["covered-structure", value.id], [value], () => ({ ...value, removed: true })) : value));
   const ranks = new Map(order.map((id, index) => [id, index]));
   const rows: Record<string, unknown>[] = [], plans = groups.flatMap(group => {
     const root = byId.get(group.root); if (!root) return [];
@@ -116,13 +119,17 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     if (group.removed) {
       const reads = collabState(source.handle).reads, { beats, removalRecords } = source.roots;
       const buffer = readSharedRemovalBufferSources(beats, removalRecords, members, reads);
-      const own = new Map(members.map(id => [id, readSharedActiveRemovalSources(beats, removalRecords, id, reads)]));
+      const own = new Map(members.map(id => {
+        const list = readSharedActiveRemovalSources(beats, removalRecords, id, reads); return [id, list.length ? list : covered.get(id) ?? []];
+      }));
+      const splitBy = covered.has(group.root) ? source.fields("beat", group.root)?.splitBy : undefined;
       // why: a beat joined into a removed beat has no removal of its own; it is in recovery by the root's removal.
       const applicable = (id: string) => { const list = own.get(id) ?? []; return list.length ? list : own.get(group.root) ?? []; };
       const parts = [...group.members.map(member => ({ removals: applicable(member.id), units: narrationByBeat.get(member.id) ?? [] })),
         ...visualCells.map(value => ({ removals: applicable(value.beat), units: value.units }))];
       const removal = cache.read(["removed-provenance", group.root], parts.flatMap(part => [part.units, part.removals.length, ...part.removals]), () => projectSharedRecoveryRemoval(parts));
-      recovery.push({ kind: "removed-beat", row: cache.canonical(painted, "row") as Record<string, unknown>, members, ...(removal ? { removal } : {}), ...(buffer.length ? { buffer } : {}) });
+      recovery.push({ kind: "removed-beat", row: cache.canonical(painted, "row") as Record<string, unknown>, members, ...(removal ? { removal } : {}), ...(buffer.length ? { buffer } : {}),
+        ...(typeof splitBy === "string" ? { splitBy } : {}) });
     }
     else rows.push(painted);
   }
@@ -149,6 +156,16 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   const result = { document, recovery, changes };
   cache.end();
   return result;
+}
+
+function coveredSharedBeats(source: SharedProjectionSource, blocks: readonly SharedCoverageBlock[], structures: readonly { readonly id: string; readonly removed: boolean }[]) {
+  const removed = new Set(structures.filter(value => value.removed).map(value => value.id));
+  if (!removed.size) return new Map<string, readonly SharedRecoveryRemovalSource[]>();
+  const reads = collabState(source.handle).reads, { beats, removalRecords } = source.roots;
+  const sources = new Map([...removed].map(id => [id, readSharedActiveRemovalSources(beats, removalRecords, id, reads)] as const));
+  const segments = new Set(blocks.filter(block => removed.has(block.id)).map(block => block.segment)), relevant = blocks.filter(block => segments.has(block.segment));
+  return source.cache.read(["covered-beats"], [...relevant.flatMap(block => [block.id, block.units, removed.has(block.id)]),
+    ...[...sources].flatMap(([id, list]) => [id, list.length, ...list])], () => projectSharedCoveredBeats(relevant, removed, sources));
 }
 
 export function readSharedDocumentFieldProjection(handle: SharedDocumentHandle): SharedDocumentFieldProjection {

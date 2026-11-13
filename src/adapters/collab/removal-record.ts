@@ -3,9 +3,8 @@ import type { SharedSoftRemove, SharedTextAddress } from "../../core/collab/oper
 import { readTextInsert } from "../../core/collab/read-operation.ts";
 import { readSharedBufferRecoveryMetadata } from "../../core/collab/removal-state.ts";
 import type { SharedRemovalBufferSource } from "../../core/collab/removal-state.ts";
-import type { SharedTextIdentity } from "./mark-record.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
-import { sharedStructureIdentity } from "./structure-identity.ts";
+import { sharedStructureKey } from "../../core/collab/structure-key.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedActiveRemovals, readSharedRemovalState } from "./removal-state.ts";
 import { sharedRecoveryIdentityKey } from "../../core/collab/recovery.ts";
@@ -13,7 +12,7 @@ import type { SharedRecoveryRemovalSource } from "../../core/collab/recovery.ts"
 import type { CollabReadCaches } from "./read-cache.ts";
 
 export interface SharedRemovalTarget { readonly beat: string; readonly segment: string; readonly generation: number }
-export interface SharedRemovalObservation { readonly target: SharedTextAddress; readonly identities: readonly SharedTextIdentity[] }
+export interface SharedRemovalObservation { readonly target: SharedTextAddress; readonly identities: readonly { readonly client: number; readonly clock: number }[] }
 export type SharedStoredRemovalCommand = {
   readonly writer: string; readonly operation: string; readonly by: string; readonly targets: readonly SharedRemovalTarget[];
 } & ({ readonly kind: "restore"; readonly removals: readonly string[] } | {
@@ -35,7 +34,7 @@ export function readSharedRemovalCommand(key: string, raw: unknown): SharedStore
   const value = bag(sharedPreparedValue(raw));
   if (!value || !ref(key) || value.kind !== "remove" && value.kind !== "restore" || !ref(value.writer) || !ref(value.operation)
     || typeof value.by !== "string" || !isStableSharedIdentity(value.by) || !Array.isArray(value.targets) || !value.targets.length) return null;
-  try { if (sharedStructureIdentity(value.writer, value.operation, value.kind === "remove" ? "removal" : "restore") !== key) return null; } catch { return null; }
+  if (sharedStructureKey(value.writer, value.operation, value.kind === "remove" ? "removal" : "restore") !== key) return null;
   const targets: SharedRemovalTarget[] = [];
   for (let index = 0; index < value.targets.length; index++) {
     const target = bag(value.targets[index]);
@@ -53,7 +52,7 @@ export function readSharedRemovalCommand(key: string, raw: unknown): SharedStore
     const item = bag(value.observed[index]), target = item && readTextInsert({ kind: "text-insert", id: "observation", by: "", target: item.target,
       at: { left: null, right: null, affinity: "before" }, content: [] })?.target;
     if (!item || !target || !ref(target.owner) || !ref(target.segment) || !Array.isArray(item.identities)) return null;
-    const identities: SharedTextIdentity[] = [];
+    const identities: { client: number; clock: number }[] = [];
     for (let unit = 0; unit < item.identities.length; unit++) {
       const identity = bag(item.identities[unit]);
       if (!identity || typeof identity.client !== "number" || !Number.isSafeInteger(identity.client) || identity.client < 0
