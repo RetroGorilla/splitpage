@@ -28,9 +28,13 @@ export function planSharedConvertedBeat(view: StructurePlanScratch, beat: string
 export function readSharedConvertedBeat(view: StructurePlanScratch, beat: string) {
   const segment = context(view).converted.get(beat); return segment === undefined ? null : Object.freeze({ owner: beat, segment });
 }
-export function readSharedStructureRemoval(view: StructurePlanScratch, id: string): boolean {
-  const state = context(view); return state.removed.get(id) ?? state.index?.removed(id) ?? false;
+function plannedRemoval(state: ReturnType<typeof context>, id: string): boolean {
+  const planned = state.removed.get(id), index = state.index;
+  if (planned !== undefined || !index) return planned ?? false;
+  // why: a removal planned or restored earlier in the list replaces the stored removals of that beat for what follows.
+  return index.removed(id) || index.coveredBy(id).some(beat => !state.removed.has(beat));
 }
+export function readSharedStructureRemoval(view: StructurePlanScratch, id: string): boolean { return plannedRemoval(context(view), id); }
 export function planSharedStructureHead(view: StructurePlanScratch, segment: string, head: unknown): void {
   context(view).heads.set(segment, { segment, inOrder: true, head: readProjectionHead(head), parts: [] });
 }
@@ -69,7 +73,7 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
       return (left < 0 ? Infinity : left) - (right < 0 ? Infinity : right) || (a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0);
     });
   return projectSharedBlocks(streams, [...records.values()]).filter(block => purpose === "restore-membership" || block.id === null
-    || !(block.kind === "h" ? state.headings.get(block.id) ?? index.headingRemoved(block.id) : state.removed.get(block.id) ?? index.removed(block.id)));
+    || !(block.kind === "h" ? state.headings.get(block.id) ?? index.headingRemoved(block.id) : plannedRemoval(state, block.id)));
 }
 
 function resolveOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading", purpose: "projected" | "restore-membership") {

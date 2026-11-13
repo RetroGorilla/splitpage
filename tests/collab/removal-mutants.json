@@ -77,5 +77,23 @@
     "find": "return list.length ? list : own.get(group.root) ?? [];",
     "replace": "return list;",
     "tests": ["tests/adapters/collab/recovery-removal.test.ts"]
+  }, {
+    "label": "split-off beat follows a removal without holding what it observed",
+    "file": "src/core/collab/recovery.ts",
+    "find": "block.units.some(unit => unit.identity !== undefined && source.observed.has(sharedRecoveryIdentityKey(unit.identity)))",
+    "replace": "block.units.length >= 0",
+    "tests": ["tests/adapters/collab/split-removal.test.ts"]
+  }, {
+    "label": "removed split-off beat still accepts commands",
+    "file": "src/adapters/collab/structure-plan.ts",
+    "find": "return index.removed(id) || index.coveredBy(id).some(beat => !state.removed.has(beat));",
+    "replace": "return index.removed(id);",
+    "tests": ["tests/adapters/collab/split-removal.test.ts"]
+  }, {
+    "label": "split-off beat stays removed after a restore earlier in the list",
+    "file": "src/adapters/collab/structure-plan.ts",
+    "find": "index.coveredBy(id).some(beat => !state.removed.has(beat))",
+    "replace": "index.coveredBy(id).length > 0",
+    "tests": ["tests/adapters/collab/split-removal.test.ts"]
   }]
 }
