@@ -66,6 +66,11 @@ function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
     .map(([key, record]) => [collection, key, (record as Y.Map<unknown>).toJSON()]));
 }
 
+// why: rule 35 leaves a beat's stamp as it is through undo, so a stamp alone is no change that uses an undo up.
+function unstamped(stored: unknown): unknown {
+  return stored instanceof Y.Map ? Object.fromEntries(Object.entries(stored.toJSON()).filter(([key]) => key !== "stamp" && !key.startsWith("stamp:"))) : null;
+}
+
 // why: undo of a restore never removes someone else's work, so it compares the beats with how the restore left them:
 // the stored beat, its status, its visuals and every piece of its row with characters and marks.
 export function readSharedBeatContent(handle: SharedDocumentHandle, beats: readonly string[]): string {
@@ -75,14 +80,14 @@ export function readSharedBeatContent(handle: SharedDocumentHandle, beats: reado
       const history = readSharedTextHistory(handle, { owner: piece.owner as SharedContentRef, segment: piece.segment as SharedContentRef, field: "audioText" });
       return [piece, history?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
     });
-    return [beat, stored instanceof Y.Map ? stored.toJSON() : null, readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat), pieces];
+    return [beat, unstamped(stored), readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat), pieces];
   }));
 }
 
 // why: a split is taken back only while nothing stored for the new beat changed; its characters join the source beat.
 export function readSharedBeatShape(handle: SharedDocumentHandle, beat: string): string {
   const stored = collabState(handle).roots.beats.get(beat), status = { scope: "beat", record: beat as SharedContentRef } as const;
-  return JSON.stringify([stored instanceof Y.Map ? stored.toJSON() : null, readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat),
+  return JSON.stringify([unstamped(stored), readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat),
     rowPieces(handle, beat).map(({ owner, segment, group }) => [owner, segment, group])]);
 }
 

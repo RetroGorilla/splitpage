@@ -16,6 +16,8 @@ import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
+import { beatPos, enterInHeading, headingPos, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
+import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 
 const runtime = createFlowLoadRuntime(), ORDERS = ["D1", "rev", "dup"] as const, target = { owner: "R1", segment: "R1", field: "audioText" };
@@ -124,4 +126,79 @@ for (const order of ORDERS) test(`a redo brings the new beat back with a change 
 
 test("the owner accepts the split part by its own name and still refuses an unrecorded split by name", () => {
   assert.deepEqual(["beat-split", "split", "split-before", "split-retire", "split-restore", "segment-create"].map(supportsSharedUndoPart), [true, false, false, false, false, false]);
+});
+
+const stamp = (id: string, beat: string, by: string) => ({ kind: "scalar", id, by, target: { scope: "beat", record: beat }, field: "stamp", value: { at: "2026-11-13T10:00:00.000Z", by } });
+const typeIn = (id: string, beat: string, by: string) => operation({ kind: "text-insert", id, by, target: { owner: beat, segment: beat, field: "audioText" },
+  at: { left: flowBaseReference(beat, "audioText", 1), right: null, affinity: "after" }, content: [{ value: "X", marks: [] }] });
+const stamped = [["R1", "ab"], ["Rs", "cdX"], ["R2", "ef"]];
+
+for (const order of ORDERS) test(`rule 35: typing in the new beat with its stamp, then undoing it, leaves the split's undo whole: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  const typing = executeSharedCommand(run.set.a, [typeIn("typed", beat, "Writer"), operation(stamp("typed:stamp", beat, "Writer"))], { label: "typing", selection: null, typing: "X" },
+    { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(typing.result, { ok: true }); assert.ok(typing.record); run.flush(); run.check("typed", stamped);
+  run.reverse(typing.record, true); run.check("typing undone", split2);
+  run.reverse(record, true); run.check("split undone", whole);
+}));
+
+for (const order of ORDERS) test(`rule 35: another writer typing in the new beat with its stamp leaves the split's undo whole: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.send(typeIn("typed", beat, "Other")); run.send(stamp("typed:stamp", beat, "Other")); run.flush(); run.check("typed", stamped);
+  run.reverse(record, true); run.check("split undone", [["R1", "abcdX"], ["R2", "ef"]]);
+}));
+
+for (const [name, change] of [
+  ["sets a field on the new beat", (run: Run, beat: string) => run.send({ kind: "scalar", id: "f", by: "Other", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 9 })],
+  ["removes the new beat", (run: Run, beat: string) => run.send(removeBeat(beat))]
+] as const) for (const order of ORDERS) test(`declared open limit (cut 5a-2): another writer ${name} while the undo is in flight; today the split is taken back anyway: ${order}`,
+  () => scenario(order, run => {
+    const record = run.command(split()), beat = run.beat(record);
+    run.reverse(record, true, false); change(run, beat); run.flush(); run.check("today", whole);
+    assert.deepEqual(projectSharedDocumentWithRecovery(run.set.a).recovery, []);
+  }));
+
+for (const order of ORDERS) test(`a used-up split part is redone as a no-op beside the parts that were undone, never taken back: ${order}`, () => scenario(order, run => {
+  const execution = executeSharedCommand(run.set.a, [split(), operation({ kind: "scalar", id: "para", by: "Writer", target: { scope: "beat", record: "R1" }, field: "paragraphStart", value: true })],
+    { label: "split", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); run.flush();
+  assert.deepEqual(execution.record.parts.map(part => part.kind), ["beat-split", "scalar"]);
+  run.send({ kind: "scalar", id: "f", by: "Other", target: { scope: "beat", record: run.beat(execution.record) }, field: "lengthSeconds", value: 9 }); run.flush();
+  const undone = run.reverse(execution.record, true); run.check("split used up, scalar undone", split2);
+  assert.deepEqual(undone.parts.map(part => part.kind === "beat-split" ? part.retired : part.kind), [true, "scalar"]);
+  run.reverse(undone, true); run.check("redone without taking the split back", split2);
+}));
+
+for (const order of ORDERS) test(`a split-restore of a boundary that is there is refused; two made apart leave it twice and the next undo takes out both: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), part = record.parts[0]; assert.ok(part?.kind === "beat-split");
+  const restore = (id: string) => operation({ kind: "split-restore", id, by: "Other", target, beat: part.beat, unit: part.boundary, before: null });
+  assert.deepEqual(executeSharedOperations(run.set.b, [restore("early")]), { ok: false, index: 0, operation: restore("early"), reason: "existing-boundary" });
+  const undone = run.reverse(record, true); run.check("undone", whole);
+  const redone = run.reverse(undone, true, false);
+  assert.deepEqual(executeSharedOperations(run.set.b, [restore("apart")]), { ok: true }); run.flush();
+  run.reverse(redone, true); run.check("both taken out", whole);
+}));
+
+test("declared: a command with two splits (a middle selection to its own beat) stays refused by name", () => scenario("D1", run => {
+  const document = projectSharedDocumentWithRecovery(run.set.a).document; let next = 0;
+  const outcome = selectionToOwnBeat({ rows: document.rows, comments: [] } as FlowDoc, { anchor: beatPos("R1", 1), head: beatPos("R1", 3) },
+    { ...runtime.ports, newId: () => "fresh" + ++next, operations: { id: "own", by: "Writer" } });
+  assert.ok(outcome && "rows" in outcome && outcome.ops);
+  const execution = executeSharedCommand(run.set.a, [...outcome.ops], { label: "own beat", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record);
+  assert.deepEqual(reverseSharedUndoRecord(run.set.a, execution.record, { by: "Writer", nextId: () => "u" }), { ok: false, reason: "undo-unsupported:split" });
+}));
+
+test("declared: Enter inside a scene heading name stays refused by name", () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }], sections: [{ id: "H1", name: "In", firstSceneId: "R1" }] });
+  try {
+    registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a); registerSharedUndoOperationHandlers(set.a); registerSharedRemovalHandlers(set.a);
+    const document = projectSharedDocumentWithRecovery(set.a).document;
+    const outcome = enterInHeading({ rows: document.rows, sections: document.sections, comments: [] } as FlowDoc, headingPos("H1", 1),
+      { ...runtime.ports, newId: () => "fresh", operations: { id: "enter", by: "Writer" } });
+    assert.ok(outcome && "rows" in outcome && outcome.ops);
+    const execution = executeSharedCommand(set.a, [...outcome.ops], { label: "enter", selection: null, typing: null }, { base: readSharedRevision(set.a) });
+    assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record);
+    assert.deepEqual(reverseSharedUndoRecord(set.a, execution.record, { by: "Writer", nextId: () => "u" }), { ok: false, reason: "undo-unsupported:split" });
+  } finally { set.close(); }
 });

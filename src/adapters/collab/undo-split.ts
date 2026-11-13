@@ -13,6 +13,7 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
 import { planSharedStructureOwner } from "./structure-plan.ts";
 import { readSharedBeatShape, readSharedLiveStructure } from "./undo-removal.ts";
+import { collabState } from "./state.ts";
 
 export type SharedSplitUndoPart = Extract<SharedUndoPart, { kind: "beat-split" }>;
 
@@ -25,12 +26,12 @@ function segmentOf(view: SharedPreparationView, beat: string): string | null {
   return typeof segment === "string" ? segment : null;
 }
 
-function located(view: SharedPreparationView, owner: string, beat: string): { readonly plan: SharedTextCommandPlan; readonly index: number } | null {
+function located(view: SharedPreparationView, owner: string, beat: string): { readonly plan: SharedTextCommandPlan; readonly index: number; readonly all: readonly number[] } | null {
   const segment = segmentOf(view, beat);
   if (!segment) throw new SharedTextPreparationError("missing-target");
   const plan = sharedTextCommandPlan(view, { owner: owner as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" });
-  const index = plan.units.findIndex(unit => boundaryOf(unit.value, beat));
-  return index < 0 ? null : { plan, index };
+  const all = plan.units.flatMap((unit, index) => boundaryOf(unit.value, beat) ? [index] : []), index = all[0];
+  return index === undefined ? null : { plan, index, all };
 }
 
 function checkAuthor(operation: { readonly id: string; readonly by: string }): void {
@@ -43,9 +44,12 @@ export function prepareSharedSplitRetire(operation: SharedSplitRetire, view: Sha
     checkAuthor(operation);
     const found = located(view, operation.beat, operation.beat);
     if (!found) return preparedTextDescription([], []);
-    spliceSharedTextPlan(found.plan, found.index, found.index + 1, []);
-    return preparedTextDescription([sharedTextOverlay(found.plan)],
-      [{ kind: "edit", write: { target: found.plan.target, edit: { type: "delete", from: found.index, to: found.index + 1 }, marks: [] } }]);
+    // why: two restores made apart can leave the boundary twice; undo takes out every copy, last first.
+    const steps = [...found.all].reverse().map(index => {
+      spliceSharedTextPlan(found.plan, index, index + 1, []);
+      return { kind: "edit" as const, write: { target: found.plan.target, edit: { type: "delete" as const, from: index, to: index + 1 }, marks: [] } };
+    });
+    return preparedTextDescription([sharedTextOverlay(found.plan)], steps);
   });
 }
 
@@ -53,7 +57,7 @@ export function prepareSharedSplitRetire(operation: SharedSplitRetire, view: Sha
 export function prepareSharedSplitRestore(operation: SharedSplitRestore, view: SharedPreparationView): SharedTextOperationPreparation {
   return preparedTextOperation(() => {
     checkAuthor(operation);
-    if (located(view, operation.target.owner, operation.beat)) return preparedTextDescription([], []);
+    if (located(view, operation.target.owner, operation.beat)) throw new SharedTextPreparationError("existing-boundary");
     const plan = sharedTextCommandPlan(view, operation.target), unit = readSharedAnchorUnit(operation.unit);
     if (!unit || unit.after) throw new SharedTextPreparationError("invalid-reference");
     const at = resolveSharedTextReference(view, plan, operation.unit, "point").from;
@@ -86,6 +90,8 @@ export function recordSharedSplit(handle: SharedDocumentHandle, operation: Share
     beat = sharedStructureIdentity(prep.view.writer, operation.id, "beat");
     source = sharedStructureReference(prep.view, operation.target.owner);
   } finally { prep.close(); }
+  // why: a split of a beat made earlier in the same list names it by an alias this reading cannot resolve; it stays refused.
+  if (!collabState(handle).roots.beats.has(source)) return null;
   const place = boundaryAnchor(handle, source, beat);
   return place ? { kind: "beat-split", beat: beat as SharedContentRef, source: source as SharedContentRef, segment: place.segment as SharedContentRef, boundary: place.anchor,
     before: operation.kind === "split-before" ? source as SharedContentRef : null, retired: false, content: readSharedBeatShape(handle, beat) } : null;
@@ -97,8 +103,9 @@ export interface SharedSplitUndoPlan { readonly effective: boolean; readonly inv
 export function planSharedSplitUndo(handle: SharedDocumentHandle, part: SharedSplitUndoPart, author: () => { id: string; by: string },
   push: (raw: Record<string, unknown>) => void): SharedSplitUndoPlan {
   const live = readSharedLiveStructure(handle), place = boundaryAnchor(handle, part.source, part.beat);
-  const standing = live.beats.has(part.source) && (part.retired ? place === null : place !== null && live.beats.has(part.beat));
-  if (!standing || !part.retired && readSharedBeatShape(handle, part.beat) !== part.content) return { effective: false, inverse: () => part };
+  const standing = live.beats.has(part.source) && (part.retired ? place === null : place !== null);
+  // why: a used-up part's inverse points the other way, so a later redo never takes this split back.
+  if (!standing || !part.retired && readSharedBeatShape(handle, part.beat) !== part.content) return { effective: false, inverse: () => ({ ...part, retired: !part.retired }) };
   const command = author();
   if (part.retired) push({ kind: "split-restore", ...command, target: { owner: part.source, segment: part.segment, field: "audioText" }, beat: part.beat, unit: part.boundary, before: part.before });
   else push({ kind: "split-retire", ...command, beat: part.beat });
