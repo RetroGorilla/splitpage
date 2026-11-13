@@ -107,6 +107,46 @@ test("a beat removed with its source refuses typing, a split and a join exactly 
   } finally { set.close(); }
 });
 
+for (const order of ["D1", "rev", "dup"] as const) test(`a list that restores the removal can type into the split-off part at once, exactly as into its source: ${order}`, () => {
+  const run = (owner: string) => {
+    const { set, handles } = setup();
+    try {
+      send(set.a, remove); send(set.b, split("R1", 2, "Rb")); set.queue.flush(order);
+      const result = executeSharedOperations(set.c, [operation({ kind: "restore", id: "back", by: "Carol", removals: [REMOVAL] }), operation(type(owner, 1, "Z"))],
+        { base: readSharedRevision(set.c) });
+      set.queue.flush(order);
+      let rows: unknown = null;
+      agree("restored and typed", order, handles, handle => { rows = visible(handle); return rows; });
+      return { result, rows };
+    } finally { set.close(); }
+  };
+  assert.deepEqual([run(RB), run("R1")], [
+    { result: { ok: true }, rows: { rows: [["R0", "x"], ["R1", "ab"], ["Rb", "cZd"], ["R2", "ef"]], recovery: [] } },
+    { result: { ok: true }, rows: { rows: [["R0", "x"], ["R1", "aZb"], ["Rb", "cd"], ["R2", "ef"]], recovery: [] } }]);
+});
+
+test("a refusal later in a list that restored the removal and typed into the split-off part changes nothing", () => {
+  const { set } = setup();
+  try {
+    send(set.a, remove); send(set.b, split("R1", 2, "Rb")); set.queue.flush("D1");
+    const bytes = encodeSharedState(set.c), vector = encodeSharedStateVector(set.c), revision = readSharedRevision(set.c);
+    const result = executeSharedOperations(set.c, [operation({ kind: "restore", id: "back", by: "Carol", removals: [REMOVAL] }), operation(type(RB, 1, "Z")),
+      operation(type("R9", 0, "Q"))], { base: revision });
+    assert.ok(!result.ok); assert.deepEqual([(result as { readonly index?: number }).index, result.reason], [2, "missing-target"]);
+    assert.deepEqual([encodeSharedState(set.c), encodeSharedStateVector(set.c), readSharedRevision(set.c)], [bytes, vector, revision]);
+  } finally { set.close(); }
+});
+
+test("a removal earlier in a list cannot observe text a split earlier in that list moved out of its target, so nothing is covered within a list", () => {
+  const { set } = setup();
+  try {
+    const bytes = encodeSharedState(set.b), revision = readSharedRevision(set.b);
+    const result = executeSharedOperations(set.b, [operation(split("R1", 2, "Rb")), operation({ ...remove, by: "Bob" }), operation(type("Rb", 1, "Z"))], { base: revision });
+    assert.ok(!result.ok); assert.deepEqual([(result as { readonly index?: number }).index, result.reason], [1, "invalid-reference"]);
+    assert.deepEqual([encodeSharedState(set.b), readSharedRevision(set.b)], [bytes, revision]);
+  } finally { set.close(); }
+});
+
 for (const order of ["D1", "rev", "dup"] as const) test(`a removed split-off part joined into a live beat leaves it as a flagged beat would: ${order}`, () => {
   const { set, handles } = setup();
   try {

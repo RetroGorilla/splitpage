@@ -85,9 +85,15 @@
     "tests": ["tests/adapters/collab/split-removal.test.ts"]
   }, {
     "label": "removed split-off beat still accepts commands",
-    "file": "src/adapters/collab/structure-index.ts",
-    "find": "removed: (id: string) => removed.has(id) || covered(id),",
-    "replace": "removed: (id: string) => removed.has(id),",
+    "file": "src/adapters/collab/structure-plan.ts",
+    "find": "return index.removed(id) || index.coveredBy(id).some(beat => !state.removed.has(beat));",
+    "replace": "return index.removed(id);",
+    "tests": ["tests/adapters/collab/split-removal.test.ts"]
+  }, {
+    "label": "split-off beat stays removed after a restore earlier in the list",
+    "file": "src/adapters/collab/structure-plan.ts",
+    "find": "index.coveredBy(id).some(beat => !state.removed.has(beat))",
+    "replace": "index.coveredBy(id).length > 0",
     "tests": ["tests/adapters/collab/split-removal.test.ts"]
   }]
 }
