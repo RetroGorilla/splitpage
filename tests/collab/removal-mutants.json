@@ -120,11 +120,23 @@
     "replace": "return false;",
     "tests": ["tests/adapters/collab/discard.test.ts"]
   }, {
-    "label": "restore ignores the discard",
+    "label": "restore leaves the discard active",
     "file": "src/adapters/collab/removal-executor.ts",
-    "find": "if (sharedRemovalDiscarded(view, removal))",
-    "replace": "if (false && sharedRemovalDiscarded(view, removal))",
+    "find": "  writes.push(...sharedRemovalDiscardRetires(view, removals));\n",
+    "replace": "",
     "tests": ["tests/adapters/collab/discard.test.ts"]
+  }, {
+    "label": "tag parts share one name",
+    "file": "src/core/collab/recovery.ts",
+    "find": "key: JSON.stringify([entry.occurrence, entry.start])",
+    "replace": "key: entry.occurrence",
+    "tests": ["tests/adapters/collab/discard.test.ts"]
+  }, {
+    "label": "an entry with no first character is discardable",
+    "file": "src/core/collab/recovery.ts",
+    "find": "return entry.kind === \"scene-with-no-beats\" || \"start\" in entry && entry.start === null;",
+    "replace": "return entry.kind === \"scene-with-no-beats\";",
+    "tests": ["tests/core/collab/recovery-discard.test.ts"]
   }, {
     "label": "retired discard still hides",
     "file": "src/adapters/collab/discard.ts",

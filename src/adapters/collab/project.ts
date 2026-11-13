@@ -77,7 +77,10 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   function cell(value: readonly SharedProjectionUnit[], rowId: string, field: "audioText" | "visualText", key: string): string {
     const units = value;
     const result = cache.read(["cell", key], [units, tags], () => projectSharedTextResult(units, tags), "cell");
-    recovery.push(...result.rejected.map(entry => ({ ...entry, rowId, field })));
+    recovery.push(...result.rejected.map(entry => {
+      const first = units[entry.from]?.identity;
+      return { ...entry, rowId, field, start: first ? sharedRecoveryIdentityKey(first) : null };
+    }));
     return result.html;
   }
   for (const fragment of fragments) if (fragment.reason) recovery.push({ kind: "unprojectable-fragment", reason: fragment.reason,

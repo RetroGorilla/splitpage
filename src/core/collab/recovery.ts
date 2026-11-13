@@ -14,7 +14,7 @@ export interface SharedRecoveryRemoval {
 export interface SharedRecoveryRemovalSource { readonly key: string; readonly by: string; readonly observed: ReadonlySet<string> }
 
 export type SharedRecoveryEntry =
-  | (SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
+  | (SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText"; readonly start: string | null })
   | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
   | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly removal?: SharedRecoveryRemoval;
     readonly buffer?: readonly SharedRemovalBufferSource[]; readonly splitBy?: string; readonly comments?: readonly string[] }
@@ -29,7 +29,7 @@ export function sharedRecoveryEntryName(entry: SharedRecoveryEntry): SharedRecov
   switch (entry.kind) {
     case "removed-beat": return { kind: entry.kind, key: String(entry.row.id) };
     case "removed-heading": case "scene-with-no-beats": return { kind: entry.kind, key: String(entry.heading.id) };
-    case "crossing-tag": case "deleted-tag": return { kind: entry.kind, key: entry.occurrence };
+    case "crossing-tag": case "deleted-tag": return { kind: entry.kind, key: JSON.stringify([entry.occurrence, entry.start]) };
     case "gallery-overflow": return { kind: entry.kind, key: entry.itemId };
     case "unprojectable-fragment": return { kind: entry.kind, key: JSON.stringify([entry.segment, entry.start]) };
     case "comment-without-words": return { kind: entry.kind, key: entry.comment };
@@ -37,8 +37,12 @@ export function sharedRecoveryEntryName(entry: SharedRecoveryEntry): SharedRecov
   }
 }
 
+function unnamed(entry: SharedRecoveryEntry): boolean {
+  return entry.kind === "scene-with-no-beats" || "start" in entry && entry.start === null;
+}
+
 export function sharedRecoveryDiscardOperation(entry: SharedRecoveryEntry, author: { readonly id: string; readonly by: string }): SharedRecoveryDiscard | null {
-  if (entry.kind === "scene-with-no-beats") return null;
+  if (unnamed(entry)) return null;
   const removals = entry.kind === "removed-beat" || entry.kind === "removed-heading" ? entry.removal?.ids ?? [] : [];
   return { kind: "discard", id: author.id as SharedContentRef, by: author.by, entry: sharedRecoveryEntryName(entry), removals: removals as SharedContentRef[] };
 }
@@ -54,7 +58,7 @@ export function hideSharedDiscardedEntries(entries: readonly SharedRecoveryEntry
     seen.set(name, ids);
   }
   return entries.filter(entry => {
-    const name = sharedRecoveryEntryName(entry), ids = entry.kind === "scene-with-no-beats" ? undefined : seen.get(JSON.stringify([name.kind, name.key]));
+    const name = sharedRecoveryEntryName(entry), ids = unnamed(entry) ? undefined : seen.get(JSON.stringify([name.kind, name.key]));
     if (!ids) return true;
     // why: assumed rule 52 on #1414: a removal the discard did not see shows the entry again.
     return !(entry.kind === "removed-beat" || entry.kind === "removed-heading" ? entry.removal?.ids ?? [] : []).every(id => ids.has(id));

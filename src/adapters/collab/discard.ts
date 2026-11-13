@@ -24,8 +24,10 @@ export function readSharedActiveDiscards(discards: Y.Map<unknown>, retired: Y.Ma
   });
 }
 
-export function sharedRemovalDiscarded(view: SharedPreparationView, removal: string): boolean {
-  return view.keys(["discards"]).some(key => !view.has(["retiredDiscards", key]) && (readDiscard(view.get(["discards", key]))?.removals.includes(removal) ?? false));
+export function sharedRemovalDiscardRetires(view: SharedPreparationView, removals: readonly string[]): SharedPreparedWrite[] {
+  return view.keys(["discards"]).filter(key => !view.has(["retiredDiscards", key])
+    && (readDiscard(view.get(["discards", key]))?.removals.some(removal => removals.includes(removal)) ?? false))
+    .sort().map(key => ({ path: ["retiredDiscards", key], kind: "set", value: true }));
 }
 
 function refuse(reason: string): SharedPreparationResult { return { ok: false, reason }; }

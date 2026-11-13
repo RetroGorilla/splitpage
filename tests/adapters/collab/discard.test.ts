@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
-import { replicas, agree, operation } from "./executor-support.ts";
+import { replicas, agree, operation, ref } from "./executor-support.ts";
+import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
+import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { readSharedActiveDiscards } from "../../../src/adapters/collab/discard.ts";
 import { deleteRecord } from "./record-support.ts";
 import { assertIncremental, captureIncrementalReplica, nativeText } from "./incremental-support.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
@@ -26,8 +30,10 @@ const SOURCE = { rows: [{ id: "R1", audioText: "a" + span("C1", "b") }, { id: "R
   comments: [comment("C1", { quotedText: "b", replies: [{ id: "r1", author: "Bob", body: "", createdAt: 0 }] }), comment("C9", { rowId: "R2", quotedText: "gone" })] };
 const remove = (id: string, by: string) => operation({ kind: "remove", id, by, removalKind: "beat", targets: ["R1"],
   observed: [flowBaseReference("R1", "audioText", 0, 2)], boundaries: ["R1"], components: [], gallery: [], at: 0 });
-const restore = (by: string) => operation({ kind: "restore", id: "back" + by, by, removals: [REMOVAL] });
+const restore = (by: string, ...removals: string[]) => operation({ kind: "restore", id: "back" + by, by, removals: removals.length ? removals : [REMOVAL] });
 const writer = (by: string) => { let next = 0; return { by, nextId: () => by + "-undo-" + next++ }; };
+const removeBoth = operation({ kind: "remove", id: "gone", by: "Alice", removalKind: "beat", targets: ["R1", "R2"],
+  observed: [flowBaseReference("R1", "audioText", 0, 2), flowBaseReference("R2", "audioText", 0, 2)], boundaries: ["R1", "R2"], components: [], gallery: [], at: 0 });
 
 function send(handle: SharedDocumentHandle, ...ops: ReturnType<typeof operation>[]): void {
   assert.deepEqual(executeSharedOperations(handle, ops, { base: readSharedRevision(handle) }), { ok: true });
@@ -45,8 +51,18 @@ function summary(handle: SharedDocumentHandle) {
   const { document, recovery } = projectSharedDocumentWithRecovery(handle);
   return { rows: document.rows.map(row => row.id), recovery: recovery.map(entry => { const name = sharedRecoveryEntryName(entry); return name.kind + " " + name.key; }) };
 }
+function state(handle: SharedDocumentHandle) {
+  const { discards, retiredDiscards } = collabState(handle).roots;
+  return { ...summary(handle), active: readSharedActiveDiscards(discards, retiredDiscards).length, retired: retiredDiscards.size };
+}
+function named(handle: SharedDocumentHandle, id: string, key: string): SharedRecoveryDiscard[] {
+  return projectSharedDocumentWithRecovery(handle).recovery.flatMap(entry => {
+    const name = sharedRecoveryEntryName(entry), made = name.kind + " " + name.key === key ? sharedRecoveryDiscardOperation(entry, { id, by: "Bob" }) : null;
+    return made ? [made] : [];
+  });
+}
 
-for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: a discarded removed beat is hidden on every copy and cannot be restored until the discard is undone; redo hides it again: ${order}`, t => {
+for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: a discarded removed beat is hidden on every copy; undo shows it and redo hides it again: ${order}`, t => {
   const { set, handles, projector } = setup();
   try {
     send(set.a, remove("gone", "Alice")); set.queue.flush(order);
@@ -55,8 +71,6 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: a disc
     const discarded = encodeSharedState(set.b).length;
     const hidden = { rows: ["R2"], recovery: ["comment-without-words C9"] };
     agree("discarded", order, handles, summary, hidden);
-    const refused = executeSharedOperations(set.a, [restore("Alice")], { base: readSharedRevision(set.a) });
-    assert.deepEqual(refused.ok ? null : refused.reason, "discarded");
     const undone = reverseSharedUndoRecord(set.b, made.record, writer("Bob"));
     assert.ok(undone.ok && undone.effective); set.queue.flush(order); assertIncremental(set.c, projector);
     agree("discard undone", order, handles, summary, { rows: ["R2"], recovery: ["removed-beat R1", "comment-without-words C9"] });
@@ -83,6 +97,56 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: a remo
   } finally { set.close(); }
 });
 
+const REMOVAL2 = native(3, "gone2", "removal"), DISCARD = { label: "discard", selection: null, typing: null };
+for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52 as amended: a restore of a discarded removal is accepted and retires the discard; its undo leaves the discard retired, and the discard's undo is used up: ${order}`, () => {
+  for (const together of [true, false]) {
+    const { set, handles, projector } = setup(), label = together ? "removed together" : "second removal";
+    try {
+      if (together) { send(set.a, removeBoth); set.queue.flush(order); } else { send(set.c, remove("gone2", "Carol")); send(set.a, remove("gone", "Alice")); set.queue.deliverFrom("A", order); }
+      const made = executeSharedCommand(set.b, named(set.b, "d", "removed-beat R1"), DISCARD);
+      assert.ok(made.result.ok && made.record); set.queue.flush(order); assertIncremental(set.c, projector);
+      agree(label + " discarded", order, handles, state, together ? { rows: [], recovery: ["removed-beat R2", "comment-without-words C9"], active: 1, retired: 0 }
+        : { rows: ["R2"], recovery: ["removed-beat R1", "comment-without-words C9"], active: 1, retired: 0 });
+      const restored = executeSharedCommand(set.c, [together ? restore("Carol") : restore("Carol", REMOVAL, REMOVAL2)], { label: "restore", selection: null, typing: null });
+      assert.deepEqual(restored.result, { ok: true }); assert.ok(restored.record); set.queue.flush(order); assertIncremental(set.c, projector);
+      const back = { rows: ["R1", "R2"], recovery: ["comment-without-words C9"], active: 0, retired: 1 };
+      agree(label + " restored", order, handles, state, back);
+      const bytes = [encodeSharedState(set.b), encodeSharedState(set.c)];
+      const undoRestore = reverseSharedUndoRecord(set.c, restored.record, writer("Carol"));
+      assert.deepEqual(undoRestore.ok ? "undone" : undoRestore.reason, "undo-unsupported:structure");
+      const usedUp = reverseSharedUndoRecord(set.b, made.record, writer("Bob"));
+      assert.ok(usedUp.ok && !usedUp.effective); assert.deepEqual([encodeSharedState(set.b), encodeSharedState(set.c)], bytes);
+      set.queue.flush(order); assertIncremental(set.c, projector);
+      agree(label + " undone", order, handles, state, back);
+    } finally { set.close(); }
+  }
+});
+
+const TAGGED = { rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }] }, RB = native(2, "cut", "beat");
+function tagged(handle: SharedDocumentHandle, key: string, from: number, to: number): void {
+  const address = { owner: ref("R1"), segment: ref("b:R1"), field: "audioText" as const };
+  const record = prepareSharedMarkRecord(handle, address, key, from, to, { type: "add", mark: { kind: "tag", id: ref("z"), value: ref("t_gone") } });
+  assert.ok(record); assert.deepEqual(writeSharedMarkRecord(handle, address, key, record), { ok: true });
+}
+for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52 as amended: two parts of one tag occurrence are named by their first characters, and a split inside an occurrence lists the split-off part on its own: ${order}`, () => {
+  for (const split of [false, true]) {
+    const set = replicas(3, TAGGED), handles = [set.a, set.b, set.c];
+    try {
+      for (const handle of handles) { registerSharedRemovalHandlers(handle); registerSharedSplitHandlers(handle, createFlowLoadRuntime()); }
+      if (split) tagged(set.a, "all", 0, 4); else { tagged(set.a, "p0", 0, 1); tagged(set.a, "p1", 3, 4); }
+      set.queue.flush(order);
+      agree("listed", order, handles, summary, { rows: ["R1", "R2"], recovery: split ? ['deleted-tag ["z","1:13"]'] : ['deleted-tag ["z","1:13"]', 'deleted-tag ["z","1:16"]'] });
+      send(set.b, ...named(set.b, "d", 'deleted-tag ["z","1:13"]')); set.queue.flush(order);
+      agree("first discarded", order, handles, summary, { rows: ["R1", "R2"], recovery: split ? [] : ['deleted-tag ["z","1:16"]'] });
+      if (!split) continue;
+      send(set.b, operation({ kind: "split", id: "cut", by: "Bob", target: { owner: "R1", segment: "R1", field: "audioText" },
+        at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" }, observed: [], boundary: "Rb", beat: "Rb", fields: {} }));
+      set.queue.flush(order);
+      agree("split inside", order, handles, summary, { rows: ["R1", RB, "R2"], recovery: ['deleted-tag ["z","1:15"]'] });
+    } finally { set.close(); }
+  }
+});
+
 for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: comments, replies and fragments are discarded by name; a fragment whose first character is deleted shows again: ${order}`, () => {
   const { set, handles, projector } = setup();
   try {
@@ -105,17 +169,17 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: commen
   } finally { set.close(); }
 });
 
-test("assumed rule 52: seeded discards, undos, redos and refused restores by any copy agree with a counting model on every copy and a late joiner", t => {
+test("assumed rule 52 as amended: seeded discards, undos, redos and restores by any copy agree with a counting model on every copy and a late joiner", t => {
   let seed = 0x52d1, steps = 0;
-  const ran = { discard: 0, undo: 0, redo: 0, refused: 0, restored: 0 };
+  const ran = { discard: 0, undo: 0, redo: 0, restored: 0 };
   const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 8) % n; };
   for (let sample = 0; sample < 8; sample++) for (const order of ["D1", "rev", "dup"] as const) {
     const { set, handles, projector } = setup(), undo = handles.map((): SharedUndoRecord[] => []), redo = handles.map((): SharedUndoRecord[] => []);
-    let active = 0;
+    let active = 0, removal = "gone";
     try {
-      send(set.a, remove("gone", "Alice")); set.queue.flush(order);
+      send(set.a, remove(removal, "Alice")); set.queue.flush(order);
       for (let step = 0; step < 12; step++, steps++) {
-        const actor = random(2), handle = handles[actor], action = [0, 0, 1, 1, 2, 2, 3][random(7)]; assert.ok(handle);
+        const actor = random(2), handle = handles[actor], action = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3][random(10)]; assert.ok(handle);
         if (action === 0 && active === 0) {
           const made = executeSharedCommand(handle, discards(handle, "d" + steps, ["removed-beat"]), { label: "discard", selection: null, typing: null });
           assert.ok(made.result.ok && made.record); undo[actor]?.push(made.record); redo[actor]?.splice(0); active++; ran.discard++;
@@ -123,16 +187,19 @@ test("assumed rule 52: seeded discards, undos, redos and refused restores by any
           const record = (action === 1 ? undo : redo)[actor]?.pop();
           if (record) { const done = reverseSharedUndoRecord(handle, record, writer("W" + actor + steps)); assert.equal(done.ok ? null : done.reason, null); if (!done.ok) break; (action === 1 ? redo : undo)[actor]?.push(done.inverse); active += action === 1 ? -1 : 1; ran[action === 1 ? "undo" : "redo"]++; }
         } else if (action === 3) {
-          const result = executeSharedOperations(handle, [restore("W" + actor + steps)], { base: readSharedRevision(handle) });
-          assert.deepEqual(result.ok ? "restored" : result.reason, active ? "discarded" : "restored"); ran[result.ok ? "restored" : "refused"]++;
-          if (result.ok) { set.queue.flush(order); break; }
+          const result = executeSharedOperations(handle, [restore("W" + actor + steps, native(1, removal, "removal"))], { base: readSharedRevision(handle) });
+          assert.deepEqual(result.ok ? "restored" : result.reason, "restored"); ran.restored++; set.queue.flush(order); assertIncremental(set.c, projector);
+          agree("seed=" + seed, order, handles, handle => ({ ...state(handle), retired: null }), { rows: ["R1", "R2"], recovery: ["comment-without-words C9"], active: 0, retired: null });
+          // why: the restore used up every discard record held for undo, so the history starts again on a fresh removal.
+          for (const stack of [...undo, ...redo]) stack.splice(0);
+          active = 0; removal = "gone" + steps; send(set.a, remove(removal, "Alice"));
         }
         set.queue.flush(order); assertIncremental(set.c, projector);
         agree("seed=" + seed, order, handles, summary, { rows: ["R2"], recovery: [...active ? [] : ["removed-beat R1"], "comment-without-words C9"] });
       }
     } finally { set.close(); }
   }
-  assert.deepEqual({ steps, ...ran }, { steps: 139, discard: 19, undo: 16, redo: 7, refused: 12, restored: 16 });
+  assert.deepEqual({ steps, ...ran }, { steps: 288, discard: 45, undo: 21, redo: 6, restored: 45 });
   t.diagnostic(JSON.stringify({ seed: "0x52d1", histories: 24, steps, ...ran }));
 });
 

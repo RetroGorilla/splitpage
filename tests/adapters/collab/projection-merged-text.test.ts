@@ -43,7 +43,7 @@ const cases = [
   ], html: cup + "a" + ada + "bc</span>d</span>", recovery: [] },
   { name: "crossing tag is untagged and recoverable", marks: [
     [0, 3, { kind: "tag", id: "z", value: "t:prop:Cup" }], [2, 4, { kind: "tag", id: "a", value: "t:cast:Ada" }]
-  ], html: cup + "abc</span>d", recovery: [{ kind: "crossing-tag", occurrence: "a", tag: "t:cast:Ada", from: 2, to: 4, words: "cd", rowId: "R1", field: "audioText" }] },
+  ], html: cup + "abc</span>d", recovery: [{ kind: "crossing-tag", occurrence: "a", tag: "t:cast:Ada", from: 2, to: 4, words: "cd", rowId: "R1", field: "audioText", start: "1:15" }] },
   { name: "same-start longer tag is outer", marks: [
     [0, 4, { kind: "tag", id: "z", value: "t:prop:Cup" }], [0, 2, { kind: "tag", id: "a", value: "t:cast:Ada" }]
   ], html: cup + ada + "ab</span>cd</span>", recovery: [] },

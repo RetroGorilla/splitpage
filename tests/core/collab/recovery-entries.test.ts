@@ -9,8 +9,8 @@ const NOTE = new URL("../../../docs/collaboration/stage-2-recovery-model.md", im
 
 const ENTRIES: Readonly<Record<string, readonly string[]>> = {
   "comment-without-words": ["comment", "field", "rowId"],
-  "crossing-tag": ["field", "from", "occurrence", "rowId", "tag", "to", "words"],
-  "deleted-tag": ["field", "from", "occurrence", "rowId", "tag", "to", "words"],
+  "crossing-tag": ["field", "from", "occurrence", "rowId", "start", "tag", "to", "words"],
+  "deleted-tag": ["field", "from", "occurrence", "rowId", "start", "tag", "to", "words"],
   "gallery-overflow": ["beat", "itemId", "rowId", "slot"],
   "removed-beat": ["buffer?", "comments?", "members", "removal?", "row", "splitBy?"],
   "removed-heading": ["heading", "removal?"],
