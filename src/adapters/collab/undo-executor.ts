@@ -456,7 +456,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       for (const part of unjoins.get(operation) ?? []) if (part && isSharedJoinRetired(handle, part.join, sharedJoinRetirementGroup(part.from, part))) parts.push(part);
     } else if (operation.kind === "join-glue") {
       const seen = glues.get(operation) ?? [];
-      // why: a separator set on a join made in the same command has no earlier value to go back to, so the command stays refused.
+      // why: a separator set on a join made in the same command has no earlier value, so the command stays refused.
       if (seen.some(item => !item)) { parts.push({ kind: "structure", command: operation.kind, operation: operation.id }); continue; }
       for (const item of seen) {
         const now = item && readSharedJoinSeparator(handle, item.join);

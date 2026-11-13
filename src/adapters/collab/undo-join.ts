@@ -87,7 +87,7 @@ function shownSeparator(handle: SharedDocumentHandle, from: string, entry: Store
   return projectSharedJoinGlue(entry.glue, collabState(handle).roots.meta.get(sharedJoinGlueRegisterField(sharedJoinRetirementGroup(from, entry))));
 }
 
-// why: an unjoin is recorded as the join it retired, with the separator and space formats it showed, so its undo joins again.
+// why: an unjoin is recorded as the join it retired, with its separator and space formats, so its undo joins again.
 export function readSharedJoinBeforeRetire(handle: SharedDocumentHandle, join: string): SharedJoinUndoPart | null {
   const found = findSharedJoin(handle, join);
   if (!found) return null;
@@ -111,7 +111,7 @@ export function planSharedJoinGlueUndo(handle: SharedDocumentHandle, part: Extra
   return effective;
 }
 
-// why: a join puts the source after the target's own row, so it is made again only while the source is the next beat there.
+// why: a join puts the source after the target's own row, so it is made again only while the source is next there.
 export function readSharedJoinNeighbours(handle: SharedDocumentHandle, from: string, into: string): boolean {
   const prep = createSharedPreparation(handle);
   try {
