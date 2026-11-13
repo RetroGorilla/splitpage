@@ -151,6 +151,7 @@ A comment goes where its words are (cut 4, assumed rule 47 on #1414). Its words 
 
 - Words partly live and partly removed: the comment stays active at its first live cell and is not listed.
 - Words only in removed content: the comment is listed with the first removed group in script order that holds them, also when another removed group holds the rest under a different removal, and its `rowId` names that group (T11: `C2` in the split-off `Rb`).
+- Inside a removed join group the `rowId` is the group's root beat, as for a live joined row: words in `R2` joined into a removed `R1` move the comment from its stored `R2` to `R1`.
 - Replies are never listed apart from a comment that exists: they stay under it, in recovery or not.
 - A comment or reply written by someone who had not seen the removal is accepted, travels with the beat and is not in `edited` (marks and replies are not characters). Resolved comments are listed like open ones.
 - Restore writes nothing for comments: the restored group's cells anchor them again in place (T11 restored).
