@@ -158,7 +158,8 @@ Declared consequences:
 Not built here:
 
 - people from `@Name`, shots from B-roll lines and owners from pairings. They are
-  read only from the visual column, which Writer typing does not edit.
+  read only from the visual column, which Writer typing does not edit. People
+  have a builder for visual edits: "People from @Name".
 - renaming a sound cue's entry when its words change, which is undetermined.
 - the replica that runs these lists in the app. It must register the record
   handlers, or a commit that introduces a tag is refused as a whole.
@@ -240,3 +241,27 @@ their own record operations when given a shared author; their callers in
 
 `tests/adapters/collab/comment-stamps.test.ts` holds these over four delivery
 orders.
+
+## People from @Name
+
+In a normal script a commit gives a person record to each `@Name` that no line of
+the script held before the commit and that no person has, compared without case.
+In a shared session the copy whose edit of a beat's visual cell typed the name
+puts a `record-create` of `people` in that edit's list.
+`sharedPeopleIntroducedByText` in `core/collab/text-records.ts` builds it. It runs
+the same plan as a normal script (`planOwnerSync`) on the script with the cell
+before and after the edit, and mints with `addPerson`, so the id and the capped
+name are the ones a normal script stores. The operation writes `name`. No caller
+uses it yet; the callers come with package 14.
+`tests/collab/people-text-records.test.ts` holds it.
+
+Declared limits:
+
+- A normal script also gives a person to a name that a new pairing with a tag
+  uses when no person has that name, even if the script held the name before.
+  That person exists only so the tag can have an owner, so it waits for the owner
+  rule, which is undetermined (see "Cases the rules do not decide").
+- The same new name typed on two copies at once gives two people with different
+  ids, as the inventory row for `person-from-name` declares.
+- A person's colour is not written here. That is `person-colour`, which is
+  undetermined.

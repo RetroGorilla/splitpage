@@ -108,7 +108,7 @@ const WRITERS = {
   },
   "person-from-name": {
     family: "records", shared: "operation",
-    reason: "An @Name with no person record gets one. Shared: record-create by the copy that typed it; the same new name typed on two copies gives two people, a declared merged-state limit."
+    reason: "An @Name new to the script with no person record gets one. Shared: record-create by the copy that typed it, built by sharedPeopleIntroducedByText (callers in package 14); the same new name typed on two copies gives two people, a declared merged-state limit."
   },
   "owner-from-name": {
     family: "records", shared: "undetermined",
@@ -349,6 +349,7 @@ const ENGINES: readonly Site[] = [
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
   ["bootstrap/wiring/ports/production.ts#production", "ProductionIndexOwner.recordsPlan 1, ProductionIndexOwner.recordsPlan (provided) 1", "tag-from-text", "cue-retitle"],
   ["bootstrap/wiring/session-owner.ts#createSession", "ReconcilePort.anchors (provided) 1, ReconcilePort.records (provided) 1, syncCommentAnchors 1", "anchor-repair", ...FROM_TEXT],
+  ["core/collab/text-records.ts#sharedPeopleIntroducedByText", "addPerson 1, planOwnerSync 1", "person-from-name"],
   ["core/migrate.ts#migrateRows", "applyBrollRecords 1, planBrollRecords 1, syncCommentAnchors 1", "file-entry"],
   ["core/production/owners.ts#applyOwnerSync", "addPerson 1", "person-from-name"],
   ["core/production/records.ts#addBrollProp", "addRegistryTag 1", "record-stated"],
