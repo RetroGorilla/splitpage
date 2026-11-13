@@ -91,7 +91,7 @@ function headingPlace(handle: SharedDocumentHandle, heading: string): { readonly
   } finally { prep.close(); }
 }
 
-// why: a heading is removed again only if nothing stored for it or for its scene's first beat changed since the restore.
+// why: a heading is removed again only if nothing stored for it or its scene's first beat changed since the restore.
 function readSharedHeadingContent(handle: SharedDocumentHandle, headings: readonly string[]): unknown[] {
   return headings.map(heading => {
     const stored = collabState(handle).roots.headings.get(heading), place = headingPlace(handle, heading);
