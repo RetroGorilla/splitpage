@@ -43,14 +43,23 @@ export function startCreateBundle(ports: VideoBundlePorts, ui: {
     if (focus?.isConnected) focus.focus({ preventScroll: true });
   }
 
+  function refused(asked: boolean): boolean {
+    const can = ports.capability.bundles();
+    if (can.allowed) return false;
+    const bar = el("bundle-outside-bar");
+    if (bar) bar.hidden = true;
+    if (asked) ports.notices.show(can.reason, "warn");
+    return true;
+  }
+
   async function inspect(show: boolean, automatic = false): Promise<void> {
     if (!ui.active() || ui.blocked()) return;
     const script = ports.script();
-    if (!script) return;
+    if (!script || refused(show && !automatic)) return;
     const mine = ++sequence;
     const ctx = ports.ownership.capture();
     const plan = await ports.create.planCreate(paths()).catch(() => null);
-    if (!plan || !ui.active() || mine !== sequence || ui.blocked() || !ports.ownership.stillOwns(ctx)) return;
+    if (!plan || !ui.active() || mine !== sequence || ui.blocked() || !ports.ownership.stillOwns(ctx) || refused(show && !automatic)) return;
     plan.bundled.forEach((file) => ui.relink(file.path, file.name));
     const bar = el("bundle-outside-bar");
     if (bar) bar.hidden = dismissed || !plan.files.length;
@@ -85,7 +94,7 @@ export function startCreateBundle(ports: VideoBundlePorts, ui: {
     if (!was) return false;
     close();
     if (choice === "leave" || !ports.ownership.stillOwns(was.ctx) ||
-      (choice === "move" && !was.plan.files.every((file) => file.move))) return true;
+      (choice === "move" && !was.plan.files.every((file) => file.move)) || refused(true)) return true;
     const folder = bundleFolderName(ports.script() || "");
     let remaining = was.plan.files.length, copied = 0, moved = 0, failed = 0;
     was.plan.files.forEach((file) => ui.enqueue(file, choice === "move", (result) => {

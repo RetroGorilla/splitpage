@@ -18,10 +18,14 @@ import type { DraftsMount, DraftsPorts } from "../../../src/application/recovery
 import { createDraftResume } from "../../../src/application/recovery/draft-resume.ts";
 type IncompleteDraftWriteFixture = { ok: boolean; code?: string };
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration, pngDataUrl } from "../../core/migrate-ports.ts";
 
 interface Timer { run: () => void; ms: number; live: boolean }
+
+const COMMON = { edit: () => ({ allowed: true }) as const, comment: () => ({ allowed: true }) as const };
+const MODES = { standalone: createSessionCapabilities("standalone", COMMON), shared: createSessionCapabilities("shared", COMMON) };
 
 function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boolean; writes?: IncompleteDraftWriteFixture[] } = {}) {
   const timers: Timer[] = [];
@@ -34,7 +38,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
   const answers = [...(start.writes ?? [])];
   const resume = createDraftResume();
   const doc = migrateRows({ title: "Pilot", docId: "d0123456789abcdef0123456789abcdef", rows: [] }, fakeMigration().ports);
-  const state = { unsaved: start.unsaved ?? true, editSeq: 1, now: 1000, base: null as unknown, current: doc };
+  const state = { unsaved: start.unsaved ?? true, editSeq: 1, now: 1000, base: null as unknown, current: doc, mode: "standalone" as keyof typeof MODES };
   const desktop = {
     writable: () => true,
     canDiscard: () => true,
@@ -48,6 +52,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     hasDraftToRestore: () => start.hasDraft ?? false
   };
   const ports: DraftsPorts = {
+    capability: { drafts: () => MODES[state.mode].drafts() },
     running: () => start.running ?? true,
     clock: { now: () => state.now },
     timers: {
@@ -637,3 +642,89 @@ for (const answer of ["merged", "refused"] as const) {
     }
   });
 }
+
+test("a shared session schedules, writes and discards no draft, and leaves the last session's draft on disk", async () => {
+  const h = harness({ hasDraft: true });
+  const drafts = mount(h.ports);
+  try {
+    h.resume.setRestorePending(false);
+    h.state.mode = "shared";
+    drafts.noteChange();
+    assert.equal(h.timers.length, 0);
+    h.state.editSeq = 2;
+    assert.deepEqual(await drafts.flush(), { ok: true });
+    h.state.unsaved = false;
+    assert.deepEqual(await drafts.flush({ keep: true }), { ok: true });
+    assert.deepEqual(await drafts.flush(), { ok: true });
+    assert.deepEqual(h.written, []);
+    assert.deepEqual(h.discarded, []);
+    assert.deepEqual(h.toasts, []);
+    assert.deepEqual(h.log, []);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("a shared session takes no draft, and a draft already taken is kept for the next launch without being read", async () => {
+  const h = harness({ hasDraft: true });
+  h.desktop.taker = () => () => Promise.resolve(null);
+  const handled: unknown[] = [];
+  const drafts = mount({
+    ...h.ports,
+    files: { handle: (entry) => { handled.push(entry); return { getFile: () => Promise.reject(new Error("read")) }; }, parse: () => Promise.reject(new Error("parse")) }
+  });
+  try {
+    assert.equal(typeof drafts.taker(), "function");
+    h.state.mode = "shared";
+    assert.equal(drafts.taker(), null);
+    const outcome = await drafts.applyTaken({
+      header: { origin: { kind: "file" }, docIdWrittenOut: true },
+      file: { id: "f1", name: "pilot.splitpage" },
+      stateJson: JSON.stringify({ title: "Recovered", rows: [] }),
+      baseJson: null
+    });
+    assert.equal(outcome, "kept");
+    assert.deepEqual(handled, []);
+    assert.deepEqual(h.recovered, []);
+    assert.deepEqual(h.toasts, []);
+    assert.deepEqual(h.restoreDone, ["kept"]);
+    assert.equal(h.resume.restorePending(), false);
+    assert.deepEqual(h.log, ["notify"]);
+    assert.equal(h.state.current.title, "Pilot");
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("a file draft whose session becomes shared while the file is read opens nothing, merges nothing and says nothing", async () => {
+  const h = harness();
+  const docId = "d0123456789abcdef0123456789abcdef";
+  const version = (title: string) => migrateRows({ title, docId, rows: [] }, fakeMigration().ports);
+  const calls: string[] = [];
+  const ports: DraftsPorts = {
+    ...h.ports,
+    files: {
+      handle: () => ({ getFile: () => { h.state.mode = "shared"; return Promise.resolve({ name: "pilot.splitpage" }); } }),
+      parse: () => { calls.push("parse"); return Promise.resolve({ state: version("Disk"), kind: "splitpage", docIdEmbedded: true }); }
+    },
+    documents: { open: () => { calls.push("open"); return Promise.resolve(true); } },
+    recovery: { ...h.ports.recovery, applyStashedWork: () => { calls.push("merge"); return Promise.reject(new Error("merge")); } }
+  };
+  const drafts = mount(ports);
+  try {
+    const outcome = await drafts.applyTaken({
+      header: { origin: { kind: "file" }, docIdWrittenOut: true },
+      file: { id: "f1", name: "pilot.splitpage" },
+      stateJson: JSON.stringify(version("Mine")),
+      baseJson: JSON.stringify(version("Base"))
+    });
+    assert.equal(outcome, "kept");
+    assert.deepEqual(calls, ["parse"]);
+    assert.deepEqual(h.recovered, []);
+    assert.deepEqual(h.toasts, []);
+    assert.deepEqual(h.restoreDone, ["kept"]);
+    assert.deepEqual(h.log, ["notify"]);
+  } finally {
+    drafts.dispose();
+  }
+});

@@ -13,9 +13,11 @@ import { documentReader } from "./document.ts";
 import { text } from "./text.ts";
 import { ids, clock } from "./identity.ts";
 import { resetProductionPanel } from "./production.ts";
+import { capabilities } from "./capabilities.ts";
 
 export function sessionMergeOwnerPorts(onRestored: SessionMergeOwnerPorts["onRestored"]): SessionMergeOwnerPorts {
   return {
+    capability: capabilities,
     document: documentReader,
     session: { held: heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteDiskUpdate },
     entry: { migrate: migrateRows, withPorts: withDocumentPorts },

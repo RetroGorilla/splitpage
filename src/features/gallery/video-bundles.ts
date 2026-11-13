@@ -193,7 +193,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   function offer(rowId: string, dropped: readonly DroppedVideo[], entry: UndoEntry | null): void {
     // why: a drop copied into the new folder while the Save As copy runs could take a name the new script links
-    if (!life.active() || saving || carrying) return;
+    if (!life.active() || saving || carrying || !ports.capability.folders().allowed) return;
     const script = ports.script();
     const list = dropped.filter(function (v) { return !!(v && v.name && v.path); });
     if (!script || !list.length) return;
@@ -272,8 +272,10 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
       // why: a Save As stopped waiting for this copy, so its bytes may already be captured without the link
       if (c.cancelled && saving) return;
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;
-      if (c.created) relinkPath(c.video.path, res.name);
-      else relink(c.offer, c.from, res.name);
+      // why: after a move the original is gone, so the link must follow the file whatever the session now allows
+      const relinks = ("outcome" in res && res.outcome === "moved") || (c.created ? ports.capability.bundles() : ports.capability.folders()).allowed;
+      if (relinks && c.created) relinkPath(c.video.path, res.name);
+      else if (relinks) relink(c.offer, c.from, res.name);
     }
     if (c.created) {
       if (c.move && (!res.ok || ("outcome" in res && res.outcome !== "moved"))) {
@@ -367,6 +369,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const offers = asking;
     asking = [];
     if (choice === "leave") return;
+    const can = ports.capability.folders();
+    if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
     offers.forEach(function (o) { o.videos.forEach(function (v) { submit(o, v, choice === "move"); }); });
     showNext();
   }
@@ -380,22 +384,28 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   function exportPlan(body: string, script: unknown): Promise<DesktopBundleExportPlan | null> {
-    if (!life.active()) return Promise.resolve(null);
+    if (!life.active() || !ports.capability.bundles().allowed) return Promise.resolve(null);
     return ports.exports.plan("files" + (++exportJobs), "Script.splitpage", body, script);
   }
 
+  function exportRefused(): boolean {
+    const can = ports.capability.bundles();
+    if (!can.allowed) ports.notices.show(can.reason, "warn");
+    return !can.allowed;
+  }
+
   async function exportWithFiles(zipName: string, scriptName: string, body: string, script: unknown): Promise<boolean> {
-    if (!life.active()) return false;
+    if (!life.active() || exportRefused()) return false;
     if (exporting) {
       ports.notices.show("Splitpage is already exporting " + quoted(exporting.name) + ". Wait for it to finish, then export again.", "warn");
       return false;
     }
     const job = "export" + (++exportJobs);
     const plan = await ports.exports.plan(job, scriptName, body, script).catch(function () { return null; });
-    if (!life.active()) return false;
+    if (!life.active() || exportRefused()) return false;
     if (!plan) { ports.notices.show(exportDoneText(zipName, null).text, "error"); return false; }
     const picked = await ports.exports.pick(zipName, job);
-    if (!picked || !life.active()) return false;
+    if (!picked || !life.active() || exportRefused()) return false;
     const mine = { job, name: picked.name };
     exporting = mine;
     showNext();

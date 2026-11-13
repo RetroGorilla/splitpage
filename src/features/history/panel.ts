@@ -76,6 +76,9 @@ function restoreSnapshotFromCard(btn: Element | null): ReturnType<HistoryPanelCo
       showToast("That version could not be read, so nothing was restored.", "warn");
     } else if (r === "changed") {
       showToast("A different document was opened while restoring, so nothing was restored.", "warn");
+    } else if (r === "refused") {
+      const can = ports.capability.history();
+      if (!can.allowed) showToast(can.reason, "warn");
     }
     return r;
   }, function (e) {

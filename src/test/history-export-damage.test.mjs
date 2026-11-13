@@ -53,6 +53,7 @@ async function harness(t, kind, snapshots = [good, bad], fields = {}, options = 
   }
   const owner = createHistoryOwner();
   const stop = owner.startHistory({
+    capability: { history: () => ({ allowed: true }) },
     document: { current: () => ({ docId, title: "Current", rows: [] }) },
     location: { home: () => ({ kind: "none" }) }, preferences: { editorName: () => "Adam" },
     saving: { changes: () => 0, unsaved: () => false }, recovery: { readRaw: () => null, remove: () => true },
@@ -91,6 +92,7 @@ function productionHarness(t, indexedDB) {
   const storage = createHistoryBackends({ now: () => 2000, holds: () => [], desktop: () => null, runningOnDesktop: () => false });
   const owner = createHistoryOwner();
   const stop = owner.startHistory({
+    capability: { history: () => ({ allowed: true }) },
     document: { current: () => ({ docId, title: "Current", rows: [] }) },
     location: { home: () => ({ kind: "none" }) }, preferences: { editorName: () => "Adam" },
     saving: { changes: () => 0, unsaved: () => false }, recovery: { readRaw: () => null, remove: () => true },

@@ -16,6 +16,7 @@ import type { DestinationPort, DocumentDestination, HistoryPort } from "../trans
 import type { MergeUndo } from "./merge-undo.ts";
 import type { DocumentIdentityOwner, IdentityEntry } from "../identity/ports.ts";
 import type { StandaloneDocumentSession } from "./document-session.ts";
+import type { CapabilityPort } from "./ports.ts";
 
 export type SessionMergePorts = Omit<DocumentMergePorts<OperationContext>, "view" | "capability">;
 
@@ -26,7 +27,7 @@ export interface SnapshotRestoreRequest {
   readonly restoredText?: string | undefined;
 }
 
-export type SnapshotRestoreResult = "busy" | "missing" | "changed" | "corrupt" | "no-backup" | "restored";
+export type SnapshotRestoreResult = "busy" | "missing" | "changed" | "corrupt" | "no-backup" | "refused" | "restored";
 
 export interface SessionMergeSession {
   readonly held: StandaloneDocumentSession["held"];
@@ -38,6 +39,7 @@ export interface SessionMergeSession {
 }
 
 export interface SessionMergeOwnerPorts {
+  readonly capability: Pick<CapabilityPort, "history">;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: SessionMergeSession;
   readonly entry: {

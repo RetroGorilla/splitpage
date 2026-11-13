@@ -12,9 +12,11 @@ import { notices } from "./effects.ts";
 import { pictures } from "./pictures.ts";
 import { ids } from "./identity.ts";
 import { seedCheck } from "./startup.ts";
+import { capabilities } from "./capabilities.ts";
 
 export function historyPorts(snapshots: LegacySnapshots = legacySnapshots(), storage: HistoryOwnerPorts["storage"] = createHistoryBackends): HistoryOwnerPorts {
   return {
+    capability: capabilities,
     document: documentReader,
     location: homes,
     preferences: { editorName: getEditorName },

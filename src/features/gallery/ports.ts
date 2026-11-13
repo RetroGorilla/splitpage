@@ -15,6 +15,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
+import type { CapabilityPort } from "../../application/session/ports.ts";
 
 export interface GalleryPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
@@ -81,6 +82,7 @@ export interface DroppedVideo {
 }
 
 export interface VideoBundlePorts {
+  readonly capability: Pick<CapabilityPort, "folders" | "bundles">;
   readonly window: Window;
   readonly script: () => string | null;
   readonly files: Pick<VideoFiles, "bundle" | "move" | "cancelBundle" | "movedPath">;

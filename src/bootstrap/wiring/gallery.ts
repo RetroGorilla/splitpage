@@ -22,6 +22,7 @@ import { desktopVideo } from "./desktop-video.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { currentHome, locationStarted } from "./location-owner.ts";
 import { place } from "./ports/location.ts";
+import { capabilities as portCapabilities } from "./ports/capabilities.ts";
 
 const gallery = owned<GalleryMount>();
 
@@ -88,6 +89,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) },
       viewer: { refresh: refreshGalleryOverlay },
       bundles: {
+        capability: portCapabilities,
         window: window,
         script: scriptOnDisk,
         files: { bundle: videoFiles.bundle, move: videoFiles.move, cancelBundle: videoFiles.cancelBundle, movedPath: videoFiles.movedPath },
