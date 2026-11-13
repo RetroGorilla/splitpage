@@ -101,5 +101,17 @@
     "find": "part.target, part.to, \"before\"",
     "replace": "part.target, part.text.length, \"before\"",
     "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
+  }, {
+    "label": "created heading accepts any name",
+    "file": "src/adapters/collab/heading-executor.ts",
+    "find": "return name === null || cappedText(name, 200) ? null : \"invalid-heading-name\";",
+    "replace": "return name === null || name.length >= 0 ? null : \"invalid-heading-name\";",
+    "tests": ["tests/adapters/collab/heading-create.test.ts"]
+  }, {
+    "label": "created heading identity omits the writer",
+    "file": "src/adapters/collab/heading-executor.ts",
+    "find": "const heading = sharedStructureIdentity(view.writer, operation.id, \"heading\")",
+    "replace": "const heading = sharedStructureIdentity(\"0\", operation.id, \"heading\")",
+    "tests": ["tests/adapters/collab/heading-create.test.ts"]
   }]
 }

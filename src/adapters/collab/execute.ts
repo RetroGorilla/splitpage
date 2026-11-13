@@ -45,6 +45,10 @@ function runSharedExecution(state: CollabDocumentState, handle: SharedDocumentHa
       if (!prepared.ok) return { ok: false, index, operation, reason: prepared.reason };
       preparation.include(prepared.writes); accepted.push(prepared);
       index++;
+    }
+    for (const [at, prepared] of accepted.entries()) {
+      const reason = prepared.complete?.(), operation = operations[at];
+      if (reason && operation) return { ok: false, index: at, operation, reason };
     } } finally { preparation.close(); }
     if (accepted.length) transactCollabState(state, options?.origin ?? "local-command", () => {
       execution.applying = true;
