@@ -7,6 +7,7 @@ import type { PictureStore } from "../media/picture-store.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { SeedCheck } from "../preferences/seed-check.ts";
 import type { LegacySnapshots } from "./legacy-snapshots.ts";
+import type { CapabilityPort } from "../session/ports.ts";
 import type { sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
 import type { createHistoryStore } from "../../../shared/history-store.ts";
 
@@ -102,6 +103,7 @@ export interface HistoryBackendOptions {
 }
 
 export interface HistoryOwnerPorts {
+  readonly capability: Pick<CapabilityPort, "history">;
   readonly document: Pick<DocumentReader, "current">;
   readonly location: Pick<DocumentLocation, "home">;
   readonly preferences: { readonly editorName: () => string };

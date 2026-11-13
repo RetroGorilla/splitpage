@@ -18,6 +18,7 @@ function setup() {
   const notices = fakeNotices();
   const requests: { id: string; request: SnapshotRestoreRequest | undefined }[] = [];
   let answer: SnapshotRestoreResult = "no-backup";
+  let shared = false;
   const listing: Listing = {
     entries: [{ id: "s1", label: "Before merge", title: "Test", by: "Ann", rows: 2, sizeBytes: 1024, at: "2026-01-01T12:00:00Z", atMs: 1767268800000, kind: "snapshot", formatVersion: 1 }],
     older: [], olderExpiresAt: null, backend: "idb", persistent: true, notice: null,
@@ -25,6 +26,7 @@ function setup() {
   };
   let load = () => Promise.resolve(listing);
   const ports: HistoryPanelPorts = {
+    capability: { history: () => shared ? { allowed: false, reason: "Earlier versions cannot replace a shared session." } : { allowed: true } },
     history: { listDocHistory: () => load() }, document: reader.document,
     merge: { restoreMergeSnapshot: async (id, request) => { requests.push({ id, request }); return answer; } },
     panels: {
@@ -35,7 +37,7 @@ function setup() {
     personColors: { personColor: () => "#123456" }, ids: migration.ids
   };
   const owner: HistoryPanelControl = startHistoryPanel(ports);
-  return { owner, reader, notices, requests, listing, answer: (value: SnapshotRestoreResult) => { answer = value; }, load: (value: typeof load) => { load = value; } };
+  return { owner, reader, notices, requests, listing, answer: (value: SnapshotRestoreResult) => { answer = value; }, share: () => { shared = true; }, load: (value: typeof load) => { load = value; } };
 }
 
 test("the history panel renders owner records and only forces a restore after its backup refusal", async () => {
@@ -106,4 +108,17 @@ test("a restore result that arrives after disposal cannot arm or notify from the
   assert.equal(await restoring, "no-backup");
   assert.equal(button.classList.contains("armed"), false);
   assert.deepEqual(f.notices.shown, []);
+});
+
+test("a restore the shared session refuses shows the reason once and arms nothing", async () => {
+  const f = setup();
+  f.owner.openHistoryPanel();
+  await f.owner.renderHistory();
+  const button = document.querySelector('[data-action="restore-snapshot"]') as HTMLButtonElement;
+  f.share();
+  f.answer("refused");
+  assert.equal(await f.owner.restoreSnapshotFromCard(button), "refused");
+  assert.equal(button.classList.contains("armed"), false);
+  assert.deepEqual(f.notices.shown.map((item) => [item.message, item.kind]), [["Earlier versions cannot replace a shared session.", "warn"]]);
+  f.owner.dispose();
 });

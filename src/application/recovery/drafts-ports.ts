@@ -12,6 +12,7 @@ import type { DraftResume } from "./draft-resume.ts";
 import type { DesktopDraftStore } from "./ports.ts";
 import type { ApplyStashedWork } from "./stashed-work.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
+import type { CapabilityPort } from "../session/ports.ts";
 
 export interface DraftFlush {
   readonly ok?: boolean;
@@ -49,6 +50,7 @@ export interface DraftRecovery {
 }
 
 export interface DraftsPorts {
+  readonly capability: Pick<CapabilityPort, "drafts">;
   readonly running: () => boolean;
   readonly clock: { readonly now: () => number };
   readonly timers: CaptureTimers;

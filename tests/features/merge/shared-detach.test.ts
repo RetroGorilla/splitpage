@@ -5,6 +5,7 @@ import { createSessionCapabilities } from "../../../src/application/session/capa
 import { startLocalMerge } from "../../../src/features/merge/local-merge.ts";
 import type { MergeReviewPorts } from "../../../src/features/merge/ports.ts";
 import { ARM_MS, mountMergeBanner } from "../../../src/features/merge/banner.ts";
+import type { MergeReport } from "../../../src/features/merge/banner.ts";
 import { fakeNotices } from "../fakes.ts";
 import { heldTimers, viewHarness } from "../view-harness.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -163,7 +164,7 @@ test("an undo armed before the session became shared is disarmed and restores no
   const said: string[] = [];
   let allowed = true;
   const owner = mountMergeBanner({ window: h.window, ports: {
-    capability: { merge: () => allowed ? { allowed: true } : REFUSED },
+    capability: { merge: () => allowed ? { allowed: true } : REFUSED, history: () => ({ allowed: true }) },
     lastUndo: () => ({ id: "s1", docId: "d1", source: "stash" }), sameDocument: () => true,
     restore: (...args) => { calls.push(["restore", ...args]); return Promise.resolve("restored"); }, warn: message => { said.push(message); },
     openComments: () => {}, rowElement: () => null, logError: () => {}, install: () => () => {}
@@ -177,4 +178,25 @@ test("an undo armed before the session became shared is disarmed and restores no
   assert.deepEqual(said, [REASON]);
   assert.equal(h.el("merge-undo").classList.contains("armed"), false);
   assert.equal(timers.pending.size, 0);
+});
+
+test("an undo merge whose restore the session refuses for history says that reason and nothing else", async t => {
+  const h = viewHarness();
+  const timers = heldTimers(h.window, ARM_MS);
+  const said: string[] = [];
+  const restores: unknown[][] = [];
+  const owner = mountMergeBanner({ window: h.window, ports: {
+    capability: { merge: () => ({ allowed: true }), history: () => SHARED.history() },
+    lastUndo: () => ({ id: "s1", docId: "d1", source: "stash" }), sameDocument: () => true,
+    restore: (...args) => { restores.push(args); return Promise.resolve("refused"); }, warn: message => { said.push(message); },
+    openComments: () => {}, rowElement: () => null, logError: () => {}, install: () => () => {}
+  } });
+  t.after(() => { owner.dispose(); timers.dispose(); h.window.close(); });
+  const shown: MergeReport = { stats: { rowsFromMe: 1 }, conflicts: [] };
+  assert.equal(owner.show(shown, { undo: true }), true);
+  owner.undoMerge();
+  owner.undoMerge();
+  await Promise.resolve();
+  assert.equal(restores.length, 1);
+  assert.deepEqual(said, ["Earlier versions cannot replace a shared session."]);
 });

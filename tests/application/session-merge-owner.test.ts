@@ -6,6 +6,10 @@ import type { HistorySnapshotRead, HistoryWriteResult } from "../../src/applicat
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
+
+const COMMON = { edit: () => ({ allowed: true }) as const, comment: () => ({ allowed: true }) as const };
+const MODES = { standalone: createSessionCapabilities("standalone", COMMON), shared: createSessionCapabilities("shared", COMMON) };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -18,6 +22,7 @@ function setup() {
   const migration = fakeMigration().ports;
   let document = migrateRows({ title: "Live", docId: "d-live", rows: [{ id: "r1", audioText: "live" }] }, migration);
   let owned = true;
+  let mode: keyof typeof MODES = "standalone";
   let changes = 0;
   let writes = 0;
   let stored = true;
@@ -29,6 +34,7 @@ function setup() {
   let backup: (() => Promise<HistoryWriteResult>) | null = null;
   const ctx: OperationContext = { epoch: 1, generation: 0, docId: "d-live", destination: null, destinationGeneration: 0 };
   const ports: SessionMergeOwnerPorts = {
+    capability: { history: () => MODES[mode].history() },
     document: { current: () => document },
     session: {
       held: () => document,
@@ -71,7 +77,7 @@ function setup() {
   return {
     owner, ports, log, start: () => owner.startSessionMerge(ports),
     document: () => document, writes: () => writes,
-    move: () => { owned = false; }, failBackup: () => { stored = false; },
+    move: () => { owned = false; }, share: () => { mode = "shared"; }, failBackup: () => { stored = false; },
     changeDuringBackup: () => { backup = () => { changes++; return Promise.resolve({ stored: true }); }; },
     holdRead: () => { const pending = deferred<HistorySnapshotRead | null>(); reading = pending.promise; return () => { pending.resolve(snapshot); }; },
     holdBackup: () => { const pending = deferred<HistoryWriteResult>(); backup = () => pending.promise; return () => { pending.resolve({ stored: true }); }; }
@@ -161,4 +167,32 @@ for (const phase of ["read", "backup"] as const) {
       stop();
     });
   }
+}
+
+test("a shared session refuses a history restore before protecting, reading, backing up or adopting, even when forced", async () => {
+  const f = setup();
+  f.share();
+  const stop = f.start();
+  assert.equal(await f.owner.restoreMergeSnapshot("s1"), "refused");
+  assert.equal(await f.owner.restoreMergeSnapshot("s1", { force: true, local: true }), "refused");
+  assert.equal(f.document().title, "Live");
+  assert.equal(f.writes(), 0);
+  assert.deepEqual(f.log, []);
+  stop();
+});
+
+for (const phase of ["read", "backup"] as const) {
+  test("a restore whose session becomes shared during its " + phase + " adopts nothing and keeps no further backup", async () => {
+    const f = setup();
+    const release = phase === "read" ? f.holdRead() : f.holdBackup();
+    const stop = f.start();
+    const restore = f.owner.restoreMergeSnapshot("s1", { force: true });
+    await Promise.resolve();
+    f.share();
+    release();
+    assert.equal(await restore, "refused");
+    assert.equal(f.document().title, "Live");
+    assert.deepEqual(f.log, phase === "read" ? ["protect", "read", "release"] : ["protect", "read", "backup", "release"]);
+    stop();
+  });
 }
