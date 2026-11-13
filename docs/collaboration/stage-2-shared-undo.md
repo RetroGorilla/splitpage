@@ -69,10 +69,10 @@ makes the change and returns its record, or `null` when it changed nothing.
 A refusal leaves both stacks as they were. The reasons:
 
 - `undo-unsupported:<kind>`: the entry has a part the executor cannot reverse.
-  The executor is not called. Every structure command but a join, a beat
-  removal, a heading removal without a new beat and a restore of either is
-  refused this way until its executor lands: `segment-create`, `split`,
-  `split-before`, `join-glue`, `segment-move`, `heading-create`,
+  The executor is not called. Every structure command but a join, an unjoin, a
+  separator change, a beat removal, a heading removal without a new beat and a
+  restore of either is refused this way until its executor lands:
+  `segment-create`, `split`, `split-before`, `segment-move`, `heading-create`,
   `heading-finalize`, and `heading-remove` with a new beat (a demotion). A
   removal of another kind (range, became-heading) is named `remove` and
   refused by the executor with `undo-unsupported:remove`. See
@@ -383,6 +383,30 @@ Declared limits:
   join, and the join interpreter decides which one shows.
 - The later-join guard compares joins with the same separator; a later join of
   the same two beats with another separator does not stop the undo.
+
+### Undo of an unjoin and of a separator change
+
+A command with `join-retire` records, for each join it retired, the `join`
+part with `retired: true`: the entry it retired, the separator the join showed
+and the formats its space carried. Its undo is the redo above: a fresh `join`
+of the same two beats with that separator, and the space formats written
+again. It is used up when either beat is removed, when the two beats are
+already joined again by anyone, or when the source beat is no longer the next
+beat after the target's own row in the order (a split, a new beat or a heading
+between them). The neighbour check also applies to the redo of an undone join.
+A `join-retire` of a join that is already retired records nothing.
+
+A command with `join-glue` on a join that stood before the command records a
+`join-glue` part with the separator before and after. Its undo sets the
+earlier separator back only while the join is not retired and still shows the
+separator the command wrote; a separator another writer changed since uses it
+up (rule 28). A separator set on a join made in the same command keeps the
+generic part and stays refused.
+
+No command of the app emits `join-retire` or `join-glue` today: the app
+separates joined beats with Enter at the join point, which is a split. These
+parts are reached by operation lists that carry either operation. Literals in
+`undo-unjoin.test.ts`.
 
 ### Undo of a removal and a restore
 
