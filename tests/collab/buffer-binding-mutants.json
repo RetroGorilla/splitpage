@@ -486,6 +486,30 @@
     "replace": "if (!key.isComposing",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
+    "label": "a key repeating on a held field ends the hold",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "      if (event.repeat && holding()) { event.preventDefault(); return true; }\n",
+    "replace": "",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts", "tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a key repeating on a held field still reaches the browser",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (event.repeat && holding()) { event.preventDefault(); return true; }",
+    "replace": "if (event.repeat && holding()) return true;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a fresh press on a held field is consumed like a repeat",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (event.repeat && holding())",
+    "replace": "if (holding())",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts", "tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a repeat consumed by a held Split rename still counts as a key press",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "      if (binding.keydown(key)) return;\n",
+    "replace": "      binding.keydown(key);\n",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
     "label": "a shared title still runs the set-title command",
     "file": "src/features/title/routes.ts",
     "find": "  if (mount.shared) {",
