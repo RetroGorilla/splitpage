@@ -110,8 +110,8 @@
   }, {
     "label": "created heading identity omits the writer",
     "file": "src/adapters/collab/heading-executor.ts",
-    "find": "const heading = sharedStructureIdentity(view.writer, operation.id, \"heading\")",
-    "replace": "const heading = sharedStructureIdentity(\"0\", operation.id, \"heading\")",
+    "find": "const heading = sharedStructureIdentity(view.writer, operation.id, \"heading\"), created =",
+    "replace": "const heading = sharedStructureIdentity(\"0\", operation.id, \"heading\"), created =",
     "tests": ["tests/adapters/collab/heading-create.test.ts"]
   }, {
     "label": "finalized heading accepts any name",
