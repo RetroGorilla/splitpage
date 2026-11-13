@@ -6,9 +6,25 @@ import { sharedStructureReference, SharedStructurePreparationError } from "./str
 import { sharedStructureSpans } from "./structure-spans.ts";
 import { sharedTextCommandPlan, sharedTextInsertionPosition } from "./executor-text-plan.ts";
 import { readProjectionHead } from "./projection-reader.ts";
-import { readSharedFinalizedHeading } from "./structure-plan.ts";
+import { readSharedFinalizedHeading, readSharedStructureStream, interpretSharedStructure } from "./structure-plan.ts";
+import { sharedOrderPlan } from "./structure-order-index.ts";
+import { readSharedOperationListNotes } from "./operation-list-notes.ts";
 
-export function prepareSharedBeatPlacement(view: SharedPreparationView, order: SharedStructureOrderView, gap: SharedIdentityGap, segment: string) {
+function nextBlock(view: SharedPreparationView, order: SharedStructureOrderView, from: { readonly index: number; readonly span: { readonly owner: string } | null } | null) {
+  if (!from?.span) return null;
+  let after = false;
+  for (let index = from.index, length = sharedOrderPlan(view, order).length; index < length; index++) {
+    const key = sharedPlannedSegmentAt(view, order, index), stream = key === undefined ? undefined : readSharedStructureStream(view, key);
+    if (stream) for (const block of interpretSharedStructure(view, [], stream)) {
+      if (block.segment !== key || block.reason || block.id === null) continue;
+      if (after) return block;
+      if (block.kind === "b" && block.id === from.span.owner) after = true;
+    }
+  }
+  return null;
+}
+
+export function prepareSharedBeatPlacement(view: SharedPreparationView, order: SharedStructureOrderView, emitted: SharedIdentityGap, segment: string, beat?: SharedContentRef) {
   const locate = (reference: SharedContentRef | null) => {
     if (reference === null) return null;
     const named = sharedStructureReference(view, reference), resolved = view.resolveOwner(named, "audioText") ?? view.resolveOwner(named, "heading");
@@ -22,6 +38,11 @@ export function prepareSharedBeatPlacement(view: SharedPreparationView, order: S
     if (!span) throw new SharedStructurePreparationError("missing-order-target");
     return { key, index, plan, span };
   };
+  const line = beat === undefined || emitted.left === null ? undefined : readSharedOperationListNotes(view).emptyFirstBeats.get(beat);
+  const next = line === undefined ? null : nextBlock(view, order, locate(emitted.left)), lineOwner = line === undefined ? null : view.resolveOwner(sharedStructureReference(view, line), "audioText")?.owner;
+  // why: the app emits the empty first beat of a finalized line after the beat before that line; the line becomes
+  // the heading later in the list, so the beat goes after the line instead (assumed rule 46).
+  const gap: SharedIdentityGap = line !== undefined && next?.kind === "b" && next.id === lineOwner ? { left: line as SharedContentRef, right: emitted.right, affinity: "after" } : emitted;
   const left = locate(gap.left), right = locate(gap.right);
   if (left && right && (left.index > right.index || left.index === right.index && (!left.span || !right.span || left.span.owner === right.span.owner || left.span.to > right.span.from))) throw new SharedStructurePreparationError("invalid-order-gap");
   const claimed = gap.affinity === "before" && right?.span ? readSharedFinalizedHeading(view, right.span.owner) : null, heading = claimed === null ? null : locate(claimed as SharedContentRef);

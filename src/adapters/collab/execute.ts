@@ -8,6 +8,7 @@ import type { SharedPreparationResult, SharedPreparationView } from "./prepare.t
 import { registeredSharedOperationHandlers } from "./operation-handlers.ts";
 import { scalarHandlers } from "./scalar-executor.ts";
 import { readSharedRevision } from "./document.ts";
+import { noteSharedOperationList } from "./operation-list-notes.ts";
 
 export type SharedExecutionResult = { readonly ok: true } | {
   readonly ok: false; readonly index: number; readonly operation: SharedOperation; readonly reason: string;
@@ -31,6 +32,7 @@ function runSharedExecution(state: CollabDocumentState, handle: SharedDocumentHa
     if (options?.base !== undefined && options.base !== readSharedRevision(handle)) return { ok: false, reason: "stale-base" };
     const handlers = { ...scalarHandlers, ...registeredSharedOperationHandlers(handle) };
     const preparation = createSharedPreparation(handle, options?.base ?? null), accepted: Extract<SharedPreparationResult, { ok: true }>[] = [];
+    noteSharedOperationList(preparation.view, operations);
     let index = 0;
     try { for (const operation of operations) {
       const validated = readOperation(operation);
