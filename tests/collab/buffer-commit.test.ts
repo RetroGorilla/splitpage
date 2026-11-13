@@ -9,11 +9,12 @@ import { readSharedRevision, observeSharedTransactions, transactSharedDocument }
 import { collabState } from "../../src/adapters/collab/state.ts";
 import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
 import { assertReplicasAgree } from "./agreement.ts";
+import { bufferReaders } from "./buffer-readers.ts";
 
 function editing(h: Stage1ExecutorHarness, row = "R1") {
   const session = sharedHarness(adapterReplica(h.a));
   let serial = 0;
-  const port = createSharedBufferedText(h.a, session.session, { target: id => h.target(id), author: () => ({ id: "buffer:" + ++serial, by: "Alice" }) });
+  const port = createSharedBufferedText(h.a, session.session, { target: id => h.target(id), author: () => ({ id: "buffer:" + ++serial, by: "Alice" }), readers: bufferReaders });
   const painted = readSharedPaintedText(h.a, h.target(row)); assert.ok(painted);
   const edit = port.open(row, painted); assert.ok(edit);
   return { ...session, edit, port, painted };

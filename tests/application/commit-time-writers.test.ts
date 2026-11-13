@@ -19,6 +19,7 @@ const RULES: WriterScanRules = {
     "application/session/ports.ts#ReconcilePort.anchors",
     "application/session/ports.ts#ReconcilePort.records",
     "application/session/shared-session.ts#ReplicaPort.execute",
+    "core/collab/text-records.ts#sharedTagsIntroducedByText",
     "core/document/person-colors.ts#colorsWithMine",
     "core/production/broll.ts#applyBrollRecords",
     "core/production/broll.ts#planBrollAnchors",
@@ -86,7 +87,7 @@ const WRITERS = {
   },
   "tag-from-text": {
     family: "records", shared: "operation",
-    reason: "A tag found in text with no registry entry gets one. Shared: record-create by the copy whose command introduced the tag; a tag without an entry projects untagged and is never registered on receipt."
+    reason: "A tag found in text with no registry entry gets one. Shared: record-create by the copy whose command introduced the tag (built for Writer typing); a tag without an entry projects untagged and is never registered on receipt."
   },
   "cue-retitle": {
     family: "records", shared: "undetermined",
@@ -313,7 +314,7 @@ const COMPUTED: readonly Site[] = [
 const FROM_TEXT = ["tag-from-text", "cue-retitle", "shot-from-line", "shot-name-from-line", "person-from-name", "owner-from-name"] as const;
 
 const ENGINES: readonly Site[] = [
-  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2", "stated-write", "recovery-write"],
+  ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2, sharedTagsIntroducedByText 1", "stated-write", "recovery-write", "tag-from-text"],
   ["adapters/production/broll-anchors.ts#anchorBrollInRows", "planBrollAnchors 1", "broll-key"],
   ["application/commands/broll-records.ts#addShotCommand", "addBrollRecord 1", "record-stated"],
   ["application/commands/production-records.ts#addPersonCommand", "addPerson 1", "record-stated"],

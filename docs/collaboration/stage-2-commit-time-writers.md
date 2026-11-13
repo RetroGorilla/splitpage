@@ -125,6 +125,45 @@ The list goes through the session's one `execute` like any other, by the copy wh
 typing was refused; receiving it writes nothing. With it the table holds 30 writers:
 6 derivations, 11 operations, 9 not applicable and 4 undetermined.
 
+## Records made from Writer typing
+
+Writer typing reaches the document as one buffered commit of a beat's narration.
+In a normal script the commit then registers every tag the script shows without a
+registry entry, cues included. In a shared session the commit's own list carries a
+`record-create` for each tag the commit introduced: one the cell shows after the
+edit, did not show unregistered before it, and that has no entry. The id and fields
+are the ones a normal script mints (`newRegistryTag`), so two copies that introduce
+the same tag at once create one entry. A tag the cell already showed unregistered
+is not registered again, and a copy that receives the list writes nothing more.
+`sharedTagsIntroducedByText` in `core/collab/text-records.ts` builds the list and
+`createSharedBufferedText` calls it; `tests/collab/buffer-text-records.test.ts`
+holds it. The operation writes `cat`, `name` and `status`; a normal script also
+writes an empty `owner` and `notes`, which the readers give by default.
+
+Declared consequences:
+
+- Editing a cue's words gives a second entry. Before the edit the beat shows
+  `SFX: door slam` with an entry; after it, `SFX: door slams`. The shared commit
+  creates a new entry "door slams" and leaves "door slam" with its owner, notes
+  and status, used by nothing. A normal script's `planRegistryHealing` renames the
+  entry instead, keeping its id and fields.
+- Once undo is wired, undoing the typing that created an entry removes the entry
+  while it still holds the fields the commit wrote, even if another beat now uses
+  the tag (assumed rule 39). That beat's tag then shows unregistered, and later
+  commits in that beat do not register it again, because the beat already showed
+  it unregistered. A normal script registers it at its next commit.
+- When another beat shows the tag unregistered in another case (`chair`) and
+  `Chair` is typed, the entry takes the typed name, where a normal script takes
+  the first mention in the script.
+
+Not built here:
+
+- people from `@Name`, shots from B-roll lines and owners from pairings. They are
+  read only from the visual column, which Writer typing does not edit.
+- renaming a sound cue's entry when its words change, which is undetermined.
+- the replica that runs these lists in the app. It must register the record
+  handlers, or a commit that introduces a tag is refused as a whole.
+
 ## Stamp on undo
 
 Settled as assumed rule 35: in a shared session undo leaves the stamp as it is. The
