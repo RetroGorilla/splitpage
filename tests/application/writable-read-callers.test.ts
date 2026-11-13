@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, posix } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { DocumentView } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
 import type { LiveDocumentPort } from "../../src/application/transitions/ports.ts";
@@ -58,10 +61,24 @@ const BRIDGE_FUNCTION = {
 };
 
 const BEAT_INSERTS = {
-  "core/flow/flow.ts": 5,
   "features/clipboard/beat-clip.ts": 3,
   "features/clipboard/flow-clip.ts": 2
 };
+
+const SRC = fileURLToPath(new URL("../../src/", import.meta.url));
+const BEAT_CLIP = "features/clipboard/beat-clip.ts";
+
+function beatClipInserts(): Record<string, number> {
+  const found: Record<string, number> = {};
+  for (const [file, count] of Object.entries(identifierMentions("insertBeats"))) {
+    const source = readFileSync(join(SRC, file), "utf8");
+    const imported = [...source.matchAll(/import\s*\{([^}]*)\}\s*from\s*"([^"]+)"/g)].some(function ([, names, from]) {
+      return /\binsertBeats\b/.test(names ?? "") && posix.join(posix.dirname(file), from ?? "") === BEAT_CLIP;
+    });
+    if (file === BEAT_CLIP || imported) found[file] = count;
+  }
+  return found;
+}
 
 test("the writable-read scan reads the app's modules", () => {
   assert.ok(sourceModuleCount() > 500);
@@ -77,5 +94,5 @@ test("the writable reads left are the bridge function and the two standalone own
 });
 
 test("the beat clipboard's insert, which writes into the document it is handed, is called from the audited app modules only", () => {
-  assert.deepEqual(identifierMentions("insertBeats"), BEAT_INSERTS);
+  assert.deepEqual(beatClipInserts(), BEAT_INSERTS);
 });
