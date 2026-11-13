@@ -209,20 +209,21 @@ test("seeded heading creations agree with a literal model through typing, a riva
 
 const headingFinalizationLimits: readonly string[] = [];
 
-test("seeded heading finalizations agree with a literal model through typing in the line, a rival finalization, removals, restores and a late joiner", t => {
-  let seed = 0x4d10, histories = 0, checkpoints = 0, commands = 0, inline = 0, rivals = 0, headingRemovals = 0;
+test("seeded heading finalizations agree with a literal model through typing in the line, a last line, a rival finalization, removals, restores and a late joiner", t => {
+  let seed = 0x4d10, histories = 0, checkpoints = 0, commands = 0, inline = 0, rivals = 0, headingRemovals = 0, lastLines = 0;
   const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 16) % n; }, violations = new Set<string>();
   const runtime = createFlowLoadRuntime(), hex = (value: string) => value.split("").map(unit => unit.charCodeAt(0).toString(16).padStart(4, "0")).join("");
   const native = (writer: number, operation: string, role: string) => "structure_" + (writer + 1) + "_" + hex(operation) + "_" + role + "_0";
   for (let sample = 0; sample < 8; sample++) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
-    const tail = random(2) === 0, split = random(3) === 0, line = tail ? "# Ab\ncd" : "# Ab", finalizer = random(copies);
+    const tail = random(2) === 0, split = random(3) === 0, line = tail ? "# Ab\ncd" : "# Ab", finalizer = random(copies), lastLine = !tail && sample % 2 === 1;
     const set = replicas(copies, { rows: [{ id: "R0", audioText: split ? "x" + line.replace("\n", "<br>") : "x" }, ...split ? [] : [{ id: "R1", audioText: line.replace("\n", "<br>"), paragraphStart: true }],
-      { id: "R2", audioText: "ef", paragraphStart: true }] });
+      ...lastLine ? [] : [{ id: "R2", audioText: "ef", paragraphStart: true }]] });
     const handles = [set.a, set.b, set.c].slice(0, copies), target = split ? native(finalizer, "cut", "beat") : "R1";
     const rival = !split && !tail && random(3) === 0 ? (finalizer + 1) % copies : null, winner = Math.max(finalizer, rival ?? -1), byHeading = !tail || random(2) === 0;
     const remover = random(copies), restorer = random(copies), early = random(2) === 0, heading = native(winner, "fin_o_0", "heading");
     const typed = handles.flatMap((_, writer) => writer === finalizer || writer === rival ? [] : [{ writer, letter: "PQR".charAt(writer), offset: random(line.length + 1) }]);
-    const shown = new Map([[target, "S"], [heading, "H"]]), show = (id: string) => shown.get(id) ?? id;
+    const creators = [finalizer, ...rival === null ? [] : [rival]].sort((a, b) => a - b), last = creators.map(writer => [native(writer, "blank", "beat"), "X" + writer] as [string, string]);
+    const shown = new Map([[target, "S"], [heading, "H"], ...last]), show = (id: string) => shown.get(id) ?? id, after = lastLine ? last.map(([, id]) => [id, ""]) : [["R2", "ef"]];
     const units = Array.from({ length: line.length + 1 }, (_, at) => [...typed.filter(item => item.offset === at).sort((a, b) => a.writer - b.writer).map(item => ({ ch: item.letter, at, typed: true, writer: item.writer })),
       ...at < line.length ? [{ ch: line.charAt(at), at, typed: false, writer: -1 }] : []]).flat();
     const inName = (unit: typeof units[number]) => unit.at < 5 || unit.typed && unit.at === 5 && unit.writer < finalizer;
@@ -230,17 +231,18 @@ test("seeded heading finalizations agree with a literal model through typing in 
     const rest = tail ? units.filter(unit => !inName(unit) && (unit.typed || unit.at > 4)).map(unit => unit.ch).join("") : null;
     const send = (handle: typeof set.a, ops: unknown[]) => { assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true }); commands += ops.length; };
     const ref = (from: number, to = from) => flowBaseReference(target, "audioText", from, to);
-    const finalize = (writer: number) => [{ kind: "heading-finalize", id: "fin_o_0", by: "Writer" + writer, target: { owner: target, segment: target, field: "audioText" }, heading: "Hn",
-      prefix: [ref(0, 2)], name: [ref(2, 4)], separator: tail ? [ref(4, 5)] : [], retainedBeat: tail ? target : "R2", emptyBeat: null,
+    const finalize = (writer: number) => [...lastLine ? [{ kind: "segment-create", id: "blank", by: "Writer" + writer, segment: "Xn", beat: "Xn", at: { left: "R0", right: null, affinity: "after" },
+      fields: { audioText: "", status: "todo" } }] : [], { kind: "heading-finalize", id: "fin_o_0", by: "Writer" + writer, target: { owner: target, segment: target, field: "audioText" }, heading: "Hn",
+      prefix: [ref(0, 2)], name: [ref(2, 4)], separator: tail ? [ref(4, 5)] : [], retainedBeat: tail ? target : lastLine ? "Xn" : "R2", emptyBeat: lastLine ? "Xn" : null,
       tail: tail ? { left: null, right: ref(5), affinity: "before" } : { left: ref(3), right: null, affinity: "after" } },
     ...tail ? [] : [{ kind: "remove", id: "fin_o_1", by: "Writer" + writer, removalKind: "became-heading", targets: [target], observed: [ref(0, 4)], boundaries: [target], components: [], gallery: [], at: 1 }]];
     const { projector } = captureIncrementalReplica(set.a);
     const checkpoint = (headingRemoved: boolean, beatRemoved: boolean) => {
       set.queue.flush(order); assertIncremental(set.a, projector); checkpoints++;
-      const rows = [["R0", "x"], ...rest !== null && !beatRemoved ? [[show(target), rest]] : [], ["R2", "ef"]], recovery: string[][] = [];
+      const rows = [["R0", "x"], ...rest !== null && !beatRemoved ? [[show(target), rest]] : [], ...after], recovery: string[][] = [];
       if (headingRemoved) recovery.push(["removed-heading", "H", name]);
       if (beatRemoved) recovery.push(["removed-beat", "S", rest ?? ""]);
-      const expected = { rows, sections: headingRemoved ? [] : [["H", name, rest !== null && !beatRemoved ? show(target) : "R2"]], recovery: recovery.map(entry => JSON.stringify(entry)) };
+      const expected = { rows, sections: headingRemoved ? [] : [["H", name, rest !== null && !beatRemoved ? show(target) : after[0]?.[0] ?? ""]], recovery: recovery.map(entry => JSON.stringify(entry)) };
       agree("seed=" + seed, order, handles, handle => {
         const projected = projectSharedDocumentWithRecovery(handle), loaded = runtime.load(projected.document);
         const result = { rows: loaded.rows.map(row => [show(row.id), row.audioText]), sections: ((loaded.sections ?? []) as DocumentScene[]).map(scene => [show(scene.id), scene.name, show(scene.firstSceneId)]),
@@ -265,10 +267,10 @@ test("seeded heading finalizations agree with a literal model through typing in 
       else send(actor, [{ kind: "remove", id: "gone", by: "Writer", removalKind: "beat", targets: [target], observed: [], boundaries: [target], components: [], gallery: [], at: 1 }]);
       const restore = (handle: typeof set.a) => send(handle, [{ kind: "restore", id: "back", by: "Writer", removals: [removal] }]);
       if (early) restore(actor); else { checkpoint(byHeading, !byHeading); const handle = handles[restorer]; assert.ok(handle); restore(handle); }
-      checkpoint(false, false); histories++;
+      checkpoint(false, false); histories++; if (lastLine) lastLines++;
     } finally { set.close(); }
   }
   assert.deepEqual([...violations], headingFinalizationLimits);
-  assert.deepEqual({ histories, checkpoints, commands, inline, rivals, headingRemovals }, { histories: 48, checkpoints: 122, commands: 263, inline: 15, rivals: 6, headingRemovals: 38 });
-  t.diagnostic(JSON.stringify({ seed: "0x4d10", histories, checkpoints, commands, inline, rivals, headingRemovals, declaredLimits: headingFinalizationLimits }));
+  assert.deepEqual({ histories, checkpoints, commands, inline, rivals, headingRemovals, lastLines }, { histories: 48, checkpoints: 122, commands: 283, inline: 15, rivals: 6, headingRemovals: 38, lastLines: 16 });
+  t.diagnostic(JSON.stringify({ seed: "0x4d10", histories, checkpoints, commands, inline, rivals, headingRemovals, lastLines, declaredLimits: headingFinalizationLimits }));
 });

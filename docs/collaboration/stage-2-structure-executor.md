@@ -432,14 +432,25 @@ existing-scene repair.
 A joined row, root or later part, refuses with `joined-heading`. Every refusal
 leaves bytes, state vector and revision unchanged.
 
-Declared limits: when the app creates an empty first beat after an earlier beat (the
-line has no tail and no visual, and either no follower or a follower that already
-starts a scene), that beat's emitted gap puts it before the line, and the whole list
-is refused with `misplaced-heading-beat`. This limit is the next cut: the list stays
-as emitted and nothing is moved; one list-level step before per-operation preparation
-notes that a created beat is the empty first beat of a later `heading-finalize` of
-line T, and placement puts it after T's span when the gap's left beat is directly
-followed by T. A name of half a surrogate pair never reaches
+The app creates an empty first beat after an earlier beat when the line has no tail
+and no visual, and either no follower or a follower that already starts a scene; its
+emitted gap names the beat before the line (assumed rule 46, point 3). The list
+stays as emitted and nothing is moved. Before per-operation preparation, the entry
+computes list notes once, a pure function over the whole list, into the plan
+scratch; handlers read them. One note names a created beat that a later
+`heading-finalize` of line T uses as its empty first beat (`emptyBeat` and
+`retainedBeat`). Placement puts that beat after T's span when the emitted left beat
+is directly followed by T. The later parts of a joined row that holds the left beat
+count with it, as the app shows that row as one beat, and a heading directly before T
+whose first beat is T counts as part of T's place, so a line that is the only beat of
+an existing scene is placed the same way. Otherwise the beat is placed as before, and the end check
+still refuses a heading left after it with `misplaced-heading-beat`. A beat added at
+the end by another writer at the same moment is ordered against the empty first beat
+by writer id; the lower writer's beat comes first and is the scene's first beat. Two
+writers finalizing the same last line keep both empty first beats, and the higher
+writer's heading takes the name.
+
+Declared limit: a name of half a surrogate pair never reaches
 the executor: hydration and the operation reader store U+FFFD, which passes the
 check, so that list is accepted and every copy loads a scene the app itself drops.
 Pinned concurrent outcomes: two writers finalizing the same line keep the higher
@@ -460,13 +471,15 @@ in recovery as `scene-with-no-beats`. When one writer keeps a typed tail and the
 other finalizes the whole line, the tail goes to recovery as a removed beat.
 
 Evidence: the copied T08 create and T08 race results with literal identities under
-three delivery orders and an encoded late joiner; complete app lists at 14 places,
+three delivery orders and an encoded late joiner; complete app lists at 19 places,
 including the first beat, a beat mid-scene, the first beat of an existing scene, a
-beat split off inline and formatted names (42 calls, 93 operations, 33 finalizations,
-none skipped or deferred), compared with the app's rows, scene ids, names and first
-beats; the app's lists at the two declared-limit places, refused unchanged; two-writer
-literals; a seeded model of 48 histories, 122 checkpoints and 263
-commands with literal declared limits `[]`; and two structure mutants.
+beat split off inline, formatted names, the last line after a plain or joined beat
+with and without a following scene, and the line as the only beat of an existing
+scene in three forms (69 calls, 180 operations, 54 finalizations, none skipped or
+deferred), compared with the app's
+rows, scene ids, names and first beats; two-writer literals; a seeded model of 48
+histories (16 of them last lines), 122 checkpoints and 283 commands with literal
+declared limits `[]`; and five structure mutants.
 
 ## Moving beats and scenes
 

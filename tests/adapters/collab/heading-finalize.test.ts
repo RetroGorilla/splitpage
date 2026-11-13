@@ -198,7 +198,7 @@ test("finalization refuses a joined row, a refused name, a broken line, a headin
     refuse([{ ...head, name: [base("R1", 3, 4)] }, ...rest], "invalid-heading-range");
     refuse([{ ...head, tail: { left: null, right: base("R1", 6), affinity: "before" } }, ...rest], "invalid-heading-range");
     refuse([{ kind: "segment-create", id: "blank", by: "Alice", segment: "Rb", beat: "Rb", at: { left: "R0", right: "R2", affinity: "after" }, fields: {} },
-      { ...head, id: "fin_o_1", retainedBeat: "Rb", emptyBeat: "Rb", separator: [], tail: { left: base("R1", 3), right: null, affinity: "after" }, name: [base("R1", 2, 4)] }], "misplaced-heading-beat", 1);
+      { ...head, id: "fin_o_1", retainedBeat: "Rb", emptyBeat: null, separator: [], tail: { left: base("R1", 3), right: null, affinity: "after" }, name: [base("R1", 2, 4)] }], "misplaced-heading-beat", 1);
     send(set.a, { kind: "join", id: "glue", by: "Alice", from: "R2", into: "R1", glue: " " });
     refuse(finalize("Alice", "R2", 2, null, "R3"), "joined-heading");
     refuse(finalize("Alice", "R1", 2, "cd", ""), "joined-heading");
