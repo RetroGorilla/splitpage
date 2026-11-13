@@ -90,7 +90,7 @@ export function recordSharedSplit(handle: SharedDocumentHandle, operation: Share
     beat = sharedStructureIdentity(prep.view.writer, operation.id, "beat");
     source = sharedStructureReference(prep.view, operation.target.owner);
   } finally { prep.close(); }
-  // why: a split of a beat made earlier in the same list names it by an alias this reading cannot resolve; it stays refused.
+  // why: a split of a beat made earlier in the same list names it by an alias that cannot be resolved here.
   if (!collabState(handle).roots.beats.has(source)) return null;
   const place = boundaryAnchor(handle, source, beat);
   return place ? { kind: "beat-split", beat: beat as SharedContentRef, source: source as SharedContentRef, segment: place.segment as SharedContentRef, boundary: place.anchor,
