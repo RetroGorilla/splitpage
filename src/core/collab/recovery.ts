@@ -69,7 +69,9 @@ export function projectSharedLostComments(comments: readonly Readonly<Record<str
   for (const comment of [...comments].sort((a, b) => compare(String(a.id), String(b.id)))) {
     known.add(comment.id);
     const anchor = comment.anchorId;
-    if (typeof comment.id !== "string" || typeof anchor !== "string" || !anchor || comment.kind === "conflict" || comment.field === "title" || words.has(anchor)) continue;
+    // why: only a text comment has words; picture, moved-media and conflict comments carry an empty quote.
+    const text = typeof comment.quotedText === "string" && comment.quotedText !== "" && comment.kind !== "conflict" && comment.field !== "title" && comment.field !== "visualImage";
+    if (typeof comment.id !== "string" || typeof anchor !== "string" || !anchor || !text || words.has(anchor)) continue;
     out.push({ kind: "comment-without-words", comment: comment.id, rowId: typeof comment.rowId === "string" ? comment.rowId : null,
       field: typeof comment.field === "string" ? comment.field : null });
   }

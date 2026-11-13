@@ -111,7 +111,7 @@ application code issues it yet: there is no recovery panel.
 
 ### `comment-without-words`
 
-- Produced: `projectSharedLostComments` in `core/collab/recovery.ts`, for a comment whose anchor is in no shared text the projection reads: no live or removed beat cell, heading or fragment. A comment with no text anchor (no `anchorId`, a conflict comment, or one on the title) is never listed (assumed rule 47). The comment stays in the document's `comments`.
+- Produced: `projectSharedLostComments` in `core/collab/recovery.ts`, for a comment whose anchor is in no shared text the projection reads: no live or removed beat cell, heading or fragment. Only a text comment is a candidate: one with a non-empty stored quote (`quote`, projected as `quotedText`), not a conflict comment and not on the title or the picture (`visualImage`). The app makes a text comment from a non-empty selection and keeps its words as the quote; a picture comment, a comment migration made from inline media (`mediaComments`) and a conflict comment carry an empty quote. Migration gives every comment an `anchorId`, so the anchor alone does not tell them apart. These are never listed (assumed rule 47). The comment stays in the document's `comments`.
 - Carries: `comment` (the comment record id), `rowId` and `field` (its stored place, or null).
 - Copies: derivation.
 - Restore today: none. Its words are gone (decided 2026-11-09).
@@ -158,6 +158,8 @@ A comment goes where its words are (cut 4, assumed rule 47 on #1414). Its words 
 - Every comment also stays in the document's `comments` (A3); only the `rowId` and `field` of a comment whose words are only in removed content change, from the stored values to the group holding them.
 
 ## Declared limits
+
+- Comment placement is not cached: every assembly rescans the units of every removed group, every heading and every unprojectable fragment for anchors, and sorts all comments and replies. This is a cost for the shared-session timings; the pinned cost lists hold no removed content, so they do not measure it.
 
 - Characters brought back by undo of a deletion are new (rule 39), so they count as edited, not observed. A beat split off that holds only such characters stays in the script, although its words are the ones the remover saw. Pinned by `split-removal.test.ts`.
 

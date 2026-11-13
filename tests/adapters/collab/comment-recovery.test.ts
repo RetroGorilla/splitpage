@@ -158,22 +158,25 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 47, answer
 });
 
 for (const order of ["D1", "rev", "dup"] as const) test(`a comment whose words are gone is listed at its stored place, comments with no text anchor never are, and a reply without its comment is listed until the comment returns: ${order}`, () => {
-  const source = { rows: [{ id: "R1", audioText: "a" + span("C1", "b") }, { id: "R2", audioText: "cd" }],
-    comments: [comment("C1", "Alice", { replies: [{ id: "r1", author: "Bob", body: "", createdAt: 0 }] }), comment("C9", "Bob", { rowId: "R2", field: "visualText" }),
+  const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const source = { rows: [{ id: "R1", audioText: "a" + span("C1", "b") }, { id: "R2", audioText: "cd" }, { id: "R3", visualText: `Wide <img src="${pixel}"> shot` }],
+    comments: [comment("C1", "Alice", { quotedText: "b", replies: [{ id: "r1", author: "Bob", body: "", createdAt: 0 }] }), comment("C9", "Bob", { rowId: "R2", field: "visualText", quotedText: "gone" }),
       { id: "K1", kind: "conflict", conflictField: "audioText", rowId: "R1", field: "audioText", author: "Alice", body: "", createdAt: 0 },
-      { id: "T1", rowId: null, field: "title", author: "Alice", body: "", createdAt: 0 }] };
+      { id: "T1", rowId: null, field: "title", author: "Alice", body: "", createdAt: 0 },
+      { id: "P1", rowId: "R2", field: "visualImage", author: "A", body: "Picture note" }] };
   const { set, handles } = setup(source);
   try {
     const { projector } = captureIncrementalReplica(set.c);
-    const gone = ["comment-without-words", "C9", "R2", "visualText"];
-    agree("stored place", order, handles, summary, { rows: ["R1", "R2"], comments: [["C1", "R1", "audioText", ["r1"]], ["C9", "R2", "visualText", []], ["K1", "R1", "audioText", []], ["T1", null, "title", []]],
-      recovery: [gone] });
+    const media = (projectSharedDocumentWithRecovery(set.a).document.comments as unknown as Record<string, unknown>[]).filter(value => String(value.id).startsWith("cm"))
+      .map(value => [value.id, shown(value.rowId), value.field, []]);
+    assert.deepEqual(media.map(value => value.slice(1)), [["R3", "visualText", []]]);
+    const gone = ["comment-without-words", "C9", "R2", "visualText"], others = [["K1", "R1", "audioText", []], ["T1", null, "title", []], ["P1", "R2", "visualImage", []], ...media];
+    const rows = ["R1", "R2", "R3"], kept = { rows, comments: [["C1", "R1", "audioText", ["r1"]], ["C9", "R2", "visualText", []], ...others], recovery: [gone] };
+    agree("stored place", order, handles, summary, kept);
     send(set.a, deleteRecord("comments", "C1")); set.queue.flush(order); assertIncremental(set.c, projector);
-    const orphan = { rows: ["R1", "R2"], comments: [["C9", "R2", "visualText", []], ["K1", "R1", "audioText", []], ["T1", null, "title", []]],
-      recovery: [gone, ["reply-without-comment", '["C1","r1"]', "C1"]] };
+    const orphan = { rows, comments: [["C9", "R2", "visualText", []], ...others], recovery: [gone, ["reply-without-comment", '["C1","r1"]', "C1"]] };
     agree("reply without comment", order, handles, summary, orphan);
-    send(set.a, createRecord("comments", "C1", { anchorId: "C1", rowId: "R2", field: "audioText", createdAt: 0, text: "" }, "Alice", "again")); set.queue.flush(order); assertIncremental(set.c, projector);
-    agree("comment back", order, handles, summary, { rows: ["R1", "R2"], comments: [["C1", "R1", "audioText", ["r1"]], ["C9", "R2", "visualText", []], ["K1", "R1", "audioText", []], ["T1", null, "title", []]],
-      recovery: [gone] });
+    send(set.a, createRecord("comments", "C1", { anchorId: "C1", rowId: "R2", field: "audioText", createdAt: 0, text: "", quote: "b" }, "Alice", "again")); set.queue.flush(order); assertIncremental(set.c, projector);
+    agree("comment back", order, handles, summary, kept);
   } finally { set.close(); }
 });
