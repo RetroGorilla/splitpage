@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyEdit, confinedPath, formatTable, killTree, loadMutants, makeScratch, parseArgs, runChild, runMutant, summarize } from "./mutants.mjs";
+import { applyEdit, confinedPath, exitCode, formatTable, killTree, loadMutantFiles, loadMutants, makeScratch, parseArgs, runChild, runMutant, shardOf, summarize } from "./mutants.mjs";
 
 let passed = 0;
 const failures = [];
@@ -72,6 +72,25 @@ eq("parseArgs reads timeout seconds", parseArgs(["m.json", "--timeout", "10"]).t
 eq("parseArgs refuses zero concurrency", typeof parseArgs(["m.json", "--concurrency", "0"]).error, "string");
 eq("parseArgs refuses unknown flags", typeof parseArgs(["m.json", "--nope"]).error, "string");
 check("default concurrency is at least 1", parseArgs(["m.json"]).concurrency >= 1);
+eq("parseArgs takes several files in order", parseArgs(["a.json", "b.json", "--concurrency", "2"]).files.join(), "a.json,b.json");
+eq("parseArgs reads --shard", JSON.stringify(parseArgs(["m.json", "--shard", "2/4"]).shard), JSON.stringify({ index: 2, count: 4 }));
+eq("parseArgs reads --shard=", JSON.stringify(parseArgs(["m.json", "--shard=1/1"]).shard), JSON.stringify({ index: 1, count: 1 }));
+for (const bad of ["0/4", "5/4", "1/0", "2", "x/y"]) eq(`parseArgs refuses --shard ${bad}`, typeof parseArgs(["m.json", "--shard", bad]).error, "string");
+const nine = Array.from({ length: 9 }, (_, i) => ({ label: String(i) }));
+eq("no shard keeps every mutant", shardOf(nine, null).length, 9);
+eq("shard 1/4 takes every fourth from the first", shardOf(nine, { index: 1, count: 4 }).map((m) => m.label).join(), "0,4,8");
+eq("shard 4/4 takes every fourth from the fourth", shardOf(nine, { index: 4, count: 4 }).map((m) => m.label).join(), "3,7");
+eq("the shards of a list cover it exactly once", [1, 2, 3, 4].flatMap((index) => shardOf(nine, { index, count: 4 })).map((m) => m.label).sort().join(), nine.map((m) => m.label).join());
+const one = { name: "a-mutants.json", text: JSON.stringify([good]) }, other = { name: "b-mutants.json", text: JSON.stringify([good]) };
+eq("one file keeps its labels", loadMutantFiles([one])[0].label, "a");
+eq("several files name each label's file", loadMutantFiles([one, other]).map((m) => m.label).join(), "a-mutants.json: a,b-mutants.json: a");
+check("a broken file among several names that file", (() => { try { loadMutantFiles([one, { name: "c-mutants.json", text: "[]" }]); return false; } catch (e) { return e.message.startsWith("c-mutants.json: "); } })());
+eq("survivors do not fail the run by default", parseArgs(["m.json"]).failOnSurvivor, false);
+eq("parseArgs reads --fail-on-survivor", parseArgs(["m.json", "--fail-on-survivor"]).failOnSurvivor, true);
+eq("a survivor exits 0 without the flag", exitCode({ caught: 1, survived: 1, errors: 0 }, false), 0);
+eq("a survivor exits 1 with the flag", exitCode({ caught: 1, survived: 1, errors: 0 }, true), 1);
+eq("all caught exits 0 with the flag", exitCode({ caught: 2, survived: 0, errors: 0 }, true), 0);
+eq("an error exits 2 with or without the flag", [exitCode({ caught: 0, survived: 1, errors: 1 }, true), exitCode({ caught: 0, survived: 0, errors: 1 }, false)].join(), "2,2");
 
 const root = mkdtempSync(join(tmpdir(), "mutants-test-"));
 try {

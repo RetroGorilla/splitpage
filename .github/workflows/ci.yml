@@ -31,6 +31,7 @@ jobs:
       desktop: ${{ steps.classify.outputs.desktop }}
       collab: ${{ steps.classify.outputs.collab }}
       root_tests: ${{ steps.classify.outputs.root_tests }}
+      mutants: ${{ steps.classify.outputs.mutants }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -237,16 +238,44 @@ jobs:
       - name: Unit, desktop and tool test shard
         run: npm run test:all -- --shard "${{ matrix.shard }}/4"
 
+  mutants:
+    name: Collaboration mutants (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.mutants == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install tooling
+        run: npm ci
+
+      - name: Every collaboration mutant is caught
+        run: node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --fail-on-survivor
+
   gate:
-    needs: [changes, checks, tests, desktop-smoke]
+    needs: [changes, checks, tests, desktop-smoke, mutants]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS smoke=$SMOKE"
+          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS tested=$TESTED desktop=$DESKTOP mutants_needed=$MUTANTS_NEEDED checks=$CHECKS tests=$TESTS smoke=$SMOKE mutants=$MUTANTS"
           [ "$CHANGES" = success ] || exit 1
+          want_mutants=skipped
+          if [ "$MUTANTS_NEEDED" = true ] && [ "$TESTED" != true ]; then want_mutants=success; fi
+          [ "$MUTANTS" = "$want_mutants" ] || exit 1
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
             want_tests=skipped
             if [ "$ROOT_TESTS" = true ]; then want_tests=success; fi
@@ -262,18 +291,20 @@ jobs:
           ROOT_TESTS: ${{ needs.changes.outputs.root_tests }}
           TESTED: ${{ needs.changes.outputs.tested }}
           DESKTOP: ${{ needs.changes.outputs.desktop }}
+          MUTANTS_NEEDED: ${{ needs.changes.outputs.mutants }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
           SMOKE: ${{ needs.desktop-smoke.result }}
+          MUTANTS: ${{ needs.mutants.result }}
 
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}

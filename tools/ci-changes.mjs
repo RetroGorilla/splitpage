@@ -37,6 +37,13 @@ export function needsCollabChecks(files) {
   return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml");
 }
 
+const MUTANT_SOURCES = [/^src\/adapters\/collab\//, /^src\/core\/collab\//, /^src\/application\/editing\//, /^tests\/collab\//, /^tools\/mutants\.mjs$/, /^\.github\/workflows\/ci\.yml$/];
+
+export function needsCollabMutants(files) {
+  if (files === null || files.length === 0) return true;
+  return files.some((f) => !f.endsWith(".md") && MUTANT_SOURCES.some((re) => re.test(f)));
+}
+
 export function needsRootTests(files) {
   if (files === null || files.length === 0) return true;
   return files.some((f) => COPIED_PROTOTYPE_FILES.has(f) || (!f.startsWith("prototypes/collab/") && needsChecks([f])));
@@ -70,6 +77,7 @@ if (isMain(import.meta.url)) {
   const desktop = needsDesktopChecks(files);
   const collab = needsCollabChecks(files);
   const rootTests = needsRootTests(files);
+  const mutants = needsCollabMutants(files);
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);
@@ -77,5 +85,6 @@ if (isMain(import.meta.url)) {
   console.log(`ci-changes: desktop=${desktop}`);
   console.log(`ci-changes: collab=${collab}`);
   console.log(`ci-changes: root_tests=${rootTests}`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\ncollab=${collab}\nroot_tests=${rootTests}\n`);
+  console.log(`ci-changes: mutants=${mutants}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\ncollab=${collab}\nroot_tests=${rootTests}\nmutants=${mutants}\n`);
 }

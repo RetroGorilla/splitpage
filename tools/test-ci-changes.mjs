@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsRootTests, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsCollabMutants, needsRootTests, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -79,6 +79,14 @@ for (const path of ["src/bootstrap/main.ts", "tools/dep-report.mjs", ".github/wo
 }
 for (const files of [null, [], [".github/workflows/ci.yml"]]) eq("unknown diffs and workflow changes run prototype tests", needsCollabChecks(files), true);
 eq("app-only changes do not run prototype tests", needsCollabChecks(["src/bootstrap/main.ts"]), false);
+console.log("\nneedsCollabMutants():\n");
+
+for (const path of ["src/adapters/collab/undo-executor.ts", "src/core/collab/undo-record.ts", "src/application/editing/buffered-field.ts", "tests/collab/undo-mutants.json",
+  "tests/collab/undo/generator.test.ts", "tools/mutants.mjs", ".github/workflows/ci.yml"]) eq(`${path} runs the mutants`, needsCollabMutants(["README.md", path]), true);
+for (const files of [null, []]) eq("an unknown diff runs the mutants", needsCollabMutants(files), true);
+for (const path of ["src/bootstrap/main.ts", "src/application/session/shared-session.ts", "src/features/writer/flow-surface.ts", "tests/collab/mutants.md",
+  "prototypes/collab/src/probe.ts", ".github/workflows/nightly.yml"]) eq(`${path} alone does not run the mutants`, needsCollabMutants([path]), false);
+
 eq("a mixed change still runs every affected check", [needsChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsCollabChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsDesktopChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"])], [true, true, true]);
 
 const repo = mkdtempSync(join(tmpdir(), "splitpage-ci-changes-"));

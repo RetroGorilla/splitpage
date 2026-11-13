@@ -46,6 +46,11 @@ export function summarize(results) {
   return { caught, survived, errors, line };
 }
 
+export function exitCode(summary, failOnSurvivor) {
+  if (summary.errors > 0) return 2;
+  return failOnSurvivor && summary.survived > 0 ? 1 : 0;
+}
+
 export function formatTable(results) {
   const rows = results.map((r) => [r.label, r.detail ? `${r.status} (${r.detail})` : r.status, `${(r.ms / 1000).toFixed(1)}s`]);
   const header = ["label", "result", "duration"];
@@ -185,8 +190,28 @@ export async function runAll(mutants, options) {
   return results;
 }
 
+export function shardOf(mutants, shard) {
+  return shard ? mutants.filter((_, i) => i % shard.count === shard.index - 1) : mutants;
+}
+
+export function loadMutantFiles(entries) {
+  const mutants = entries.flatMap(({ name, text }) => {
+    try {
+      return loadMutants(text).map((m) => (entries.length > 1 ? { ...m, label: `${name}: ${m.label}` } : m));
+    } catch (e) {
+      throw new Error(entries.length > 1 ? `${name}: ${e.message}` : e.message, { cause: e });
+    }
+  });
+  const seen = new Set();
+  for (const m of mutants) {
+    if (seen.has(m.label)) throw new Error(`duplicate label ${m.label}`);
+    seen.add(m.label);
+  }
+  return mutants;
+}
+
 export function parseArgs(args) {
-  const opts = { file: null, concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, keep: false, baseline: true };
+  const opts = { files: [], concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, keep: false, baseline: true, failOnSurvivor: false, shard: null };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     const value = (name) => {
@@ -201,13 +226,18 @@ export function parseArgs(args) {
       const n = Number(value("--timeout"));
       if (!Number.isFinite(n) || n <= 0) return { error: "--timeout needs a number of seconds above 0" };
       opts.timeoutMs = n * 1000;
+    } else if (a === "--shard" || a.startsWith("--shard=")) {
+      const m = /^(\d+)\/(\d+)$/.exec(value("--shard") ?? "");
+      const index = m ? Number(m[1]) : 0, count = m ? Number(m[2]) : 0;
+      if (!m || count < 1 || index < 1 || index > count) return { error: "--shard needs K/N with 1 <= K <= N" };
+      opts.shard = { index, count };
     } else if (a === "--keep") opts.keep = true;
     else if (a === "--no-baseline") opts.baseline = false;
-    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --keep or --no-baseline` };
-    else if (opts.file) return { error: "only one mutants file is accepted" };
-    else opts.file = a;
+    else if (a === "--fail-on-survivor") opts.failOnSurvivor = true;
+    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --shard, --keep, --no-baseline or --fail-on-survivor` };
+    else opts.files.push(a);
   }
-  if (!opts.file) return { error: "usage: node tools/mutants.mjs <mutants.json> [--concurrency N] [--timeout SECONDS] [--keep] [--no-baseline]" };
+  if (!opts.files.length) return { error: "usage: node tools/mutants.mjs <mutants.json>... [--concurrency N] [--timeout SECONDS] [--shard K/N] [--keep] [--no-baseline] [--fail-on-survivor]" };
   return opts;
 }
 
@@ -216,11 +246,12 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   if (opts.error) { printError(`mutants: ${opts.error}`); return 2; }
   let mutants;
   try {
-    mutants = loadMutants(readFileSync(resolve(opts.file), "utf8"));
+    mutants = shardOf(loadMutantFiles(opts.files.map((file) => ({ name: basename(file), text: readFileSync(resolve(file), "utf8") }))), opts.shard);
   } catch (e) {
     printError(`mutants: ${e.message}`);
     return 2;
   }
+  if (!mutants.length) { print("no mutants in this shard"); return 0; }
   const files = listRepoFiles(repo).filter((p) => existsSync(join(repo, p)));
   const parent = mkdtempSync(join(tmpdir(), "splitpage-mutants-"));
   const interrupt = (signal, code) => () => {
@@ -257,7 +288,7 @@ export async function main(args, { repo = REPO, print = console.log, printError 
     print(s.line);
     for (const r of results.filter((x) => x.status === "survived")) print(`survived: ${r.label} (record why it was accepted, or add a test)`);
     for (const r of results.filter((x) => x.status === "error")) print(`error: ${r.label}: ${r.detail}`);
-    return s.errors > 0 ? 2 : 0;
+    return exitCode(s, opts.failOnSurvivor);
   } finally {
     process.off("SIGINT", onInt);
     process.off("SIGTERM", onTerm);
