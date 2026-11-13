@@ -16,6 +16,22 @@ env:
   PLAYWRIGHT_VERSION: '1.63.0'
 
 jobs:
+  mutants:
+    runs-on: ${{ vars.CI_RUNNER }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install tooling
+        run: npm ci
+
+      - name: The slow collaboration mutants are caught
+        run: node tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor
+
   suites:
     runs-on: ${{ vars.CI_RUNNER }}
     timeout-minutes: 180
