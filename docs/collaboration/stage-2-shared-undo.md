@@ -435,25 +435,32 @@ side keeps its side; it is refused while the boundary is there. Both are read
 like any other operation, so a hand-made one from another copy is refused only
 when its beat or segment cannot be found.
 
-Undo writes only while the source beat is live, the boundary is there and the
-new beat compares unchanged (its record holds its removal flags, so a removed
-new beat does not compare); otherwise it is used up. A used-up part's inverse
-points the other way, so in a record with other parts a later redo never takes
-the split back. Text typed in either beat is
-not a change that uses it up: it joins the source beat and comes back to its
-side on redo. Redo writes while the boundary is gone and the source beat is
-live. It does not compare the new beat: a change someone made to it without
-seeing the undo comes back into view with it. A split in a joined row is
-undone the same way and the row comes back whole (rule 36). Literals in
-`undo-split.test.ts`.
+Whether the boundary is there is one test, the same one `split-restore` makes
+before it writes; naming the boundary by an anchor is a separate step. Undo
+writes only while the source beat is live, the boundary is there and can be
+named as the split wrote it, and the new beat compares unchanged (its record
+holds its removal flags, so a removed new beat does not compare); otherwise it
+is used up. A used-up part's inverse points the other way, so in a record with
+other parts a later redo never takes the split back. Text typed in either beat
+is not a change that uses it up: it joins the source beat and comes back to
+its side on redo. Redo writes while the boundary is gone and the source beat
+is live; a boundary that is there uses the redo up, even one no anchor can
+name (another writer made the new beat's first line a heading, which writes
+its boundary again after the heading name), so a redo is never refused. It
+does not compare the new beat: a change someone made to it without seeing the
+undo comes back into view with it. A split in a joined row is undone the same
+way and the row comes back whole (rule 36). Literals in `undo-split.test.ts`.
 
 Declared open limits, each pinned by a literal of today's result (cut 5a-2):
-when another writer changes the new beat (a field, its status) or removes it
-without having seen the undo, the undo still takes the split back on every
-copy. The change then sits on a beat with no row, and text that writer removed
-is back in the script with nobody restoring it. The fix is for `split-retire`
-to carry what it observed of the new beat, and the projection to honour the
-retire only while the beat still matches and is not removed.
+when another writer, without having seen the undo, changes the new beat (a
+field, its status, a visual or gallery record) or removes it, or joins another
+beat into it, the undo still takes the split back on every copy. The change
+then sits on a beat with no row, and text that writer removed is back in the
+script with nobody restoring it; a beat joined into it stands on its own row.
+Field, removal, status and join are pinned; visual and gallery take the same
+path as status and have no literal. The fix is for `split-retire` to carry
+what it observed of the new beat, and the projection to honour the retire only
+while the beat still matches and is not removed.
 
 Declared, refused by name (`undo-unsupported:split`): a command with two
 splits (a middle selection to its own beat, where the second split names the

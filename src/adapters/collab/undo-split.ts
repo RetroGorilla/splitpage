@@ -12,7 +12,7 @@ import { createSharedAnchor, readSharedAnchorUnit } from "./anchors.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
 import { planSharedStructureOwner } from "./structure-plan.ts";
-import { readSharedBeatShape, readSharedLiveStructure } from "./undo-removal.ts";
+import { readSharedBeatShape } from "./undo-removal.ts";
 import { collabState } from "./state.ts";
 
 export type SharedSplitUndoPart = Extract<SharedUndoPart, { kind: "beat-split" }>;
@@ -69,14 +69,15 @@ export function prepareSharedSplitRestore(operation: SharedSplitRestore, view: S
   });
 }
 
-function boundaryAnchor(handle: SharedDocumentHandle, source: string, beat: string): { readonly segment: string; readonly anchor: SharedContentRef } | null {
+function boundary(handle: SharedDocumentHandle, source: string, beat: string): { readonly segment: string; readonly anchor: SharedContentRef | null } | null | "absent" {
   const prep = createSharedPreparation(handle);
   try {
     const found = located(prep.view, source, beat), segment = segmentOf(prep.view, beat);
+    if (!found || !segment) return "absent";
     // why: a split-before boundary lies outside the source's text, so it is named through the new beat.
-    const anchor = found && segment ? [source, beat].map(owner => createSharedAnchor(handle, { owner: owner as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" },
-      found.index, "after")).find(value => value !== null) : null;
-    return anchor && segment ? { segment, anchor } : null;
+    const anchor = [source, beat].map(owner => createSharedAnchor(handle, { owner: owner as SharedContentRef, segment: segment as SharedContentRef, field: "audioText" },
+      found.index, "after")).find(value => value !== null) ?? null;
+    return { segment, anchor };
   } catch (error) {
     if (error instanceof SharedTextPreparationError) return null;
     throw error;
@@ -92,8 +93,8 @@ export function recordSharedSplit(handle: SharedDocumentHandle, operation: Share
   } finally { prep.close(); }
   // why: a split of a beat made earlier in the same list names it by an alias that cannot be resolved here.
   if (!collabState(handle).roots.beats.has(source)) return null;
-  const place = boundaryAnchor(handle, source, beat);
-  return place ? { kind: "beat-split", beat: beat as SharedContentRef, source: source as SharedContentRef, segment: place.segment as SharedContentRef, boundary: place.anchor,
+  const place = boundary(handle, source, beat), anchor = place !== null && place !== "absent" ? place.anchor : null;
+  return place !== null && place !== "absent" && anchor ? { kind: "beat-split", beat: beat as SharedContentRef, source: source as SharedContentRef, segment: place.segment as SharedContentRef, boundary: anchor,
     before: operation.kind === "split-before" ? source as SharedContentRef : null, retired: false, content: readSharedBeatShape(handle, beat) } : null;
 }
 
@@ -102,15 +103,17 @@ export interface SharedSplitUndoPlan { readonly effective: boolean; readonly inv
 // why: a split is undone only while both beats stand and the new beat is as the split left it; a redo only shows more.
 export function planSharedSplitUndo(handle: SharedDocumentHandle, part: SharedSplitUndoPart, author: () => { id: string; by: string },
   push: (raw: Record<string, unknown>) => void): SharedSplitUndoPlan {
-  const live = readSharedLiveStructure(handle), place = boundaryAnchor(handle, part.source, part.beat);
-  const standing = live.beats.has(part.source) && (part.retired ? place === null : place !== null);
+  const place = boundary(handle, part.source, part.beat);
+  // why: a boundary that is there uses a redo up, even one no anchor names; an undo needs it as the split wrote it.
+  // A removed source beat has no text plan, so the test fails for it in both directions.
+  const standing = place !== null && (part.retired ? place === "absent" : place !== "absent" && place.anchor !== null);
   // why: a used-up part's inverse points the other way, so a later redo never takes this split back.
   if (!standing || !part.retired && readSharedBeatShape(handle, part.beat) !== part.content) return { effective: false, inverse: () => ({ ...part, retired: !part.retired }) };
   const command = author();
   if (part.retired) push({ kind: "split-restore", ...command, target: { owner: part.source, segment: part.segment, field: "audioText" }, beat: part.beat, unit: part.boundary, before: part.before });
   else push({ kind: "split-retire", ...command, beat: part.beat });
   return { effective: true, inverse: () => {
-    const now = boundaryAnchor(handle, part.source, part.beat);
-    return { ...part, boundary: now?.anchor ?? part.boundary, retired: !part.retired, content: readSharedBeatShape(handle, part.beat) };
+    const now = boundary(handle, part.source, part.beat);
+    return { ...part, boundary: now !== null && now !== "absent" ? now.anchor ?? part.boundary : part.boundary, retired: !part.retired, content: readSharedBeatShape(handle, part.beat) };
   } };
 }

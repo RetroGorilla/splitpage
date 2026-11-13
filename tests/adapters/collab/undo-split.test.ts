@@ -4,6 +4,7 @@ import { replicas, agree, operation } from "./executor-support.ts";
 import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
+import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
@@ -16,7 +17,7 @@ import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
-import { beatPos, enterInHeading, headingPos, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
+import { beatPos, enterAt, enterInHeading, headingPos, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 
@@ -29,15 +30,15 @@ const type = (id: string, owner: string, offset: number, value: string) => ({ ki
   content: [{ value, marks: [] }] });
 const read = (handle: SharedDocumentHandle) => projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.id.startsWith("structure_") ? "Rs" : row.id, row.audioText]);
 
-function scenario(order: typeof ORDERS[number], body: (run: Run) => void) {
-  const run = start(order);
+function scenario(order: typeof ORDERS[number], body: (run: Run) => void, source: Record<string, unknown> = SOURCE) {
+  const run = start(order, source);
   try { body(run); } finally { run.close(); }
 }
 type Run = ReturnType<typeof start>;
-function start(order: typeof ORDERS[number]) {
-  const set = replicas(2, SOURCE), handles = [set.a, set.b], incremental = handles.map(handle => captureIncrementalReplica(handle));
+function start(order: typeof ORDERS[number], source: Record<string, unknown> = SOURCE) {
+  const set = replicas(2, source), handles = [set.a, set.b], incremental = handles.map(handle => captureIncrementalReplica(handle));
   handles.forEach(handle => {
-    registerSharedJoinHandlers(handle); registerSharedRemovalHandlers(handle); registerSharedSplitHandlers(handle, runtime);
+    registerSharedJoinHandlers(handle); registerSharedRemovalHandlers(handle); registerSharedSplitHandlers(handle, runtime); registerSharedHeadingHandlers(handle);
     registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle);
   });
   const flush = () => { set.queue.flush(order); handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); }); };
@@ -150,7 +151,12 @@ for (const order of ORDERS) test(`rule 35: another writer typing in the new beat
 
 for (const [name, change] of [
   ["sets a field on the new beat", (run: Run, beat: string) => run.send({ kind: "scalar", id: "f", by: "Other", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 9 })],
-  ["removes the new beat", (run: Run, beat: string) => run.send(removeBeat(beat))]
+  ["removes the new beat", (run: Run, beat: string) => run.send(removeBeat(beat))],
+  ["sets the new beat's status", (run: Run, beat: string) => {
+    const status = { scope: "beat", record: beat as SharedContentRef } as const;
+    run.send({ kind: "status", id: "s", by: "Other", target: status, value: "ready", parents: readSharedStatusHeads(run.set.b, status) });
+  }],
+  ["joins another beat into the new beat", (run: Run, beat: string) => run.send({ kind: "join", id: "j", by: "Other", from: "R2", into: beat, glue: " " })]
 ] as const) for (const order of ORDERS) test(`declared open limit (cut 5a-2): another writer ${name} while the undo is in flight; today the split is taken back anyway: ${order}`,
   () => scenario(order, run => {
     const record = run.command(split()), beat = run.beat(record);
@@ -202,3 +208,37 @@ test("declared: Enter inside a scene heading name stays refused by name", () => 
     assert.deepEqual(reverseSharedUndoRecord(set.a, execution.record, { by: "Writer", nextId: () => "u" }), { ok: false, reason: "undo-unsupported:split" });
   } finally { set.close(); }
 });
+
+const HEADED = { rows: [{ id: "R1", audioText: "abX# Q<br>cd" }, { id: "R2", audioText: "ef" }] };
+const headRs = (run: Run, beat: string) => {
+  const base = (from: number, to = from) => flowBaseReference(beat, "audioText", from, to);
+  run.send({ kind: "heading-finalize", id: "fin", by: "Other", target: { owner: beat, segment: beat, field: "audioText" }, heading: "Hq",
+    prefix: [base(0, 2)], name: [base(2, 3)], separator: [base(3, 4)], retainedBeat: beat, emptyBeat: null, tail: { left: null, right: base(4), affinity: "before" } });
+};
+const headed = (handle: SharedDocumentHandle) => { const document = projectSharedDocumentWithRecovery(handle).document;
+  return [read(handle), ((document.sections ?? []) as { readonly name: unknown }[]).map(section => section.name)]; };
+
+const headedSplit2 = [[["R1", "ab"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]];
+for (const order of ORDERS) test(`Enter over a selection, the new beat headed by another writer: the split's undo and redo are used up, never refused: ${order}`, () => scenario(order, run => {
+  const document = projectSharedDocumentWithRecovery(run.set.a).document, same = (label: string, expected: unknown) => agree(label, order, [run.set.a, run.set.b], headed, expected);
+  const outcome = enterAt({ rows: document.rows, comments: [] } as FlowDoc, { anchor: beatPos("R1", 2), head: beatPos("R1", 3) },
+    { ...runtime.ports, newId: () => "fresh", operations: { id: "enter", by: "Writer" } });
+  assert.ok(outcome && "rows" in outcome && outcome.ops);
+  const execution = executeSharedCommand(run.set.a, [...outcome.ops], { label: "enter", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); run.flush(); same("entered", [[["R1", "ab"], ["Rs", "# Q<br>cd"], ["R2", "ef"]], []]);
+  const beat = execution.record.parts.flatMap(part => part.kind === "beat-split" ? [part.beat] : [])[0]; assert.ok(beat);
+  headRs(run, beat); run.flush(); same("headed", headedSplit2);
+  const parts = (record: SharedUndoRecord) => record.parts.map(part => part.kind === "beat-split" ? part.retired : part.kind);
+  const undone = run.reverse(execution.record, true); assert.deepEqual(parts(undone), ["text", true]);
+  same("undone", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["# Q\n"]]);
+  const redone = run.reverse(undone, true); assert.deepEqual(parts(redone), ["text", false]);
+  same("redone", [[["R1", "ab"], ["Rs", "cd"], ["R2", "ef"]], ["# Q\n"]]);
+  run.reverse(redone, true); same("undone again", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["# Q\n"]]);
+}, HEADED));
+
+for (const order of ORDERS) test(`a split undone while another writer heads the new beat stays headed, and its redo is used up, never refused: ${order}`, () => scenario(order, run => {
+  const record = run.command(split("split", 3)), beat = run.beat(record), same = (label: string, expected: unknown) => agree(label, order, [run.set.a, run.set.b], headed, expected);
+  same("split", [[["R1", "abX"], ["Rs", "# Q<br>cd"], ["R2", "ef"]], []]);
+  const undone = run.reverse(record, true, false); headRs(run, beat); run.flush(); same("headed", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
+  run.unchanged(undone, "redo used up", [["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]]); same("still headed", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
+}, HEADED));
