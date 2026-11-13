@@ -1,6 +1,7 @@
 import { BROLL_MARKER_RE } from "../../core/document/broll.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
-import { anchorBrollCell, brollAnchorTodo, planBrollAnchors } from "../../core/production/broll.ts";
+import { anchorBrollCell, brollAnchorTodo, planBrollAnchorsInState } from "../../core/production/broll.ts";
+import type { BrollState } from "../../core/production/broll.ts";
 import { holdsMedia } from "../../core/production/tags.ts";
 import { toHtml } from "../../core/text/html.ts";
 
@@ -131,8 +132,13 @@ function brollRekeyHtmlLine(line: HtmlLine, id: string): boolean {
 
 export function anchorBrollInRows(doc: ValidatedDocument | null | undefined, only: readonly DocumentRow[] | null | undefined, ports: BrollAnchorPorts): number {
   const rows = only || (doc && doc.rows);
-  if (!doc || !rows || !rows.length) return 0;
-  const plan = planBrollAnchors(doc, ports.readers, ports.ids);
+  if (!doc || !rows) return 0;
+  return anchorBrollInGivenRows(doc, rows, ports);
+}
+
+export function anchorBrollInGivenRows(state: Pick<BrollState, "rows" | "brollShots"> | null, rows: readonly DocumentRow[], ports: BrollAnchorPorts): number {
+  if (!state || !rows.length) return 0;
+  const plan = planBrollAnchorsInState(state, ports.readers, ports.ids);
   let total = 0;
   rows.forEach(function (row) {
     if (ports.declined(row.id)) return;
