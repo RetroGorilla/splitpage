@@ -57,8 +57,7 @@ export function hasLaterSharedJoin(handle: SharedDocumentHandle, part: SharedJoi
   return liveJoins(handle, part.from, part.into).some(item => item.glue === part.glue && item.generation > part.generation);
 }
 
-// why: a join puts the source after the whole row, so it stands while the source part follows a part of the target in one row
-// through a live join of the same two beats.
+// why: a join puts the source after the whole row, so a target part anywhere before it in the row counts.
 export function readSharedJoinPlace(handle: SharedDocumentHandle, from: string, into: string):
   { readonly removed: boolean; readonly joined: { readonly glue: "" | " " } | null; readonly root: string } {
   const prep = createSharedPreparation(handle);
