@@ -137,6 +137,6 @@ for (const order of ORDERS) test(`used up: undo of an unjoin after someone creat
   assert.deepEqual(executeSharedOperations(run.set.b, [operation({ kind: "heading-create", id: "head", by: "Other", segment: "Hn", heading: "Hn", firstBeat: "R2",
     at: { left: null, right: "R2", affinity: "before" } }), operation({ kind: "text-insert", id: "name", by: "Other", target: { owner: "Hn", segment: "Hn", field: "heading" },
     at: { left: null, right: flowBaseReference("Hn", "heading", 0), affinity: "before" }, content: [{ value: "Two", marks: [] }] })], { base: readSharedRevision(run.set.b) }), { ok: true });
-  run.flush(); assert.deepEqual(projectSharedDocumentWithRecovery(run.set.a).document.sections?.map(scene => scene.name), ["Two"]);
+  run.flush(); assert.deepEqual(((projectSharedDocumentWithRecovery(run.set.a).document.sections ?? []) as { name: string }[]).map(scene => scene.name), ["Two"]);
   run.unchanged(record, "used up", ["ab", "cd", "ef"]);
 }));
