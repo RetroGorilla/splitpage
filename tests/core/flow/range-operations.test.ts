@@ -193,7 +193,7 @@ test("range operations reproduce rows, sections and removed comments over retain
   for (const name of names) {
     const row = flowOperationCoverage.find(row => row[0] === name);
     assert.ok(row);
-    assert.deepEqual([...kinds.get(name) ?? []].sort(), row[2].split(" | ").filter(part => part !== "whole-field today, needs package 9" && part !== "partial-segment-move").flatMap(part => part.split(",")).sort(), name + " exact kinds");
+    assert.deepEqual([...kinds.get(name) ?? []].sort(), row[2].split(" | ").filter(part => part !== "whole-field today, needs package 9" && part !== "move-in-shared-session").flatMap(part => part.split(",")).sort(), name + " exact kinds");
     assert.ok((edits.get(name) ?? 0) >= floors[name], name + " changing edit floor");
     assert.equal(counts.get(name), name === "replaceFlowMatches" ? 2482 : name === "setMarkAcross" ? 2415 : name === "pasteFlowRange" ? 2407 : name === "typeWithMarks" ? 2403 : name === "moveBeats" ? 2404 : name === "insertBeats" ? 2403 : 2402, name + " call count");
     t.diagnostic(name + ": " + counts.get(name) + " calls, " + edits.get(name) + " changing edits, 0 mismatches");

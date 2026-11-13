@@ -49,7 +49,8 @@ export const SHARED_SESSION_DISABLED = Object.freeze({
   drafts: "Independent drafts are not available in a shared session.",
   history: "Earlier versions cannot replace a shared session.",
   folders: "Local folders cannot be attached to a shared session.",
-  bundles: "File bundles are not available in a shared session."
+  bundles: "File bundles are not available in a shared session.",
+  moves: "Moving beats and scenes is not available in a shared session."
 });
 
 export type StandaloneCapabilityName = keyof typeof SHARED_SESSION_DISABLED;

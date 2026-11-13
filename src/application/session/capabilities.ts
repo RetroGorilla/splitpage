@@ -20,7 +20,8 @@ export function createSessionCapabilities(
     drafts: answer("drafts"),
     history: answer("history"),
     folders: answer("folders"),
-    bundles: answer("bundles")
+    bundles: answer("bundles"),
+    moves: answer("moves")
   } satisfies Record<StandaloneCapabilityName, () => Capability>;
   return Object.freeze({ ...standalone, edit: () => common.edit(), comment: () => common.comment() });
 }
@@ -39,7 +40,8 @@ export function captureSessionCapabilities(source: CapabilityPort): CapabilityPo
     drafts: hold("drafts"),
     history: hold("history"),
     folders: hold("folders"),
-    bundles: hold("bundles")
+    bundles: hold("bundles"),
+    moves: hold("moves")
   } satisfies Record<StandaloneCapabilityName, Capability>;
   return Object.freeze({
     saveDestinations: () => answers.saveDestinations,
@@ -51,6 +53,7 @@ export function captureSessionCapabilities(source: CapabilityPort): CapabilityPo
     history: () => answers.history,
     folders: () => answers.folders,
     bundles: () => answers.bundles,
+    moves: () => answers.moves,
     edit: () => source.edit(),
     comment: () => source.comment()
   });

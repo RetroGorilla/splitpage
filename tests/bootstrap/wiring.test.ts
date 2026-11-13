@@ -668,7 +668,7 @@ test("the standalone session allows commenting whatever its edit effect answers,
       attribute: () => { asked.push("attribute"); return null; }
     }
   });
-  assert.deepEqual(Object.keys(ports.capability).sort(), ["autosave", "bundles", "comment", "drafts", "edit", "folders", "history", "merge", "reload", "saveDestinations", "stash"]);
+  assert.deepEqual(Object.keys(ports.capability).sort(), ["autosave", "bundles", "comment", "drafts", "edit", "folders", "history", "merge", "moves", "reload", "saveDestinations", "stash"]);
   assert.deepEqual(ports.capability.saveDestinations(), { allowed: true });
   assert.deepEqual(ports.capability.autosave(), { allowed: true });
   assert.deepEqual(ports.capability.merge(), { allowed: true });
@@ -678,6 +678,7 @@ test("the standalone session allows commenting whatever its edit effect answers,
   assert.deepEqual(ports.capability.history(), { allowed: true });
   assert.deepEqual(ports.capability.folders(), { allowed: true });
   assert.deepEqual(ports.capability.bundles(), { allowed: true });
+  assert.deepEqual(ports.capability.moves(), { allowed: true });
   assert.deepEqual(ports.capability.comment(), { allowed: true });
   assert.deepEqual(asked, []);
   assert.deepEqual(ports.capability.edit(), { allowed: false, reason: "review" });

@@ -50,7 +50,8 @@ export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): Capab
     drafts: allowed,
     history: allowed,
     folders: allowed,
-    bundles: allowed
+    bundles: allowed,
+    moves: allowed
   } satisfies CapabilityPort;
   return { ...defaults, ...overrides };
 }
