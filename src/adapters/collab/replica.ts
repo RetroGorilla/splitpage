@@ -20,6 +20,7 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
     revision: () => projector.pending() ?? projector.read().revision,
     project: () => published().document,
     changes: () => published().changes,
+    recovery: () => published().recovery,
     execute: (operations: Parameters<ReplicaPort["execute"]>[0], options: Parameters<ReplicaPort["execute"]>[1]) =>
       disposed ? { ok: false as const, reason: REPLICA_DISPOSED } : executeSharedOperations(handle, operations, options),
     observe: (listener: Parameters<ReplicaPort["observe"]>[0]) =>
