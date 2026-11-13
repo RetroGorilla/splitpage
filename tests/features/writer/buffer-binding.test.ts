@@ -392,7 +392,7 @@ for (const kind of ["status", "scalar", "structural"] as const) {
       assert.equal(outcome.kind, "applied", JSON.stringify(outcome));
       assert.equal(plans, 1);
       assert.deepEqual(page.a.executed.map(command => command.base), [1, 2]);
-      assert.deepEqual(page.a.executed[0]?.operations.map(operation => operation.kind), ["text-insert"]);
+      assert.deepEqual(page.a.executed[0]?.operations.map(operation => operation.kind), ["text-insert", "scalar"]);
       assert.deepEqual(page.a.executed[1]?.operations.map(operation => operation.kind), [kind === "structural" ? "split" : kind]);
       page.end("Z"); page.h.queue.flush("dup"); page.h.join();
       const projections = [page.h.a, page.h.b, page.h.c].map(projectSharedDocumentWithRecovery);

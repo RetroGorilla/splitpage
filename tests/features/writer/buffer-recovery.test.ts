@@ -121,7 +121,7 @@ test("rule 29: the local command whose admission found the stale edit plans on t
       return command.plan(doc, capabilities);
     } });
     assert.deepEqual([outcome.kind, plans, page.reports], ["applied", 1, []]);
-    assert.deepEqual(page.a.executed.map(command => command.operations.map(operation => operation.kind)), [["text-insert"], ["segment-create", "remove"], ["status"]]);
+    assert.deepEqual(page.a.executed.map(command => command.operations.map(operation => operation.kind)), [["text-insert", "scalar"], ["segment-create", "remove"], ["status"]]);
     assert.equal(page.a.session.read(doc => doc?.rows[0]?.status), "ready");
     copies(page, { rows: [{ id: "R1", text: "ab" }, { id: "R2", text: "next" }], recovery: [{
       id: BEAT, text: "abZ", members: [BEAT], buffer: [{ beat: BEAT, metadata: { bufferSourceOwner: "R1", bufferPaintedBase: 1 } }] }] });
@@ -154,7 +154,7 @@ test("T01 in the Writer: typing over a held removal joins that beat's recovery, 
       page.h.queue.deliverFrom("B", "D1");
     }), true);
     assert.deepEqual([page.recovered, page.reports], [[], []]);
-    assert.deepEqual(page.a.executed.map(command => command.operations.map(operation => operation.kind)), [["text-insert"]]);
+    assert.deepEqual(page.a.executed.map(command => command.operations.map(operation => operation.kind)), [["text-insert", "scalar"]]);
     copies(page, { rows: [{ id: "R2", text: "next" }], recovery: [{ id: "R1", text: "abZ", members: ["R1"] }] });
   } finally { page.close(); }
 });

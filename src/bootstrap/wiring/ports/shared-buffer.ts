@@ -5,14 +5,17 @@ import type { SharedDocumentSession } from "../../../application/session/shared-
 import type { PaintedTextSource } from "../../../application/editing/ports.ts";
 import type { WriterBufferPorts } from "../../../features/writer/flow-buffer.ts";
 import type { ProductionReaders } from "../../../core/production/ports.ts";
+import type { StampPorts } from "../../../application/session/ports.ts";
 
 export function sharedWriterBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
   effects: Pick<WriterBufferPorts, "missingBase" | "recovered" | "report"> & {
     readonly author: () => { readonly id: string; readonly by: string };
     readonly readers: ProductionReaders;
+    readonly stamps: StampPorts;
   }
 ): { readonly paintedText: PaintedTextSource; readonly bufferedText: WriterBufferPorts } {
-  const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers });
+  const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers,
+    stamps: effects.stamps });
   return {
     paintedText: {
       documentRevision: () => session.readAt((_doc, revision) => revision),

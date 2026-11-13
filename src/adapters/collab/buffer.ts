@@ -9,6 +9,8 @@ import { toHtml } from "../../core/text/html.ts";
 import { cellLength } from "../../core/text/runs.ts";
 import { sharedStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
+import type { StampPorts } from "../../application/session/ports.ts";
+import { sharedBeatStamp } from "./stamp.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { readSharedRevision } from "./document.ts";
 import { holdSharedBuffer, sharedBufferDeliveryBusy } from "./ingress.ts";
@@ -31,6 +33,7 @@ export function createSharedBufferedText(
     readonly target: (rowId: string) => SharedTextAddress;
     readonly author: () => { readonly id: string; readonly by: string };
     readonly readers: ProductionReaders;
+    readonly stamps: StampPorts;
   }
 ): BufferedTextCommit {
   return {
@@ -60,10 +63,11 @@ export function createSharedBufferedText(
               const field = target.field, row = doc.rows.find(entry => entry.id === rowId);
               const tags = field === "audioText" || field === "visualText" ? sharedTagsIntroducedByText({ field, before: row?.[field],
                 after: toHtml(runs), registry: doc.productionTags }, ports.readers, author) : [];
+              const stamp = operations.length ? [sharedBeatStamp(target.owner, author, ports.stamps)] : [];
               return {
                 changes: cellEdit(rowId, target.field),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
-                shared: { operations: [...operations, ...tags], base: commit.base }
+                shared: { operations: [...operations, ...tags, ...stamp], base: commit.base }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }
