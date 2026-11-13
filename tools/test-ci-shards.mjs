@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
@@ -52,8 +52,13 @@ assert.equal(mutants.if, "needs.changes.outputs.mutants == 'true' && needs.chang
 assert.equal(mutants["runs-on"], tests["runs-on"]);
 assert.deepEqual(mutants.strategy.matrix.shard, [1, 2, 3, 4]);
 assert.equal(mutants.strategy["fail-fast"], false);
-assert.equal(mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run,
-  'node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --baseline-timeout 1500 --fail-on-survivor');
+assert.equal(mutants["timeout-minutes"], 30);
+const prMutants = mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
+assert.equal(prMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --baseline-timeout 900 --fail-on-survivor\n');
+const nightly = parse(readFileSync(join(REPO, ".github/workflows/nightly.yml"), "utf8"));
+const nightlyMutants = nightly.jobs.mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
+assert.equal(nightlyMutants, "node tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor");
+assert.equal(nightly.jobs.mutants["runs-on"], nightly.jobs.suites["runs-on"]);
 assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke", "mutants"]);
 assert.equal(gate.if, "always()");
 const step = gate.steps[0];
@@ -141,6 +146,20 @@ for (const needed of bash ? ["true", "false"] : []) {
       cases++;
     }
   }
+}
+if (bash) {
+  const manifestsRunBy = (script) => {
+    const echo = 'node() { for arg in "$@"; do case "$arg" in *-mutants.json) printf "%s\\n" "$arg";; esac; done; }\n';
+    const result = spawnSync(bash, ["-e", "-c", echo + script.replaceAll("${{ matrix.shard }}", "1")], { cwd: REPO, encoding: "utf8", timeout: 5000 });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.split("\n").filter(Boolean);
+  };
+  const pr = manifestsRunBy(prMutants), night = manifestsRunBy(nightlyMutants);
+  const manifests = readdirSync(join(REPO, "tests/collab")).filter((name) => name.endsWith("-mutants.json")).map((name) => `tests/collab/${name}`).sort();
+  for (const file of manifests) assert.equal(pr.filter((f) => f === file).length + night.filter((f) => f === file).length, 1, `${file} must be run by exactly one of ci.yml and nightly.yml`);
+  assert.deepEqual([...pr, ...night].sort(), manifests);
+  assert.deepEqual(night, ["tests/collab/undo-slow-mutants.json"]);
+  cases++;
 }
 console.log(`CI shard configuration and ${cases} real gate outcomes passed`);
 if (!bash) console.log("SKIP real CI gate outcomes: bash is unavailable on this Windows machine outside CI; static workflow checks passed");
