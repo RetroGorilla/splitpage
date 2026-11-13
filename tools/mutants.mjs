@@ -4,6 +4,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
+import { discover, selectFiles } from "./run-tests.mjs";
 
 const DEFAULT_TIMEOUT_MS = 300000;
 
@@ -39,11 +40,49 @@ export function applyEdit(source, find, replace) {
 }
 
 export function summarize(results) {
-  const caught = results.filter((r) => r.status === "caught").length;
-  const survived = results.filter((r) => r.status === "survived").length;
-  const errors = results.filter((r) => r.status === "error").length;
-  const line = `Mutants caught: ${caught}/${results.length}` + (errors ? ` (${errors} could not run)` : "");
-  return { caught, survived, errors, line };
+  const count = (status) => results.filter((r) => r.status === status).length;
+  const caught = count("caught"), survived = count("survived"), inconclusive = count("inconclusive"), errors = count("error");
+  const notes = [inconclusive ? `${inconclusive} inconclusive` : "", errors ? `${errors} could not run` : ""].filter(Boolean);
+  const line = `Mutants caught: ${caught}/${results.length}` + (notes.length ? ` (${notes.join(", ")})` : "");
+  return { caught, survived, inconclusive, errors, line };
+}
+
+export function exitCode(summary, failOnSurvivor) {
+  if (summary.errors > 0) return 2;
+  return failOnSurvivor && summary.survived + summary.inconclusive > 0 ? 1 : 0;
+}
+
+export function unitTestFiles(files) {
+  return discover(files).groups.filter((entry) => entry.group.set === "unit").flatMap((entry) => entry.files).sort();
+}
+
+export function resolveTests(unitFiles, filters) {
+  if (!filters.length) return { files: unitFiles, unmatched: [] };
+  const unmatched = filters.filter((filter) => selectFiles(unitFiles, [filter]).length === 0);
+  return { files: selectFiles(unitFiles, filters), unmatched };
+}
+
+export function verdict(run, events) {
+  if (run.error) return { status: "error", detail: `could not start the test run: ${run.error}` };
+  if (run.timedOut) return { status: "inconclusive", detail: "timeout" };
+  const fails = events.filter((e) => e.type === "fail");
+  const asserted = fails.filter((e) => e.assertion);
+  if (asserted.length) return { status: "caught", detail: `assertion failed in ${JSON.stringify(asserted[0].name)}${asserted.length > 1 ? ` and ${asserted.length - 1} more` : ""}` };
+  const failure = fails.find((e) => e.failureType !== "subtestsFailed" && e.failureType !== "cancelledByParent") ?? fails[0];
+  if (failure) {
+    if (failure.fileLevel) return { status: "inconclusive", detail: `${failure.file} failed outside its tests (load, syntax or exit)` };
+    if (failure.failureType === "testTimeoutFailure") return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} timed out` };
+    return { status: "inconclusive", detail: `test ${JSON.stringify(failure.name)} failed without an assertion: ${failure.cause ?? failure.failureType}` };
+  }
+  if (run.code !== 0) return { status: "inconclusive", detail: `test process exited ${run.code} with no failed test` };
+  if (!events.some((e) => e.type === "pass" && !e.fileLevel)) return { status: "inconclusive", detail: "no test ran" };
+  return { status: "survived", detail: "" };
+}
+
+export function readEvents(text) {
+  return text.split("\n").flatMap((line) => {
+    try { return line ? [JSON.parse(line)] : []; } catch { return []; }
+  });
 }
 
 export function formatTable(results) {
@@ -55,21 +94,26 @@ export function formatTable(results) {
 }
 
 const CHILD = `
-import { spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { readFileSync } from "node:fs";
-const [, scratch, filesPath, onlyJson] = process.argv;
-const { runTests } = await import(pathToFileURL(scratch + "/tools/run-tests.mjs").href);
-const quiet = () => {};
-process.exitCode = runTests({
-  repo: scratch,
-  files: JSON.parse(readFileSync(filesPath, "utf8")),
-  sets: ["unit"],
-  only: JSON.parse(onlyJson),
-  print: quiet,
-  printError: quiet,
-  spawn: (cmd, args, opts) => spawnSync(cmd, args, { ...opts, stdio: "ignore" })
-});
+import { run } from "node:test";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, relative } from "node:path";
+const [, , filesPath, eventsPath] = process.argv;
+writeFileSync(eventsPath, "");
+let failed = false;
+for await (const event of run({ files: JSON.parse(readFileSync(filesPath, "utf8")), concurrency: true })) {
+  if (event.type !== "test:fail" && event.type !== "test:pass") continue;
+  const data = event.data, error = data.details?.error, cause = error?.cause;
+  const file = data.file ? relative(process.cwd(), data.file).replace(/\\\\/g, "/") : null;
+  const named = cause instanceof Error;
+  if (event.type === "test:fail") failed = true;
+  appendFileSync(eventsPath, JSON.stringify({
+    type: event.type === "test:fail" ? "fail" : "pass", name: data.name, nesting: data.nesting, file,
+    failureType: error?.failureType ?? null, assertion: named && (cause.code === "ERR_ASSERTION" || cause.name === "AssertionError"),
+    fileLevel: !named && data.nesting === 0 && file !== null && (data.name === basename(file) || String(data.name).replace(/\\\\/g, "/") === file),
+    cause: named ? cause.name + ": " + String(cause.message).split("\\n")[0].slice(0, 200) : cause === undefined ? null : String(cause).slice(0, 200)
+  }) + "\\n");
+}
+process.exitCode = failed ? 1 : 0;
 `;
 
 export function confinedPath(root, file) {
@@ -116,28 +160,38 @@ function childEnv() {
   return env;
 }
 
-export function runChild(scratch, files, only, timeoutMs, node) {
+export function runChild(scratch, testFiles, timeoutMs, node) {
   return new Promise((resolveRun) => {
     let child;
+    const eventsPath = join(dirname(scratch), `${basename(scratch)}-events.jsonl`);
+    const finish = (result) => {
+      let text = "";
+      try { text = readFileSync(eventsPath, "utf8"); } catch {}
+      rmSync(eventsPath, { force: true });
+      resolveRun({ ...result, events: readEvents(text) });
+    };
     try {
       const filesPath = join(dirname(scratch), `${basename(scratch)}-files.json`);
-      writeFileSync(filesPath, JSON.stringify(files));
-      child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, filesPath, JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
+      const childPath = join(dirname(scratch), `${basename(scratch)}-child.mjs`);
+      writeFileSync(filesPath, JSON.stringify(testFiles));
+      // why: node:test's run() passes the parent's execArgv to every test process, so the child is a file, not -e.
+      writeFileSync(childPath, CHILD);
+      child = spawn(node, [childPath, filesPath, eventsPath], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
     } catch (e) {
-      resolveRun({ code: -1, timedOut: false, error: e.message });
+      finish({ code: -1, timedOut: false, error: e.message });
       return;
     }
     running.add(child);
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
-    child.on("error", (e) => { running.delete(child); clearTimeout(timer); resolveRun({ code: -1, timedOut, error: e.message }); });
-    child.on("close", (code) => { running.delete(child); clearTimeout(timer); resolveRun({ code, timedOut }); });
+    child.on("error", (e) => { running.delete(child); clearTimeout(timer); finish({ code: -1, timedOut, error: e.message }); });
+    child.on("close", (code) => { running.delete(child); clearTimeout(timer); finish({ code, timedOut }); });
   });
 }
 
 export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, keep }) {
   const started = Date.now();
-  const done = (status, detail, extra = {}) => ({ label: mutant.label, status, detail, ms: Date.now() - started, ...extra });
+  const done = (status, detail) => ({ label: mutant.label, status, detail, ms: Date.now() - started });
   let scratch;
   try {
     const original = confinedPath(repo, mutant.file);
@@ -147,12 +201,9 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
     if (edit.error) return done("error", edit.error);
     scratch = makeScratch(repo, parent, files);
     writeFileSync(join(scratch, mutant.file), edit.text);
-    const run = await runChild(scratch, files, mutant.tests, timeoutMs, node);
-    if (run.error) return done("error", `could not start the test run: ${run.error}`);
-    if (run.timedOut) return done("caught", "timeout");
-    if (run.code === 0) return done("survived", "");
-    if (run.code === 1) return done("caught", "");
-    return done("error", `test run exited ${run.code}`);
+    const run = await runChild(scratch, mutant.testFiles, timeoutMs, node);
+    const result = verdict(run, run.events);
+    return done(result.status, result.detail);
   } catch (e) {
     return done("error", e.message);
   } finally {
@@ -160,12 +211,15 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
   }
 }
 
-export async function baselinePasses({ repo, files, parent, timeoutMs, node, tests }) {
+export async function baseline({ repo, files, parent, timeoutMs, node, testFiles }) {
   const scratch = makeScratch(repo, parent, files);
+  const started = Date.now();
   try {
-    const run = await runChild(scratch, files, tests, timeoutMs, node);
-    if (run.error) throw new Error(`could not start the test run: ${run.error}`);
-    return run.code === 0 && !run.timedOut;
+    const run = await runChild(scratch, testFiles, timeoutMs, node);
+    const result = verdict(run, run.events);
+    const failures = run.events.filter((e) => e.type === "fail" && e.failureType !== "subtestsFailed")
+      .map((e) => `${e.file ?? "?"}: ${e.fileLevel ? "failed outside its tests" : JSON.stringify(e.name)}${e.cause ? ` (${e.cause})` : ""}`);
+    return { ok: result.status === "survived", detail: result.detail, failures, ms: Date.now() - started };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -185,8 +239,28 @@ export async function runAll(mutants, options) {
   return results;
 }
 
+export function shardOf(mutants, shard) {
+  return shard ? mutants.filter((_, i) => i % shard.count === shard.index - 1) : mutants;
+}
+
+export function loadMutantFiles(entries) {
+  const mutants = entries.flatMap(({ name, text }) => {
+    try {
+      return loadMutants(text).map((m) => (entries.length > 1 ? { ...m, label: `${name}: ${m.label}` } : m));
+    } catch (e) {
+      throw new Error(entries.length > 1 ? `${name}: ${e.message}` : e.message, { cause: e });
+    }
+  });
+  const seen = new Set();
+  for (const m of mutants) {
+    if (seen.has(m.label)) throw new Error(`duplicate label ${m.label}`);
+    seen.add(m.label);
+  }
+  return mutants;
+}
+
 export function parseArgs(args) {
-  const opts = { file: null, concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, keep: false, baseline: true };
+  const opts = { files: [], concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, baselineTimeoutMs: null, keep: false, baseline: true, failOnSurvivor: false, shard: null };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     const value = (name) => {
@@ -201,13 +275,27 @@ export function parseArgs(args) {
       const n = Number(value("--timeout"));
       if (!Number.isFinite(n) || n <= 0) return { error: "--timeout needs a number of seconds above 0" };
       opts.timeoutMs = n * 1000;
+    } else if (a === "--baseline-timeout" || a.startsWith("--baseline-timeout=")) {
+      const n = Number(value("--baseline-timeout"));
+      if (!Number.isFinite(n) || n <= 0) return { error: "--baseline-timeout needs a number of seconds above 0" };
+      opts.baselineTimeoutMs = n * 1000;
+    } else if (a === "--shard" || a.startsWith("--shard=")) {
+      const m = /^(\d+)\/(\d+)$/.exec(value("--shard") ?? "");
+      const index = m ? Number(m[1]) : 0, count = m ? Number(m[2]) : 0;
+      if (!m || !Number.isSafeInteger(index) || !Number.isSafeInteger(count) || count < 1 || index < 1 || index > count) {
+        return { error: "--shard needs K/N with whole numbers 1 <= K <= N" };
+      }
+      opts.shard = { index, count };
     } else if (a === "--keep") opts.keep = true;
     else if (a === "--no-baseline") opts.baseline = false;
-    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --keep or --no-baseline` };
-    else if (opts.file) return { error: "only one mutants file is accepted" };
-    else opts.file = a;
+    else if (a === "--fail-on-survivor") opts.failOnSurvivor = true;
+    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --baseline-timeout, --shard, --keep, --no-baseline or --fail-on-survivor` };
+    else opts.files.push(a);
   }
-  if (!opts.file) return { error: "usage: node tools/mutants.mjs <mutants.json> [--concurrency N] [--timeout SECONDS] [--keep] [--no-baseline]" };
+  if (!opts.files.length) {
+    return { error: "usage: node tools/mutants.mjs <mutants.json>... [--concurrency N] [--timeout SECONDS] [--baseline-timeout SECONDS] [--shard K/N] [--keep] [--no-baseline] [--fail-on-survivor]" };
+  }
+  opts.baselineTimeoutMs ??= opts.timeoutMs;
   return opts;
 }
 
@@ -216,12 +304,24 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   if (opts.error) { printError(`mutants: ${opts.error}`); return 2; }
   let mutants;
   try {
-    mutants = loadMutants(readFileSync(resolve(opts.file), "utf8"));
+    mutants = shardOf(loadMutantFiles(opts.files.map((file) => ({ name: basename(file), text: readFileSync(resolve(file), "utf8") }))), opts.shard);
   } catch (e) {
     printError(`mutants: ${e.message}`);
     return 2;
   }
+  if (!mutants.length) { print("no mutants in this shard"); return 0; }
   const files = listRepoFiles(repo).filter((p) => existsSync(join(repo, p)));
+  const unitFiles = unitTestFiles(files);
+  const unmatched = [];
+  mutants = mutants.map((m) => {
+    const tests = resolveTests(unitFiles, m.tests);
+    for (const filter of tests.unmatched) unmatched.push(`${m.label}: test filter ${JSON.stringify(filter)} matches no unit test file`);
+    return { ...m, testFiles: tests.files };
+  });
+  if (unmatched.length) {
+    for (const line of unmatched) printError(`mutants: ${line}`);
+    return 2;
+  }
   const parent = mkdtempSync(join(tmpdir(), "splitpage-mutants-"));
   const interrupt = (signal, code) => () => {
     killRunning();
@@ -238,15 +338,21 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   const base = { repo, files, parent, timeoutMs: opts.timeoutMs, node, keep: opts.keep };
   try {
     if (opts.baseline) {
-      const scope = [...new Set(mutants.flatMap((m) => m.tests))];
-      let ok;
+      // why: a mutant without a filter runs every unit test, so the baseline must cover them all as well.
+      const scope = mutants.some((m) => !m.tests.length) ? unitFiles : [...new Set(mutants.flatMap((m) => m.testFiles))].sort();
+      let result;
       try {
-        ok = await baselinePasses({ ...base, tests: scope });
+        result = await baseline({ ...base, timeoutMs: opts.baselineTimeoutMs, testFiles: scope });
       } catch (e) {
         printError(`mutants: ${e.message}`);
         return 2;
       }
-      if (!ok) { printError("mutants: the unmutated copy fails its tests, so every mutant would count as caught; fix that first (or pass --no-baseline)"); return 2; }
+      print(`baseline: ${scope.length} test files, ${result.ok ? "passed" : "FAILED"} in ${(result.ms / 1000).toFixed(1)}s`);
+      if (!result.ok) {
+        printError(`mutants: the unmutated copy does not pass its tests (${result.detail}), so no verdict would mean anything; fix that first (or pass --no-baseline)`);
+        for (const line of result.failures) printError(`  ${line}`);
+        return 2;
+      }
     }
     print(`running ${mutants.length} mutants, ${Math.min(opts.concurrency, mutants.length)} at a time`);
     const results = await runAll(mutants, { ...base, concurrency: opts.concurrency, onResult: (r) => print(`  ${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ""}`) });
@@ -256,8 +362,9 @@ export async function main(args, { repo = REPO, print = console.log, printError 
     print("");
     print(s.line);
     for (const r of results.filter((x) => x.status === "survived")) print(`survived: ${r.label} (record why it was accepted, or add a test)`);
+    for (const r of results.filter((x) => x.status === "inconclusive")) print(`inconclusive: ${r.label}: ${r.detail} (no assertion failed in a named test)`);
     for (const r of results.filter((x) => x.status === "error")) print(`error: ${r.label}: ${r.detail}`);
-    return s.errors > 0 ? 2 : 0;
+    return exitCode(s, opts.failOnSurvivor);
   } finally {
     process.off("SIGINT", onInt);
     process.off("SIGTERM", onTerm);
