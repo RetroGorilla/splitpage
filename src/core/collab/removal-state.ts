@@ -5,6 +5,8 @@ export interface SharedBufferRecoveryMetadata {
   readonly bufferPaintedBase: number;
 }
 
+export interface SharedRemovalBufferSource { readonly beat: string; readonly metadata: SharedBufferRecoveryMetadata }
+
 function record(raw: unknown): Record<string, unknown> | null {
   return raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
 }

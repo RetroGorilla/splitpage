@@ -17,7 +17,8 @@ import type { SharedTextCommandPlan } from "./executor-text-plan.ts";
 import { prepareSharedRemovalObservations } from "./removal-observations.ts";
 import type { SharedRemovalCapture } from "./removal-observations.ts";
 import { readSharedRemovalCommand } from "./removal-record.ts";
-import type { SharedStoredRemovalCommand, SharedRemovalTarget, SharedRemovalBufferSource } from "./removal-record.ts";
+import type { SharedStoredRemovalCommand, SharedRemovalTarget } from "./removal-record.ts";
+import type { SharedRemovalBufferSource } from "../../core/collab/removal-state.ts";
 import { readSharedRemovalState, readSharedHeadingRemovalState, sharedHeadingRemovalField } from "./removal-state.ts";
 import { bindSharedStructurePlan, planSharedStructureRemoval, resolveSharedRestorableBeat, planSharedHeadingRemoval, resolveSharedRestorableHeading,
   sharedStructurePlanIndex, readSharedStructureStream, interpretSharedStructure } from "./structure-plan.ts";
