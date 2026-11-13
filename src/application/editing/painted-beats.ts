@@ -1,8 +1,7 @@
-import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
-import type { FlowRow } from "../../core/flow/flow.ts";
+import type { PaintedText, PaintedTextSource } from "./ports.ts";
 
 export interface PaintedBeats {
-  readonly record: (rows: readonly FlowRow[], painted: (row: FlowRow) => string) => void;
+  readonly record: <R extends { readonly id: string }>(rows: readonly R[], painted: (row: R) => string) => void;
   readonly base: (rowId: string) => PaintedText | null;
   readonly text: (rowId: string) => string | undefined;
   readonly field: (rowId: string, text: string) => void;

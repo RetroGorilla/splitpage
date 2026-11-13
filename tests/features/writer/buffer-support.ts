@@ -2,7 +2,7 @@ import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
-import { sharedWriterBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createSurface } from "../../../src/features/writer/flow-surface.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
 import { writerPage } from "./painted-base-support.ts";
@@ -25,7 +25,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
-  const shared = sharedWriterBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => {
+  const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => {
     const next = ++serial;
     return { id: options.author?.(next) ?? (options.h ? "other_native:" : "native:") + next, by: "Alice" };
   } });
