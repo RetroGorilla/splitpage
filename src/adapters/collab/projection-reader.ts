@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { scalarFieldAllowed } from "./scalar-fields.ts";
+import { readSharedStamp } from "./stamp.ts";
 import { sharedJson } from "./snapshot.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import type { SharedProjectionBeatStructure } from "../../core/collab/projection/joins.ts";
@@ -30,7 +31,7 @@ export function readProjectionFields(raw: unknown, scope: "document" | "beat" | 
   const fields = scope === "document" ? ["fileTitle", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "extra"]
     : scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra", "segment", "splitBy"] : ["extra"];
   for (const key of fields) {
-    const value = sharedJson(raw.get(key));
+    const value = key === "stamp" ? readSharedStamp(raw) : sharedJson(raw.get(key));
     const valid = key === "segment" || key === "splitBy" ? typeof value === "string" && (key !== "segment" || value.length > 0) && isStableSharedIdentity(value)
       : key === "stamp" ? retainedStamp(value) : scalarFieldAllowed(scope, key, value, false);
     if (valid) output.push([key, value]);

@@ -11,6 +11,7 @@ import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { resolveIndexedStructureOwner } from "./structure-plan.ts";
+import { sharedStampOperation, sharedStampWrites } from "./stamp.ts";
 
 export function scalarTarget(handle: SharedDocumentHandle, target: SharedScalarSet["target"]): Y.Map<unknown> | null {
   const roots = collabState(handle).roots;
@@ -33,8 +34,9 @@ function prepareScalar(operation: SharedScalarSet, view: SharedPreparationView):
   if (target.scope === "heading" && operation.field === "firstSceneId" && (typeof value !== "string" || view.kind(["beats", value]) !== "map")) return { ok: false, reason: "missing-target" };
   const fieldPath = [...path, operation.field];
   const unchanged = operation.clear ? view.kind(fieldPath) === "missing" : JSON.stringify(view.get(fieldPath)) === JSON.stringify(value);
-  const writes: SharedPreparedWrite[] = unchanged ? []
-    : [{ path: fieldPath, kind: operation.clear ? "delete" : "set", value }];
+  const writes: SharedPreparedWrite[] = sharedStampOperation(operation)
+    ? sharedStampWrites(view.keys(path), key => view.get([...path, key]), operation.id, value).map(({ key, ...write }) => ({ ...write, path: [...path, key] }))
+    : unchanged ? [] : [{ path: fieldPath, kind: operation.clear ? "delete" : "set", value }];
   const description = freezeSharedPreparedValue(writes);
   return { ok: true, writes: description, apply: handle => applySharedMapWrites(handle, description) };
 }

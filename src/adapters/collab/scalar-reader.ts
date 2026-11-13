@@ -3,6 +3,7 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { scalarTarget } from "./scalar-executor.ts";
 import { scalarFieldAllowed } from "./scalar-fields.ts";
 import { sharedJson, withSharedSnapshot } from "./snapshot.ts";
+import { readSharedStamp } from "./stamp.ts";
 
 export function readSharedScalars(handle: SharedDocumentHandle, target: SharedScalarAddress): Record<string, unknown> | null {
   return withSharedSnapshot(handle, copy => {
@@ -12,7 +13,7 @@ export function readSharedScalars(handle: SharedDocumentHandle, target: SharedSc
     const fields = target.scope === "document" ? ["fileTitle", "wordsPerMinute", "targetSeconds", "paragraphsDecided", "extra"]
       : target.scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra"] : ["extra"];
     for (const key of fields) {
-      const value = sharedJson(source.get(key));
+      const value = key === "stamp" ? readSharedStamp(source) : sharedJson(source.get(key));
       if (scalarFieldAllowed(target.scope, key, value, false)) output.push([key, value]);
     }
     return Object.fromEntries(output);
