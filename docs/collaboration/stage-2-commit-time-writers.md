@@ -172,9 +172,11 @@ and tags. It returns the cell with its B-roll keys and a `record-create` for eac
 shot the edit introduced. Both come from the functions a normal script runs on
 commit, so they give the same ids and fields:
 
-- An unkeyed marker line gets a key from `planBrollAnchors`: the id of an
-  unclaimed shot with the line's name that no other line holds, or a new id.
-- A keyed line in the cell gets a shot from `planBrollRecords`, with the id of its
+- An unkeyed marker line gets a key from the body of `planBrollAnchors`
+  (`planBrollAnchorsInState`): the id of an unclaimed shot with the line's name
+  that no other line holds, or a new id.
+- A keyed line in the cell gets a shot from the body of `planBrollRecords`
+  (`planBrollRecordsInState`), with the id of its
   key and fields seeded from the beat, if no shot has that id and the cell did not
   hold that key before the edit. A key the cell already held is left to the copy
   that brought it, as a tag the cell already showed is.
