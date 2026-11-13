@@ -37,7 +37,7 @@ function harness(): Stage1ExecutorHarness {
 }
 
 function tags(handle: SharedDocumentHandle): unknown {
-  return projectSharedDocumentWithRecovery(handle).document.productionTags?.map(tag => ({ id: tag.id, cat: tag.cat, name: tag.name, status: tag.status }));
+  return projectSharedDocumentWithRecovery(handle).document.productionTags?.map(tag => ({ id: tag?.id, cat: tag?.cat, name: tag?.name, status: tag?.status }));
 }
 
 test("a tag typed into narration with no registry entry gets one, minted as a normal script mints it, on every copy", () => {

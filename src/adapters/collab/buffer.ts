@@ -30,7 +30,7 @@ export function createSharedBufferedText(
   ports: {
     readonly target: (rowId: string) => SharedTextAddress;
     readonly author: () => { readonly id: string; readonly by: string };
-    readonly readers: Pick<ProductionReaders, "tagsInField" | "cellOf">;
+    readonly readers: ProductionReaders;
   }
 ): BufferedTextCommit {
   return {

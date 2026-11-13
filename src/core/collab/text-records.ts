@@ -13,7 +13,7 @@ export interface SharedTextCellEdit {
 
 export function sharedTagsIntroducedByText(
   edit: SharedTextCellEdit,
-  readers: Pick<ProductionReaders, "tagsInField" | "cellOf">,
+  readers: ProductionReaders,
   author: { readonly id: string; readonly by: string }
 ): readonly SharedRecordCreate[] {
   const missing = (html: FieldHtml) => missingRegistryTags([{ id: "", [edit.field]: html }], edit.registry, readers);

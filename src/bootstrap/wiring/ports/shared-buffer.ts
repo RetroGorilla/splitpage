@@ -9,7 +9,7 @@ import type { ProductionReaders } from "../../../core/production/ports.ts";
 export function sharedWriterBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
   effects: Pick<WriterBufferPorts, "missingBase" | "recovered" | "report"> & {
     readonly author: () => { readonly id: string; readonly by: string };
-    readonly readers: Pick<ProductionReaders, "tagsInField" | "cellOf">;
+    readonly readers: ProductionReaders;
   }
 ): { readonly paintedText: PaintedTextSource; readonly bufferedText: WriterBufferPorts } {
   const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers });
