@@ -14,6 +14,7 @@ import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
+import { edgeInput } from "../edge-input.ts";
 
 export type RenamePage = ReturnType<typeof sharedRename>;
 
@@ -66,31 +67,9 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
     document.querySelector<HTMLElement>('.section-header [data-section-action="rename"]')?.click();
     return input();
   }
-  function key(name: string): boolean {
-    return input().dispatchEvent(new window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
-  }
-  function edit(from: number, to: number, insert: string, type: string, after: readonly [string, number], during?: () => void, pressed: string | null = null): boolean {
-    const field = input();
-    field.setSelectionRange(from, to);
-    if (pressed !== null && !key(pressed)) return false;
-    const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data: insert || null });
-    if (!field.dispatchEvent(event)) return false;
-    during?.();
-    field.value = after[0]; field.setSelectionRange(after[1], after[1]);
-    field.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data: insert || null }));
-    if (pressed !== null) field.dispatchEvent(new window.KeyboardEvent("keyup", { key: pressed, bubbles: true }));
-    return true;
-  }
-  const typed = (from: number, to: number, insert: string, during?: () => void) => {
-    const value = input().value;
-    return edit(from, to, insert, "insertText", [value.slice(0, from) + insert + value.slice(to), from + insert.length], during, Array.from(insert).length === 1 ? insert : null);
-  };
-  const backspace = (at: number) => {
-    const value = input().value;
-    return edit(at, at, "", "deleteContentBackward", [value.slice(0, at - 1) + value.slice(at), at - 1], undefined, "Backspace");
-  };
+  const edge = edgeInput(input);
   const stored = () => readSharedPaintedText(h.a, sharedBufferedTarget(h.a, "heading:H1"))?.text;
-  return { h, a, controls, reports, recovered, commands, open, input, key, edit, typed, backspace, stored, paint, rows,
+  return { h, a, controls, reports, recovered, commands, open, input, edge, stored, paint, rows,
     repaints: () => repaints, shownDepth: () => depth,
     close: () => { controls.dispose(); a.session.dispose(); h.destroy(); document.body.innerHTML = ""; } };
 }

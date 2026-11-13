@@ -1,6 +1,7 @@
 import type { BufferedFieldBinding, BufferedFieldSurface } from "../../application/editing/buffered-field.ts";
 import { headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
 import type { PaintedBeats } from "../../application/editing/painted-beats.ts";
+import type { PaintedText } from "../../application/editing/ports.ts";
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import { headingPos } from "../../core/flow/flow.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
@@ -21,22 +22,34 @@ export interface SceneNameBuffer {
   readonly dispose: () => boolean;
 }
 
-const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown"] as const;
+const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste"] as const;
 
-function movedCaret(before: string, after: string, offset: number): number {
-  let start = 0, end = 0;
-  while (start < before.length && start < after.length && before[start] === after[start]) start++;
-  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
-  if (offset <= start) return offset;
-  return offset >= before.length - end ? offset + after.length - before.length : after.length - end;
+interface KeptCaret {
+  readonly start: number;
+  readonly end: number;
+  readonly direction: "forward" | "backward" | "none";
+  readonly base: PaintedText | null;
+}
+
+function followed(before: PaintedText | null, after: PaintedText | null, offset: number, length: number): number {
+  if (!before || !after) return Math.min(offset, length);
+  for (let at = offset - 1; at >= 0; at--) {
+    const identity = before.identity(at);
+    for (let next = 0; identity && next < after.text.length; next++) if (after.identity(next) === identity) return next + 1;
+  }
+  return 0;
 }
 
 export function bindSceneName(form: {
   readonly input: HTMLInputElement; readonly sceneId: string; readonly name: () => string | null; readonly place: () => void
 }, ports: SceneNameBufferPorts): SceneNameBuffer {
   const { input, sceneId } = form, key = headingFieldKey(sceneId), stored = form.name;
-  let composing = false, kept: readonly [number, number] | null = null;
+  let composing = false, kept: KeptCaret | null = null, open = true;
   const focused = () => input.ownerDocument.activeElement === input;
+  const caretNow = (): KeptCaret => {
+    const start = input.selectionStart ?? 0;
+    return { start, end: input.selectionEnd ?? start, direction: input.selectionDirection ?? "none", base: ports.painted.base(key) };
+  };
   const range = (): FlowRange => {
     const from = input.selectionStart ?? input.value.length, to = input.selectionEnd ?? from;
     const [anchor, head] = input.selectionDirection === "backward" ? [to, from] : [from, to];
@@ -61,8 +74,8 @@ export function bindSceneName(form: {
     composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (_rowId, selection) => {
       if (!input.isConnected || selection?.anchor.kind !== "heading" || selection.head.kind !== "heading") return;
-      const from = Math.min(selection.anchor.offset, selection.head.offset), to = Math.max(selection.anchor.offset, selection.head.offset);
-      input.setSelectionRange(from, to);
+      const { anchor, head } = { anchor: selection.anchor.offset, head: selection.head.offset };
+      input.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : anchor < head ? "forward" : "none");
     },
     changed: () => {},
     key: pos => pos.kind === "heading" && pos.sceneId === sceneId ? key : null,
@@ -74,12 +87,15 @@ export function bindSceneName(form: {
     if (event.type === "input") { binding.input(); return; }
     if (event.type === "compositionstart") { binding.start(event, range()); return; }
     if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
+    // why: a cut with nothing selected sends no beforeinput, so a held name ends its hold on the clipboard event
+    if (event.type === "cut" || event.type === "paste") { if (binding.held()) binding.settledFor(event); return; }
     const native = event as InputEvent, type = native.inputType;
     if (native.isComposing || /Composition/.test(type)) return;
     if (!binding.dirty() && input.value === ports.painted.text(key)) ports.painted.field(key, input.value);
-    // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event;
-    // a held empty name has nothing to delete, so there the binding gets it and ends the hold
-    if (!binding.held() && type.startsWith("delete") && type !== "deleteByCut" && type !== "deleteByDrag" && input.selectionStart === input.selectionEnd) return;
+    // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event
+    if (type.startsWith("delete") && type !== "deleteByCut" && type !== "deleteByDrag" && input.selectionStart === input.selectionEnd) return;
+    // why: Enter sends this before the form's submit, which closes a settled name; a held one is consumed below
+    if (type === "insertLineBreak" && !binding.held()) return;
     if (binding.beforeInput(native, range(), range())) return;
     event.preventDefault();
     ports.report({ kind: "rejected", reason: "buffer-unsupported-input" });
@@ -88,22 +104,36 @@ export function bindSceneName(form: {
     ports.shown(() => { binding.native(event, () => { step(event); }); });
   }
   function painted(): void {
-    const caret = kept ?? (focused() ? [input.selectionStart ?? 0, input.selectionEnd ?? 0] as const : null), before = input.value;
+    const caret = kept ?? (focused() ? caretNow() : null), dirty = binding.dirty();
     kept = null;
     form.place();
-    if (!binding.dirty()) reset();
+    if (!dirty) reset();
     if (!caret || !input.isConnected) return;
     if (!focused()) input.focus({ preventScroll: true });
-    input.setSelectionRange(movedCaret(before, input.value, caret[0]), movedCaret(before, input.value, caret[1]));
+    const after = ports.painted.base(key), length = input.value.length;
+    const map = (offset: number) => dirty ? Math.min(offset, length) : followed(caret.base, after, offset, length);
+    input.setSelectionRange(map(caret.start), map(caret.end), caret.direction);
+  }
+  function settleHeld(): void {
+    if (open && binding.held()) ports.shown(() => binding.finish());
+  }
+  function blurred(): void {
+    // why: a repaint re-homes the form, blurring it until the paint refocuses; the hold ends only if focus stays away
+    queueMicrotask(() => { if (!focused()) settleHeld(); });
+  }
+  function selectionMoved(): void {
+    const selection = input.ownerDocument.getSelection(), at = selection?.rangeCount ? selection.anchorNode : null;
+    if (!focused() || at && !input.form?.contains(at)) settleHeld();
   }
   for (const type of TYPES) input.addEventListener(type, listener);
+  input.addEventListener("blur", blurred);
+  input.ownerDocument.addEventListener("selectionchange", selectionMoved);
   const stopPainted = ports.onPainted(painted);
   const stopCheck = ports.beforePaint(() => {
     binding.canPaint();
-    kept = focused() ? [input.selectionStart ?? 0, input.selectionEnd ?? 0] : null;
+    kept = focused() ? caretNow() : null;
   });
   reset();
-  let open = true;
   return {
     held: binding.held,
     finish: () => ports.shown(() => binding.finish()),
@@ -113,6 +143,8 @@ export function bindSceneName(form: {
       open = false;
       stopPainted(); stopCheck();
       for (const type of TYPES) input.removeEventListener(type, listener);
+      input.removeEventListener("blur", blurred);
+      input.ownerDocument.removeEventListener("selectionchange", selectionMoved);
       ports.painted.clear();
       ports.repaintRows();
       return true;

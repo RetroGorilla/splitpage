@@ -441,26 +441,38 @@ the stored name (`storedSceneName`, edge spaces included), and the empty and
 the plan review:
 
 - An input gives no target range, so a collapsed Backspace or Delete is left to
-  the browser and adopted at its `input` event; in a name held empty there is
-  nothing to delete, so the binding gets it. Paste, drop and other input types
-  are refused with `buffer-unsupported-input`, after settling typing.
+  the browser and adopted at its `input` event. Paste, drop, `historyUndo`,
+  `historyRedo` and other input types are refused with `buffer-unsupported-input`,
+  after settling typing; a refused undo restores nothing.
+- Enter on a settled name lets its `insertLineBreak` through, so the form's
+  submit closes it. A shared form sets no native `maxlength`: the binding refuses
+  the 201st character at its `input` event (rule 5), which native truncation
+  would suppress.
 - A name held empty ends as in the Writer (rule 59 as merged): a command
-  admitted, focus loss, or a cancelled composition that began held, each with the
-  stored name back and one report. Backspace, Delete, paste, cut, drop,
-  `historyUndo` and `historyRedo` end it the same way and are consumed: nothing
-  else happens and the form stays open on the stored name. Submitting it (Enter)
-  only ends the hold, as Enter does in the Writer; Escape then closes the form.
-  Paste is not an insertion: emptying a name and then pasting a new one gives the
-  report, while selecting the name and pasting is refused as any paste is.
-- A paint during an edit re-homes the form into the rebuilt header and keeps the
-  caret, moved past text others inserted before it.
+  admitted, a cancelled composition that began held, or the input losing focus
+  (any blur that a same-task refocus, as a repaint's re-homing, does not undo) or
+  the document selection leaving the form, each with the stored name back and one
+  report. Enter, cut and paste (on their clipboard events, since a cut with
+  nothing selected sends no `beforeinput`), drop, `historyUndo` and `historyRedo`
+  end it the same way and are consumed: nothing else happens and the form stays
+  open on the stored name; Escape then closes it. A focus transfer to another
+  element also closes the form. Backspace and Delete have nothing to delete in an
+  empty input, so the hold stays. Paste is not an insertion: emptying a name and
+  then pasting a new one gives the report, while selecting the name and pasting is
+  refused as any paste is.
+- A paint during an edit re-homes the form into the rebuilt header. The caret and
+  selection, with their direction, follow the shared units: each end stays after
+  the unit it followed, so text others insert at either side or between equal
+  letters does not move it.
 - Adding a scene, or naming an automatic one, opens no form in a shared session
   and tells the person (`not shared`): scene creation has no shared operation yet.
 - Name text the document refuses goes to recovery through the rule 29 write, as
   in the Writer.
 
 `tests/features/rows/scene-name-buffer.test.ts` holds each case, compared on
-the typist, the other copy and a late joiner; `tests/features/rows/scene-controls.test.ts`
+the typist, the other copy and a late joiner. It drives the input through
+`tests/features/edge-input.ts`, one helper per user action, each dispatching the
+sequence Edge sends for an `<input>`; `tests/features/rows/scene-controls.test.ts`
 pins the standalone form, which binds nothing.
 
 ## Mapping and coverage

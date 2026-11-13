@@ -109,15 +109,15 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const made = doc.createElement("form");
     made.className = "section-rename";
     const input = doc.createElement("input");
-    input.type = "text"; input.maxLength = 200; input.value = value;
+    input.type = "text"; input.value = value;
+    // why: a shared name refuses its 201st character in the binding; native truncation would drop that input event
+    if (!shared) input.maxLength = 200;
     input.setAttribute("aria-label", "Scene name");
     made.append(input);
     function settle(focus: boolean): void {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
       if (bound) {
-        // why: Enter on a held empty name only ends the hold, as in the Writer; the form stays open on the stored name
-        if (focus && bound.held()) { bound.finish(); return; }
         if (!bound.finish()) return;
         cancelName(false, false);
         if (focus && sceneId !== null) header(sceneId)?.querySelector<HTMLButtonElement>(".section-name")?.focus();

@@ -36,20 +36,22 @@ function written(page: RenamePage) {
 
 const holds = (page: RenamePage) => [...collabState(page.h.a).ingress.holds];
 const caret = (page: RenamePage) => [page.input().selectionStart, page.input().selectionEnd];
+const selected = (page: RenamePage) => [page.input().selectionStart, page.input().selectionEnd, page.input().selectionDirection];
 const TARGET = { owner: "H1", segment: "H1", field: "heading" };
+const inserted = (value: string) => ({ kind: "text-insert", target: TARGET, content: [{ value, marks: [] }] });
+const UNSUPPORTED = [{ kind: "rejected", reason: "buffer-unsupported-input" }];
 
 test("Split rename typing settles each keystroke as heading text operations, with no rename command", () => {
   const page = sharedRename();
   try {
     const input = page.open();
     assert.deepEqual([input.value, document.activeElement === input], ["Scene", true]);
-    assert.equal(page.typed(5, 5, "X"), true);
-    assert.equal(page.edit(1, 3, "", "deleteContentBackward", ["SneX", 1]), true);
+    page.edge.select(5);
+    assert.equal(page.edge.type("X"), true);
+    page.edge.select(1, 3);
+    assert.equal(page.edge.backspace(), true);
     assert.deepEqual([page.stored(), input.value, caret(page), page.reports, page.commands], ["SneX", "SneX", [1, 1], [], []]);
-    assert.deepEqual(written(page), [
-      [{ kind: "text-insert", target: TARGET, content: [{ value: "X", marks: [] }] }],
-      [{ kind: "text-delete", target: TARGET, observed: 2 }]
-    ]);
+    assert.deepEqual(written(page), [[inserted("X")], [{ kind: "text-delete", target: TARGET, observed: 2 }]]);
     assert.deepEqual([holds(page), page.shownDepth(), page.repaints()], [[], 0, 0]);
     copies(page, ["SneX"]);
   } finally { page.close(); }
@@ -59,7 +61,8 @@ test("Split rename: a collapsed Backspace is left to the input and adopted at it
   const page = sharedRename();
   try {
     page.open();
-    assert.equal(page.backspace(5), true);
+    page.edge.select(5);
+    assert.equal(page.edge.backspace(), true);
     assert.deepEqual([page.stored(), page.input().value, page.reports], ["Scen", "Scen", []]);
     assert.deepEqual(written(page), [[{ kind: "text-delete", target: TARGET, observed: 1 }]]);
   } finally { page.close(); }
@@ -69,7 +72,8 @@ test("Split rename: a remote change arriving mid-keystroke is held until it sett
   const page = sharedRename();
   try {
     page.open();
-    page.typed(5, 5, "X", () => {
+    page.edge.select(5);
+    page.edge.type("X", () => {
       remote(page, 0, "!");
       page.h.queue.deliverFrom("B", "D1");
       assert.equal(page.stored(), "Scene");
@@ -83,14 +87,13 @@ test("Split rename: a remote change arriving mid-composition is held until compo
   const page = sharedRename();
   try {
     const input = page.open();
-    input.setSelectionRange(3, 3);
-    input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-    input.value = "Sce漢ne"; input.setSelectionRange(4, 4);
-    input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "漢", isComposing: true }));
+    page.edge.select(3);
+    page.edge.composeStart();
+    page.edge.composeUpdate("漢");
     remote(page, 0, "!");
     page.h.queue.flush("dup");
     assert.deepEqual([page.stored(), input.value, page.a.executed.length], ["Scene", "Sce漢ne", 0]);
-    input.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "漢" }));
+    page.edge.composeEnd("漢");
     assert.deepEqual([page.stored(), input.value, caret(page), page.reports], ["!Sce漢ne", "!Sce漢ne", [5, 5], []]);
     copies(page, ["!Sce漢ne"]);
   } finally { page.close(); }
@@ -100,16 +103,56 @@ test("Split rename: a remote change between keystrokes rebuilds the header; the 
   const page = sharedRename();
   try {
     const input = page.open();
-    page.typed(5, 5, "X");
+    page.edge.select(5);
+    page.edge.type("X");
     remote(page, 0, "!");
     page.h.queue.flush("dup");
     page.paint();
     const header = page.rows.querySelector('.section-header[data-section-id="H1"]');
     assert.deepEqual([header?.querySelector(".section-name")?.textContent, header?.contains(input), document.activeElement === input], ["!SceneX", true, true]);
     assert.deepEqual([input.value, caret(page)], ["!SceneX", [7, 7]]);
-    page.typed(7, 7, "Y");
+    page.edge.type("Y");
     assert.deepEqual([page.stored(), input.value, page.reports], ["!SceneXY", "!SceneXY", []]);
     copies(page, ["!SceneXY"]);
+  } finally { page.close(); }
+});
+
+test("Split rename: a repaint keeps the caret after the same letter when another writer inserts that letter before it", () => {
+  const page = sharedRename("aaaa");
+  try {
+    page.open();
+    page.edge.select(2);
+    remote(page, 0, "a");
+    page.h.queue.flush("dup");
+    page.paint();
+    assert.deepEqual([page.input().value, caret(page), page.stored(), page.reports], ["aaaaa", [3, 3], "aaaaa", []]);
+    copies(page, ["aaaaa"]);
+  } finally { page.close(); }
+});
+
+test("Split rename: a repaint keeps the caret between the same letters when another writer adds at both ends", () => {
+  const page = sharedRename();
+  try {
+    page.open();
+    page.edge.select(3);
+    remote(page, 0, "!");
+    remote(page, 6, "?");
+    page.h.queue.flush("dup");
+    page.paint();
+    assert.deepEqual([page.input().value, caret(page), page.stored(), page.reports], ["!Scene?", [4, 4], "!Scene?", []]);
+    copies(page, ["!Scene?"]);
+  } finally { page.close(); }
+});
+
+test("Split rename: a repaint keeps a backward selection backward over the same letters", () => {
+  const page = sharedRename();
+  try {
+    page.open();
+    page.edge.select(1, 4, "backward");
+    remote(page, 0, "!");
+    page.h.queue.flush("dup");
+    page.paint();
+    assert.deepEqual([page.input().value, selected(page), page.reports], ["!Scene", [2, 5, "backward"], []]);
   } finally { page.close(); }
 });
 
@@ -117,15 +160,13 @@ test("Split rename rule 4: a name cleared to nothing stays held, a Shift press k
   const page = sharedRename();
   try {
     page.open();
-    page.edit(0, 5, "", "deleteContentBackward", ["", 0], undefined, "Backspace");
-    page.key("Shift");
+    page.edge.selectAll();
+    assert.equal(page.edge.backspace(), true);
+    page.edge.press("Shift");
     assert.deepEqual([page.stored(), page.input().value, page.reports, page.a.executed.length, holds(page)], ["Scene", "", [], 0, ["buffer"]]);
-    page.typed(0, 0, "N");
+    page.edge.type("N");
     assert.deepEqual([page.stored(), page.input().value, page.reports], ["N", "N", []]);
-    assert.deepEqual(written(page), [[
-      { kind: "text-insert", target: TARGET, content: [{ value: "N", marks: [] }] },
-      { kind: "text-delete", target: TARGET, observed: 5 }
-    ]]);
+    assert.deepEqual(written(page), [[inserted("N"), { kind: "text-delete", target: TARGET, observed: 5 }]]);
     copies(page, ["N"]);
   } finally { page.close(); }
 });
@@ -134,38 +175,51 @@ test("Split rename rule 4: a Backspace that empties a one-letter name is adopted
   const page = sharedRename("S");
   try {
     page.open();
-    page.backspace(1);
+    page.edge.select(1);
+    page.edge.backspace();
     assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page)], ["S", "", [], ["buffer"]]);
   } finally { page.close(); }
 });
 
-test("Split rename rule 4: submitting a held empty name only ends the hold: the form stays open on the stored name and tells once; Escape then closes it", () => {
-  const page = sharedRename();
+function emptied(name = "Scene"): RenamePage {
+  const page = sharedRename(name);
+  page.open();
+  page.edge.selectAll();
+  page.edge.backspace();
+  assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page)], [name, "", [], ["buffer"]]);
+  return page;
+}
+
+const EMPTY_REPORT = [{ kind: "rejected", reason: "buffer-heading-empty" }];
+
+test("Split rename rule 4: Enter on a held empty name only ends the hold: the form stays open on the stored name and tells once; Escape then closes it", () => {
+  const page = emptied();
   try {
-    const input = page.open();
-    page.edit(0, 5, "", "deleteContentBackward", ["", 0], undefined, "Backspace");
-    input.form?.requestSubmit();
+    const input = page.input();
+    assert.equal(page.edge.enter(), false);
     assert.deepEqual([input.isConnected, page.stored(), input.value, page.reports, holds(page), page.a.executed.length],
-      [true, "Scene", "Scene", [{ kind: "rejected", reason: "buffer-heading-empty" }], [], 0]);
-    page.key("Escape");
-    assert.deepEqual([input.isConnected, page.stored(), page.reports, page.commands], [false, "Scene", [{ kind: "rejected", reason: "buffer-heading-empty" }], []]);
+      [true, "Scene", "Scene", EMPTY_REPORT, [], 0]);
+    page.edge.press("Escape");
+    assert.deepEqual([input.isConnected, page.stored(), page.reports, page.commands], [false, "Scene", EMPTY_REPORT, []]);
     assert.deepEqual([holds(page), page.rows.querySelector(".section-name")?.textContent], [[], "Scene"]);
   } finally { page.close(); }
 });
 
 for (const [label, leave] of [
-  ["Enter", (page: RenamePage) => { page.input().form?.requestSubmit(); }],
-  ["Escape", (page: RenamePage) => { page.key("Escape"); }],
+  ["Enter", (page: RenamePage) => { assert.equal(page.edge.enter(), true); }],
+  ["Escape", (page: RenamePage) => { page.edge.press("Escape"); }],
   ["moving focus away", () => { document.getElementById("away")?.focus(); }]
 ] as const) {
   test(`Split rename: ${label} closes the form over what is already shared, runs no rename command and repaints once`, () => {
     const page = sharedRename();
     try {
       const input = page.open();
-      page.typed(5, 5, "X");
+      page.edge.select(5);
+      page.edge.type("X");
       leave(page);
       assert.deepEqual([input.isConnected, page.stored(), page.commands, page.reports, page.repaints()], [false, "SceneX", [], [], 1]);
-      assert.equal(page.rows.querySelector(".section-name")?.textContent, "SceneX");
+      assert.deepEqual([written(page), page.rows.querySelector(".section-name")?.textContent], [[[inserted("X")]], "SceneX"]);
+      copies(page, ["SceneX"]);
     } finally { page.close(); }
   });
 }
@@ -174,10 +228,29 @@ test("Split rename rule 5: only the keystroke that passes 200 characters is refu
   const page = sharedRename("a".repeat(199));
   try {
     page.open();
-    page.typed(199, 199, "Y");
-    page.typed(200, 200, "Z");
+    page.edge.select(199);
+    page.edge.type("Y");
+    page.edge.type("Z");
     assert.deepEqual([page.stored(), page.input().value], ["a".repeat(199) + "Y", "a".repeat(199) + "Y"]);
     assert.deepEqual([page.reports, page.a.executed.length, holds(page)], [[{ kind: "rejected", reason: "buffer-heading-length" }], 1, []]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 5: a letter typed into a full 200-character name is refused, told once, and Enter then closes the form", () => {
+  const page = sharedRename("a".repeat(200));
+  try {
+    const input = page.open();
+    assert.equal(input.maxLength, -1);
+    page.edge.select(200);
+    page.edge.type("Z");
+    assert.deepEqual([page.stored(), input.value, caret(page), page.reports, page.a.executed.length, holds(page)],
+      ["a".repeat(200), "a".repeat(200), [200, 200], [{ kind: "rejected", reason: "buffer-heading-length" }], 0, []]);
+    assert.equal(page.edge.enter(), true);
+    assert.deepEqual([input.isConnected, page.reports, page.commands, page.repaints()], [false, [{ kind: "rejected", reason: "buffer-heading-length" }], [], 1]);
+    remote(page, 0, "!");
+    page.h.queue.flush("dup");
+    assert.equal(page.stored(), "!" + "a".repeat(200));
+    copies(page, ["!" + "a".repeat(200)]);
   } finally { page.close(); }
 });
 
@@ -185,12 +258,24 @@ test("Split rename rule 3: paste settles typing first, then is refused and the p
   const page = sharedRename();
   try {
     const input = page.open();
-    input.value = "SceneX"; input.setSelectionRange(6, 6);
-    input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "X" }));
-    input.setSelectionRange(2, 2);
-    const paste = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertFromPaste", data: "Q" });
-    assert.equal(input.dispatchEvent(paste), false);
-    assert.deepEqual([page.stored(), input.value, page.reports], ["SceneX", "SceneX", [{ kind: "rejected", reason: "buffer-unsupported-input" }]]);
+    page.edge.select(5);
+    page.edge.type("X");
+    page.edge.select(2);
+    assert.equal(page.edge.paste("Q"), false);
+    assert.deepEqual([page.stored(), input.value, page.reports, written(page)], ["SceneX", "SceneX", UNSUPPORTED, [[inserted("X")]]]);
+    copies(page, ["SceneX"]);
+  } finally { page.close(); }
+});
+
+test("Split rename: Ctrl+Z after settled typing is refused and the person is told; nothing is restored", () => {
+  const page = sharedRename();
+  try {
+    const input = page.open();
+    page.edge.select(5);
+    page.edge.type("X");
+    assert.equal(page.edge.undo("Scene"), false);
+    assert.deepEqual([page.stored(), input.value, caret(page), page.reports, written(page)], ["SceneX", "SceneX", [6, 6], UNSUPPORTED, [[inserted("X")]]]);
+    copies(page, ["SceneX"]);
   } finally { page.close(); }
 });
 
@@ -198,39 +283,24 @@ test("Split rename rule 8: a typed edge space is stored and shown as typed", () 
   const page = sharedRename();
   try {
     page.open();
-    page.typed(5, 5, " ");
-    page.typed(6, 6, "2");
-    page.typed(0, 0, " ");
+    page.edge.select(5);
+    page.edge.type(" ");
+    page.edge.type("2");
+    page.edge.select(0);
+    page.edge.type(" ");
     assert.deepEqual([page.stored(), page.input().value, page.reports], [" Scene 2", " Scene 2", []]);
     copies(page, [" Scene 2"]);
-    page.key("Escape");
+    page.edge.press("Escape");
     assert.equal(page.open().value, " Scene 2");
   } finally { page.close(); }
 });
 
-function emptied(name = "Scene"): RenamePage {
-  const page = sharedRename(name);
-  page.open();
-  page.edit(0, name.length, "", "deleteContentBackward", ["", 0], undefined, "Backspace");
-  assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page)], [name, "", [], ["buffer"]]);
-  return page;
-}
-
-const EMPTY_REPORT = [{ kind: "rejected", reason: "buffer-heading-empty" }];
-
-function heldInput(page: RenamePage, type: string): boolean {
-  page.input().setSelectionRange(0, 0);
-  return page.input().dispatchEvent(new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data: type === "insertFromPaste" ? "Q" : null }));
-}
-
 const HELD_ENDINGS: readonly (readonly [string, (page: RenamePage) => boolean])[] = [
-  ["Backspace", page => page.edit(0, 0, "", "deleteContentBackward", ["", 0], undefined, "Backspace")],
-  ["Delete", page => page.edit(0, 0, "", "deleteContentForward", ["", 0], undefined, "Delete")],
-  ["paste", page => heldInput(page, "insertFromPaste")],
-  ["cut", page => heldInput(page, "deleteByCut")],
-  ["drop", page => heldInput(page, "insertFromDrop")],
-  ["historyUndo", page => heldInput(page, "historyUndo")],
-  ["historyRedo", page => heldInput(page, "historyRedo")]
+  ["Ctrl+X with nothing selected", page => page.edge.cut()],
+  ["Ctrl+V", page => page.edge.paste("Q")],
+  ["a drop", page => page.edge.drop("Q")],
+  ["Ctrl+Z", page => page.edge.undo("Scene")],
+  ["Ctrl+Y", page => page.edge.redo("Q")]
 ];
 
 for (const [label, act] of HELD_ENDINGS) {
@@ -245,22 +315,25 @@ for (const [label, act] of HELD_ENDINGS) {
   });
 }
 
+test("Split rename rule 4: Backspace and Delete in a held empty name have nothing to delete and leave the hold as it is", () => {
+  const page = emptied();
+  try {
+    assert.deepEqual([page.edge.backspace(), page.edge.delete()], [false, false]);
+    assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page), page.a.executed.length], ["Scene", "", [], ["buffer"], 0]);
+  } finally { page.close(); }
+});
+
 for (const [label, cancel] of [
-  ["with its text left", (input: HTMLInputElement) => { input.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" })); }],
-  ["with nothing left", (input: HTMLInputElement) => {
-    input.value = ""; input.setSelectionRange(0, 0);
-    input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "", isComposing: true }));
-    input.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" }));
-  }]
+  ["with its text left", (page: RenamePage) => { page.edge.composeEnd(""); }],
+  ["with nothing left", (page: RenamePage) => { page.edge.composeUpdate(""); page.edge.composeEnd(""); }]
 ] as const) {
   test(`Split rename rule 4: a composition begun in a held empty name and cancelled ${label} puts the name back and tells the person once`, () => {
     const page = emptied();
     try {
       const input = page.input();
-      input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-      input.value = "x"; input.setSelectionRange(1, 1);
-      input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "x", isComposing: true }));
-      cancel(input);
+      page.edge.composeStart();
+      page.edge.composeUpdate("x");
+      cancel(page);
       assert.deepEqual([page.stored(), input.value, page.reports, holds(page), page.a.executed.length], ["Scene", "Scene", EMPTY_REPORT, [], 0]);
       assert.equal(input.isConnected, true);
     } finally { page.close(); }
@@ -285,18 +358,59 @@ test("Split rename rule 4: moving focus away from a held empty name closes the f
   } finally { page.close(); }
 });
 
+test("Split rename rule 4: a blur with nowhere to go ends a held empty name's hold: the name is back, told once, and the form stays", async () => {
+  const page = emptied();
+  try {
+    const input = page.input();
+    page.edge.blur();
+    await Promise.resolve();
+    assert.deepEqual([input.isConnected, page.stored(), input.value, page.reports, holds(page), page.a.executed.length, page.commands],
+      [true, "Scene", "Scene", EMPTY_REPORT, [], 0, []]);
+    copies(page, ["Scene"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 4: a blur the form is refocused from in the same task, as a repaint re-homing it does, keeps the hold", async () => {
+  const page = emptied();
+  try {
+    const input = page.input();
+    page.edge.blur();
+    input.focus();
+    await Promise.resolve();
+    assert.deepEqual([page.stored(), input.value, page.reports, holds(page)], ["Scene", "", [], ["buffer"]]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 4: the selection leaving the form ends a held empty name's hold: the name is back and told once", () => {
+  const page = emptied();
+  try {
+    const input = page.input(), away = document.getElementById("away"); assert.ok(away);
+    page.edge.selectNode(away);
+    assert.deepEqual([input.isConnected, page.stored(), input.value, page.reports, holds(page), page.a.executed.length],
+      [true, "Scene", "Scene", EMPTY_REPORT, [], 0]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 4: a selection change inside the form keeps a held empty name held", () => {
+  const page = emptied();
+  try {
+    const input = page.input(); assert.ok(input.form);
+    page.edge.selectNode(input.form);
+    assert.deepEqual([page.stored(), input.value, page.reports, holds(page)], ["Scene", "", [], ["buffer"]]);
+  } finally { page.close(); }
+});
+
 test("Split rename rule 6: name text the document refuses goes to recovery through the existing write, naming the scene", () => {
   const page = sharedRename("Scene", { author: serial => "r" + (15 + serial) });
   registerSplits(page.h.a); registerSharedRemovalHandlers(page.h.a);
   try {
     const input = page.open();
-    input.setSelectionRange(3, 3);
-    input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-    input.value = "Sce漢ne"; input.setSelectionRange(4, 4);
-    input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "漢", isComposing: true }));
+    page.edge.select(3);
+    page.edge.composeStart();
+    page.edge.composeUpdate("漢");
     const other = collabState(page.h.a).roots.beats.get("R2"); assert.ok(other instanceof Y.Map);
     transactSharedDocument(page.h.a, "local-command", () => { other.set("lengthSeconds", 7); });
-    input.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "漢" }));
+    page.edge.composeEnd("漢");
     assert.deepEqual([page.recovered, page.reports, page.stored(), input.value], [["heading:H1"], [], "Scene", "Scene"]);
     assert.deepEqual(page.a.executed[1]?.operations[0], { kind: "segment-create", id: "r17", by: "Alice", segment: "draft_segment_r17", beat: "draft_r17",
       at: { left: null, right: null, affinity: "after" }, fields: { audioText: "Sce漢ne", bufferSourceOwner: "H1", bufferPaintedBase: 1 } });
