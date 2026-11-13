@@ -9,12 +9,13 @@ import { readSharedRevision, observeSharedTransactions, transactSharedDocument }
 import { collabState } from "../../src/adapters/collab/state.ts";
 import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
 import { assertReplicasAgree } from "./agreement.ts";
-import { bufferReaders } from "./buffer-readers.ts";
+import { bufferReaders, bufferStamps } from "./buffer-readers.ts";
 
 function editing(h: Stage1ExecutorHarness, row = "R1") {
   const session = sharedHarness(adapterReplica(h.a));
   let serial = 0;
-  const port = createSharedBufferedText(h.a, session.session, { target: id => h.target(id), author: () => ({ id: "buffer:" + ++serial, by: "Alice" }), readers: bufferReaders });
+  const port = createSharedBufferedText(h.a, session.session, { target: id => h.target(id), author: () => ({ id: "buffer:" + ++serial, by: "Alice" }), readers: bufferReaders,
+    stamps: bufferStamps("Alice") });
   const painted = readSharedPaintedText(h.a, h.target(row)); assert.ok(painted);
   const edit = port.open(row, painted); assert.ok(edit);
   return { ...session, edit, port, painted };
@@ -44,7 +45,7 @@ for (const order of ["D1", "rev", "dup", "late-C"] as const) {
         assert.equal(a.executed.length, 1);
         assert.equal(a.executed[0]?.base, a.painted.revision);
         const sent = a.executed[0]?.operations; assert.ok(sent);
-        assert.deepEqual(sent.map(operation => operation.kind), ["text-insert", "text-delete"]);
+        assert.deepEqual(sent.map(operation => operation.kind), ["text-insert", "text-delete", "scalar"]);
         assert.deepEqual(sent[1]?.kind === "text-delete" && sent[1].observed, [a.painted.identity(1), a.painted.identity(2)]);
         assert.deepEqual([...collabState(h.a).ingress.holds], []);
         h.queue.flush(order); h.join();
