@@ -21,17 +21,17 @@ function writer(h: Stage1ExecutorHarness, handle: SharedDocumentHandle, by: stri
   const session = sharedHarness(adapterReplica(handle));
   let serial = 0;
   const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer:" + ++serial, by }), readers: bufferReaders });
-  const open = () => {
-    const painted = readSharedPaintedText(handle, h.target("R1")); assert.ok(painted);
-    const edit = port.open("R1", painted); assert.ok(edit);
+  const open = (row = "R1") => {
+    const painted = readSharedPaintedText(handle, h.target(row)); assert.ok(painted);
+    const edit = port.open(row, painted); assert.ok(edit);
     return edit;
   };
   return { session, open, sent: () => session.executed.map(entry => entry.operations.map(operation => operation.kind === "record-create"
     ? [operation.kind, operation.target.record, operation.fields] : operation.kind)) };
 }
 
-function harness(): Stage1ExecutorHarness {
-  const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }]);
+function harness(rows = [{ id: "R1", text: "ab" }]): Stage1ExecutorHarness {
+  const h = new Stage1ExecutorHarness(rows);
   for (const handle of [h.a, h.b, h.c]) registerSharedRecordHandlers(handle);
   return h;
 }
@@ -77,6 +77,19 @@ test("a sound cue typed into narration gets a sound entry; plain typing, a regis
       [["text-insert"], [["record-create", DOOR.id, { cat: "sound", name: "door slam", status: "needed" }]],
         [["record-create", CHAIR.id, { cat: "prop", name: "Chair", status: "needed" }]], [], []]);
     assert.deepEqual(tags(h.a), [DOOR]);
+  } finally { a.session.session.dispose(); h.destroy(); }
+});
+
+test("a registered tag typed into a beat that did not show it gets no entry, and the commit applies", () => {
+  const h = harness([{ id: "R1", text: "ab" }, { id: "R2", text: "cd" }]), a = writer(h, h.a, "Alice");
+  try {
+    let edit = a.open("R1"); edit.replace(2, 2, "Chair");
+    assert.equal(edit.commit([{ text: "ab", marks: {} }, chair()]).kind, "applied");
+    edit = a.open("R2"); edit.replace(0, 0, "Chair");
+    assert.equal(edit.commit([chair(), { text: "cd", marks: {} }]).kind, "applied");
+    assert.deepEqual(a.sent()[1], ["text-insert"]);
+    assert.deepEqual(tags(h.a), [CHAIR]);
+    assert.deepEqual(projectSharedDocumentWithRecovery(h.a).recovery, []);
   } finally { a.session.session.dispose(); h.destroy(); }
 });
 

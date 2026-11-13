@@ -137,7 +137,24 @@ the same tag at once create one entry. A tag the cell already showed unregistere
 is not registered again, and a copy that receives the list writes nothing more.
 `sharedTagsIntroducedByText` in `core/collab/text-records.ts` builds the list and
 `createSharedBufferedText` calls it; `tests/collab/buffer-text-records.test.ts`
-holds it.
+holds it. The operation writes `cat`, `name` and `status`; a normal script also
+writes an empty `owner` and `notes`, which the readers give by default.
+
+Declared consequences:
+
+- Editing a cue's words gives a second entry. Before the edit the beat shows
+  `SFX: door slam` with an entry; after it, `SFX: door slams`. The shared commit
+  creates a new entry "door slams" and leaves "door slam" with its owner, notes
+  and status, used by nothing. A normal script's `planRegistryHealing` renames the
+  entry instead, keeping its id and fields.
+- Once undo is wired, undoing the typing that created an entry removes the entry
+  while it still holds the fields the commit wrote, even if another beat now uses
+  the tag (assumed rule 39). That beat's tag then shows unregistered, and later
+  commits in that beat do not register it again, because the beat already showed
+  it unregistered. A normal script registers it at its next commit.
+- When another beat shows the tag unregistered in another case (`chair`) and
+  `Chair` is typed, the entry takes the typed name, where a normal script takes
+  the first mention in the script.
 
 Not built here:
 
