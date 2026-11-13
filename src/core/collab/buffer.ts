@@ -60,6 +60,15 @@ export function alignSpaceForm(runs: readonly Run[], text: string): readonly Run
   return changed ? aligned : runs;
 }
 
+export function bufferedFieldKey(rowId: string, field: "audioText" | "visualText"): string {
+  return field === "audioText" ? rowId : rowId + "\ufffd" + field;
+}
+
+export function readBufferedFieldKey(key: string): { readonly rowId: string; readonly field: "audioText" | "visualText" } {
+  const at = key.lastIndexOf("\ufffd");
+  return at !== -1 && key.slice(at + 1) === "visualText" ? { rowId: key.slice(0, at), field: "visualText" } : { rowId: key, field: "audioText" };
+}
+
 export interface BufferedCommit {
   readonly base: number;
   readonly text: string;

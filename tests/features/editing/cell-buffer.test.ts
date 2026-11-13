@@ -58,15 +58,14 @@ test("rule 27 in the Split view: a cell without a painted base refuses the nativ
   } finally { page.close(); }
 });
 
-test("rule 55, R2: native input in the visual column is refused with no write and no hold, and an unreported change there is put back", () => {
+test("9e (supersedes rule 55, R2): native input in the visual column commits through the binding, and an unreported change there is adopted", () => {
   const page = bufferedSplit([{ id: "R1", text: "ab" }]);
   try {
-    assert.equal(page.key("R1", 0, 0, "insertText", "Z", { field: "visualText" }), false);
-    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "buffer-visual-column" }]);
-    const visual = page.cell("R1", "visualText"), before = visual.innerHTML;
+    assert.equal(page.key("R1", 0, 0, "insertText", "Z", { field: "visualText" }), true);
+    const visual = page.cell("R1", "visualText");
     visual.append("typed");
     visual.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "typed" }));
-    assert.deepEqual([visual.innerHTML, page.a.executed.length, [...collabState(page.h.a).ingress.holds]], [before, 0, []]);
+    assert.deepEqual([page.a.session.read(doc => doc?.rows[0]?.visualText), page.reports, [...collabState(page.h.a).ingress.holds]], ["Ztyped", [], []]);
   } finally { page.close(); }
 });
 
@@ -112,26 +111,25 @@ test("a cell changed outside the binding is checked before a received update pai
   } finally { page.close(); }
 });
 
-test("rule 55, R2: a visual cell changed with no input event is put back at the next native event in a narration cell, and that key works", () => {
+test("9e (supersedes rule 55, R2): a visual cell changed with no input event is adopted into its own field at the next native event in a narration cell, and that key works", () => {
   const page = bufferedSplit([{ id: "R1", text: "ab" }]);
   try {
-    const visual = page.cell("R1", "visualText"), before = visual.innerHTML;
-    visual.append("typed");
+    page.cell("R1", "visualText").append("typed");
     assert.equal(page.key("R1", 2, 2, "insertText", "Z"), true);
-    assert.deepEqual([visual.innerHTML, page.text(), page.reports], [before, "abZ", [{ kind: "rejected", reason: "buffer-visual-column" }]]);
+    assert.deepEqual([page.a.session.read(doc => doc?.rows[0]?.visualText), page.text(), page.reports], ["typed", "abZ", []]);
   } finally { page.close(); }
 });
 
-test("rule 55, R2: a composition in a visual cell is refused once and its text is put back when it ends", () => {
+test("9e (supersedes rule 55, R2): a composition in a visual cell commits once when it ends", () => {
   const page = bufferedSplit([{ id: "R1", text: "ab" }]);
   try {
-    const visual = page.cell("R1", "visualText"), before = visual.innerHTML;
+    const visual = page.cell("R1", "visualText"); visual.focus(); setCellSelection(visual, 0);
     visual.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-    assert.equal(page.key("R1", 0, 0, "insertCompositionText", "x", { field: "visualText" }), false);
-    assert.equal(page.key("R1", 0, 0, "insertCompositionText", "y", { field: "visualText" }), false);
-    visual.append("xy");
+    assert.equal(page.key("R1", 0, 0, "insertCompositionText", "x", { field: "visualText" }), true);
+    assert.equal(page.key("R1", 0, 1, "insertCompositionText", "xy", { field: "visualText" }), true);
+    assert.equal(page.a.executed.length, 0);
     visual.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "xy" }));
-    assert.deepEqual([visual.innerHTML, page.reports, page.a.executed.length], [before, [{ kind: "rejected", reason: "buffer-visual-column" }], 0]);
+    assert.deepEqual([page.a.session.read(doc => doc?.rows[0]?.visualText), page.reports, page.a.executed.length], ["xy", [], 1]);
   } finally { page.close(); }
 });
 

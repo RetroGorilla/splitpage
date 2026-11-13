@@ -92,6 +92,6 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
   return { h, a, root, buffer, painted, cell, key, paint, reports, missing, recovered,
     ready: () => { ready = true; },
     text: (rowId = "R1") => doc()?.rows.find(row => row.id === rowId)?.audioText,
-    caret: (rowId = "R1") => cellSelection(cell(rowId)),
+    caret: (rowId = "R1", field: Field = "audioText") => cellSelection(cell(rowId, field)),
     close: () => { buffer.dispose(); stopPaint(); a.session.dispose(); h.destroy(); root.remove(); } };
 }

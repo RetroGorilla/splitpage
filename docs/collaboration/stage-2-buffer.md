@@ -244,7 +244,7 @@ passes `foldSpaceForm`.
 ## Split view binding
 
 `mountCellBuffer` in `src/features/editing/cell-buffer.ts` binds the Split
-view's narration cells to the same `createBufferedField`, with
+view's narration and visual cells (package 9e) to the same `createBufferedField`, with
 `foldSpaceForm: true`. It gets the binding factory, the painted record and
 everything it needs from the rows renderer through `CellBufferPorts`;
 `mountSharedSplitBuffer` in `src/bootstrap/wiring/split-buffer.ts` builds them.
@@ -260,8 +260,13 @@ Nothing in the running app calls it yet (package 14); a test pins that.
   changed outside the binding is adopted or put back, and reported, before a
   received update replaces it. The hook has no subscriber in a standalone session
   and is never reached by a standalone keystroke.
-- The ownership check also compares each visual cell with its stored visual text
-  and puts back one that differs, with `buffer-visual-column`.
+- A visual cell is a field of the same binding under its own key: the row id,
+  U+FFFD and `visualText` (`bufferedFieldKey`; a stable id never holds U+FFFD).
+  So there is one open edit, one composition and one admission gate across both
+  columns. The adapter reads the field from the key: the text address is
+  `{ owner: row, segment: row, field: "visualText" }`, which resolves to the
+  beat's visual, and the caret after a visual commit follows the visual's own
+  offsets. A narration key is the bare row id, so narration is unchanged.
 - An adopted change is settled after the event only when the event left no
   native target waiting for its `input`; otherwise the event's own edit settled
   it already, and settling again would report a false `buffer-pending`.
@@ -270,12 +275,10 @@ Nothing in the running app calls it yet (package 14); a test pins that.
   the cell in place only when the stored text differs from what is shown other
   than in space form, notes the cell as painted, and asks the renderer for a
   render so that updates released after the commit paint in the other rows.
-- The painted record is refreshed at every rows paint for each narration cell
+- The painted record is refreshed at every rows paint for each narration and visual cell
   whose row signature matches the shown document (`paintedFromRow` in the rows
   renderer reads the signature and changes nothing).
-- Assumed rule 55 on #1414: native input, composition, cut, paste and drop in
-  the visual column are refused (`buffer-visual-column`, once per composition)
-  and an unreported change there is put back from the document (R2); native formatting, history
+- Assumed rule 55 on #1414: native formatting, history
   and other input that is not text is refused after settling
   (`buffer-unsupported-input`) (R5). Enter, row commands, paste into a cell and
   formatting from the toolbar settle typing through command admission and then
@@ -292,18 +295,43 @@ typing refused on a stale base, the cell kept as shown (a U+00A0 the browser
 showed stays U+00A0 in the entry), the local command that found the edit going on
 after the write, unmounting, a paint during the drain, a refused recovery write
 keeping the text and the hold, and typing over someone else's removal joining
-that beat's recovery with no write. The refused commit needs a write to the
+that beat's recovery with no write. A refused visual edit goes into the same
+kind of draft, with the cell as shown in the draft's visual and its narration
+empty (`tests/features/editing/cell-buffer-visual.test.ts`). The refused commit needs a write to the
 replica that bypassed the hold; a removal, join or other change from someone else
 is held while the cell is edited and the typing lands by its identities.
 
 The named tests are in `tests/features/editing/cell-buffer.test.ts`, including
 "rule 55, T03 Split native whitespace (D1 and D3) ...", which checks the copied
 Stage 1 literal on every replica. `tests/features/editing/cell-buffer-cost.test.ts`
-pins the standalone Split keystroke: one edit, one decode, no paint check and no
-repaint per key with 2 and 50 rows, and no buffered field, painted record or cell buffer
+pins the standalone Split keystroke in narration and in the visual column: one
+edit, one decode, no paint check and no repaint per key with 2 and 50 rows, and no buffered field, painted record or cell buffer
 built. Shared-only cost per native event: the ownership scan over every
 narration and visual cell, as in the Writer, and a render after each commit; and
 one ownership scan before each paint for a received or other non-screen change.
+
+### The visual column (package 9e)
+
+Visual typing commits like narration: a text insert or delete on the beat's
+visual and the beat's stamp, one commit per key, or one per composition. What
+else a commit derives from the visual text, per
+[the commit-time writers](stage-2-commit-time-writers.md):
+
+- The stamp is written, and the commit runs the same tag check as narration
+  (`sharedTagsIntroducedByText` reads either field). Typing alone adds no tag
+  mark, though: a typed `SFX:` line stays plain text, because the cue shortcut
+  that marks it in a normal script is a model edit package 14 composes, so the
+  check registers nothing.
+- People from a typed `@Name`, and shots and keys from a typed B-roll line, are
+  not written: their builders have no caller until package 14, so in a shared
+  session the line keeps the typed text only (assumed for package 9e, for the
+  plan review).
+- A tag's owner from an `@Name` pairing and a sound cue's entry following its
+  words stay off; both are undetermined.
+
+Declared limit: the visual cell of a joined row shows both visuals, and its
+painted record is one visual, so typing there is refused and repainted, as rule
+27 does, until a later cut binds a joined visual.
 
 ## Mapping and coverage
 
