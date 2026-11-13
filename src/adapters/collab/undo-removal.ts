@@ -50,7 +50,7 @@ function rowPieces(handle: SharedDocumentHandle, beat: string): readonly { reado
   } finally { prep.close(); }
 }
 
-// why: the attachment index cannot be read inside a write, so a beat's visuals and gallery are found by the beat they name.
+// why: the attachment index cannot be read inside a write, so visuals and gallery are found by their beat.
 function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
   const roots = collabState(handle).roots;
   return (["visuals", "gallery"] as const).flatMap(collection => [...roots[collection].entries()]

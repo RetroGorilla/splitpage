@@ -19,6 +19,7 @@ import { executeSharedCommand, reverseSharedUndoRecord, supportsSharedUndoPart }
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
+import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 
 const runtime = createFlowLoadRuntime(), ORDERS = ["D1", "rev", "dup"] as const, target = { owner: "R1", segment: "R1", field: "audioText" };
@@ -161,7 +162,7 @@ test("a removal of another kind than a beat stays a structure part; its undo is 
 }));
 
 const VISUAL = { rows: [{ id: "R1", audioText: "abcd", visualText: "v" }, { id: "R2", audioText: "ef" }] };
-const beat = { scope: "beat", record: "R1" } as const, joinR2 = { kind: "join", id: "j", by: "Other", from: "R2", into: "R1", glue: " " };
+const beat = { scope: "beat", record: "R1" as SharedContentRef } as const, joinR2 = { kind: "join", id: "j", by: "Other", from: "R2", into: "R1", glue: " " };
 type Run = ReturnType<typeof start>;
 function restoredByWriter(run: Run): SharedUndoRecord {
   const theirs = run.command(run.set.b, removeOp("gone", "Other"), "remove"); run.flush();
