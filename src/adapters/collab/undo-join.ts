@@ -6,8 +6,8 @@ import { collabState } from "./state.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
 import { interpretSharedStructure, readSharedStructureRemoval, readSharedStructureStream, sharedStructurePlanIndex } from "./structure-plan.ts";
-import { sharedOrderPlan } from "./structure-order-index.ts";
-import { sharedPlannedSegmentAt, sharedPlannedSegmentIndex } from "./structure-order.ts";
+import { readPlannedStructureIndex, sharedOrderPlan } from "./structure-order-index.ts";
+import { sharedPlannedSegmentAt } from "./structure-order.ts";
 import { projectSharedJoinGlue, sharedJoinFormatRegisterField, sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { FORMAT_MARKS } from "../../core/text/runs.ts";
 import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
@@ -122,7 +122,9 @@ export function readSharedJoinNeighbours(handle: SharedDocumentHandle, from: str
     if (!last) return false;
     const order = sharedStructurePlanIndex(view).order, length = sharedOrderPlan(view, order).length;
     let after = false;
-    for (let index = sharedPlannedSegmentIndex(view, order, last.segment); index >= 0 && index < length; index++) {
+    const first = readPlannedStructureIndex(view, order, last.segment);
+    if (first < 0) return false;
+    for (let index = first; index < length; index++) {
       const segment = sharedPlannedSegmentAt(view, order, index), stream = segment === undefined ? undefined : readSharedStructureStream(view, segment);
       if (!stream) continue;
       for (const block of interpretSharedStructure(view, [], stream)) {

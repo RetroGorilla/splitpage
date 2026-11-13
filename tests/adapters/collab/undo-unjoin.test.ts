@@ -8,6 +8,7 @@ import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/remo
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { encodeSharedState, encodeSharedStateVector, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
@@ -30,7 +31,7 @@ function start(order: typeof ORDERS[number]) {
   const set = replicas(2, SOURCE), handles = [set.a, set.b], incremental = handles.map(handle => captureIncrementalReplica(handle));
   handles.forEach(handle => {
     registerSharedJoinHandlers(handle); registerSharedRemovalHandlers(handle); registerSharedSplitHandlers(handle, runtime);
-    registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle);
+    registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle); registerSharedHeadingHandlers(handle);
   });
   const flush = () => { set.queue.flush(order); handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); }); };
   const send = (handle: SharedDocumentHandle, value: unknown) =>
@@ -121,3 +122,21 @@ for (const order of ORDERS) test(`used up: undo of an unjoin after someone joine
     run.send(run.set.b, { kind: "join", id: "again", by: "Other", from: "R3", into: "R2", glue: " " }); run.flush(); run.check("joined again", ["ab cd ef"]);
     run.unchanged(record, "used up", ["ab cd ef"]);
   }));
+
+for (const order of ORDERS) test(`a command that retires the same join twice records it once; undo joins once and redo unjoins again: ${order}`, () => scenario(order, run => {
+  const retire = (id: string) => operation({ kind: "join-retire", id, by: "Writer", joins: [run.join] });
+  const execution = executeSharedCommand(run.set.a, [retire("apart"), retire("again")], { label: "unjoin", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); run.flush();
+  assert.deepEqual(execution.record.parts.map(part => part.kind), ["join"]);
+  const undone = run.reverse(execution.record, true); run.check("joined again", ["ab cd", "ef"]);
+  run.reverse(undone, true); run.check("unjoined again", ["ab", "cd", "ef"]);
+}));
+
+for (const order of ORDERS) test(`used up: undo of an unjoin after someone created a scene heading between the two beats: ${order}`, () => scenario(order, run => {
+  const record = run.unjoin(); assert.ok(record);
+  assert.deepEqual(executeSharedOperations(run.set.b, [operation({ kind: "heading-create", id: "head", by: "Other", segment: "Hn", heading: "Hn", firstBeat: "R2",
+    at: { left: null, right: "R2", affinity: "before" } }), operation({ kind: "text-insert", id: "name", by: "Other", target: { owner: "Hn", segment: "Hn", field: "heading" },
+    at: { left: null, right: flowBaseReference("Hn", "heading", 0), affinity: "before" }, content: [{ value: "Two", marks: [] }] })], { base: readSharedRevision(run.set.b) }), { ok: true });
+  run.flush(); assert.deepEqual(projectSharedDocumentWithRecovery(run.set.a).document.sections?.map(scene => scene.name), ["Two"]);
+  run.unchanged(record, "used up", ["ab", "cd", "ef"]);
+}));
