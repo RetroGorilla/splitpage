@@ -239,9 +239,9 @@ marks, atoms, metadata and multiple rows at the start, middle and end of narrati
 Production structural projection is not used for these comparisons;
 its interpretation belongs to the projection lane.
 
-Join, heading creation/finalization, movement, complete recovery placement
+Join, heading finalization, movement, complete recovery placement
 and structural undo integration remain later cuts. In particular, the heading-name
-`cappedText` rule, imported-layout movement and the remaining structural Stage 1
+`cappedText` rule for finalization, imported-layout movement and the remaining structural Stage 1
 histories are still open here. Standalone flow results, application, features,
 bootstrap, exports and browser behaviour remain unchanged.
 
@@ -310,7 +310,8 @@ production caret-placement claim. The seeded model has 72 histories, 900 operati
 peer delivery, with literal declared limits
 `[]` for its beat-only cases. Complete app lists execute 42 operations in 18 calls
 and skip or defer none: the three lists that remove across a scene boundary run
-since heading removal (below). T08 creation, the T09 cross-heading selection, T06/T12
+since heading removal (below). T08 creation (a beat turned into a heading, which is
+finalization), the T09 cross-heading selection, T06/T12
 join, imported-layout move and complete structural undo await their named cuts.
 Split-descendant removal classification and comment/reply recovery placement (T11)
 remain recovery work; retained observed ids, boundaries, attachment ids and author
@@ -350,4 +351,52 @@ delivery orders and an encoded late joiner; discard and demotion literals agains
 concurrent typing in the name and in the following narration, with restore and an
 incremental-versus-fresh projection comparison; a seeded model of 36 histories,
 56 checkpoints and 144 commands with literal declared limits `[]`; and two removal
-mutants. Heading creation, finalization, movement and structural undo are not built.
+mutants. Heading finalization, movement and structural undo are not built.
+
+## Heading creation
+
+`registerSharedHeadingHandlers(handle)` adds `heading-create`, the operation the app
+emits when pasted text carries scene headers. It accepts only the gap the flow
+emits (no left neighbour, the first beat on the right, affinity `before`). The
+heading key uses the existing identity format with role `heading`; it survives the
+app's scene-id rule. The supplied heading name, and a different supplied segment
+name, become aliases for later operations in the list. The heading record holds
+`id` and `extra` as hydration writes them.
+
+The heading goes directly before its first beat. When that beat heads its segment,
+a new segment with head `{h:id}` and empty text (role `segment`) enters the order
+before it. When the beat is inline, an `{h:id}` boundary goes before its boundary in
+the same text, and the name lies between the two. The per-call structure plan
+knows the planned heading, so the name insertion and scalars that follow resolve it.
+A first beat that is a later part of a joined row refuses with `joined-heading`.
+
+The executor entry gained one step: an accepted preparation may name a check that
+runs after the whole list is prepared, still before any write. Heading creation
+uses it for the name: at the end of the list the created heading's name must keep
+some text under `cappedText(name, 200)`, the rule the app's scene loader applies.
+A blank or missing name refuses the whole list with `invalid-heading-name`, leaving
+bytes, state vector and revision unchanged. A heading removed later in the same
+list is not checked. Declared limit: the operation reader turns a name of half a
+surrogate pair into U+FFFD before the check, so that name is accepted and every
+copy loads a scene the app itself would drop.
+
+Two writers creating a heading before the same beat at once both keep their
+headings; the lower writer id comes first. Its scene has no beats, so it appears in
+recovery as `scene-with-no-beats`, and the other heading owns the beat. Before an
+inline beat, text typed concurrently at the end of the previous beat is ordered
+against the new boundary by writer id: from a writer whose id is higher than the
+creator's it joins the new name. Text typed in the first beat itself stays there.
+A concurrent join of the first beat into the beat before it depends on placement:
+when the first beat heads its segment the join wins and the heading goes to recovery
+as `scene-with-no-beats`; when it is inline the join has no effect and leaves no
+recovery entry, and the heading owns the beat.
+
+Evidence: complete paste lists from the app at seven places and four header shapes,
+including selections across a scene boundary, executed under three delivery orders
+with an encoded late joiner (84 calls, 588 operations, 105 creations, none skipped or
+deferred), compared with the app's loaded rows and scenes and the independent
+applier; literals for concurrent typing, split, removal and restore of the first
+beat, simultaneous creation, removal and restore of a created heading, and the
+refusals; a seeded model of 48 histories and 122 checkpoints with literal declared
+limits `[]`; and two structure mutants. The copied T08 creation oracle is a beat
+turned into a heading and waits for finalization.

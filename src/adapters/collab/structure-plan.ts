@@ -10,7 +10,7 @@ interface StructurePlanScratch { readonly scratch: <T>(key: string, create: () =
 function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
     records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>(),
-    headings: new Map<string, boolean>() }));
+    headings: new Map<string, boolean>(), created: new Map<string, string>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
@@ -21,6 +21,7 @@ export function planSharedStructureOwner(view: StructurePlanScratch, id: string,
 export function isPlannedStructureOwner(view: StructurePlanScratch, id: string): boolean { return context(view).records.has(id); }
 export function planSharedStructureRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).removed.set(id, removed); }
 export function planSharedHeadingRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).headings.set(id, removed); }
+export function planSharedHeadingCreation(view: StructurePlanScratch, id: string, segment: string): void { context(view).created.set(id, segment); }
 export function readSharedStructureRemoval(view: StructurePlanScratch, id: string): boolean {
   const state = context(view); return state.removed.get(id) ?? state.index?.removed(id) ?? false;
 }
@@ -54,7 +55,7 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
     for (const key of index.candidates(name, false)) keys.add(key);
   }
   for (const record of records.values()) if (record.segment) keys.add(record.segment);
-  for (const name of headings) for (const key of index.candidates(name, true)) keys.add(key);
+  for (const name of headings) { for (const key of index.candidates(name, true)) keys.add(key); const created = state.created.get(name); if (created) keys.add(created); }
   for (const stream of state.heads.values()) if (stream.head && (stream.head.kind === "h" ? headings.has(stream.head.id) : [...names].some(name => cleanId(name) === cleanId(stream.head?.id)))) keys.add(stream.segment);
   const streams = [...keys].flatMap(key => { const stream = actual?.segment === key ? actual : readSharedStructureStream(view, key); return stream ? [stream] : []; })
     .sort((a, b) => {
@@ -66,11 +67,11 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
 }
 
 function resolveOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading", purpose: "projected" | "restore-membership") {
-  const index = context(view).index; if (!index) throw new Error("Structural index is not bound to preparation");
+  const state = context(view), index = state.index; if (!index) throw new Error("Structural index is not bound to preparation");
   const heading = field === "heading";
   const block = interpretSharedStructure(view, [{ owner, heading }], undefined, purpose).find(block => !block.reason && block.id !== null
     && block.kind === (heading ? "h" : "b") && (heading ? block.id === owner : cleanId(block.id) === cleanId(owner)));
-  return block?.id && (!heading || index.heading(block.id)) ? Object.freeze({ owner: block.id, segment: block.segment }) : null;
+  return block?.id && (!heading || index.heading(block.id) || state.created.has(block.id)) ? Object.freeze({ owner: block.id, segment: block.segment }) : null;
 }
 
 export function resolveSharedStructureOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading") {
