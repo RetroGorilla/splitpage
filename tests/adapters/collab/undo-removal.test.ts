@@ -235,3 +235,14 @@ for (const together of [false, true]) for (const order of ORDERS)
     else run.unchanged(theirs, "second used up", live, run.set.b);
     run.check("live", live);
   }));
+
+for (const order of ORDERS) test(`rule 35: typing in a restored beat with its stamp, then undoing it, leaves the restore's undo whole: ${order}`, () => scenario(order, run => {
+  const theirs = run.command(run.set.b, removeOp("gone", "Other"), "remove"); run.flush();
+  const record = run.command(run.set.a, operation({ kind: "restore", id: "back", by: "Writer", removals: [run.removal(theirs)] }), "restore"); run.flush();
+  const typing = executeSharedCommand(run.set.a, [operation({ kind: "text-insert", id: "typed", by: "Writer", target, at: { left: flowBaseReference("R1", "audioText", 3), right: null,
+    affinity: "after" }, content: [{ value: "X", marks: [] }] }), operation({ kind: "scalar", id: "typed:stamp", by: "Writer", target: { scope: "beat", record: "R1" }, field: "stamp",
+    value: { at: "2026-11-13T10:00:00.000Z", by: "Writer" } })], { label: "typing", selection: null, typing: "X" }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(typing.result, { ok: true }); assert.ok(typing.record); run.flush();
+  run.reverse(typing.record, true); run.check("typing undone", live);
+  run.reverse(record, true); run.check("restore undone", gone);
+}));

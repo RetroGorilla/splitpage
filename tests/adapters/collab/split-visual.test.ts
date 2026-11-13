@@ -8,7 +8,7 @@ import { registerSharedUndoOperationHandlers } from "../../../src/adapters/colla
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
-import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { projectSharedDocument, projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { executeSharedCommand, reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
@@ -75,9 +75,10 @@ for (const order of deliveryOrders) test(`9e: two copies splitting the same beat
   } finally { set.close(); }
 });
 
-test("9e undo: split, type in the new visual, undo the typing, undo the split; until split undo lands (#1534) the split stays and its visual is empty again on three copies", () => {
+test("9e undo: split, type V in the new visual, undo the typing, undo the split: the document equals the start on three copies, and the redo brings the visual back", () => {
   const set = setup(3);
   try {
+    const start = projectSharedDocumentWithRecovery(set.a);
     let serial = 0;
     const undo = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
       reverse: record => reverseSharedUndoRecord(set.a, record, { by: "Alice", nextId: () => "undo-" + String(++serial) }) });
@@ -93,9 +94,27 @@ test("9e undo: split, type in the new visual, undo the typing, undo the split; u
     set.queue.flush("D1");
     assert.deepEqual(read(set.b).rows, [["R1", "ab", ""], [BEAT_A, "c", "V"], ["R2", "de", ""]]);
     assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "type", selection: null });
-    const second = undo.undo();
+    assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "enter", selection: null });
     set.queue.flush("D1");
-    agree("after both undos", "D1", [set.a, set.b, set.c], handle => read(handle).rows, [["R1", "ab", ""], [BEAT_A, "c", ""], ["R2", "de", ""]]);
-    assert.deepEqual(second, { ok: false, reason: "undo-unsupported:split" });
+    agree("after both undos", "D1", [set.a, set.b, set.c], projectSharedDocumentWithRecovery, start);
+    assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "enter", selection: null });
+    set.queue.flush("D1");
+    agree("split redone", "D1", [set.a, set.b, set.c], handle => read(handle).rows, [["R1", "ab", ""], [BEAT_A, "c", ""], ["R2", "de", ""]]);
+    assert.deepEqual(read(set.c).visuals.find(visual => visual[0] === VISUAL_A), [VISUAL_A, BEAT_A, "0000000000", "", 1]);
+  } finally { set.close(); }
+});
+
+for (const order of deliveryOrders) test(`9e undo: an undo of the split while the new visual holds text another writer typed is used up and keeps the split (${order})`, () => {
+  const set = setup(3);
+  try {
+    const execution = executeSharedCommand(set.a, [enter("Alice", 2)], { label: "enter", selection: null, typing: null }, { base: readSharedRevision(set.a) });
+    assert.ok(execution.record); set.queue.flush(order);
+    const target = { owner: BEAT_A as SharedContentRef, segment: BEAT_A as SharedContentRef, field: "visualText" as const };
+    const gap = readSharedPaintedText(set.b, target)?.emptyGap; assert.ok(gap);
+    send(set.b, operation({ kind: "text-insert", id: "typed", by: "Bob", target, at: { left: null, right: gap, affinity: "before" }, content: [{ value: "V", marks: [] }] }));
+    set.queue.flush(order);
+    const done = reverseSharedUndoRecord(set.a, execution.record, { by: "Alice", nextId: () => "undo" });
+    assert.ok(done.ok); assert.equal(done.effective, false); set.queue.flush(order);
+    agree("used up", order, [set.a, set.b, set.c], handle => read(handle).rows, [["R1", "ab", ""], [BEAT_A, "c", "V"], ["R2", "de", ""]]);
   } finally { set.close(); }
 });

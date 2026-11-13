@@ -63,7 +63,17 @@ function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
   const roots = collabState(handle).roots;
   return (["visuals", "gallery"] as const).flatMap(collection => [...roots[collection].entries()]
     .filter(([, record]) => record instanceof Y.Map && record.get("beat") === beat).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-    .map(([key, record]) => [collection, key, (record as Y.Map<unknown>).toJSON()]));
+    .map(([key, record]) => {
+      const fields = Object.fromEntries(Object.entries((record as Y.Map<unknown>).toJSON()).filter(([field]) => field !== "text" && field !== "markRecords"));
+      // why: a visual is compared by what it shows, so typing undone in it leaves no difference behind in its mark records.
+      return collection === "gallery" ? [collection, key, (record as Y.Map<unknown>).toJSON()] : [collection, key, fields,
+        readSharedTextHistory(handle, { owner: beat as SharedContentRef, segment: key as SharedContentRef, field: "visualText" })?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
+    }));
+}
+
+// why: rule 35 leaves a beat's stamp as it is through undo, so a stamp alone is no change that uses an undo up.
+function unstamped(stored: unknown): unknown {
+  return stored instanceof Y.Map ? Object.fromEntries(Object.entries(stored.toJSON()).filter(([key]) => key !== "stamp" && !key.startsWith("stamp:"))) : null;
 }
 
 // why: undo of a restore never removes someone else's work, so it compares the beats with how the restore left them:
@@ -75,8 +85,15 @@ export function readSharedBeatContent(handle: SharedDocumentHandle, beats: reado
       const history = readSharedTextHistory(handle, { owner: piece.owner as SharedContentRef, segment: piece.segment as SharedContentRef, field: "audioText" });
       return [piece, history?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
     });
-    return [beat, stored instanceof Y.Map ? stored.toJSON() : null, readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat), pieces];
+    return [beat, unstamped(stored), readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat), pieces];
   }));
+}
+
+// why: a split is taken back only while nothing stored for the new beat changed; its characters join the source beat.
+export function readSharedBeatShape(handle: SharedDocumentHandle, beat: string): string {
+  const stored = collabState(handle).roots.beats.get(beat), status = { scope: "beat", record: beat as SharedContentRef } as const;
+  return JSON.stringify([unstamped(stored), readSharedStatus(handle, status), readSharedStatusHeads(handle, status), attached(handle, beat),
+    rowPieces(handle, beat).map(({ owner, segment, group }) => [owner, segment, group])]);
 }
 
 function textLength(handle: SharedDocumentHandle, target: SharedTextAddress): number {
