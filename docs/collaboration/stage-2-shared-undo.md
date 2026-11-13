@@ -69,11 +69,14 @@ makes the change and returns its record, or `null` when it changed nothing.
 A refusal leaves both stacks as they were. The reasons:
 
 - `undo-unsupported:<kind>`: the entry has a part the executor cannot reverse.
-  The executor is not called. Every structure command but a join is refused
-  this way until its executor lands: `segment-create`, `split`, `split-before`,
-  `join-glue`, `remove`, `restore`, `segment-move`, `heading-create`,
-  `heading-finalize`, `heading-remove`. A join is undone as described in
-  [Undo of a join](#undo-of-a-join).
+  The executor is not called. Every structure command but a join, a beat
+  removal and a restore of beat removals is refused this way until its
+  executor lands: `segment-create`, `split`, `split-before`, `join-glue`,
+  `segment-move`, `heading-create`, `heading-finalize`, `heading-remove`. A
+  removal of another kind (range, became-heading) is named `remove` and
+  refused by the executor with `undo-unsupported:remove`. See
+  [Undo of a join](#undo-of-a-join) and
+  [Undo of a removal and a restore](#undo-of-a-removal-and-a-restore).
 - `command-in-progress`: asked while a command is being recorded.
 - `undo-in-progress`: asked from inside an undo.
 - `held`: a hold is open.
@@ -379,6 +382,43 @@ Declared limits:
 - The later-join guard compares joins with the same separator; a later join of
   the same two beats with another separator does not stop the undo.
 
+### Undo of a removal and a restore
+
+A command with one beat removal records a `remove` part: the key of the
+removal record this copy wrote (`sharedStructureIdentity` of the writer, the
+operation id and `removal`) and the beats that stopped being live, read from
+the live beats before and after the command. A command with one restore of beat
+removals records a `restore` part: the key of its restore record, the beats
+that became live, the removal's place and a fingerprint of those beats as the
+restore left them: the stored beat with its fields, flags and joins, its status
+and status events, its visual and gallery records, and every piece of its
+joined row with characters and marks. A command with
+more than one removal or restore, or a removal of another kind, records the
+generic structure part.
+
+Undo of a `remove` part runs `restore` on the removal. Restore writes nothing
+for comments or for a beat split off unseen (rules 44 and 47), so they come
+back with the beat, and text typed by someone who had not seen the removal
+stays in it. It writes only while the removal is the one the beat shows: the
+beat's flags are removed at the removal's generation. If someone else
+restored it, or removed it again afterwards (rule 33), it is used up. Its
+inverse is a `restore` part.
+
+Undo of a `restore` part runs a new `remove` of the same beats (a new change,
+rule 33). It observes each beat's characters as the row shows them, over the
+row's painted length, so a split made at the same moment and unseen sends both
+halves to recovery, as for an ordinary removal (rule 44). It writes only while
+every beat is live and the fingerprint is unchanged; once anyone typed in it
+or in a piece joined to it, formatted it, set a field or the status, changed
+its visual column or records, joined another beat into it, or removed and
+restored it, it is used up. When two writers removed a beat apart and undo
+their removals in turn, the first brings it back and the second is used up;
+when they undo at the same moment, both write and the beat is live. Its inverse is a `remove` part,
+so a redo after an undone removal follows the same rule. Each case has a
+literal in `undo-removal.test.ts` over in-order, reversed and duplicated
+delivery and a late joiner, with the incremental projection compared after
+every delivery.
+
 ### The provenance marker
 
 Retractions and copies are rare; typing is not. A text's mark store therefore
@@ -498,9 +538,10 @@ second creation of a record that is there, a change to a record that is not,
 a status for a tag or shot that is not there, another person's comment text)
 is counted by its reason and changes nothing.
 
-Not covered yet: structure commands other than a join, which the owner refuses
-by name. A join is not drawn either: the model has no join, and adding a command
-changes the draw and so every pinned count.
+Not covered yet: structure commands other than a join, a beat removal and a
+restore, which the owner refuses by name. Joins, removals and restores are not
+drawn either: the model has neither, and adding a command changes the draw and
+so every pinned count.
 Formatting across a joined row is not drawn either: the generator's rows are
 never joined and the model has no join, so it is covered by the literal tests
 in `join-marks.test.ts`.

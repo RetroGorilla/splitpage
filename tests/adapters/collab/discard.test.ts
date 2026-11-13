@@ -98,7 +98,7 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: a remo
 });
 
 const REMOVAL2 = native(3, "gone2", "removal"), DISCARD = { label: "discard", selection: null, typing: null };
-for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52 as amended: a restore of a discarded removal is accepted and retires the discard; its undo leaves the discard retired, and the discard's undo is used up: ${order}`, () => {
+for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52 as amended: a restore of a discarded removal is accepted and retires the discard; its undo removes the beats again by a new removal and leaves the discard retired, and the discard's undo is used up: ${order}`, () => {
   for (const together of [true, false]) {
     const { set, handles, projector } = setup(), label = together ? "removed together" : "second removal";
     try {
@@ -111,13 +111,18 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52 as amen
       assert.deepEqual(restored.result, { ok: true }); assert.ok(restored.record); set.queue.flush(order); assertIncremental(set.c, projector);
       const back = { rows: ["R1", "R2"], recovery: ["comment-without-words C9"], active: 0, retired: 1 };
       agree(label + " restored", order, handles, state, back);
-      const bytes = [encodeSharedState(set.b), encodeSharedState(set.c)];
       const undoRestore = reverseSharedUndoRecord(set.c, restored.record, writer("Carol"));
-      assert.deepEqual(undoRestore.ok ? "undone" : undoRestore.reason, "undo-unsupported:structure");
+      assert.ok(undoRestore.ok && undoRestore.effective); set.queue.flush(order); assertIncremental(set.c, projector);
+      const again = undoRestore.inverse.parts[0];
+      assert.ok(again?.kind === "remove" && again.removal !== REMOVAL && again.removal !== REMOVAL2);
+      const removedAgain = together ? { rows: [], recovery: ["removed-beat R1", "removed-beat R2", "comment-without-words C9"], active: 0, retired: 1 }
+        : { rows: ["R2"], recovery: ["removed-beat R1", "comment-without-words C9"], active: 0, retired: 1 };
+      agree(label + " restore undone", order, handles, state, removedAgain);
+      const bytes = [encodeSharedState(set.b), encodeSharedState(set.c)];
       const usedUp = reverseSharedUndoRecord(set.b, made.record, writer("Bob"));
       assert.ok(usedUp.ok && !usedUp.effective); assert.deepEqual([encodeSharedState(set.b), encodeSharedState(set.c)], bytes);
       set.queue.flush(order); assertIncremental(set.c, projector);
-      agree(label + " undone", order, handles, state, back);
+      agree(label + " undone", order, handles, state, removedAgain);
     } finally { set.close(); }
   }
 });

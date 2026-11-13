@@ -78,6 +78,18 @@ export type SharedUndoPart =
     readonly formats?: readonly FormatMark[];
   }
   | {
+    readonly kind: "remove";
+    readonly removal: SharedContentRef;
+    readonly beats: readonly SharedContentRef[];
+  }
+  | {
+    readonly kind: "restore";
+    readonly restore: SharedContentRef;
+    readonly beats: readonly SharedContentRef[];
+    readonly at: number;
+    readonly content: string;
+  }
+  | {
     readonly kind: "discard" | "discard-retired";
     readonly discard: string;
     readonly entry: SharedRecoveryName;
