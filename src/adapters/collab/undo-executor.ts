@@ -29,7 +29,7 @@ import { sharedJoinFormatRegisterField } from "../../core/collab/projection/join
 import { FORMAT_MARKS } from "../../core/text/runs.ts";
 import type { FormatMark } from "../../core/text/runs.ts";
 import { sharedJoinRetirementGroup } from "./join-record.ts";
-import { isSharedJoinRetired, nextSharedJoinGeneration, readSharedJoinOf, readSharedJoinPlace, recordSharedJoin } from "./undo-join.ts";
+import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, readSharedJoinOf, readSharedJoinPlace, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
@@ -267,7 +267,8 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
 function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author: () => { id: string; by: string }, operations: SharedOperation[]): Planned {
   const place = readSharedJoinPlace(handle, part.from, part.into), group = sharedJoinRetirementGroup(part.from, part);
   if (!part.retired) {
-    const effective = !place.removed && place.joined !== null && !isSharedJoinRetired(handle, part.join, group), formats = effective ? FORMAT_MARKS.filter(format => spaceFormat(handle, group, format)) : [];
+    const effective = !place.removed && place.joined !== null && !isSharedJoinRetired(handle, part.join, group) && !hasLaterSharedJoin(handle, part);
+    const formats = effective ? FORMAT_MARKS.filter(format => spaceFormat(handle, group, format)) : [];
     if (effective) operations.push(operationOf({ kind: "join-retire", ...author(), joins: [part.join] }));
     return { inverse: () => ({ effective, part: { ...part, retired: true, glue: place.joined?.glue ?? part.glue, ...formats.length ? { formats } : {} } }) };
   }

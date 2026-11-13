@@ -20,14 +20,15 @@ import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts
 const runtime = createFlowLoadRuntime(), ORDERS = ["D1", "rev", "dup"] as const, target = { owner: "R1", segment: "R1", field: "audioText" };
 const strong = (text: string) => `<strong>${text}</strong>`;
 const rows = (handle: SharedDocumentHandle) => projectSharedDocumentWithRecovery(handle).document.rows.map(row => row.audioText);
-const join = (id: string, by = "Writer", glue = " ") => operation({ kind: "join", id, by, from: "R2", into: "R1", glue });
+const join = (id: string, by = "Writer", glue = " ", from = "R2") => operation({ kind: "join", id, by, from, into: "R1", glue });
+const TWO = [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }], THREE = [...TWO, { id: "R3", audioText: "ef" }];
 
-function scenario(order: typeof ORDERS[number], body: (run: ReturnType<typeof start>) => void) {
-  const run = start(order);
+function scenario(order: typeof ORDERS[number], body: (run: ReturnType<typeof start>) => void, beats = TWO) {
+  const run = start(order, beats);
   try { body(run); } finally { run.close(); }
 }
-function start(order: typeof ORDERS[number]) {
-  const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] }), handles = [set.a, set.b];
+function start(order: typeof ORDERS[number], beats: readonly { id: string; audioText: string }[]) {
+  const set = replicas(2, { rows: beats }), handles = [set.a, set.b];
   const incremental = handles.map(handle => captureIncrementalReplica(handle));
   handles.forEach(handle => {
     registerSharedJoinHandlers(handle); registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle);
@@ -35,8 +36,8 @@ function start(order: typeof ORDERS[number]) {
   });
   const flush = () => { set.queue.flush(order); handles.forEach((handle, index) => { const value = incremental[index]; assert.ok(value); assertIncremental(handle, value.projector); }); };
   const send = (handle: SharedDocumentHandle, value: unknown) => assert.deepEqual(executeSharedOperations(handle, [operation(value)], { base: readSharedRevision(handle) }), { ok: true });
-  const joined = (id = "join", handle = set.a): SharedUndoRecord => {
-    const execution = executeSharedCommand(handle, [join(id)], { label: "join", selection: null, typing: null }, { base: readSharedRevision(handle) });
+  const joined = (id = "join", handle = set.a, from = "R2"): SharedUndoRecord => {
+    const execution = executeSharedCommand(handle, [join(id, "Writer", " ", from)], { label: "join", selection: null, typing: null }, { base: readSharedRevision(handle) });
     assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); flush(); return execution.record;
   };
   let count = 0;
@@ -45,7 +46,12 @@ function start(order: typeof ORDERS[number]) {
     assert.ok(done.ok); assert.equal(done.effective, effective); return done.inverse;
   };
   const check = (label: string, expected: (string | undefined)[]) => agree(label, order, handles, rows, expected);
-  return { set, handles, flush, send, joined, reverse, check, close: () => { incremental.forEach(value => value.projector.dispose()); set.close(); } };
+  const unchanged = (record: SharedUndoRecord, label: string, expected: (string | undefined)[]) => {
+    const before = [encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)];
+    const inverse = reverse(record, false);
+    assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], before); check(label, expected); return inverse;
+  };
+  return { set, handles, flush, send, joined, reverse, check, unchanged, close: () => { incremental.forEach(value => value.projector.dispose()); set.close(); } };
 }
 
 for (const order of ORDERS) test(`a join is recorded with its entry, undone by retiring it and redone as a fresh join: ${order}`, () => scenario(order, run => {
@@ -70,10 +76,49 @@ for (const order of ORDERS) test(`rule 34: undoing a join made after seeing ours
   run.reverse(later, true, run.set.b); run.check("earlier stays", ["ab cd"]);
 }));
 
-for (const order of ORDERS) test(`open: undoing ours while a later generation exists separates the beats, since the later join is bound to the joined row: ${order}`, () => scenario(order, run => {
-  const record = run.joined(); run.joined("after", run.set.b);
-  run.reverse(record, true); run.check("later generation does not hold", ["ab", "cd"]);
+for (const order of ORDERS) test(`rule 48: while a later join of the same beats by someone else is live our undo is used up, and their undo leaves ours: ${order}`,
+  () => scenario(order, run => {
+    const record = run.joined(), later = run.joined("after", run.set.b);
+    run.unchanged(record, "ours used up", ["ab cd"]);
+    run.reverse(later, true, run.set.b); run.check("ours remains", ["ab cd"]);
+  }));
+
+for (const order of ORDERS) test(`a join onto a row that is already joined is undone and redone; a redo after someone joined it again is used up: ${order}`, () => scenario(order, run => {
+  const first = run.joined(), second = run.joined("third", run.set.a, "R3"); run.check("joined", ["ab cd ef"]);
+  const undone = run.reverse(second, true); run.check("third separated", ["ab cd", "ef"]);
+  run.reverse(run.reverse(undone, true), true); run.check("redone and undone", ["ab cd", "ef"]);
+  run.reverse(first, true); run.check("second separated", ["ab", "cd", "ef"]);
+}, THREE));
+
+for (const order of ORDERS) test(`a redo of a join onto a joined row after someone joined the same beats again is used up: ${order}`, () => scenario(order, run => {
+  run.joined(); const undone = run.reverse(run.joined("third", run.set.a, "R3"), true);
+  run.send(run.set.b, { kind: "join", id: "again", by: "Other", from: "R3", into: "R1", glue: " " }); run.flush(); run.check("joined again", ["ab cd ef"]);
+  run.unchanged(undone, "used up", ["ab cd ef"]);
+}, THREE));
+
+for (const order of ORDERS) test(`a record names this writer's join although another writer used the same operation id: ${order}`, () => scenario(order, run => {
+  const theirs = run.joined("j", run.set.b); run.reverse(theirs, true, run.set.b);
+  const ours = run.joined("j"), [their, our] = [theirs.parts[0], ours.parts[0]];
+  assert.ok(their?.kind === "join" && our?.kind === "join"); assert.notEqual(our.join, their.join);
+  run.reverse(ours, true); run.check("ours undone", ["ab", "cd"]);
 }));
+
+for (const order of ORDERS) test(`used up: ours was retired with the same join made apart, and the beats were joined again with another separator: ${order}`, () => scenario(order, run => {
+  const execution = executeSharedCommand(run.set.a, [join("join")], { label: "join", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  const theirs = executeSharedCommand(run.set.b, [join("same", "Other")], { label: "join", selection: null, typing: null }, { base: readSharedRevision(run.set.b) });
+  run.flush(); assert.ok(execution.record && theirs.record);
+  run.reverse(theirs.record, true, run.set.b); run.check("both retired", ["ab", "cd"]);
+  run.send(run.set.b, { kind: "join", id: "again", by: "Other", from: "R2", into: "R1", glue: "" }); run.flush(); run.check("joined again", ["abcd"]);
+  run.unchanged(execution.record, "used up", ["abcd"]);
+}));
+
+for (const [removed, left] of [["R1", ["cd"]], ["R2", ["ab"]]] as const) for (const order of ORDERS)
+  test(`used up: a redo after ${removed} was removed: ${order}`, () => scenario(order, run => {
+    const undone = run.reverse(run.joined(), true);
+    run.send(run.set.b, { kind: "remove", id: "gone", by: "Other", removalKind: "beat", targets: [removed], boundaries: [removed], observed: [], components: [], gallery: [], at: 0 });
+    run.flush(); run.check("removed", [...left]);
+    run.unchanged(undone, "used up", [...left]);
+  }));
 
 for (const order of ORDERS) test(`after another writer changed the separator the undo separates, and the redo uses the separator it had: ${order}`, () => scenario(order, run => {
   const record = run.joined(), part = record.parts[0]; assert.ok(part?.kind === "join");
