@@ -28,7 +28,9 @@ const RULES: WriterScanRules = {
     "core/document/person-colors.ts#colorsWithMine",
     "core/production/broll.ts#applyBrollRecords",
     "core/production/broll.ts#planBrollAnchors",
+    "core/production/broll.ts#planBrollAnchorsInState",
     "core/production/broll.ts#planBrollRecords",
+    "core/production/broll.ts#planBrollRecordsInState",
     "core/production/index.ts#ProductionIndexOwner.recordsPlan",
     "core/production/owners.ts#applyOwnerSync",
     "core/production/owners.ts#planOwnerSync",
@@ -100,7 +102,7 @@ const WRITERS = {
   },
   "shot-from-line": {
     family: "records", shared: "operation",
-    reason: "A B-roll line with no shot gets one, seeded from its beat. Shared: record-create by the copy that typed or pasted the line, with the id of its key."
+    reason: "A B-roll line with no shot gets one, seeded from its beat. Shared: record-create by the copy that typed or pasted the line, with the id of its key, built by sharedBrollIntroducedByText for a key the edited cell did not hold (callers in package 14)."
   },
   "shot-name-from-line": {
     family: "records", shared: "derivation",
@@ -116,7 +118,7 @@ const WRITERS = {
   },
   "broll-key": {
     family: "records", shared: "operation",
-    reason: "An unkeyed B-roll marker is given an id by rewriting its text: a command of its own, with text operations. A repeated key is settled by the projection (assumed rules 14 and 15)."
+    reason: "An unkeyed B-roll marker is given an id by rewriting its text: a command of its own, with text operations. sharedBrollIntroducedByText keys the edited cell as the anchor plan does; its caller sends the keyed cell (package 14). A repeated key is settled by the projection (assumed rules 14 and 15)."
   },
   "registry-heal-on-draw": {
     family: "records", shared: "not applicable",
@@ -349,8 +351,11 @@ const ENGINES: readonly Site[] = [
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
   ["bootstrap/wiring/ports/production.ts#production", "ProductionIndexOwner.recordsPlan 1, ProductionIndexOwner.recordsPlan (provided) 1", "tag-from-text", "cue-retitle"],
   ["bootstrap/wiring/session-owner.ts#createSession", "ReconcilePort.anchors (provided) 1, ReconcilePort.records (provided) 1, syncCommentAnchors 1", "anchor-repair", ...FROM_TEXT],
+  ["core/collab/text-records.ts#sharedBrollIntroducedByText", "planBrollAnchorsInState 1, planBrollRecordsInState 1", "broll-key", "shot-from-line"],
   ["core/collab/text-records.ts#sharedPeopleIntroducedByText", "addPerson 1, planOwnerSync 1", "person-from-name"],
   ["core/migrate.ts#migrateRows", "applyBrollRecords 1, planBrollRecords 1, syncCommentAnchors 1", "file-entry"],
+  ["core/production/broll.ts#planBrollAnchors", "planBrollAnchorsInState 1", "broll-key"],
+  ["core/production/broll.ts#planBrollRecords", "planBrollRecordsInState 1", "shot-from-line", "shot-name-from-line"],
   ["core/production/owners.ts#applyOwnerSync", "addPerson 1", "person-from-name"],
   ["core/production/records.ts#addBrollProp", "addRegistryTag 1", "record-stated"],
   ["features/clipboard/beat-clip.ts#insertBeats", "syncCommentAnchors 1", "anchor-repair"],
