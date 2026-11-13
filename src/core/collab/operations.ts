@@ -184,7 +184,7 @@ export type SharedStatusRetire = SharedOperationAuthor & {
 } & Pick<SharedStatusEvent, "target" | "value">;
 export function sharedRecoveryKinds() {
   return ["removed-beat", "removed-heading", "crossing-tag", "deleted-tag", "gallery-overflow",
-    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats"] as const;
+    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats", "deleted-person"] as const;
 }
 export interface SharedRecoveryName { readonly kind: ReturnType<typeof sharedRecoveryKinds>[number]; readonly key: string }
 export interface SharedRecoveryDiscard extends SharedOperationAuthor {

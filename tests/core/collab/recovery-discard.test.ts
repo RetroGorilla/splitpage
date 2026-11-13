@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hideSharedDiscardedEntries, sharedRecoveryDiscardOperation, sharedRecoveryEntryName } from "../../../src/core/collab/recovery.ts";
+import { hideSharedDiscardedEntries, projectSharedDeletedPeople, readSharedWhoNames, sharedRecoveryDiscardOperation, sharedRecoveryEntryName,
+  sharedRecoveryPersonRestore } from "../../../src/core/collab/recovery.ts";
 import type { SharedRecoveryEntry } from "../../../src/core/collab/recovery.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 
@@ -14,13 +15,27 @@ const ENTRIES: readonly SharedRecoveryEntry[] = [
   { kind: "unprojectable-fragment", reason: "missing-beat", owner: "N", segment: "b:R3", field: "audioText", from: 2, to: 6, html: "lost", start: "2:1" },
   { kind: "comment-without-words", comment: "C9", rowId: "R2", field: "visualText" },
   { kind: "reply-without-comment", reply: '["C1","r1"]', commentId: "C1" },
+  { kind: "deleted-person", person: "P1", name: "Ada", by: "Bob", owners: [], mentions: ["R1"] },
   { kind: "scene-with-no-beats", heading: { id: "H2" }, beforeRowId: null }
 ];
 const named = (entries: readonly SharedRecoveryEntry[]) => entries.map(entry => { const name = sharedRecoveryEntryName(entry); return name.kind + " " + name.key; });
 
+test("assumed rule 54: a deleted person is listed only while an owner or an @Name refers to it, and restore is refused while a live person has its name", () => {
+  const deleted = [{ person: "P1", name: "Ada", by: "Bob" }, { person: "P2", name: "Bo", by: "Bob" }, { person: "P3", name: "Cy", by: "Bob" }];
+  const records = { people: [{ id: "P3", name: "Cy" }], tags: [{ id: "t2", owner: "P2" }, { id: "t1", owner: "P2" }], shots: [{ id: "S1", owner: "P2" }] };
+  const listed = projectSharedDeletedPeople(deleted, records, [{ rowId: "R2", names: readSharedWhoNames([{ value: { atom: "who", name: "ADA" }, marks: [] }]) }, { rowId: "R1", names: ["ada"] }]);
+  assert.deepEqual(listed, [{ kind: "deleted-person", person: "P1", name: "Ada", by: "Bob", owners: [], mentions: ["R2", "R1"] },
+    { kind: "deleted-person", person: "P2", name: "Bo", by: "Bob", owners: [{ collection: "shots", record: "S1" }, { collection: "tags", record: "t1" }, { collection: "tags", record: "t2" }], mentions: [] }]);
+  assert.deepEqual(projectSharedDeletedPeople(deleted, records, []).map(entry => entry.kind === "deleted-person" ? entry.person : ""), ["P2"]);
+  const [ada] = listed; assert.ok(ada);
+  assert.deepEqual(sharedRecoveryPersonRestore(ada, [], { id: "back", by: "Carol" }),
+    { kind: "record-create", id: "back", by: "Carol", target: { collection: "people", record: "P1" }, fields: { name: "Ada" } });
+  assert.equal(sharedRecoveryPersonRestore(ada, [{ id: "P9", name: " ADA " }], { id: "back", by: "Carol" }), null);
+});
+
 test("assumed rule 51: every entry kind is named by its kind and one stored key", () => {
   assert.deepEqual(named(ENTRIES), ["removed-beat R1", "removed-heading H1", 'crossing-tag ["t1","3:1"]', 'deleted-tag ["t2","3:5"]', "gallery-overflow g1",
-    'unprojectable-fragment ["b:R3","2:1"]', "comment-without-words C9", 'reply-without-comment ["C1","r1"]', "scene-with-no-beats H2"]);
+    'unprojectable-fragment ["b:R3","2:1"]', "comment-without-words C9", 'reply-without-comment ["C1","r1"]', "deleted-person P1", "scene-with-no-beats H2"]);
 });
 
 test("assumed rule 52: a discard names its entry and the removals it saw; a scene with no beats has none, and every discard reads back unchanged", () => {

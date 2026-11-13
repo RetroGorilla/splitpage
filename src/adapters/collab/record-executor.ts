@@ -10,6 +10,7 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { sharedResolutionEntryAccepted, sharedResolutionOperation, sharedResolutionWrites } from "./stamp.ts";
 import { prepareSharedCreatedAttachment, sharedPendingAttachmentKeys } from "./structure-content.ts";
 import { reserveSharedCommandIdentities } from "./structure-identity.ts";
+import { sharedPersonNameKey } from "../../core/collab/recovery.ts";
 
 function candidate(view: SharedPreparationView, writes: readonly SharedPreparedWrite[]): Pick<SharedPreparationView, "get" | "kind" | "keys"> {
   const edits = new Map<string, SharedPreparedWrite>();
@@ -75,6 +76,8 @@ function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationVie
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
   const created = prepareSharedCreatedAttachment(operation, view); if (created) return created;
   if (view.has(path)) return { ok: false, reason: "duplicate-record" };
+  if (collection === "people" && view.has(["deletedPeople", key]) && view.keys(["people"])
+    .some(other => sharedPersonNameKey(readPreparedSharedRecord("people", other, view)?.name) === sharedPersonNameKey(operation.fields.name))) return { ok: false, reason: "name-taken" };
   const fields: Record<string, unknown> = { ...operation.fields };
   if (collection !== "gallery" && collection !== "visuals" && collection !== "replies") {
     if (fields.id !== undefined && fields.id !== key) return { ok: false, reason: "mismatched-record-id" };
@@ -127,8 +130,11 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
 function prepareDelete(operation: SharedRecordDelete, view: SharedPreparationView): SharedPreparationResult {
   const { collection, record: key } = operation.target;
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
-  if (!readPreparedSharedRecord(collection, key, view)) return { ok: false, reason: "missing-or-invalid-record" };
-  return accepted(view, [{ path: [collection, key], kind: "delete" }]);
+  const record = readPreparedSharedRecord(collection, key, view);
+  if (!record) return { ok: false, reason: "missing-or-invalid-record" };
+  // why: assumed rule 54 on #1414: a deleted person keeps its name, so recovery can list and restore it.
+  const kept: SharedPreparedWrite[] = collection === "people" ? [{ path: ["deletedPeople", key], kind: "set", value: { name: record.name, by: operation.by } }] : [];
+  return accepted(view, [{ path: [collection, key], kind: "delete" }, ...kept]);
 }
 
 export const recordHandlers: SharedOperationHandlers = Object.freeze({ "record-create": prepareCreate, "record-set": prepareSet, "record-delete": prepareDelete });

@@ -149,5 +149,29 @@
     "find": "key: JSON.stringify([entry.segment, entry.start])",
     "replace": "key: JSON.stringify([entry.segment, entry.from])",
     "tests": ["tests/adapters/collab/discard.test.ts"]
+  }, {
+    "label": "deleted person loses its name",
+    "file": "src/adapters/collab/record-executor.ts",
+    "find": "const kept: SharedPreparedWrite[] = collection === \"people\" ?",
+    "replace": "const kept: SharedPreparedWrite[] = collection === \"nobody\" ?",
+    "tests": ["tests/adapters/collab/people-recovery.test.ts"]
+  }, {
+    "label": "unreferenced deleted person listed",
+    "file": "src/core/collab/recovery.ts",
+    "find": "return owners.length || mentions.length ?",
+    "replace": "return true ?",
+    "tests": ["tests/core/collab/recovery-discard.test.ts"]
+  }, {
+    "label": "restore ignores a live namesake",
+    "file": "src/adapters/collab/record-executor.ts",
+    "find": "if (collection === \"people\" && view.has([\"deletedPeople\", key])",
+    "replace": "if (false && view.has([\"deletedPeople\", key])",
+    "tests": ["tests/adapters/collab/people-recovery.test.ts"]
+  }, {
+    "label": "mention matched with case",
+    "file": "src/core/collab/recovery.ts",
+    "find": "names.add(sharedPersonNameKey(unit.value.name))",
+    "replace": "names.add(String(unit.value.name))",
+    "tests": ["tests/core/collab/recovery-discard.test.ts"]
   }]
 }
