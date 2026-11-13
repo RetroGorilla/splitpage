@@ -78,6 +78,13 @@ export type SharedUndoPart =
     readonly formats?: readonly FormatMark[];
   }
   | {
+    readonly kind: "join-glue";
+    readonly join: SharedContentRef;
+    readonly from: SharedContentRef;
+    readonly prior: "" | " ";
+    readonly written: "" | " ";
+  }
+  | {
     readonly kind: "remove";
     readonly removal: SharedContentRef;
     readonly beats: readonly SharedContentRef[];
