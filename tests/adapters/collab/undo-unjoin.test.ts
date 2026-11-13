@@ -111,3 +111,13 @@ test("an unjoin of a join that is already retired records nothing", () => scenar
   assert.equal(run.unjoin("second"), null); run.check("unjoined", ["ab", "cd", "ef"]);
   assert.deepEqual(["join", "join-glue", "join-retire"].map(supportsSharedUndoPart), [true, true, false]);
 }));
+
+for (const order of ORDERS) test(`used up: undo of an unjoin after someone joined the beats again while the target beat is itself joined into the one before: ${order}`,
+  () => scenario(order, run => {
+    const joined = run.command({ kind: "join", id: "third", by: "Writer", from: "R3", into: "R2", glue: " " }, "join"), part = joined?.parts[0];
+    assert.ok(part?.kind === "join"); run.check("one row", ["ab cd ef"]);
+    const record = run.command({ kind: "join-retire", id: "apart", by: "Writer", joins: [part.join] }, "unjoin"); assert.ok(record);
+    run.check("third apart", ["ab cd", "ef"]);
+    run.send(run.set.b, { kind: "join", id: "again", by: "Other", from: "R3", into: "R2", glue: " " }); run.flush(); run.check("joined again", ["ab cd ef"]);
+    run.unchanged(record, "used up", ["ab cd ef"]);
+  }));
