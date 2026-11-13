@@ -1,0 +1,7 @@
+{"mutants":[
+  {"label":"duplicated identity (text restore, model executor, generator)","file":"tests/collab/undo/model-world.ts","find":"if (!original || view.restorations.has(unit.identity) || view.visible(original.beat).some(id => view.root(id) === root)) continue;","replace":"if (!original) continue;","tests":["tests/collab/undo/generator.test.ts"]},
+  {"label":"duplicated identity (restored beside a visible copy, model executor)","file":"tests/collab/undo/model-world.ts","find":" || view.visible(original.beat).some(id => view.root(id) === root)) continue;","replace":") continue;","tests":["tests/collab/undo/generator.test.ts"]},
+  {"label":"undo leaves the identical mark that arrives later (model executor, generator)","file":"tests/collab/undo/model-state.ts","find":"|| unmark.identical && ","replace":"|| false && ","tests":["tests/collab/undo/generator.test.ts"]},
+  {"label":"scalar undo overwrites a later value (model executor)","file":"tests/collab/undo/model-world.ts","find":"if (!sameValue(now, part.written)) return { effective: false, inverse };","replace":"","tests":["tests/collab/undo/generator.test.ts"]},
+  {"label":"undo of a field change overwrites a later value (generator)","file":"src/adapters/collab/undo-executor.ts","find":"effective = now !== null && same(recordField(now, part.field), part.written);","replace":"effective = now !== null;","tests":["tests/collab/undo/generator.test.ts"]}
+]}

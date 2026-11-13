@@ -16,6 +16,7 @@ import { sharedPreparedTextInsert } from "./prepare-value.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedStatusRetire } from "./status.ts";
+import { prepareSharedSplitRestore, prepareSharedSplitRetire } from "./undo-split.ts";
 import { SHARED_MARK_PROVENANCE_MARKER, readSharedTextRestoreOperation, sharedMarkCopyOperation, sharedMarkRetractOperation, sharedTextRestoreOperation } from "./mark-provenance.ts";
 
 function checkAuthor(operation: { readonly id: string; readonly by: string }): void {
@@ -106,5 +107,6 @@ export function prepareSharedMarkRetract(operation: SharedMarkRetract, view: Sha
 }
 
 export function registerSharedUndoOperationHandlers(handle: SharedDocumentHandle): void {
-  registerSharedOperationHandlers(handle, { "text-restore": prepareSharedTextRestore, "mark-retract": prepareSharedMarkRetract, "status-retire": prepareSharedStatusRetire });
+  registerSharedOperationHandlers(handle, { "text-restore": prepareSharedTextRestore, "mark-retract": prepareSharedMarkRetract, "status-retire": prepareSharedStatusRetire,
+    "split-retire": prepareSharedSplitRetire, "split-restore": prepareSharedSplitRestore });
 }

@@ -569,6 +569,70 @@ alter behavior (an *equivalent* mutant) is a valid reason. The example file
 has two: `href-blocks-data` and `href-allows-vbscript` remove a check that the
 final scheme test makes redundant.
 
+### Collaboration mutants in CI
+
+Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs in
+PR CI, in the job "Collaboration mutants", as four shards in parallel (the step
+turns on bash's `extglob` first):
+
+```
+node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/4 --concurrency 4 --baseline-timeout 900 --fail-on-survivor
+```
+
+A survivor, an inconclusive mutant or a mutant that cannot be applied fails the
+shard, and the gate requires every shard. Each shard first runs its own
+baseline: every test file its mutants name, which with every fourth mutant is
+nearly all of them. The baseline has its own time budget (`--baseline-timeout`),
+and when it fails the shard's log lists the failing tests. On 2026-11-13 the
+four baselines took 272 to 407 s on GitHub's 4-core runners; 900 s is a little
+over twice the slowest.
+
+`tests/collab/undo-slow-mutants.json` runs in the nightly workflow instead, job
+`mutants`, at `--concurrency 2` with a 600 s timeout per mutant. Its entries are
+the undo mutants caught only by the seeded generator histories, which run long
+before the failing seed:
+
+| Mutant | Local, Windows workstation | PR CI shard, 4-core runner |
+| --- | --- | --- |
+| duplicated identity (text restore, model executor, generator) | 169 s | 217 s |
+| duplicated identity (restored beside a visible copy, model executor) | 169 s | over 300 s (timed out) |
+| undo leaves the identical mark that arrives later (model executor, generator) | 171 s | 216 s |
+| scalar undo overwrites a later value (model executor) | 170 s | over 300 s (timed out) |
+| undo of a field change overwrites a later value (generator) | 164 s | over 300 s (timed out) |
+
+In PR CI they finished or timed out depending on how many landed in the same
+shard, and a timeout makes a mutant inconclusive, which fails the shard. The
+next slowest, "a restored character is written behind the whole deleted run
+(generator)", took 125 s locally and 260 s in CI beside three of the five, and
+stays in PR CI; every other undo mutant took under 100 s locally. The
+sources these five edit are also edited by faster mutants in
+`undo-mutants.json`, so a change to them still starts the PR job.
+`tools/test-ci-shards.mjs` expands both workflows' file arguments in bash and
+fails unless every mutants file is run by exactly one of them; a new file is
+run by PR CI unless it is named `undo-slow-mutants.json`.
+
+A failing nightly mutants run shows as a failed scheduled run of `nightly.yml`
+in the repository's Actions tab, and GitHub notifies the account that last
+changed the workflow's schedule, as its notification settings say. Nothing else
+reports it: no issue is opened and no pull request is blocked.
+
+The job runs when the change touches a file that a mutant edits, a test file
+that a mutant's `tests` filter selects, anything under `tests/collab/` other
+than Markdown, the runner (`tools/mutants.mjs` and the modules it imports) or
+`ci.yml`, or when the diff is unknown. `needsCollabMutants` in
+`tools/ci-changes.mjs` reads these from the mutants files themselves, so a new
+entry brings its paths with it; a mutant with no filter runs every unit test, so
+it makes every change start the job. `tools/test-ci-changes.mjs` fails if any
+path a mutants file names would not start the job. A test helper outside
+`tests/collab/` that a named test imports is not a trigger: the unit test shards
+still run it, and the next change that starts the job runs the mutants against
+it.
+
+When you add a mutants file under `tests/collab/`, CI picks it up by name; list
+its mutants in `tests/collab/mutants.md` as before. A survivor needs a test, or
+the entry is removed with the reason it cannot be caught (unreachable or
+equivalent), recorded in the pull request.
+
 ## TypeScript
 
 Node runs `.ts` files directly by stripping types; it does not read

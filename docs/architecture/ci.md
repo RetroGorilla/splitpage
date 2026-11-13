@@ -50,7 +50,10 @@ cache layout. No new schedule or runner routing is introduced.
 
 ## `.github/workflows/nightly.yml`
 
-Every browser suite, four lanes, on `CI_RUNNER`, once a day and on demand.
+Every browser suite, four lanes, on `CI_RUNNER`, once a day and on demand. A
+second job, `mutants`, runs `tests/collab/undo-slow-mutants.json`, the mutants
+too slow for PR CI; [testing.md](testing.md#collaboration-mutants-in-ci) says
+which and why. The two jobs pass or fail separately.
 
 | Where | Why |
 | --- | --- |
