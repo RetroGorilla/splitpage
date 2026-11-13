@@ -138,7 +138,9 @@ split id and the minted shot, the latter as a declared limit; the other entries 
 as found in the review of this owner and have no test here.
 
 Prerequisite for package 14: an entry that is safe for shared state. It creates no
-record from text and rewrites no id. This owner is the same whichever entry it is
+record from text and rewrites no id, and it keeps each scene name exactly as
+projected, edge spaces included; `migrateRows` trims names, so the tests' entry
+puts the projected names back ([Scene headings in the Writer](stage-2-buffer.md#scene-headings-in-the-writer)). This owner is the same whichever entry it is
 given; it is not built here.
 
 ## Commands
