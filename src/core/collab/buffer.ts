@@ -1,3 +1,6 @@
+import { projection } from "../text/runs.ts";
+import type { Run } from "../text/runs.ts";
+
 export function sharedBufferQueueBytes(): number {
   const SHARED_BUFFER_QUEUE_BYTES = 64 * 1024;
   return SHARED_BUFFER_QUEUE_BYTES;
@@ -16,6 +19,45 @@ export function bufferedNativeReplacement(before: string, after: string): Buffer
   while (prefix < leftEnd && prefix < rightEnd && left[prefix] === right[prefix]) { from += (left[prefix] as string).length; prefix++; }
   while (leftEnd > prefix && rightEnd > prefix && left[leftEnd - 1] === right[rightEnd - 1]) { leftEnd--; rightEnd--; }
   return { from, to: from + left.slice(prefix, leftEnd).join("").length, insert: right.slice(prefix, rightEnd).join("") };
+}
+
+function spaceForm(text: string): string {
+  return text.indexOf(" ") === -1 ? text : text.replaceAll(" ", " ");
+}
+
+export function sameUpToSpaceForm(a: string, b: string): boolean {
+  return a === b || a.length === b.length && spaceForm(a) === spaceForm(b);
+}
+
+export function foldedNativeSplice(before: string, after: string, from: number, to: number, data: string | null): BufferedSplice | null {
+  const inserted = after.length - before.length + to - from;
+  if (inserted < 0 || !sameUpToSpaceForm(after.slice(0, from), before.slice(0, from))
+    || !sameUpToSpaceForm(after.slice(from + inserted), before.slice(to))) return null;
+  const shown = after.slice(from, from + inserted);
+  return { from, to, insert: data !== null && sameUpToSpaceForm(data, shown) ? data : shown };
+}
+
+export function foldedNativeReplacement(before: string, after: string): BufferedSplice | null {
+  const found = bufferedNativeReplacement(spaceForm(before), spaceForm(after));
+  return found && { ...found, insert: after.slice(found.from, found.from + found.insert.length) };
+}
+
+export function alignSpaceForm(runs: readonly Run[], text: string): readonly Run[] | null {
+  let at = 0, changed = false;
+  const aligned = runs.map((run): Run => {
+    if (run.atom) { at += 1; return run; }
+    let next = "";
+    for (let index = 0; index < run.text.length; index++) {
+      const shown = run.text.charAt(index), wanted = text.charAt(at + index);
+      next += shown !== wanted && sameUpToSpaceForm(shown, wanted) ? wanted : shown;
+    }
+    at += run.text.length;
+    if (next === run.text) return run;
+    changed = true;
+    return { ...run, text: next };
+  });
+  if (projection(aligned) !== text) return null;
+  return changed ? aligned : runs;
 }
 
 export interface BufferedCommit {

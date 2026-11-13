@@ -144,5 +144,28 @@
     "file": "src/application/editing/buffered-field.ts",
     "find": "return checked.ok && settle();",
     "replace": "surface.composition(false); return checked.ok && settle();"
+  }, {
+    "label": "the Writer folds the space form",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "    ...surface,",
+    "replace": "    ...surface, foldSpaceForm: true,"
+  }, {
+    "label": "space form beside the native target compared exactly",
+    "file": "src/core/collab/buffer.ts",
+    "find": "!sameUpToSpaceForm(after.slice(0, from), before.slice(0, from))",
+    "replace": "after.slice(0, from) !== before.slice(0, from)",
+    "tests": ["tests/application/editing/buffered-field.test.ts"]
+  }, {
+    "label": "text typed over a selected space keeps the stored space form",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept",
+    "replace": "kept",
+    "tests": ["tests/application/editing/buffered-field.test.ts"]
+  }, {
+    "label": "closed edit compared with the shown field exactly",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "!active.edit.isOpen() && same(next, active.edit.text())",
+    "replace": "!active.edit.isOpen() && next === active.edit.text()",
+    "tests": ["tests/application/editing/buffered-field.test.ts"]
   }]
 }

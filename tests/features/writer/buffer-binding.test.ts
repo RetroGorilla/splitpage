@@ -271,6 +271,18 @@ test("a DOM difference outside the native target is refused and held without a w
   } finally { page.close(); }
 });
 
+test("rule 55: the Writer keeps exact comparison, so a space shown as U+00A0 beside the native target is refused as evidence", () => {
+  const page = bufferedWriter("ab cd");
+  try {
+    page.native(4, 5, "", () => {
+      const text = page.beat().firstChild; assert.ok(text instanceof window.Text);
+      text.replaceData(2, 1, " ");
+    }, "deleteContentBackward");
+    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "buffer-native-evidence" }]);
+    assert.deepEqual([page.text(), page.beat().textContent, page.a.executed.length], ["ab cd", "ab c", 0]);
+  } finally { page.close(); }
+});
+
 test("paint during a dirty composition keeps the typed DOM and its original identities until commit", () => {
   const page = bufferedWriter();
   try {
