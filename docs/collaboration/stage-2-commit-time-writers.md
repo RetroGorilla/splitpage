@@ -173,24 +173,28 @@ commit carries one stamp, and only when it changes the text.
 `sharedBeatStamp` in `adapters/collab/stamp.ts` builds it and
 `createSharedBufferedText` appends it. A copy that receives the list writes nothing.
 
-Each stamp is stored under a key of its own in the beat (`stamp:` and the
-operation's id), and the copy that writes it removes every stamp it has seen. The
-rule that decides what the beat shows:
+Each copy stores its stamp under a key of its own in the beat (`stamp:` and the
+copy's writer id, so a later stamp from the same copy replaces its earlier one and
+two copies whose commands share an author id still write two keys), and the copy
+that writes it removes every stamp it has seen. The rule that decides what the beat
+shows:
 
 - A stamp replaces every stamp its copy had seen when it was written, even if its
   clock is behind.
 - Stamps written without seeing each other are all kept. The beat shows the one
   with the later time; at the same time, the later name; both compared as text.
+  A stored stamp under a `stamp:` key counts only if it has the form a stamp
+  operation may write (a text time, a text or empty name).
 
 The rule reads only the stamps themselves, so delivery order and the copies' client
-ids do not change the result. A plain scalar set would leave the native register
+ids do not change which one is shown; the client id only names each copy's key. A plain scalar set would leave the native register
 winner, which depends on client ids; the stamp is the one scalar read this way.
 A beat holds at most one stamp per copy that wrote without seeing the others. The
 stamp a beat was created or hydrated with stays under `stamp` until the first stamp
 step removes it, so a beat no step has stamped is read with one lookup; after that
 the reader lists the beat's keys.
 `tests/collab/buffer-stamps.test.ts` holds the rule over four delivery orders,
-with the names swapped between the copies.
+with the names swapped between the copies and with one author id on both copies.
 
 Other commands send no shared list yet; each one that does adds its stamp the same
 way.

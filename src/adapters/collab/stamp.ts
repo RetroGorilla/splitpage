@@ -1,6 +1,7 @@
 import type { SharedContentRef, SharedOperation, SharedScalarSet } from "../../core/collab/operations.ts";
 import type { StampPorts } from "../../application/session/ports.ts";
 import { sharedJson } from "./snapshot.ts";
+import { scalarFieldAllowed } from "./scalar-fields.ts";
 
 const SHARED_STAMP_FIELD = "stamp";
 
@@ -23,31 +24,32 @@ function retained(value: unknown): value is Record<string, unknown> {
   return Object.keys(value).every(key => key === "at" || key === "by") && (by === null || typeof by === "string");
 }
 
-function text(value: unknown): string { return typeof value === "string" ? value : JSON.stringify(value) ?? ""; }
-
-function wins(stamp: Record<string, unknown>, other: Record<string, unknown>): boolean {
-  if (text(stamp.at) !== text(other.at)) return text(stamp.at) > text(other.at);
-  if (text(stamp.by ?? "") !== text(other.by ?? "")) return text(stamp.by ?? "") > text(other.by ?? "");
+function wins(stamp: { readonly at: string; readonly by: string | null }, other: { readonly at: string; readonly by: string | null }): boolean {
+  if (stamp.at !== other.at) return stamp.at > other.at;
+  if ((stamp.by ?? "") !== (other.by ?? "")) return (stamp.by ?? "") > (other.by ?? "");
   return JSON.stringify(stamp) > JSON.stringify(other);
 }
 
-// why: stamps written without seeing each other are all kept, so the one shown is chosen by its own content
-// rather than by the Yjs client ids: docs/collaboration/stage-2-commit-time-writers.md#stamps
+// why: each copy keeps its stamp under its own key, so stamps written without seeing each other are all kept
+// and the one shown is chosen by content: docs/collaboration/stage-2-commit-time-writers.md#stamps
 export function readSharedStamp(beat: { keys: () => Iterable<string>; get: (key: string) => unknown }): Record<string, unknown> | undefined {
   const base = sharedJson(beat.get(SHARED_STAMP_FIELD));
   // why: a stamp step removes the stamps it saw, so a stamp stored with the beat means no step has written since.
   if (base !== undefined) return retained(base) ? base : undefined;
-  let shown: Record<string, unknown> | undefined;
+  let shown: { readonly at: string; readonly by: string | null } | undefined;
   for (const key of stampKeys(beat.keys())) {
     const value = sharedJson(beat.get(key));
-    if (retained(value) && (!shown || wins(value, shown))) shown = value;
+    if (scalarFieldAllowed("beat", SHARED_STAMP_FIELD, value, false)) {
+      const stamp = value as { readonly at: string; readonly by: string | null };
+      if (!shown || wins(stamp, shown)) shown = stamp;
+    }
   }
   return shown;
 }
 
-export function sharedStampWrites(keys: Iterable<string>, get: (key: string) => unknown, operation: string,
+export function sharedStampWrites(keys: Iterable<string>, get: (key: string) => unknown, writer: string,
   value: unknown): readonly { readonly key: string; readonly kind: "delete" | "set"; readonly value?: unknown }[] {
-  const seen = stampKeys(keys), only = seen.length === 1 ? seen[0] : undefined;
-  if (only !== undefined && JSON.stringify(get(only)) === JSON.stringify(value)) return [];
-  return [...seen.map(key => ({ key, kind: "delete" as const })), { key: SHARED_STAMP_FIELD + ":" + operation, kind: "set" as const, value }];
+  const own = SHARED_STAMP_FIELD + ":" + writer, seen = stampKeys(keys);
+  if (seen.length === 1 && seen[0] === own && JSON.stringify(get(own)) === JSON.stringify(value)) return [];
+  return [...seen.filter(key => key !== own).map(key => ({ key, kind: "delete" as const })), { key: own, kind: "set" as const, value }];
 }

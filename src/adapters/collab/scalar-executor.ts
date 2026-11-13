@@ -33,10 +33,10 @@ function prepareScalar(operation: SharedScalarSet, view: SharedPreparationView):
   if (!scalarFieldAllowed(target.scope, operation.field, value, operation.clear === true)) return { ok: false, reason: "unsupported-scalar-field" };
   if (target.scope === "heading" && operation.field === "firstSceneId" && (typeof value !== "string" || view.kind(["beats", value]) !== "map")) return { ok: false, reason: "missing-target" };
   const fieldPath = [...path, operation.field];
-  const unchanged = operation.clear ? view.kind(fieldPath) === "missing" : JSON.stringify(view.get(fieldPath)) === JSON.stringify(value);
+  const unchanged = (): boolean => operation.clear ? view.kind(fieldPath) === "missing" : JSON.stringify(view.get(fieldPath)) === JSON.stringify(value);
   const writes: SharedPreparedWrite[] = sharedStampOperation(operation)
-    ? sharedStampWrites(view.keys(path), key => view.get([...path, key]), operation.id, value).map(({ key, ...write }) => ({ ...write, path: [...path, key] }))
-    : unchanged ? [] : [{ path: fieldPath, kind: operation.clear ? "delete" : "set", value }];
+    ? sharedStampWrites(view.keys(path), key => view.get([...path, key]), view.writer, value).map(({ key, ...write }) => ({ ...write, path: [...path, key] }))
+    : unchanged() ? [] : [{ path: fieldPath, kind: operation.clear ? "delete" : "set", value }];
   const description = freezeSharedPreparedValue(writes);
   return { ok: true, writes: description, apply: handle => applySharedMapWrites(handle, description) };
 }
