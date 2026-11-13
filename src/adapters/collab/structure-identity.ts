@@ -2,6 +2,8 @@ import type { SharedContentRef } from "../../core/collab/operations.ts";
 import type { SharedPreparationView } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
+import { sharedStructureKey } from "../../core/collab/structure-key.ts";
+import type { SharedStructureRole } from "../../core/collab/structure-key.ts";
 
 export interface SharedStructureIdentityReservations { readonly has: (identity: string) => boolean }
 
@@ -15,11 +17,11 @@ export function requireSharedStructureOperationId(operation: string): void {
   if (!operation || cleanId(operation) !== operation || !isStableSharedIdentity(operation)) throw new SharedStructurePreparationError("invalid-structure-operation-id");
 }
 
-export function sharedStructureIdentity(writer: string, operation: string, role: "beat" | "segment" | "visual" | "gallery" | "removal" | "restore" | "join" | "heading", slot = 0): SharedContentRef {
+export function sharedStructureIdentity(writer: string, operation: string, role: SharedStructureRole, slot = 0): SharedContentRef {
   requireSharedStructureOperationId(operation);
-  if (!/^(0|[1-9][0-9]*)$/.test(writer) || !Number.isSafeInteger(slot) || slot < 0) throw new SharedStructurePreparationError("unstable-identity");
-  const encoded = operation.split("").map(unit => unit.charCodeAt(0).toString(16).padStart(4, "0")).join("");
-  return ("structure_" + writer + "_" + encoded + "_" + role + "_" + slot) as SharedContentRef;
+  const key = sharedStructureKey(writer, operation, role, slot);
+  if (key === null) throw new SharedStructurePreparationError("unstable-identity");
+  return key as SharedContentRef;
 }
 
 export function reserveSharedStructureIdentity(view: SharedPreparationView, identity: SharedContentRef, reserved: SharedStructureIdentityReservations): void {

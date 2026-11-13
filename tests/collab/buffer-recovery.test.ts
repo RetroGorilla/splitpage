@@ -15,23 +15,26 @@ import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/pro
 import { flowBaseReference } from "../../src/core/collab/base-reference.ts";
 import type { SharedDocumentHandle } from "../../src/adapters/collab/types.ts";
 import type { Run } from "../../src/core/text/runs.ts";
+import type { SharedTextAddress } from "../../src/core/collab/operations.ts";
 import { assertReplicasAgree } from "./agreement.ts";
 
-const BEAT = "structure_1_007200310037_beat_0", VISUAL = "structure_1_007200310037_visual_0";
+const BEAT = "structure_1_007200310037_beat_0", VISUAL = "structure_1_007200310037_visual_0", SPLIT = "structure_1_006300750074_beat_0";
 const typed: readonly Run[] = [{ text: "aZd", marks: {} }];
 
-function editing(h: Stage1ExecutorHarness, options: { handlers?: boolean; author?: (serial: number) => string; hooks?: SharedHarnessHooks } = {}) {
+function editing(h: Stage1ExecutorHarness, options: { handlers?: boolean; author?: (serial: number) => string; hooks?: SharedHarnessHooks;
+  before?: () => { readonly row: string; readonly target: SharedTextAddress } } = {}) {
   for (let revision = readSharedRevision(h.a); revision < 7; revision++) {
     transactSharedDocument(h.a, "local-command", () => collabState(h.a).roots.meta.set("seed" + revision, true));
   }
   h.queue.flush("D1");
   if (options.handlers !== false) { registerSplits(h.a); registerSharedRemovalHandlers(h.a); }
+  const opened = options.before?.() ?? { row: "R1", target: h.target("R1") };
   const session = sharedHarness(adapterReplica(h.a), options.hooks);
   let serial = 0;
-  const port = createSharedBufferedText(h.a, session.session, { target: id => h.target(id),
+  const port = createSharedBufferedText(h.a, session.session, { target: id => id === opened.row ? opened.target : h.target(id),
     author: () => { const next = ++serial; return { id: options.author?.(next) ?? "r" + (15 + next), by: "Alice" }; }, readers: bufferReaders });
-  const painted = readSharedPaintedText(h.a, h.target("R1")); assert.ok(painted);
-  const edit = port.open("R1", painted); assert.ok(edit);
+  const painted = readSharedPaintedText(h.a, opened.target); assert.ok(painted);
+  const edit = port.open(opened.row, painted); assert.ok(edit);
   return { ...session, edit, port, painted };
 }
 
@@ -176,6 +179,25 @@ for (const order of ["D1", "rev", "dup", "late-C"] as const) {
       assert.equal(a.edit.commit(typed).kind, "applied");
       assert.equal(a.edit.recover(typed), null);
       agree(h, order, { rows: [{ id: "R2", text: "ef" }], recovery: [{ id: "R1", text: "aZd", members: ["R1"] }] });
+    } finally { a.session.dispose(); h.destroy(); }
+  });
+
+  test(`T01 in a split-off beat: typing committed before a held removal of its source joins the split-off beat's recovery, ${order}`, () => {
+    const h = new Stage1ExecutorHarness([{ id: "R1", text: "abcd" }, { id: "R2", text: "ef" }]);
+    const a = editing(h, { before: () => {
+      assert.deepEqual(executeSharedOperations(h.a, [operation({ kind: "split", id: "cut", by: "Alice", target: h.target("R1"),
+        at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" }, observed: [], boundary: "Rb", beat: "Rb", fields: {} })], { base: readSharedRevision(h.a) }), { ok: true });
+      return { row: SPLIT, target: { ...h.target("R1"), owner: SPLIT as SharedTextAddress["owner"] } };
+    } });
+    try {
+      registerSharedRemovalHandlers(h.b);
+      a.edit.replace(1, 1, "Z");
+      assert.deepEqual(executeSharedOperations(h.b, [operation({ kind: "remove", id: "gone", by: "Bob", removalKind: "beat", targets: ["R1"],
+        observed: [flowBaseReference("R1", "audioText", 0, 4)], boundaries: ["R1"], components: [], gallery: [], at: 0 })], { base: readSharedRevision(h.b) }), { ok: true });
+      h.queue.deliverFrom("B", order);
+      assert.equal(readSharedRevision(h.a), 8);
+      assert.equal(a.edit.commit([{ text: "cZd", marks: {} }]).kind, "applied");
+      agree(h, order, { rows: [{ id: "R2", text: "ef" }], recovery: [{ id: "R1", text: "ab", members: ["R1"] }, { id: SPLIT, text: "cZd", members: [SPLIT] }] });
     } finally { a.session.dispose(); h.destroy(); }
   });
 }

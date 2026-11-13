@@ -29,6 +29,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "collab/read-operation.ts": await import("../../src/core/collab/read-operation.ts"),
   "collab/recovery.ts": await import("../../src/core/collab/recovery.ts"),
   "collab/refusals.ts": await import("../../src/core/collab/refusals.ts"),
+  "collab/structure-key.ts": await import("../../src/core/collab/structure-key.ts"),
   "collab/undo-record.ts": await import("../../src/core/collab/undo-record.ts"),
   "document/broll.ts": await import("../../src/core/document/broll.ts"),
   "document/clone.ts": await import("../../src/core/document/clone.ts"),
