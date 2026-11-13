@@ -12,7 +12,7 @@ import { projectSharedTextResult, projectSharedCommentAnchors, readSharedComment
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { SharedProjectionCache } from "./projection-cache.ts";
 import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
-import { projectSharedCoveredBeats, projectSharedLostComments, projectSharedRecoveryRemoval } from "../../core/collab/recovery.ts";
+import { hideSharedDiscardedEntries, projectSharedCoveredBeats, projectSharedLostComments, projectSharedRecoveryRemoval, sharedRecoveryIdentityKey } from "../../core/collab/recovery.ts";
 import type { SharedCoverageBlock, SharedRecoveryEntry, SharedRecoveryRemovalSource } from "../../core/collab/recovery.ts";
 import { readSharedActiveRemovalSources, readSharedRemovalBufferSources, readSharedRemovalSources } from "./removal-record.ts";
 import { collabState } from "./state.ts";
@@ -77,12 +77,16 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   function cell(value: readonly SharedProjectionUnit[], rowId: string, field: "audioText" | "visualText", key: string): string {
     const units = value;
     const result = cache.read(["cell", key], [units, tags], () => projectSharedTextResult(units, tags), "cell");
-    recovery.push(...result.rejected.map(entry => ({ ...entry, rowId, field })));
+    recovery.push(...result.rejected.map(entry => {
+      const first = units[entry.from]?.identity;
+      return { ...entry, rowId, field, start: first ? sharedRecoveryIdentityKey(first) : null };
+    }));
     return result.html;
   }
   for (const fragment of fragments) if (fragment.reason) recovery.push({ kind: "unprojectable-fragment", reason: fragment.reason,
     owner: fragment.id, segment: fragment.segment, field: fragment.kind === "h" ? "heading" : "audioText", from: fragment.from, to: fragment.to,
-    html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", JSON.stringify([fragment.segment, fragment.from, fragment.to])) });
+    html: cell(fragment.units, fragment.id ?? fragment.segment, "audioText", JSON.stringify([fragment.segment, fragment.from, fragment.to])),
+    start: fragment.units[0]?.identity ? sharedRecoveryIdentityKey(fragment.units[0].identity) : null });
   const sourceRows = out.rows as Record<string, unknown>[], byId = new Map(sourceRows.map(row => [String(row.id), row]));
   const order = sourceRows.map(row => String(row.id)), beatBlocks = blocks.filter(block => block.kind === "b"), structures = order.map(id => source.structure(id));
   const covered = coveredSharedBeats(source, beatBlocks, structures);
@@ -160,7 +164,7 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   Object.assign(out, { rows }); if (sections.length) out.sections = sections; else delete out.sections;
   const document = cache.canonical(out) as DocumentShape;
   const changes = compareSharedProjections(previous, document, (kind, key) => cache.counted(kind === "row" ? "compare-row" : "compare-field", key));
-  const result = { document, recovery, changes };
+  const result = { document, recovery: hideSharedDiscardedEntries(recovery, source.discards()), changes };
   cache.end();
   return result;
 }

@@ -35,7 +35,7 @@ import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedRemovalUndo, readSharedLiveBeats, recordSharedRemoval } from "./undo-removal.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -266,6 +266,16 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       const plan = planSharedRemovalUndo(handle, part, author, raw => { const operation = operationOf(raw); operations.push(operation); return operation; });
       return { inverse: () => ({ effective: plan.effective, part: plan.inverse() }) };
     }
+    case "discard": {
+      const { discards, retiredDiscards } = collabState(handle).roots, effective = discards.has(part.discard) && !retiredDiscards.has(part.discard);
+      if (effective) operations.push(operationOf({ kind: "discard-retire", ...author(), discard: part.discard }));
+      return { inverse: () => ({ effective, part: { ...part, kind: "discard-retired" } }) };
+    }
+    case "discard-retired": {
+      const command = author();
+      operations.push(operationOf({ kind: "discard", ...command, entry: part.entry, removals: part.removals }));
+      return { inverse: () => ({ effective: true, part: { ...part, kind: "discard", discard: eventKey(handle, command.id) } }) };
+    }
     default: throw new SharedUndoRefusal("undo-unsupported:" + sharedUndoPartName(part));
   }
 }
@@ -435,7 +445,9 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join") {
       parts.push(recordSharedJoin(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
-    } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire") {
+    } else if (operation.kind === "discard") {
+      parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
+    } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }

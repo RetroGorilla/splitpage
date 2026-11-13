@@ -74,7 +74,7 @@ application code issues it yet: there is no recovery panel.
 ### `crossing-tag` and `deleted-tag`
 
 - Produced: `projectSharedTagExtents` in `core/collab/projection/tag-extents.ts`, through every cell `assembleSharedDocument` paints: visible rows, removed groups and unprojectable fragments. `crossing-tag` is the later of two tags that overlap without nesting (assumed rule 4); `deleted-tag` is a tag whose registry entry is gone. Either is shown untagged there.
-- Carries: `occurrence` (the stored mark id), `tag` (the registry id), `from` and `to` (offsets in the cell's units), `words`, `rowId` (for a fragment its owner, or its segment when it has none), `field`.
+- Carries: `occurrence` (the stored mark id), `tag` (the registry id), `from` and `to` (offsets in the cell's units), `words`, `rowId` (for a fragment its owner, or its segment when it has none), `field`, `start` (the first character's identity, which names it with the occurrence; cut 7).
 - Copies: derivation.
 - Restore today: none.
 - Restore should mean: no restore; the words are in the script, untagged at that place. The panel offers remove-this-tag (the ordinary tag clear over the listed words) and, for a deleted tag, re-create the tag (an ordinary record create with that id, after which the mark shows again) (assumed A9).
@@ -92,7 +92,7 @@ application code issues it yet: there is no recovery panel.
 ### `unprojectable-fragment`
 
 - Produced: `projectSharedBlocks` in `core/collab/projection/blocks.ts`, for a stretch of stored text that cannot be shown as a row or heading. Only damaged data from another program reaches it, never the app's own commands (assumed rules 8, 9, 21 and 25).
-- Carries: `reason`, `owner` (the beat or heading id the stretch names, or null), `segment`, `field` (`audioText`, or `heading` for a heading stretch), `from` and `to` (offsets in the segment), `html` (the painted text).
+- Carries: `reason`, `owner` (the beat or heading id the stretch names, or null), `segment`, `field` (`audioText`, or `heading` for a heading stretch), `from` and `to` (offsets in the segment), `html` (the painted text), `start` (the first unit's identity, which names it; cut 7).
 - Copies: derivation.
 - Restore today: none.
 - Restore should mean: no restore in a shared session. Bringing it back would copy its text under new identities, and a later repair of the damage would then show it twice. It stays listed, and a standalone export offers it as recovery material (assumed A9).
@@ -177,25 +177,45 @@ The shared session publishes the list beside the document (cut 8): `SharedDocume
 
 ## Entry names
 
-An entry is named by its kind and a stored key (assumed rule 51 on #1414, amending A6), so the name is the same on every copy and for a late joiner. The kind is part of the name because a removed heading and a scene with no beats share a heading id. The name function and discard come with cut 7.
+An entry is named by its kind and a stored key (assumed rule 51 on #1414, amending A6), so the name is the same on every copy and for a late joiner. The kind is part of the name because a removed heading and a scene with no beats share a heading id. `sharedRecoveryEntryName` builds the name (cut 7).
 
 | Kind | Key | Stable across | Not stable when |
 | --- | --- | --- | --- |
 | `removed-beat` | the group's root beat id | restore, a split (a split-off beat is its own entry), a join into the removed beat | the group's root changes: the join that made the group is undone, or the root is later joined into an earlier beat |
 | `removed-heading` | the heading id | restore; headings are never split or joined | |
-| `crossing-tag`, `deleted-tag` | the occurrence id; `rowId` follows joins | restore, split, join | an adjacent piece of the same tag is added or removed: the extent takes the smallest occurrence id of the pieces it merges |
+| `crossing-tag`, `deleted-tag` | the occurrence id and its first character's identity (`start`); `rowId` follows joins | restore, join, growth at its end; the part before a split | an adjacent piece of the same tag is added or removed (the extent takes the smallest occurrence id of the pieces it merges); its first character changes (growth at its start, or that character deleted); a split inside it makes the split-off part its own entry |
 | `gallery-overflow` | the gallery record id; `rowId` follows joins | restore, split, join | |
-| `unprojectable-fragment` | its segment and its first unit's identity | typing before it | the fragment's first character is deleted |
+| `unprojectable-fragment` | its segment and its first unit's identity (`start`) | typing before it | the fragment's first character is deleted |
+
+An entry whose `start` is null (an empty fragment, or a tag part with no first character) has no name to discard: `sharedRecoveryDiscardOperation` returns null and the filter never hides it, because two such entries in one segment would share a name. It stays listed until its content changes.
 | `scene-with-no-beats` | the heading id; not discardable, it follows its beats | | |
 | `comment-without-words`, `reply-without-comment` | the comment or reply record id | | |
 
 A removed beat or heading removed again after a restore has the same name, so a discard of it records the removal ids it saw, as a restore does, and a fresh removal shows again.
+
+## Discard
+
+Discard is built (cut 7, assumed rule 52 on #1414, as amended there for restore). A `discard` operation names an entry and, for a removed beat or heading, the removal ids its writer saw; it writes one record in the `discards` root, keyed by writer and operation id. Undo writes `discard-retire`, which marks that key in the `retiredDiscards` root; redo writes a fresh discard. Neither record is ever deleted.
+
+- An entry is hidden while an active discard has its name and, for the removal kinds, every current removal id was seen by an active discard. A removal the discarder had not seen shows the entry again.
+- A discarded entry leaves `session.recovery()` entirely; undo is the way back.
+- A restore of a removal that an active discard saw is accepted, and the same operation retires every active discard that saw one of its removals, so it converges like any retire. A discard by a copy that has left can therefore never block a restore. Undo of that restore is refused like any restore's (gap 9) and the discards stay retired; undo of a retired discard is used up and writes nothing. A restore and a discard made without seeing each other both land; the restore wins and the entry is gone with its removal.
+- Two discards of one entry count together: the entry is hidden while their seen removal ids together cover its current removals, and each is undone on its own.
+- Redo of a discard always writes a fresh record.
+- The discard does not check that the entry is listed when it is written. A discard whose entry is not listed hides nothing until that name is listed.
+- A scene with no beats is refused as `not-discardable`.
+- The names that can change fail open: a new root, a merged tag occurrence id or a new first character gives a new name, and the entry shows again. Pinned by `recovery-discard.test.ts`; the deleted first character of a fragment, two parts of one tag occurrence and a split inside a discarded occurrence also by `discard.test.ts`.
+- Hiding is a filter over the built entry list, read from the two roots' versions through the projection cache. With both roots empty it returns the same list.
 
 ## Declared limits
 
 - Comment placement is not cached: every assembly rescans the units of every removed group, every heading and every unprojectable fragment for anchors, and sorts all comments and replies. This is a cost for the shared-session timings; the pinned cost lists hold no removed content, so they do not measure it.
 
 - Characters brought back by undo of a deletion are new (rule 39), so they count as edited, not observed. A beat split off that holds only such characters stays in the script, although its words are the ones the remover saw. Pinned by `split-removal.test.ts`.
+
+- Discard and retired-discard records are never deleted: about 114 bytes per discard and 150 per undo and redo pair, measured on a removed beat (`discard.test.ts`).
+- A tag extent that grows at its end keeps its name, so a discard still hides it; growth at its start changes its first character and shows it again. A comment whose words come back and are deleted again stays hidden.
+- An empty fragment or a tag part with no first character cannot be discarded.
 
 The removal records, per-beat removal flags and heading removal fields are read through the same per-key caches as the rest of the projection, and every projection unit carries the identity its mark state already read. A removed beat adds no native read; a removed heading reads each of its removal records once, on the first projection, and from the cache after. The provenance of a removed group is cached on its units and removal ids, and a removed heading's entry on its heading, name and removal records.
 
@@ -216,9 +236,9 @@ These keep work, but locally, on one copy, and are not in the list:
 5. **Closed by cut 4.** A reply whose comment is missing is listed as `reply-without-comment` (Stage 0 assumed answer 4).
 6. **A removed person still named as a tag owner is not listed** (Stage 0 assumed answer 10). Deleting a person deletes its record, so its name is not kept; a later cut keeps the name at deletion and adds the entry and restore together (assumed rule 47 narrows A8).
 7. **Closed by cut 5** ([Rule 29 drafts](#rule-29-drafts)). A rule 29 draft is created after its source's segment and listed beside it.
-8. **There is no discard.** Assumed rule 29 says an entry leaves recovery by being restored or discarded.
+8. **Closed by cut 7** ([Discard](#discard)). An entry leaves recovery by being restored or discarded (assumed rule 29); discard is an undo step.
 9. **Undo of restore is refused**, as is undo of a removal (moved to package 10 by assumed rule 40). The Stage 1 limit "a character undone and redone inside a removed beat is listed as edited" (`redone-recovery`, waiting for removal in `stage-2-shared-undo.md`) is not yet reproduced.
-10. **Entry names are decided, not built** ([Entry names](#entry-names), assumed rule 51). For removals, `removal.ids` is what a restore takes (cut 2); the name function comes with discard (cut 7).
+10. **Closed by cut 7** ([Entry names](#entry-names), assumed rule 51). Every entry kind has its name; a fragment carries `start` for it. For removals, `removal.ids` is what a restore and a discard take.
 11. **Closed by cut 8** ([Reading the list](#reading-the-list)). The shared session publishes the list beside the document. No panel and no export disclosure yet (plan section 2 item 7, section 6); those are Stage 4 product work.
 12. **Closed by cut 2.** Removed headings were rebuilt on every projection step (open item 3 from #1501); the entry is now cached.
 13. **Retained recovery content is never compacted.** Removal records and removed text stay for the life of the instance; budgets and limits are Stage 3 (1a decision, carry-overs).
@@ -236,8 +256,8 @@ all deleted is listed, with no restore).
 - **A2. A split-off beat follows its source.** A beat split off a removed beat by someone who had not seen the removal is removed with it and listed split by that person. One restore brings both back, in place, the split-off part directly after the part it was split from. A split made after seeing the removal cannot happen: a removed beat refuses commands. Narrowed by assumed rule 44: a split-off beat that holds nothing the remover observed stays in the script.
 - **A3. Comments and replies come back with their words.** A comment whose words are in removed content is listed with its beat's entry and anchored again when that beat is restored; its replies go with it. A comment whose words are all deleted is listed on its own, keeps its last row and field, and has no restore (its words are gone); it can be discarded. A reply whose comment is missing is listed on its own and shows under its comment again if the comment comes back. All of them also stay in the document's `comments` as today, so exports do not change. Settled by assumed rule 47 on #1414: words partly live keep the comment active at its first live cell; words only in removed content move its `rowId` and `field` to the first removed group holding them, in script order; a comment with no text anchor is never listed as without words; a comment or reply from someone who had not seen the removal travels with the beat and is not edited; resolved comments are listed like open ones; a reply without a comment is named by its stored key.
 - **A4. A rule 29 draft is created beside its source.** Settled by assumed rule 50: the draft beat's segment is placed after the source beat's segment when the write is made, so a restore puts the kept text after the beat it came from. Visible effect: the recovery list shows the draft beside its source.
-- **A5. Discard hides, it does not delete.** Discarding an entry writes a record that hides it on every copy; the content stays in shared state; actually deleting data is Stage 3. Discard is an undo step; undo shows the entry again. A discarded removed beat can no longer be restored until the discard is undone.
-- **A6. An entry is named by what it lists.** A removed beat by its group's root beat id, a removed heading by its heading id, a tag rejection by its occurrence id, a gallery overflow by its record id, a fragment by its segment and its first unit's identity (amended by assumed rule 51: a start offset shifts with typing before it), a scene with no beats by its heading id, a comment or reply by its record id. Stability per kind: [Entry names](#entry-names).
+- **A5. Discard hides, it does not delete.** Discarding an entry writes a record that hides it on every copy; the content stays in shared state; actually deleting data is Stage 3. Discard is an undo step; undo shows the entry again. Settled by assumed rule 52, amended: a restore of a discarded removal is accepted and retires the discard ([Discard](#discard)).
+- **A6. An entry is named by what it lists.** A removed beat by its group's root beat id, a removed heading by its heading id, a tag rejection by its occurrence id and first character's identity (amended with assumed rule 52: two parts of one occurrence are two entries), a gallery overflow by its record id, a fragment by its segment and its first unit's identity (amended by assumed rule 51: a start offset shifts with typing before it), a scene with no beats by its heading id, a comment or reply by its record id. Stability per kind: [Entry names](#entry-names).
 - **A7. Remover names, `edited` and `splitBy`** follow the Stage 1 assumptions in the [1a decision](stage-1/1a-decision.md#decided-and-assumed-product-answers): every distinct applicable remover in UTF-16 order, a character is edited when at least one applicable removal had not observed it, and more removals never take information away.
 - **A8. A removed person named as an owner** is listed, with the owners naming them; the assignment shows as text (Stage 0 assumed answer 10). Restore re-creates the person record with its id; undo of that restore removes it again. Narrowed by assumed rule 47: not built with the comment entries, because a deleted person's name is not kept; a later cut keeps it at deletion and adds the entry and its restore together.
 - **A9. Entries for merged states have no restore.** Scenes with no beats, crossing or deleted tags, gallery overflow and damaged fragments are resolved with ordinary commands offered beside the entry, each with its ordinary undo.
@@ -253,7 +273,7 @@ order. Each stops at its stop line.
 4. **Comments and replies in recovery** (gaps 3 to 5, done). Entries for comments in removed content, comments whose words are all deleted and replies without a comment; the T11 comment records of both oracles. Needs A3 as settled by assumed rule 47. Stop: no restore for them beyond the beat restore of cut 3; removed people moved to a later cut (A8 as narrowed).
 5. **Rule 29 placement** (gap 7, done). The draft segment is created after its source's segment; the literal rule 29 list and its tests change by that placement only. Needs A4 as settled by assumed rule 50. Stop: no new operation.
 6. **Undo of restore** (gap 9). The undo owner records a restore and reverses it as a fresh removal; redo restores again. Literal cases for two restorers, a late restore after a new removal, and undo before delivery; restore and its undo join the seeded removal generator with a literal table of declared limits. Depends on package 10's structure undo entry. Needs A1. Stop: discard not yet.
-7. **Discard** (gap 8). A discard operation with its record, its reader and its undo, in the generator. Needs A5. Stop: no panel.
+7. **Discard** (gaps 8 and 10, done). A discard operation with its record, its reader and its undo, in its own seeded generator. Needs A5 as settled by assumed rule 52. Stop: no panel.
 8. **The read port** (gap 11, done). The shared session publishes the recovery list beside the document through a named port, with a test that every copy and a late joiner read the same list. Stop: no UI and no export change; the panel and export disclosure are Stage 4.
 
 Gaps 13 to 15 stay with Stage 3 and packages 15 and 5c as listed.
