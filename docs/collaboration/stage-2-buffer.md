@@ -441,14 +441,17 @@ the stored name (`storedSceneName`, edge spaces included), and the empty and
 the plan review:
 
 - An input gives no target range, so a collapsed Backspace or Delete is left to
-  the browser and adopted at its `input` event. Paste, drop and other input types
-  are refused with `buffer-unsupported-input`, after settling typing. A paste or
-  drop into a name held empty is an insertion into it, so it is refused without
-  ending the hold.
-- A name held empty ends as in the Writer: a command admitted, focus loss, or a
-  cancelled composition that began held, each with the stored name back and one
-  report. Submitting it (Enter) keeps the form open and held, as the standalone
-  form keeps an empty name open; Escape closes it with the one report.
+  the browser and adopted at its `input` event; in a name held empty there is
+  nothing to delete, so the binding gets it. Paste, drop and other input types
+  are refused with `buffer-unsupported-input`, after settling typing.
+- A name held empty ends as in the Writer (rule 59 as merged): a command
+  admitted, focus loss, or a cancelled composition that began held, each with the
+  stored name back and one report. Backspace, Delete, paste, cut, drop,
+  `historyUndo` and `historyRedo` end it the same way and are consumed: nothing
+  else happens and the form stays open on the stored name. Submitting it (Enter)
+  only ends the hold, as Enter does in the Writer; Escape then closes the form.
+  Paste is not an insertion: emptying a name and then pasting a new one gives the
+  report, while selecting the name and pasting is refused as any paste is.
 - A paint during an edit re-homes the form into the rebuilt header and keeps the
   caret, moved past text others inserted before it.
 - Adding a scene, or naming an automatic one, opens no form in a shared session

@@ -77,11 +77,10 @@ export function bindSceneName(form: {
     const native = event as InputEvent, type = native.inputType;
     if (native.isComposing || /Composition/.test(type)) return;
     if (!binding.dirty() && input.value === ports.painted.text(key)) ports.painted.field(key, input.value);
-    // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event
-    if (type.startsWith("delete") && type !== "deleteByCut" && type !== "deleteByDrag" && input.selectionStart === input.selectionEnd) return;
-    // why: a paste or drop is an insertion into the held name, so refusing it must not also end the hold
-    const refusedInsertion = binding.held() && type.startsWith("insert") && type !== "insertText" && type !== "insertReplacementText";
-    if (!refusedInsertion && binding.beforeInput(native, range(), range())) return;
+    // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event;
+    // a held empty name has nothing to delete, so there the binding gets it and ends the hold
+    if (!binding.held() && type.startsWith("delete") && type !== "deleteByCut" && type !== "deleteByDrag" && input.selectionStart === input.selectionEnd) return;
+    if (binding.beforeInput(native, range(), range())) return;
     event.preventDefault();
     ports.report({ kind: "rejected", reason: "buffer-unsupported-input" });
   }

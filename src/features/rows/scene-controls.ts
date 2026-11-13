@@ -116,7 +116,9 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
       if (bound) {
-        if (focus && bound.held() || !bound.finish()) return;
+        // why: Enter on a held empty name only ends the hold, as in the Writer; the form stays open on the stored name
+        if (focus && bound.held()) { bound.finish(); return; }
+        if (!bound.finish()) return;
         cancelName(false, false);
         if (focus && sceneId !== null) header(sceneId)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
         return;
@@ -156,7 +158,8 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const state = ports.document.current();
     const scene = state && sceneGroups(state).find(group => group.scene.id === id)?.scene;
     if (!scene) return;
-    nameAt(parent, id, sceneFirstBeatId(scene), scene.name, (name, focus) => {
+    const value = ports.sharedNames && state ? storedSceneName(state, id) ?? scene.name : scene.name;
+    nameAt(parent, id, sceneFirstBeatId(scene), value, (name, focus) => {
       ports.edits.run(renameSceneCommand(id, name));
       if (focus) header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
     }, ports.sharedNames);

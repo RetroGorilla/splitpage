@@ -139,13 +139,14 @@ test("Split rename rule 4: a Backspace that empties a one-letter name is adopted
   } finally { page.close(); }
 });
 
-test("Split rename rule 4: submitting a held empty name keeps the form open and held; Escape puts the name back and tells once", () => {
+test("Split rename rule 4: submitting a held empty name only ends the hold: the form stays open on the stored name and tells once; Escape then closes it", () => {
   const page = sharedRename();
   try {
     const input = page.open();
     page.edit(0, 5, "", "deleteContentBackward", ["", 0], undefined, "Backspace");
     input.form?.requestSubmit();
-    assert.deepEqual([input.isConnected, page.stored(), input.value, page.reports, holds(page)], [true, "Scene", "", [], ["buffer"]]);
+    assert.deepEqual([input.isConnected, page.stored(), input.value, page.reports, holds(page), page.a.executed.length],
+      [true, "Scene", "Scene", [{ kind: "rejected", reason: "buffer-heading-empty" }], [], 0]);
     page.key("Escape");
     assert.deepEqual([input.isConnected, page.stored(), page.reports, page.commands], [false, "Scene", [{ kind: "rejected", reason: "buffer-heading-empty" }], []]);
     assert.deepEqual([holds(page), page.rows.querySelector(".section-name")?.textContent], [[], "Scene"]);
@@ -217,16 +218,32 @@ function emptied(name = "Scene"): RenamePage {
 
 const EMPTY_REPORT = [{ kind: "rejected", reason: "buffer-heading-empty" }];
 
-test("Split rename rule 4: a paste into a held empty name is refused and keeps the hold; the next letter replaces the name once", () => {
-  const page = emptied();
-  try {
-    const paste = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertFromPaste", data: "Q" });
-    assert.equal(page.input().dispatchEvent(paste), false);
-    assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page)], ["Scene", "", [{ kind: "rejected", reason: "buffer-unsupported-input" }], ["buffer"]]);
-    page.typed(0, 0, "N");
-    assert.deepEqual([page.stored(), page.input().value, page.a.executed.length, holds(page)], ["N", "N", 1, []]);
-  } finally { page.close(); }
-});
+function heldInput(page: RenamePage, type: string): boolean {
+  page.input().setSelectionRange(0, 0);
+  return page.input().dispatchEvent(new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data: type === "insertFromPaste" ? "Q" : null }));
+}
+
+const HELD_ENDINGS: readonly (readonly [string, (page: RenamePage) => boolean])[] = [
+  ["Backspace", page => page.edit(0, 0, "", "deleteContentBackward", ["", 0], undefined, "Backspace")],
+  ["Delete", page => page.edit(0, 0, "", "deleteContentForward", ["", 0], undefined, "Delete")],
+  ["paste", page => heldInput(page, "insertFromPaste")],
+  ["cut", page => heldInput(page, "deleteByCut")],
+  ["drop", page => heldInput(page, "insertFromDrop")],
+  ["historyUndo", page => heldInput(page, "historyUndo")],
+  ["historyRedo", page => heldInput(page, "historyRedo")]
+];
+
+for (const [label, act] of HELD_ENDINGS) {
+  test(`Split rename rule 4: after emptying a name, ${label} only ends the hold: consumed, the form stays open on the stored name, told once`, () => {
+    const page = emptied();
+    try {
+      assert.equal(act(page), false);
+      assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page), page.a.executed.length, page.commands, page.input().isConnected],
+        ["Scene", "Scene", EMPTY_REPORT, [], 0, [], true]);
+      copies(page, ["Scene"]);
+    } finally { page.close(); }
+  });
+}
 
 for (const [label, cancel] of [
   ["with its text left", (input: HTMLInputElement) => { input.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" })); }],
