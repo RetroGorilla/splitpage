@@ -282,6 +282,20 @@ Nothing in the running app calls it yet (package 14); a test pins that.
   run their existing command (R5). The caret after someone else's change while
   nobody is typing is put back by the renderer, by offset (R7).
 
+The rule 29 recovery write is the binding's own: when the document refuses a
+commit at its painted base, settlement writes the whole cell as shown to
+recovery through `BufferedTextEdit.recover`, exactly as for the Writer, and the
+Split view only supplies the repaint, the clamped caret and the `recovered`
+announcement. Its cases follow assumed rules 29, 38 and 55 and are named in
+`tests/features/editing/cell-buffer-recovery.test.ts`: a composition or ordinary
+typing refused on a stale base, the cell kept as shown (a U+00A0 the browser
+showed stays U+00A0 in the entry), the local command that found the edit going on
+after the write, unmounting, a paint during the drain, a refused recovery write
+keeping the text and the hold, and typing over someone else's removal joining
+that beat's recovery with no write. The refused commit needs a write to the
+replica that bypassed the hold; a removal, join or other change from someone else
+is held while the cell is edited and the typing lands by its identities.
+
 The named tests are in `tests/features/editing/cell-buffer.test.ts`, including
 "rule 55, T03 Split native whitespace (D1 and D3) ...", which checks the copied
 Stage 1 literal on every replica. `tests/features/editing/cell-buffer-cost.test.ts`
