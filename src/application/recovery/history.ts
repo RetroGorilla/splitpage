@@ -28,6 +28,7 @@ function startHistory(ports: HistoryOwnerPorts, instrumentation?: HistoryInstrum
   const unsavedChanges = ports.saving.unsaved;
   const legacySnapshots = function () { return ports.recovery; };
   const seedCheckPasses = ports.seed.passes;
+  const historyRefused = function () { return !ports.capability.history().allowed; };
   const showToast = function (...args: Parameters<HistoryOwnerPorts["effects"]["show"]>) { if (active) ports.effects.show(...args); };
   const { intern, persist, recordFor, ensureBytes } = ports.pictures;
   const dataUrlForSync = ports.pictures.dataUrlFor;
@@ -190,6 +191,7 @@ function historyStoreEntry(backend: HistoryResolvedBackend, entry: HistoryPendin
 
 function captureSnapshot(label: string | undefined, src: unknown, opts?: { allowSeedSkip?: boolean }) {
   opts = opts || {};
+  if (historyRefused()) return null;
   if (!src || typeof src !== "object" || !Array.isArray((src as { rows?: unknown }).rows)) return null;
   if (opts.allowSeedSkip && src === currentDocument() && isPristineSeedDocument()) return null;
   const docId = normalizeDocId((src as { docId?: unknown }).docId) || ((src as { docId: string }).docId = mintDocId());
@@ -335,11 +337,12 @@ function historyTouchDocument(docId: string | null, title: string) {
 }
 
 function historyDocumentChanged() {
-  if (currentDocument() && normalizeDocId((currentDocument() as { docId: string; title: string }).docId)) historyTouchDocument((currentDocument() as { docId: string; title: string }).docId, (currentDocument() as { docId: string; title: string }).title);
+  if (!historyRefused() && currentDocument() && normalizeDocId((currentDocument() as { docId: string; title: string }).docId)) historyTouchDocument((currentDocument() as { docId: string; title: string }).docId, (currentDocument() as { docId: string; title: string }).title);
   historyChanged();
 }
 
 function copyHistory(from: string | null, to: string | null) {
+  if (historyRefused()) return Promise.resolve({ ok: true, copied: 0 });
   if (from === HISTORY_OLDER_KEY || to === HISTORY_OLDER_KEY) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
   from = normalizeDocId(from);
   to = normalizeDocId(to);

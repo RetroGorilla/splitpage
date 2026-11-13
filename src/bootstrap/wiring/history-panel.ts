@@ -11,6 +11,7 @@ import { personColors } from "./ports/person-colors.ts";
 import { historyPreferences } from "./ports/preferences.ts";
 import { ids } from "./ports/identity.ts";
 import { screen } from "./ports/screen.ts";
+import { capabilities } from "./ports/capabilities.ts";
 
 const panel = owned<HistoryPanelControl>();
 export function historyPanelControls(): HistoryPanelControl {
@@ -21,6 +22,7 @@ export function historyPanelControls(): HistoryPanelControl {
 export function mountHistoryPanelFeature(merge: Pick<SessionMergeOwner, "restoreMergeSnapshot">): HistoryPanelControl {
   return panel.replace(() => {
     const ports: HistoryPanelPorts = {
+      capability: capabilities,
       history: { listDocHistory: (...args) => historyOwner().listDocHistory(...args) },
       document: documentReader,
       merge: { restoreMergeSnapshot: (...args) => merge.restoreMergeSnapshot(...args) },

@@ -5,6 +5,10 @@ import { createHistoryBackendProbe } from "../adapters/storage/history-backend-t
 import { createHistoryOwnerInstrumentation } from "../adapters/storage/history-owner-testing.ts";
 import { createHistoryOwner } from "../application/recovery/history.ts";
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
+import { createSessionCapabilities } from "../application/session/capabilities.ts";
+
+const COMMON = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
+const MODES = { standalone: createSessionCapabilities("standalone", COMMON), shared: createSessionCapabilities("shared", COMMON) };
 
 const docId = "d" + "1".repeat(32);
 const otherId = "d" + "2".repeat(32);
@@ -23,12 +27,14 @@ async function harness(options = {}) {
   let removed = 0;
   const messages = [];
   let holds = () => [];
+  let mode = "standalone";
   const storage = createHistoryBackends({ now: () => 1000, holds: () => holds(), desktop: () => null, runningOnDesktop: () => false }, options.release ? undefined : createHistoryBackendProbe());
   if (!options.release) await storage.controls.forceBackend("memory");
   const backend = await storage.resolveHistoryBackend();
   if (options.persistent) backend.name = "idb";
   const owner = createHistoryOwner(options.release ? undefined : createHistoryOwnerInstrumentation);
   const ports = {
+    capability: { history: () => MODES[mode].history() },
     document: { current: () => live },
     location: { home: () => ({ kind: "none" }) },
     preferences: { editorName: () => "Adam" },
@@ -50,7 +56,7 @@ async function harness(options = {}) {
     }
   };
   const stop = owner.startHistory(ports);
-  return { owner, stop, backend, ports, storage, messages, closed: () => closed, removed: () => removed, replace: (doc) => { live = doc; } };
+  return { owner, stop, backend, ports, storage, messages, closed: () => closed, removed: () => removed, replace: (doc) => { live = doc; }, share: () => { mode = "shared"; } };
 }
 
 test("history owner refuses every public operation before start and after stop", async () => {
@@ -280,4 +286,32 @@ test("a missing desktop history port still throws during backend resolution", ()
     const storage = createHistoryBackends({ now: () => 1000, holds: () => [], desktop: () => null, runningOnDesktop: () => true }, probe);
     assert.throws(() => storage.resolveHistoryBackend(), TypeError);
   }
+});
+
+test("a shared session takes no snapshot, copies and touches no history, and still lists and reads what was kept", async () => {
+  const h = await harness();
+  const kept = h.owner.captureSnapshot("Before", document());
+  assert.equal((await kept.done).stored, true);
+  const writes = [];
+  for (const name of ["put", "copy", "touch"]) {
+    const real = h.backend[name];
+    h.backend[name] = (...args) => { writes.push(name); return real(...args); };
+  }
+  h.owner.historyDocumentChanged();
+  await h.owner.testControls().idle();
+  assert.deepEqual(writes, ["touch"]);
+  writes.length = 0;
+  h.share();
+  const unnamed = { title: "Shared", rows: [] };
+  assert.equal(h.owner.captureSnapshot("Shared", unnamed), null);
+  assert.equal("docId" in unnamed, false);
+  assert.deepEqual(await h.owner.copyHistory(docId, otherId), { ok: true, copied: 0 });
+  h.owner.historyDocumentChanged();
+  await h.owner.testControls().idle();
+  assert.deepEqual(writes, []);
+  assert.deepEqual((await h.owner.listDocHistory(docId)).entries.map((entry) => entry.id), [kept.id]);
+  assert.deepEqual((await h.owner.listDocHistory(otherId)).entries, []);
+  assert.equal(JSON.parse((await h.owner.getHistorySnapshot({ docId, id: kept.id })).stateJson).title, "Original");
+  assert.deepEqual(h.messages, []);
+  await h.stop();
 });

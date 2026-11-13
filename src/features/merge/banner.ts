@@ -13,7 +13,7 @@ export interface MergeReport {
   readonly conflicts: readonly { readonly rowId: string }[];
 }
 
-export type RestoreAnswer = "restored" | "busy" | "missing" | "corrupt" | "changed" | "no-backup";
+export type RestoreAnswer = "restored" | "busy" | "missing" | "corrupt" | "changed" | "no-backup" | "refused";
 
 export interface RestoreRequest {
   readonly force: boolean;
@@ -22,7 +22,7 @@ export interface RestoreRequest {
 }
 
 export interface MergeBannerPorts {
-  readonly capability: Pick<CapabilityPort, "merge">;
+  readonly capability: Pick<CapabilityPort, "merge" | "history">;
   readonly lastUndo: () => MergeUndoRecord | null;
   readonly sameDocument: (docId: string | null | undefined) => boolean;
   readonly restore: (id: string, request: RestoreRequest) => PromiseLike<RestoreAnswer>;
@@ -143,6 +143,9 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
         if (r === "no-backup") {
           forceFor = undo;
           ports.warn("Could not keep a backup of your current version. Undo the merge again to discard your edits anyway.");
+        } else if (r === "refused") {
+          const can = ports.capability.history();
+          if (!can.allowed) ports.warn(can.reason);
         } else if (RESTORE_SAYS[r]) {
           ports.warn(RESTORE_SAYS[r]);
         }

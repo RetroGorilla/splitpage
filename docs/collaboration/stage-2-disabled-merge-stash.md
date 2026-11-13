@@ -34,9 +34,9 @@ which always permits: those entries are package 14's.
 
 ## Limits
 
-- `restoreMergeSnapshot` in `session-merge.ts` is not guarded at the owner. Its
-  one caller, the merge banner, asks `merge` first. The history part of the
-  package guards the restore owner with `history`.
+- `restoreMergeSnapshot` in `session-merge.ts` asks `history`, as described in
+  [Shared sessions, drafts and version history](stage-2-disabled-drafts-history.md).
+  The merge banner still asks `merge` first.
 - The session merge ports (`adopt`, `snapshot`, `armUndo`, `setBase`,
   `noteHistoryFrom`) carry no check of their own: they are reached only through
   `createDocumentMerge`, and a check inside them would break a continuation that
