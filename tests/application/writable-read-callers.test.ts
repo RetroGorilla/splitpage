@@ -46,18 +46,23 @@ const LEFT: StandaloneWritableReads = {
 };
 
 const BRIDGE_FUNCTION = {
-  "bootstrap/wiring/broll.ts": 3,
+  "bootstrap/wiring/broll.ts": 2,
+  "bootstrap/wiring/ports/document-identity.ts": 1,
+  "bootstrap/wiring/ports/document.ts": 2,
+  "bootstrap/wiring/recovery-owners.ts": 2,
+  "bootstrap/wiring/session-owner.ts": 3
+};
+
+const VIEW_PORT_USERS = {
+  "bootstrap/wiring/broll.ts": 1,
   "bootstrap/wiring/desktop-owners.ts": 2,
   "bootstrap/wiring/document-identity.ts": 2,
-  "bootstrap/wiring/editor.ts": 6,
   "bootstrap/wiring/panels.ts": 4,
   "bootstrap/wiring/ports/document-identity.ts": 2,
-  "bootstrap/wiring/ports/document.ts": 2,
   "bootstrap/wiring/ports/person-colors.ts": 2,
   "bootstrap/wiring/ports/shot-hiding.ts": 2,
-  "bootstrap/wiring/recovery-owners.ts": 2,
-  "bootstrap/wiring/session-owner.ts": 3,
-  "bootstrap/wiring/shot-hiding.ts": 2
+  "bootstrap/wiring/shot-hiding.ts": 2,
+  "bootstrap/wiring/split-buffer.ts": 2
 };
 
 const BEAT_INSERTS = {
@@ -88,9 +93,15 @@ test("the shared document reader and the transitions' live port hand out the rea
   assert.deepEqual(Object.keys(NAMED).sort(), ["beatClipHasNoReader", "beatInsertWritesTheGivenDocument", "bridgePortReadsAView", "sharedReaderGivesAView", "transitionsReadAView"]);
 });
 
-test("the writable reads left are the bridge function and the two standalone owners that take it", () => {
+test("the writable reads left are the bridge function, the view port built on it, and the two standalone owners that take it", () => {
   assert.deepEqual(Object.keys(LEFT).sort(), ["bridgeFunction", "brollRecordsViewed", "localWorkStash"]);
   assert.deepEqual(under(identifierMentions("currentDocument"), "bootstrap/"), BRIDGE_FUNCTION);
+});
+
+test("the wiring's read-only users of the current document read it through the shared view port", () => {
+  const users = identifierMentions("documentReader");
+  assert.deepEqual(Object.fromEntries(Object.keys(VIEW_PORT_USERS).map(function (file) { return [file, users[file]]; })), VIEW_PORT_USERS);
+  assert.equal(identifierMentions("numberedDocument")["bootstrap/wiring/editor.ts"], 7);
 });
 
 test("the beat clipboard's insert, which writes into the document it is handed, is called from the audited app modules only", () => {
