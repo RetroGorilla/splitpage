@@ -11,6 +11,7 @@ export interface BufferedRecoverySnapshot {
   readonly base: number;
   readonly html: string;
   readonly units: number;
+  readonly segment?: string | null;
 }
 
 export function bufferedRecoveryOperations(
@@ -21,7 +22,7 @@ export function bufferedRecoveryOperations(
   const id = author.id as SharedContentRef, beat = ("draft_" + author.id) as SharedContentRef;
   return [
     { kind: "segment-create", id, by: author.by, segment: ("draft_segment_" + author.id) as SharedContentRef, beat,
-      at: { left: null, right: null, affinity: "after" },
+      at: { left: (snapshot.segment ?? null) as SharedContentRef | null, right: null, affinity: "after" },
       fields: { audioText: snapshot.html, bufferSourceOwner: snapshot.owner, bufferPaintedBase: snapshot.base } },
     { kind: "remove", id: (author.id + "_remove") as SharedContentRef, by: author.by, removalKind: "beat", targets: [beat],
       observed: snapshot.units ? [flowBaseReference(beat, "audioText", 0, snapshot.units)] : [],

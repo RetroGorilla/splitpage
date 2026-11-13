@@ -108,6 +108,10 @@ export function resolveIndexedStructureOwner(index: SharedStructureIndex, owner:
   return resolveSharedStructureOwner(indexedStructureView(index), owner, field);
 }
 
+export function resolveIndexedRestorableBeat(index: SharedStructureIndex, owner: string) {
+  return resolveSharedRestorableBeat(indexedStructureView(index), owner);
+}
+
 export function readIndexedStructureSpans(index: SharedStructureIndex, segment: string) {
   const view = indexedStructureView(index), stream = readSharedStructureStream(view, segment);
   return stream ? interpretSharedStructure(view, [], stream).filter(block => block.segment === segment && !block.reason && block.id !== null) : [];

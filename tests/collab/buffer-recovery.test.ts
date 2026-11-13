@@ -76,7 +76,7 @@ for (const order of ["D1", "rev", "dup", "late-C"] as const) {
       assert.deepEqual([transactions, updates], [1, 1]);
       assert.deepEqual(a.executed.at(-1), { base: 9, operations: [
         { kind: "segment-create", id: "r17", by: "Alice", segment: "draft_segment_r17", beat: "draft_r17",
-          at: { left: null, right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 7 } },
+          at: { left: "b:R1", right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 7 } },
         { kind: "remove", id: "r17_remove", by: "Alice", removalKind: "beat", targets: ["draft_r17"], observed: ['["flow-base","draft_r17","audioText",0,3]'],
           boundaries: ["draft_r17"], components: [VISUAL], gallery: [], comments: [], at: 2 }
       ] });

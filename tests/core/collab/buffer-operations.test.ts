@@ -18,16 +18,16 @@ test("literal native replacement operations use painted occurrence identities ev
   ]);
 });
 
-test("rule 29 literal list: one creation carrying the source owner and painted base, then its removal; an empty field observes nothing", () => {
-  const literal = bufferedRecoveryOperations({ owner: "R1", base: 7, html: "aZd", units: 3 }, { id: "r17", by: "Alice" }, { rows: 2, visual: "structure_1_007200310037_visual_0" });
+test("rule 29 literal list: one creation after the source's segment carrying the source owner and painted base, then its removal; an empty field observes nothing", () => {
+  const literal = bufferedRecoveryOperations({ owner: "R1", base: 7, html: "aZd", units: 3, segment: "b:R1" }, { id: "r17", by: "Alice" }, { rows: 2, visual: "structure_1_007200310037_visual_0" });
   assert.deepEqual(literal, [
     { kind: "segment-create", id: "r17", by: "Alice", segment: "draft_segment_r17", beat: "draft_r17",
-      at: { left: null, right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 7 } },
+      at: { left: "b:R1", right: null, affinity: "after" }, fields: { audioText: "aZd", bufferSourceOwner: "R1", bufferPaintedBase: 7 } },
     { kind: "remove", id: "r17_remove", by: "Alice", removalKind: "beat", targets: ["draft_r17"], observed: ['["flow-base","draft_r17","audioText",0,3]'],
       boundaries: ["draft_r17"], components: ["structure_1_007200310037_visual_0"], gallery: [], comments: [], at: 2 }
   ]);
   const empty = bufferedRecoveryOperations({ owner: "R9", base: 0, html: "", units: 0 }, { id: "e1", by: "Bob" }, { rows: 0, visual: "v" });
-  assert.deepEqual(empty[0]?.kind === "segment-create" && empty[0].fields, { audioText: "", bufferSourceOwner: "R9", bufferPaintedBase: 0 });
+  assert.deepEqual(empty[0]?.kind === "segment-create" && [empty[0].fields, empty[0].at], [{ audioText: "", bufferSourceOwner: "R9", bufferPaintedBase: 0 }, { left: null, right: null, affinity: "after" }]);
   assert.deepEqual(empty[1]?.kind === "remove" && [empty[1].observed, empty[1].targets, empty[1].at], [[], ["draft_e1"], 0]);
   for (const made of [...literal, ...empty]) assert.deepEqual(readOperation(made), made);
 });
