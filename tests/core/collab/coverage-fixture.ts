@@ -97,17 +97,17 @@ export const builderOperationCoverage = [
     ["surviving paragraph flags", ["scalar"]],
     ["scene first-beat derivation / empty-scene recovery / missing beat", []]
   ]],
-  ["moveBeatCommand", "structure", "segment-move,scalar | partial-segment-move", [
+  ["moveBeatCommand", "structure", "segment-move,scalar | move-in-shared-session", [
     ["before versus after", ["segment-move"]],
     ["destination membership and source paragraph repair", ["scalar"]],
-    ["source occupies part of segment", ["partial-segment-move"]],
+    ["source occupies part of segment", ["move-in-shared-session"]],
     ["unchanged order with changed scene", ["scalar"]],
     ["missing/self/no-op", []]
   ]],
-  ["swapBeatsCommand", "structure", "segment-move,scalar | partial-segment-move", [
+  ["swapBeatsCommand", "structure", "segment-move,scalar | move-in-shared-session", [
     ["previous/next delegates whole-beat movement", ["segment-move"]],
     ["delegated paragraph repair", ["scalar"]],
-    ["source occupies part of segment", ["partial-segment-move"]],
+    ["source occupies part of segment", ["move-in-shared-session"]],
     ["edge/missing beat", []]
   ]],
   ["splitBeatCommand", "structure", "text-delete,split,segment-create,record-create", [
@@ -121,7 +121,7 @@ export const builderOperationCoverage = [
     ["status rank derives from the join group", []],
     ["missing next/header/gallery-limit guards", []]
   ]],
-  ["pasteBeatsCommand", "structure", "segment-create,text-insert,text-delete,remove,restore,segment-move,heading-create,record-create,record-set,scalar | partial-segment-move,cross-scene-structural-paste", [
+  ["pasteBeatsCommand", "structure", "segment-create,text-insert,text-delete,remove,restore,segment-move,heading-create,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
     ["append/insert copied beats, including prefix/trailing blanks", ["segment-create", "text-insert"]],
     ["replace blank beat", ["remove"]],
     ["carries scene header", ["heading-create", "text-insert"]],
@@ -130,7 +130,7 @@ export const builderOperationCoverage = [
     ["copy comments, replies, registries and media", ["record-create"]],
     ["restore cut ids and place their segments", ["restore", "segment-move"]],
     ["restore an existing cut comment's fallback row", ["record-set"]],
-    ["partial-source/cross-scene structural cut-paste", ["partial-segment-move", "cross-scene-structural-paste"]],
+    ["partial-source/cross-scene structural cut-paste", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["null/empty plan or incomplete apply", []]
   ]],
   ["removeBeatsCommand", "structure", "remove,scalar | cross-scene-structural-paste", [
@@ -149,9 +149,9 @@ export const builderOperationCoverage = [
     ["first beat paragraph flag", ["scalar"]],
     ["missing header", []]
   ]],
-  ["moveSceneCommand", "structure", "segment-move | partial-segment-move", [
+  ["moveSceneCommand", "structure", "segment-move | move-in-shared-session", [
     ["before/after whole scene, moving its header with beat segments", ["segment-move"]],
-    ["scene cuts through a segment", ["partial-segment-move"]],
+    ["scene cuts through a segment", ["move-in-shared-session"]],
     ["derived scene order / missing/self/unchanged guards", []]
   ]],
   ["importRowsCommand", "structure", "segment-create,text-insert,remove,heading-remove,record-create", [
@@ -162,7 +162,7 @@ export const builderOperationCoverage = [
     ["initial fields omit paragraph flags; scanner anchors new b-roll atoms before insertion", []],
     ["empty import", []]
   ]],
-  ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | partial-segment-move,cross-scene-structural-paste", [
+  ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
     ["typing and arbitrary range-replacement outcomes", ["text-insert", "text-delete", "segment-create", "remove", "heading-remove"]],
     ["observed mark and inline-markdown outcomes", ["mark"]],
     ["ordinary and prefix-isolation split outcomes", ["split", "split-before"]],
@@ -170,7 +170,7 @@ export const builderOperationCoverage = [
     ["structural clipboard restore/move/header and record outcomes", ["restore", "segment-move", "heading-create", "record-create", "record-set"]],
     ["heading finalization outcomes", ["heading-finalize"]],
     ["paragraph/retained-record field edits", ["scalar"]],
-    ["partial-source/cross-scene structural clipboard guards", ["partial-segment-move", "cross-scene-structural-paste"]],
+    ["partial-source/cross-scene structural clipboard guards", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["removed comment words stay in recovery / optional selection / null/caret-only/refused/no-change", []]
   ]]
 ] as const;
@@ -320,12 +320,12 @@ export const flowOperationCoverage = [
     ["end creates a blank", ["segment-create"]],
     ["start/empty/non-beat/missing guards", []]
   ]],
-  ["moveBeats", "known-unused", "segment-move,split,scalar,heading-remove | partial-segment-move", [
+  ["moveBeats", "known-unused", "segment-move,split,scalar,heading-remove | move-in-shared-session", [
     ["move whole source segments before/after destination", ["segment-move"]],
     ["middle of destination beat or heading", ["split"]],
     ["retained source/follower/destination flags and moved-row normalization", ["scalar"]],
     ["source scene loses its last anchor", ["heading-remove"]],
-    ["source occupies part of segment", ["partial-segment-move"]],
+    ["source occupies part of segment", ["move-in-shared-session"]],
     ["empty-beat affinity / derived anchors / missing/self/nonconsecutive guards", []]
   ]],
   ["replaceAll", "known-unused", "text-insert,text-delete,heading-remove,scalar", [
@@ -337,6 +337,6 @@ export const flowOperationCoverage = [
 ] as const;
 
 export const sharedRefusalCoverage = [
-  { refusal: "partial-segment-move", source: "8-schema-hypotheses.md §1 Candidate B: Move part of a segment; structure-results.md MOVE concurrent" },
+  { refusal: "move-in-shared-session", source: "8-schema-hypotheses.md §1 Candidate B: Move part of a segment; structure-results.md MOVE concurrent; issue #1414 assumed rule 40: every move" },
   { refusal: "cross-scene-structural-paste", source: "8-schema-hypotheses.md §3 MOVE cut-paste; structure-results.md MOVE cut-paste" }
 ] as const;

@@ -400,3 +400,16 @@ beat, simultaneous creation, removal and restore of a created heading, and the
 refusals; a seeded model of 48 histories and 122 checkpoints with literal declared
 limits `[]`; and two structure mutants. The copied T08 creation oracle is a beat
 turned into a heading and waits for finalization.
+
+## Moving beats and scenes
+
+In a shared session moving a beat or a scene is refused by name, in every form,
+until the plan review (assumed rule 40, issue #1414). After ordinary editing most
+beats are no longer whole stored segments, so a simple move would cover only beats
+that were imported and never split; a real move is a later design.
+`sharedCommandPermission` answers `move-in-shared-session` for every move intent,
+whole or partial. `registerSharedMoveRefusal(handle)` adds a `segment-move` handler
+that refuses the whole list with the same reason, leaving bytes, state vector and
+revision unchanged, also when the move follows a typed character or a prepared
+heading removal. The shared disable list carries `moves` with its message; no
+command consults it yet.

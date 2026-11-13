@@ -83,7 +83,7 @@ Fixture corrections, demonstrated by the exact kind checks:
 - selectionToOwnBeat includes text-insert for overlapping surrogate slices.
 - moveBeats includes heading-remove when detaching the last source-scene anchor, and describes moved-row normalization under scalar.
 
-The two-sided kind assertion compares emitted kinds with the fixture's operation-kind union. The literal package 9 handoff and partial-segment-move refusal are policy markers, not operation kinds, and are excluded from that comparison. The separate vocabulary coverage suite still checks the complete branch union, including those markers.
+The two-sided kind assertion compares emitted kinds with the fixture's operation-kind union. The literal package 9 handoff and move-in-shared-session refusal are policy markers, not operation kinds, and are excluded from that comparison. The separate vocabulary coverage suite still checks the complete branch union, including those markers.
 
 ### Package 4b evidence
 
