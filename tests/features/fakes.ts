@@ -25,7 +25,7 @@ import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts"
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
-import type { WriterBufferPorts } from "../../src/features/writer/flow-buffer.ts";
+import type { BufferedFieldPorts } from "../../src/application/editing/buffered-field.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
 import type { PaintedTextSource } from "../../src/application/editing/ports.ts";
@@ -81,7 +81,7 @@ export function fakePdfPrinter() {
 
 export function fakeWriterBufferEffects() {
   const reports: CommandOutcome[] = [], missing: string[] = [], recovered: string[] = [];
-  const effects: Pick<WriterBufferPorts, "missingBase" | "recovered" | "report"> = {
+  const effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report"> = {
     missingBase: rowId => { missing.push(rowId); }, recovered: rowId => { recovered.push(rowId); }, report: outcome => { reports.push(outcome); }
   };
   return { effects, reports, missing, recovered };

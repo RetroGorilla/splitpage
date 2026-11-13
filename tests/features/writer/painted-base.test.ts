@@ -230,7 +230,7 @@ test("standalone: painting, typing and a beat split never create or call the pai
     import { mock } from "node:test";
     import { pathToFileURL } from "node:url";
     let created = 0, recorded = 0;
-    mock.module(pathToFileURL("src/features/writer/flow-painted-base.ts").href, { namedExports: { createPaintedBeats: () => {
+    mock.module(pathToFileURL("src/application/editing/painted-beats.ts").href, { namedExports: { createPaintedBeats: () => {
       created++;
       return { record: () => { recorded++; }, base: () => null, clear: () => {} };
     } } });

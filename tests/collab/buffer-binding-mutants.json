@@ -2,27 +2,27 @@
   "tests": ["tests/features/writer/buffer-binding.test.ts", "tests/features/writer/buffer-review.test.ts", "tests/features/writer/buffer-invariants.test.ts"],
   "mutants": [{
     "label": "local command admitted before dirty native typing",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "const stopAdmission = ports.beforeCommand(() => committing || finish());",
     "replace": "const stopAdmission = () => {};"
   }, {
     "label": "native cut and drag bypass delegated refusal",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "type === \"deleteByCut\" || type === \"deleteByDrag\" || ",
     "replace": ""
   }, {
     "label": "ordinary cross-beat input never reaches its command port",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "&& intended.anchor.rowId !== intended.head.rowId)",
     "replace": "&& false)"
   }, {
     "label": "refused cross-beat composition permits native mutation",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) { refuse(event, \"buffer-unsupported-target\"); return true; }",
     "replace": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) return true;"
   }, {
     "label": "native boundary deletion never reaches its structural command",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "if (type === \"deleteContentBackward\" && at === 0 || type === \"deleteContentForward\" && at === length)",
     "replace": "if (false)"
   }, {
@@ -32,7 +32,7 @@
     "replace": "ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste })"
   }, {
     "label": "native input accepted without a painted base",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "event.preventDefault(); ports.missingBase(rowId);",
     "replace": "ports.missingBase(rowId);"
   }, {
@@ -47,7 +47,7 @@
     "replace": "buffered?.dispose();"
   }, {
     "label": "cancel trusts the old render cache",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "if (!event.data) {",
     "replace": "if (!event.data) { const closed = active; active = null; target = null; closed.edit.cancel(); return;"
   }, {
@@ -73,29 +73,29 @@
     "replace": "      composing = false; if (false) {"
   }, {
     "label": "failed acquisition leaves native mutation allowed",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "catch (error) { event.preventDefault(); ports.report({ kind: \"failed\", error }); return false; }",
     "replace": "catch (error) { ports.report({ kind: \"failed\", error }); return false; }"
   }, {
     "label": "drain failure leaves the surface attached to its closed edit",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "if (held.edit.isOpen()) return recover(held, outcome, selection);",
     "replace": "if (outcome.kind === \"failed\") { ports.report(outcome); return false; } if (held.edit.isOpen()) return recover(held, outcome, selection);"
   }, {
     "label": "recovered typing is not announced",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "ports.recovered(held.rowId);",
     "replace": "void held.rowId;",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {
     "label": "recovered field keeps its native text",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "surface.repaint(held.rowId); const shown",
     "replace": "const shown",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {
     "label": "refused recovery discards the native edit",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "if (held.edit.isOpen()) { ports.report(kept ?? refusal); return false; }",
     "replace": "if (held.edit.isOpen()) { ports.report(kept ?? refusal); held.edit.cancel(); }"
   }, {
@@ -136,12 +136,12 @@
     "tests": ["tests/core/collab/buffer-operations.test.ts"]
   }, {
     "label": "input entry skips the ownership invariant",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "native: (event, dispatch) => {",
     "replace": "native: (event, dispatch) => { if (event.type === \"input\") { dispatch(); return; }"
   }, {
     "label": "settlement caller clears composition before the gate",
-    "file": "src/features/writer/flow-buffer.ts",
+    "file": "src/application/editing/buffered-field.ts",
     "find": "return checked.ok && settle();",
     "replace": "surface.composition(false); return checked.ok && settle();"
   }]
