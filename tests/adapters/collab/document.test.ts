@@ -19,13 +19,13 @@ after(() => {
   console.info("document hydration link audit: " + JSON.stringify(counts));
 });
 
-test("empty script hydrates all eighteen roots without inventing a beat", () => {
+test("empty script hydrates all nineteen roots without inventing a beat", () => {
   const handle = createSharedDocument();
   hydrateSharedDocument(handle, validatedFixture({ title: "", rows: [] }));
   assert.deepEqual(readRoots(handle), {
     segments: {}, order: [], beats: {}, visuals: {}, gallery: {}, comments: {}, replies: {}, people: {}, tags: {}, shots: {},
     meta: { capture: { rev: 0 }, docId: "d00000000000000000000000000000000", extra: "{}", fileTitle: {}, schema: 2, title: [], titleMarks: [], wordsPerMinute: 150 },
-    removalRecords: {}, retiredJoins: {}, statusEvents: {}, retiredStatus: {}, headings: {}, discards: {}, retiredDiscards: {}
+    removalRecords: {}, retiredJoins: {}, statusEvents: {}, retiredStatus: {}, headings: {}, discards: {}, retiredDiscards: {}, deletedPeople: {}
   });
   destroySharedDocument(handle);
 });

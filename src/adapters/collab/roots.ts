@@ -18,7 +18,8 @@ export const collabRootTypes = Object.freeze({
   retiredStatus: Y.Map<unknown>,
   headings: Y.Map<unknown>,
   discards: Y.Map<unknown>,
-  retiredDiscards: Y.Map<unknown>
+  retiredDiscards: Y.Map<unknown>,
+  deletedPeople: Y.Map<unknown>
 });
 
 export type CollabRoots = {

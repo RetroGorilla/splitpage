@@ -127,8 +127,11 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
 function prepareDelete(operation: SharedRecordDelete, view: SharedPreparationView): SharedPreparationResult {
   const { collection, record: key } = operation.target;
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
-  if (!readPreparedSharedRecord(collection, key, view)) return { ok: false, reason: "missing-or-invalid-record" };
-  return accepted(view, [{ path: [collection, key], kind: "delete" }]);
+  const record = readPreparedSharedRecord(collection, key, view);
+  if (!record) return { ok: false, reason: "missing-or-invalid-record" };
+  // why: assumed rule 54 on #1414: a deleted person keeps its name, so recovery can list and restore it.
+  const kept: SharedPreparedWrite[] = collection === "people" ? [{ path: ["deletedPeople", key], kind: "set", value: { name: record.name, by: operation.by } }] : [];
+  return accepted(view, [{ path: [collection, key], kind: "delete" }, ...kept]);
 }
 
 export const recordHandlers: SharedOperationHandlers = Object.freeze({ "record-create": prepareCreate, "record-set": prepareSet, "record-delete": prepareDelete });
