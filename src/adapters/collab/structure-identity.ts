@@ -15,7 +15,7 @@ export function requireSharedStructureOperationId(operation: string): void {
   if (!operation || cleanId(operation) !== operation || !isStableSharedIdentity(operation)) throw new SharedStructurePreparationError("invalid-structure-operation-id");
 }
 
-export function sharedStructureIdentity(writer: string, operation: string, role: "beat" | "segment" | "visual" | "gallery" | "removal" | "restore" | "join", slot = 0): SharedContentRef {
+export function sharedStructureIdentity(writer: string, operation: string, role: "beat" | "segment" | "visual" | "gallery" | "removal" | "restore" | "join" | "heading", slot = 0): SharedContentRef {
   requireSharedStructureOperationId(operation);
   if (!/^(0|[1-9][0-9]*)$/.test(writer) || !Number.isSafeInteger(slot) || slot < 0) throw new SharedStructurePreparationError("unstable-identity");
   const encoded = operation.split("").map(unit => unit.charCodeAt(0).toString(16).padStart(4, "0")).join("");
