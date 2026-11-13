@@ -3,6 +3,7 @@ import type {
   SharedTextAddress
 } from "../../core/collab/operations.ts";
 import type { SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
+import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
 import type { SharedDocumentHandle } from "./types.ts";
@@ -31,9 +32,10 @@ import type { FormatMark } from "../../core/text/runs.ts";
 import { sharedJoinRetirementGroup } from "./join-record.ts";
 import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, readSharedJoinOf, readSharedJoinPlace, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
+import { planSharedRemovalUndo, readSharedLiveBeats, recordSharedRemoval } from "./undo-removal.ts";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -260,7 +262,11 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
     }
     case "join": return planJoin(handle, part, author, operations);
-    default: throw new SharedUndoRefusal("undo-unsupported:" + part.kind);
+    case "remove": case "restore": {
+      const plan = planSharedRemovalUndo(handle, part, author, raw => { const operation = operationOf(raw); operations.push(operation); return operation; });
+      return { inverse: () => ({ effective: plan.effective, part: plan.inverse() }) };
+    }
+    default: throw new SharedUndoRefusal("undo-unsupported:" + sharedUndoPartName(part));
   }
 }
 
@@ -359,6 +365,9 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (record) priors.set(operation, record.has(operation.field) ? { value: sharedPreparedValue(record.get(operation.field)) as Extract<SharedFieldValue, { clear?: false }>["value"] } : { clear: true });
     }
   }
+  const removals = operations.filter(operation => operation.kind === "remove" || operation.kind === "restore");
+  // why: which beats a removal or a restore took away or brought back is read from the live beats around it.
+  const live = removals.length === 1 ? readSharedLiveBeats(handle) : null;
   const result = executeSharedOperations(handle, operations, options);
   if (!result.ok) return { result, record: null };
   const parts: SharedUndoPart[] = [], described = new Set<string>(), spaced = new Set<string>(), after = new Map<string, SharedTextHistory | null>();
@@ -422,6 +431,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
         const prior = recordField(was, field), written = recordField(is, field);
         if (!same(prior, written)) parts.push({ kind: "record-field", target: operation.target, field, prior, written });
       }
+    } else if ((operation.kind === "remove" || operation.kind === "restore") && live) {
+      parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join") {
       parts.push(recordSharedJoin(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire") {
