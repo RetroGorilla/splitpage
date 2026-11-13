@@ -141,5 +141,7 @@ export function checkModel(actual: CollabModel, oracle: ScriptOracle, identities
     recovery: oracle.recovery.map(entry => ({ ...entry, row: expectedRow(entry.row, identities) }))
   };
   const difference = firstDifference(expected, actual, replica);
-  if (difference) throw new Error(difference);
+  // why: the checker may load no module, node:assert included (checker.test.ts), so it marks a mismatch
+  // with node:assert's own code, which is what makes a failure count as an assertion.
+  if (difference) throw Object.assign(new Error(difference), { code: "ERR_ASSERTION" });
 }

@@ -19,7 +19,7 @@ const MERGE_REASON = "Local merge is not available in a shared session.";
 const RELOAD_REASON = "Reloading a local file is not available in a shared session.";
 
 function recorder(calls: unknown[][]) {
-  return (name: string) => (...args: unknown[]): never => { calls.push([name, ...args]); throw new Error("unexpected local recovery port"); };
+  return (name: string) => (...args: unknown[]): never => { calls.push([name, ...args]); assert.fail("unexpected local recovery port"); };
 }
 
 function document() {

@@ -4,7 +4,7 @@
     "label": "join copies characters with fresh native identities",
     "file": "src/adapters/collab/join-executor.ts",
     "find": "applySharedMapWrites(handle, description);",
-    "replace": "applySharedMapWrites(handle, description); for (const write of description) if (write.path[0] === \"beats\" && write.path[2] === \"joins\") { const roots = collabState(handle).roots; const beat = roots.beats.get(write.path[1]) as import(\"yjs\").Map<unknown>; const segment = roots.segments.get(beat.get(\"segment\") as string) as import(\"yjs\").Map<unknown>; const text = segment.get(\"text\") as import(\"yjs\").Text; const value = text.toString(); text.delete(0, text.length); text.insert(0, value); }",
+    "replace": "applySharedMapWrites(handle, description); for (const write of description) if (write.path[0] === \"beats\" && write.path[2] === \"joins\") { const segment = collabState(handle).roots.segments.get(\"b:\" + String(write.path[1])) as import(\"yjs\").Map<unknown>; const text = segment.get(\"text\") as import(\"yjs\").Text; const value = text.toString(); text.delete(0, text.length); text.insert(0, value); }",
     "tests": ["tests/adapters/collab/join-stage1.test.ts"]
   },
   {

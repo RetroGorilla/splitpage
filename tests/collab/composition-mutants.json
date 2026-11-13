@@ -13,7 +13,7 @@
   }, {
     "label": "author port answers in a standalone session",
     "file": "src/bootstrap/wiring/ports/shared-author.ts",
-    "find": "return handle ? {",
-    "replace": "return true ? {"
+    "find": "by: source.name() } : null;",
+    "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
   }]
 }
