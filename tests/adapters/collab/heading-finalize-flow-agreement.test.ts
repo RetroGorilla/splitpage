@@ -7,20 +7,36 @@ import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/remo
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
+import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { readSharedRevision, encodeSharedState, encodeSharedStateVector } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { applyFlowOperations } from "../../core/flow/operation-applier.ts";
-import { finalizeHeading, startParagraph, beatPos } from "../../../src/core/flow/flow.ts";
+import { finalizeHeading, startParagraph, joinWithPrevious, beatPos } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 
+const declaredLimits: readonly string[] = Object.freeze([]);
 const scene = [{ id: "H1", name: "One", firstSceneId: "R0" }];
-const places: Record<string, { readonly source: Record<string, unknown>; readonly row: string; readonly enter: number | null; readonly split?: number }> = {
+const places: Record<string, { readonly source: Record<string, unknown>; readonly row: string; readonly enter: number | null; readonly split?: number; readonly join?: string }> = {
   "first beat, follower": { source: { rows: [{ id: "R1", audioText: "# Ab" }, { id: "R2", audioText: "cd", paragraphStart: true }] }, row: "R1", enter: null },
   "first beat, tail": { source: { rows: [{ id: "R1", audioText: "# Ab<br>cd" }, { id: "R2", audioText: "ef" }] }, row: "R1", enter: null },
+  "last beat after an earlier beat, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }] }, row: "R1", enter: null },
+  "last beat of a scene before the next heading, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }, { id: "R2", audioText: "ef" }],
+    sections: [{ id: "H1", name: "One", firstSceneId: "R0" }, { id: "H2", name: "Two", firstSceneId: "R2" }] }, row: "R1", enter: null },
+  "last beat after a joined beat, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "Rj", audioText: "y", paragraphStart: true }, { id: "R1", audioText: "# Ab", paragraphStart: true }] },
+    row: "R1", enter: null, join: "Rj" },
+  "last beat of a scene after a joined beat before the next heading, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "Rj", audioText: "y", paragraphStart: true },
+    { id: "R1", audioText: "# Ab", paragraphStart: true }, { id: "R2", audioText: "ef" }], sections: [{ id: "H1", name: "One", firstSceneId: "R0" }, { id: "H2", name: "Two", firstSceneId: "R2" }] },
+    row: "R1", enter: null, join: "Rj" },
+  "only beat of an existing scene, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab" }], sections: [{ id: "H1", name: "One", firstSceneId: "R1" }] },
+    row: "R1", enter: null },
+  "only beat of an existing scene after another scene, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab" }],
+    sections: [{ id: "H0", name: "Zero", firstSceneId: "R0" }, { id: "H1", name: "One", firstSceneId: "R1" }] }, row: "R1", enter: null },
+  "only beat of an existing scene before the next scene, empty first beat": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab" }, { id: "R2", audioText: "ef" }],
+    sections: [{ id: "H1", name: "One", firstSceneId: "R1" }, { id: "H2", name: "Two", firstSceneId: "R2" }] }, row: "R1", enter: null },
   "only beat, empty first beat": { source: { rows: [{ id: "R1", audioText: "# Ab" }] }, row: "R1", enter: null },
   "first beat, Enter": { source: { rows: [{ id: "R1", audioText: "# Abcd" }] }, row: "R1", enter: 4 },
   "mid scene, follower": { source: { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }, { id: "R2", audioText: "cd", paragraphStart: true }], sections: scene }, row: "R1", enter: null },
@@ -37,10 +53,15 @@ const places: Record<string, { readonly source: Record<string, unknown>; readonl
 
 test("complete finalization lists agree with app rows, scene ids, names and first beats under three delivery orders and a late joiner", t => {
   const runtime = createFlowLoadRuntime(); let calls = 0, executed = 0, finalized = 0, removed = 0, creates = 0;
-  for (const [place, { source: raw, row, enter, split }] of Object.entries(places)) for (const order of ["D1", "rev", "dup"] as const) {
+  for (const [place, { source: raw, row, enter, split, join }] of Object.entries(places)) for (const order of ["D1", "rev", "dup"] as const) {
     const source = validatedFixture(raw), label = place + "/" + order, aliases = new Map<string, string>();
     let doc: FlowDoc = { rows: source.rows, sections: source.sections, comments: source.comments ?? [] }, target = row, next = 0;
     const lists: (readonly SharedOperation[])[] = [];
+    if (join !== undefined) {
+      const glued = joinWithPrevious(doc, join, { ...runtime.ports, newId: () => "glue" + ++next, operations: { id: "glue", by: "Writer" } });
+      assert.ok(glued && "rows" in glued && glued.ops, label); lists.push(glued.ops);
+      doc = { rows: glued.rows, sections: glued.sections ?? doc.sections, comments: doc.comments };
+    }
     if (split !== undefined) {
       const cut = startParagraph(doc, beatPos("R0", split), { ...runtime.ports, newId: () => "split" + ++next, operations: { id: "split", by: "Writer" } });
       assert.ok(cut && "rows" in cut && cut.ops, label); lists.push(cut.ops); target = structureIdentityFixture("1", "split_o_0", "beat");
@@ -51,7 +72,7 @@ test("complete finalization lists agree with app rows, scene ids, names and firs
     const expected = applyFlowOperations(doc, outcome.ops, runtime.cells); assert.deepEqual(expected.rows, outcome.rows, label); assert.deepEqual(expected.sections, outcome.sections, label);
     const set = replicas(3, source);
     try {
-      registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a); registerSharedHeadingHandlers(set.a);
+      registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a); registerSharedHeadingHandlers(set.a); registerSharedJoinHandlers(set.a);
       const { projector } = captureIncrementalReplica(set.b);
       for (const ops of lists) {
         for (const op of ops) {
@@ -72,33 +93,6 @@ test("complete finalization lists agree with app rows, scene ids, names and firs
       });
     } finally { set.close(); }
   }
-  assert.deepEqual({ calls, executed, finalized, removed, creates }, { calls: 42, executed: 93, finalized: 33, removed: 15, creates: 9 });
-  t.diagnostic(JSON.stringify({ calls, executed, finalized, removed, creates, skipped: 0, deferred: 0, limits: [] }));
-});
-
-const declaredLimits = Object.freeze([
-  { place: "last beat after an earlier beat", rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }] },
-  { place: "last beat of a scene before the next heading", rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "# Ab", paragraphStart: true }, { id: "R2", audioText: "ef" }],
-    sections: [{ id: "H1", name: "One", firstSceneId: "R0" }, { id: "H2", name: "Two", firstSceneId: "R2" }] }
-]);
-test("declared limit: an empty first beat the app creates after an earlier beat lands before the finalized line, so the complete list is refused and nothing is written", t => {
-  const runtime = createFlowLoadRuntime();
-  for (const { place, ...raw } of declaredLimits) {
-    const source = validatedFixture(raw);
-    let next = 0;
-    const outcome = finalizeHeading({ rows: source.rows, sections: source.sections, comments: [] }, "R1", null, null, { ...runtime.ports, newId: () => "fresh" + ++next, operations: { id: "fin", by: "Writer" } });
-    assert.ok(outcome && "rows" in outcome && outcome.ops, place);
-    assert.deepEqual(outcome.ops.map(op => op.kind), ["segment-create", "heading-finalize", "remove"], place);
-    const created = outcome.ops[0]; assert.ok(created?.kind === "segment-create");
-    assert.deepEqual(created.at, { left: "R0", right: "sections" in raw ? "R2" : null, affinity: "after" }, place);
-    const set = replicas(2, source);
-    try {
-      registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a); registerSharedHeadingHandlers(set.a);
-      const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a);
-      const result = executeSharedOperations(set.a, outcome.ops, { base: revision });
-      assert.ok(!result.ok && "index" in result, place); assert.deepEqual([result.reason, result.index], ["misplaced-heading-beat", 1], place);
-      assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], [bytes, vector, revision], place);
-    } finally { set.close(); }
-  }
-  t.diagnostic(JSON.stringify({ limits: declaredLimits.map(item => "empty first beat placed before the line, " + item.place + ": refused with misplaced-heading-beat") }));
+  assert.deepEqual({ calls, executed, finalized, removed, creates }, { calls: 69, executed: 180, finalized: 54, removed: 36, creates: 39 });
+  t.diagnostic(JSON.stringify({ calls, executed, finalized, removed, creates, skipped: 0, deferred: 0, limits: declaredLimits }));
 });

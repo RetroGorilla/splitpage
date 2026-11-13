@@ -416,6 +416,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       else if (was && is) for (const field of [...new Set([...Object.keys(was), ...Object.keys(is)])].sort()) {
         // why: a status changes through its own operation and is undone by the status part.
         if (field === "status" && (operation.target.collection === "tags" || operation.target.collection === "shots")) continue;
+        // why: assumed rule 35 on #1414: a comment's updatedAt and resolution are stamps, left out like a beat stamp.
+        if (operation.target.collection === "comments" && (field === "updatedAt" || field === "resolution")) continue;
         const prior = recordField(was, field), written = recordField(is, field);
         if (!same(prior, written)) parts.push({ kind: "record-field", target: operation.target, field, prior, written });
       }

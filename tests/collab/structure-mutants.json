@@ -131,5 +131,23 @@
     "find": "registerSharedOperationHandlers(handle, { \"segment-move\": () => ({ ok: false, reason }) });",
     "replace": "registerSharedOperationHandlers(handle, {});",
     "tests": ["tests/adapters/collab/move-refusal.test.ts"]
+  }, {
+    "label": "list note forgets the empty first beat",
+    "file": "src/adapters/collab/operation-list-notes.ts",
+    "find": "emptyFirstBeats.set(beat, operation.target.owner)",
+    "replace": "emptyFirstBeats.delete(beat)",
+    "tests": ["tests/adapters/collab/heading-last-line.test.ts"]
+  }, {
+    "label": "empty first beat moved past a line its left beat does not reach",
+    "file": "src/adapters/collab/structure-placement.ts",
+    "find": "next?.kind === \"b\" && next.id === lineOwner",
+    "replace": "line !== undefined",
+    "tests": ["tests/adapters/collab/heading-last-line.test.ts"]
+  }, {
+    "label": "joined row before a last line counted as separate beats",
+    "file": "src/adapters/collab/structure-placement.ts",
+    "find": "if (block.kind === \"b\" && joined.has(block.id) || block.kind === \"h\" && !heading)",
+    "replace": "if (block.kind === \"h\" && !heading)",
+    "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
   }]
 }

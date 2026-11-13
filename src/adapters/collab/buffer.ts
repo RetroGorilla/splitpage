@@ -18,7 +18,14 @@ import { readSharedPaintedText } from "./paint-base.ts";
 import { resolveSharedBufferedSelection } from "./buffer-selection.ts";
 import { sharedAnchorCharacterEnd } from "./anchors.ts";
 import { collabState } from "./state.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
+import { resolveIndexedRestorableBeat } from "./structure-plan.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
+
+export function sharedBufferSourceSegment(handle: SharedDocumentHandle, rowId: string): string | null {
+  const segment = resolveIndexedRestorableBeat(observeSharedStructureIndex(handle), rowId)?.segment;
+  return segment && readSharedContentRef(segment) && collabState(handle).roots.order.toArray().includes(segment) ? segment : null;
+}
 
 export function sharedBufferedTarget(_handle: SharedDocumentHandle, rowId: string): SharedTextAddress {
   const owner = readSharedContentRef(rowId);
@@ -100,7 +107,7 @@ export function createSharedBufferedText(
             outcome = session.run({ name: "buffered-text-recovery", needs: "edit", plan: doc => ({
               changes: NO_CHANGES,
               apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
-              shared: { operations: bufferedRecoveryOperations(snapshot, author, { rows: doc.rows.length, visual }), undo: false }
+              shared: { operations: bufferedRecoveryOperations({ ...snapshot, segment: sharedBufferSourceSegment(handle, rowId) }, author, { rows: doc.rows.length, visual }), undo: false }
             }) });
           } catch (error) {
             return error instanceof SharedStructurePreparationError ? { kind: "rejected", reason: error.message } : { kind: "failed", error };

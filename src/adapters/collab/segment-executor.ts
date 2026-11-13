@@ -27,7 +27,7 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
   try {
     if (!isStableSharedIdentity(operation.by) || !isStableSharedIdentity(operation.segment)) return { ok: false as const, reason: "unstable-identity" };
     const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat, identities), createdSegment = sharedStructureIdentity(view.writer, operation.id, "segment");
-    const placement = prepareSharedBeatPlacement(view, order, operation.at, createdSegment);
+    const placement = prepareSharedBeatPlacement(view, order, operation.at, createdSegment, operation.beat);
     if (placement.kind === "order") reserveSharedStructureIdentity(view, createdSegment, identities);
     const segment = placement.kind === "inline" ? placement.plan.target.segment : createdSegment;
     if (operation.segment !== operation.beat) prepareStructureAlias(view, operation.segment, segment as SharedContentRef);

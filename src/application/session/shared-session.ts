@@ -1,5 +1,6 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
 import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
+import type { SharedRecoveryEntry } from "../../core/collab/recovery.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { WHOLE_DOCUMENT, changeSet } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
@@ -20,6 +21,7 @@ export interface ReplicaPort {
   readonly revision: () => number;
   readonly project: () => unknown;
   readonly changes: () => SharedProjectionChanges;
+  readonly recovery: () => readonly SharedRecoveryEntry[];
   readonly execute: (operations: readonly SharedOperation[], options: { readonly base: number }) => ReplicaExecution;
   readonly observe: (listener: (origin: ReplicaOrigin | null, failure?: ReplicaFailure) => void) => () => void;
 }
@@ -41,6 +43,7 @@ export interface SharedDocumentSession extends CommonDocumentSession {
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
   beforeCommand: (listener: () => boolean) => () => void;
   subscribeRows: (listener: ChangedRowsListener) => () => void;
+  recovery: () => readonly SharedRecoveryEntry[];
 }
 
 export type ChangedRowsListener = (rows: SharedProjectionChanges, change: SessionChange) => void;
@@ -62,6 +65,7 @@ interface ProjectionStep {
   readonly document: ValidatedDocument;
   readonly changes: ChangeSet;
   readonly rows: SharedProjectionChanges;
+  readonly recovery: readonly SharedRecoveryEntry[];
 }
 
 interface Landed {
@@ -97,6 +101,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   let admitting = false;
   let missed = false;
   let document: ValidatedDocument | null = null;
+  let recovery: readonly SharedRecoveryEntry[] = [];
   let revision = 0;
   let epoch = ports.after ? ports.after.epoch : 0;
   let generation = ports.after ? ports.after.generation : 0;
@@ -110,7 +115,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   function projectionStep(previous: ValidatedDocument | null): ProjectionStep {
     const next = ports.entry(ports.replica.project());
     const rows = previous && !missed ? ports.replica.changes() : WHOLE_PROJECTION;
-    return { document: next, changes: previous ? changesBetween(previous, next) : WHOLE_DOCUMENT, rows: rows };
+    return { document: next, changes: previous ? changesBetween(previous, next) : WHOLE_DOCUMENT, rows: rows, recovery: ports.replica.recovery() };
   }
 
   function deliver(kind: TransactionKind, changes: ChangeSet, rows: SharedProjectionChanges, mine: Running | null, failure: ReplicaFailure | undefined): Landed {
@@ -156,6 +161,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     const kind = document === null ? "adopt" : known(origin) ? ORIGIN_KINDS[origin] : "remote";
     if (!known(origin)) ports.report(new Error(UNRECOGNISED_ORIGIN + ": " + String(origin)));
     document = step.document;
+    recovery = step.recovery;
     revision = at;
     if (kind === "adopt") epoch++;
     if (kind === "edit" || kind === "replay") generation++;
@@ -242,6 +248,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     revision: function () { return revision; },
     read: function (select) { return select(document); },
     readAt: function (select) { return select(document, revision); },
+    recovery: function () { return recovery; },
     run: run,
     beforeCommand: listener => {
       if (disposed) return () => {};
@@ -275,6 +282,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
       rowListeners.length = 0;
       admissions.length = 0;
       document = null;
+      recovery = [];
     }
   };
 }
