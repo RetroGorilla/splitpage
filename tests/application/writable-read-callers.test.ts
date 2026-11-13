@@ -76,6 +76,6 @@ test("the writable reads left are the bridge function and the two standalone own
   assert.deepEqual(under(identifierMentions("currentDocument"), "bootstrap/"), BRIDGE_FUNCTION);
 });
 
-test("the beat clipboard's insert, which writes into the document it is handed, is called from the audited modules only", () => {
+test("the beat clipboard's insert, which writes into the document it is handed, is called from the audited app modules only", () => {
   assert.deepEqual(identifierMentions("insertBeats"), BEAT_INSERTS);
 });

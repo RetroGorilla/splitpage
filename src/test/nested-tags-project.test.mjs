@@ -81,7 +81,7 @@ test("copies and cuts retain nested HTML; scene clipboard carries both records, 
   assert.deepEqual(pasted.productionTags, doc.productionTags);
   assert.deepEqual(pasted.people, doc.people);
   loadTestDocument(migrateRows({ rows: [{ id: "target", audioText: "Target" }] }));
-  insertBeats(pasted, { afterRowId: "target" });
+  insertBeats(pasted, { state: currentDocument(), afterRowId: "target" });
   assert.equal(currentDocument().rows[1].visualText, nested);
   const metadata = records => records.map(t => [t.cat, t.name, t.status, t.notes, t.owner]);
   assert.deepEqual(metadata(currentDocument().productionTags), metadata(doc.productionTags));
