@@ -15,6 +15,8 @@ import { SharedProjectionCache } from "./projection-cache.ts";
 import type { CollabRoots } from "./roots.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { sharedJoinEndpointField, sharedJoinEndpointOffset } from "./join-endpoint.ts";
+import { readSharedActiveDiscards } from "./discard.ts";
+import type { SharedActiveDiscard } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
   readonly cache: SharedProjectionCache;
@@ -91,6 +93,11 @@ export class SharedProjectionSource {
       return { fields: readProjectionFields(entries, "heading"), removed: readSharedHeadingRemovalState(entries.keys(), key => entries.get(key)).removed,
         removals: readSharedHeadingActiveRemovals(entries.keys(), key => entries.get(key)) };
     });
+  }
+
+  discards(): readonly SharedActiveDiscard[] {
+    return this.cache.read(["discards"], [this.version("discards"), this.version("retiredDiscards")],
+      () => readSharedActiveDiscards(this.inputRoots.discards, this.inputRoots.retiredDiscards));
   }
 
   title(): string {

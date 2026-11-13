@@ -80,7 +80,7 @@ test("a command writes as a local command and its reversal as a local undo, and 
     assert.equal(readSharedStatus(run.a, BEAT), "ready");
     stop();
     assert.deepEqual(origins, ["local-command", "local-undo", "local-undo"]);
-    assert.deepEqual(SHARED_UNDO_PARTS, ["text", "mark-add", "mark-remove", "scalar", "status", "status-retired", "record-create", "record-delete", "record-field", "join"]);
+    assert.deepEqual(SHARED_UNDO_PARTS, ["text", "mark-add", "mark-remove", "scalar", "status", "status-retired", "record-create", "record-delete", "record-field", "join", "discard", "discard-retired"]);
     assert.deepEqual(["text", "status-retired", "structure", "record-create", "record-field", ""].map(supportsSharedUndoPart), [true, true, false, true, true, false]);
   } finally { run.close(); }
 });

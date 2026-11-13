@@ -229,7 +229,7 @@ function concurrentCleanedCollision(order: DeliveryOrder): void {
     const read = (handle: SharedDocumentHandle) => { const projection = projectSharedDocumentWithRecovery(handle); return {
       rows: projection.document.rows.map(row => ({ id: row.id, text: row.audioText })), loaded: runtime.load(projection.document).rows.map(row => ({ id: row.id, text: row.audioText })), recovery: projection.recovery }; };
     const rows = [{ id: beat, text: "Reserved" }, { id: "R1", text: "abcd" }];
-    const recovery = [{ kind: "unprojectable-fragment", reason: "duplicate-boundary", owner: beat, segment, field: "audioText", from: 0, to: 7, html: "Created" }] as const;
+    const recovery = [{ kind: "unprojectable-fragment", reason: "duplicate-boundary", owner: beat, segment, field: "audioText", from: 0, to: 7, html: "Created", start: "1:51" }] as const;
     agree("same cleaned beat id keeps the first row", order, [set.a, set.b], read, { rows, loaded: rows, recovery });
     const bytes = encodeSharedState(set.a), vector = encodeSharedStateVector(set.a), revision = readSharedRevision(set.a); let updates = 0;
     const stop = deliveryReplica(set.a).onLocalUpdate(() => { updates++; });
@@ -278,7 +278,7 @@ test("an empty cleaned native beat id has no invented row id and keeps its text 
       agree("empty cleaned beat identity", order, [set.a, set.b, set.c], handle => {
         const out = projectSharedDocumentWithRecovery(handle);
         return { rows: out.document.rows.map(row => ({ id: row.id, text: row.audioText })), loaded: runtime.load(out.document).rows.map(row => row.id), recovery: out.recovery };
-      }, { rows: [{ id: "R1", text: "abcd" }], loaded: ["R1"], recovery: [{ kind: "unprojectable-fragment", reason: "invalid-beat-id", owner: "[]", segment: "empty", field: "audioText", from: 0, to: 4, html: "Kept" }] });
+      }, { rows: [{ id: "R1", text: "abcd" }], loaded: ["R1"], recovery: [{ kind: "unprojectable-fragment", reason: "invalid-beat-id", owner: "[]", segment: "empty", field: "audioText", from: 0, to: 4, html: "Kept", start: "1:41" }] });
       registerSharedTextOperationHandlers(set.b);
       const bytes = encodeSharedState(set.b), vector = encodeSharedStateVector(set.b), revision = readSharedRevision(set.b);
       const result = executeSharedOperations(set.b, [operation({ kind: "text-insert", id: "empty-edit", by: "Writer", target: { owner: "[]", segment: "empty", field: "audioText" },
@@ -313,12 +313,12 @@ for (const order of ["D1", "rev", "dup"] as const) test(`an in-flight edit stays
     set.queue.flush(order);
     agree("accepted edit enters recovery", order, [set.a, set.b, set.c], read, {
       rows: [{ id: "R1", text: "Reserved", status: "todo", length: null }],
-      recovery: [{ kind: "unprojectable-fragment", reason: "duplicate-boundary", owner: "R1", segment: "b:R1", field: "audioText", from: 0, to: 5, html: "!abcd" }]
+      recovery: [{ kind: "unprojectable-fragment", reason: "duplicate-boundary", owner: "R1", segment: "b:R1", field: "audioText", from: 0, to: 5, html: "!abcd", start: "1:35" }]
     });
     transactSharedDocument(set.b, "local-command", () => { collabState(set.b).roots.beats.delete("[R1]"); }); set.queue.flush(order);
     agree("deleting the winner reveals the accepted edits", order, [set.a, set.b, set.c], read, {
       rows: [{ id: "R1", text: "!abcd", status: "ready", length: 9 }],
-      recovery: [{ kind: "unprojectable-fragment", reason: "missing-beat", owner: "[R1]", segment: "earlier", field: "audioText", from: 0, to: 8, html: "Reserved" }]
+      recovery: [{ kind: "unprojectable-fragment", reason: "missing-beat", owner: "[R1]", segment: "earlier", field: "audioText", from: 0, to: 8, html: "Reserved", start: "2:6" }]
     });
   } finally { set.close(); }
 });

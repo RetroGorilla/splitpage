@@ -3,6 +3,7 @@ import { ROW_STATUS_IDS } from "../document/timing.ts";
 import { TAG_STATUS_IDS } from "../document/tags.ts";
 import { BROLL_STATUS_IDS } from "../document/broll.ts";
 import type { SharedContentRef, SharedMarkValue, SharedOperation } from "./operations.ts";
+import { sharedRecoveryKinds } from "./operations.ts";
 
 type OperationReader = (value: unknown) => unknown;
 type OperationFields = Readonly<Record<string, OperationReader>>;
@@ -216,6 +217,13 @@ export function readStatusRetire(raw: unknown) {
   return statusValue(readKind(raw, "status-retire", { target: statusTarget, event: ref, value: string }));
 }
 
+export function readRecoveryDiscard(raw: unknown) {
+  return readKind(raw, "discard", { entry: entry => fields(entry, { kind: oneOf(...sharedRecoveryKinds()), key: string }), removals: list(ref) });
+}
+export function readDiscardRetire(raw: unknown) {
+  return readKind(raw, "discard-retire", { discard: string });
+}
+
 export function readOperation(raw: unknown): SharedOperation | null {
   try {
     const value = canonical(raw);
@@ -244,6 +252,8 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "text-restore": return readTextRestore(value);
       case "mark-retract": return readMarkRetract(value);
       case "status-retire": return readStatusRetire(value);
+      case "discard": return readRecoveryDiscard(value);
+      case "discard-retire": return readDiscardRetire(value);
       default: return null;
     }
   } catch { return null; }

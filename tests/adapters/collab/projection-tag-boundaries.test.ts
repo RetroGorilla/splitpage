@@ -78,17 +78,20 @@ for (const field of ["audioText", "visualText"] as const) for (const copies of [
   });
 
 const checks: readonly { name: string; source: string; plain: readonly Run[]; boxParts: readonly (readonly [number, number])[];
-  from: number; to: number; html: string; rejection: readonly unknown[] }[] = [
+  from: number; to: number; html: string; rejection: readonly unknown[]; start: { audioText: string; visualText: string } }[] = [
   { name: "a real crossing after an atom still recovers", source: atoms[0]?.html + "abcd",
     plain: [{ atom: "who", name: "Ada", text: "@Ada", marks: {} }, { text: "abcd", marks: {} }], boxParts: [[1, 4]], from: 3, to: 5,
-    html: atoms[0]?.html + box + "abc</span>d", rejection: [{ kind: "crossing-tag", occurrence: "m", tag: "t_red", from: 3, to: 5, words: "cd", rowId: "R1" }] },
+    html: atoms[0]?.html + box + "abc</span>d", rejection: [{ kind: "crossing-tag", occurrence: "m", tag: "t_red", from: 3, to: 5, words: "cd", rowId: "R1" }],
+    start: { audioText: "1:34", visualText: "1:46" } },
   { name: "line feeds stay inside the tag wrapper", source: "a<br>bc", plain: [{ text: "a\nbc", marks: {} }], boxParts: [[0, 3]], from: 2, to: 4,
-    html: box + "a<br>b</span>c", rejection: [{ kind: "crossing-tag", occurrence: "m", tag: "t_red", from: 2, to: 4, words: "bc", rowId: "R1" }] },
+    html: box + "a<br>b</span>c", rejection: [{ kind: "crossing-tag", occurrence: "m", tag: "t_red", from: 2, to: 4, words: "bc", rowId: "R1" }],
+    start: { audioText: "1:33", visualText: "1:45" } },
   { name: "an untagged gap closes the occurrence", source: "axbc", plain: [{ text: "axbc", marks: {} }], boxParts: [[0, 1], [2, 3]], from: 2, to: 4,
-    html: box + "a</span>x" + red + box + "b</span>c</span>", rejection: [] },
+    html: box + "a</span>x" + red + box + "b</span>c</span>", rejection: [], start: { audioText: "", visualText: "" } },
   { name: "formatting inside a tag does not close it", source: "a<strong>b</strong>cd",
     plain: [{ text: "a", marks: {} }, { text: "b", marks: { b: true } }, { text: "cd", marks: {} }], boxParts: [[0, 3]], from: 2, to: 4,
-    html: box + "a<strong>b</strong>c</span>d", rejection: [{ kind: "crossing-tag", occurrence: "m", tag: "t_red", from: 2, to: 4, words: "cd", rowId: "R1" }] }
+    html: box + "a<strong>b</strong>c</span>d", rejection: [{ kind: "crossing-tag", occurrence: "m", tag: "t_red", from: 2, to: 4, words: "cd", rowId: "R1" }],
+    start: { audioText: "1:33", visualText: "1:45" } }
 ];
 for (const scenario of checks) for (const field of ["audioText", "visualText"] as const) for (const order of deliveryOrders)
   test(`tag extent boundary: ${scenario.name}, ${field}, ${order}`, () => {
@@ -109,7 +112,7 @@ for (const scenario of checks) for (const field of ["audioText", "visualText"] a
       for (const handle of [run.a, run.b]) {
         const actual = readPureMergedProjection(handle);
         assert.equal(actual.view.document.rows?.[0]?.[field], scenario.html);
-        assert.deepEqual(actual.view.recovery, scenario.rejection.map(entry => ({ ...entry as object, field })));
+        assert.deepEqual(actual.view.recovery, scenario.rejection.map(entry => ({ ...entry as object, field, start: scenario.start[field] })));
       }
       agree(scenario.name, order, [run.a, run.b], readPureMergedProjection);
     } finally { run.close(); }

@@ -182,10 +182,25 @@ export type SharedStatusRetire = SharedOperationAuthor & {
   readonly kind: "status-retire";
   readonly event: SharedContentRef;
 } & Pick<SharedStatusEvent, "target" | "value">;
+export function sharedRecoveryKinds() {
+  return ["removed-beat", "removed-heading", "crossing-tag", "deleted-tag", "gallery-overflow",
+    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats"] as const;
+}
+export interface SharedRecoveryName { readonly kind: ReturnType<typeof sharedRecoveryKinds>[number]; readonly key: string }
+export interface SharedRecoveryDiscard extends SharedOperationAuthor {
+  readonly kind: "discard";
+  readonly entry: SharedRecoveryName;
+  readonly removals: readonly SharedContentRef[];
+}
+export interface SharedDiscardRetire extends SharedOperationAuthor {
+  readonly kind: "discard-retire";
+  readonly discard: string;
+}
 export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedBeatSplitBefore
   | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
-  | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire;
+  | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
+  | SharedRecoveryDiscard | SharedDiscardRetire;
 
 export function replaceObservedText(
   deletion: SharedTextDelete, insertion: SharedTextInsert

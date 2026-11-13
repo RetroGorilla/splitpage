@@ -28,6 +28,7 @@ import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
 import { prepareSharedBeatSplit } from "./split-executor.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
+import { prepareSharedDiscard, prepareSharedDiscardRetire, sharedRemovalDiscardRetires } from "./discard.ts";
 import { collabPreparedOperationTextTarget } from "./text-target.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 
@@ -173,6 +174,8 @@ function restore(operation: SharedRestore, view: SharedPreparationView, identiti
     }
   }
   if (!writes.length) return { ok: true, writes: Object.freeze([]), apply: handle => applySharedMapWrites(handle, Object.freeze([])) };
+  // why: assumed rule 52 as amended on #1414: a restore retires the discards that saw its removals.
+  writes.push(...sharedRemovalDiscardRetires(view, removals));
   reserveSharedStructureIdentity(view, id, identities); prepareStructureAlias(view, operation.id, id);
   for (const beat of beats) planSharedStructureRemoval(view, beat, false);
   for (const heading of headings) planSharedHeadingRemoval(view, heading, false);
@@ -191,5 +194,6 @@ export function registerSharedRemovalHandlers(handle: SharedDocumentHandle): voi
     if (!isStableSharedIdentity(operation.by)) throw new SharedStructurePreparationError("unstable-identity");
     return remove(operation, view, index, identities);
   }), restore: (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return restore(operation, view, identities); }),
-  "heading-remove": (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return removeHeading(operation, view, identities); }) });
+  "heading-remove": (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return removeHeading(operation, view, identities); }),
+  discard: prepareSharedDiscard, "discard-retire": prepareSharedDiscardRetire });
 }
