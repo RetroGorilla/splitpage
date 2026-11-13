@@ -530,7 +530,9 @@ every `node:assert` failure carries. Nothing else counts: not an error merely
 named `AssertionError`, and not an error whose `cause` is an assertion, since
 the code that wrapped it decided to throw something else. A plain `Error` given
 `code: "ERR_ASSERTION"` does count, so test helpers should fail through
-`node:assert` rather than set that code by hand.
+`node:assert` rather than set that code by hand. The one exception is the
+Stage 1 oracle checker (`tests/collab/checker.ts`), which may load no module at
+all, `node:assert` included, and so sets the code on its mismatch itself.
 
 Tests marked `skip` or `todo` count for nothing: they are not among "every
 chosen test" above, a skipped body never runs, and a failing `todo` test does

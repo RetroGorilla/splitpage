@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { DeliveryOrder, ReplicaName } from "./delivery.ts";
 
 export interface ReplicaReading<Output> {
@@ -119,7 +120,7 @@ export function assertReplicasAgree<Output>(reader: string, readings: readonly R
   for (const reading of rest) {
     const found = difference(first.output, reading.output, reader);
     if (found) {
-      throw new Error(`${reader}: replica ${reading.replica} after ${reading.order} differs from replica ${first.replica} after ${first.order} at ${found}`);
+      assert.fail(`${reader}: replica ${reading.replica} after ${reading.order} differs from replica ${first.replica} after ${first.order} at ${found}`);
     }
   }
 }

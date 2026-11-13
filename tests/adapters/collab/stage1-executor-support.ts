@@ -30,12 +30,12 @@ export class Stage1ExecutorHarness {
   readonly seed: readonly SeedBeat[];
   joined = false;
   private serial = 0;
-  constructor(seed: readonly SeedBeat[]) {
+  constructor(seed: readonly SeedBeat[], fields: Record<string, unknown> = {}) {
     this.seed = seed;
     const base = createMonitoredSharedDocument();
     try {
       collabState(base).doc.clientID = 10;
-      hydrateSharedDocument(base, validatedFixture({ rows: seed.map(row => ({ id: row.id, audioText: row.text })) }));
+      hydrateSharedDocument(base, validatedFixture({ ...fields, rows: seed.map(row => ({ id: row.id, audioText: row.text })) }));
       let index = 0;
       for (const row of seed) for (const char of this.characters(base, row.id)) this.book.bind("s" + ++index, char.identity);
       for (const [client, handle] of [this.a, this.b, this.c].entries()) {

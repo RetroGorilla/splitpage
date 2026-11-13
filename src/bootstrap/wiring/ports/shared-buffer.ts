@@ -1,10 +1,10 @@
 import { createSharedBufferedText, sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
 import { readSharedPaintedText } from "../../../adapters/collab/paint-base.ts";
-import { readBufferedFieldKey } from "../../../core/collab/buffer.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
 import type { PaintedTextSource } from "../../../application/editing/ports.ts";
 import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
+import { bufferedFieldTarget } from "../../../application/editing/buffered-field-key.ts";
 import type { ProductionReaders } from "../../../core/production/ports.ts";
 import type { StampPorts } from "../../../application/session/ports.ts";
 
@@ -20,7 +20,7 @@ export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<Sh
   return {
     paintedText: {
       documentRevision: () => session.readAt((_doc, revision) => revision),
-      read: (key, field) => field === readBufferedFieldKey(key).field ? readSharedPaintedText(handle, sharedBufferedTarget(handle, key)) : null
+      read: (key, field) => field === bufferedFieldTarget(key)?.field ? readSharedPaintedText(handle, sharedBufferedTarget(handle, key)) : null
     },
     bufferedText: { open: commit.open, beforeCommand: session.beforeCommand, missingBase: effects.missingBase, recovered: effects.recovered, report: effects.report }
   };

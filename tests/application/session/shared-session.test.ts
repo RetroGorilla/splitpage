@@ -287,6 +287,22 @@ for (const during of ["edit", "remote"] as const) {
   });
 }
 
+test("re-entry: one command issued while another is planning is rejected as reentered, and the outer command applies alone", () => {
+  const replica = fakeReplica(script()), inner: CommandOutcome[] = [];
+  const h = sharedHarness(replica.port);
+  replica.script(() => { replica.write("local-command", timed(7)); return { ok: true }; });
+  const outcome = h.session.run({
+    name: "outer", needs: "edit",
+    plan: () => {
+      inner.push(h.session.run(sharedCommand("planned", [LENGTH])));
+      return { changes: changeSet({ whole: true }), apply: () => { throw new Error("applied"); }, shared: { operations: [LENGTH] } };
+    }
+  });
+  assert.deepEqual(inner, [{ kind: "rejected", reason: REENTERED }]);
+  assert.deepEqual(outcome, { kind: "applied", generation: 1, changes: LENGTH_CELL });
+  assert.deepEqual(h.executed, [{ operations: [LENGTH], base: 1 }]);
+});
+
 test("re-entry: a command issued while another is planning or being asked for capability is rejected as reentered, and the outer command applies alone", () => {
   const replica = fakeReplica(script()), inner: CommandOutcome[] = [];
   let ask = false;

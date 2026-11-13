@@ -127,14 +127,14 @@ test("an autosave timer armed before authority changes is cleared without callin
 function job(kind: string, calls: string[]): SaveJob<{ kind: string }> {
   return {
     request: { kind }, generation: 0,
-    operation: () => { calls.push("operation"); throw new Error("unexpected operation"); },
+    operation: () => { calls.push("operation"); assert.fail("unexpected operation"); },
     owns: () => { calls.push("owns"); return true; }, alive: () => { calls.push("alive"); return true; },
     moved: () => { calls.push("moved"); }, landed: () => { calls.push("landed"); }
   };
 }
 
 function guardedFilePorts(capability: FileSavingPorts["capability"], calls: string[], bundles?: FileSavingPorts["bundles"], saves?: FileSavingPorts["saves"], notices?: FileSavingPorts["notices"]): FileSavingPorts {
-  const unexpected = (name: string): never => { calls.push(name); throw new Error("unexpected file port"); };
+  const unexpected = (name: string): never => { calls.push(name); assert.fail("unexpected file port"); };
   return {
     capability,
     get edits() { return unexpected("edits"); },
@@ -186,7 +186,7 @@ test("automatic requests ask autosave before planning even when manual destinati
     destination: () => { calls.push("destination"); return null; },
     keyOf: () => { calls.push("keyOf"); return { owner: null, name: "none" }; },
     obsolete: () => { calls.push("obsolete"); },
-    ownership: { capture: () => { calls.push("capture"); throw new Error("unexpected capture"); }, stillOwns: () => { calls.push("stillOwns"); return true; } },
+    ownership: { capture: () => { calls.push("capture"); assert.fail("unexpected capture"); }, stillOwns: () => { calls.push("stillOwns"); return true; } },
     autosave: { enabledAtStart: () => { calls.push("preference"); return true; }, changed: () => { calls.push("changed"); } }
   }, { start: () => { calls.push("timer.start"); return 1; }, stop: () => { calls.push("timer.stop"); } }));
   for (const kind of ["auto", "autosave"] as const) {
@@ -208,11 +208,11 @@ test("Save As waiting for bundle copies asks the current session before holding 
     }
   }, {
     resume: () => { calls.push("resume"); },
-    policy: () => { throw new Error("unexpected policy"); },
-    confirmSavedNow: () => { throw new Error("unexpected confirm"); },
-    halt: () => { throw new Error("unexpected halt"); },
-    changes: () => { throw new Error("unexpected changes"); }
-  }, { ...notices.notices, imagesLeftOut: () => { throw new Error("unexpected image notice"); } });
+    policy: () => assert.fail("unexpected policy"),
+    confirmSavedNow: () => assert.fail("unexpected confirm"),
+    halt: () => assert.fail("unexpected halt"),
+    changes: () => assert.fail("unexpected changes")
+  }, { ...notices.notices, imagesLeftOut: () => assert.fail("unexpected image notice") });
   const saving = mountFileSaving(ports);
   t.after(saving.dispose);
   const pending = saving.destination().write(job("saveAs", calls));
@@ -231,7 +231,7 @@ test("shared save requests stop before destination, ownership, writer and confli
     destination: () => { calls.push(["destination"]); return "file"; },
     keyOf: identity => { calls.push(["keyOf", identity]); return { owner: identity, name: "file" }; },
     obsolete: request => { calls.push(["obsolete", request]); },
-    ownership: { capture: () => { calls.push(["capture"]); throw new Error("unexpected capture"); }, stillOwns: () => { calls.push(["stillOwns"]); return true; } },
+    ownership: { capture: () => { calls.push(["capture"]); assert.fail("unexpected capture"); }, stillOwns: () => { calls.push(["stillOwns"]); return true; } },
     autosave: { enabledAtStart: () => { calls.push(["preference"]); return true; }, changed: what => { calls.push(["changed", what]); } }
   }, { start: (_run, ms) => { calls.push(["timer.start", ms]); return 1; }, stop: handle => { calls.push(["timer.stop", handle]); } }));
   for (const kind of ["save", "saveAs", "auto", "autosave", "force", "writeback", "writebackForce"] as const) {
@@ -250,7 +250,7 @@ test("shared save requests stop before destination, ownership, writer and confli
 test("the import destination and its save-back actions refuse before reading, building, requesting or writing", async t => {
   const calls: string[] = [];
   const notices: unknown[][] = [];
-  const unused = (name: string) => (): never => { calls.push(name); throw new Error("unexpected import port"); };
+  const unused = (name: string) => (): never => { calls.push(name); assert.fail("unexpected import port"); };
   const ports: ImportSavingPorts = {
     capability: SHARED,
     location: { importHome: unused("home"), amendHome: unused("amendHome") },
@@ -275,7 +275,7 @@ test("the import destination and its save-back actions refuse before reading, bu
 test("shared manual saves and autosave settings present their refusal before preferences or save ports", async t => {
   const calls: string[] = [];
   const notices: unknown[][] = [];
-  const unused = (name: string) => (): never => { calls.push(name); throw new Error("unexpected save port"); };
+  const unused = (name: string) => (): never => { calls.push(name); assert.fail("unexpected save port"); };
   t.after(startEffects(new Proxy({} as EffectPorts<Element>, {
     get: (_target, key) => {
       if (key === "notices") return { show: (message: string, kind: string) => {
@@ -283,7 +283,7 @@ test("shared manual saves and autosave settings present their refusal before pre
         return { isConnected: true, dismiss: () => {}, removeEventListener: () => {} };
       } };
       calls.push(String(key));
-      throw new Error("unexpected effect port");
+      assert.fail("unexpected effect port");
     }
   })));
   t.after(startSaves({
@@ -313,7 +313,7 @@ for (const member of ["saveDestinations", "autosave"] as const) {
       get: (_target, key) => {
         if (key === "capability") return capability;
         calls.push(String(key));
-        throw new Error("unexpected effect port");
+        assert.fail("unexpected effect port");
       }
     });
     createSessionEffects(ports).save({ kind: "edit", epoch: 1, generation: 1, changes: changeSet({ saveNow: true }) });

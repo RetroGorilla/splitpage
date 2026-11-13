@@ -14,14 +14,28 @@ import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import type { BufferedTextCommit, BufferedTextEdit } from "../../../src/application/editing/ports.ts";
 
+export function keyOf(type: string, insert: string): string | null {
+  if (type === "insertText" && Array.from(insert).length === 1) return insert;
+  return type === "deleteContentBackward" ? "Backspace" : type === "deleteContentForward" ? "Delete" : null;
+}
+
+export function pressKey(root: HTMLElement, key: string | null): boolean {
+  return key === null || root.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+}
+
+export function releaseKey(root: HTMLElement, key: string | null): void {
+  if (key !== null) root.dispatchEvent(new window.KeyboardEvent("keyup", { bubbles: true, key }));
+}
+
 export function bufferedWriter(text = "ab", sourceReady = true,
   command?: SurfacePorts["commit"], clipboard?: SurfacePorts["clipboard"], options: {
     h?: Stage1ExecutorHarness;
     open?: (open: BufferedTextCommit["open"]) => BufferedTextCommit["open"];
     key?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
     author?: (serial: number) => string;
+    fields?: Record<string, unknown>;
   } = {}) {
-  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }]), a = sharedHarness(adapterReplica(h.a));
+  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a));
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
@@ -55,18 +69,20 @@ export function bufferedWriter(text = "ab", sourceReady = true,
   surface.paint(); surface.place(caretAt(beatPos("R1", text.length)));
   const beat = (rowId = "R1") => { const element = root.querySelector<HTMLElement>('.wr-beat[data-id="' + rowId + '"]'); assert.ok(element); return element; };
   function native(from: number, to: number, insert: string, during?: () => void, type = "insertText", rowId = "R1", reportInput = true): boolean {
-    const target = { anchor: beatPos(rowId, from), head: beatPos(rowId, to) };
+    const target = { anchor: beatPos(rowId, from), head: beatPos(rowId, to) }, key = keyOf(type, insert);
     surface.place(target);
+    if (!pressKey(root, key)) return false;
     const range = surface.domRange(target); assert.ok(range);
     const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data: insert });
     const nativeTarget = range.cloneRange();
     Object.defineProperty(event, "getTargetRanges", { value: () => [nativeTarget] });
-    if (!root.dispatchEvent(event)) return false;
+    if (!root.dispatchEvent(event)) { releaseKey(root, key); return false; }
     during?.();
     range.deleteContents();
     const node = document.createTextNode(insert); range.insertNode(node);
     window.getSelection()?.setBaseAndExtent(node, insert.length, node, insert.length);
     if (reportInput) root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data: insert }));
+    releaseKey(root, key);
     return true;
   }
   return { h, a, root, surface, native, beat, reports, missing, recovered, notices, edits, outcomes, reads: () => reads, ready: () => { ready = true; },

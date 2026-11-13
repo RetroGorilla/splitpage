@@ -1,7 +1,8 @@
 import type { BufferedTextCommit } from "../../application/editing/ports.ts";
 import type { CommonDocumentSession, CommandOutcome } from "../../application/session/document-session.ts";
-import { cellEdit, NO_CHANGES } from "../../application/session/change-set.ts";
-import { createSharedTextBuffer, readBufferedFieldKey } from "../../core/collab/buffer.ts";
+import { NO_CHANGES } from "../../application/session/change-set.ts";
+import { bufferedFieldChanges, bufferedFieldTarget } from "../../application/editing/buffered-field-key.ts";
+import { createSharedTextBuffer } from "../../core/collab/buffer.ts";
 import { bufferedRecoveryOperations, bufferedTextOperations } from "../../core/collab/buffer-operations.ts";
 import { sharedTagsIntroducedByText } from "../../core/collab/text-records.ts";
 import type { ProductionReaders } from "../../core/production/ports.ts";
@@ -27,10 +28,11 @@ export function sharedBufferSourceSegment(handle: SharedDocumentHandle, rowId: s
   return segment && readSharedContentRef(segment) && collabState(handle).roots.order.toArray().includes(segment) ? segment : null;
 }
 
-export function sharedBufferedTarget(_handle: SharedDocumentHandle, key: string): SharedTextAddress {
-  const { rowId, field } = readBufferedFieldKey(key), owner = readSharedContentRef(rowId);
-  if (!owner) throw new Error("Invalid buffered beat address");
-  return { owner, segment: owner, field };
+export function sharedBufferedTarget(handle: SharedDocumentHandle, key: string): SharedTextAddress {
+  const field = bufferedFieldTarget(key), docId: unknown = field?.field === "title" ? collabState(handle).roots.meta.get("docId") : null;
+  const owner = readSharedContentRef(field?.field === "title" ? docId : field?.owner);
+  if (!field || !owner) throw new Error("Invalid buffered field address");
+  return { owner, segment: owner, field: field.field };
 }
 
 export function createSharedBufferedText(
@@ -70,9 +72,9 @@ export function createSharedBufferedText(
               const field = target.field, row = doc.rows.find(entry => entry.id === target.owner);
               const tags = field === "audioText" || field === "visualText" ? sharedTagsIntroducedByText({ field, before: row?.[field],
                 after: toHtml(runs), registry: doc.productionTags }, ports.readers, author) : [];
-              const stamp = operations.length ? [sharedBeatStamp(target.owner, author, ports.stamps)] : [];
+              const stamp = operations.length && field !== "heading" && field !== "title" ? [sharedBeatStamp(target.owner, author, ports.stamps)] : [];
               return {
-                changes: cellEdit(target.owner, target.field),
+                changes: bufferedFieldChanges(rowId),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
                 shared: { operations: [...operations, ...tags, ...stamp], base: commit.base }
               };
@@ -92,7 +94,7 @@ export function createSharedBufferedText(
               outcome = outcome.kind === "noop" ? { kind: "failed", error }
                 : { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
             }
-            const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "visualText" ? { key: rowId, target } : undefined) : undefined;
+            const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "audioText" ? undefined : { key: rowId, target }) : undefined;
             return restored ? { ...outcome, selection: restored } : outcome;
           }
           return outcome;
@@ -104,10 +106,11 @@ export function createSharedBufferedText(
           try {
             const author = ports.author(), visual = sharedStructureIdentity(String(collabState(handle).doc.clientID), author.id, "visual");
             const snapshot = { owner: target.owner, base: painted.revision, html: toHtml(runs), units: cellLength(runs), field: target.field === "visualText" ? "visualText" as const : "audioText" as const };
+            const segment = target.field === "audioText" || target.field === "visualText" ? sharedBufferSourceSegment(handle, target.owner) : null;
             outcome = session.run({ name: "buffered-text-recovery", needs: "edit", plan: doc => ({
               changes: NO_CHANGES,
               apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
-              shared: { operations: bufferedRecoveryOperations({ ...snapshot, segment: sharedBufferSourceSegment(handle, target.owner) }, author, { rows: doc.rows.length, visual }), undo: false }
+              shared: { operations: bufferedRecoveryOperations({ ...snapshot, segment }, author, { rows: doc.rows.length, visual }), undo: false }
             }) });
           } catch (error) {
             return error instanceof SharedStructurePreparationError ? { kind: "rejected", reason: error.message } : { kind: "failed", error };
