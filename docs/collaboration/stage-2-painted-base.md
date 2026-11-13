@@ -38,6 +38,11 @@ The record is replaced by each paint, holds only the beats that pass painted,
 and is cleared when the surface is disposed. Only narration is recorded;
 headings, the visual box and the title are a later package.
 
+The Split view keeps the same record (`createPaintedBeats`, handed to its cell
+buffer by the wiring). It records at every rows paint, one read per narration
+cell, and only for cells whose row signature matches the shown document; a cell
+the binding rewrote or kept after a commit is recorded on its own with `field`.
+
 ## Buffer cases
 
 The five cases raised by the painted-base slice have these ends in the buffer

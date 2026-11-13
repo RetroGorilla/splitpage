@@ -522,6 +522,12 @@ export function noteFieldPainted(cellEl: Element, field: string, row: Row): void
   sig[field as TextField] = rowFieldHtml(row, field as TextField);
 }
 
+export function paintedFromRow(cellEl: Element, field: string, row: Row): boolean {
+  const rowEl: SignedRow | null = cellEl.closest(".row");
+  const sig = rowEl ? rowEl[ROW_SIG] : undefined;
+  return !!rowEl && !!sig && rowEl.getAttribute("data-id") === row.id && sig[field as TextField] === rowFieldHtml(row, field as TextField);
+}
+
 function markLongestIncreasing(positions: readonly number[], from: number, to: number, lo: number, hi: number, keep: boolean[]): void {
   const tails: number[] = [], tailAt: number[] = [], prev: Record<number, number> = {};
   for (let i = from; i < to; i++) {

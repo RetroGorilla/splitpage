@@ -238,8 +238,47 @@ The Writer passes no `foldSpaceForm` and keeps exact comparison. The literal cas
 `tests/core/collab/buffer.test.ts` and
 `tests/application/editing/buffered-field.test.ts`; the Writer's own pin is
 "rule 55: the Writer keeps exact comparison, ..." in
-`tests/features/writer/buffer-binding.test.ts`. The Split view binding that
-passes `foldSpaceForm` is the next cut.
+`tests/features/writer/buffer-binding.test.ts`. The Split view binding below
+passes `foldSpaceForm`.
+
+## Split view binding
+
+`mountCellBuffer` in `src/features/editing/cell-buffer.ts` binds the Split
+view's narration cells to the same `createBufferedField`, with
+`foldSpaceForm: true`. It gets the binding factory, the painted record and
+everything it needs from the rows renderer through `CellBufferPorts`;
+`mountSharedSplitBuffer` in `src/bootstrap/wiring/split-buffer.ts` builds them.
+Nothing in the running app calls it yet (package 14); a test pins that.
+
+- One capture listener on the rows root sends every `beforeinput`, `input`,
+  composition, `keydown`, `cut`, `paste`, `drop` and `focusout` through the
+  binding's ownership check and settlement gate. The check after the event runs
+  when the binding's own step ends, before the standalone handlers further down;
+  their changes are caught at the next native event, settlement or paint.
+- Each event runs inside the paint guard's `whileShown`, so the commit's own
+  change does not replace the focused cell. After a commit the binding rewrites
+  the cell in place only when the stored text differs from what is shown other
+  than in space form, notes the cell as painted, and asks the renderer for a
+  render so that updates released after the commit paint in the other rows.
+- The painted record is refreshed at every rows paint for each narration cell
+  whose row signature matches the shown document (`paintedFromRow` in the rows
+  renderer reads the signature and changes nothing).
+- Assumed rule 55 on #1414: native input, composition, cut, paste and drop in
+  the visual column are refused (`buffer-visual-column`) and an unreported
+  change there is put back from the document (R2); native formatting, history
+  and other input that is not text is refused after settling
+  (`buffer-unsupported-input`) (R5). Enter, row commands, paste into a cell and
+  formatting from the toolbar settle typing through command admission and then
+  run their existing command (R5). The caret after someone else's change while
+  nobody is typing is put back by the renderer, by offset (R7).
+
+The named tests are in `tests/features/editing/cell-buffer.test.ts`, including
+"rule 55, T03 Split native whitespace (D1 and D3) ...", which checks the copied
+Stage 1 literal on every replica. `tests/features/editing/cell-buffer-cost.test.ts`
+pins the standalone Split keystroke: one edit, one decode and no repaint per
+key with 2 and 50 rows, and no buffered field, painted record or cell buffer
+built. Shared-only cost per native event: the ownership scan over every
+narration cell, as in the Writer, and a render after each commit.
 
 ## Mapping and coverage
 
