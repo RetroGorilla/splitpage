@@ -64,7 +64,7 @@ function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
   return (["visuals", "gallery"] as const).flatMap(collection => [...roots[collection].entries()]
     .filter(([, record]) => record instanceof Y.Map && record.get("beat") === beat).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([key, record]) => {
-      const { text: _text, markRecords: _marks, ...fields } = (record as Y.Map<unknown>).toJSON();
+      const fields = Object.fromEntries(Object.entries((record as Y.Map<unknown>).toJSON()).filter(([field]) => field !== "text" && field !== "markRecords"));
       // why: a visual is compared by what it shows, so typing undone in it leaves no difference behind in its mark records.
       return collection === "gallery" ? [collection, key, (record as Y.Map<unknown>).toJSON()] : [collection, key, fields,
         readSharedTextHistory(handle, { owner: beat as SharedContentRef, segment: key as SharedContentRef, field: "visualText" })?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
