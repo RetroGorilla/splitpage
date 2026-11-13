@@ -1,6 +1,6 @@
 import type {
   SharedContentRef, SharedFieldValue, SharedInlineValue, SharedJsonFields, SharedMarkValue, SharedOperation,
-  SharedRecordAddress, SharedScalarAddress, SharedStatusEvent, SharedTextAddress
+  SharedRecordAddress, SharedRecoveryName, SharedScalarAddress, SharedStatusEvent, SharedTextAddress
 } from "./operations.ts";
 import type { FormatMark } from "../text/runs.ts";
 
@@ -76,6 +76,12 @@ export type SharedUndoPart =
     readonly generation: number;
     readonly retired: boolean;
     readonly formats?: readonly FormatMark[];
+  }
+  | {
+    readonly kind: "discard" | "discard-retired";
+    readonly discard: string;
+    readonly entry: SharedRecoveryName;
+    readonly removals: readonly SharedContentRef[];
   }
   | {
     readonly kind: "structure";

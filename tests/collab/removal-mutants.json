@@ -113,5 +113,29 @@
     "find": "segment: sharedBufferSourceSegment(handle, rowId) }",
     "replace": "segment: null }",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
+  }, {
+    "label": "discard hides by name only",
+    "file": "src/core/collab/recovery.ts",
+    "find": "return !(entry.kind === \"removed-beat\" || entry.kind === \"removed-heading\" ? entry.removal?.ids ?? [] : []).every(id => ids.has(id));",
+    "replace": "return false;",
+    "tests": ["tests/adapters/collab/discard.test.ts"]
+  }, {
+    "label": "restore ignores the discard",
+    "file": "src/adapters/collab/removal-executor.ts",
+    "find": "if (sharedRemovalDiscarded(view, removal))",
+    "replace": "if (false && sharedRemovalDiscarded(view, removal))",
+    "tests": ["tests/adapters/collab/discard.test.ts"]
+  }, {
+    "label": "retired discard still hides",
+    "file": "src/adapters/collab/discard.ts",
+    "find": "const discard = retired.has(key) ? null : readDiscard(discards.get(key));",
+    "replace": "const discard = readDiscard(discards.get(key));",
+    "tests": ["tests/adapters/collab/discard.test.ts"]
+  }, {
+    "label": "fragment named by its offset",
+    "file": "src/core/collab/recovery.ts",
+    "find": "key: JSON.stringify([entry.segment, entry.start])",
+    "replace": "key: JSON.stringify([entry.segment, entry.from])",
+    "tests": ["tests/adapters/collab/discard.test.ts"]
   }]
 }

@@ -25,7 +25,9 @@ const expectedRoots = [
   ["retiredJoins", "map"],
   ["statusEvents", "map"],
   ["retiredStatus", "map"],
-  ["headings", "map"]
+  ["headings", "map"],
+  ["discards", "map"],
+  ["retiredDiscards", "map"]
 ] as const;
 
 function assertDeclared(doc: Y.Doc): void {

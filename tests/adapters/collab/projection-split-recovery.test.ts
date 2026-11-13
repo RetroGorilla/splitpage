@@ -17,49 +17,49 @@ import { readProjectionUnits } from "../../../src/adapters/collab/projection-tex
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 
-function fragment(reason: string, owner: string | null, segment: string, from: number, to: number, html: string) {
-  return { kind: "unprojectable-fragment", reason, owner, segment, field: "audioText", from, to, html };
+function fragment(reason: string, owner: string | null, segment: string, from: number, to: number, html: string, start: string) {
+  return { kind: "unprojectable-fragment", reason, owner, segment, field: "audioText", from, to, html, start };
 }
 const second = { ...splitOriginal("v"), id: "R2" };
 const newRow = (audioText: string) => ({ id: "N", status: "shot", visualText: "", audioText, imageRef: null, lengthSeconds: 5 });
 const scenarios = [
   { name: "missing beat", parts: [{ b: "N" }, "lost"], record: "missing", rows: [splitOriginal("a"), second],
-    recovery: [fragment("missing-beat", "N", "b:R1", 2, 6, "lost")] },
+    recovery: [fragment("missing-beat", "N", "b:R1", 2, 6, "lost", "A:1")] },
   { name: "wrong-shape beat", parts: [{ b: "N" }, "lost"], record: "wrong", rows: [splitOriginal("a"), second],
-    recovery: [fragment("wrong-shape-beat", "N", "b:R1", 2, 6, "lost")] },
+    recovery: [fragment("wrong-shape-beat", "N", "b:R1", 2, 6, "lost", "A:1")] },
   { name: "unowned inline beat", parts: [{ b: "N" }, "lost"], record: "unowned", rows: [splitOriginal("a"), second],
-    recovery: [fragment("unowned-beat", "N", "b:R1", 2, 6, "lost")] },
+    recovery: [fragment("unowned-beat", "N", "b:R1", 2, 6, "lost", "A:1")] },
   { name: "duplicate source boundary", parts: [{ b: "N" }, "b", { b: "R1" }, "c"], record: "valid", rows: [splitOriginal("a"), newRow("b"), second],
-    recovery: [fragment("duplicate-boundary", "R1", "b:R1", 4, 5, "c")] },
+    recovery: [fragment("duplicate-boundary", "R1", "b:R1", 4, 5, "c", "A:3")] },
   { name: "adjacent identical boundaries coalesce", parts: [{ b: "N" }, { b: "N" }, "t"], record: "valid", rows: [splitOriginal("a"), newRow("t"), second], recovery: [] },
   { name: "nonadjacent identical boundaries recover the later fragment", parts: [{ b: "N" }, "s", { b: "N" }, "t"], record: "valid", rows: [splitOriginal("a"), newRow("s"), second],
-    recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 5, "t")] },
+    recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 5, "t", "A:3")] },
   { name: "foreign beat stays with its owner", parts: [{ b: "R2" }, "lost"], record: "foreign", rows: [splitOriginal("a"), second],
-    recovery: [fragment("foreign-segment", "R2", "b:R1", 2, 6, "lost")] },
+    recovery: [fragment("foreign-segment", "R2", "b:R1", 2, 6, "lost", "A:1")] },
   { name: "second segment head cannot steal an imported beat", parts: [], record: "second-head", rows: [splitOriginal("a"), second],
-    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost")] },
+    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost", "A:3")] },
   { name: "valid stored segment beats the head fallback", parts: [], record: "explicit", rows: [second, splitOriginal("lost")],
-    recovery: [fragment("foreign-segment", "R1", "b:R1", 0, 1, "a")] },
+    recovery: [fragment("foreign-segment", "R1", "b:R1", 0, 1, "a", "1:13")] },
   { name: "nonexistent stored segment uses the first head", parts: [], record: "absent-segment", rows: [splitOriginal("a"), second],
-    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost")] },
+    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost", "A:3")] },
   { name: "stored segment without its beat uses the first head", parts: [], record: "wrong-segment", rows: [splitOriginal("a"), second],
-    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost")] },
+    recovery: [fragment("foreign-segment", "R1", "S", 0, 4, "lost", "A:3")] },
   { name: "invalid head recovers its anonymous leading text", head: null, parts: [{ b: "N" }, "b"], record: "valid", rows: [newRow("b"), second],
-    recovery: [fragment("missing-boundary", null, "b:R1", 0, 1, "a")] },
+    recovery: [fragment("missing-boundary", null, "b:R1", 0, 1, "a", "1:13")] },
   { name: "self prefix without an earlier fragment stays in recovery", parts: [{ b: "N", before: "N" }, "b"], record: "valid", rows: [splitOriginal("a"), second],
-    recovery: [fragment("invalid-prefix", "N", "b:R1", 2, 3, "b")] },
+    recovery: [fragment("invalid-prefix", "N", "b:R1", 2, 3, "b", "A:1")] },
   { name: "dangling prefix cannot steal a later valid fragment", parts: [{ b: "N", before: "X" }, "b", { b: "X" }, "c"], record: "valid", otherBeat: true,
-    rows: [splitOriginal("a"), { ...newRow("c"), id: "X" }, second], recovery: [fragment("invalid-prefix", "X", "b:R1", 2, 3, "b")] },
+    rows: [splitOriginal("a"), { ...newRow("c"), id: "X" }, second], recovery: [fragment("invalid-prefix", "X", "b:R1", 2, 3, "b", "A:1")] },
   { name: "prefix followed by the source boundary recovers the later source text", parts: [{ b: "N", before: "R1" }, { b: "R1" }, "b"], record: "valid",
-    rows: [newRow("a"), splitOriginal(""), second], recovery: [fragment("duplicate-boundary", "R1", "b:R1", 3, 4, "b")] },
+    rows: [newRow("a"), splitOriginal(""), second], recovery: [fragment("duplicate-boundary", "R1", "b:R1", 3, 4, "b", "A:2")] },
   { name: "unreadable embed separates repeated boundaries", parts: [{ b: "N" }, { unreadable: true }, { b: "N" }, "t"], record: "valid",
-    rows: [splitOriginal("a"), newRow(""), second], recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 5, "t")] },
+    rows: [splitOriginal("a"), newRow(""), second], recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 5, "t", "A:3")] },
   { name: "edit-after-damage handoff: adjacent head boundary projects ab", start: "", parts: [{ b: "R1" }, "ab"], record: "missing",
     rows: [splitOriginal("ab"), second], recovery: [] },
   { name: "stored order overrides map insertion order for head ownership", parts: [], record: "second-head", order: ["S", "b:R2", "b:R1"],
-    rows: [splitOriginal("lost"), second], recovery: [fragment("foreign-segment", "R1", "b:R1", 0, 1, "a")] },
+    rows: [splitOriginal("lost"), second], recovery: [fragment("foreign-segment", "R1", "b:R1", 0, 1, "a", "1:13")] },
   { name: "recovery offsets count surrogate pairs as two UTF-16 units", start: "a😀", parts: [{ b: "N" }, "😀b"], record: "missing",
-    rows: [splitOriginal("a😀"), second], recovery: [fragment("missing-beat", "N", "b:R1", 4, 7, "😀b")] }
+    rows: [splitOriginal("a😀"), second], recovery: [fragment("missing-beat", "N", "b:R1", 4, 7, "😀b", "A:4")] }
 ];
 
 function author(handle: Parameters<typeof collabState>[0], scenario: typeof scenarios[number]): void {
@@ -95,10 +95,12 @@ function author(handle: Parameters<typeof collabState>[0], scenario: typeof scen
     }
   });
 }
-function check(run: ReturnType<typeof splitReplicas>, scenario: typeof scenarios[number], order: "D1" | "rev" | "dup"): void {
-  run.queue.flush(order); const document = { ...literalMergedDocument(""), rows: scenario.rows };
+function check(run: ReturnType<typeof splitReplicas>, scenario: typeof scenarios[number], order: "D1" | "rev" | "dup", writer = run.handles.at(-1), base = 0): void {
+  run.queue.flush(order); const document = { ...literalMergedDocument(""), rows: scenario.rows }; assert.ok(writer);
+  const recovery = scenario.recovery.map(entry => ({ ...entry,
+    start: entry.start.startsWith("A:") ? collabState(writer).doc.clientID + ":" + (base + Number(entry.start.slice(2))) : entry.start }));
   for (const handle of run.handles) {
-    const actual = readPureMergedProjection(handle); assert.deepEqual(actual.view, { document, recovery: scenario.recovery }); assert.equal(actual.save, mergedProjectionSave(document));
+    const actual = readPureMergedProjection(handle); assert.deepEqual(actual.view, { document, recovery }); assert.equal(actual.save, mergedProjectionSave(document));
   }
   agree(scenario.name, order, run.handles, handle => {
     const roots = collabState(handle).roots, prep = createSharedPreparation(handle);
@@ -151,7 +153,7 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
       });
     });
     const html = '<span class="cmt-anchor" data-cmt="C1"><a href="https://example.test/" target="_blank" rel="noopener"><span class="tag-anchor" data-tag-cat="prop" data-tag-name="Box" contenteditable="false"><strong>t</strong></span><strong><span class="who-anchor" data-who="Ada" contenteditable="false">@Ada</span></strong></a></span>';
-    check(run, { ...scenario, recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 6, html)] }, order);
+    check(run, { ...scenario, recovery: [fragment("duplicate-boundary", "N", "b:R1", 4, 6, html, "1:59")] }, order);
   } finally { run.close(); }
 });
 for (const scenario of scenarios) for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const)
@@ -168,12 +170,12 @@ test("seeded malformed boundaries cover each ruling across writers, delivery ord
     try {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       const index = (seed >>> 16) % 3, writer = run.handles[index], typing = run.handles[(index + 1) % 3], scalar = run.handles[(index + 2) % 3];
-      assert.ok(writer && typing && scalar); author(writer, scenario);
+      assert.ok(writer && typing && scalar); const base = Y.getState(collabState(writer).doc.store, collabState(writer).doc.clientID); author(writer, scenario);
       submitProjectionOperations(typing, [{ kind: "text-insert", id: "peer", by: "Peer", target: { owner: "R2", segment: "b:R2", field: "audioText" },
         at: { left: null, right: flowBaseReference("R2", "audioText", 0), affinity: "before" }, content: [{ value: "X", marks: [] }] }]);
       submitProjectionOperations(scalar, [{ kind: "scalar", id: "peer-field", by: "Peer", target: { scope: "beat", record: "R2" }, field: "lengthSeconds", value: 8 }]);
       const rows = scenario.rows.map(row => row.id === "R2" ? { ...second, audioText: "Xv", lengthSeconds: 8 } : row);
-      check(run, { ...scenario, rows }, order); commands += 3;
+      check(run, { ...scenario, rows }, order, writer, base); commands += 3;
       covered.add(scenario.name); checkpoints++;
     } finally { run.close(); }
   }

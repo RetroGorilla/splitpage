@@ -28,6 +28,7 @@ import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
 import { prepareSharedBeatSplit } from "./split-executor.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { freezeSharedPreparedValue } from "./prepare-value.ts";
+import { prepareSharedDiscard, prepareSharedDiscardRetire, sharedRemovalDiscarded } from "./discard.ts";
 import { collabPreparedOperationTextTarget } from "./text-target.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 
@@ -154,6 +155,7 @@ function restore(operation: SharedRestore, view: SharedPreparationView, identiti
   for (const reference of new Set(operation.removals)) {
     const removal = sharedStructureReference(view, reference), record = readSharedRemovalCommand(removal, view.get(["removalRecords", removal]));
     if (!record || record.kind !== "remove") throw new SharedStructurePreparationError("invalid-removal-record");
+    if (sharedRemovalDiscarded(view, removal)) throw new SharedStructurePreparationError("discarded");
     removals.push(removal);
     for (const target of record.targets) {
       if (record.removalKind === "header") {
@@ -191,5 +193,6 @@ export function registerSharedRemovalHandlers(handle: SharedDocumentHandle): voi
     if (!isStableSharedIdentity(operation.by)) throw new SharedStructurePreparationError("unstable-identity");
     return remove(operation, view, index, identities);
   }), restore: (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return restore(operation, view, identities); }),
-  "heading-remove": (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return removeHeading(operation, view, identities); }) });
+  "heading-remove": (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return removeHeading(operation, view, identities); }),
+  discard: prepareSharedDiscard, "discard-retire": prepareSharedDiscardRetire });
 }

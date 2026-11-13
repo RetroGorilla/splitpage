@@ -3,6 +3,7 @@ import type { SharedProjectionGalleryOverflow } from "./projection/gallery.ts";
 import type { SharedTagProjectionRejection } from "./projection/tag-extents.ts";
 import type { SharedProjectionUnit } from "./projection/units.ts";
 import type { SharedRemovalBufferSource } from "./removal-state.ts";
+import type { SharedContentRef, SharedRecoveryDiscard, SharedRecoveryName } from "./operations.ts";
 
 export interface SharedRecoveryRemoval {
   readonly ids: readonly string[];
@@ -20,9 +21,45 @@ export type SharedRecoveryEntry =
   | { readonly kind: "comment-without-words"; readonly comment: string; readonly rowId: string | null; readonly field: string | null }
   | { readonly kind: "reply-without-comment"; readonly reply: string; readonly commentId: string }
   | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
-    readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
+    readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string; readonly start: string | null }
   | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
   | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>>; readonly removal?: SharedRecoveryRemoval };
+
+export function sharedRecoveryEntryName(entry: SharedRecoveryEntry): SharedRecoveryName {
+  switch (entry.kind) {
+    case "removed-beat": return { kind: entry.kind, key: String(entry.row.id) };
+    case "removed-heading": case "scene-with-no-beats": return { kind: entry.kind, key: String(entry.heading.id) };
+    case "crossing-tag": case "deleted-tag": return { kind: entry.kind, key: entry.occurrence };
+    case "gallery-overflow": return { kind: entry.kind, key: entry.itemId };
+    case "unprojectable-fragment": return { kind: entry.kind, key: JSON.stringify([entry.segment, entry.start]) };
+    case "comment-without-words": return { kind: entry.kind, key: entry.comment };
+    case "reply-without-comment": return { kind: entry.kind, key: entry.reply };
+  }
+}
+
+export function sharedRecoveryDiscardOperation(entry: SharedRecoveryEntry, author: { readonly id: string; readonly by: string }): SharedRecoveryDiscard | null {
+  if (entry.kind === "scene-with-no-beats") return null;
+  const removals = entry.kind === "removed-beat" || entry.kind === "removed-heading" ? entry.removal?.ids ?? [] : [];
+  return { kind: "discard", id: author.id as SharedContentRef, by: author.by, entry: sharedRecoveryEntryName(entry), removals: removals as SharedContentRef[] };
+}
+
+export interface SharedActiveDiscard { readonly entry: SharedRecoveryName; readonly removals: readonly string[] }
+
+export function hideSharedDiscardedEntries(entries: readonly SharedRecoveryEntry[], discards: readonly SharedActiveDiscard[]): readonly SharedRecoveryEntry[] {
+  if (!discards.length) return entries;
+  const seen = new Map<string, Set<string>>();
+  for (const discard of discards) {
+    const name = JSON.stringify([discard.entry.kind, discard.entry.key]), ids = seen.get(name) ?? new Set<string>();
+    for (const id of discard.removals) ids.add(id);
+    seen.set(name, ids);
+  }
+  return entries.filter(entry => {
+    const name = sharedRecoveryEntryName(entry), ids = entry.kind === "scene-with-no-beats" ? undefined : seen.get(JSON.stringify([name.kind, name.key]));
+    if (!ids) return true;
+    // why: assumed rule 52 on #1414: a removal the discard did not see shows the entry again.
+    return !(entry.kind === "removed-beat" || entry.kind === "removed-heading" ? entry.removal?.ids ?? [] : []).every(id => ids.has(id));
+  });
+}
 
 export function sharedRecoveryIdentityKey(identity: { readonly client: number; readonly clock: number }): string {
   return identity.client + ":" + identity.clock;

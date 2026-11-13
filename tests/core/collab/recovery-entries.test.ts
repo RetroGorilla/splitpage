@@ -16,7 +16,7 @@ const ENTRIES: Readonly<Record<string, readonly string[]>> = {
   "removed-heading": ["heading", "removal?"],
   "reply-without-comment": ["commentId", "reply"],
   "scene-with-no-beats": ["beforeRowId", "heading"],
-  "unprojectable-fragment": ["field", "from", "html", "owner", "reason", "segment", "to"]
+  "unprojectable-fragment": ["field", "from", "html", "owner", "reason", "segment", "start", "to"]
 };
 
 const FRAGMENT_REASONS = ["duplicate-boundary", "foreign-segment", "invalid-beat-id", "invalid-prefix", "missing-beat", "missing-boundary", "unowned-beat", "wrong-shape-beat"];
