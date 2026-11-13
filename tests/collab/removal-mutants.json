@@ -65,5 +65,17 @@
     "find": "        if (!state.removed || state.generation !== target.generation || !view.has([\"headings\", target.beat, field])) continue;\n        if (!resolveSharedRestorableHeading(view, target.beat)) throw new SharedStructurePreparationError(\"missing-target\");\n        writes.push({ kind: \"set\", path: [\"headings\", target.beat, field], value: { generation: target.generation, removed: false } });",
     "replace": "        if (!state.removed || !view.has([\"headings\", target.beat, field])) continue;\n        if (!resolveSharedRestorableHeading(view, target.beat)) throw new SharedStructurePreparationError(\"missing-target\");\n        writes.push({ kind: \"set\", path: [\"headings\", target.beat, field], value: { generation: state.generation ?? 0, removed: false } });",
     "tests": ["tests/adapters/collab/heading-removal.test.ts"]
+  }, {
+    "label": "removal provenance ignores what the remover saw",
+    "file": "src/core/collab/recovery.ts",
+    "find": "part.removals.some(removal => !removal.observed.has(sharedRecoveryIdentityKey(identity)))",
+    "replace": "part.removals.some(removal => removal.key.length > 0)",
+    "tests": ["tests/adapters/collab/removal-stage1.test.ts"]
+  }, {
+    "label": "joined member loses the removal of its root",
+    "file": "src/adapters/collab/project.ts",
+    "find": "return list.length ? list : own.get(group.root) ?? [];",
+    "replace": "return list;",
+    "tests": ["tests/adapters/collab/recovery-removal.test.ts"]
   }]
 }

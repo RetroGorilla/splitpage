@@ -113,5 +113,11 @@
     "find": "const heading = sharedStructureIdentity(view.writer, operation.id, \"heading\")",
     "replace": "const heading = sharedStructureIdentity(\"0\", operation.id, \"heading\")",
     "tests": ["tests/adapters/collab/heading-create.test.ts"]
+  }, {
+    "label": "segment move falls through to the generic unhandled refusal",
+    "file": "src/adapters/collab/move-refusal.ts",
+    "find": "registerSharedOperationHandlers(handle, { \"segment-move\": () => ({ ok: false, reason }) });",
+    "replace": "registerSharedOperationHandlers(handle, {});",
+    "tests": ["tests/adapters/collab/move-refusal.test.ts"]
   }]
 }

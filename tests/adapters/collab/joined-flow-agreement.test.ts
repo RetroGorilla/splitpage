@@ -117,7 +117,7 @@ for (const order of ["D1", "rev", "dup"] as const) test("seen destination split 
 });
 
 test("seeded joined rows agree with app formatting across the join point while another writer types", t => {
-  const declaredLimits = ["separator-keeps-no-inline-format"], violations = new Set<string>(), runtime = createFlowLoadRuntime();
+  const declaredLimits: readonly string[] = [], violations = new Set<string>(), runtime = createFlowLoadRuntime();
   let seed = 0x5c3603, histories = 0, commands = 0, compared = 0, covering = 0;
   const choose = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 16) % n; };
   const plain = (html: string) => html.replace(/<[^>]*>/g, "");
@@ -175,6 +175,6 @@ test("seeded joined rows agree with app formatting across the join point while a
   }
   assert.deepEqual([...violations], declaredLimits);
   const measured = { seed: 0x5c3603, histories, commands, compared, covering, declaredLimits };
-  assert.deepEqual(measured, { seed: 6043139, histories: 24, commands: 132, compared: 48, covering: 18, declaredLimits: ["separator-keeps-no-inline-format"] });
+  assert.deepEqual(measured, { seed: 6043139, histories: 24, commands: 132, compared: 48, covering: 18, declaredLimits: [] });
   t.diagnostic(JSON.stringify(measured));
 });

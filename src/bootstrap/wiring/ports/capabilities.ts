@@ -12,5 +12,6 @@ export const capabilities: CapabilityPort = {
   drafts: () => currentCapabilities().drafts(),
   history: () => currentCapabilities().history(),
   folders: () => currentCapabilities().folders(),
-  bundles: () => currentCapabilities().bundles()
+  bundles: () => currentCapabilities().bundles(),
+  moves: () => currentCapabilities().moves()
 };

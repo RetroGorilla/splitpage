@@ -9,6 +9,8 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedMarkTranslation } from "./mark-translation.ts";
 import { readSharedMarkGeneration, sharedRangeMarkOperation } from "./mark-provenance.ts";
 import { usesSharedJoinedText, readSharedJoinedText, sharedJoinedSelected } from "./joined-text-routing.ts";
+import { sharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
+import { FORMAT_MARKS } from "../../core/text/runs.ts";
 
 interface MarkRange { from: number; to: number }
 
@@ -19,11 +21,20 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
     if (!usesSharedJoinedText(view, operation.target)) return preparePhysicalMarkChange(operation, view);
     const row = readSharedJoinedText(view, operation.target); if (!row) throw new SharedTextPreparationError("missing-target");
     const writes: SharedPreparedWrite[] = [], steps: SharedTextExecutionStep[] = [];
+    const selected = sharedJoinedSelected(view, row, operation.observed);
     // why: each range keeps its own position in the command, as in one text, so comment occurrences stay distinct.
-    for (const part of sharedJoinedSelected(view, row, operation.observed).physical) {
+    for (const part of selected.physical) {
       const planned = markSteps(operation, view, part.plan, unitRanges(view, part.plan, part.units), steps.length);
       writes.push(...planned.writes); steps.push(...planned.steps);
     }
+    const format = FORMAT_MARKS.find(kind => kind === operation.mark.kind);
+    // why: a removal deletes only the value it saw, so a set made at the same time survives it;
+    // of two sets made at the same time, one value wins.
+    const spaces: SharedPreparedWrite[] = format ? selected.groups.flatMap((group): SharedPreparedWrite[] => {
+      const path = ["meta", sharedJoinFormatRegisterField(group, format)];
+      return operation.mark.value === true ? [{ kind: "set", path, value: true }] : view.has(path) ? [{ kind: "delete", path }] : [];
+    }) : [];
+    if (spaces.length) { writes.push(...spaces); steps.push({ kind: "map", writes: spaces }); }
     return preparedTextDescription(writes, steps);
   });
 }
