@@ -25,11 +25,7 @@ const ACCESSES = {
     "application/production/broll-records.ts": 1,
     "application/save/project-files.ts": 1,
     "application/session/session-merge.ts": 2,
-    "application/transitions/transitions.ts": 3,
-    "bootstrap/wiring/editor-owners.ts": 2,
-    "bootstrap/wiring/editor.ts": 4,
-    "bootstrap/wiring/session-owner.ts": 3,
-    "bootstrap/wiring/transition-owners.ts": 1
+    "bootstrap/wiring/session-owner.ts": 3
   }
 };
 
@@ -45,7 +41,7 @@ const POSITIONS = {
   "application/session/document-session.ts": 14,
   "application/session/session-merge-ports.ts": 10,
   "application/transitions/local-files-ports.ts": 4,
-  "application/transitions/ports.ts": 4,
+  "application/transitions/ports.ts": 2,
   "bootstrap/wiring/ports/document.ts": 4,
   "bootstrap/wiring/session-owner.ts": 9,
   "features/imports/ports.ts": 2,
