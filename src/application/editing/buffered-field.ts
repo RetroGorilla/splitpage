@@ -4,7 +4,7 @@ import type { SharedDocumentSession } from "../session/shared-session.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
-import { bufferedNativeReplacement } from "../../core/collab/buffer.ts";
+import { alignSpaceForm, bufferedNativeReplacement, foldedNativeReplacement, foldedNativeSplice, sameUpToSpaceForm } from "../../core/collab/buffer.ts";
 
 export interface BufferedFieldPorts extends Pick<BufferedTextCommit, "open">, Pick<SharedDocumentSession, "beforeCommand"> {
   readonly missingBase: (rowId: string) => void;
@@ -19,7 +19,7 @@ export interface BufferedFieldEvent {
 
 export interface BufferedFieldBinding {
   readonly native: (event: BufferedFieldEvent, dispatch: () => void) => void;
-  readonly beforeInput: (event: BufferedFieldEvent & { readonly inputType: string; readonly isComposing: boolean },
+  readonly beforeInput: (event: BufferedFieldEvent & { readonly inputType: string; readonly isComposing: boolean; readonly data?: string | null },
     range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
   readonly start: (event: BufferedFieldEvent, range: FlowRange | null) => void;
@@ -33,6 +33,7 @@ export interface BufferedFieldBinding {
 }
 
 export interface BufferedFieldSurface<E> {
+  readonly foldSpaceForm?: boolean;
   readonly fields: () => Iterable<E>;
   readonly field: (rowId: string) => E | null;
   readonly rowId: (field: E) => string;
@@ -51,6 +52,8 @@ export interface BufferedFieldSurface<E> {
 export function createBufferedField<E>(ports: BufferedFieldPorts, surface: BufferedFieldSurface<E>): BufferedFieldBinding {
   let active: { rowId: string; beat: E; base: PaintedText; edit: BufferedTextEdit; fault: boolean } | null = null;
   let target: readonly [number, number] | null = null;
+  let typed: string | null = null;
+  const same = surface.foldSpaceForm ? sameUpToSpaceForm : (a: string, b: string) => a === b;
   let ended = false;
   let committing = false;
   let refusedComposition = false;
@@ -93,11 +96,16 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     if (!active || !active.edit.isOpen() || active.fault) return;
     const next = projection(surface.runs(active.beat)), before = active.edit.text();
     if (!target) {
-      const replacement = bufferedNativeReplacement(before, next);
+      const replacement = surface.foldSpaceForm ? foldedNativeReplacement(before, next) : bufferedNativeReplacement(before, next);
       if (replacement) active.edit.replace(replacement.from, replacement.to, replacement.insert);
       return;
     }
-    if (next === before) return;
+    if (same(next, before)) return;
+    if (surface.foldSpaceForm) {
+      const splice = foldedNativeSplice(before, next, target[0], target[1], typed);
+      if (!splice) { active.fault = true; ports.report({ kind: "rejected", reason: "buffer-native-evidence" }); return; }
+      active.edit.replace(splice.from, splice.to, splice.insert); target = null; return;
+    }
     const [from, to] = target, inserted = next.length - before.length + to - from;
     if (inserted < 0 || next.slice(0, from) !== before.slice(0, from) || next.slice(from + inserted) !== before.slice(to)) {
       active.fault = true; ports.report({ kind: "rejected", reason: "buffer-native-evidence" }); return;
@@ -111,8 +119,8 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     for (const beat of surface.fields()) {
       if (active?.beat === beat && active.edit.isOpen()) continue;
       const rowId = surface.rowId(beat), shown = surface.painted(rowId), next = projection(surface.runs(beat));
-      if (active?.beat === beat && !active.edit.isOpen() && next === active.edit.text()) { surface.reset(rowId); continue; }
-      if (next === shown) continue;
+      if (active?.beat === beat && !active.edit.isOpen() && same(next, active.edit.text())) { surface.reset(rowId); continue; }
+      if (shown !== undefined && same(next, shown)) continue;
       if (active?.edit.isOpen()) { refuse(event, "buffer-pending"); surface.reset(rowId); ok = false; continue; }
       const pos = { kind: "beat" as const, rowId, offset: next.length };
       if (!begin(event, { anchor: pos, head: pos }, false)) { surface.reset(rowId); ok = false; continue; }
@@ -151,7 +159,8 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       && range.anchor.rowId === held.rowId && range.head.rowId === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
     let outcome: ReturnType<BufferedTextEdit["commit"]>;
     committing = true;
-    try { outcome = held.edit.commit(surface.runs(held.beat), selection); }
+    const runs = surface.runs(held.beat);
+    try { outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection); }
     catch (error) { outcome = { kind: "failed", error }; }
     finally { committing = false; }
     if (held.edit.isOpen()) return recover(held, outcome, selection);
@@ -209,13 +218,13 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (!begin(event, intended)) return true;
       if (!intended || intended.anchor.kind !== "beat" || intended.head.kind !== "beat") return true;
       const from = Math.min(intended.anchor.offset, intended.head.offset), to = Math.max(intended.anchor.offset, intended.head.offset);
-      target = [from, to];
+      target = [from, to]; typed = event.data ?? null;
       return true;
     },
     input: () => {
       if (!active || !active.edit.isOpen()) return;
       reconcile();
-      if (target && !active.fault && projection(surface.runs(active.beat)) === active.edit.text()) {
+      if (target && !active.fault && same(projection(surface.runs(active.beat)), active.edit.text())) {
         const [from, to] = target;
         active.edit.replace(from, to, active.edit.text().slice(from, to)); target = null;
       }

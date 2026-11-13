@@ -211,6 +211,34 @@ Two cases the write does not cover, both as before it: a commit that threw (amon
 them a write that landed and could not be projected) keeps its edit, and assumed
 rule 26's bound never interrupts typing, so it leads to no recovery entry.
 
+## The space form (assumed rule 55)
+
+A cell that does not keep its spaces (the Split view; the Writer uses
+`pre-wrap`) lets the browser show a space as U+00A0, and back again, outside the
+native target. Stage 1 trace T03 failed on exactly that: after the third
+Backspace on `the the` the DOM reads `the `. A surface that passes
+`foldSpaceForm: true` to `createBufferedField` compares the DOM with the buffer and with
+the painted text counting U+0020 and U+00A0 as one character
+(`sameUpToSpaceForm` in `src/core/collab/buffer.ts`):
+
+- a unit outside the native target keeps its identity and its stored form,
+  whatever form the browser shows (`foldedNativeSplice`, and
+  `foldedNativeReplacement` for input without a target);
+- typed text is stored as the native data when the two differ only in space
+  form, so a typed space is U+0020 and a typed U+00A0 stays U+00A0; with no
+  data, it is stored as the browser shows it;
+- the runs a commit sends are aligned to the buffered text (`alignSpaceForm`),
+  so the mapper's evidence check holds. The rule 29 recovery write keeps the
+  field as shown.
+
+Any other difference outside the target is still refused as native evidence.
+The Writer passes no `foldSpaceForm` and keeps exact comparison. The literal cases are in
+`tests/core/collab/buffer.test.ts` and
+`tests/application/editing/buffered-field.test.ts`; the Writer's own pin is
+"rule 55: the Writer keeps exact comparison, ..." in
+`tests/features/writer/buffer-binding.test.ts`. The Split view binding that
+passes `foldSpaceForm` is the next cut.
+
 ## Mapping and coverage
 
 Mapping normalizes the supplied native runs once, then slices the prepared units
