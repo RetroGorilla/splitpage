@@ -272,7 +272,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
       // why: a Save As stopped waiting for this copy, so its bytes may already be captured without the link
       if (c.cancelled && saving) return;
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;
-      const relinks = (c.created ? ports.capability.bundles() : ports.capability.folders()).allowed;
+      // why: after a move the original is gone, so the link must follow the file whatever the session now allows
+      const relinks = ("outcome" in res && res.outcome === "moved") || (c.created ? ports.capability.bundles() : ports.capability.folders()).allowed;
       if (relinks && c.created) relinkPath(c.video.path, res.name);
       else if (relinks) relink(c.offer, c.from, res.name);
     }

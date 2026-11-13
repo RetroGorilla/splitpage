@@ -988,6 +988,56 @@ test("a copy that lands after the session became shared leaves the live link whe
   h.owner.dispose();
 });
 
+test("a move that lands after the session became shared links the moved file, because the original is gone", async () => {
+  let finish: ((r: DesktopBundleMove) => void) | undefined;
+  const h = setup({ moved: () => new Promise((resolve) => { finish = resolve; }) });
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  h.el("bundle-move").click();
+  assert.equal(h.moves.length, 1);
+  h.share();
+  finish?.({ ok: true, name: "take one (2).mp4", outcome: "moved" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" });
+  assert.deepEqual(h.folds, [ENTRY]);
+  assert.deepEqual(h.notices.shown.map((n) => n.message), ["Moved “take one.mp4” to “Episode 12 files”."]);
+  h.owner.dispose();
+});
+
+test("a Create bundle move that lands after the session became shared links every use to the moved file", async () => {
+  let finish: ((r: DesktopBundleMove) => void) | undefined;
+  const h = setup({ createPlan: async () => ({ ...CREATE_PLAN, files: [{ path: DROP.path, size: 9, move: true }] }),
+    pathRun: () => new Promise((resolve) => { finish = resolve; }) });
+  await settle();
+  await h.owner.createBundle();
+  h.el("bundle-move").click();
+  assert.deepEqual(h.pathCalls.map((c) => c.choice), ["move"]);
+  h.share();
+  finish?.({ ok: true, name: "take one.mp4", outcome: "moved" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "bundled", name: "take one.mp4" });
+  assert.deepEqual(h.forgotten, [DROP.path]);
+  assert.deepEqual(h.notices.shown.map((n) => n.message), ["Moved 1 file to “Episode 12 files”."]);
+  h.owner.dispose();
+});
+
+test("a Create bundle plan that arrives after the session became shared relinks nothing, opens nothing and warns once", async () => {
+  const pending: ((plan: CreateBundlePlan) => void)[] = [];
+  const h = setup({ createPlan: () => new Promise((resolve) => { pending.push(resolve); }) });
+  await settle();
+  const opening = h.owner.createBundle();
+  assert.equal(pending.length, 2);
+  h.share();
+  pending.forEach((resolve) => { resolve({ ...CREATE_PLAN, bundled: [{ path: DROP.path, name: "take one.mp4" }] }); });
+  await opening;
+  await settle();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  assert.deepEqual(h.edits, []);
+  assert.equal(h.el("bundle-outside-bar").hidden, true);
+  assert.equal(h.el("bundle-modal").hidden, true);
+  assert.deepEqual(h.notices.shown.map((n) => [n.message, n.kind]), [[BUNDLES, "warn"]]);
+  h.owner.dispose();
+});
+
 test("a Create bundle dialog answered after the session became shared moves nothing and says why", async () => {
   const h = setup({ createPlan: async () => CREATE_PLAN });
   await settle();

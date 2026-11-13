@@ -19,12 +19,17 @@ functions on. The guards sit there and follow the lifetime rule in
 | --- | --- | --- | --- |
 | Copy or move a dropped or picked file into the script's folder | `offerAfterDrop` | `folders`: no prompt; the file is linked where it is, as for a script not saved to disk | Nothing |
 | Copy or Move answered on that prompt | `answer` | `folders` asked again: nothing is copied or moved | Warning toast |
-| A copy or move that finishes after the session became shared | `copied` | `folders` (or `bundles` for Create bundle): the live link is not changed; the file on disk is where the copy put it, and the copy notice still says so | Copy notice only |
+| A copy that finishes after the session became shared | `copied` | `folders` (or `bundles` for Create bundle): the live link is not changed; the copy is on disk beside the original, and the copy notice still says so | Copy notice only |
+| A move that finishes after the session became shared | `copied` | The link follows the moved file, because the original no longer exists | Move notice |
 | Automatic inspection on open and after the first save | `inspect` | `bundles`: no plan, no automatic relink of paths already in the folder, the outside bar stays hidden | Nothing |
 | Create bundle from the File menu or the outside bar | `inspect` | `bundles`, at entry and again after the plan | Warning toast |
 | Copy or Move answered in the Create bundle dialog | `answer` | `bundles` asked again: nothing is copied or moved | Warning toast |
 | The Export dialog's line about the script's files | `exportPlan` | `bundles`: no plan, so no line | Nothing |
 | Export with files (`.splitpage` with "Include the script's files") | `exportWithFiles` | `bundles`, at entry, after the plan and after the save dialog: nothing is written | Warning toast |
+
+Assumed rule (for the plan review): a copy already running when the session becomes
+shared finishes on disk, but the shared document keeps linking the original. A move
+that already finished is followed, because the original no longer exists.
 
 There is no folder watcher; a file is only found at save, open or an explicit
 action.
@@ -43,6 +48,8 @@ action.
 - The File menu enables Create bundle from the script's home, not from the
   capability; if it is offered in a shared session, choosing it shows the reason.
 - The plain `.splitpage` export, and every other export, are unchanged.
+- A zip export already being written when the session becomes shared still lands
+  where the person picked.
 
 ## Inventory
 
