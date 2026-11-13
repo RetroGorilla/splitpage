@@ -143,5 +143,11 @@
     "find": "next?.kind === \"b\" && next.id === lineOwner",
     "replace": "line !== undefined",
     "tests": ["tests/adapters/collab/heading-last-line.test.ts"]
+  }, {
+    "label": "joined row before a last line counted as separate beats",
+    "file": "src/adapters/collab/structure-placement.ts",
+    "find": "if (block.kind === \"b\" && joined.has(block.id) || block.kind === \"h\" && !heading)",
+    "replace": "if (block.kind === \"h\" && !heading)",
+    "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
   }]
 }

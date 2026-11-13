@@ -9,7 +9,8 @@ interface ListNoteScratch { readonly scratch: <T>(key: string, create: () => T) 
 const EMPTY: SharedOperationListNotes = Object.freeze({ emptyFirstBeats: new Map<string, string>() });
 
 export function sharedOperationListNotes(operations: readonly unknown[]): SharedOperationListNotes {
-  const read = operations.map(readOperation), emptyFirstBeats = new Map<string, string>();
+  const noted = (raw: unknown) => typeof raw === "object" && raw !== null && ["segment-create", "heading-finalize"].includes(String((raw as { readonly kind?: unknown }).kind));
+  const read = operations.map(raw => noted(raw) ? readOperation(raw) : null), emptyFirstBeats = new Map<string, string>();
   read.forEach((operation: SharedOperation | null, index) => {
     if (operation?.kind !== "heading-finalize" || operation.emptyBeat === null || operation.retainedBeat !== operation.emptyBeat) return;
     const beat = operation.emptyBeat;

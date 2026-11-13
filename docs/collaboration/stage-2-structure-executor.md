@@ -440,7 +440,10 @@ computes list notes once, a pure function over the whole list, into the plan
 scratch; handlers read them. One note names a created beat that a later
 `heading-finalize` of line T uses as its empty first beat (`emptyBeat` and
 `retainedBeat`). Placement puts that beat after T's span when the emitted left beat
-is directly followed by T; otherwise it places the beat as before, and the end check
+is directly followed by T. The later parts of a joined row that holds the left beat
+count with it, as the app shows that row as one beat, and a heading directly before T
+whose first beat is T counts as part of T's place, so a line that is the only beat of
+an existing scene is placed the same way. Otherwise the beat is placed as before, and the end check
 still refuses a heading left after it with `misplaced-heading-beat`. A beat added at
 the end by another writer at the same moment is ordered against the empty first beat
 by writer id; the lower writer's beat comes first and is the scene's first beat. Two
@@ -468,13 +471,15 @@ in recovery as `scene-with-no-beats`. When one writer keeps a typed tail and the
 other finalizes the whole line, the tail goes to recovery as a removed beat.
 
 Evidence: the copied T08 create and T08 race results with literal identities under
-three delivery orders and an encoded late joiner; complete app lists at 16 places,
+three delivery orders and an encoded late joiner; complete app lists at 19 places,
 including the first beat, a beat mid-scene, the first beat of an existing scene, a
-beat split off inline, formatted names and the two last-line places (48 calls, 111
-operations, 39 finalizations, none skipped or deferred), compared with the app's
+beat split off inline, formatted names, the last line after a plain or joined beat
+with and without a following scene, and the line as the only beat of an existing
+scene in three forms (69 calls, 180 operations, 54 finalizations, none skipped or
+deferred), compared with the app's
 rows, scene ids, names and first beats; two-writer literals; a seeded model of 48
 histories (16 of them last lines), 122 checkpoints and 283 commands with literal
-declared limits `[]`; and four structure mutants.
+declared limits `[]`; and five structure mutants.
 
 ## Moving beats and scenes
 

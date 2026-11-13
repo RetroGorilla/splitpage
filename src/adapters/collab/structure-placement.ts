@@ -8,17 +8,22 @@ import { sharedTextCommandPlan, sharedTextInsertionPosition } from "./executor-t
 import { readProjectionHead } from "./projection-reader.ts";
 import { readSharedFinalizedHeading, readSharedStructureStream, interpretSharedStructure } from "./structure-plan.ts";
 import { sharedOrderPlan } from "./structure-order-index.ts";
+import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
 import { readSharedOperationListNotes } from "./operation-list-notes.ts";
 
 function nextBlock(view: SharedPreparationView, order: SharedStructureOrderView, from: { readonly index: number; readonly span: { readonly owner: string } | null } | null) {
   if (!from?.span) return null;
-  let after = false;
+  const joined = new Set(readSharedJoinedTextGeometry(view, from.span.owner)?.parts.map(part => part.owner) ?? []);
+  let after = false, heading = false;
   for (let index = from.index, length = sharedOrderPlan(view, order).length; index < length; index++) {
     const key = sharedPlannedSegmentAt(view, order, index), stream = key === undefined ? undefined : readSharedStructureStream(view, key);
     if (stream) for (const block of interpretSharedStructure(view, [], stream)) {
       if (block.segment !== key || block.reason || block.id === null) continue;
-      if (after) return block;
-      if (block.kind === "b" && block.id === from.span.owner) after = true;
+      if (!after) { after = block.kind === "b" && block.id === from.span.owner; continue; }
+      // why: the app shows a joined row as one beat, and a heading directly before the line counts as
+      // part of the line's place (assumed rule 46, point 3).
+      if (block.kind === "b" && joined.has(block.id) || block.kind === "h" && !heading) { heading ||= block.kind === "h"; continue; }
+      return block;
     }
   }
   return null;
