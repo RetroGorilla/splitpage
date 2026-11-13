@@ -14,8 +14,8 @@
   }, {
     "label": "staged removal ignores creation aliases",
     "file": "src/adapters/collab/removal-executor.ts",
-    "find": "const owner = view.resolveOwner(sharedStructureReference(view, reference), \"audioText\");",
-    "replace": "const owner = view.resolveOwner(reference, \"audioText\");",
+    "find": "const resolve = (reference: SharedContentRef) => view.resolveOwner(sharedStructureReference(view, reference), \"audioText\")",
+    "replace": "const resolve = (reference: SharedContentRef) => view.resolveOwner(reference, \"audioText\")",
     "tests": ["tests/adapters/collab/structure-removal.test.ts"]
   }, {
     "label": "removal trusts foreign components",

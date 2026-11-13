@@ -12,7 +12,7 @@ import type { SharedStructureIdentityReservations } from "./structure-identity.t
 import type { SharedAttachmentOwnership } from "./structure-index.ts";
 import { sharedCreatedAttachments, sharedPendingAttachmentKeys } from "./structure-content.ts";
 import { readPreparedSharedRecord } from "./record-codec.ts";
-import { sharedTextCommandPlan, SharedTextPreparationError } from "./executor-text-plan.ts";
+import { sharedTextCommandPlan, sharedTextPlanSlot, SharedTextPreparationError } from "./executor-text-plan.ts";
 import type { SharedTextCommandPlan } from "./executor-text-plan.ts";
 import { prepareSharedRemovalObservations } from "./removal-observations.ts";
 import type { SharedRemovalCapture } from "./removal-observations.ts";
@@ -21,7 +21,7 @@ import type { SharedStoredRemovalCommand, SharedRemovalTarget } from "./removal-
 import type { SharedRemovalBufferSource } from "../../core/collab/removal-state.ts";
 import { readSharedRemovalState, readSharedHeadingRemovalState, sharedHeadingRemovalField } from "./removal-state.ts";
 import { bindSharedStructurePlan, planSharedStructureRemoval, resolveSharedRestorableBeat, planSharedHeadingRemoval, resolveSharedRestorableHeading,
-  sharedStructurePlanIndex, readSharedStructureStream, interpretSharedStructure } from "./structure-plan.ts";
+  sharedStructurePlanIndex, readSharedStructureStream, interpretSharedStructure, readSharedConvertedBeat } from "./structure-plan.ts";
 import { sharedOrderPlan } from "./structure-order-index.ts";
 import { sharedPlannedSegmentIndex, sharedPlannedSegmentAt } from "./structure-order.ts";
 import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
@@ -64,13 +64,17 @@ function remove(operation: SharedSoftRemove, view: SharedPreparationView, index:
   reserveSharedStructureIdentity(view, id, identities); prepareStructureAlias(view, operation.id, id);
   if (!operation.targets.length) throw new SharedStructurePreparationError("missing-target");
   const plans: SharedTextCommandPlan[] = [], visuals: { beat: SharedContentRef; record: SharedContentRef }[] = [], gallery: string[] = [], buffer: SharedRemovalBufferSource[] = [];
+  // why: a beat that became a heading earlier in the list has no boundary left; its line is now the heading.
+  const resolve = (reference: SharedContentRef) => view.resolveOwner(sharedStructureReference(view, reference), "audioText")
+    ?? (operation.removalKind === "became-heading" ? readSharedConvertedBeat(view, sharedStructureReference(view, reference)) : null);
   for (const reference of operation.targets) {
-    const owner = view.resolveOwner(sharedStructureReference(view, reference), "audioText");
+    const owner = resolve(reference);
     if (!owner) throw new SharedStructurePreparationError("missing-target");
     if (targets.some(target => target.beat === owner.owner)) continue;
     const state = flags(view, owner.owner), generation = state.generation === null ? 0 : state.generation + 1;
     if (!Number.isSafeInteger(generation)) throw new SharedStructurePreparationError("removal-generation-limit");
-    const plan = sharedTextCommandPlan(view, { owner: owner.owner as SharedContentRef, segment: owner.segment as SharedContentRef, field: "audioText" });
+    const target = { owner: owner.owner as SharedContentRef, segment: owner.segment as SharedContentRef, field: "audioText" as const }, converted = sharedTextPlanSlot(view, ["segments", owner.segment, "text"]).plan;
+    const plan = readSharedConvertedBeat(view, owner.owner) && converted ? { ...converted, target } : sharedTextCommandPlan(view, target);
     plans.push(plan); targets.push({ beat: owner.owner, segment: owner.segment, generation });
     visuals.push(...attachments(view, index, "visuals", owner.owner).map(record => ({ beat: owner.owner as SharedContentRef, record: record as SharedContentRef })));
     gallery.push(...attachments(view, index, "gallery", owner.owner));
@@ -81,13 +85,13 @@ function remove(operation: SharedSoftRemove, view: SharedPreparationView, index:
     }
     writes.push({ kind: "set", path: ["beats", owner.owner, "removals", id], value: { generation, removed: true } });
   }
-  const boundaries = operation.boundaries.map(reference => view.resolveOwner(sharedStructureReference(view, reference), "audioText")?.owner);
+  const boundaries = operation.boundaries.map(reference => resolve(reference)?.owner);
   if (boundaries.some(owner => !owner || !targets.some(target => target.beat === owner))) throw new SharedStructurePreparationError("invalid-removal-boundary");
   for (const [collection, supplied, derived] of [["visuals", operation.components, visuals.map(value => value.record)], ["gallery", operation.gallery, gallery]] as const) {
     if (supplied.some(reference => !derived.includes(sharedStructureReference(view, reference)) && !operation.targets.some(target => reference === target + (collection === "visuals" ? ":visual" : ":gallery"))))
       throw new SharedStructurePreparationError(collection === "visuals" ? "invalid-removal-components" : "invalid-removal-gallery");
   }
-  const captures = prepareSharedRemovalObservations(view, plans, operation.observed, visuals);
+  const captures = prepareSharedRemovalObservations(view, plans, operation.observed, visuals, operation.removalKind !== "became-heading");
   const record: SharedStoredRemovalCommand = { kind: "remove", writer: view.writer, operation: operation.id, by: operation.by, targets,
     removalKind: operation.removalKind, at: operation.at, observed: captures.map(capture => ({ target: capture.target, identities: capture.known })),
     references: operation.observed, boundaries: boundaries as string[], components: visuals.map(value => value.record), gallery, comments: operation.comments ?? null, buffer };
@@ -101,7 +105,7 @@ function headingFlags(view: SharedPreparationView, heading: string) {
   return readSharedHeadingRemovalState(view.keys(path), key => view.get([...path, key]));
 }
 
-function followingBeat(view: SharedPreparationView, heading: { readonly owner: string; readonly segment: string }): string | null {
+export function sharedFollowingBeat(view: SharedPreparationView, heading: { readonly owner: string; readonly segment: string }): string | null {
   const order = sharedStructurePlanIndex(view).order, length = sharedOrderPlan(view, order).length;
   let after = false;
   for (let index = sharedPlannedSegmentIndex(view, order, heading.segment); index < length; index++) {
@@ -122,7 +126,7 @@ function removeHeading(operation: SharedHeadingRemove, view: SharedPreparationVi
   if (view.has(["removalRecords", id])) throw new SharedStructurePreparationError("existing-identity");
   const heading = view.resolveOwner(sharedStructureReference(view, operation.heading), "heading");
   if (!heading) throw new SharedStructurePreparationError("missing-target");
-  const next = followingBeat(view, heading), geometry = next === null ? null : readSharedJoinedTextGeometry(view, next);
+  const next = sharedFollowingBeat(view, heading), geometry = next === null ? null : readSharedJoinedTextGeometry(view, next);
   if (geometry && geometry.root !== next) throw new SharedStructurePreparationError("joined-heading");
   reserveSharedStructureIdentity(view, id, identities); prepareStructureAlias(view, operation.id, id);
   const state = headingFlags(view, heading.owner), generation = state.generation === null ? 0 : state.generation + 1;
