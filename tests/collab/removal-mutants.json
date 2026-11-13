@@ -110,7 +110,7 @@
   }, {
     "label": "draft placed at the end of the order",
     "file": "src/adapters/collab/buffer.ts",
-    "find": "segment: sharedBufferSourceSegment(handle, rowId) }",
+    "find": "segment: sharedBufferSourceSegment(handle, target.owner) }",
     "replace": "segment: null }",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {

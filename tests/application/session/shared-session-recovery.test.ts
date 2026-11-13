@@ -58,7 +58,9 @@ test("read port: a failed publication keeps the held document and its list toget
     assert.deepEqual(first, { rows: [readSharedRevision(run.a), ["R0", "R2"]], recovery: [["removed-beat", "R1", "abcd"]] });
     armed = true;
     transactSharedDocument(run.b, "local-command", () => nativeText(run.b, "b:R0").insert(1, "!")); send(run.b, remove("R2", "gone2", 2)); run.queue.flush("D1");
-    assert.deepEqual([held(), h.reported.length > 0], [first, true]);
+    let during: unknown;
+    assert.doesNotThrow(() => { during = held(); });
+    assert.deepEqual([during, h.reported.length > 0], [first, true]);
     armed = false;
     transactSharedDocument(run.b, "local-command", () => nativeText(run.b, "b:R0").insert(2, "?")); run.queue.flush("D1");
     assert.deepEqual(held(), { rows: [readSharedRevision(run.a), ["R0"]], recovery: [["removed-beat", "R1", "abcd"], ["removed-beat", "R2", "ef"]] });
