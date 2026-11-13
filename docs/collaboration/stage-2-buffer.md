@@ -452,14 +452,20 @@ the plan review:
   admitted, a cancelled composition that began held, or the input losing focus
   (any blur that a same-task refocus, as a repaint's re-homing, does not undo) or
   the document selection leaving the form, each with the stored name back and one
-  report. Enter, cut and paste (on their clipboard events, since a cut with
-  nothing selected sends no `beforeinput`), drop, `historyUndo` and `historyRedo`
-  end it the same way and are consumed: nothing else happens and the form stays
+  report. Enter, paste, drop, `historyUndo` and `historyRedo` end it the same way
+  at their `beforeinput` and are consumed: nothing else happens and the form stays
   open on the stored name; Escape then closes it. A focus transfer to another
-  element also closes the form. Backspace and Delete have nothing to delete in an
-  empty input, so the hold stays. Paste is not an insertion: emptying a name and
-  then pasting a new one gives the report, while selecting the name and pasting is
-  refused as any paste is.
+  element, or a submit from elsewhere, also closes the form after the one report.
+  Some keys on an input send no `input` event (Backspace and Delete in an empty
+  input, Ctrl+X with nothing selected, Ctrl+Z or Ctrl+Y with no history, arrows),
+  so a key pressed while the
+  name is held that is not a bare modifier (Shift, Control, Alt, Meta, AltGraph,
+  CapsLock, a dead key) or a composition key ends the hold at its `keyup` if
+  nothing inserted by then; a hold already ended does not report again. A letter,
+  with or without Shift or after a dead key, and a committed composition replace
+  the name once. Paste is not an insertion: emptying a name and then pasting a new
+  one gives the report, while selecting the name and pasting is refused as any
+  paste is.
 - A paint during an edit re-homes the form into the rebuilt header. The caret and
   selection, with their direction, follow the shared units: each end stays after
   the unit it followed, so text others insert at either side or between equal
@@ -472,7 +478,9 @@ the plan review:
 `tests/features/rows/scene-name-buffer.test.ts` holds each case, compared on
 the typist, the other copy and a late joiner. It drives the input through
 `tests/features/edge-input.ts`, one helper per user action, each dispatching the
-sequence Edge sends for an `<input>`; `tests/features/rows/scene-controls.test.ts`
+sequence Edge sends for an `<input>`; the test file's `EDGE_SEQUENCES` table holds
+the sequences recorded in Edge 157 and checks each helper against it on a plain
+input; `tests/features/rows/scene-controls.test.ts`
 pins the standalone form, which binds nothing.
 
 ## Mapping and coverage

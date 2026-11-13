@@ -22,7 +22,9 @@ export interface SceneNameBuffer {
   readonly dispose: () => boolean;
 }
 
-const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste"] as const;
+const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown"] as const;
+
+const MODIFIERS: ReadonlySet<string> = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "Dead", "Process"]);
 
 interface KeptCaret {
   readonly start: number;
@@ -44,7 +46,7 @@ export function bindSceneName(form: {
   readonly input: HTMLInputElement; readonly sceneId: string; readonly name: () => string | null; readonly place: () => void
 }, ports: SceneNameBufferPorts): SceneNameBuffer {
   const { input, sceneId } = form, key = headingFieldKey(sceneId), stored = form.name;
-  let composing = false, kept: KeptCaret | null = null, open = true;
+  let composing = false, kept: KeptCaret | null = null, open = true, pressed = false;
   const focused = () => input.ownerDocument.activeElement === input;
   const caretNow = (): KeptCaret => {
     const start = input.selectionStart ?? 0;
@@ -83,12 +85,14 @@ export function bindSceneName(form: {
     unsettled: (_rowId, text) => unsettledHeading(text)
   });
   function step(event: Event): void {
-    if (event.type === "keydown") { binding.keydown(event as KeyboardEvent); return; }
+    if (event.type === "keydown") {
+      const key = event as KeyboardEvent;
+      if (binding.held() && !key.isComposing && key.keyCode !== 229 && !MODIFIERS.has(key.key)) pressed = true;
+      binding.keydown(key); return;
+    }
     if (event.type === "input") { binding.input(); return; }
     if (event.type === "compositionstart") { binding.start(event, range()); return; }
     if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
-    // why: a cut with nothing selected sends no beforeinput, so a held name ends its hold on the clipboard event
-    if (event.type === "cut" || event.type === "paste") { if (binding.held()) binding.settledFor(event); return; }
     const native = event as InputEvent, type = native.inputType;
     if (native.isComposing || /Composition/.test(type)) return;
     if (!binding.dirty() && input.value === ports.painted.text(key)) ports.painted.field(key, input.value);
@@ -117,6 +121,12 @@ export function bindSceneName(form: {
   function settleHeld(): void {
     if (open && binding.held()) ports.shown(() => binding.finish());
   }
+  function released(): void {
+    // why: some keys on an input send no input event (an empty Backspace, a redo with no history), so a key that
+    // inserted nothing ends the hold once the browser's default has run
+    if (pressed) settleHeld();
+    pressed = false;
+  }
   function blurred(): void {
     // why: a repaint re-homes the form, blurring it until the paint refocuses; the hold ends only if focus stays away
     queueMicrotask(() => { if (!focused()) settleHeld(); });
@@ -127,6 +137,7 @@ export function bindSceneName(form: {
   }
   for (const type of TYPES) input.addEventListener(type, listener);
   input.addEventListener("blur", blurred);
+  input.addEventListener("keyup", released);
   input.ownerDocument.addEventListener("selectionchange", selectionMoved);
   const stopPainted = ports.onPainted(painted);
   const stopCheck = ports.beforePaint(() => {
@@ -144,6 +155,7 @@ export function bindSceneName(form: {
       stopPainted(); stopCheck();
       for (const type of TYPES) input.removeEventListener(type, listener);
       input.removeEventListener("blur", blurred);
+      input.removeEventListener("keyup", released);
       input.ownerDocument.removeEventListener("selectionchange", selectionMoved);
       ports.painted.clear();
       ports.repaintRows();

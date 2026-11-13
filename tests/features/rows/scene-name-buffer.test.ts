@@ -11,6 +11,8 @@ import { transactSharedDocument } from "../../../src/adapters/collab/document.ts
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSplits, sharedCommand } from "../../application/session/shared-session-support.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { edgeInput } from "../edge-input.ts";
+import type { EdgeInput } from "../edge-input.ts";
 
 const HEADING = { owner: ref("H1"), segment: ref("h:H1"), field: "heading" as const };
 
@@ -40,6 +42,68 @@ const selected = (page: RenamePage) => [page.input().selectionStart, page.input(
 const TARGET = { owner: "H1", segment: "H1", field: "heading" };
 const inserted = (value: string) => ({ kind: "text-insert", target: TARGET, content: [{ value, marks: [] }] });
 const UNSUPPORTED = [{ kind: "rejected", reason: "buffer-unsupported-input" }];
+
+type Recorded = readonly [string, string | null, boolean];
+
+const EDGE_SEQUENCES: readonly {
+  readonly label: string;
+  readonly value: string;
+  readonly max?: number;
+  readonly act: (edge: EdgeInput) => unknown;
+  readonly events: readonly Recorded[];
+  readonly after: readonly [string, number, number];
+}[] = [
+  { label: "a letter", value: "", act: edge => edge.type("Z"), after: ["Z", 1, 1],
+    events: [["keydown", "Z", true], ["keypress", "Z", true], ["beforeinput", "insertText", true], ["input", "insertText", false], ["keyup", "Z", true]] },
+  { label: "a letter into a full maxlength", value: "a".repeat(200), max: 200, act: edge => edge.type("Z"), after: ["a".repeat(200), 200, 200],
+    events: [["keydown", "Z", true], ["keypress", "Z", true], ["beforeinput", "insertText", true], ["keyup", "Z", true]] },
+  { label: "Enter in a form", value: "", act: edge => edge.enter(), after: ["", 0, 0],
+    events: [["keydown", "Enter", true], ["keypress", "Enter", true], ["beforeinput", "insertLineBreak", true], ["submit", null, true], ["keyup", "Enter", true]] },
+  { label: "Backspace in an empty input", value: "", act: edge => edge.backspace(), after: ["", 0, 0],
+    events: [["keydown", "Backspace", true], ["beforeinput", "deleteContentBackward", true], ["keyup", "Backspace", true]] },
+  { label: "Delete in an empty input", value: "", act: edge => edge.delete(), after: ["", 0, 0],
+    events: [["keydown", "Delete", true], ["beforeinput", "deleteContentForward", true], ["keyup", "Delete", true]] },
+  { label: "Ctrl+X with nothing selected", value: "", act: edge => edge.cut(), after: ["", 0, 0],
+    events: [["keydown", "x", true], ["cut", null, true], ["keyup", "x", true]] },
+  { label: "Ctrl+V", value: "", act: edge => edge.paste("Q"), after: ["Q", 1, 1],
+    events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "a drop", value: "", act: edge => edge.drop("Q"), after: ["Q", 0, 1],
+    events: [["drop", null, true], ["beforeinput", "insertFromDrop", true], ["input", "insertFromDrop", false]] },
+  { label: "Ctrl+Y with nothing to redo", value: "", act: edge => edge.redo(null), after: ["", 0, 0],
+    events: [["keydown", "y", true], ["keyup", "y", true]] },
+  { label: "a composition committed", value: "", act: edge => { edge.imeSet("漢"); edge.imeCommit("漢"); }, after: ["漢", 1, 1],
+    events: [["compositionstart", "", true], ["compositionupdate", "漢", true], ["beforeinput", "insertCompositionText", false], ["input", "insertCompositionText", false],
+      ["compositionupdate", "漢", true], ["beforeinput", "insertCompositionText", false], ["input", "insertCompositionText", false], ["compositionend", "漢", true]] },
+  { label: "a composition cancelled", value: "", act: edge => { edge.imeSet("漢"); edge.imeCancel(); }, after: ["", 0, 0],
+    events: [["compositionstart", "", true], ["compositionupdate", "漢", true], ["beforeinput", "insertCompositionText", false], ["input", "insertCompositionText", false],
+      ["compositionupdate", "", true], ["beforeinput", "insertCompositionText", false], ["input", "insertCompositionText", false], ["compositionend", "", true]] }
+];
+
+const RECORDED_TYPES = ["keydown", "keypress", "beforeinput", "input", "keyup", "cut", "paste", "drop", "submit", "compositionstart", "compositionupdate", "compositionend"];
+
+for (const sequence of EDGE_SEQUENCES) {
+  test(`Edge input helpers: ${sequence.label} dispatches the sequence Edge sends to a plain input`, () => {
+    document.body.innerHTML = '<form><input></form>';
+    const input = document.querySelector("input"); assert.ok(input);
+    input.value = sequence.value;
+    if (sequence.max !== undefined) input.maxLength = sequence.max;
+    input.form?.addEventListener("submit", event => { event.preventDefault(); });
+    input.focus(); input.setSelectionRange(sequence.value.length, sequence.value.length);
+    const events: Recorded[] = [];
+    for (const type of RECORDED_TYPES) {
+      (type === "submit" ? input.form : input)?.addEventListener(type, event => {
+        const detail = event instanceof window.KeyboardEvent ? event.key : event instanceof window.InputEvent ? event.inputType
+          : event instanceof window.CompositionEvent ? event.data : null;
+        events.push([event.type, detail, event.cancelable]);
+      });
+    }
+    try {
+      sequence.act(edgeInput(() => input));
+      assert.deepEqual(events, sequence.events);
+      assert.deepEqual([input.value, input.selectionStart, input.selectionEnd], sequence.after);
+    } finally { document.body.innerHTML = ""; }
+  });
+}
 
 test("Split rename typing settles each keystroke as heading text operations, with no rename command", () => {
   const page = sharedRename();
@@ -88,12 +152,11 @@ test("Split rename: a remote change arriving mid-composition is held until compo
   try {
     const input = page.open();
     page.edge.select(3);
-    page.edge.composeStart();
-    page.edge.composeUpdate("漢");
+    page.edge.imeSet("漢");
     remote(page, 0, "!");
     page.h.queue.flush("dup");
     assert.deepEqual([page.stored(), input.value, page.a.executed.length], ["Scene", "Sce漢ne", 0]);
-    page.edge.composeEnd("漢");
+    page.edge.imeCommit("漢");
     assert.deepEqual([page.stored(), input.value, caret(page), page.reports], ["!Sce漢ne", "!Sce漢ne", [5, 5], []]);
     copies(page, ["!Sce漢ne"]);
   } finally { page.close(); }
@@ -296,11 +359,16 @@ test("Split rename rule 8: a typed edge space is stored and shown as typed", () 
 });
 
 const HELD_ENDINGS: readonly (readonly [string, (page: RenamePage) => boolean])[] = [
+  ["Backspace", page => page.edge.backspace()],
+  ["Delete", page => page.edge.delete()],
+  ["Enter", page => page.edge.enter()],
   ["Ctrl+X with nothing selected", page => page.edge.cut()],
   ["Ctrl+V", page => page.edge.paste("Q")],
   ["a drop", page => page.edge.drop("Q")],
   ["Ctrl+Z", page => page.edge.undo("Scene")],
-  ["Ctrl+Y", page => page.edge.redo("Q")]
+  ["Ctrl+Z with nothing to undo", page => page.edge.undo(null)],
+  ["Ctrl+Y with nothing to redo", page => page.edge.redo(null)],
+  ["ArrowLeft", page => page.edge.press("ArrowLeft")]
 ];
 
 for (const [label, act] of HELD_ENDINGS) {
@@ -308,37 +376,72 @@ for (const [label, act] of HELD_ENDINGS) {
     const page = emptied();
     try {
       assert.equal(act(page), false);
-      assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page), page.a.executed.length, page.commands, page.input().isConnected],
-        ["Scene", "Scene", EMPTY_REPORT, [], 0, [], true]);
+      assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page), page.a.executed.length, page.commands, page.input().isConnected],
+        ["Scene", "Scene", [0, 0], EMPTY_REPORT, [], 0, [], true]);
       copies(page, ["Scene"]);
     } finally { page.close(); }
   });
 }
 
-test("Split rename rule 4: Backspace and Delete in a held empty name have nothing to delete and leave the hold as it is", () => {
-  const page = emptied();
-  try {
-    assert.deepEqual([page.edge.backspace(), page.edge.delete()], [false, false]);
-    assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page), page.a.executed.length], ["Scene", "", [], ["buffer"], 0]);
-  } finally { page.close(); }
-});
-
-for (const [label, cancel] of [
-  ["with its text left", (page: RenamePage) => { page.edge.composeEnd(""); }],
-  ["with nothing left", (page: RenamePage) => { page.edge.composeUpdate(""); page.edge.composeEnd(""); }]
+for (const [label, act] of [
+  ["Shift alone", (page: RenamePage) => page.edge.press("Shift")],
+  ["Control alone", (page: RenamePage) => page.edge.press("Control")]
 ] as const) {
-  test(`Split rename rule 4: a composition begun in a held empty name and cancelled ${label} puts the name back and tells the person once`, () => {
+  test(`Split rename rule 4: ${label} keeps a held empty name held, with no report`, () => {
     const page = emptied();
     try {
-      const input = page.input();
-      page.edge.composeStart();
-      page.edge.composeUpdate("x");
-      cancel(page);
-      assert.deepEqual([page.stored(), input.value, page.reports, holds(page), page.a.executed.length], ["Scene", "Scene", EMPTY_REPORT, [], 0]);
-      assert.equal(input.isConnected, true);
+      assert.equal(act(page), false);
+      assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page), page.a.executed.length], ["Scene", "", [0, 0], [], ["buffer"], 0]);
     } finally { page.close(); }
   });
 }
+
+for (const [label, act, typed] of [
+  ["Shift then a letter", (page: RenamePage) => page.edge.shiftType("N"), "N"],
+  ["a dead key then a letter", (page: RenamePage) => page.edge.deadType("é"), "é"]
+] as const) {
+  test(`Split rename rule 4: in a held empty name, ${label} replaces the name once, with no report`, () => {
+    const page = emptied();
+    try {
+      assert.equal(act(page), true);
+      assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page)], [typed, typed, [1, 1], [], []]);
+      assert.deepEqual(written(page), [[inserted(typed), { kind: "text-delete", target: TARGET, observed: 5 }]]);
+      copies(page, [typed]);
+    } finally { page.close(); }
+  });
+}
+
+test("Split rename rule 4: a composition begun in a held empty name and committed replaces the name once, with no report", () => {
+  const page = emptied();
+  try {
+    page.edge.imeSet("漢");
+    page.edge.imeCommit("漢");
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page)], ["漢", "漢", [1, 1], [], []]);
+    assert.deepEqual(written(page), [[inserted("漢"), { kind: "text-delete", target: TARGET, observed: 5 }]]);
+    copies(page, ["漢"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 4: a composition begun in a held empty name and cancelled puts the name back and tells the person once", () => {
+  const page = emptied();
+  try {
+    const input = page.input();
+    page.edge.imeSet("x");
+    page.edge.imeCancel();
+    assert.deepEqual([page.stored(), input.value, page.reports, holds(page), page.a.executed.length, input.isConnected], ["Scene", "Scene", EMPTY_REPORT, [], 0, true]);
+    copies(page, ["Scene"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 4: a submit from elsewhere while the name is held empty ends the hold once and closes the form on the stored name", () => {
+  const page = emptied();
+  try {
+    const input = page.input();
+    input.form?.requestSubmit();
+    assert.deepEqual([input.isConnected, page.stored(), page.reports, holds(page), page.a.executed.length, page.commands], [false, "Scene", EMPTY_REPORT, [], 0, []]);
+    assert.equal(page.rows.querySelector(".section-name")?.textContent, "Scene");
+  } finally { page.close(); }
+});
 
 test("Split rename rule 4: a command admitted while the name is held empty ends the hold once, and the form stays open on the stored name", () => {
   const page = emptied();
@@ -406,11 +509,10 @@ test("Split rename rule 6: name text the document refuses goes to recovery throu
   try {
     const input = page.open();
     page.edge.select(3);
-    page.edge.composeStart();
-    page.edge.composeUpdate("漢");
+    page.edge.imeSet("漢");
     const other = collabState(page.h.a).roots.beats.get("R2"); assert.ok(other instanceof Y.Map);
     transactSharedDocument(page.h.a, "local-command", () => { other.set("lengthSeconds", 7); });
-    page.edge.composeEnd("漢");
+    page.edge.imeCommit("漢");
     assert.deepEqual([page.recovered, page.reports, page.stored(), input.value], [["heading:H1"], [], "Scene", "Scene"]);
     assert.deepEqual(page.a.executed[1]?.operations[0], { kind: "segment-create", id: "r17", by: "Alice", segment: "draft_segment_r17", beat: "draft_r17",
       at: { left: null, right: null, affinity: "after" }, fields: { audioText: "Sce漢ne", bufferSourceOwner: "H1", bufferPaintedBase: 1 } });
