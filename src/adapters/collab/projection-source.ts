@@ -5,7 +5,7 @@ import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-g
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
-import { readSharedHeadingRemovalState } from "./removal-state.ts";
+import { readSharedHeadingActiveRemovals, readSharedHeadingRemovalState } from "./removal-state.ts";
 import { readStoredSharedRecord } from "./record-codec.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
@@ -81,12 +81,15 @@ export class SharedProjectionSource {
 
   headingRemoved(id: string): boolean { return this.heading(id).removed; }
 
-  private heading(id: string): { readonly fields: Record<string, unknown> | null; readonly removed: boolean } {
+  headingRemovals(id: string): readonly string[] { return this.heading(id).removals; }
+
+  private heading(id: string): { readonly fields: Record<string, unknown> | null; readonly removed: boolean; readonly removals: readonly string[] } {
     return this.cache.read(["fields", "headings", id], [this.keyVersion("headings", id)], () => {
       const raw: unknown = this.inputRoots.headings.get(id), entries = new Map<string, unknown>();
-      if (!(raw instanceof Y.Map)) return { fields: null, removed: false };
+      if (!(raw instanceof Y.Map)) return { fields: null, removed: false, removals: [] };
       raw.forEach((value, key) => entries.set(key, value));
-      return { fields: readProjectionFields(entries, "heading"), removed: readSharedHeadingRemovalState(entries.keys(), key => entries.get(key)).removed };
+      return { fields: readProjectionFields(entries, "heading"), removed: readSharedHeadingRemovalState(entries.keys(), key => entries.get(key)).removed,
+        removals: readSharedHeadingActiveRemovals(entries.keys(), key => entries.get(key)) };
     });
   }
 

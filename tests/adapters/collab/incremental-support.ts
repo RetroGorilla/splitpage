@@ -41,6 +41,22 @@ export function nativeText(handle: SharedDocumentHandle, segment: string): Y.Tex
   const text = nativeMap(handle, "segments", segment).get("text"); assert.ok(text instanceof Y.Text); return text;
 }
 
+export function identityLetters(handle: SharedDocumentHandle): Map<string, string> {
+  const found = new Map<string, string>();
+  collabState(handle).roots.segments.forEach(segment => {
+    const text = segment instanceof Y.Map ? segment.get("text") : null;
+    if (!(text instanceof Y.Text)) return;
+    let offset = 0;
+    for (const delta of text.toDelta() as { insert: unknown }[]) {
+      for (const value of typeof delta.insert === "string" ? delta.insert : [""]) {
+        const item = Y.createRelativePositionFromTypeIndex(text, offset++).item; assert.ok(item);
+        found.set(item.client + ":" + item.clock, value);
+      }
+    }
+  });
+  return found;
+}
+
 export function captureIncrementalReplica(handle: SharedDocumentHandle, count?: Parameters<typeof createSharedIncrementalProjector>[1]) {
   const descriptor = Object.getOwnPropertyDescriptor(Y.Doc.prototype, "get"); assert.ok(descriptor);
   const docs = new Set<Y.Doc>(), source = collabState(handle).doc;

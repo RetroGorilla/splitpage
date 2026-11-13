@@ -37,3 +37,15 @@ export function projectSharedRemovalState(entries: readonly unknown[]) {
   }
   return { generation, removed: active && !cancelled };
 }
+
+export function projectSharedActiveRemovals(entries: readonly unknown[]): string[] {
+  const state = projectSharedRemovalState(entries), keys: string[] = [];
+  if (!state.removed) return keys;
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || !identity(entry[0])) continue;
+    const value = entry[1], flag = record(value);
+    if (value === true ? state.generation === 0 : flag?.generation === state.generation && flag.removed === true) keys.push(entry[0]);
+  }
+  return keys.sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+}

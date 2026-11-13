@@ -11,8 +11,8 @@ const ENTRIES: Readonly<Record<string, readonly string[]>> = {
   "crossing-tag": ["field", "from", "occurrence", "rowId", "tag", "to", "words"],
   "deleted-tag": ["field", "from", "occurrence", "rowId", "tag", "to", "words"],
   "gallery-overflow": ["beat", "itemId", "rowId", "slot"],
-  "removed-beat": ["buffer?", "members", "row"],
-  "removed-heading": ["heading"],
+  "removed-beat": ["buffer?", "members", "removal?", "row"],
+  "removed-heading": ["heading", "removal?"],
   "scene-with-no-beats": ["beforeRowId", "heading"],
   "unprojectable-fragment": ["field", "from", "html", "owner", "reason", "segment", "to"]
 };
