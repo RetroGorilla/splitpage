@@ -46,18 +46,18 @@ application code issues it yet: there is no recovery panel.
 ### `removed-beat`
 
 - Produced: `assembleSharedDocument`, for a joined group whose root has an active removal (`group.removed`). Beats joined into a removed beat are members of the same entry (assumed rule 3); a beat removed while someone typed in it keeps that typing (decided: an edit to a removed beat goes to recovery).
-- Carries: `row` (the painted row in canonical row order: id, `audioText`, `visualText`, joined fields and gallery), `members` (the beat ids of the group), `buffer` (optional: for a rule 29 entry, each source beat's id and its `bufferSourceOwner` and `bufferPaintedBase`, historical provenance never shown in a row or export).
+- Carries: `row` (the painted row in canonical row order: id, `audioText`, `visualText`, joined fields and gallery), `members` (the beat ids of the group), `removal` (optional, see [Removal provenance](#removal-provenance)), `buffer` (optional: for a rule 29 entry, each source beat's id and its `bufferSourceOwner` and `bufferPaintedBase`, historical provenance never shown in a row or export).
 - Copies: derivation. Every copy holding the same state lists the same entry; a late joiner reads it from the removal records and per-beat removal flags.
-- Restore today: `restore` with the ids of the removal records whose generation is active. The entry does not carry those ids; a caller reads them from the beat's `removals` map.
+- Restore today: `restore` with the ids in `removal.ids`. An entry without `removal` has removal flags but no readable removal record (only damaged data), and `restore` refuses it.
 - Restore should mean: the group back in the script where its boundaries are, with its text, marks, attachments and comment anchors, nothing copied (already true for a beat removed on its own). A rule 29 draft beat comes back as an ordinary beat directly after its source (assumed A4).
 - Undo of restore: refused today (every structure command is refused by name in the undo owner). Should be a fresh removal of the same beats by the person who restored, the next generation (assumed A1).
 
 ### `removed-heading`
 
-- Produced: `assembleSharedDocument`, for a heading with an active `header` removal whose name still holds text; a removed heading with an empty name has no entry. It is rebuilt on every projection step instead of being cached (open item 3 from #1501).
-- Carries: `heading` (the section record: id, name and stored extras).
+- Produced: `assembleSharedDocument`, for a heading with an active `header` removal whose name still holds text; a removed heading with an empty name has no entry. The entry is cached on the heading, its name and its removal records, so an unrelated step does not rebuild it.
+- Carries: `heading` (the section record: id, name and stored extras), `removal` (optional, see [Removal provenance](#removal-provenance)).
 - Copies: derivation.
-- Restore today: `restore` of the `header` removal. It unmasks the heading; it does not undo the split of a demotion.
+- Restore today: `restore` with the ids in `removal.ids`. It unmasks the heading; it does not undo the split of a demotion.
 - Restore should mean: the heading back at its boundary, starting a scene again with the beats after it.
 - Undo of restore: refused today; should be a fresh `heading-remove` by the person who restored (assumed A1).
 
@@ -108,6 +108,17 @@ application code issues it yet: there is no recovery panel.
 | `duplicate-boundary` | A beat or heading boundary seen a second time, or a beat id equal to an earlier one after id cleaning (assumed rules 8 and 21) |
 | `invalid-beat-id` | A beat id that is empty after the app's id cleaning (assumed rule 25) |
 
+## Removal provenance
+
+A `removed-beat` or `removed-heading` entry carries `removal` when at least one of its active removals has a readable removal record. It is a derivation: every copy holding the same state, and a late joiner, reads the same value.
+
+- `ids`: the keys of the active removal records, in UTF-16 order. Those are the ids `restore` takes. A removal that a restore cancelled is not active; a removal made again after that restore is (assumed rule 33).
+- `by`: every distinct remover name, in UTF-16 order, joined by `, ` (A7).
+- `edited`: the identity (`client`, `clock`) of each character that at least one applicable removal had not observed, in narration order and then visual cells in row order (A7). For a heading, its name.
+- Applicable removals: a beat's own active removals; a beat joined into a removed beat has none of its own, so the removals of the group's root apply to it.
+
+The removal records, per-beat removal flags and heading removal fields are read through the same per-key caches as the rest of the projection, and every projection unit carries the identity its mark state already read, so no new native reads are added. The provenance of a removed group is cached on its units and removal ids, and a removed heading's entry on its heading, name and removal records.
+
 ## What is not an entry
 
 These keep work, but locally, on one copy, and are not in the list:
@@ -118,7 +129,7 @@ These keep work, but locally, on one copy, and are not in the list:
 
 ## Gaps against the plan and Stage 1
 
-1. **A removed beat's entry does not say who removed it, which removal it is, or what was edited after.** Stage 1 lists remover names (`Alice, Bob`, UTF-16 order), `edited` (characters an applicable removal had not observed) and `splitBy`; the T10 test computes `by` and `edited` in its own reader (`removal-stage1.test.ts`). The entry also lacks the removal record ids its restore needs. A removed heading has the same gap.
+1. **Closed by cut 2 except `splitBy`.** A removed beat's or heading's entry now says who removed it, which removals are active and what was edited after ([Removal provenance](#removal-provenance)); the T10 test reads `by` and `edited` from the entry. `splitBy` comes with gap 2.
 2. **A split-off beat stays visible.** Alice removes `R1 "abcd"` while Bob, who has not seen it, splits it after `b`: every copy shows the new beat `cd` and lists only `R1 "ab"`. T11, Stage 0 assumed answer 2 and assumed rule 40 want both parts removed, `cd` marked split by Bob, and both back in place on restore. The copied oracles `commentsRemovedOracle` and `commentsRestoredOracle` are pending on package 11.
 3. **A comment whose words are all deleted is not listed** (decided 2026-11-09). It stays in `comments` at its last known row and field.
 4. **A comment anchored only in removed content is not marked.** It stays in `comments` like an active comment; T11 wants it in recovery with its replies until the beat is restored, then anchored again.
@@ -127,23 +138,25 @@ These keep work, but locally, on one copy, and are not in the list:
 7. **A restored rule 29 draft lands at the end of the script.** Its segment is created at a gap with no neighbours, which is the end of the order, not beside `bufferSourceOwner`.
 8. **There is no discard.** Assumed rule 29 says an entry leaves recovery by being restored or discarded.
 9. **Undo of restore is refused**, as is undo of a removal (moved to package 10 by assumed rule 40). The Stage 1 limit "a character undone and redone inside a removed beat is listed as edited" (`redone-recovery`, waiting for removal in `stage-2-shared-undo.md`) is not yet reproduced.
-10. **Entries have no identity of their own.** A panel, a restore and a discard need one that is the same on every copy.
+10. **Entries have no identity of their own.** A panel, a restore and a discard need one that is the same on every copy. For removals, `removal.ids` is what a restore takes (cut 2); the name of an entry itself (A6) is still open.
 11. **Nothing outside the adapter reads the list.** No session port, no panel, and no export disclosure (plan section 2 item 7, section 6). The panel and export are Stage 4 product work; the read port is not.
-12. **Removed headings are rebuilt on every projection step** (open item 3 from #1501).
+12. **Closed by cut 2.** Removed headings were rebuilt on every projection step (open item 3 from #1501); the entry is now cached.
 13. **Retained recovery content is never compacted.** Removal records and removed text stay for the life of the instance; budgets and limits are Stage 3 (1a decision, carry-overs).
 14. **The movement oracles assigned here (`MOVE delete`, `MOVE delete undo`) cannot run**: moving a beat is refused in a shared session (assumed rule 40). They stay pending, declared.
 15. **One recovery defect is no longer caught**: `duplicate fragment not recovered` in `tests/collab/projection-mutants.json` survives (open item from #1498, package 15).
 
 ## Assumed rules
 
-Product rules the plan and the decided rows do not settle. Each is the recommended
-reading; each needs a ruling before the cut that builds it.
+Product rules the plan and the decided rows did not settle. All nine were accepted as
+written (assumed rule 43 on #1414), with two riders: A5 discard only hides, and deleting
+data stays Stage 3; A3 keeps the 2026-11-09 decision exactly (a comment whose words are
+all deleted is listed, with no restore).
 
 - **A1. Undo of restore is a new removal.** Undoing a restore removes the same beats or heading again as a fresh removal by the person who restored (the next generation). Redo restores that removal. Two people who restored the same removal without seeing each other made one change (decided: identical changes are one); either one's undo removes the beat again and the other's undo is used up. Undo of a removal is a restore of that removal (package 10).
 - **A2. A split-off beat follows its source.** A beat split off a removed beat by someone who had not seen the removal is removed with it and listed split by that person. One restore brings both back, in place, the split-off part directly after the part it was split from. A split made after seeing the removal cannot happen: a removed beat refuses commands.
 - **A3. Comments and replies come back with their words.** A comment whose words are in removed content is listed with its beat's entry and anchored again when that beat is restored; its replies go with it. A comment whose words are all deleted is listed on its own, keeps its last row and field, and has no restore (its words are gone); it can be discarded. A reply whose comment is missing is listed on its own and shows under its comment again if the comment comes back. All of them also stay in the document's `comments` as today, so exports do not change.
 - **A4. A rule 29 draft is created beside its source.** The draft beat's segment is placed directly after the source beat's segment when the write is made, so a restore puts the kept text right after the beat it came from. This changes where the removed draft is stored, not what anyone sees, and rule 29 allows it.
-- **A5. Discard hides, it does not delete.** Discarding an entry writes a record that hides it on every copy; the content stays in shared state, since destructive reclamation is outside v1 (plan section 6). Discard is an undo step; undo shows the entry again. A discarded removed beat can no longer be restored until the discard is undone.
+- **A5. Discard hides, it does not delete.** Discarding an entry writes a record that hides it on every copy; the content stays in shared state; actually deleting data is Stage 3. Discard is an undo step; undo shows the entry again. A discarded removed beat can no longer be restored until the discard is undone.
 - **A6. An entry is named by what it lists.** A removed beat by its group's root beat id, a removed heading by its heading id, a tag rejection by its occurrence id, a gallery overflow by its record id, a fragment by its segment and start, a comment or reply by its record id.
 - **A7. Remover names, `edited` and `splitBy`** follow the Stage 1 assumptions in the [1a decision](stage-1/1a-decision.md#decided-and-assumed-product-answers): every distinct applicable remover in UTF-16 order, a character is edited when at least one applicable removal had not observed it, and more removals never take information away.
 - **A8. A removed person named as an owner** is listed, with the owners naming them; the assignment shows as text (Stage 0 assumed answer 10). Restore re-creates the person record with its id; undo of that restore removes it again.
