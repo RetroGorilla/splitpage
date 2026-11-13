@@ -457,7 +457,7 @@ export function brollEntries(
 }
 
 export function planBrollRecords(
-  state: ValidatedDocument,
+  state: BrollState,
   readers: ProductionReaders,
   ids: IdSource,
   plainTextOf: FieldText,
@@ -536,7 +536,7 @@ export function brollLineKey(rowId: string, ordinal: number): string {
   return rowId + "\u0000" + ordinal;
 }
 
-export function planBrollAnchors(state: ValidatedDocument, readers: ProductionReaders, ids: IdSource): BrollAnchorPlan {
+export function planBrollAnchors(state: Pick<BrollState, "rows" | "brollShots">, readers: ProductionReaders, ids: IdSource): BrollAnchorPlan {
   const shots = state.brollShots;
   const claimed: Record<string, boolean> = Object.create(null);
   const byId = shotIndexById(shots);

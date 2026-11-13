@@ -100,7 +100,7 @@ const WRITERS = {
   },
   "shot-from-line": {
     family: "records", shared: "operation",
-    reason: "A B-roll line with no shot gets one, seeded from its beat. Shared: record-create by the copy that typed or pasted the line, with the id of its key."
+    reason: "A B-roll line with no shot gets one, seeded from its beat. Shared: record-create by the copy that typed or pasted the line, with the id of its key, built by sharedBrollIntroducedByText for a key the edited cell did not hold (callers in package 14)."
   },
   "shot-name-from-line": {
     family: "records", shared: "derivation",
@@ -116,7 +116,7 @@ const WRITERS = {
   },
   "broll-key": {
     family: "records", shared: "operation",
-    reason: "An unkeyed B-roll marker is given an id by rewriting its text: a command of its own, with text operations. A repeated key is settled by the projection (assumed rules 14 and 15)."
+    reason: "An unkeyed B-roll marker is given an id by rewriting its text: a command of its own, with text operations. sharedBrollIntroducedByText keys the edited cell as the anchor plan does; its caller sends the keyed cell (package 14). A repeated key is settled by the projection (assumed rules 14 and 15)."
   },
   "registry-heal-on-draw": {
     family: "records", shared: "not applicable",
@@ -349,6 +349,7 @@ const ENGINES: readonly Site[] = [
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
   ["bootstrap/wiring/ports/production.ts#production", "ProductionIndexOwner.recordsPlan 1, ProductionIndexOwner.recordsPlan (provided) 1", "tag-from-text", "cue-retitle"],
   ["bootstrap/wiring/session-owner.ts#createSession", "ReconcilePort.anchors (provided) 1, ReconcilePort.records (provided) 1, syncCommentAnchors 1", "anchor-repair", ...FROM_TEXT],
+  ["core/collab/text-records.ts#sharedBrollIntroducedByText", "planBrollAnchors 1, planBrollRecords 1", "broll-key", "shot-from-line"],
   ["core/migrate.ts#migrateRows", "applyBrollRecords 1, planBrollRecords 1, syncCommentAnchors 1", "file-entry"],
   ["core/production/owners.ts#applyOwnerSync", "addPerson 1", "person-from-name"],
   ["core/production/records.ts#addBrollProp", "addRegistryTag 1", "record-stated"],
