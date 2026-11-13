@@ -16,7 +16,9 @@ export type SharedRecoveryEntry =
   | (SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
   | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
   | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly removal?: SharedRecoveryRemoval;
-    readonly buffer?: readonly SharedRemovalBufferSource[]; readonly splitBy?: string }
+    readonly buffer?: readonly SharedRemovalBufferSource[]; readonly splitBy?: string; readonly comments?: readonly string[] }
+  | { readonly kind: "comment-without-words"; readonly comment: string; readonly rowId: string | null; readonly field: string | null }
+  | { readonly kind: "reply-without-comment"; readonly reply: string; readonly commentId: string }
   | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
     readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
   | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
@@ -57,4 +59,25 @@ export function projectSharedCoveredBeats(blocks: readonly SharedCoverageBlock[]
     if (covering.length) covered.set(block.id, covering);
   }
   return covered;
+}
+
+export type SharedLostCommentEntry = Extract<SharedRecoveryEntry, { readonly kind: "comment-without-words" | "reply-without-comment" }>;
+
+export function projectSharedLostComments(comments: readonly Readonly<Record<string, unknown>>[], words: ReadonlySet<string>,
+  replies: readonly { readonly key: string; readonly fields: Readonly<Record<string, unknown>> }[]): SharedLostCommentEntry[] {
+  const out: SharedLostCommentEntry[] = [], known = new Set<unknown>();
+  for (const comment of [...comments].sort((a, b) => compare(String(a.id), String(b.id)))) {
+    known.add(comment.id);
+    const anchor = comment.anchorId;
+    // why: only a text comment has words; picture, moved-media and conflict comments carry an empty quote.
+    const text = typeof comment.quotedText === "string" && comment.quotedText !== "" && comment.kind !== "conflict" && comment.field !== "title" && comment.field !== "visualImage";
+    if (typeof comment.id !== "string" || typeof anchor !== "string" || !anchor || !text || words.has(anchor)) continue;
+    out.push({ kind: "comment-without-words", comment: comment.id, rowId: typeof comment.rowId === "string" ? comment.rowId : null,
+      field: typeof comment.field === "string" ? comment.field : null });
+  }
+  for (const reply of [...replies].sort((a, b) => compare(a.key, b.key))) {
+    const parent = reply.fields.commentId;
+    if (typeof parent === "string" && !known.has(parent)) out.push({ kind: "reply-without-comment", reply: reply.key, commentId: parent });
+  }
+  return out;
 }

@@ -407,11 +407,11 @@ for (const copies of [2, 3]) for (const order of deliveryOrders) test(`removed j
   const handles = [run.a, run.b, ...(copies === 3 ? [run.c] : [])];
   try {
     join(run.a, "R2", "R1", "join"); remove(run.b, "R1"); run.queue.flush(order);
-    const document = { ...literalMergedDocument(""), rows: [], comments: [{ id: "C1", rowId: "R2", field: "audioText", anchorId: "anchor", quotedText: "b", author: "Ada",
+    const document = { ...literalMergedDocument(""), rows: [], comments: [{ id: "C1", rowId: "R1", field: "audioText", anchorId: "anchor", quotedText: "b", author: "Ada",
       body: "Typed comment", resolved: false, resolvedBy: null, resolvedAt: null, assignee: "", updatedAt: null, kind: "anchor",
       replies: [{ id: "RP1", author: "Bob", body: "Typed reply" }] }] };
     const recovery = [{ kind: "removed-beat", row: row("R1", "<strong>a</strong> " + audio, { visualText: "<em>first</em><br>second",
-      imageRef: firstImage, imageName: "First", moreImages: [{ imageRef: secondImage, name: "Second" }] }), members: ["R1", "R2"] }];
+      imageRef: firstImage, imageName: "First", moreImages: [{ imageRef: secondImage, name: "Second" }] }), members: ["R1", "R2"], comments: ["C1"] }];
     for (const handle of handles) {
       const actual = readPureMergedProjection(handle); assert.deepEqual(actual.view, { document, recovery }); assert.equal(actual.save, mergedProjectionSave(document));
     }

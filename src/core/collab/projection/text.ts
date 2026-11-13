@@ -11,12 +11,20 @@ export function chooseSharedProjectionPayload(values: readonly (true | string)[]
 function identifiedMarkPayload(mark: SharedProjectionUnit["marks"][number]): string | null {
   return typeof mark.value === "string" ? mark.value : null;
 }
-export function projectSharedCommentAnchors(units: readonly SharedProjectionUnit[], comments: Record<string, unknown>[], rowId: string, field: string, anchored: Set<string>): void {
+export function projectSharedCommentAnchors(units: readonly SharedProjectionUnit[], comments: Record<string, unknown>[], rowId: string, field: string, anchored: Set<string>): string[] {
+  const placed: string[] = [];
   for (const unit of units) for (const mark of unit.marks) if (mark.kind === "comment") {
     const anchor = identifiedMarkPayload(mark);
     if (anchor === null || anchored.has(anchor)) continue;
     const comment = comments.find(comment => comment.anchorId === anchor);
-    if (comment) { comment.rowId = rowId; comment.field = field; anchored.add(anchor); }
+    if (comment) { comment.rowId = rowId; comment.field = field; anchored.add(anchor); if (typeof comment.id === "string") placed.push(comment.id); }
+  }
+  return placed;
+}
+export function readSharedCommentAnchors(units: readonly SharedProjectionUnit[], into: Set<string>): void {
+  for (const unit of units) for (const mark of unit.marks) if (mark.kind === "comment") {
+    const anchor = identifiedMarkPayload(mark);
+    if (anchor !== null) into.add(anchor);
   }
 }
 export function projectSharedText(units: readonly SharedProjectionUnit[], tags: readonly Readonly<Record<string, unknown>>[]): string {
