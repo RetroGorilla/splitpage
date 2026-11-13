@@ -343,13 +343,13 @@ Declared limits, each pinned by a literal in
 - The visual cell of a joined row shows both visuals, and its painted record is
   one visual, so typing there is refused and repainted, as rule 27 does, until a
   later cut binds a joined visual.
-- A beat split off in a shared session has no visual yet: `split` creates none,
-  and no existing operation gives an existing beat its visual text
-  (`record-create` on `visuals` refuses the `text` field). Typing in that visual
-  cell is refused with `buffer-no-visual`, reported to the person, and writes
-  nothing; the beat's narration takes typing. Follow-up: an operation that gives
-  an existing beat its visual record and text in one list, so the first commit in
-  such a cell can create it.
+- A beat split off before splits created a visual (in a document written
+  before package 9e's split change) has no visual, and no existing operation
+  gives an existing beat its visual text (`record-create` on `visuals` refuses
+  the `text` field). Typing in that visual cell is refused with
+  `buffer-no-visual`, reported to the person, and writes nothing; the beat's
+  narration takes typing. A beat split off now has its own empty visual, so the
+  first key in its visual cell commits like any other.
 
 ## Scene headings in the Writer
 

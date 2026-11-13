@@ -8,7 +8,10 @@ import { applySharedTextEdit } from "./text-edit.ts";
 import type { SharedTextWritePlan } from "./text-edit.ts";
 import { sharedTextCommandPlan, sharedTextOverlay, spliceSharedTextPlan, addSharedTextSource, sharedTextInsertionPosition, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
-import { prepareStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
+import { prepareStructureIdentity, reserveSharedStructureIdentity, sharedStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
+import { prepareSharedTextCreation } from "./text-creation.ts";
+import { applySharedTextCreation } from "./text-target.ts";
+import { sharedCreatedAttachments, sharedStructureView } from "./structure-content.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedStructureSpans } from "./structure-spans.ts";
 import { planSharedStructureOwner } from "./structure-plan.ts";
@@ -52,10 +55,13 @@ function preparePhysicalBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBe
     if (left && right && left.from > right.from || offset < span.from || offset > span.to) throw new SharedTextPreparationError("invalid-reference");
     if (!fixed) for (const ref of operation.observed) resolveSharedTextReference(view, plan, ref, "range");
     const beat = prepareStructureIdentity(view, operation.id, "beat", operation.beat, identities), path = ["beats", beat];
-    if (view.has(path)) throw new SharedTextPreparationError("existing-identity");
+    const visual = sharedStructureIdentity(view.writer, operation.id, "visual");
+    reserveSharedStructureIdentity(view, visual, identities);
+    if (view.has(path) || view.has(["visuals", visual])) throw new SharedTextPreparationError("existing-identity");
     const writes: SharedPreparedWrite[] = [{ kind: "map", path }, { kind: "set", path: [...path, "id"], value: beat },
       { kind: "set", path: [...path, "segment"], value: plan.target.segment }, { kind: "set", path: [...path, "splitBy"], value: operation.by },
-      { kind: "map", path: [...path, "joins"] }, { kind: "map", path: [...path, "removals"] }];
+      { kind: "set", path: [...path, "visual"], value: visual }, { kind: "map", path: [...path, "joins"] }, { kind: "map", path: [...path, "removals"] },
+      { kind: "map", path: ["visuals", visual] }, { kind: "set", path: ["visuals", visual, "beat"], value: beat }, { kind: "set", path: ["visuals", visual, "rank"], value: "0000000000" }];
     for (const [field, value] of Object.entries(operation.fields)) {
       if (field === "visualText" && value === "" || field === "imageRef" && value === null) continue;
       if (field !== "status" && !scalarFieldAllowed("beat", field, value, false) || field === "status" && !["todo", "ready", "shot"].includes(String(value))) throw new SharedTextPreparationError("unsupported-beat-field");
@@ -66,9 +72,11 @@ function preparePhysicalBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBe
     spliceSharedTextPlan(plan, offset, offset, [value]);
     planSharedStructureOwner(view, beat, plan.target.segment);
     addSharedTextSource(view, plan, beat, operation.kind === "split-before" ? span.from : offset + 1, operation.kind === "split-before" ? offset : span.to + 1, "audioText");
-    const description = freezeSharedPreparedValue({ writes, edit }), overlay = freezeSharedPreparedValue([...writes, sharedTextOverlay(plan)]);
+    const text = prepareSharedTextCreation(sharedStructureView(view, writes), ["visuals", visual]); if (!text.ok) return text;
+    sharedCreatedAttachments(view).push({ collection: "visuals", beat, html: "", record: visual });
+    const description = freezeSharedPreparedValue({ writes, text: text.description, edit }), overlay = freezeSharedPreparedValue([...writes, ...text.writes, sharedTextOverlay(plan)]);
     return { ok: true as const, description, writes: overlay, apply: (handle: SharedDocumentHandle) => {
-      applySharedMapWrites(handle, description.writes); applySharedTextEdit(handle, description.edit);
+      applySharedMapWrites(handle, description.writes); applySharedTextCreation(handle, description.text); applySharedTextEdit(handle, description.edit);
     } };
   } catch (error) { if (error instanceof SharedTextPreparationError || error instanceof SharedStructurePreparationError) return { ok: false as const, reason: error.message }; throw error; }
 }
