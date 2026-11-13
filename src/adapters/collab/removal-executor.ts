@@ -86,7 +86,7 @@ function remove(operation: SharedSoftRemove, view: SharedPreparationView, index:
     if (supplied.some(reference => !derived.includes(sharedStructureReference(view, reference)) && !operation.targets.some(target => reference === target + (collection === "visuals" ? ":visual" : ":gallery"))))
       throw new SharedStructurePreparationError(collection === "visuals" ? "invalid-removal-components" : "invalid-removal-gallery");
   }
-  const captures = prepareSharedRemovalObservations(view, plans, operation.observed, visuals);
+  const captures = prepareSharedRemovalObservations(view, plans, operation.observed, visuals, operation.removalKind !== "became-heading");
   const record: SharedStoredRemovalCommand = { kind: "remove", writer: view.writer, operation: operation.id, by: operation.by, targets,
     removalKind: operation.removalKind, at: operation.at, observed: captures.map(capture => ({ target: capture.target, identities: capture.known })),
     references: operation.observed, boundaries: boundaries as string[], components: visuals.map(value => value.record), gallery, comments: operation.comments ?? null, buffer };
@@ -100,7 +100,7 @@ function headingFlags(view: SharedPreparationView, heading: string) {
   return readSharedHeadingRemovalState(view.keys(path), key => view.get([...path, key]));
 }
 
-function followingBeat(view: SharedPreparationView, heading: { readonly owner: string; readonly segment: string }): string | null {
+export function sharedFollowingBeat(view: SharedPreparationView, heading: { readonly owner: string; readonly segment: string }): string | null {
   const order = sharedStructurePlanIndex(view).order, length = sharedOrderPlan(view, order).length;
   let after = false;
   for (let index = sharedPlannedSegmentIndex(view, order, heading.segment); index < length; index++) {
@@ -121,7 +121,7 @@ function removeHeading(operation: SharedHeadingRemove, view: SharedPreparationVi
   if (view.has(["removalRecords", id])) throw new SharedStructurePreparationError("existing-identity");
   const heading = view.resolveOwner(sharedStructureReference(view, operation.heading), "heading");
   if (!heading) throw new SharedStructurePreparationError("missing-target");
-  const next = followingBeat(view, heading), geometry = next === null ? null : readSharedJoinedTextGeometry(view, next);
+  const next = sharedFollowingBeat(view, heading), geometry = next === null ? null : readSharedJoinedTextGeometry(view, next);
   if (geometry && geometry.root !== next) throw new SharedStructurePreparationError("joined-heading");
   reserveSharedStructureIdentity(view, id, identities); prepareStructureAlias(view, operation.id, id);
   const state = headingFlags(view, heading.owner), generation = state.generation === null ? 0 : state.generation + 1;

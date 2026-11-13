@@ -67,6 +67,9 @@ const identities: Readonly<Record<string, string>> = Object.freeze({
   "1/trace_o_0/beat/0": "structure_1_00740072006100630065005f006f005f0030_beat_0",
   "1/heading_o_0/beat/0": "structure_1_00680065006100640069006e0067005f006f005f0030_beat_0",
   "1/joined_o_0/beat/0": "structure_1_006a006f0069006e00650064005f006f005f0030_beat_0",
+  "1/fin_o_0/heading/0": "structure_1_00660069006e005f006f005f0030_heading_0",
+  "1/fin_o_1/beat/0": "structure_1_00660069006e005f006f005f0031_beat_0",
+  "1/fin_o_2/beat/0": "structure_1_00660069006e005f006f005f0032_beat_0",
   "1/atom-split_o_0/beat/0": "structure_1_00610074006f006d002d00730070006c00690074005f006f005f0030_beat_0"
 });
 

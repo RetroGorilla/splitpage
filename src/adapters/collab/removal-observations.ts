@@ -20,14 +20,14 @@ function capture(view: SharedPreparationView, plan: SharedTextCommandPlan, units
   return { target: plan.target, known, positions };
 }
 
-export function prepareSharedRemovalObservations(view: SharedPreparationView, plans: readonly SharedTextCommandPlan[], references: readonly SharedContentRef[], visuals: readonly { readonly beat: SharedContentRef; readonly record: SharedContentRef }[]): SharedRemovalCapture[] {
+export function prepareSharedRemovalObservations(view: SharedPreparationView, plans: readonly SharedTextCommandPlan[], references: readonly SharedContentRef[], visuals: readonly { readonly beat: SharedContentRef; readonly record: SharedContentRef }[], owned = true): SharedRemovalCapture[] {
   const selected = new Map(plans.map(plan => [plan, new Set<SharedPlannedTextUnit>()]));
   for (const reference of references) {
     let matched = false;
     for (const plan of plans) {
       try {
         const range = resolveSharedTextReference(view, plan, reference, "range");
-        requireSharedTextOwnership(view, plan, range.from, range.to);
+        if (owned) requireSharedTextOwnership(view, plan, range.from, range.to);
         for (const unit of range.units) selected.get(plan)?.add(unit);
         matched = true; break;
       } catch (error) {

@@ -6,6 +6,7 @@ import { sharedStructureReference, SharedStructurePreparationError } from "./str
 import { sharedStructureSpans } from "./structure-spans.ts";
 import { sharedTextCommandPlan, sharedTextInsertionPosition } from "./executor-text-plan.ts";
 import { readProjectionHead } from "./projection-reader.ts";
+import { readSharedFinalizedHeading } from "./structure-plan.ts";
 
 export function prepareSharedBeatPlacement(view: SharedPreparationView, order: SharedStructureOrderView, gap: SharedIdentityGap, segment: string) {
   const locate = (reference: SharedContentRef | null) => {
@@ -23,6 +24,11 @@ export function prepareSharedBeatPlacement(view: SharedPreparationView, order: S
   };
   const left = locate(gap.left), right = locate(gap.right);
   if (left && right && (left.index > right.index || left.index === right.index && (!left.span || !right.span || left.span.owner === right.span.owner || left.span.to > right.span.from))) throw new SharedStructurePreparationError("invalid-order-gap");
+  const claimed = gap.affinity === "before" && right?.span ? readSharedFinalizedHeading(view, right.span.owner) : null, heading = claimed === null ? null : locate(claimed as SharedContentRef);
+  // why: the app chooses scene intent before it adds the scene it finalizes, so a beat placed before
+  // the finalized heading's first beat goes before that heading.
+  if (heading?.plan && heading.span) return heading.span.from > 0 ? { kind: "inline" as const, plan: heading.plan, offset: sharedTextInsertionPosition(heading.plan, heading.span.from - 1) }
+    : { kind: "order" as const, index: prepareSharedOrderInsertion(view, order, { left: null, right: heading.key as SharedContentRef, affinity: "before" }, segment) };
   const candidates = gap.affinity === "before" ? [[gap.right, "right"], [gap.left, "left"]] as const : [[gap.left, "left"], [gap.right, "right"]] as const;
   for (const [reference, side] of candidates) {
     if (reference === null) continue;

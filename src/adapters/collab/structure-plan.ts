@@ -10,7 +10,7 @@ interface StructurePlanScratch { readonly scratch: <T>(key: string, create: () =
 function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
     records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>(),
-    headings: new Map<string, boolean>(), created: new Map<string, string>() }));
+    headings: new Map<string, boolean>(), created: new Map<string, string>(), finalized: new Map<string, string>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
@@ -22,6 +22,8 @@ export function isPlannedStructureOwner(view: StructurePlanScratch, id: string):
 export function planSharedStructureRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).removed.set(id, removed); }
 export function planSharedHeadingRemoval(view: StructurePlanScratch, id: string, removed: boolean): void { context(view).headings.set(id, removed); }
 export function planSharedHeadingCreation(view: StructurePlanScratch, id: string, segment: string): void { context(view).created.set(id, segment); }
+export function planSharedHeadingFinalization(view: StructurePlanScratch, beat: string, heading: string): void { context(view).finalized.set(beat, heading); }
+export function readSharedFinalizedHeading(view: StructurePlanScratch, beat: string): string | null { return context(view).finalized.get(beat) ?? null; }
 export function readSharedStructureRemoval(view: StructurePlanScratch, id: string): boolean {
   const state = context(view); return state.removed.get(id) ?? state.index?.removed(id) ?? false;
 }
