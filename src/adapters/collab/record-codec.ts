@@ -8,6 +8,7 @@ import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { sharedJson } from "./snapshot.ts";
 import type { SharedPreparationView } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import { isSharedResolutionKey, readSharedResolution, sharedResolutionAccepted } from "./stamp.ts";
 
 interface RecordFieldSource {
   readonly keys: () => readonly string[];
@@ -76,10 +77,7 @@ export function sharedRecordFieldAccepted(kind: SharedRecordCollection, field: s
   if (field === "origin") return value === "script" || value === "list";
   if (field === "reshoot" || field === "emptyValue") return typeof value === "boolean";
   if (field === "imageValue") return value === null || image(value);
-  if (field === "resolution") return bag(value) && typeof value.resolved === "boolean"
-    && Object.keys(value).every(key => key === "resolved" || key === "resolvedAt" || key === "resolvedBy")
-    && (value.resolvedAt === undefined || value.resolvedAt === null || typeof value.resolvedAt === "string")
-    && (value.resolvedBy === undefined || value.resolvedBy === null || identity(value.resolvedBy));
+  if (field === "resolution") return sharedResolutionAccepted(value);
   if (field === "picture") return bag(value) && Object.keys(value).every(key => ["imageRef", "name", "annotation"].includes(key))
     && (value.imageRef === undefined || value.imageRef === null || image(value.imageRef))
     && (value.name === undefined || typeof value.name === "string")
@@ -150,7 +148,13 @@ function readRecordFields(kind: SharedRecordCollection, key: string, raw: Record
   if (!raw || !key || !isStableSharedIdentity(key)) return null;
   const output: [string, unknown][] = [], known: readonly string[] = sharedRecordFields[kind], keys = raw.keys();
   if (keys.some(field => !isStableSharedIdentity(field))) return null;
-  for (const field of [...known, ...keys.filter(field => !known.includes(field) && !(kind === "visuals" && ["text", "html", "markRecords"].includes(field))).sort()]) {
+  const register = kind === "comments" && keys.some(isSharedResolutionKey);
+  for (const field of [...known, ...keys.filter(field => !known.includes(field) && !(kind === "visuals" && ["text", "html", "markRecords"].includes(field))
+    && !(register && isSharedResolutionKey(field))).sort()]) {
+    if (register && field === "resolution" && !keys.includes(field)) {
+      const shown = readSharedResolution({ keys: raw.keys, get: key => jsonField(raw, key) });
+      if (shown !== undefined) output.push([field, shown]);
+    }
     if (!keys.includes(field)) continue;
     const nestedField = isSharedRecordNestedField(kind, field);
     const value = nestedField ? nested(field, raw.child(field)) : jsonField(raw, field);
