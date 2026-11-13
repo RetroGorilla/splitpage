@@ -239,9 +239,9 @@ marks, atoms, metadata and multiple rows at the start, middle and end of narrati
 Production structural projection is not used for these comparisons;
 its interpretation belongs to the projection lane.
 
-Join, heading finalization, movement, complete recovery placement
-and structural undo integration remain later cuts. In particular, the heading-name
-`cappedText` rule for finalization, imported-layout movement and the remaining structural Stage 1
+Join, movement, complete recovery placement
+and structural undo integration remain later cuts. In particular,
+imported-layout movement and the remaining structural Stage 1
 histories are still open here. Standalone flow results, application, features,
 bootstrap, exports and browser behaviour remain unchanged.
 
@@ -310,8 +310,7 @@ production caret-placement claim. The seeded model has 72 histories, 900 operati
 peer delivery, with literal declared limits
 `[]` for its beat-only cases. Complete app lists execute 42 operations in 18 calls
 and skip or defer none: the three lists that remove across a scene boundary run
-since heading removal (below). T08 creation (a beat turned into a heading, which is
-finalization), the T09 cross-heading selection, T06/T12
+since heading removal (below). The T09 cross-heading selection, T06/T12
 join, imported-layout move and complete structural undo await their named cuts.
 Split-descendant removal classification and comment/reply recovery placement (T11)
 remain recovery work; retained observed ids, boundaries, attachment ids and author
@@ -351,7 +350,7 @@ delivery orders and an encoded late joiner; discard and demotion literals agains
 concurrent typing in the name and in the following narration, with restore and an
 incremental-versus-fresh projection comparison; a seeded model of 36 histories,
 56 checkpoints and 144 commands with literal declared limits `[]`; and two removal
-mutants. Heading finalization, movement and structural undo are not built.
+mutants. Movement and structural undo are not built.
 
 ## Heading creation
 
@@ -398,5 +397,59 @@ deferred), compared with the app's loaded rows and scenes and the independent
 applier; literals for concurrent typing, split, removal and restore of the first
 beat, simultaneous creation, removal and restore of a created heading, and the
 refusals; a seeded model of 48 histories and 122 checkpoints with literal declared
-limits `[]`; and two structure mutants. The copied T08 creation oracle is a beat
-turned into a heading and waits for finalization.
+limits `[]`; and two structure mutants.
+
+## Heading finalization
+
+`heading-finalize` runs through the same heading handlers. It is the operation the
+app emits when a typed `# ` line becomes a scene heading (assumed rule 40). The
+heading key uses role `heading`, as creation does, and the supplied heading name
+becomes an alias. The prefix, name and separator must be the beat's first
+characters in that order, with the tail gap directly after them; otherwise the list
+is refused with `invalid-heading-range`. The beat's own boundary becomes the
+heading's: a beat that heads its segment has the head converted to `{h:id}`, and an
+inline beat gets `{h:id}` before its boundary, which is deleted. When the beat keeps
+a tail, a new `{b:beat}` boundary goes before the tail; a converted head also records
+the beat's segment, since a hydrated beat is owned through its head. Boundaries go
+in before the prefix and separator are deleted, so each sits beside visible
+characters. The name is the same stored characters, with their identities, marks
+and comment anchors. A name shows no marks, as in the app; they return when another
+writer demotes the heading, and a comment whose only anchor is in the name stays
+listed with an empty quote. Typing by another writer in the prefix or the name joins
+the name. Typing at the tail start is ordered against the new beat boundary by
+writer id: from a writer whose id is lower than the finalizer's it joins the name.
+
+A line with no tail leaves no boundary for its beat, so that beat appears nowhere,
+as in the copied T08 result. The `became-heading` removal that follows in the app's
+list resolves the beat through the same list's plan and records its observed
+characters without requiring the beat to own them; they are the name now. At the
+end of the list the name must pass `cappedText(name, 200)`, the scene loader's rule
+(`invalid-heading-name`), and the first unmasked beat after the heading must be the
+retained beat (`misplaced-heading-beat`). A beat created with affinity `before`
+next to that retained beat goes before the finalized heading, because the app
+chooses scene intent before it adds the scene; this places the existing-scene repair.
+A joined row, root or later part, refuses with `joined-heading`. Every refusal
+leaves bytes, state vector and revision unchanged.
+
+Declared limits: when the line is the last beat after another beat, the app creates
+an empty first beat whose emitted gap puts it before the line, and the whole list is
+refused with `misplaced-heading-beat`. A name of half a surrogate pair never reaches
+the executor: hydration and the operation reader store U+FFFD, which passes the
+check, so that list is accepted and every copy loads a scene the app itself drops.
+Pinned concurrent outcomes: two writers finalizing the same line keep the higher
+writer's heading, and the other heading record has no place and is not listed. If a
+third writer whose id lies between theirs types at the start of a shared tail, the
+two tail boundaries are no longer adjacent and the tail after that typing goes to
+recovery as an unprojectable fragment. A concurrent join of the line into the beat
+above joins its tail to that row; a concurrent removal sends the tail to recovery.
+In both, the heading moves to the next beat. A split inside the name makes the rest
+of the name the first beat. Demotion returns the name, with its marks, as narration,
+and restore keeps the demotion.
+
+Evidence: the copied T08 create and T08 race results with literal identities under
+three delivery orders and an encoded late joiner; complete app lists at 14 places,
+including the first beat, a beat mid-scene, the first beat of an existing scene, a
+beat split off inline and formatted names (42 calls, 93 operations, 33 finalizations,
+none skipped or deferred), compared with the app's rows, scene ids, names and first
+beats; two-writer literals; a seeded model of 48 histories, 122 checkpoints and 263
+commands with literal declared limits `[]`; and two structure mutants.

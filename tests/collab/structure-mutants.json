@@ -113,5 +113,17 @@
     "find": "const heading = sharedStructureIdentity(view.writer, operation.id, \"heading\")",
     "replace": "const heading = sharedStructureIdentity(\"0\", operation.id, \"heading\")",
     "tests": ["tests/adapters/collab/heading-create.test.ts"]
+  }, {
+    "label": "finalized heading accepts any name",
+    "file": "src/adapters/collab/heading-executor.ts",
+    "find": "if (!cappedText(value, 200)) return \"invalid-heading-name\";",
+    "replace": "if (!value.length) return \"invalid-heading-name\";",
+    "tests": ["tests/adapters/collab/heading-finalize.test.ts"]
+  }, {
+    "label": "placement ignores the finalized heading",
+    "file": "src/adapters/collab/structure-placement.ts",
+    "find": "readSharedFinalizedHeading(view, right.span.owner)",
+    "replace": "null",
+    "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
   }]
 }
