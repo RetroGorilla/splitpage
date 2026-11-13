@@ -35,8 +35,9 @@ unit, and `null` for an owner that holds no part of the segment.
 - The address names no text, or an owner with no span in it.
 
 The record is replaced by each paint, holds only the beats that pass painted,
-and is cleared when the surface is disposed. Only narration is recorded;
-headings, the visual box and the title are a later package.
+and is cleared when the surface is disposed. The Writer also records each shown
+scene heading under its field key ([Scene headings in the Writer](stage-2-buffer.md#scene-headings-in-the-writer));
+the visual box and the title are a later package.
 
 The Split view keeps the same record (`createPaintedBeats`, handed to its cell
 buffer by the wiring). It records at every rows paint, one read per narration
@@ -58,8 +59,8 @@ binding. The named tests below are in `tests/features/writer/buffer-binding.test
    text is unchanged" cover both text changes and replacement of equal letters.
 3. **Closed:** the empty beat records its native zero gap with `before` affinity;
    "empty beat native typing uses the painted zero gap" commits its first letter.
-4. **Declared:** headings, the visual box and title remain package 9e, whose field
-   bindings have not been migrated. This slice binds narration only.
+4. **Declared:** the visual box and title remain packages 9d and 9e, whose field
+   bindings have not been migrated. Writer headings are bound since 9d.
 5. **Closed for this binding:** while dirty, paint/repaint/refresh keep the native
    DOM and its original base. "paint during a dirty composition keeps the typed
    DOM and its original identities until commit" and "orphan repair keeps the

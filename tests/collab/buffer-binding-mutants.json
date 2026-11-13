@@ -13,8 +13,8 @@
   }, {
     "label": "ordinary cross-beat input never reaches its command port",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "&& intended.anchor.rowId !== intended.head.rowId)",
-    "replace": "&& false)"
+    "find": "ends[0] && ends[1] && ends[0] !== ends[1])",
+    "replace": "false)"
   }, {
     "label": "refused cross-beat composition permits native mutation",
     "file": "src/application/editing/buffered-field.ts",
@@ -23,7 +23,7 @@
   }, {
     "label": "native boundary deletion never reaches its structural command",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "if (type === \"deleteContentBackward\" && at === 0 || type === \"deleteContentForward\" && at === length)",
+    "find": "if (type === \"deleteContentBackward\" && offset === 0 || type === \"deleteContentForward\" && offset === length)",
     "replace": "if (false)"
   }, {
     "label": "mounted clipboard captures selection before settling typing",
@@ -233,5 +233,65 @@
     "find": "if (!ports.shown(() => binding.dispose())) return false;",
     "replace": "ports.shown(() => binding.dispose());",
     "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
+  }, {
+    "label": "Writer heading positions get no field key",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "key: pos => pos.kind === \"beat\" ? pos.rowId : headingFieldKey(pos.sceneId),",
+    "replace": "key: pos => pos.kind === \"beat\" ? pos.rowId : null,",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the heading painted base is never read",
+    "file": "src/bootstrap/wiring/ports/shared-buffer.ts",
+    "find": ": field === \"heading\" ? readSharedPaintedText",
+    "replace": ": false ? readSharedPaintedText",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an emptied heading settles at once",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "{ reason: \"buffer-heading-empty\", hold: true }",
+    "replace": "{ reason: \"buffer-heading-empty\", hold: false }",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an emptied heading is written empty",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": ": !cappedText(text, SCENE_NAME_MAX) ? { reason:",
+    "replace": ": false ? { reason:",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a heading over 200 characters settles",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "Array.from(text).length > SCENE_NAME_MAX ?",
+    "replace": "false ?",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an unsettled edit is committed anyway",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
+    "replace": "const unsettled = null;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a heading commit stamps a beat",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "operations.length && field !== \"heading\" && field !== \"title\" ?",
+    "replace": "operations.length ?",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a heading commit reports a narration cell change",
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "if (target?.field === \"heading\") return changeSet({ docFields: [\"sections\"], derive: CELL_TEXT_DERIVES });",
+    "replace": "",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "heading recovery names the field key instead of the scene",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "const snapshot = { owner: target.owner,",
+    "replace": "const snapshot = { owner: rowId,",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the caret after a heading commit is resolved as narration",
+    "file": "src/adapters/collab/buffer-selection.ts",
+    "find": "if (field === \"heading\") {",
+    "replace": "if (false) {",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }]
 }

@@ -20,8 +20,9 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     open?: (open: BufferedTextCommit["open"]) => BufferedTextCommit["open"];
     key?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
     author?: (serial: number) => string;
+    fields?: Record<string, unknown>;
   } = {}) {
-  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }]), a = sharedHarness(adapterReplica(h.a));
+  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a));
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;

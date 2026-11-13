@@ -1,7 +1,8 @@
 import type { BufferedTextCommit, BufferedTextEdit, PaintedText } from "./ports.ts";
 import type { CommandOutcome } from "../session/document-session.ts";
 import type { SharedDocumentSession } from "../session/shared-session.ts";
-import type { FlowRange } from "../../core/flow/flow.ts";
+import { beatPos } from "../../core/flow/flow.ts";
+import type { FlowPos, FlowRange } from "../../core/flow/flow.ts";
 import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { alignSpaceForm, bufferedNativeReplacement, foldedNativeReplacement, foldedNativeSplice, sameUpToSpaceForm } from "../../core/collab/buffer.ts";
@@ -47,6 +48,9 @@ export interface BufferedFieldSurface<E> {
   readonly repaint: (rowId: string) => void;
   readonly restore: (rowId: string, selection: FlowRange | undefined) => void;
   readonly changed: () => void;
+  readonly key?: (pos: FlowPos) => string | null;
+  readonly position?: (key: string, offset: number) => FlowPos;
+  readonly unsettled?: (key: string, text: string) => { readonly reason: string; readonly hold: boolean } | null;
 }
 
 export function createBufferedField<E>(ports: BufferedFieldPorts, surface: BufferedFieldSurface<E>): BufferedFieldBinding {
@@ -57,6 +61,12 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   let ended = false;
   let committing = false;
   let refusedComposition = false;
+  const keyOf = surface.key ?? ((pos: FlowPos) => pos.kind === "beat" ? pos.rowId : null);
+  const at = surface.position ?? beatPos;
+  function one(range: FlowRange | null): string | null {
+    const key = range ? keyOf(range.anchor) : null;
+    return key !== null && range && keyOf(range.head) === key ? key : null;
+  }
 
   function checkpoint(type: string): BufferedFieldEvent {
     return { type, preventDefault: () => {} };
@@ -68,10 +78,8 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   }
 
   function begin(event: BufferedFieldEvent, range: FlowRange | null, repaint = true): boolean {
-    if (!range || range.anchor.kind !== "beat" || range.head.kind !== "beat" || range.anchor.rowId !== range.head.rowId) {
-      refuse(event, "buffer-unsupported-target"); return false;
-    }
-    const rowId = range.head.rowId;
+    const rowId = one(range);
+    if (rowId === null || !range) { refuse(event, "buffer-unsupported-target"); return false; }
     if (active?.rowId === rowId && active.edit.isOpen()) return true;
     if (active && !settle()) { event.preventDefault(); return false; }
     const base = surface.base(rowId), beat = surface.field(rowId);
@@ -122,7 +130,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (active?.beat === beat && !active.edit.isOpen() && same(next, active.edit.text())) { surface.reset(rowId); continue; }
       if (shown !== undefined && same(next, shown)) continue;
       if (active?.edit.isOpen()) { refuse(event, "buffer-pending"); surface.reset(rowId); ok = false; continue; }
-      const pos = { kind: "beat" as const, rowId, offset: next.length };
+      const pos = at(rowId, next.length);
       if (!begin(event, { anchor: pos, head: pos }, false)) { surface.reset(rowId); ok = false; continue; }
       reconcile(); adopted = true;
     }
@@ -138,8 +146,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     if (held.edit.isOpen()) { ports.report(kept ?? refusal); return false; }
     active = null; target = null;
     surface.repaint(held.rowId); const shown = surface.painted(held.rowId) !== undefined;
-    const at = (offset: number) => ({ kind: "beat" as const, rowId: held.rowId, offset });
-    surface.restore(held.rowId, selection && shown ? { anchor: at(selection[0]), head: at(selection[1]) } : undefined);
+    surface.restore(held.rowId, selection && shown ? { anchor: at(held.rowId, selection[0]), head: at(held.rowId, selection[1]) } : undefined);
     surface.changed();
     ports.recovered(held.rowId);
     if (kept && (kept.kind === "failed" || kept.kind === "committed" && kept.errors.length)) ports.report(kept);
@@ -155,8 +162,17 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       return false;
     }
     const held = active, range = surface.selection();
-    const selection: readonly [number, number] | undefined = range?.anchor.kind === "beat" && range.head.kind === "beat"
-      && range.anchor.rowId === held.rowId && range.head.rowId === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
+    const selection: readonly [number, number] | undefined = range && one(range) === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
+    const unsettled = surface.unsettled?.(held.rowId, held.edit.text());
+    if (unsettled) {
+      active = null; target = null;
+      surface.reset(held.rowId);
+      try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
+      surface.repaint(held.rowId);
+      surface.restore(held.rowId, selection ? { anchor: at(held.rowId, selection[0]), head: at(held.rowId, selection[1]) } : undefined);
+      ports.report({ kind: "rejected", reason: unsettled.reason });
+      return true;
+    }
     let outcome: ReturnType<BufferedTextEdit["commit"]>;
     committing = true;
     try {
@@ -190,8 +206,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     },
     beforeInput: (event, range, native) => {
       const type = event.inputType, intended = native ?? range;
-      if (refusedComposition && !event.isComposing && !/Composition/.test(type) && intended?.anchor.kind === "beat"
-        && intended.head.kind === "beat" && intended.anchor.rowId === intended.head.rowId) refusedComposition = false;
+      if (refusedComposition && !event.isComposing && !/Composition/.test(type) && one(intended) !== null) refusedComposition = false;
       if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) { refuse(event, "buffer-unsupported-target"); return true; }
       if (ended && /Composition/.test(type)) { event.preventDefault(); return true; }
       ended = false;
@@ -199,26 +214,25 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
         if (!finish()) { event.preventDefault(); return true; }
         return false;
       }
-      if (!event.isComposing && !/Composition/.test(type) && intended?.anchor.kind === "beat" && intended.head.kind === "beat"
-        && intended.anchor.rowId !== intended.head.rowId) {
+      const ends = intended ? [keyOf(intended.anchor), keyOf(intended.head)] : [];
+      if (!event.isComposing && !/Composition/.test(type) && ends[0] && ends[1] && ends[0] !== ends[1]) {
         if (!finish()) { event.preventDefault(); return true; }
-        const missing = [intended.anchor.rowId, intended.head.rowId].find(rowId => !surface.base(rowId));
+        const missing = ends.find(key => key && !surface.base(key));
         if (missing) { event.preventDefault(); ports.missingBase(missing); surface.repaint(missing); return true; }
         return false;
       }
-      if (type.startsWith("delete") && intended?.anchor.kind === "beat" && intended.head.kind === "beat"
-        && intended.anchor.rowId === intended.head.rowId && intended.anchor.offset === intended.head.offset) {
-        const rowId = intended.head.rowId, base = active?.rowId === rowId ? active.base : surface.base(rowId);
+      const collapsed = one(intended);
+      if (type.startsWith("delete") && intended && collapsed !== null && intended.anchor.offset === intended.head.offset) {
+        const rowId = collapsed, base = active?.rowId === rowId ? active.base : surface.base(rowId);
         if (!base) { begin(event, intended); return true; }
-        const length = active?.rowId === rowId ? active.edit.text().length : base.text.length, at = intended.head.offset;
-        if (type === "deleteContentBackward" && at === 0 || type === "deleteContentForward" && at === length) {
+        const length = active?.rowId === rowId ? active.edit.text().length : base.text.length, offset = intended.head.offset;
+        if (type === "deleteContentBackward" && offset === 0 || type === "deleteContentForward" && offset === length) {
           if (!finish()) { event.preventDefault(); return true; }
           return false;
         }
         refuse(event, "buffer-native-target"); return true;
       }
-      if (!begin(event, intended)) return true;
-      if (!intended || intended.anchor.kind !== "beat" || intended.head.kind !== "beat") return true;
+      if (!begin(event, intended) || !intended) return true;
       const from = Math.min(intended.anchor.offset, intended.head.offset), to = Math.max(intended.anchor.offset, intended.head.offset);
       target = [from, to]; typed = event.data ?? null;
       return true;
@@ -230,11 +244,11 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
         const [from, to] = target, kept = active.edit.text().slice(from, to);
         active.edit.replace(from, to, surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept); target = null;
       }
-      if (!surface.composition()) finish();
+      if (!surface.composition() && !surface.unsettled?.(active.rowId, active.edit.text())?.hold) finish();
     },
     start: (event, range) => {
       ended = false; refusedComposition = false;
-      if (!range || range.anchor.kind !== "beat" || range.head.kind !== "beat" || range.anchor.rowId !== range.head.rowId) {
+      if (one(range) === null) {
         surface.composition(true); refusedComposition = true; refuse(event, "buffer-unsupported-target"); return;
       }
       begin(event, range); surface.composition(true);
