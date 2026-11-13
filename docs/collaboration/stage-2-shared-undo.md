@@ -423,7 +423,17 @@ its record without its stamp, status and events, visual and gallery records,
 and its row's pieces. The stamp is left out because undo never takes a stamp
 back (rule 35): typing in the new beat and undoing that typing leaves a stamp
 that must not use the split's undo up. The comparison of a restored beat
-(below) leaves it out for the same reason.
+(below) leaves it out for the same reason. A visual is compared by its fields
+and the characters it shows with their marks, not by its mark records, so
+typing undone in the new beat's visual leaves no difference; text someone
+typed there and left uses the undo up.
+
+A split also makes the new beat's empty visual (#1545). It stays stored with
+the new beat's record while the split is undone, so it shows nowhere, not in
+recovery either, and comes back with the beat on redo. Literal in
+`split-visual.test.ts`: split, type V in the new visual, undo the typing, undo
+the split, and the document and recovery equal the start on three copies; the
+redo brings the visual back.
 
 Two operations serve only undo, as `text-restore` does. `split-retire` deletes
 the boundary atom; the new beat's characters join the source beat and its

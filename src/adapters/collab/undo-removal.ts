@@ -63,7 +63,12 @@ function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
   const roots = collabState(handle).roots;
   return (["visuals", "gallery"] as const).flatMap(collection => [...roots[collection].entries()]
     .filter(([, record]) => record instanceof Y.Map && record.get("beat") === beat).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-    .map(([key, record]) => [collection, key, (record as Y.Map<unknown>).toJSON()]));
+    .map(([key, record]) => {
+      const { text: _text, markRecords: _marks, ...fields } = (record as Y.Map<unknown>).toJSON();
+      // why: a visual is compared by what it shows, so typing undone in it leaves no difference behind in its mark records.
+      return collection === "gallery" ? [collection, key, (record as Y.Map<unknown>).toJSON()] : [collection, key, fields,
+        readSharedTextHistory(handle, { owner: beat as SharedContentRef, segment: key as SharedContentRef, field: "visualText" })?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
+    }));
 }
 
 // why: rule 35 leaves a beat's stamp as it is through undo, so a stamp alone is no change that uses an undo up.
