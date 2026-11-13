@@ -12,7 +12,8 @@ import { projectSharedTextResult, projectSharedCommentAnchors, readSharedComment
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { SharedProjectionCache } from "./projection-cache.ts";
 import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
-import { hideSharedDiscardedEntries, projectSharedCoveredBeats, projectSharedLostComments, projectSharedRecoveryRemoval, sharedRecoveryIdentityKey } from "../../core/collab/recovery.ts";
+import { hideSharedDiscardedEntries, projectSharedCoveredBeats, projectSharedDeletedPeople, projectSharedLostComments, projectSharedRecoveryRemoval, readSharedWhoNames,
+  sharedRecoveryIdentityKey } from "../../core/collab/recovery.ts";
 import type { SharedCoverageBlock, SharedRecoveryEntry, SharedRecoveryRemovalSource } from "../../core/collab/recovery.ts";
 import { readSharedActiveRemovalSources, readSharedRemovalBufferSources, readSharedRemovalSources } from "./removal-record.ts";
 import { collabState } from "./state.ts";
@@ -155,6 +156,12 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     })));
     return [];
   });
+  const deleted = source.deletedPeople();
+  if (deleted.length) recovery.push(...projectSharedDeletedPeople(deleted, { people: out.people as Record<string, unknown>[], tags, shots: out.brollShots as Record<string, unknown>[] },
+    plans.filter(plan => !plan.group.removed).map(plan => ({ rowId: plan.group.root, names: plan.visualCells.flatMap(value => {
+      const units = broll.get(value.key) ?? value.units;
+      return cache.read(["who-names", value.key], [units], () => { cache.counted("who-scan", value.key, units.length); return readSharedWhoNames(units); });
+    }) }))));
   const visible = rows.map(row => String(row.id));
   const { sections, empty } = cache.read(["sections"], [...headings, ...visible], () => projectSharedSections(headings, new Set(visible)));
   recovery.push(...empty.map(entry => ({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId })));

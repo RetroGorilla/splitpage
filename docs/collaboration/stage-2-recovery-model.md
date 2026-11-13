@@ -127,6 +127,15 @@ application code issues it yet: there is no recovery panel.
 - Restore should mean: no restore of its own; it can be discarded (A3, A5).
 - Undo of restore: not applicable.
 
+### `deleted-person`
+
+- Produced: `projectSharedDeletedPeople` in `core/collab/recovery.ts` (cut 9, assumed rule 54 on #1414), for each kept record in the `deletedPeople` root whose id has no live person, while something still refers to it: a tag or shot whose `owner` holds the id, or a visual cell of a row in the script with an `@Name` that matches the kept name without case. A deletion of `people` keeps `{ name, by }` under the id in the same write list. A deleted person nothing refers to is not listed.
+- Carries: `person` (the person id), `name` (the name kept at deletion), `by` (who deleted it), `owners` (each `{collection, record}` still owning the id, sorted), `mentions` (row ids with a matching `@Name`, in script order).
+- Copies: derivation.
+- Restore today: `sharedRecoveryPersonRestore` builds an ordinary `record-create` of the person with its id and kept name. It returns null (`name-taken`) while the state it is given holds a live person with that name without case. The record executor does not check names.
+- Restore should mean: as built (A8 as settled by assumed rule 54). Owners the deletion cleared are not put back (that is undo of the deletion), no owner is paired from `@Name`, and no colour is written.
+- Undo of restore: the ordinary undo of the create, a `record-delete`, which keeps the name again, so the entry comes back.
+
 ## Removal provenance
 
 A `removed-beat` or `removed-heading` entry carries `removal` when at least one of its active removals has a readable removal record. It is a derivation: every copy holding the same state, and a late joiner, reads the same value.
@@ -190,6 +199,7 @@ An entry is named by its kind and a stored key (assumed rule 51 on #1414, amendi
 An entry whose `start` is null (an empty fragment, or a tag part with no first character) has no name to discard: `sharedRecoveryDiscardOperation` returns null and the filter never hides it, because two such entries in one segment would share a name. It stays listed until its content changes.
 | `scene-with-no-beats` | the heading id; not discardable, it follows its beats | | |
 | `comment-without-words`, `reply-without-comment` | the comment or reply record id | | |
+| `deleted-person` | the person id | restore and a later deletion of the same id (newer name and `by`) | |
 
 A removed beat or heading removed again after a restore has the same name, so a discard of it records the removal ids it saw, as a restore does, and a fresh removal shows again.
 
@@ -216,6 +226,13 @@ Discard is built (cut 7, assumed rule 52 on #1414, as amended there for restore)
 - Discard and retired-discard records are never deleted: about 114 bytes per discard and 150 per undo and redo pair, measured on a removed beat (`discard.test.ts`).
 - A tag extent that grows at its end keeps its name, so a discard still hides it; growth at its start changes its first character and shows it again. A comment whose words come back and are deleted again stays hidden.
 - An empty fragment or a tag part with no first character cannot be discarded.
+- A kept person name is never deleted: 43 bytes for name `Ada` by `Bob` on its own, one more per further character of either. A whole shared deletion of that person still shrinks the state by 15 bytes (`people-recovery.test.ts`).
+- People deleted before sharing have no kept record, so they are never listed.
+- While `deletedPeople` holds a record, each visual cell of a row in the script is read for `@Name` once and then from a per-cell cache: at 300 beats the first publication reads 300 cells (947 units), one typed character in a visual cell reads that cell only (12 units), and a typed narration character reads none. With the root empty nothing is read. Pinned by `people-recovery.test.ts`.
+- A re-creation of a deleted id by another path, such as undo of the deletion or redo of a creation, hides the entry and leaves the kept record. Undo and redo of people are accepted as before, beside a live namesake too. Undoing a person's creation is a deletion, so it also writes a kept record.
+- Restore is refused only by the builder, against the state it is given. Two restores of namesakes at the same moment, or a restore beside someone's create of a namesake, give two live people with one name: the existing [namesake limit](stage-2-commit-time-writers.md#people-from-name) (`people-recovery.test.ts`).
+- A rename made at the same moment as a deletion is lost; the kept record holds the older name, the same on every copy.
+- `@Name` is counted only in rows in the script, not in removed groups or unprojectable fragments. A row with two visual cells naming the person lists it once.
 
 The removal records, per-beat removal flags and heading removal fields are read through the same per-key caches as the rest of the projection, and every projection unit carries the identity its mark state already read. A removed beat adds no native read; a removed heading reads each of its removal records once, on the first projection, and from the cache after. The provenance of a removed group is cached on its units and removal ids, and a removed heading's entry on its heading, name and removal records.
 
@@ -234,7 +251,7 @@ These keep work, but locally, on one copy, and are not in the list:
 3. **Closed by cut 4.** A comment whose words are all deleted is listed as `comment-without-words` at its stored row and field (decided 2026-11-09).
 4. **Closed by cut 4** ([Comments in recovery](#comments-in-recovery)). A comment whose words are only in removed content is listed with that group, with its replies, and anchored again when the group is restored.
 5. **Closed by cut 4.** A reply whose comment is missing is listed as `reply-without-comment` (Stage 0 assumed answer 4).
-6. **A removed person still named as a tag owner is not listed** (Stage 0 assumed answer 10). Deleting a person deletes its record, so its name is not kept; a later cut keeps the name at deletion and adds the entry and restore together (assumed rule 47 narrows A8).
+6. **Closed by cut 9** ([`deleted-person`](#deleted-person), assumed rule 54). A deleted person keeps its name; it is listed while a tag or shot owner or an `@Name` still refers to it, and restored with its id.
 7. **Closed by cut 5** ([Rule 29 drafts](#rule-29-drafts)). A rule 29 draft is created after its source's segment and listed beside it.
 8. **Closed by cut 7** ([Discard](#discard)). An entry leaves recovery by being restored or discarded (assumed rule 29); discard is an undo step.
 9. **Undo of restore is refused**, as is undo of a removal (moved to package 10 by assumed rule 40). The Stage 1 limit "a character undone and redone inside a removed beat is listed as edited" (`redone-recovery`, waiting for removal in `stage-2-shared-undo.md`) is not yet reproduced.
@@ -259,7 +276,7 @@ all deleted is listed, with no restore).
 - **A5. Discard hides, it does not delete.** Discarding an entry writes a record that hides it on every copy; the content stays in shared state; actually deleting data is Stage 3. Discard is an undo step; undo shows the entry again. Settled by assumed rule 52, amended: a restore of a discarded removal is accepted and retires the discard ([Discard](#discard)).
 - **A6. An entry is named by what it lists.** A removed beat by its group's root beat id, a removed heading by its heading id, a tag rejection by its occurrence id and first character's identity (amended with assumed rule 52: two parts of one occurrence are two entries), a gallery overflow by its record id, a fragment by its segment and its first unit's identity (amended by assumed rule 51: a start offset shifts with typing before it), a scene with no beats by its heading id, a comment or reply by its record id. Stability per kind: [Entry names](#entry-names).
 - **A7. Remover names, `edited` and `splitBy`** follow the Stage 1 assumptions in the [1a decision](stage-1/1a-decision.md#decided-and-assumed-product-answers): every distinct applicable remover in UTF-16 order, a character is edited when at least one applicable removal had not observed it, and more removals never take information away.
-- **A8. A removed person named as an owner** is listed, with the owners naming them; the assignment shows as text (Stage 0 assumed answer 10). Restore re-creates the person record with its id; undo of that restore removes it again. Narrowed by assumed rule 47: not built with the comment entries, because a deleted person's name is not kept; a later cut keeps it at deletion and adds the entry and its restore together.
+- **A8. A removed person named as an owner** is listed, with the owners naming them; the assignment shows as text (Stage 0 assumed answer 10). Restore re-creates the person record with its id; undo of that restore removes it again. Narrowed by assumed rule 47 and settled by assumed rule 54: the name is kept at deletion; the entry is listed for an owner or an `@Name` mention; the restore builder refuses while a live person has the name; it touches neither person colours nor owners from `@Name`.
 - **A9. Entries for merged states have no restore.** Scenes with no beats, crossing or deleted tags, gallery overflow and damaged fragments are resolved with ordinary commands offered beside the entry, each with its ordinary undo.
 
 ## Cut list
@@ -275,5 +292,6 @@ order. Each stops at its stop line.
 6. **Undo of restore** (gap 9). The undo owner records a restore and reverses it as a fresh removal; redo restores again. Literal cases for two restorers, a late restore after a new removal, and undo before delivery; restore and its undo join the seeded removal generator with a literal table of declared limits. Depends on package 10's structure undo entry. Needs A1. Stop: discard not yet.
 7. **Discard** (gaps 8 and 10, done). A discard operation with its record, its reader and its undo, in its own seeded generator. Needs A5 as settled by assumed rule 52. Stop: no panel.
 8. **The read port** (gap 11, done). The shared session publishes the recovery list beside the document through a named port, with a test that every copy and a late joiner read the same list. Stop: no UI and no export change; the panel and export disclosure are Stage 4.
+9. **People in recovery** (gap 6, done). A deleted person keeps its name in the `deletedPeople` root, is listed while an owner or an `@Name` refers to it, and is restored by an ordinary create (assumed rule 54). Stop: no person colour and no owner from `@Name`.
 
 Gaps 13 to 15 stay with Stage 3 and packages 15 and 5c as listed.

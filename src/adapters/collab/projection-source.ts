@@ -16,7 +16,7 @@ import type { CollabRoots } from "./roots.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { sharedJoinEndpointField, sharedJoinEndpointOffset } from "./join-endpoint.ts";
 import { readSharedActiveDiscards } from "./discard.ts";
-import type { SharedActiveDiscard } from "../../core/collab/recovery.ts";
+import type { SharedActiveDiscard, SharedDeletedPerson } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
   readonly cache: SharedProjectionCache;
@@ -98,6 +98,15 @@ export class SharedProjectionSource {
   discards(): readonly SharedActiveDiscard[] {
     return this.cache.read(["discards"], [this.version("discards"), this.version("retiredDiscards")],
       () => readSharedActiveDiscards(this.inputRoots.discards, this.inputRoots.retiredDiscards));
+  }
+
+  deletedPeople(): readonly SharedDeletedPerson[] {
+    return this.cache.read(["deleted-people"], [this.version("deletedPeople")], () => [...this.inputRoots.deletedPeople.keys()].sort().flatMap(person => {
+      const raw: unknown = this.inputRoots.deletedPeople.get(person);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+      const { name, by } = raw as Record<string, unknown>;
+      return typeof name === "string" && typeof by === "string" ? [{ person, name, by }] : [];
+    }));
   }
 
   title(): string {

@@ -3,7 +3,10 @@ import type { SharedProjectionGalleryOverflow } from "./projection/gallery.ts";
 import type { SharedTagProjectionRejection } from "./projection/tag-extents.ts";
 import type { SharedProjectionUnit } from "./projection/units.ts";
 import type { SharedRemovalBufferSource } from "./removal-state.ts";
-import type { SharedContentRef, SharedRecoveryDiscard, SharedRecoveryName } from "./operations.ts";
+import type { SharedContentRef, SharedRecordCreate, SharedRecoveryDiscard, SharedRecoveryName } from "./operations.ts";
+import { normalizeTagName } from "../document/tags.ts";
+import { cappedText } from "../document/text-policy.ts";
+import { PERSON_NAME_MAX } from "../production/records.ts";
 
 export interface SharedRecoveryRemoval {
   readonly ids: readonly string[];
@@ -23,7 +26,42 @@ export type SharedRecoveryEntry =
   | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
     readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string; readonly start: string | null }
   | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
-  | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>>; readonly removal?: SharedRecoveryRemoval };
+  | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>>; readonly removal?: SharedRecoveryRemoval }
+  | { readonly kind: "deleted-person"; readonly person: string; readonly name: string; readonly by: string;
+    readonly owners: readonly { readonly collection: "tags" | "shots"; readonly record: string }[]; readonly mentions: readonly string[] };
+
+export interface SharedDeletedPerson { readonly person: string; readonly name: string; readonly by: string }
+
+export function sharedPersonNameKey(name: unknown): string {
+  return normalizeTagName(cappedText(name, PERSON_NAME_MAX));
+}
+
+export function readSharedWhoNames(units: readonly SharedProjectionUnit[]): readonly string[] {
+  const names = new Set<string>();
+  for (const unit of units) if (typeof unit.value !== "string" && unit.value.atom === "who") names.add(sharedPersonNameKey(unit.value.name));
+  return [...names].sort(compare);
+}
+
+export function projectSharedDeletedPeople(deleted: readonly SharedDeletedPerson[], records: { readonly people: readonly Readonly<Record<string, unknown>>[];
+  readonly tags: readonly Readonly<Record<string, unknown>>[]; readonly shots: readonly Readonly<Record<string, unknown>>[] },
+  cells: readonly { readonly rowId: string; readonly names: readonly string[] }[]): SharedRecoveryEntry[] {
+  const live = new Set(records.people.map(person => String(person.id)));
+  return deleted.flatMap(({ person, name, by }) => {
+    if (live.has(person)) return [];
+    const key = sharedPersonNameKey(name);
+    const owners = [...records.tags.filter(tag => tag.owner === person).map(tag => ({ collection: "tags" as const, record: String(tag.id) })),
+      ...records.shots.filter(shot => shot.owner === person).map(shot => ({ collection: "shots" as const, record: String(shot.id) }))]
+      .sort((a, b) => compare(a.collection, b.collection) || compare(a.record, b.record));
+    const mentions = [...new Set(cells.filter(cell => cell.names.includes(key)).map(cell => cell.rowId))];
+    return owners.length || mentions.length ? [{ kind: "deleted-person" as const, person, name, by, owners, mentions }] : [];
+  });
+}
+
+export function sharedRecoveryPersonRestore(entry: SharedRecoveryEntry, people: readonly Readonly<Record<string, unknown>>[],
+  author: { readonly id: string; readonly by: string }): SharedRecordCreate | null {
+  if (entry.kind !== "deleted-person" || people.some(person => sharedPersonNameKey(person.name) === sharedPersonNameKey(entry.name))) return null;
+  return { kind: "record-create", id: author.id as SharedContentRef, by: author.by, target: { collection: "people", record: entry.person as SharedContentRef }, fields: { name: entry.name } };
+}
 
 export function sharedRecoveryEntryName(entry: SharedRecoveryEntry): SharedRecoveryName {
   switch (entry.kind) {
@@ -34,6 +72,7 @@ export function sharedRecoveryEntryName(entry: SharedRecoveryEntry): SharedRecov
     case "unprojectable-fragment": return { kind: entry.kind, key: JSON.stringify([entry.segment, entry.start]) };
     case "comment-without-words": return { kind: entry.kind, key: entry.comment };
     case "reply-without-comment": return { kind: entry.kind, key: entry.reply };
+    case "deleted-person": return { kind: entry.kind, key: entry.person };
   }
 }
 
