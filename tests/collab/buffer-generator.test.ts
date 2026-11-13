@@ -7,6 +7,7 @@ import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState } from "../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
 import { assertReplicasAgree } from "./agreement.ts";
+import { bufferReaders } from "./buffer-readers.ts";
 
 const DECLARED_LIMITS: readonly { readonly name: string; readonly violation: RegExp }[] = [];
 const WRITERS = ["Alice", "Bob", "Carol"] as const;
@@ -23,7 +24,7 @@ for (let seed = 1; seed <= 12; seed++) {
     try {
       const edits = handles.map((handle, index) => {
         const session = sessions[index], spec = EDITS[index], by = WRITERS[index]; assert.ok(session && spec && by);
-        const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer", by }) });
+        const port = createSharedBufferedText(handle, session.session, { target: id => h.target(id), author: () => ({ id: by + ":buffer", by }), readers: bufferReaders });
         const painted = readSharedPaintedText(handle, h.target("R1")); assert.ok(painted);
         const edit = port.open("R1", painted); assert.ok(edit);
         edit.replace(spec.from, spec.to, spec.insert);

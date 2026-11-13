@@ -126,13 +126,13 @@ test("prefix isolation keeps the original identity and visual on the suffix", ()
   assert.deepEqual(selectionToOwnBeat(doc, caretAt(beatPos("R1", 0)), branchPorts()), null);
 });
 
-test("MOVE rows: the pure policy refuses partial moves and cross-scene structural paste", () => {
+test("MOVE rows: the pure policy refuses every move and cross-scene structural paste", () => {
   const first = readSharedContentRef("H1"), second = readSharedContentRef("H2");
   assert.ok(first && second);
   const cases = [
     [{ kind: "edit" }, "allowed"],
-    [{ kind: "move", extent: "whole-segment" }, "allowed"],
-    [{ kind: "move", extent: "part-segment" }, "partial-segment-move"],
+    [{ kind: "move", extent: "whole-segment" }, "move-in-shared-session"],
+    [{ kind: "move", extent: "part-segment" }, "move-in-shared-session"],
     [{ kind: "structural-cut-paste", sourceScenes: [first], destinationScene: second }, "cross-scene-structural-paste"],
     [{ kind: "structural-cut-paste", sourceScenes: [first, second], destinationScene: first }, "cross-scene-structural-paste"],
     [{ kind: "structural-cut-paste", sourceScenes: [null], destinationScene: first }, "cross-scene-structural-paste"],
@@ -147,6 +147,6 @@ test("MOVE rows: the pure policy refuses partial moves and cross-scene structura
     assert.deepEqual(intent, before);
     if (permission !== "allowed") refused.add(permission);
   }
-  assert.deepEqual([...refused].sort(), ["cross-scene-structural-paste", "partial-segment-move"]);
+  assert.deepEqual([...refused].sort(), ["cross-scene-structural-paste", "move-in-shared-session"]);
   assert.deepEqual(sharedRefusalCoverage.map(row => row.refusal).sort(), [...refused].sort());
 });

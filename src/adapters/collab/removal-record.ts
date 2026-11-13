@@ -2,17 +2,18 @@ import * as Y from "yjs";
 import type { SharedSoftRemove, SharedTextAddress } from "../../core/collab/operations.ts";
 import { readTextInsert } from "../../core/collab/read-operation.ts";
 import { readSharedBufferRecoveryMetadata } from "../../core/collab/removal-state.ts";
-import type { SharedBufferRecoveryMetadata } from "../../core/collab/removal-state.ts";
+import type { SharedRemovalBufferSource } from "../../core/collab/removal-state.ts";
 import type { SharedTextIdentity } from "./mark-record.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { sharedStructureIdentity } from "./structure-identity.ts";
 import { isStableSharedIdentity } from "./identity.ts";
-import { readSharedRemovalState } from "./removal-state.ts";
+import { readSharedActiveRemovals, readSharedRemovalState } from "./removal-state.ts";
+import { sharedRecoveryIdentityKey } from "../../core/collab/recovery.ts";
+import type { SharedRecoveryRemovalSource } from "../../core/collab/recovery.ts";
 import type { CollabReadCaches } from "./read-cache.ts";
 
 export interface SharedRemovalTarget { readonly beat: string; readonly segment: string; readonly generation: number }
 export interface SharedRemovalObservation { readonly target: SharedTextAddress; readonly identities: readonly SharedTextIdentity[] }
-export interface SharedRemovalBufferSource { readonly beat: string; readonly metadata: SharedBufferRecoveryMetadata }
 export type SharedStoredRemovalCommand = {
   readonly writer: string; readonly operation: string; readonly by: string; readonly targets: readonly SharedRemovalTarget[];
 } & ({ readonly kind: "restore"; readonly removals: readonly string[] } | {
@@ -69,15 +70,41 @@ export function readSharedRemovalCommand(key: string, raw: unknown): SharedStore
   return { kind: "remove", ...common, removalKind: value.removalKind as SharedSoftRemove["removalKind"], at: value.at, observed,
     references: value.references, boundaries: value.boundaries, components: value.components, gallery: value.gallery, comments: value.comments, buffer };
 }
+const noFlags = Object.freeze({ keys: Object.freeze([]), active: Object.freeze([]) });
+
+function removalFlags(beats: Y.Map<unknown>, beat: string, caches: CollabReadCaches): { readonly keys: readonly string[]; readonly active: readonly string[] } {
+  const raw = caches.entry(beats, "removal-source-beat", beat, () => beats.get(beat));
+  const flags: unknown = raw instanceof Y.Map ? caches.entry(raw, "removal-source-map", "removals", () => (raw as Y.Map<unknown>).get("removals")) : null;
+  return flags instanceof Y.Map ? caches.memo([flags], "removal-source-keys", () => {
+    const entries = [...flags.keys()].map(key => [key, flags.get(key)] as const);
+    return { keys: entries.filter(entry => readSharedRemovalState([entry]).generation !== null).map(([key]) => key), active: readSharedActiveRemovals(entries) };
+  }) : noFlags;
+}
+
+function removalRecord(records: Y.Map<unknown>, key: string, caches: CollabReadCaches): SharedStoredRemovalCommand | null {
+  return caches.entry(records, "removal-source-record", key, () => readSharedRemovalCommand(key, records.get(key)));
+}
+
+export function readSharedRemovalSources(records: Y.Map<unknown>, keys: readonly string[], caches: CollabReadCaches): SharedRecoveryRemovalSource[] {
+  return keys.flatMap(key => {
+    const source = caches.entry(records, "removal-recovery-source", key, () => {
+      const record = removalRecord(records, key, caches);
+      return record?.kind === "remove" ? Object.freeze({ key, by: record.by,
+        observed: new Set(record.observed.flatMap(value => value.identities.map(sharedRecoveryIdentityKey))) as ReadonlySet<string> }) : null;
+    });
+    return source ? [source] : [];
+  });
+}
+
+export function readSharedActiveRemovalSources(beats: Y.Map<unknown>, records: Y.Map<unknown>, beat: string, caches: CollabReadCaches): SharedRecoveryRemovalSource[] {
+  return readSharedRemovalSources(records, removalFlags(beats, beat, caches).active, caches);
+}
+
 export function readSharedRemovalBufferSources(beats: Y.Map<unknown>, records: Y.Map<unknown>, members: readonly string[], caches: CollabReadCaches): SharedRemovalBufferSource[] {
   const sources = new Map<string, SharedRemovalBufferSource>();
   for (const beat of members) {
-    const raw = caches.entry(beats, "removal-source-beat", beat, () => beats.get(beat));
-    const flags: unknown = raw instanceof Y.Map ? caches.entry(raw, "removal-source-map", "removals", () => (raw as Y.Map<unknown>).get("removals")) : null;
-    const keys = flags instanceof Y.Map ? caches.memo([flags], "removal-source-keys",
-      () => [...flags.keys()].filter(key => readSharedRemovalState([[key, flags.get(key)]]).generation !== null)) : [];
-    for (const key of keys) {
-      const record = caches.entry(records, "removal-source-record", key, () => readSharedRemovalCommand(key, records.get(key)));
+    for (const key of removalFlags(beats, beat, caches).keys) {
+      const record = removalRecord(records, key, caches);
       if (record?.kind !== "remove") continue;
       for (const source of record.buffer) if (source.beat === beat) sources.set(JSON.stringify([beat, source.metadata.bufferSourceOwner, source.metadata.bufferPaintedBase]), source);
     }

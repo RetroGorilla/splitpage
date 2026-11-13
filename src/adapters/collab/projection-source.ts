@@ -1,11 +1,11 @@
 import * as Y from "yjs";
 import type { SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
-import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
+import { sharedJoinGlueRegisterField, isSharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
-import { readSharedHeadingRemovalState } from "./removal-state.ts";
+import { readSharedHeadingActiveRemovals, readSharedHeadingRemovalState } from "./removal-state.ts";
 import { readStoredSharedRecord } from "./record-codec.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
@@ -54,7 +54,7 @@ export class SharedProjectionSource {
           for (const id of this.joinReaders.get(key) ?? []) {
             const scope = JSON.stringify(["join-glue", id]); this.versions.set(scope, this.version(scope) + 1);
           }
-          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !key.startsWith(sharedJoinEndpointField("")))
+          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !isSharedJoinFormatRegisterField(key) && !key.startsWith(sharedJoinEndpointField("")))
             this.versions.set("meta-fields", this.version("meta-fields") + 1);
         }
       }
@@ -81,12 +81,15 @@ export class SharedProjectionSource {
 
   headingRemoved(id: string): boolean { return this.heading(id).removed; }
 
-  private heading(id: string): { readonly fields: Record<string, unknown> | null; readonly removed: boolean } {
+  headingRemovals(id: string): readonly string[] { return this.heading(id).removals; }
+
+  private heading(id: string): { readonly fields: Record<string, unknown> | null; readonly removed: boolean; readonly removals: readonly string[] } {
     return this.cache.read(["fields", "headings", id], [this.keyVersion("headings", id)], () => {
       const raw: unknown = this.inputRoots.headings.get(id), entries = new Map<string, unknown>();
-      if (!(raw instanceof Y.Map)) return { fields: null, removed: false };
+      if (!(raw instanceof Y.Map)) return { fields: null, removed: false, removals: [] };
       raw.forEach((value, key) => entries.set(key, value));
-      return { fields: readProjectionFields(entries, "heading"), removed: readSharedHeadingRemovalState(entries.keys(), key => entries.get(key)).removed };
+      return { fields: readProjectionFields(entries, "heading"), removed: readSharedHeadingRemovalState(entries.keys(), key => entries.get(key)).removed,
+        removals: readSharedHeadingActiveRemovals(entries.keys(), key => entries.get(key)) };
     });
   }
 

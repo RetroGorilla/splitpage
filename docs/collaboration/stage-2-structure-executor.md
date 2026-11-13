@@ -453,3 +453,16 @@ beat split off inline and formatted names (42 calls, 93 operations, 33 finalizat
 none skipped or deferred), compared with the app's rows, scene ids, names and first
 beats; two-writer literals; a seeded model of 48 histories, 122 checkpoints and 263
 commands with literal declared limits `[]`; and two structure mutants.
+
+## Moving beats and scenes
+
+In a shared session moving a beat or a scene is refused by name, in every form,
+until the plan review (assumed rule 40, issue #1414). After ordinary editing most
+beats are no longer whole stored segments, so a simple move would cover only beats
+that were imported and never split; a real move is a later design.
+`sharedCommandPermission` answers `move-in-shared-session` for every move intent,
+whole or partial. `registerSharedMoveRefusal(handle)` adds a `segment-move` handler
+that refuses the whole list with the same reason, leaving bytes, state vector and
+revision unchanged, also when the move follows a typed character or a prepared
+heading removal. The shared disable list carries `moves` with its message; no
+command consults it yet.

@@ -11,6 +11,7 @@ import { createEditorSelection } from "../../../src/application/editing/selectio
 import { beatPos, caretAt } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
+import { bufferReaders } from "../../collab/buffer-readers.ts";
 import type { BufferedTextCommit, BufferedTextEdit } from "../../../src/application/editing/ports.ts";
 
 export function bufferedWriter(text = "ab", sourceReady = true,
@@ -24,7 +25,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
-  const shared = sharedWriterBufferPorts(h.a, a.session, { ...effects, author: () => {
+  const shared = sharedWriterBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, author: () => {
     const next = ++serial;
     return { id: options.author?.(next) ?? (options.h ? "other_native:" : "native:") + next, by: "Alice" };
   } });

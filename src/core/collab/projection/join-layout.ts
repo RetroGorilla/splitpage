@@ -1,8 +1,9 @@
 import { projectSharedJoinForest, projectSharedJoinGroups } from "./joins.ts";
 import type { SharedProjectionBeatStructure } from "./joins.ts";
+import type { FormatMark } from "../../text/runs.ts";
 
 export interface SharedJoinLayoutBlock { readonly id: string; readonly segment: string; readonly from: number; readonly to: number }
-export interface SharedJoinLayoutPart extends SharedJoinLayoutBlock { readonly glue: "" | " "; readonly join: string | null; readonly glueSet?: true }
+export interface SharedJoinLayoutPart extends SharedJoinLayoutBlock { readonly glue: "" | " "; readonly join: string | null; readonly glueSet?: true; readonly formats?: readonly FormatMark[] }
 export interface SharedJoinLayoutRow { readonly root: string; readonly removed: boolean; readonly cyclic: boolean; readonly members: readonly SharedJoinLayoutPart[]; readonly fields: readonly string[] }
 
 export function projectSharedJoinedLayout(blocks: readonly SharedJoinLayoutBlock[], structures: readonly SharedProjectionBeatStructure[]): SharedJoinLayoutRow[] {
@@ -60,7 +61,8 @@ export function projectSharedJoinedLayout(blocks: readonly SharedJoinLayoutBlock
       row.cyclic ||= frame.source?.cyclic ?? false;
       row.members.push({ id: block.id, segment: block.segment, from: block.from, to: block.to,
         glue: frame.first && frame.continuation ? frame.source?.entry.glue ?? "" : "", join: frame.first && frame.continuation ? frame.source?.entry.id ?? null : null,
-        ...(frame.first && frame.continuation && frame.source?.entry.glueSet ? { glueSet: true as const } : {}) });
+        ...(frame.first && frame.continuation && frame.source?.entry.glueSet ? { glueSet: true as const } : {}),
+        ...(frame.first && frame.continuation && frame.source?.entry.formats ? { formats: frame.source.entry.formats } : {}) });
       frame.first = false;
       for (const child of [...children.get(block.id) ?? []].reverse()) stack.push({ parts: child.blocks, continuation: true, source: child, inheritedRemoved: row.removed, first: true, next: 0 });
     }

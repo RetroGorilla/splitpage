@@ -13,7 +13,7 @@ import { observeSharedStructureIndex } from "../../../src/adapters/collab/struct
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
-import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
+import { captureIncrementalReplica, assertIncremental, identityLetters } from "./incremental-support.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 
 const identities = [
@@ -39,13 +39,17 @@ test("seeded removal checkpoints agree with a literal model and fresh ownership 
       agree("seed=" + seed, order, handles, handle => {
         const value = projectSharedDocumentWithRecovery(handle), prep = createSharedPreparation(handle), index = observeSharedStructureIndex(handle).attachments();
         try {
-          const targets = ["R1", "R2", "R3", ...created.map(row => row.id)];
+          const targets = ["R1", "R2", "R3", ...created.map(row => row.id)], known = identityLetters(handle);
           const result = { rows: value.document.rows.map(row => ({ id: row.id, text: row.audioText })), recovery: value.recovery.map(entry => {
-            assert.equal(entry.kind, "removed-beat"); return entry.kind === "removed-beat" ? { id: entry.row.id, text: entry.row.audioText } : null;
+            assert.equal(entry.kind, "removed-beat"); return entry.kind === "removed-beat" ? { id: entry.row.id, text: entry.row.audioText, ids: entry.removal?.ids, by: entry.removal?.by,
+              edited: entry.removal?.edited.map(identity => known.get(identity.client + ":" + identity.clock) ?? "?").join("") } : null;
           }).sort((a, b) => String(a?.id) < String(b?.id) ? -1 : String(a?.id) > String(b?.id) ? 1 : 0), owners: targets.map(id => prep.view.resolveOwner(id, "audioText")),
           attachments: targets.map(id => [index.keys("visuals", id), index.keys("gallery", id)]) };
           const expectedRows = removed ? [original[0], original[2]] : [...original, ...created];
-          const expectedRecovery = removed ? [original[1], ...created].sort((a, b) => String(a?.id) < String(b?.id) ? -1 : 1) : [];
+          const removedR2 = { ...original[1], ids: identities.slice(0, copies).map(value => value.a), by: "Writer",
+            edited: [...text].filter(value => value !== "c" && value !== "d").join("") };
+          const removedCreated = created.map((row, index) => ({ ...row, ids: [identities[index]?.removal], by: "Writer", edited: "" }));
+          const expectedRecovery = removed ? [removedR2, ...removedCreated].sort((a, b) => String(a?.id) < String(b?.id) ? -1 : 1) : [];
           try { assert.deepEqual({ rows: result.rows, recovery: result.recovery }, { rows: expectedRows, recovery: expectedRecovery }); }
           catch (error) { violations.add(String(error)); }
           comparisons++; return result;

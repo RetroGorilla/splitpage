@@ -5,6 +5,7 @@ import { operation } from "../adapters/collab/executor-support.ts";
 import { adapterReplica, registerSplits, sharedHarness } from "../application/session/shared-session-support.ts";
 import type { SharedHarnessHooks } from "../application/session/shared-session-support.ts";
 import { createSharedBufferedText } from "../../src/adapters/collab/buffer.ts";
+import { bufferReaders } from "./buffer-readers.ts";
 import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { executeSharedOperations } from "../../src/adapters/collab/execute.ts";
 import { registerSharedRemovalHandlers } from "../../src/adapters/collab/removal-executor.ts";
@@ -28,7 +29,7 @@ function editing(h: Stage1ExecutorHarness, options: { handlers?: boolean; author
   const session = sharedHarness(adapterReplica(h.a), options.hooks);
   let serial = 0;
   const port = createSharedBufferedText(h.a, session.session, { target: id => h.target(id),
-    author: () => { const next = ++serial; return { id: options.author?.(next) ?? "r" + (15 + next), by: "Alice" }; } });
+    author: () => { const next = ++serial; return { id: options.author?.(next) ?? "r" + (15 + next), by: "Alice" }; }, readers: bufferReaders });
   const painted = readSharedPaintedText(h.a, h.target("R1")); assert.ok(painted);
   const edit = port.open("R1", painted); assert.ok(edit);
   return { ...session, edit, port, painted };

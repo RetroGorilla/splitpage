@@ -125,5 +125,11 @@
     "find": "readSharedFinalizedHeading(view, right.span.owner)",
     "replace": "null",
     "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
+  }, {
+    "label": "segment move falls through to the generic unhandled refusal",
+    "file": "src/adapters/collab/move-refusal.ts",
+    "find": "registerSharedOperationHandlers(handle, { \"segment-move\": () => ({ ok: false, reason }) });",
+    "replace": "registerSharedOperationHandlers(handle, {});",
+    "tests": ["tests/adapters/collab/move-refusal.test.ts"]
   }]
 }

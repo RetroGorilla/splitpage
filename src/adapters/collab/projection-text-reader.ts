@@ -26,8 +26,7 @@ export function readProjectionUnits(handle: SharedDocumentHandle, raw: unknown, 
         const mark = readSharedStoredMark({ kind: group.kind, ...(group.id === null ? {} : { id: group.id }), value: payload });
         if (mark) marks.push(mark);
       }
-      units.push({ value, marks, ...(typeof value !== "string" && value.atom === "broll" && character
-        ? { identity: { client: character.identity.client, clock: character.identity.clock } } : {}) });
+      units.push(character ? { value, marks, identity: character.identity } : { value, marks });
     }
   }
   return units;

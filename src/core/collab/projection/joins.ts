@@ -1,4 +1,5 @@
 import { projection } from "../../text/runs.ts";
+import type { FormatMark } from "../../text/runs.ts";
 import { projectSharedTextResult } from "./text.ts";
 import type { SharedProjectionUnit } from "./units.ts";
 import { projectSharedGroupGallery } from "./gallery.ts";
@@ -6,7 +7,7 @@ import { projectSharedGroupGallery } from "./gallery.ts";
 export interface SharedProjectionBeatStructure {
   readonly id: string;
   readonly removed: boolean;
-  readonly joins: readonly { readonly id: string; readonly into: string | null; readonly glue: "" | " "; readonly glueSet?: true;
+  readonly joins: readonly { readonly id: string; readonly into: string | null; readonly glue: "" | " "; readonly glueSet?: true; readonly formats?: readonly FormatMark[];
     readonly binding?: { readonly end: { readonly segment: string; readonly offset: number }; readonly start: { readonly segment: string; readonly offset: number }; readonly stop: { readonly segment: string; readonly offset: number } } | null }[];
 }
 
@@ -81,7 +82,7 @@ export function projectSharedJoinSeparator(left: string, right: string, glue: ""
   return index === 0 ? "" : cyclic && !override ? left && right && !/\s$/.test(left) ? " " : "" : glue;
 }
 
-export function projectSharedJoinedUnits(parts: readonly { readonly units: readonly SharedProjectionUnit[]; readonly glue: "" | " "; readonly glueSet?: true }[],
+export function projectSharedJoinedUnits(parts: readonly { readonly units: readonly SharedProjectionUnit[]; readonly glue: "" | " "; readonly glueSet?: true; readonly formats?: readonly FormatMark[] }[],
   tags: readonly Readonly<Record<string, unknown>>[], cyclic: boolean): SharedProjectionUnit[] {
   const units: SharedProjectionUnit[] = [];
   for (const [index, part] of parts.entries()) {
@@ -94,6 +95,7 @@ export function projectSharedJoinedUnits(parts: readonly { readonly units: reado
         for (const anchor of last.marks.cmt ?? []) if (first.marks.cmt?.includes(anchor)) marks.push({ kind: "comment", id: anchor, value: anchor });
         if (!last.atom && !first.atom && last.marks.dir && first.marks.dir) marks.push({ kind: "dir", value: true });
       }
+      for (const format of part.formats ?? []) marks.push({ kind: format, value: true });
       units.push({ value: glue, marks });
     }
     units.push(...part.units);

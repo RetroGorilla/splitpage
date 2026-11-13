@@ -10,7 +10,7 @@ import { readSharedStructureBoundary } from "./structure-boundary.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import type { SharedProjectionBoundary, SharedProjectionStream } from "../../core/collab/projection/blocks.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
-import { projectSharedJoinGlue, sharedJoinGlueRegisterField, readSharedJoinGlue } from "../../core/collab/projection/join-glue.ts";
+import { projectSharedJoinGlue, sharedJoinGlueRegisterField, readSharedJoinGlue, projectSharedJoinFormats } from "../../core/collab/projection/join-glue.ts";
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 import { readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
@@ -105,15 +105,15 @@ export function readProjectionBeatStructure(raw: unknown, id: string, retirement
     if (!key || !isStableSharedIdentity(key) || retirements.get(key) === true) continue;
     const value = readSharedJoinEntry(stored.get(key));
     if (value && retirements.get(sharedJoinRetirementGroup(id, value)) !== true) {
-      const field = sharedJoinGlueRegisterField(sharedJoinRetirementGroup(id, value)); registerRead?.(field);
+      const group = sharedJoinRetirementGroup(id, value), field = sharedJoinGlueRegisterField(group); registerRead?.(field);
       const end = sharedJoinEndpointField(key); registerRead?.(end);
       const stored = glueRegisters.get(end), position = readSharedJoinEndpoint(stored);
       const resolve = (point: SharedJoinEndpointPosition) => { const offset = endpointOffset?.(point); return typeof offset === "number" ? { segment: point.segment, offset } : null; };
       const destination = position && resolve(position.end), start = position && resolve(position.start), stop = position && resolve(position.stop);
       const binding = destination && start && stop ? { end: destination, start, stop } : null;
-      const register = glueRegisters.get(field);
+      const register = glueRegisters.get(field), formats = projectSharedJoinFormats(group, format => { registerRead?.(format); return glueRegisters.get(format); });
       joins.push({ id: key, into: value.into, glue: projectSharedJoinGlue(value.glue, register),
-        ...(stored === undefined && !glueRegisters.has(end) ? {} : { binding }), ...(readSharedJoinGlue(register) === null ? {} : { glueSet: true as const }) });
+        ...(stored === undefined && !glueRegisters.has(end) ? {} : { binding }), ...(readSharedJoinGlue(register) === null ? {} : { glueSet: true as const }), ...(formats.length ? { formats } : {}) });
     }
   }
   const removed = readSharedRemovalState(removals instanceof Y.Map ? removals : []).removed;

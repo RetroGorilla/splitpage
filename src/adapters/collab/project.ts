@@ -9,14 +9,12 @@ import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts
 import type { SharedDocumentHandle } from "./types.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
 import { projectSharedTextResult, projectSharedCommentAnchors } from "../../core/collab/projection/text.ts";
-import type { SharedTagProjectionRejection } from "../../core/collab/projection/tag-extents.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { SharedProjectionCache } from "./projection-cache.ts";
-import type { SharedProjectionFragmentReason } from "../../core/collab/projection/blocks.ts";
 import { applySharedBrollRewrite, assignSharedBrollKeys, readSharedBrollAtoms } from "../../core/collab/projection/broll.ts";
-import type { SharedProjectionGalleryOverflow } from "../../core/collab/projection/gallery.ts";
-import { readSharedRemovalBufferSources } from "./removal-record.ts";
-import type { SharedRemovalBufferSource } from "./removal-record.ts";
+import { projectSharedRecoveryRemoval } from "../../core/collab/recovery.ts";
+import type { SharedRecoveryEntry } from "../../core/collab/recovery.ts";
+import { readSharedActiveRemovalSources, readSharedRemovalBufferSources, readSharedRemovalSources } from "./removal-record.ts";
 import { collabState } from "./state.ts";
 import { compareSharedProjections } from "../../core/collab/projection/changes.ts";
 import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
@@ -32,13 +30,7 @@ export function projectSharedDocument(handle: SharedDocumentHandle): DocumentSha
 
 export interface SharedDocumentProjectionResult {
   readonly document: DocumentShape;
-  readonly recovery: readonly ((SharedTagProjectionRejection & { readonly rowId: string; readonly field: "audioText" | "visualText" })
-    | (SharedProjectionGalleryOverflow & { readonly kind: "gallery-overflow"; readonly rowId: string })
-    | { readonly kind: "removed-beat"; readonly row: Readonly<Record<string, unknown>>; readonly members: readonly string[]; readonly buffer?: readonly SharedRemovalBufferSource[] }
-    | { readonly kind: "unprojectable-fragment"; readonly reason: SharedProjectionFragmentReason; readonly owner: string | null; readonly segment: string;
-      readonly field: "audioText" | "heading"; readonly from: number; readonly to: number; readonly html: string }
-    | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
-    | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>> })[];
+  readonly recovery: readonly SharedRecoveryEntry[];
 }
 
 export interface SharedDocumentProjectionStep extends SharedDocumentProjectionResult {
@@ -73,7 +65,7 @@ function projectSharedBrollCells(cache: SharedProjectionCache, cells: readonly S
 export function assembleSharedDocument(source: SharedProjectionSource, previous: DocumentShape | null): SharedDocumentProjectionStep {
   source.begin();
   const cache = source.cache;
-  const recovery: SharedDocumentProjectionResult["recovery"][number][] = [];
+  const recovery: SharedRecoveryEntry[] = [];
   const fields = assembleSharedDocumentFields(source), out = { ...fields.document };
   const tags = out.productionTags as Record<string, unknown>[], comments = (out.comments as Record<string, unknown>[]).map(comment => ({ ...comment }));
   out.comments = comments;
@@ -101,13 +93,13 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     const memberUnits = group.members.map(member => narrationByBeat.get(member.id));
     const memberVisuals = group.fields.flatMap(id => visuals.get(id) ?? []);
     const visualCells = memberVisuals.map(visual => {
-      return { key: JSON.stringify([group.root, "visualText", visual.key]), units: source.units("visuals", visual.key) };
+      return { key: JSON.stringify([group.root, "visualText", visual.key]), units: source.units("visuals", visual.key), beat: String(visual.fields.beat) };
     });
     const relevantGallery = group.fields.flatMap(id => galleryGroups.get(id) ?? []);
     return [cache.read(["group", group.root], [JSON.stringify(group), root, tags, ...memberRows, ...memberUnits,
       ...memberVisuals, ...visualCells.map(cell => cell.units), ...relevantGallery], () => {
       const projected = projectSharedJoinedFields(root, memberRows, gallery);
-      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue, ...(member.glueSet ? { glueSet: true as const } : {}) })), tags, group.cyclic);
+      const narration = projectSharedJoinedUnits(group.members.map(member => ({ units: narrationByBeat.get(member.id) ?? [], glue: member.glue, ...(member.glueSet ? { glueSet: true as const } : {}), ...(member.formats ? { formats: member.formats } : {}) })), tags, group.cyclic);
       return { group, members, ...projected, audio: { key: JSON.stringify([group.root, "audioText"]), units: narration }, visualCells };
     }, "group")];
   });
@@ -122,8 +114,15 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", value.key)).filter(Boolean).join("<br>");
     const painted = cache.read(["painted-row", group.root], [row, audioText, visualText], () => ({ ...row, audioText, visualText }));
     if (group.removed) {
-      const buffer = readSharedRemovalBufferSources(source.roots.beats, source.roots.removalRecords, members, collabState(source.handle).reads);
-      recovery.push({ kind: "removed-beat", row: cache.canonical(painted, "row") as Record<string, unknown>, members, ...(buffer.length ? { buffer } : {}) });
+      const reads = collabState(source.handle).reads, { beats, removalRecords } = source.roots;
+      const buffer = readSharedRemovalBufferSources(beats, removalRecords, members, reads);
+      const own = new Map(members.map(id => [id, readSharedActiveRemovalSources(beats, removalRecords, id, reads)]));
+      // why: a beat joined into a removed beat has no removal of its own; it is in recovery by the root's removal.
+      const applicable = (id: string) => { const list = own.get(id) ?? []; return list.length ? list : own.get(group.root) ?? []; };
+      const parts = [...group.members.map(member => ({ removals: applicable(member.id), units: narrationByBeat.get(member.id) ?? [] })),
+        ...visualCells.map(value => ({ removals: applicable(value.beat), units: value.units }))];
+      const removal = cache.read(["removed-provenance", group.root], parts.flatMap(part => [part.units, part.removals.length, ...part.removals]), () => projectSharedRecoveryRemoval(parts));
+      recovery.push({ kind: "removed-beat", row: cache.canonical(painted, "row") as Record<string, unknown>, members, ...(removal ? { removal } : {}), ...(buffer.length ? { buffer } : {}) });
     }
     else rows.push(painted);
   }
@@ -134,7 +133,11 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     const heading = cache.read(["heading", block.id], [extra, block.units], () => ({ kind: "h" as const, id: block.id,
       name: block.units.map(unit => typeof unit.value === "string" ? unit.value : "").join(""), extra: sharedProjectionExtra(extra) }));
     if (!source.headingRemoved(block.id)) return [heading];
-    for (const entry of projectSharedSections([heading], new Set()).empty) recovery.push({ kind: "removed-heading", heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown> });
+    const removals = readSharedRemovalSources(source.roots.removalRecords, source.headingRemovals(block.id), collabState(source.handle).reads);
+    recovery.push(...cache.read(["removed-heading", block.id], [heading, block.units, ...removals], () => projectSharedSections([heading], new Set()).empty.map(entry => {
+      const removal = projectSharedRecoveryRemoval([{ removals, units: block.units }]);
+      return { kind: "removed-heading" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, ...(removal ? { removal } : {}) };
+    })));
     return [];
   });
   const visible = rows.map(row => String(row.id));

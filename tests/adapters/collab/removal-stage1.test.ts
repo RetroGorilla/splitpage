@@ -13,7 +13,6 @@ import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { IdentityBook, checkModel } from "../../collab/checker.ts";
 import type { CollabModel, CollabRow } from "../../collab/checker.ts";
 import { removedOracle, restorationOracle } from "../../collab/oracles/oracles.ts";
-import { readSharedRemovalCommand } from "../../../src/adapters/collab/removal-record.ts";
 
 for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) test(`Stage 1 T10 removal against typing and restore retains identities: ${copies}/${order}`, () => {
   const set = replicas(copies, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }, { id: "R3", audioText: "ef" }] });
@@ -45,13 +44,12 @@ for (const copies of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) 
       const visible = new Set(projected.document.rows.map(row => row.id));
       const next = storedOrder.slice(storedOrder.indexOf(resolved.segment) + 1).map(segment => ((roots.segments.get(segment) as Y.Map<unknown>).get("head") as { b: string }).b).find(id => visible.has(id));
       const caret = visible.has(source.b) ? { beat: source.b, offset: resolved.offset } : { beat: next, offset: 0 }; assert.ok(typeof caret.beat === "string");
-      const removal = readSharedRemovalCommand("structure_1_0061_removal_0", roots.removalRecords.get("structure_1_0061_removal_0")); assert.ok(removal?.kind === "remove");
-      const observed = new Set(removal.observed.flatMap(value => value.identities.map(id => id.client + ":" + id.clock)));
       const model: CollabModel = { rows: projected.document.rows.map(value => row(value.id)),
         carets: { A: { beat: caret.beat, offset: caret.offset } },
         recovery: projected.recovery.map(entry => { assert.ok(entry.kind === "removed-beat"); const recovered = row(String(entry.row.id));
-          assert.equal(entry.row.audioText, recovered.characters.map(char => char.value).join("")); return { row: recovered, by: removal.by,
-          edited: recovered.characters.filter(char => char.identity && !observed.has(char.identity.client + ":" + char.identity.clock)).map(char => char.notation) }; }) };
+          assert.equal(entry.row.audioText, recovered.characters.map(char => char.value).join(""));
+          assert.ok(entry.removal); assert.deepEqual(entry.removal.ids, ["structure_1_0061_removal_0"]);
+          return { row: recovered, by: entry.removal.by, edited: entry.removal.edited.map(identity => book.notation(identity)) }; }) };
       checkModel(model, restored ? restorationOracle : removedOracle, book, order); return model;
     };
     agree("T10 removed", order, handles, handle => read(handle, false));
