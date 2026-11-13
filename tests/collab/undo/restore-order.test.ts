@@ -77,6 +77,20 @@ for (const kind of UNDO_WORLDS) {
     assert.deepEqual(everywhere(world), ["iklmj", "iklmj", "iklmj"]);
   });
 
+  test("two backspaces over bold text in one typing entry are undone into bold characters in their order" + kind.suffix, () => {
+    const world = kind.make([{ id: "R1", text: "abcdef" }]), a = world.replica("A");
+    a.mark(a.observe("R1", 1, 3), { kind: "b", value: true });
+    a.edit({ at: a.observe("R1", 2, 3) });
+    a.typing = true;
+    a.edit({ at: a.observe("R1", 1, 2) });
+    a.typing = false;
+    assert.equal(a.undo.sizes().undo, 2);
+    undo(a);
+    world.queue.flush("D1");
+    assert.deepEqual([world.replica("A"), world.replica("B"), world.fresh("A")].map(copy => copy.snapshot().rows[0]?.characters.map(character => [character.value, character.marks])),
+      Array.from({ length: 3 }, () => [["a", []], ["b", ["b:true"]], ["c", ["b:true"]], ["d", []], ["e", []], ["f", []]]));
+  });
+
   test("a cut undone while the text after it is still cut stays before what the other writer put into that text" + kind.suffix, () => {
     const world = kind.make([{ id: "R1", text: "abcdef" }]), a = world.replica("A"), b = world.replica("B");
     a.edit({ at: a.observe("R1", 3, 6), command: "cut" });
