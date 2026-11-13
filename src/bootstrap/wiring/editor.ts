@@ -37,7 +37,7 @@ import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "./editor-owners.ts";
-import { currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "./session-owner.ts";
+import { liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "./session-owner.ts";
 import { fromHtml } from "../richtext.ts";
 import { cycleRowStatus } from "./beat-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
@@ -450,7 +450,7 @@ const rowRoutePorts: RowRoutePorts = {
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
-  reveal: function (rowId) { const doc = currentDocument(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); },
+  reveal: function (rowId) { const doc = numberedDocument.current(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); },
   gone: function () { showToast("That beat is no longer here.", "warn"); }
 };
 
@@ -474,7 +474,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
 export const stopRowsFeature = rowRoutes.stop;
 
 export function rowsActions(): ActionDefinition[] {
-  return rowActions({ reveal: (rowId) => { const doc = currentDocument(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); } });
+  return rowActions({ reveal: (rowId) => { const doc = numberedDocument.current(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); } });
 }
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();
@@ -743,7 +743,7 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
     }
   }
   if (res.movedComments) {
-    syncAnchorResolvedClasses(currentDocument(), document);
+    syncAnchorResolvedClasses(numberedDocument.current(), document);
     captureReplyDrafts();
     renderComments();
   }
@@ -755,7 +755,7 @@ function announceAttached(attached: PasteAttached, rowIndex: number, before: unk
   const parts = ([[attached.pictures, "picture"], [attached.videos, "video"], [attached.files || 0, "file"]] as const)
     .filter(function (p) { return p[0] > 0; }).map(function (p) { return n(p[0], p[1]); });
   const what = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0] || n(0, "video");
-  const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to beat " + (numberedDocument.numbering().beats[currentDocument()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
+  const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to beat " + (numberedDocument.numbering().beats[numberedDocument.current()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
   const entry = undoOwner().last();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
   showActionToast(msg, "ok", "Undo", function () {
@@ -830,7 +830,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
     const mvField = cellEl.getAttribute("data-field");
     const mvOffset = caretTextOffset(cellEl);
     if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
-      const moved = currentDocument();
+      const moved = numberedDocument.current();
       if (moved && mvId) sceneView().reveal(moved, mvId);
       if (!viewFlags().writerOpen()) focusRowField(mvId, mvField, mvOffset);
       renderProduction();

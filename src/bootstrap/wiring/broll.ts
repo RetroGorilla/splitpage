@@ -35,7 +35,7 @@ export function mountBrollFeature(): BrollRecordsMount {
   return broll.replace(() => {
     const text = portText;
     const records = createBrollRecords({
-      document: { current: currentDocument, read: portDocument.read, numbering: portDocument.numbering },
+      document: { current: portDocument.current, read: portDocument.read, numbering: portDocument.numbering },
       edits: portEdits,
       cells: { edit: (cell, change) => cellEditing().edit(cell, change) },
       paint: { whileShown: (edit) => paintGuard().whileShown(edit) },
