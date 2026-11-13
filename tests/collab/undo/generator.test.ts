@@ -117,6 +117,18 @@ test("a record history is replayed from its literal steps: the undo of a creatio
   assert.deepEqual(run.copies.map(copy => copy.records), Array.from({ length: 3 }, () => ({ "people|P1": '[["id","P1"],["name","vBa"]]' })));
 });
 
+test("a record history is replayed from its literal steps: the undo of a name the other writer set again since is used up", () => {
+  const deliver = { op: "deliver", writer: 0, r: [0, 0, 0] } as const;
+  const history: UndoHistory = { writers: 2, steps: [
+    { op: "record-create", writer: 0, r: [0.5, 0.9, 0.1] }, deliver, { op: "record-set", writer: 0, r: [0.5, 0.9, 0.9] }, deliver,
+    { op: "record-set", writer: 1, r: [0.5, 0.9, 0.1] }, deliver, { op: "undo", writer: 0, r: [0, 0, 0] }
+  ] };
+  const run = runUndoHistory(history, ADAPTER_WORLD);
+  assert.deepEqual(run.violations, []);
+  assert.deepEqual(run.counts, { command: 3, deliver: 3, "record-create people": 1, "record-set people": 2, "used up undo": 1 });
+  assert.deepEqual(run.copies.map(copy => copy.records), Array.from({ length: 3 }, () => ({ "people|P1": '[["id","P1"],["name","vBa"]]' })));
+});
+
 for (const kept of keptUndoSeeds) test(`kept seed ${kept.seed}, ${kept.writers} writers, reaches ${kept.reaches} and nothing else`, () => {
   const run = runUndoHistory(generateUndoHistory(kept.seed, kept.writers));
   assert.ok(run.violations.length > 0);
