@@ -3,6 +3,8 @@ import type { CommonDocumentSession, CommandOutcome } from "../../application/se
 import { cellEdit, NO_CHANGES } from "../../application/session/change-set.ts";
 import { createSharedTextBuffer } from "../../core/collab/buffer.ts";
 import { bufferedRecoveryOperations, bufferedTextOperations } from "../../core/collab/buffer-operations.ts";
+import { sharedTagsIntroducedByText } from "../../core/collab/text-records.ts";
+import type { ProductionReaders } from "../../core/production/ports.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { cellLength } from "../../core/text/runs.ts";
 import { sharedStructureIdentity, SharedStructurePreparationError } from "./structure-identity.ts";
@@ -25,7 +27,11 @@ export function sharedBufferedTarget(_handle: SharedDocumentHandle, rowId: strin
 export function createSharedBufferedText(
   handle: SharedDocumentHandle,
   session: Pick<CommonDocumentSession, "run" | "epoch" | "read">,
-  ports: { readonly target: (rowId: string) => SharedTextAddress; readonly author: () => { readonly id: string; readonly by: string } }
+  ports: {
+    readonly target: (rowId: string) => SharedTextAddress;
+    readonly author: () => { readonly id: string; readonly by: string };
+    readonly readers: Pick<ProductionReaders, "tagsInField" | "cellOf">;
+  }
 ): BufferedTextCommit {
   return {
     open: (rowId, painted) => {
@@ -48,13 +54,16 @@ export function createSharedBufferedText(
           if (session.epoch() !== epoch) { stranded = true; return { kind: "rejected", reason: "buffer-epoch" }; }
           let outcome: CommandOutcome, planned = false;
           try {
-            const commit = buffer.plan(), operations = bufferedTextOperations(commit, painted, target, runs, ports.author());
-            outcome = session.run({ name: "buffered-text", needs: "edit", plan: () => {
+            const commit = buffer.plan(), author = ports.author(), operations = bufferedTextOperations(commit, painted, target, runs, author);
+            outcome = session.run({ name: "buffered-text", needs: "edit", plan: doc => {
               planned = true;
+              const field = target.field, row = doc.rows.find(entry => entry.id === rowId);
+              const tags = field === "audioText" || field === "visualText" ? sharedTagsIntroducedByText({ field, before: row?.[field],
+                after: toHtml(runs), registry: doc.productionTags }, ports.readers, author) : [];
               return {
                 changes: cellEdit(rowId, target.field),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
-                shared: { operations, base: commit.base }
+                shared: { operations: [...operations, ...tags], base: commit.base }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }

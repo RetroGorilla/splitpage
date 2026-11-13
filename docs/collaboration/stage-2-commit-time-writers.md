@@ -125,6 +125,28 @@ The list goes through the session's one `execute` like any other, by the copy wh
 typing was refused; receiving it writes nothing. With it the table holds 30 writers:
 6 derivations, 11 operations, 9 not applicable and 4 undetermined.
 
+## Records made from Writer typing
+
+Writer typing reaches the document as one buffered commit of a beat's narration.
+In a normal script the commit then registers every tag the script shows without a
+registry entry, cues included. In a shared session the commit's own list carries a
+`record-create` for each tag the commit introduced: one the cell shows after the
+edit, did not show unregistered before it, and that has no entry. The id and fields
+are the ones a normal script mints (`newRegistryTag`), so two copies that introduce
+the same tag at once create one entry. A tag the cell already showed unregistered
+is not registered again, and a copy that receives the list writes nothing more.
+`sharedTagsIntroducedByText` in `core/collab/text-records.ts` builds the list and
+`createSharedBufferedText` calls it; `tests/collab/buffer-text-records.test.ts`
+holds it.
+
+Not built here:
+
+- people from `@Name`, shots from B-roll lines and owners from pairings. They are
+  read only from the visual column, which Writer typing does not edit.
+- renaming a sound cue's entry when its words change, which is undetermined.
+- the replica that runs these lists in the app. It must register the record
+  handlers, or a commit that introduces a tag is refused as a whole.
+
 ## Stamp on undo
 
 Settled as assumed rule 35: in a shared session undo leaves the stamp as it is. The
