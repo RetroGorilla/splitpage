@@ -13,8 +13,8 @@
   }, {
     "label": "ordinary cross-beat input never reaches its command port",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "&& intended.anchor.rowId !== intended.head.rowId)",
-    "replace": "&& false)"
+    "find": "ends[0] && ends[1] && ends[0] !== ends[1])",
+    "replace": "false)"
   }, {
     "label": "refused cross-beat composition permits native mutation",
     "file": "src/application/editing/buffered-field.ts",
@@ -23,7 +23,7 @@
   }, {
     "label": "native boundary deletion never reaches its structural command",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "if (type === \"deleteContentBackward\" && at === 0 || type === \"deleteContentForward\" && at === length)",
+    "find": "if (type === \"deleteContentBackward\" && offset === 0 || type === \"deleteContentForward\" && offset === length)",
     "replace": "if (false)"
   }, {
     "label": "mounted clipboard captures selection before settling typing",
@@ -218,8 +218,8 @@
   }, {
     "label": "adoption settles over a pending native target",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target) settle();",
-    "replace": "if ((before.adopted || after.adopted) && !surface.composition()) settle();",
+    "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target && !holding()) settle();",
+    "replace": "if ((before.adopted || after.adopted) && !surface.composition() && !holding()) settle();",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }, {
     "label": "the Split view keeps the typed cell after a recovery write",
@@ -234,10 +234,160 @@
     "replace": "ports.shown(() => binding.dispose());",
     "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
   }, {
+    "label": "Writer heading positions get no field key",
+    "file": "src/features/writer/flow-buffer.ts",
+    "find": "key: pos => pos.kind === \"beat\" ? pos.rowId : headingFieldKey(pos.sceneId),",
+    "replace": "key: pos => pos.kind === \"beat\" ? pos.rowId : null,",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the heading painted base is never read",
+    "file": "src/bootstrap/wiring/ports/shared-buffer.ts",
+    "find": "read: (key, field) => field === bufferedFieldTarget(key)?.field ? readSharedPaintedText",
+    "replace": "read: (key, field) => field !== \"heading\" && field === bufferedFieldTarget(key)?.field ? readSharedPaintedText",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an emptied heading settles at once",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "{ reason: \"buffer-heading-empty\", hold: true }",
+    "replace": "{ reason: \"buffer-heading-empty\", hold: false }",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an emptied heading is written empty",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": ": !cappedText(text, SCENE_NAME_MAX) ? { reason:",
+    "replace": ": false ? { reason:",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a heading over 200 characters settles",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "Array.from(text).length > SCENE_NAME_MAX ?",
+    "replace": "false ?",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an unsettled edit is committed anyway",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
+    "replace": "const unsettled = null;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a heading commit stamps a beat",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "operations.length && field !== \"heading\" && field !== \"title\" ?",
+    "replace": "operations.length ?",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a heading commit reports a narration cell change",
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "if (target?.field === \"heading\") return changeSet({ docFields: [\"sections\"], derive: CELL_TEXT_DERIVES });",
+    "replace": "",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "heading recovery names the field key instead of the scene",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "const snapshot = { owner: target.owner,",
+    "replace": "const snapshot = { owner: rowId,",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the caret after a heading commit is resolved as narration",
+    "file": "src/adapters/collab/buffer-selection.ts",
+    "find": "if (field?.target.field === \"heading\") {",
+    "replace": "if (false) {",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a keydown settles a heading held empty",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (buffered.held() || ready(event)) onKeydown(key);",
+    "replace": "if (ready(event)) onKeydown(key);",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a selection leaving a heading held empty keeps the hold",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "moved: range => { if (active && holding() && !surface.composition() && one(range) !== active.rowId) finish(); },",
+    "replace": "moved: () => {},",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a selection inside a heading held empty ends the hold",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "&& one(range) !== active.rowId) finish(); },",
+    "replace": ") finish(); },",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a mouseup landing outside a heading held empty is not checked",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp",
+    "replace": "onMouseUp",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an adopted emptying change settles at once",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "!surface.composition() && !target && !holding()) settle();",
+    "replace": "!surface.composition() && !target) settle();",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "an emptying change found by a paint settles at once",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (checked.adopted && !surface.composition() && !holding()) settle();",
+    "replace": "if (checked.adopted && !surface.composition()) settle();",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a composition begun in a heading held empty is not recorded",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (begin(event, range)) composedFromHold = hold?.reason ?? null;",
+    "replace": "begin(event, range);",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a cancelled composition begun in a held heading ends it without telling the person",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (heldReason !== null) ports.report({ kind: \"rejected\", reason: heldReason });",
+    "replace": "",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "every cancelled heading composition reports an empty heading",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (heldReason !== null) ports.report({ kind: \"rejected\", reason: heldReason });",
+    "replace": "if (surface.unsettled) ports.report({ kind: \"rejected\", reason: heldReason ?? \"buffer-heading-empty\" });",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "input that ends a held heading still acts",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "if (finish() && !held) return true;",
+    "replace": "if (finish()) return true;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "clipboard in a held heading ends the hold and still acts",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "const ready = (event: Event): boolean => !buffered || buffered.settledFor(event);",
+    "replace": "const ready = (event: Event): boolean => !buffered || buffered.finish();",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "a Writer command aimed at a held heading still runs",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (endsHold()) return null;",
+    "replace": "",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the undo shortcut runs in a held heading",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (!endsHold()) ports.undo(event.shiftKey ? \"redo\" : \"undo\");",
+    "replace": "ports.undo(event.shiftKey ? \"redo\" : \"undo\");",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the redo shortcut runs in a held heading",
+    "file": "src/features/writer/flow-surface.ts",
+    "find": "if (!endsHold()) ports.undo(\"redo\");",
+    "replace": "ports.undo(\"redo\");",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
+    "label": "the shared entry trims scene names",
+    "file": "tests/application/session/shared-session-support.ts",
+    "find": "if (typeof name === \"string\") scene.name = name;",
+    "replace": "void name;",
+    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+  }, {
     "label": "a visual commit addressed to the narration",
     "file": "src/adapters/collab/buffer.ts",
-    "find": "  return { owner, segment: owner, field };",
-    "replace": "  return { owner, segment: owner, field: \"audioText\" as const };",
+    "find": "  return { owner, segment: owner, field: field.field };",
+    "replace": "  return { owner, segment: owner, field: field.field === \"visualText\" ? \"audioText\" as const : field.field };",
     "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
   }, {
     "label": "a visual recovery draft written to the narration",
@@ -247,9 +397,9 @@
     "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
   }, {
     "label": "the visual caret resolved as narration",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "target.field === \"visualText\" ? { key: rowId, target } : undefined",
-    "replace": "undefined",
+    "file": "src/adapters/collab/buffer-selection.ts",
+    "find": "if (field?.target.field === \"visualText\") {",
+    "replace": "if (false) {",
     "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
   }, {
     "label": "a visual cell with no visual is left to the silent repaint",

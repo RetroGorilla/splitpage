@@ -506,27 +506,64 @@ shared `tests` list. Each mutant has:
 For each mutant the script copies the repository's files (the ones git lists,
 tracked or not ignored, so no `.git` and no nested `node_modules`) into its own
 temporary folder, links the root `node_modules` rather than copying it, applies
-the one edit there, and runs the chosen unit tests through
-`tools/run-tests.mjs`. The list of copied files is written to a JSON file next
-to each copy and the test process reads it from there, because the list is too
-long for a Windows command line. If the test process cannot be started, the
-mutant is reported as an error. Your working tree is never touched. A mutant is
-**caught** when the tests fail or run past the timeout, and **survived** when
-they pass. A timed-out mutant's whole process tree is killed, and so is every running mutant's (with the scratch copies removed) when you stop the run with Ctrl+C. A mutant whose `find` text
-is missing or ambiguous, or whose `file` is outside the repository or under
-`node_modules`, is reported as an error and makes the exit code 2.
+the one edit there, and runs the chosen unit test files with `node:test`'s
+`run()` in a child process, which records every passed and failed test as it
+arrives. The child gives each file its own `run()`, at least two files at a
+time, so a file that hangs cannot hold back the results of the others. The
+test file list is written to a JSON file next to each copy and the child reads
+it from there, because the list can be too long for a Windows command line.
+Each filter in `tests` must match at least one discovered unit test file;
+one that matches none stops the run with exit code 2 before anything runs.
+Your working tree is never touched.
 
-First the script runs the unmutated copy and stops if its tests fail, because
-every mutant would then look caught. `--no-baseline` skips that run.
+Every mutant gets one verdict:
+
+| Verdict | When |
+| --- | --- |
+| **caught** | An assertion failed in the body of a named test in a chosen file. This still holds when the run times out later |
+| **survived** | Every chosen test ran and passed, and at least one ran |
+| **inconclusive** | Anything else that is not a pass: the run passed the timeout before any assertion failed, a test file failed outside its tests (a syntax or load error, or `process.exit`), a hook (`before`, `after`, `beforeEach`, `afterEach`) failed, a test failed with an error that is not an assertion, a test in a file that was not chosen failed, a test timed out, or no chosen test ran |
+| **error** | The mutant could not be applied (missing or ambiguous `find`, a `file` outside the repository or under `node_modules`) or the test process could not be started; this makes the exit code 2 |
+
+An assertion is an error whose own `code` is `ERR_ASSERTION`, which is what
+every `node:assert` failure carries. Nothing else counts: not an error merely
+named `AssertionError`, and not an error whose `cause` is an assertion, since
+the code that wrapped it decided to throw something else. A plain `Error` given
+`code: "ERR_ASSERTION"` does count, so test helpers should fail through
+`node:assert` rather than set that code by hand. The one exception is the
+Stage 1 oracle checker (`tests/collab/checker.ts`), which may load no module at
+all, `node:assert` included, and so sets the code on its mismatch itself.
+
+Tests marked `skip` or `todo` count for nothing: they are not among "every
+chosen test" above, a skipped body never runs, and a failing `todo` test does
+not fail a normal run, so its assertion is not evidence either. A file of only
+skipped tests therefore leaves the mutant inconclusive.
+
+A timed-out mutant's whole process tree is killed, and so is every running
+mutant's (with the scratch copies removed) when you stop the run with Ctrl+C.
+
+First the script runs the unmutated copy and stops with exit code 2, listing
+the failing tests, unless every chosen test passes. Its scope is every test
+file the mutants name, or every unit test when any mutant has no filter.
+`--no-baseline` skips that run.
 
 | Flag | Default |
 | --- | --- |
 | `--concurrency N` | CPU count minus one |
 | `--timeout SECONDS` | 300 per mutant |
+| `--baseline-timeout SECONDS` | The `--timeout` value |
+| `--shard K/N` | Every mutant; with it, only every Nth mutant of the combined list, starting with the Kth |
+| `--fail-on-survivor` | Survivors and inconclusive mutants exit 0; with it, either makes the exit code 1 |
 | `--keep` | Delete the scratch copies when done; this keeps them for inspection |
 
+Several files can be given at once. Their mutants are run as one list, each
+label prefixed with its file's name, with one baseline run for the list (or
+the shard).
+
 The output is a table of label, result and duration, then the line to paste
-into the review record, for example `Mutants caught: 4/6`. Each survivor needs
+into the review record, for example `Mutants caught: 4/6 (1 inconclusive)`.
+An inconclusive mutant is not evidence either way: make a test assert the
+behaviour, or record why it cannot. Each survivor needs
 either a new test or a recorded reason it was accepted. A change that cannot
 alter behavior (an *equivalent* mutant) is a valid reason. The example file
 has two: `href-blocks-data` and `href-allows-vbscript` remove a check that the

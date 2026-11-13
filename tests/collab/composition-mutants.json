@@ -1,0 +1,19 @@
+{
+  "tests": ["tests/adapters/collab/operation-families.test.ts", "tests/bootstrap/shared-author.test.ts"],
+  "mutants": [{
+    "label": "one family left out of the composition",
+    "file": "src/adapters/collab/operation-families.ts",
+    "find": "  registerSharedJoinHandlers(handle);\n",
+    "replace": ""
+  }, {
+    "label": "author ids without the replica's client number",
+    "file": "src/bootstrap/wiring/ports/shared-author.ts",
+    "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
+    "replace": "\"w_\" + String(++serial)"
+  }, {
+    "label": "author port answers in a standalone session",
+    "file": "src/bootstrap/wiring/ports/shared-author.ts",
+    "find": "by: source.name() } : null;",
+    "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
+  }]
+}

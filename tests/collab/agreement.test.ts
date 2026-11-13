@@ -64,7 +64,7 @@ function readings<Output>(reader: (replica: StatusReplica) => Output): ReplicaRe
 
 test("a reader that takes the first map entry is caught, and the message names the replica and order that differ", () => {
   assert.throws(() => assertReplicasAgree("status", readings(firstWrite)),
-    /^Error: status: replica B after D1 differs from replica A after D1 at status: "ready" against "shot"$/);
+    /^AssertionError \[ERR_ASSERTION\]: status: replica B after D1 differs from replica A after D1 at status: "ready" against "shot"$/);
 });
 
 test("a reader with an order independent of delivery agrees across orders and the late joiner", () => {

@@ -1,5 +1,5 @@
 import {
-  backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown,
+  backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown, SCENE_NAME_MAX,
   isCollapsed, isPendingHeading, joinWithPrevious, lineBreakAt, logicalText, orderedRange, pasteText, renameHeading, replaceRange,
   setMarkAcross, selectionToOwnBeat, startParagraph, stepFrom, typeWithMarks, withinOneBeat
 } from "../../core/flow/flow.ts";
@@ -16,6 +16,8 @@ import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import { createWriterBuffer } from "./flow-buffer.ts";
+import { bufferedFieldTarget, headingFieldKey } from "../../application/editing/buffered-field-key.ts";
+import { cappedText } from "../../core/document/text-policy.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
@@ -304,7 +306,9 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     keptHeads.forEach(el => { if (el.isConnected) el.remove(); });
     painting = false;
     // why: the base is what this pass showed, so it is read here; a later read could describe text nobody saw
-    if (paintedBeats) paintedBeats.record(doc.rows, row => projection(cellOf(row)));
+    if (paintedBeats) paintedBeats.record([...doc.rows.map(row => ({ id: row.id, text: projection(cellOf(row)) })),
+      ...flowOf(doc).flatMap(block => block.kind === "heading" ? [{ id: headingFieldKey(block.scene.id), text: emptyHeadings.get(block.scene.id) ?? block.scene.name }] : [])],
+    entry => entry.text);
   }
 
   function posFromDom(node: Node, offset: number): FlowPos | null {
@@ -477,7 +481,14 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     else root.focus({ preventScroll: true });
   }
 
+  function endsHold(): boolean {
+    // why: a write aimed at a held empty heading would land on the name the person did not see; it only ends the hold
+    if (!buffered?.held()) return false;
+    buffered.finish(); return true;
+  }
+
   function apply(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null, focus = true): FlowOutcome {
+    if (endsHold()) return null;
     const outcome = ports.commit(name, operation, before ?? selection());
     if (!outcome) return null;
     if ("refused" in outcome) { ports.notice(outcome.refused); return outcome; }
@@ -939,12 +950,12 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     const ctrl = event.ctrlKey || event.metaKey;
     if (ctrl && !event.altKey && (key === "z" || key === "Z")) {
       event.preventDefault();
-      ports.undo(event.shiftKey ? "redo" : "undo");
+      if (!endsHold()) ports.undo(event.shiftKey ? "redo" : "undo");
       return;
     }
     if (ctrl && !event.altKey && (key === "y" || key === "Y")) {
       event.preventDefault();
-      ports.undo("redo");
+      if (!endsHold()) ports.undo("redo");
       return;
     }
     if (ctrl && !event.altKey && (key === "f" || key === "F")) {
@@ -1259,6 +1270,12 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     return problems;
   }
 
+  function sceneOf(sceneId: string): { readonly name: string } | null {
+    const doc = ports.doc();
+    for (const block of flowOf(doc)) if (block.kind === "heading" && block.scene.id === sceneId) return { name: block.scene.name };
+    return null;
+  }
+
   const buffered = ports.bufferedText ? createWriterBuffer(ports.bufferedText, {
     root, base: rowId => paintedBeats?.base(rowId) ?? null,
     painted: rowId => paintedBeats?.text(rowId),
@@ -1267,6 +1284,12 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       repairOrphans(focus?.closest<HTMLElement>(".wr-beat") ?? null);
     },
     reset: rowId => {
+      const heading = bufferedFieldTarget(rowId);
+      if (heading?.field === "heading") {
+        const el = headingEl(heading.owner), scene = sceneOf(heading.owner);
+        if (el && scene) { el.textContent = scene.name; paintedBeats?.field(rowId, scene.name); }
+        return;
+      }
       const el = beatEl(rowId), row = ports.doc().rows.find(row => row.id === rowId);
       if (!el) return;
       if (!row) { el.remove(); return; }
@@ -1275,14 +1298,19 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       decorate(el, row, el.getAttribute("data-num") ?? "");
       paintedBeats?.field(rowId, projection(runs));
     },
-    runs: beat => ports.decode(ports.storedHtml(beat.innerHTML.replace(ZWSP_ALL, ""))),
+    runs: beat => beat.classList.contains("wr-heading") ? [{ text: (beat.textContent ?? "").replace(ZWSP_ALL, ""), marks: {} }]
+      : ports.decode(ports.storedHtml(beat.innerHTML.replace(ZWSP_ALL, ""))),
     selection: () => selection(true), repaint: rowId => {
       const el = beatEl(rowId); if (el) rendered.delete(el);
       repaint();
     },
+    unsettled: (key, text) => bufferedFieldTarget(key)?.field !== "heading" ? null
+      : !cappedText(text, SCENE_NAME_MAX) ? { reason: "buffer-heading-empty", hold: true }
+        : Array.from(text).length > SCENE_NAME_MAX ? { reason: "buffer-heading-length", hold: false } : null,
     composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (rowId, offsets) => {
-      const exists = ports.doc().rows.some(row => row.id === rowId);
+      const heading = bufferedFieldTarget(rowId);
+      const exists = heading?.field === "heading" ? sceneOf(heading.owner) !== null : ports.doc().rows.some(row => row.id === rowId);
       if (offsets) place(offsets);
       else if (!exists) {
         const first = ports.doc().rows[0];
@@ -1291,10 +1319,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     },
     changed: ports.changed
   }) : null;
-  const ready = (event: Event): boolean => {
-    if (!buffered || buffered.finish()) return true;
-    event.preventDefault(); return false;
-  };
+  const ready = (event: Event): boolean => !buffered || buffered.settledFor(event);
   const clipboardActions = {
     copy: buffered ? (event: ClipboardEvent) => {
       if (composing) {
@@ -1330,7 +1355,8 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
         return;
       }
       buffered.keydown(key);
-      if (ready(event)) onKeydown(key);
+      // why: a held empty heading ends on what the key does (input, command, selection, focus), never on the keydown
+      if (buffered.held() || ready(event)) onKeydown(key);
     } : onKeydown as EventListener],
     ...ports.clipboard ? [] : [
       [root, "copy", clipboardActions.copy as EventListener] as [EventTarget, string, EventListener],
@@ -1340,11 +1366,14 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
     [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
     [root, "mousedown", onMouseDown],
-    [root, "focusout", buffered ? event => { if (!composing && ready(event)) onHostBlur(event); } : onHostBlur],
+    [root, "focusout", buffered ? event => { if (!composing && buffered.finish()) onHostBlur(event); } : onHostBlur],
     ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
       [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
-    [window, "mouseup", onMouseUp],
-    [document, "selectionchange", buffered ? () => { if (!buffered.dirty()) onSelectionChange(); } : onSelectionChange]
+    [window, "mouseup", buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp],
+    [document, "selectionchange", buffered ? () => {
+      if (buffered.held()) buffered.moved(selection(true));
+      if (!buffered.dirty()) onSelectionChange();
+    } : onSelectionChange]
   ];
   const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
     [target, name, event => { buffered.native(event, () => handler(event)); }]) : listeners;

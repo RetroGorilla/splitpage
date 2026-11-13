@@ -56,7 +56,7 @@ const BRIDGE_FUNCTION = {
 const VIEW_PORT_USERS = {
   "bootstrap/wiring/broll.ts": 1,
   "bootstrap/wiring/desktop-owners.ts": 2,
-  "bootstrap/wiring/document-identity.ts": 2,
+  "bootstrap/wiring/document-identity.ts": 3,
   "bootstrap/wiring/panels.ts": 4,
   "bootstrap/wiring/ports/document-identity.ts": 2,
   "bootstrap/wiring/ports/person-colors.ts": 2,
