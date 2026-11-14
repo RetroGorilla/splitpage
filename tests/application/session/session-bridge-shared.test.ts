@@ -16,7 +16,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import {
   adoptReplacement, adoptShared, currentCapabilities, currentDocument, heldDocument, liveSession, onDocumentReplaced,
-  onSessionChange, runCommand, sharedSession, standaloneSession, startSessionBridge
+  onSessionChange, runCommand, sharedRecoverySession, sharedSession, standaloneSession, startSessionBridge
 } from "../../../src/bootstrap/wiring/session-owner.ts";
 import type { SharedOwnerPorts } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -119,6 +119,25 @@ function hydrated(made: Bridge): Entered {
 }
 
 const counters = (): SessionCounters => ({ epoch: liveSession().epoch(), generation: liveSession().generation() });
+
+test("C9: the read-only recovery accessor is null before start, in standalone and after stop, and follows the shared owner", () => {
+  assert.equal(sharedRecoverySession(), null);
+  const made = start();
+  try {
+    assert.equal(sharedRecoverySession(), null);
+    const entered = hydrated(made), reader = sharedRecoverySession();
+    assert.equal(reader, entered.owner()); assert.deepEqual(reader?.recovery(), []);
+    let heard = 0;
+    const off = reader?.subscribe(() => { heard++; });
+    entered.replica.write("remote", projection("Changed"));
+    assert.equal(heard, 1); off?.();
+    entered.replica.write("remote", projection("Changed again")); assert.equal(heard, 1);
+    adoptReplacement(migrateRows(projection("Left"), made.migration.ports), capabilities("standalone"));
+    assert.equal(sharedRecoverySession(), null);
+    const next = hydrated(made); assert.equal(sharedRecoverySession(), next.owner()); assert.notEqual(sharedRecoverySession(), reader);
+  } finally { made.stop(); }
+  assert.equal(sharedRecoverySession(), null);
+});
 
 test("D3, D37: entering builds the shared owner with the old owner's counters and the captured shared capabilities, then hydration opens a new epoch the app hears", () => {
   const made = start();

@@ -369,6 +369,10 @@ export function sharedSession(): boolean {
   return started !== null && started.current.kind === "shared";
 }
 
+export function sharedRecoverySession(): Pick<SharedDocumentSession, "recovery" | "subscribe"> | null {
+  return started?.current.kind === "shared" ? started.current.session : null;
+}
+
 // why: The shared session hands its projection to readers typed as a view; keeping the entry's own result gives
 // the app's readers that same object, and only the core entry may make a validated document.
 function ownerDocument(): ValidatedDocument | null {

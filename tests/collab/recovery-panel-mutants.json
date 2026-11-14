@@ -1,0 +1,11 @@
+{
+  "mutants": [
+    {
+      "label": "recovery bridge hides the running shared reader",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "return started?.current.kind === \"shared\" ? started.current.session : null;",
+      "replace": "return null;",
+      "tests": ["tests/application/session/session-bridge-shared.test.ts"]
+    }
+  ]
+}
