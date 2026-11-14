@@ -275,7 +275,17 @@ for (const field of ["audioText", "visualText"]) test(`C7 composed ${field}: a n
     cell.blur();
     agree(f, [["r1", field === "audioText" ? "Word " : "Word", field === "visualText" ? "Word " : "Word"], ["r2", "Other", "Wide"]]);
     assert.deepEqual(f.parts.undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
+    select(cell, 5);
   } finally { f.close(); }
+  const cold = cellOf(field);
+  assert.deepEqual(points(cold), [5, 5]);
+  select(cold, 0, 5);
+  const copied = {}, event = new window.Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { setData: (format, text) => { copied[format] = text; } } });
+  cold.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(currentDocument().rows[0][field], "Word ");
+  assert.deepEqual(copied, { "text/html": "Word ", "text/plain": "Word " });
 });
 
 test("C7 lifecycle: failed entry releases the real binding and restores the kept standalone document and handlers", async () => {

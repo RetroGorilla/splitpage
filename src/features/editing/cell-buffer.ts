@@ -5,7 +5,7 @@ import { beatPos } from "../../core/flow/flow.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
-import { domToPos, posToDom, placeSelection, paintTrailingCellSpaces, clearTrailingCellSpaces } from "../common/cell-dom.ts";
+import { domToPos, posToDom, placeSelection, paintTrailingCellSpaces, clearTrailingCellSpaces, readSharedCellSpaceForm } from "../common/cell-dom.ts";
 import { cssAttr } from "../common/dom.ts";
 import type { CellBufferPorts } from "./ports.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
@@ -127,6 +127,14 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     return anchor && head ? { anchor, head, affinity: "backward" } : null;
   }
   function selectionChanged(): void { retained = capture(); }
+  function place(cell: HTMLElement, end: HTMLElement, anchor: number, head: number, affinity: CellPoints["affinity"]): void {
+    const selection = root.ownerDocument.getSelection();
+    if (cell === end) placeSelection(cell, selection, { anchor, head, affinity });
+    else {
+      const a = posToDom(cell, anchor), h = posToDom(end, head);
+      try { selection?.setBaseAndExtent(a.node, a.offset, h.node, h.offset); } catch {}
+    }
+  }
   function painted(): void {
     if (!caret) return;
     const snapshot = caret.selection.snapshot();
@@ -158,12 +166,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
       const cell = cellOf(anchor.key), end = cellOf(head.key), active = root.ownerDocument.activeElement;
       if (!cell || !end || active !== root.ownerDocument.body && !root.contains(active)) return;
       cell.focus({ preventScroll: true });
-      const selection = root.ownerDocument.getSelection();
-      if (cell === end) placeSelection(cell, selection, { anchor: anchor.offset, head: head.offset, affinity: previous.affinity });
-      else {
-        const a = posToDom(cell, anchor.offset), h = posToDom(end, head.offset);
-        try { selection?.setBaseAndExtent(a.node, a.offset, h.node, h.offset); } catch {}
-      }
+      place(cell, end, anchor.offset, head.offset, previous.affinity);
       focus();
       retained = capture();
     });
@@ -244,13 +247,23 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     dispose: () => {
       if (!open) return true;
       if (!ports.shown(() => binding.dispose())) return false;
+      const selection = caret ? capture() : null, forms = spaceForms;
       open = false;
       spaceForms = null;
       stopPainted(); stopCheck();
       for (const type of TYPES) root.removeEventListener(type, listener, true);
       root.removeEventListener("focusin", focus);
       root.ownerDocument.removeEventListener("selectionchange", selectionChanged);
-      for (const cell of root.querySelectorAll(CELLS)) clearTrailingCellSpaces(cell);
+      for (const cell of root.querySelectorAll(CELLS)) {
+        const stored = forms?.get(cell)?.text;
+        const restored = stored === undefined ? null : readSharedCellSpaceForm(cell, stored);
+        if (restored && restored.html !== cell.innerHTML) ports.page.write(cell, restored.html);
+        else clearTrailingCellSpaces(cell);
+      }
+      if (selection) {
+        const cell = cellOf(selection.anchor.key), end = cellOf(selection.head.key);
+        if (cell && end) place(cell, end, selection.anchor.offset, selection.head.offset, selection.affinity);
+      }
       ports.painted.clear();
       return true;
     }

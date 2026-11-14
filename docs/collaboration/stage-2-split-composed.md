@@ -8,6 +8,14 @@ same parts after that refusal does not mount twice. Failed entry releases the
 binding and restores the kept standalone document and cold handlers. The switch
 itself is unchanged.
 
+Before disposal forgets its stored space forms, it restores known native
+nonbreaking stand-ins to their stored characters in the live DOM and removes
+display spans. Otherwise a plain space typed just before leaving can escape
+through a later standalone HTML copy as U+00A0. Both selection endpoints survive
+that cleanup, including endpoints in different cells; it reuses the same DOM
+placement as repaint. Stored U+00A0 remains U+00A0. No cold handler is changed
+to recognize shared paint.
+
 The composed entry supplies
 `commandRefused: sharedCommandRefusalNotice(notices)` through the hook cut's
 named switch port. That reports commands without a shared form once and marks
@@ -38,6 +46,9 @@ The literals cover keyboard undo/redo, idle repeated-character carets in both
 columns, typing at a direction's closing edge, compositions holding a remote
 update, refused finish/dispose, re-entry, entry rollback and cold typing,
 formatting, render tracking and composition after leave.
+The native-terminal-space cases copy after leaving and require plain-space
+HTML and text payloads. Four disposal literals cover two-cell selections in
+both directions and both columns, with two replicas and an encoded late joiner.
 
 The ordinary typing helper uses the native sequence recorded in
 [the Split caret record](stage-2-split-caret.md#trailing-space-native-edge-recording):
