@@ -351,6 +351,28 @@ Declared limits, each pinned by a literal in
   narration takes typing. A beat split off now has its own empty visual, so the
   first key in its visual cell commits like any other.
 
+Setting a beat's visual through the flow (`setVisualForRange`) is the same edit
+as selecting the whole visual cell and typing the new text, pinned by literals
+in `tests/adapters/collab/visual-set.test.ts`:
+
+- An empty visual gets one text insert. A non-empty one gets a text insert of
+  the new text before the old and a text delete of the old text, in one list,
+  so it is one command and one undo step. A set that leaves the visual as it was
+  emits nothing.
+- Marks follow the cell binding: the deleted characters take their bold,
+  comments, tags and links with them, and the inserted text carries the marks of
+  the set HTML. Undo restores the old characters with their marks; typing
+  another writer added meanwhile stays.
+- A beat removed concurrently keeps the new visual in recovery. Undoing the set
+  there is refused with `missing-target`, as narration typing in a removed beat
+  is, and works again after the restore.
+
+By reading, not by literal: a beat without a visual record (the legacy case
+above) has nothing to insert into, so the command is refused with
+`missing-target` and writes nothing; and a B-roll line, `@Name` or `SFX:` in the
+new text creates no records, as with typing, because the set emits only text
+operations.
+
 ## Scene headings in the Writer
 
 A buffered field is named by a key: a narration field by its row id, a visual
