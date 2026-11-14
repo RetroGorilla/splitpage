@@ -126,8 +126,41 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters, number
 
 const replacedListeners: Array<() => void> = [];
 
+let replacementErrors: unknown[] | null = null;
+
 function announceReplaced(): void {
-  for (const listener of replacedListeners.slice()) listener();
+  const sink = replacementErrors;
+  if (!sink) {
+    for (const listener of replacedListeners.slice()) listener();
+    return;
+  }
+  for (const listener of replacedListeners.slice()) {
+    try { listener(); } catch (error) { sink.push(error); }
+  }
+}
+
+export function collectReplacementErrors<T>(errors: unknown[], run: () => T): T {
+  const outer = replacementErrors;
+  replacementErrors = errors;
+  try { return run(); } finally { replacementErrors = outer; }
+}
+
+export interface OwnerSwap {
+  readonly commit: () => void;
+  readonly restore: () => void;
+}
+
+let commandHold: string | null = null;
+
+export function holdSessionCommands(reason: string): () => void {
+  const outer = commandHold;
+  commandHold = reason;
+  let open = true;
+  return function () {
+    if (!open) return;
+    open = false;
+    commandHold = outer;
+  };
 }
 
 export function onDocumentReplaced(listener: () => void): () => void {
@@ -199,7 +232,7 @@ const session: DocumentSession = {
   absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return standalone("absorbMerged").absorbMerged(kind, unwrapped(merged)); },
   absorbReload: function (content: ReloadedContent) { return standalone("absorbReload").absorbReload(unwrapped(content)); },
   settle: function (kind: AbsorbedKind) { standalone("settle").settle(kind); },
-  run: function (command: Command) { return swept(owner().run(command)); },
+  run: function (command: Command) { return commandHold ? { kind: "rejected", reason: commandHold } : swept(owner().run(command)); },
   replay: function (task: Replay) { return refusedWhileShared("replay") ?? swept(standalone("replay").replay(task)); },
   amend: function (task: Replay) { return refusedWhileShared("amend") ?? swept(standalone("amend").amend(task)); },
   stamp: function (task: Stamp) { return refusedWhileShared("stamp") ?? swept(standalone("stamp").stamp(task)); },
@@ -269,11 +302,20 @@ export function adoptReplacement(doc: ValidatedDocument, capability?: Capability
   announceReplaced();
 }
 
-export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSession, capability: CapabilityPort): void {
+function swapBack(now: Started, previous: Owner, previousCapability: CapabilityPort, replaced: CommonDocumentSession): () => void {
+  return function () {
+    if (now.current.session !== replaced) return;
+    now.current = previous;
+    now.capability = previousCapability;
+    try { replaced.dispose(); } finally { announceReplaced(); }
+  };
+}
+
+export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSession, capability: CapabilityPort): OwnerSwap {
   const now = running();
   if (now.ended) throw new Error("The document session has ended");
   if (now.current.kind === "shared") throw new Error("The document session is shared already");
-  const old = now.current.session;
+  const previous = now.current, previousCapability = now.capability, old = previous.session;
   const nextCapability = captureSessionCapabilities(capability);
   const entered = new WeakMap<object, ValidatedDocument>();
   const made = build({
@@ -294,8 +336,28 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
   changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
   now.current = { kind: "shared", session: made, entered: entered };
   now.capability = nextCapability;
-  old.dispose();
   announceReplaced();
+  return { commit: () => { if (now.current.session === made) old.dispose(); }, restore: swapBack(now, previous, previousCapability, made) };
+}
+
+export function landStandalone(doc: ValidatedDocument, capability: CapabilityPort): OwnerSwap {
+  const now = running();
+  if (now.current.kind !== "shared") throw new Error("Only a shared session lands a standalone copy");
+  const previous = now.current, previousCapability = now.capability, old = previous.session;
+  const nextCapability = captureSessionCapabilities(capability);
+  const next = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() }, now.numbering, nextCapability);
+  now.current = { kind: "standalone", session: next };
+  now.capability = nextCapability;
+  try {
+    next.adopt(unwrapped(doc));
+  } catch (error) {
+    now.current = previous;
+    now.capability = previousCapability;
+    next.dispose();
+    throw error;
+  }
+  announceReplaced();
+  return { commit: () => { if (now.current.session === next) old.dispose(); }, restore: swapBack(now, previous, previousCapability, next) };
 }
 
 export function sharedSession(): boolean {

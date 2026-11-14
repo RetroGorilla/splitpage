@@ -301,6 +301,39 @@ Found in the review of #1567 (C4):
     restart, migrates it, silences the author, swaps the owner, and only then
     clears the route and destroys the handle. A failure before the landing puts
     the shared bindings back and leaves a shared session that can be left again.
+- **The switch's fault model** (second review of #1567). This is the bar, and
+  nothing wider:
+  - **A. Single fault.** Any one port call, or any one listener or callback run
+    during a step, throws once. Then exactly one session is current and whole
+    (standalone on the kept document, or shared and working), and Ctrl+Z reaches
+    that session's owner. The other session's handle, replica, route, bindings and
+    listeners are gone, the original error is reported, and entering or leaving can
+    be called again and works.
+  - **B. A further fault while unwinding** (a rollback step, a cleanup step or
+    `report` itself throws). Then the user's document is not lost (the kept copy or
+    the projection is the current standalone document, or the shared session still
+    holds it and can be left), every remaining cleanup step is still attempted, and
+    the first error is reported first. Leftovers are accepted, and named:
+    - an undisposed shared session when its `dispose` throws during a restore or
+      a commit;
+    - an undisposed replica when its `dispose` throws;
+    - Yjs observers on a handle whose destroy listener throws on both attempts;
+    - errors after the first left unreported when `report` throws.
+  - **C.** Nothing is accepted between the capture of a document and its landing.
+    A command or an undo issued in that window is refused as `session-switching`.
+- **How the switch meets it.**
+  - Callbacks are not steps: replacement listeners run inside
+    `collectReplacementErrors`, and their errors are reported once the state is
+    consistent.
+  - Entering prepares before it changes anything: it holds commands, copies the
+    kept document, migrates the hydration copy and allocates the handle.
+  - Both replacements are two-phase (`OwnerSwap`): the previous owner stays alive
+    until `commit`. A failed entry `restore`s the kept standalone owner itself,
+    which changes no document and runs no migration, and re-tracks the standalone
+    undo owner.
+  - Leaving reports success only when the landed standalone document equals the
+    captured copy; otherwise it restores the shared owner.
+  - Cleanup is a list of guarded steps, and destroying a handle is tried twice.
 - **The cut that supplies the real ports (the hook).** Detaching cancels pending
   draft and autosave timers, a late save completion cannot land in the shared
   session, and the source draft survives entering and leaving untouched (rule 76).

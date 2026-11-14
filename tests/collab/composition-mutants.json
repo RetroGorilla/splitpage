@@ -348,37 +348,37 @@
     {
       "label": "leaving clears the author only after the owner swap",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  now.live(false);\n  try {\n    adoptReplacement(landed, ports.standalone);\n",
-      "replace": "  try {\n    adoptReplacement(landed, ports.standalone);\n    now.live(false);\n"
+      "find": "  now.live(false);\n  let swap: OwnerSwap;\n",
+      "replace": "  let swap: OwnerSwap;\n"
     },
     {
       "label": "entry unwinding leaves the bridge shared",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  if (sharedSession()) attempt(errors, () => { adoptReplacement(ports.migrate(entering.kept), ports.standalone); });\n",
+      "find": "    if (made.swap) { const swap = made.swap; faults.attempt(() => { collectReplacementErrors(faults.errors, swap.restore); }); }\n",
       "replace": ""
     },
     {
       "label": "entry unwinding keeps the undo route",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  entering.stopRoute?.();\n",
+      "find": "    if (made.stopRoute) faults.attempt(made.stopRoute);\n",
       "replace": ""
     },
     {
       "label": "entry unwinding leaves the shared bindings on",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  if (entering.bound) attempt(errors, () => { ports.bindings.leave(); });\n",
+      "find": "    if (made.bound) faults.attempt(() => { ports.bindings.leave(); });\n",
       "replace": ""
     },
     {
       "label": "entry unwinding forgets the merge base",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  attempt(errors, () => { holdMergeBase(entering.base); });\n",
+      "find": "    faults.attempt(() => { holdMergeBase(base); });\n",
       "replace": ""
     },
     {
       "label": "failed leaving leaves the bindings off",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  attempt(errors, () => { ports.bindings.enter(now.parts); });\n",
+      "find": "    faults.attempt(() => { ports.bindings.enter(now.parts); });\n",
       "replace": ""
     },
     {
@@ -390,14 +390,56 @@
     {
       "label": "the undo route arrives only after the shared owner is seen",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    entering.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    adoptShared(owner => {\n      made.session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      return made.session;\n    }, createSessionCapabilities(\"shared\", ports.common));\n",
-      "replace": "    adoptShared(owner => {\n      made.session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      return made.session;\n    }, createSessionCapabilities(\"shared\", ports.common));\n    entering.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
+      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
+      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
     },
     {
       "label": "the standalone undo reset runs after the bindings",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    undoOwner().adopt(null);\n    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n",
-      "replace": "    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n    undoOwner().adopt(null);\n"
+      "find": "    undoOwner().adopt(null);\n    holdMergeBase(null);\n    made.bound = true;\n    ports.bindings.enter(parts);\n",
+      "replace": "    holdMergeBase(null);\n    made.bound = true;\n    ports.bindings.enter(parts);\n    undoOwner().adopt(null);\n"
+    },
+    {
+      "label": "a failed entry leaves the restored standalone undo untracked",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    faults.attempt(() => { undoOwner().track(); });\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding keeps the shared handle",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    destroy(faults, handle);\n    releaseCommands();\n",
+      "replace": "    releaseCommands();\n"
+    },
+    {
+      "label": "a throwing destroy listener keeps the handle's observers",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (!faults.attempt(() => { destroySharedDocument(handle); })) faults.attempt(() => { destroySharedDocument(handle); });",
+      "replace": "  faults.attempt(() => { destroySharedDocument(handle); });"
+    },
+    {
+      "label": "leaving accepts commands between the capture and the landing",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  holds.session = now.parts.session.hold(SHARED_SWITCHING);\n  holds.commands = holdSessionCommands(SHARED_SWITCHING);\n",
+      "replace": "  holds.session = () => {};\n  holds.commands = () => {};\n"
+    },
+    {
+      "label": "entering accepts commands between the capture and the landing",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  const releaseCommands = holdSessionCommands(SHARED_SWITCHING);\n  const prepared",
+      "replace": "  const releaseCommands = (): void => {};\n  const prepared"
+    },
+    {
+      "label": "a listener's failure aborts entering",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(",
+      "replace": "    made.swap = ((errors: unknown[], run: () => OwnerSwap) => run())(faults.errors, () => adoptShared("
+    },
+    {
+      "label": "a later failure is reported before the first",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    faults.errors.unshift(error);\n    running = null;\n",
+      "replace": "    faults.errors.push(error);\n    running = null;\n"
     }
   ]
 }
