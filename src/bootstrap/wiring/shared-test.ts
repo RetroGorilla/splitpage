@@ -89,6 +89,7 @@ export function mountSharedSessionFeature(): void {
       },
       peer: {
         type: (rowId: string, offset: number, text: string) => peer?.type(rowId, offset, text),
+        remove: (rowId: string) => peer?.remove(rowId),
         hold: () => { peer?.hold(); },
         deliver: (order?: "forward" | "reverse" | "duplicate") => peer?.deliver(order),
         release: (order?: "forward" | "reverse" | "duplicate") => peer?.release(order)

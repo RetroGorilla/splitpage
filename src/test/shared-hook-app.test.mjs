@@ -223,15 +223,35 @@ test("leaving shared mode keeps desktop draft sequence numbers increasing for th
   }
 });
 
-test("the composed recovery panel binding offers the Recovery action only while shared and closes its panel on leave", async () => {
-  script();
+test("the composed recovery panel binding offers the Recovery action only while shared, restores and discards a peer's removal, and closes on leave", async () => {
+  script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "Removed words", visualText: "" }]);
   assert.equal(appActions.has("recovery"), false);
   assert.deepEqual(await hook.enter(), { ok: true });
   try {
     assert.equal(appActions.has("recovery"), true);
     assert.deepEqual([appActions.view("recovery")?.enabled, appActions.view("recovery")?.visible], [true, true]);
     appActions.invoke("recovery", "command-menu");
-    assert.ok(document.getElementById("shared-recovery-panel"));
+    const panel = () => document.getElementById("shared-recovery-panel");
+    assert.equal(panel()?.textContent.includes("Nothing in recovery."), true);
+    const ids = () => hook.read().app.rows.map(row => row.id);
+    const card = () => panel()?.querySelector('[data-recovery-kind="removed-beat"]');
+    const press = label => Array.from(card()?.querySelectorAll("button") ?? []).find(button => button.textContent === label)?.click();
+    assert.equal(hook.peer.remove("r2"), "applied");
+    hook.peer.deliver();
+    assert.deepEqual(ids(), ["r1"]);
+    assert.ok(card()?.querySelector("pre").textContent.includes("Removed words"));
+    press("Restore");
+    hook.peer.deliver();
+    assert.deepEqual(ids(), ["r1", "r2"]);
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    assert.equal(card(), null);
+    assert.equal(hook.peer.remove("r2"), "applied");
+    hook.peer.deliver();
+    press("Discard");
+    hook.peer.deliver();
+    assert.equal(card(), null);
+    assert.deepEqual(ids(), ["r1"]);
+    assert.deepEqual(hook.read().app, hook.read().peer);
     assert.deepEqual(hook.leave(), { ok: true });
     assert.equal(appActions.has("recovery"), false);
     assert.equal(document.getElementById("shared-recovery-panel"), null);

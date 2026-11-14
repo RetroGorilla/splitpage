@@ -9,6 +9,8 @@ import { enterSharedDocument } from "../../core/migrate.ts";
 import type { SharedSwitchPorts, SharedSessionParts } from "./shared-session.ts";
 import { sharedAuthorPort } from "./ports/shared-author.ts";
 import { sharedBufferPorts } from "./ports/shared-buffer.ts";
+import { sharedStructurePorts } from "./ports/shared-values.ts";
+import { deleteBeatCommand } from "../../application/commands/rows.ts";
 import { productionReaders } from "../document-ports.ts";
 import { sessionStamps } from "./session-owner.ts";
 
@@ -27,6 +29,8 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     const next = author.next(); if (!next) throw new Error("The peer has left"); return next;
   }, readers: productionReaders, stamps: { clock: sessionStamps.clock, editor: { name: () => "Peer" } },
   missingBase: () => {}, recovered: () => {}, report: ports.report });
+  const structure = sharedStructurePorts({ handle: () => live ? handle : null, author: () => author.next(),
+    stamps: { clock: sessionStamps.clock, editor: { name: () => "Peer" } }, cells: html => ports.structure.cells(html) });
   const pending: { readonly side: "app" | "peer"; readonly update: Uint8Array }[] = [];
   const enqueue = (side: "app" | "peer", update: Uint8Array): void => {
     if (!live) return;
@@ -67,6 +71,10 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
       edit.replace(offset, offset, insert);
       try { return edit.commit([{ text: edit.text(), marks: {} }], [offset + insert.length, offset + insert.length]); }
       finally { if (edit.isOpen()) edit.cancel(); }
+    },
+    remove: (rowId: string) => {
+      if (!live) throw new Error("The peer has left");
+      return session.run(deleteBeatCommand(rowId, structure() ?? undefined)).kind;
     },
     deliver,
     hold: () => { paused = true; },
