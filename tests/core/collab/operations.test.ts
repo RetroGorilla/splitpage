@@ -8,7 +8,7 @@ const validators = [readers.readTextInsert, readers.readTextDelete, readers.read
   readers.readBeatSplit, readers.readBeatJoin, readers.readJoinGlue, readers.readSoftRemove, readers.readRestore,
   readers.readSegmentMove, readers.readHeadingCreate, readers.readHeadingFinalize, readers.readHeadingRemove,
   readers.readRecordCreate, readers.readRecordSet, readers.readRecordDelete, readers.readScalarSet, readers.readSharedStatusEvent, readers.readBeatSplitBefore,
-  readers.readTextRestore, readers.readMarkRetract, readers.readStatusRetire];
+  readers.readTextRestore, readers.readMarkRetract, readers.readStatusRetire, readers.readRecoveryDiscard];
 
 for (const { fixture, operation } of operationExamples) {
   test(`${fixture}: accepts literal ${operation.kind} intent without positional indices`, () => {
@@ -214,5 +214,5 @@ test("seeded arbitrary values: every validator is total and agrees after a JSON 
     }
   }
   assert.ok(attempts > 30000);
-  context.diagnostic(`${attempts} JSON round-trip comparisons across 23 readers and four seeds`);
+  context.diagnostic(`${attempts} JSON round-trip comparisons across 24 readers and four seeds`);
 });
