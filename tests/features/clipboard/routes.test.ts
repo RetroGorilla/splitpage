@@ -45,6 +45,7 @@ function harness(p: ReturnType<typeof page>) {
     window: p.win,
     roots: p.roots,
     ports: {
+      sharedCell: () => false,
       scriptCell: (el) => el.classList.contains("script"),
       copy: (_e, cell, cut) => { calls.push((cut ? "cut:" : "copy:") + cell.id); return state.copied; },
       afterCut: (cell) => { calls.push("afterCut:" + cell.id); },

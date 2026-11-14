@@ -5,7 +5,7 @@ import { beatPos } from "../../core/flow/flow.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
-import { domToPos, posToDom, placeSelection, paintTrailingCellSpaces } from "../common/cell-dom.ts";
+import { domToPos, posToDom, placeSelection, paintTrailingCellSpaces, clearTrailingCellSpaces } from "../common/cell-dom.ts";
 import { cssAttr } from "../common/dom.ts";
 import type { CellBufferPorts } from "./ports.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
@@ -18,6 +18,7 @@ const FIELDS = ["audioText", "visualText"] as const;
 
 export interface CellBuffer {
   readonly binding: BufferedFieldBinding;
+  readonly spaceForm: (cell: Element) => string | null;
   readonly dispose: () => boolean;
 }
 
@@ -37,6 +38,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   const { root, ports } = mount, caret = ports.caret;
   let composing = false;
   let open = true;
+  let spaceForms: WeakMap<Element, { html: string; readonly text: string }> | null = new WeakMap();
   let kept: KeptSplitSelection | null = null;
   let retained: KeptSplitSelection | null = null;
   let fallback: { readonly key: string; readonly base: PaintedText | null } | null = null;
@@ -51,6 +53,16 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   const stored = (row: { readonly audioText?: string | null | undefined; readonly visualText?: string | null | undefined }, field: typeof FIELDS[number]) => row[field] ?? "";
   const at = (key: string, range: CellRange | null): FlowRange | null => range ? { anchor: beatPos(key, range.from), head: beatPos(key, range.to) } : null;
 
+  function rememberSpaceForm(cell: Element, html: string, rewritten = false): void {
+    if (!caret || !spaceForms) return;
+    const previous = spaceForms.get(cell);
+    if (previous?.html === html && !rewritten) return;
+    const text = previous?.html === html ? previous.text : projection(ports.decode(html));
+    if (!previous || previous.text !== text) spaceForms.set(cell, { html, text });
+    else previous.html = html;
+    paintTrailingCellSpaces(cell);
+  }
+
   function shown(key: string) {
     const { rowId, field } = readBufferedFieldKey(key), cell = cellOf(key), row = shownRow(rowId);
     return cell && row ? { cell, row, field, html: stored(row, field) } : null;
@@ -60,7 +72,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     const found = shown(key);
     if (!found) return;
     ports.page.write(found.cell, found.html);
-    if (caret) paintTrailingCellSpaces(found.cell, projection(ports.decode(found.html)));
+    rememberSpaceForm(found.cell, found.html, true);
     ports.notePainted(found.cell, found.field, found.row);
     ports.painted.field(key, projection(ports.decode(found.html)));
   }
@@ -69,8 +81,9 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     const found = shown(key);
     if (found) {
       const painted = ports.decode(found.html), text = projection(painted), current = alignSpaceForm(runs(found.cell), text);
-      if (!current || toHtml(current) !== toHtml(painted)) ports.page.write(found.cell, found.html);
-      if (caret) paintTrailingCellSpaces(found.cell, text);
+      const rewritten = !current || toHtml(current) !== toHtml(painted);
+      if (rewritten) ports.page.write(found.cell, found.html);
+      rememberSpaceForm(found.cell, found.html, rewritten);
       ports.notePainted(found.cell, found.field, found.row);
       ports.painted.field(key, text);
     }
@@ -82,7 +95,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     if (!doc) { ports.painted.clear(); return; }
     const painted = doc.rows.flatMap(row => FIELDS.flatMap(field => {
       const id = bufferedFieldKey(row.id, field), cell = cellOf(id);
-      if (caret && cell) paintTrailingCellSpaces(cell, projection(ports.decode(stored(row, field))));
+      if (cell && ports.paintedFrom(cell, field, row)) rememberSpaceForm(cell, stored(row, field));
       return cell !== null && ports.paintedFrom(cell, field, row) ? [{ id, html: stored(row, field) }] : [];
     }));
     ports.painted.record(painted, entry => projection(ports.decode(entry.html)));
@@ -227,13 +240,17 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   focus();
   return {
     binding,
+    spaceForm: cell => spaceForms?.get(cell)?.text ?? null,
     dispose: () => {
+      if (!open) return true;
       if (!ports.shown(() => binding.dispose())) return false;
       open = false;
+      spaceForms = null;
       stopPainted(); stopCheck();
       for (const type of TYPES) root.removeEventListener(type, listener, true);
       root.removeEventListener("focusin", focus);
       root.ownerDocument.removeEventListener("selectionchange", selectionChanged);
+      for (const cell of root.querySelectorAll(CELLS)) clearTrailingCellSpaces(cell);
       ports.painted.clear();
       return true;
     }

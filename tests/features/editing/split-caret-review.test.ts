@@ -9,6 +9,7 @@ import { projection } from "../../../src/core/text/runs.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { fakePictures } from "../fakes.ts";
 import { mountClipboardRoutes } from "../../../src/features/clipboard/routes.ts";
+import { mountRowRoutes } from "../../../src/features/rows/routes.ts";
 
 for (const backward of [false, true]) {
   test(`rule 89 review: both selection ends survive split, two remote repaints and a full repaint, backward ${backward}`, () => {
@@ -57,6 +58,7 @@ for (const field of ["audioText", "visualText"] as const) for (const action of [
       const cut = action === "cut";
       const outcomes: unknown[] = [];
       const owner = startCellClipboard({
+        sharedSpaceForm: p.buffer.spaceForm,
         document: { read: read => p.a.session.read(read) },
         edits: { run: command => { const result = p.a.session.run(command); outcomes.push(result); return result; },
           text: { cells: fromHtml, clock: { nowIso: () => "2026-11-14T00:00:00.000Z" }, editor: { name: () => "Alice" } } },
@@ -70,9 +72,17 @@ for (const field of ["audioText", "visualText"] as const) for (const action of [
         paintGuard: { whileShown: edit => edit() }, brollSeed: () => ({ audioRef: "", location: "" })
       });
       const routes = mountClipboardRoutes({ window, roots: [p.root], ports: {
+        sharedCell: cell => p.buffer.spaceForm(cell) !== null,
         scriptCell: () => true, copy: copyFromCell, afterCut: () => {}, pasteBeats: () => false, pasteDraft: () => {},
         hasMedia: () => false, readMedia: async () => null, capture: () => null, stillOwns: () => true, notAdded: () => {},
         refused: () => {}, placeOf: () => null, restorePlace: () => {}, findCell: () => null, insertNow: () => {}
+      } });
+      const rowRoutes = mountRowRoutes({ window, rows: p.root, ports: {
+        mac: false, scriptCell: () => true, cellDragStart: routes.dragStart, openLink: () => {},
+        dragging: () => null, setDragging: () => {}, clearMarkers: () => {}, markDrop: () => {},
+        scroll: () => {}, stopScroll: () => {}, move: () => {}, add: () => {}, moveBy: () => {},
+        toggleMenu: () => {}, armDelete: () => {}, cycleStatus: () => {}, expandHidden: () => {},
+        reveal: () => {}, gone: () => {}
       } });
       try {
         if (scenario.typed) assert.equal(p.type(field, 4, 4, " "), true);
@@ -93,7 +103,7 @@ for (const field of ["audioText", "visualText"] as const) for (const action of [
         for (const handle of [p.h.a, p.h.b, p.h.c]) assert.deepEqual(projectSharedDocumentWithRecovery(handle).document.rows.map(row => projection(fromHtml(row[field] ?? ""))),
           [scenario.stored, scenario.wanted + "uvwx"]);
         assert.deepEqual([p.a.executed.length, p.reports, p.missing, p.recovered], [scenario.typed ? 1 : 0, [], [], []]);
-      } finally { routes.dispose(); owner.dispose(); p.close(); }
+      } finally { rowRoutes.dispose(); routes.dispose(); owner.dispose(); p.close(); }
     });
   }
 }

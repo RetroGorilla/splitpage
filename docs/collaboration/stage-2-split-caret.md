@@ -93,8 +93,11 @@ operates on the same plain shared character.
 
 The first paint used nonbreaking stand-ins; review found that HTML copy then
 changed their decoded characters. The marked span now preserves width without
-substituting characters. The shared-cell marker also retains the painted stored
-space form. The serializer checks that the DOM differs only in space form,
+substituting characters. The mounted Split binding keeps the painted stored
+space form in a WeakMap keyed by cell, and gives the clipboard a reader while
+mounted. It updates that form only when the cell's stored text changes, and
+skips decoding and painting a cell whose stored HTML is unchanged. The serializer
+checks that the DOM differs only in space form,
 restores those known characters in its clone, and unwraps the paint spans. This
 also handles a freshly typed native nonbreaking space before any remote repaint
 without changing the live DOM. Real stored nonbreaking spaces are preserved. Shared
@@ -102,6 +105,11 @@ text drag uses that same serializer without cancelling the drag. Copy, cut and
 drag payload literals cover plain space, real nonbreaking space, and a selection
 ending at the first of two painted spaces, plus a freshly typed space before a
 remote repaint, in both columns and both formats.
+The existing row dragstart route calls the clipboard through a named port;
+there is no second drag listener. Successful disposal disconnects the reader,
+drops the map and unwraps every painted span. A stored-text attribute is never
+written. The span marker identifies display styling to remove, and carries no
+stored text. Copy and drag after leaving match standalone on the reused cell.
 The production paste decoder feeds existing shared text operations on another
 beat, and the resulting stored characters agree on two copies and a late joiner.
 Split's cut/paste commands themselves remain refused as not shared; this cut
@@ -124,6 +132,19 @@ mapping, selection reading and space painting through full and row repaint,
 with two and fifty rows, and expects zero calls. Existing standalone typing
 cost tests remain unchanged. Writer visual buffers use their existing mapping
 and do not receive these ports.
+
+The booted space-form literals enter and leave through the real switch and
+binding. Their test fixture detaches the legacy input, focus and composition
+handlers and standalone undo tracking while shared: those callers are C7's
+pending composition work. With two and fifty rows, a key updates only the typed
+cell's stored form. The standalone repaint spy also enters and leaves, checks
+that every marker and span is gone, and again expects zero shared paint work.
+
+Production `afterThisPaint` runs synchronously at the end of the outer paint
+guard. Each shared delivery's row paints finish that guard before the next
+delivery can run; the rows and screen notifications of a full paint share one
+document revision. The test-only deferred queue spanning two separate remote
+paints does not describe that production scheduling. This cut leaves it out.
 
 The clipboard correction has a literal in the existing shared-undo surfaces
 table: append `x` to `Scene`, cut the whole name, undo the empty hold, and

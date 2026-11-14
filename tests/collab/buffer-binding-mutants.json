@@ -224,7 +224,7 @@
   }, {
     "label": "the Split view keeps the typed cell after a recovery write",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "if (!current || toHtml(current) !== toHtml(painted)) ports.page.write(found.cell, found.html);",
+    "find": "if (rewritten) ports.page.write(found.cell, found.html);",
     "replace": "void current;",
     "tests": ["tests/features/editing/cell-buffer-recovery.test.ts"]
   }, {
@@ -794,7 +794,7 @@
   }, {
     "label": "Split repaint leaves a plain trailing space collapsed",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "if (caret && cell) paintTrailingCellSpaces(cell, projection(ports.decode(stored(row, field))));",
+    "find": "if (cell && ports.paintedFrom(cell, field, row)) rememberSpaceForm(cell, stored(row, field));",
     "replace": "",
     "tests": ["tests/features/editing/split-caret.test.ts"]
   }, {
@@ -847,10 +847,40 @@
     "tests": ["tests/features/editing/split-caret-review.test.ts"]
   }, {
     "label": "shared text drag bypasses the character-preserving clipboard serializer",
-    "file": "src/features/clipboard/routes.ts",
-    "find": "root.addEventListener(\"dragstart\", dragStart);",
+    "file": "src/features/rows/routes.ts",
+    "find": "if (ports.cellDragStart(e as DragEvent)) return;",
     "replace": "",
     "tests": ["tests/features/editing/split-caret-review.test.ts"]
+  }, {
+    "label": "row drag wiring omits the shared cell clipboard route",
+    "file": "src/bootstrap/wiring/editor.ts",
+    "find": "cellDragStart: event => clipboardRoutes.owner()?.dragStart(event) ?? false,",
+    "replace": "cellDragStart: () => false,",
+    "tests": ["src/test/cut-paste-app.test.mjs"]
+  }, {
+    "label": "Split repaints unchanged stored space forms on every paint",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (previous?.html === html && !rewritten) return;",
+    "replace": "",
+    "tests": ["tests/features/editing/split-caret-cost.test.ts"]
+  }, {
+    "label": "Split disposal leaves the visible space spans in standalone cells",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "for (const cell of root.querySelectorAll(CELLS)) clearTrailingCellSpaces(cell);",
+    "replace": "",
+    "tests": ["src/test/shared-split-space-app.test.mjs", "tests/features/editing/split-caret-cost.test.ts"]
+  }, {
+    "label": "Split clipboard registration outlives the binding",
+    "file": "src/bootstrap/wiring/split-buffer.ts",
+    "find": "disconnect(); mounted = null;",
+    "replace": "mounted = null;",
+    "tests": ["src/test/shared-split-space-app.test.mjs"]
+  }, {
+    "label": "clipboard composition omits the mounted Split space form",
+    "file": "src/bootstrap/wiring/clipboard.ts",
+    "find": "sharedSpaceForm: sharedCellSpaceForm,",
+    "replace": "sharedSpaceForm: () => null,",
+    "tests": ["src/test/shared-split-space-app.test.mjs"]
   }, {
     "label": "Split captures endpoints only inside the focused cell",
     "file": "src/features/editing/cell-buffer.ts",

@@ -3,8 +3,7 @@ import type { Affinity, CellPoints } from "../../core/text/selection.ts";
 import { protectedTagAt } from "./dom.ts";
 import { sameUpToSpaceForm } from "../../core/collab/buffer.ts";
 
-export function paintTrailingCellSpaces(cell: Element, stored = ""): void {
-  cell.setAttribute("data-shared-cell-space-form", stored);
+export function paintTrailingCellSpaces(cell: Element): void {
   const edits: { readonly node: Text; readonly spaces: string }[] = [];
   let node: Node | null = cell.lastChild;
   while (node && node !== cell) {
@@ -33,12 +32,14 @@ export function paintTrailingCellSpaces(cell: Element, stored = ""): void {
   if (points) placeSelection(cell, selection, points);
 }
 
-export function hasSharedCellSpaceForm(cell: Element): boolean { return cell.hasAttribute("data-shared-cell-space-form"); }
+export function clearTrailingCellSpaces(cell: Element): void {
+  const selection = cell.ownerDocument.getSelection(), points = readSelection(cell, selection);
+  for (const span of cell.querySelectorAll("[data-shared-cell-space]")) span.replaceWith(...span.childNodes);
+  if (points) placeSelection(cell, selection, points);
+}
 
-export function readSharedCellSpaceForm(cell: Element): { readonly html: string } | null {
-  if (!hasSharedCellSpaceForm(cell)) return null;
+export function readSharedCellSpaceForm(cell: Element, stored: string): { readonly html: string } {
   const clone = cell.cloneNode(true) as Element;
-  const stored = cell.getAttribute("data-shared-cell-space-form") ?? "";
   let shown = "";
   walkCell(clone, (kind, node) => {
     shown += kind === "text" ? (node.nodeValue ?? "").replace(/\u200b/g, "") : kind === "atom" ? "\ufffc" : "\n";

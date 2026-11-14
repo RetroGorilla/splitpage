@@ -28,10 +28,25 @@ test("standalone Split full and row repaint add no shared caret mapping, paint n
     for (const size of [2, 50]) {
       const rows = Array.from({ length: size }, (_, index) => ({ id: "r" + index, audioText: "Word ", visualText: "Wide " }));
       const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows({ schema: 2, paragraphsDecided: true, title: "Paint cost", rows })))], "paint.splitpage");
-      await openDocument(file);
+      await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
+      assert.equal(document.querySelector('#rows .cell-editable[data-id="r0"][data-field="audioText"]').textContent, "Word ");
       render(); renderRow("r0");
       assert.deepEqual(counts, { mapping: 0, paint: 0, reading: 0 });
     }
+    const { splitSpaceSwitch } = await import("./src/test/_shared-split-space.mjs");
+    const { enterSharedSession, leaveSharedSession } = await import("./src/bootstrap/wiring/shared-session.ts");
+    const { ports } = splitSpaceSwitch();
+    assert.deepEqual(await enterSharedSession(ports), { ok: true });
+    assert.ok(document.querySelector("[data-shared-cell-space]"));
+    counts.paint = 0;
+    render(); renderRow("r0");
+    assert.equal(counts.paint, 0);
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+    assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
+    Object.assign(counts, { mapping: 0, paint: 0, reading: 0 });
+    render(); renderRow("r0");
+    assert.deepEqual(counts, { mapping: 0, paint: 0, reading: 0 });
+    assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
     await closeApp();
   `;
   const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "--eval", script],

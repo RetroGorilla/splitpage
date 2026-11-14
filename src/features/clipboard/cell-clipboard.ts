@@ -247,7 +247,8 @@ function anchoredInText(id: string, target: PasteTarget) {
 }
 
 function liveCellHtml(cellEl: Element) {
-  const shared = readSharedCellSpaceForm(cellEl);
+  const stored = (ports as CellClipboardPorts).sharedSpaceForm?.(cellEl) ?? null;
+  const shared = stored === null ? null : readSharedCellSpaceForm(cellEl, stored);
   let html = shared?.html ?? cellEl.innerHTML;
   if (html.indexOf("\u200B") !== -1) html = html.replace(/\u200B/g, "");
   return { html: (ports as CellClipboardPorts).text.storedHtmlFromDom(html), keepSpaceForm: shared !== null };
