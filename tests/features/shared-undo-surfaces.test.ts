@@ -86,6 +86,23 @@ const SURFACES: readonly Surface[] = [
   } }
 ];
 
+test("rule 85 discarding a cut empty-name hold clears its description so Backspace cancels the typing group", () => {
+  const page = sharedRename();
+  try {
+    const input = page.open(); page.edge.select(5); page.edge.type("x");
+    page.edge.selectAll(); page.edge.cut();
+    assert.equal(page.edge.copied(), "Scenex");
+    page.edge.undo(null);
+    assert.deepEqual([input.value, page.stored(), page.owner.sizes()], ["Scenex", "Scenex", { undo: 1, redo: 0, dropped: 0 }]);
+    page.edge.select(6); page.edge.backspace(); page.h.queue.flush("dup"); page.h.join();
+    for (const handle of [page.h.a, page.h.b, page.h.c]) assert.equal(field(handle, headingFieldKey("H1")), "Scene");
+    assert.deepEqual([input.value, input.selectionStart, input.selectionEnd, page.reports, page.owner.sizes(),
+      page.a.described.map(description => [description?.label, description?.typing]), page.a.executed.map(entry => entry.operations.map(op => op.kind))],
+      ["Scene", 5, 5, [{ kind: "rejected", reason: "buffer-heading-empty" }], { undo: 0, redo: 0, dropped: 0 },
+        [["typing", "x"], ["typing", ""]], [["text-insert"], ["text-delete"]]]);
+  } finally { page.close(); }
+});
+
 function field(handle: SharedDocumentHandle, key: string): string | undefined {
   return readSharedPaintedText(handle, sharedBufferedTarget(handle, key))?.text;
 }

@@ -1,5 +1,5 @@
 import { createSharedBufferedText, sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
-import { readSharedPaintedText } from "../../../adapters/collab/paint-base.ts";
+import { readSharedPaintedText, readSharedPaintedSelectionText } from "../../../adapters/collab/paint-base.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
 import type { PaintedTextSource } from "../../../application/editing/ports.ts";
@@ -14,13 +14,17 @@ export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<Sh
     readonly readers: ProductionReaders;
     readonly stamps: StampPorts;
   }
-): { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts } {
+): { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts } {
   const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers,
     stamps: effects.stamps });
   return {
     paintedText: {
       documentRevision: () => session.readAt((_doc, revision) => revision),
       read: (key, field) => field === bufferedFieldTarget(key)?.field ? readSharedPaintedText(handle, sharedBufferedTarget(handle, key)) : null
+    },
+    selectionText: {
+      documentRevision: () => session.readAt((_doc, revision) => revision),
+      read: (key, field) => field === bufferedFieldTarget(key)?.field ? readSharedPaintedSelectionText(handle, sharedBufferedTarget(handle, key)) : null
     },
     bufferedText: { open: commit.open, beforeCommand: session.beforeCommand, missingBase: effects.missingBase, recovered: effects.recovered, report: effects.report }
   };

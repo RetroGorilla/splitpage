@@ -21,6 +21,7 @@ import { startNewScript } from "./file-menu-controls.ts";
 import { cellEditing, paintGuard, rowDrag } from "./editor-owners.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { imageRefOf } from "../richtext.ts";
+import { sharedCellSpaceForm } from "./ports/shared-cell-space.ts";
 
 const copyPaste = owned<CopyPasteMount>();
 
@@ -31,6 +32,7 @@ function nonce(): string {
 export function mountCopyPasteFeature(): CopyPasteMount {
   return copyPaste.replace(() => {
     const cellPorts: CellClipboardPorts = {
+      sharedSpaceForm: sharedCellSpaceForm,
       document: portDocument,
       edits: portEdits,
       undo: portUndo,
