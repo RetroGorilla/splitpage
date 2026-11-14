@@ -277,6 +277,8 @@ const LISTS: readonly { readonly name: string; readonly hidden: boolean; readonl
     values: [{ kind: "gallery-retire", record: "G1", id: "retire", by: "Alice" }, removeBeat("gone", "Alice")] },
   { name: "a hidden picture restored, then its beat removed", hidden: true, listed: ["G1"], after: removedWith(["P1"]),
     values: [{ kind: "gallery-restore", record: "G1", id: "restore", by: "Alice" }, removeBeat("gone", "Alice")] },
+  { name: "a hidden picture shown by a field change, then its beat removed", hidden: true, listed: ["G1"], after: removedWith(["P1"]),
+    values: [setRecord("gallery", "G1", "custom", "wake", "Alice", "wake"), removeBeat("gone", "Alice")] },
   { name: "a hidden picture shown by a field change, retired, then its beat removed", hidden: true, listed: [], after: removedWith([]),
     values: [setRecord("gallery", "G1", "custom", "wake", "Alice", "wake"), { kind: "gallery-retire", record: "G1", id: "retire", by: "Alice" }, removeBeat("gone", "Alice")] }
 ];
