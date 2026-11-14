@@ -153,8 +153,8 @@ export async function enterSharedSession(ports: SharedSwitchPorts): Promise<Shar
 export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
-  const held = ports.bindings.settle();
-  if (held) return { ok: false, reason: held };
+  const holding = ports.bindings.settle();
+  if (holding) return { ok: false, reason: holding };
   const current = currentDocument();
   leaveTo(ports, { ...(current ? copyOf(current) : now.kept), docId: ports.docId() });
   return { ok: true };
