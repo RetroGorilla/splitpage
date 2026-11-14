@@ -221,6 +221,7 @@ for (const [label, act] of [
       assert.equal(act(page), false);
       assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, written(page)], ["Draft", "Draft", "Draft", [], [[inserted("X")]]]);
       copies(page, ["Draft", "user"]);
+      assert.equal(page.pageTitles(), 2);
     } finally { page.close(); }
   });
 }

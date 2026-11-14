@@ -5,6 +5,7 @@ import type { CommandOutcome } from "../../application/session/document-session.
 import type { FlowPos, FlowRange } from "../../core/flow/flow.ts";
 import { unitSafePrefix } from "../../core/document/text-policy.ts";
 import type { SharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
+import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
 
 export interface BufferedInputPorts {
   readonly field: (surface: BufferedFieldSurface<HTMLInputElement>) => BufferedFieldBinding;
@@ -14,7 +15,7 @@ export interface BufferedInputPorts {
   readonly repaint: () => void;
   readonly onPainted: (listener: () => void) => () => void;
   readonly beforePaint: (check: () => void) => () => void;
-  readonly history?: SharedUndoActions;
+  readonly history?: SharedUndoActions & { readonly selection: (key: string, selection: SharedUndoSelection) => FlowRange | undefined };
 }
 
 export interface BufferedInputField {
@@ -66,6 +67,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   let paste: { readonly before: string; readonly from: number; readonly to: number } | null = null;
   let clipboardPending = false;
   let expected: PaintedText | null = null, foreign = false;
+  let replay: FlowRange | undefined;
   function sameName(a: PaintedText | null, b: PaintedText | null): boolean {
     return !!a && !!b && a.text === b.text && a.emptyGap === b.emptyGap
       && Array.from({ length: a.text.length }, (_, at) => a.identity(at) === b.identity(at)).every(Boolean);
@@ -84,6 +86,12 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     const [anchor, head] = input.selectionDirection === "backward" ? [to, from] : [from, to];
     return { anchor: form.position(anchor), head: form.position(head) };
   };
+  function putRange(input: HTMLInputElement, selection: FlowRange | undefined): boolean {
+    if (!input.isConnected || !selection || !form.owns(selection.anchor) || !form.owns(selection.head)) return false;
+    const { anchor, head } = { anchor: selection.anchor.offset, head: selection.head.offset };
+    input.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : anchor < head ? "forward" : "none");
+    return true;
+  }
   function reset(): void {
     const text = form.stored();
     if (text === null) return;
@@ -111,10 +119,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     selection: () => { const input = active(); return input ? range(input) : null; },
     composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (_rowId, selection) => {
-      const input = typing();
-      if (!input.isConnected || !selection || !form.owns(selection.anchor) || !form.owns(selection.head)) return;
-      const { anchor, head } = { anchor: selection.anchor.offset, head: selection.head.offset };
-      input.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : anchor < head ? "forward" : "none");
+      putRange(typing(), selection);
     },
     changed: () => { form.changed?.(); },
     key: pos => form.owns(pos) ? key : null,
@@ -179,8 +184,10 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     if (!binding.settledFor(event)) return;
     if (!ports.history) { ports.report({ kind: "rejected", reason: "buffer-unsupported-input" }); return; }
     const result = ports.history[direction]();
+    replay = result.ok && result.selection ? ports.history.selection(key, result.selection) : undefined;
     if (!result.ok && "reason" in result) ports.report({ kind: "rejected", reason: result.reason });
     if (form.opening !== undefined) expected = ports.painted.current(key);
+    if (result.ok && result.effective) form.changed?.();
     ports.repaint();
   }
   function listener(event: Event): void {
@@ -189,6 +196,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   }
   function painted(): void {
     checkName();
+    const selection = replay; replay = undefined;
     const focused = active(), caret = kept ?? (focused ? caretNow(focused) : null), dirty = binding.dirty();
     kept = null;
     form.place?.();
@@ -196,6 +204,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     if (!caret || !caret.input.isConnected) return;
     const input = caret.input;
     if (doc.activeElement !== input) input.focus({ preventScroll: true });
+    if (putRange(input, selection)) return;
     const after = ports.painted.base(key), length = input.value.length;
     const map = (offset: number) => dirty ? Math.min(offset, length) : followed(caret.base, after, offset, length);
     input.setSelectionRange(map(caret.start), map(caret.end), caret.direction);

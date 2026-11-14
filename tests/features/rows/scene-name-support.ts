@@ -17,7 +17,7 @@ import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.t
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
+import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import { sharedSceneCreation } from "../../../src/bootstrap/wiring/ports/shared-scenes.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
@@ -68,7 +68,7 @@ export function sharedRename(name = "Scene", options: {
     ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
     ...options.creation === false ? {} : { sharedScenes: sharedSceneCreation(h.a, a.session, () => ({ id: "create_scene", by: "Alice" })) },
     sharedNames: {
-      history: sharedUndoActions(a.session, owner),
+      history: sharedBufferedInputHistory(h.a, a.session, owner),
       field: surface => createBufferedField(shared.bufferedText, surface),
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,

@@ -28,6 +28,7 @@ import { bindBufferedInput } from "../../src/features/common/buffered-input.ts";
 import { beatPos, headingPos } from "../../src/core/flow/flow.ts";
 import { createMonitoredSharedDocument } from "../adapters/collab/helpers.ts";
 import { applySharedUpdate, encodeSharedState, destroySharedDocument } from "../../src/adapters/collab/document.ts";
+import { sharedBufferedInputHistory } from "../../src/bootstrap/wiring/buffered-input.ts";
 
 type Hook = (h: Stage1ExecutorHarness) => SharedUndo;
 
@@ -183,6 +184,7 @@ for (const surface of SURFACES.filter(entry => entry.name === "rename form" || e
         assert.equal(typeB(h, surface.key, surface.start), "applied");
         h.queue.flush(order); box.paint();
         assert.equal(box.input().value, "Y" + surface.start + "x");
+        box.edge.select(0);
         assert.equal(box.edge.undo("native history must never reach the DOM"), false);
         h.queue.flush(order); box.paint(); h.join();
         for (const handle of [h.a, h.b, h.c]) assert.equal(field(handle, surface.key), "Y" + surface.start);
@@ -303,6 +305,35 @@ test("rule 85 Escape refuses a remote replacement with the same visible letters"
   } finally { page.close(); }
 });
 
+for (const direction of ["undo", "redo"] as const) {
+  test(`rule 85 a held empty name consumes ${direction} without using the owner's available entry`, () => {
+    const page = sharedRename();
+    try {
+      const input = page.open(); page.edge.select(5); page.edge.type("x");
+      if (direction === "redo") page.edge.undo(null);
+      page.edge.selectAll(); page.edge.backspace(); page.edge[direction](null);
+      assert.deepEqual([input.value, input.selectionStart, input.selectionEnd, page.reports, page.owner.sizes()],
+        [direction === "undo" ? "Scenex" : "Scene", 0, 0, [{ kind: "rejected", reason: "buffer-heading-empty" }],
+          direction === "undo" ? { undo: 1, redo: 0, dropped: 0 } : { undo: 0, redo: 1, dropped: 0 }]);
+      page.edge[direction](null); page.h.queue.flush("dup"); page.h.join();
+      for (const handle of [page.h.a, page.h.b, page.h.c]) assert.equal(field(handle, headingFieldKey("H1")), direction === "undo" ? "Scene" : "Scenex");
+      assert.equal(page.reports.length, 1);
+    } finally { page.close(); }
+  });
+}
+
+test("rule 85 Escape releases an empty hold before checking a queued foreign name", () => {
+  const page = sharedRename();
+  try {
+    const input = page.open(); page.edge.selectAll(); page.edge.backspace();
+    typeB(page.h, headingFieldKey("H1"), "Scene"); page.h.queue.deliverFrom("B", "D1");
+    page.edge.escape(); page.h.queue.flush("dup"); page.h.join();
+    for (const handle of [page.h.a, page.h.b, page.h.c]) assert.equal(field(handle, headingFieldKey("H1")), "YScene");
+    assert.deepEqual([input.isConnected, input.value, page.a.executed, page.reports, page.owner.sizes().undo],
+      [false, "YScene", [], [{ kind: "rejected", reason: "buffer-heading-empty" }, { kind: "rejected", reason: "buffer-heading-changed" }], 0]);
+  } finally { page.close(); }
+});
+
 function undoPeer(handle: SharedDocumentHandle, key: string, by: string) {
   let serial = 0, reversal = 0;
   const reports: unknown[] = [];
@@ -319,7 +350,7 @@ function undoPeer(handle: SharedDocumentHandle, key: string, by: string) {
     position: offset => key === TITLE_FIELD_KEY ? beatPos(key, offset) : headingPos("H1", offset),
     owns: pos => key === TITLE_FIELD_KEY ? pos.kind === "beat" && pos.rowId === key : pos.kind === "heading" && pos.sceneId === "H1"
   }, { field: surface => createBufferedField(shared.bufferedText, surface), painted: createPaintedBeats(shared.paintedText),
-    report: outcome => reports.push(outcome), shown: edit => edit(), repaint: paint, history: sharedUndoActions(session.session, owner),
+    report: outcome => reports.push(outcome), shown: edit => edit(), repaint: paint, history: sharedBufferedInputHistory(handle, session.session, owner),
     onPainted: listener => { painted = listener; return () => {}; }, beforePaint: listener => { check = listener; return () => {}; } });
   return { input, edge: edgeInput(() => input), paint, reports, owner,
     close: () => { bound.dispose(); session.session.dispose(); input.remove(); } };

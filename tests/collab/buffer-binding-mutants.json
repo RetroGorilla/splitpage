@@ -266,7 +266,7 @@
   }, {
     "label": "an unsettled edit is committed anyway",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
+    "find": "const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());",
     "replace": "const unsettled = null;",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
@@ -464,8 +464,8 @@
   }, {
     "label": "closing a Split rename does not repaint the rows",
     "file": "src/features/common/buffered-input.ts",
-    "find": "      ports.repaint();\n",
-    "replace": "",
+    "find": "      ports.painted.clear();\n      ports.repaint();",
+    "replace": "      ports.painted.clear();",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a key that inserted nothing leaves a held Split rename held",
@@ -701,5 +701,17 @@
     "find": "const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());",
     "replace": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
     "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "name-box undo keeps a moved caret instead of restoring its recorded anchor",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "replay = result.ok && result.selection ? ports.history.selection(key, result.selection) : undefined;",
+    "replace": "replay = undefined;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "undo in a title input leaves the page title stale",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (result.ok && result.effective) form.changed?.();",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
   }]
 }

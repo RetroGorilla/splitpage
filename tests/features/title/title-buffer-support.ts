@@ -15,7 +15,7 @@ import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.t
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
+import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 
 export type TitlePage = ReturnType<typeof sharedTitle>;
@@ -45,7 +45,7 @@ export function sharedTitle(title = "Draft", fields: Record<string, unknown> = {
     main, writer,
     ports: { run: command => { commands.push(command.name); return { kind: "noop" }; }, current, pageTitle: () => { pageTitles++; } },
     shared: {
-      history: sharedUndoActions(a.session, owner),
+      history: sharedBufferedInputHistory(h.a, a.session, owner),
       field: surface => createBufferedField(shared.bufferedText, surface),
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
