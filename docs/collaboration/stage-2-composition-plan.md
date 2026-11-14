@@ -256,6 +256,29 @@ Found in the review of #1551, for other cuts:
 - **C5c.** `src/features/tags/production-tags.ts:142` skips registry healing
   when its stamp is refused and then runs `plan.commit()` anyway.
 
+Wiring notes from pull requests merged or in review since the plan, each for the cut
+that wires its surface:
+
+- **C6 or later, Writer paste** (paste is outside C6's typing scope). The shared
+  Writer selects `pasteSharedFlowClipboard` and passes the handle to
+  `writerFlowCommands(flow, { author, writer })`, with `writer` from the same handle
+  as the author port (`String(collabState(handle).doc.clientID)`), and consumes the
+  returned selection anchors.
+- **C7, people.** `sharedPeopleIntroducedByText` uses the name-derived person id,
+  as `personIdentity` in `src/application/commands/flow-paste.ts` does
+  ("person_" and the hex of the normalized name's UTF-16 units). Rule 101.
+- **C7, pictures** (#1564). Cell editing's `editGallery` passes
+  `sharedGalleryPorts({ handle, author: () => authorPort.next(), stamps: ports.text })`
+  as the fourth argument of `galleryCommand`: a plain author function, since only
+  the Writer's ports may name the author port (`operation-families.test.ts`).
+- **C7, scene name boxes** (#1562). `mountSceneHeaders` gets
+  `sharedBufferedInputPorts` and `sharedSceneCreation(handle, session, author)`, with
+  the same `shown` as `src/bootstrap/wiring/buffered-input.ts`. No beat buffer may
+  be holding when the add-scene form gets keys, and teardown handles a dispose
+  during a first composition.
+- **The cut that wires add-section.** It describes its plan with `typing: null`, so
+  the replica records it at execution like any described command (C2).
+
 Found in the review of #1559 (C2):
 
 - **C4.** The same shared undo owner goes to the replica (`createSharedReplica(handle,
