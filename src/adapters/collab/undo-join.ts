@@ -98,6 +98,27 @@ export function readSharedJoinedFields(handle: SharedDocumentHandle, beat: strin
   } finally { prep.close(); }
 }
 
+export function readSharedJoinedParts(handle: SharedDocumentHandle, beat: string): { readonly beat: string; readonly length: number }[] {
+  const prep = createSharedPreparation(handle);
+  try {
+    bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
+    const geometry = readSharedJoinedTextGeometry(prep.view, beat);
+    return geometry && !geometry.removed ? geometry.parts.map(part => ({ beat: part.owner, length: part.length })) : [];
+  } finally { prep.close(); }
+}
+
+export function readSharedJoinedSeparators(handle: SharedDocumentHandle, beat: string): { readonly join: string; readonly from: string; readonly separator: "" | " " }[] {
+  const prep = createSharedPreparation(handle);
+  try {
+    bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
+    const geometry = readSharedJoinedTextGeometry(prep.view, beat);
+    return geometry && !geometry.removed ? geometry.parts.flatMap(part => {
+      const entry = storedJoins(handle, part.owner).find(join => sharedJoinRetirementGroup(part.owner, join) === part.group);
+      return entry ? [{ join: entry.id, from: part.owner, separator: shownSeparator(handle, part.owner, entry) }] : [];
+    }) : [];
+  } finally { prep.close(); }
+}
+
 function findSharedJoin(handle: SharedDocumentHandle, join: string): { readonly from: string; readonly entry: StoredJoin } | null {
   for (const from of collabState(handle).roots.beats.keys()) {
     const entry = storedJoins(handle, from).find(item => item.id === join);
