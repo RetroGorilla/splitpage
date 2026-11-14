@@ -52,6 +52,10 @@ export function readSharedAnchor(raw: unknown): SharedContentRef | null {
   return value ? readSharedContentRef(JSON.stringify(value.target ? { v: 2, target: value.target, relative: [...value.relative] } : { v: 1, segment: value.segment, relative: [...value.relative] })) : null;
 }
 
+export function sharedAnchorTarget(raw: unknown): SharedTextAddress | null {
+  return readAnchorValue(raw)?.target ?? null;
+}
+
 export function sharedAnchorCharacterEnd(raw: unknown): SharedContentRef | null {
   const glue = readSharedJoinGlueReference(raw);
   if (glue) return glue.after ? null : sharedJoinGlueReference(glue.group, true);
