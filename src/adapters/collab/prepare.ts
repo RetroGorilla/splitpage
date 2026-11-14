@@ -7,7 +7,7 @@ import type { SharedPreparationText } from "./prepare-text.ts";
 import type { SharedStatusEvent } from "../../core/collab/operations.ts";
 import { sharedStatusEventKeys } from "./status-index.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
-import { bindSharedStructurePlan, resolveSharedStructureOwner } from "./structure-plan.ts";
+import { bindSharedStructurePlan, planSharedSplitStaged, resolveSharedStructureOwner } from "./structure-plan.ts";
 
 export type SharedPreparedWrite = {
   readonly path: readonly string[];
@@ -128,6 +128,7 @@ export function createSharedPreparation(handle: SharedDocumentHandle, base: numb
       }
       overlay.set(JSON.stringify(write.path), { path: [...write.path], kind: write.kind, value: sharedPreparedValue(write.value) });
     }
+    planSharedSplitStaged(view, observeSharedStructureIndex(handle), writes);
   }, close: (): void => { open = false; scratch.clear(); texts.clear(); overlay.clear(); } };
 }
 
