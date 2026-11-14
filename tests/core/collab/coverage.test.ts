@@ -6,7 +6,7 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { sharedCommandPermission } from "../../../src/core/collab/refusals.ts";
 import { readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
-import { builderOperationCoverage, flowOperationCoverage, sharedRefusalCoverage } from "./coverage-fixture.ts";
+import { builderOperationCoverage, flowOperationCoverage, sharedRefusalCoverage, sharedBuilderRefusalCoverage } from "./coverage-fixture.ts";
 import { operationExamples } from "./operation-examples.ts";
 import { beatPos, caretAt, moveBeats, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
 import type { FlowPorts } from "../../../src/core/flow/flow.ts";
@@ -45,6 +45,7 @@ test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one
 });
 
 test("the six structure command builders await their C7 ports with their implemented lists and named visual refusal", () => {
+  assert.deepEqual(sharedBuilderRefusalCoverage.map(row => row.refusal), ["visual-split-in-shared-session"]);
   const names = ["addBeatCommand", "deleteBeatCommand", "splitBeatCommand", "joinBeatsCommand", "removeBeatsCommand", "removeSceneCommand"];
   assert.deepEqual(builderOperationCoverage.filter(row => names.includes(row[0])).map(row => [row[0], row.shared, row[2]]), [
     ["addBeatCommand", "serve pending composition", "segment-create"],
@@ -67,9 +68,9 @@ test("the new core modules define only types and functions when loaded", () => {
   }
 });
 
-test("coverage decisions name only defined operations, the two refusals or the package 9 whole-field handoff", () => {
+test("coverage decisions name only defined operations, capability and builder refusals or the package 9 whole-field handoff", () => {
   const decisions = new Set<string>([...operationExamples.map(example => example.operation.kind), ...sharedRefusalCoverage.map(row => row.refusal),
-    "whole-field today, needs package 9"]);
+    ...sharedBuilderRefusalCoverage.map(row => row.refusal), "whole-field today, needs package 9"]);
   for (const row of [...builderOperationCoverage, ...flowOperationCoverage]) {
     for (const branch of row[2].split(" | ")) {
       if (branch === "whole-field today, needs package 9") continue;

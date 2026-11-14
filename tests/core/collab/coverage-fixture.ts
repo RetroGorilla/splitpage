@@ -366,7 +366,10 @@ export const flowOperationCoverage = [
 ] as const;
 
 export const sharedRefusalCoverage = [
-  { refusal: "visual-split-in-shared-session", source: "stage-2-composition-plan.md C5b: visual splits have no shared form" },
   { refusal: "move-in-shared-session", source: "8-schema-hypotheses.md §1 Candidate B: Move part of a segment; structure-results.md MOVE concurrent; issue #1414 assumed rule 40: every move" },
   { refusal: "cross-scene-structural-paste", source: "8-schema-hypotheses.md §3 MOVE cut-paste; structure-results.md MOVE cut-paste" }
+] as const;
+
+export const sharedBuilderRefusalCoverage = [
+  { refusal: "visual-split-in-shared-session", source: "stage-2-composition-plan.md C5b: visual splits have no shared form" }
 ] as const;
