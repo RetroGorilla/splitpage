@@ -19,7 +19,7 @@ export function observeSharedCreationMarkers(handle: SharedDocumentHandle): Read
   for (const key of root._map.keys()) refresh(key);
   const changed: Parameters<typeof root.observeDeep>[0] = events => guardSharedCallback(state, () => {
     for (const event of events) if (event instanceof Y.YMapEvent) {
-      if (!event.path.length) for (const key of event.keysChanged) refresh(key);
+      if (!event.path.length) for (const key of event.keysChanged) refresh(String(key));
       else if (event.path.length === 1 && event.keysChanged.has(SHARED_CREATION_RETIREMENT_FIELD)) refresh(String(event.path[0]));
     }
   });

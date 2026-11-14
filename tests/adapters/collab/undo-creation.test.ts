@@ -12,7 +12,6 @@ import { applySharedUpdate, encodeSharedState, destroySharedDocument, readShared
 import { createMonitoredSharedDocument } from "./helpers.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { createRecord, setRecord } from "./record-support.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
@@ -30,7 +29,7 @@ function start(order: typeof ORDERS[number], source: Record<string, unknown> = S
   let serial = 0;
   const owner = createSharedUndo({ now: () => serial * 2000, supports: supportsSharedUndoPart,
     reverse: record => reverseSharedUndoRecord(h.a, record, { by: "Alice", nextId: () => "undo" + ++serial }) });
-  const flush = () => { h.queue.flush(order); handles.forEach((handle, i) => assertIncremental(handle, incremental[i]!.projector)); };
+  const flush = () => { h.queue.flush(order); handles.forEach((handle, i) => { const current = incremental[i]; assert.ok(current); assertIncremental(handle, current.projector); }); };
   const check = (expected: ReturnType<typeof projectSharedDocumentWithRecovery>) => {
     flush(); const late = createMonitoredSharedDocument();
     try {

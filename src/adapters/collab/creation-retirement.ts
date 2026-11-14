@@ -47,7 +47,7 @@ function text(handle: SharedDocumentHandle, record: Y.Map<unknown>, writer: stri
       visited.add(key); at = previous;
     }
   };
-  const values = raw.toDelta().flatMap((part: { insert: unknown }) => typeof part.insert === "string" ? part.insert.split("") : [sharedJson(part.insert)]);
+  const values = (raw.toDelta() as { insert: unknown }[]).flatMap(part => typeof part.insert === "string" ? part.insert.split("") : [sharedJson(part.insert)]);
   return state.characters.slice(from, to).map(unit => [root(unit.identity), values[unit.offset], unit.marks.map(mark =>
     [mark.kind, mark.id, mark.values, [...new Set(mark.additions.map(markIdentity))].sort()])]);
 }

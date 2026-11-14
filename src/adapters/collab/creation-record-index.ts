@@ -14,7 +14,7 @@ function indexOf(handle: SharedDocumentHandle, collection: CreationOwnedCollecti
     const made: CreationRecordOwners = { groups: new Map(), owners: new Map(), pending: new Set(root.keys()) };
     const changed: Parameters<typeof root.observeDeep>[0] = events => guardSharedCallback(state, () => {
       for (const event of events) if (event instanceof Y.YMapEvent) {
-        if (!event.path.length) for (const key of event.keysChanged) made.pending.add(key);
+        if (!event.path.length) for (const key of event.keysChanged) made.pending.add(String(key));
         else if (event.path.length === 1 && event.keysChanged.has(field)) made.pending.add(String(event.path[0]));
       }
     });
