@@ -20,6 +20,11 @@ import type { Command, CommandOutcome, DocumentView, SessionListener } from "../
 import type { UndoControl } from "../../src/application/editing/undo-control.ts";
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
+import type { SharedCommandGuard } from "../../src/application/session/document-edits.ts";
+
+export function fakeSharedCommands(): SharedCommandGuard {
+  return { refuseUnsupported: () => false };
+}
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";

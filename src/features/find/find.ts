@@ -464,6 +464,7 @@ function refreshBulkTagRow() {
 
 export function runBulkTag() {
   if (findingInPresent()) return;
+  if ((ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;
   const doc = (ports as FindRuntimePorts).document.current();
   if (!doc) return;
   const needle = bulkTagNeedle();

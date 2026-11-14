@@ -1,127 +1,137 @@
+type CompositionClass = "serve" | "serve pending composition" | "refuse" | "could not classify";
+
+function classified<const Row extends readonly unknown[]>(shared: CompositionClass, row: Row): Row & { readonly shared: CompositionClass } {
+  return Object.assign(row, { shared });
+}
+
 export const builderOperationCoverage = [
-  ["beatStatusCommand", "field-record", "status"],
-  ["setBeatFilmedCommand", "field-record", "status"],
-  ["beatLengthCommand", "field-record", "scalar"],
-  ["addCommentCommand", "field-record", "record-create"],
-  ["addReplyCommand", "field-record", "record-create,record-set"],
-  ["setCommentAssigneeCommand", "field-record", "record-set"],
-  ["toggleResolveCommand", "field-record", "record-set"],
-  ["galleryCommand", "field-record", "record-create,record-set,record-delete"],
-  ["registerTagCommand", "field-record", "record-create"],
-  ["addPersonCommand", "field-record", "record-create"],
-  ["deletePersonCommand", "field-record", "record-delete,record-set"],
-  ["updateTagsCommand", "field-record", "record-create,record-set,status"],
-  ["gearQuickAddCommand", "field-record", "record-create,record-delete"],
-  ["addShotCommand", "field-record", "record-create"],
-  ["setShotsCommand", "field-record", "record-create,record-set,status"],
-  ["deleteShotCommand", "field-record", "record-delete"],
-  ["addShotPropCommand", "field-record", "record-create,record-set"],
-  ["removeShotPropCommand", "field-record", "record-set"],
-  ["targetLengthCommand", "field-record", "scalar"],
-  ["wordsPerMinuteCommand", "field-record", "scalar"],
-  ["editStamp", "field-record", "scalar"],
-  ["documentIdStamp", "field-record", "scalar"],
-  ["initializeFlowParagraphs", "field-record", "scalar"],
-  ["titleCommand", "field-record", "whole-field today, needs package 9"],
-  ["fileTitleCommand", "field-record", "text-insert,text-delete,scalar"],
-  ["renameSceneCommand", "field-record", "whole-field today, needs package 9"],
-  ["cellTextCommand", "text-mark", "record-create | whole-field today, needs package 9", [
+  classified("refuse", ["createBulkTagRows", "text-mark", "mark", [
+    ["preview counts without writing", []],
+    ["standalone bulk writer behind tagCellsCommand; shared callers refuse before preview or undo", ["mark"]]
+  ]]),
+  classified("serve pending composition", ["beatStatusCommand", "field-record", "status"]),
+  classified("serve pending composition", ["setBeatFilmedCommand", "field-record", "status"]),
+  classified("serve pending composition", ["beatLengthCommand", "field-record", "scalar"]),
+  classified("serve", ["addCommentCommand", "field-record", "record-create"]),
+  classified("serve", ["addReplyCommand", "field-record", "record-create,record-set"]),
+  classified("serve", ["setCommentAssigneeCommand", "field-record", "record-set"]),
+  classified("serve", ["toggleResolveCommand", "field-record", "record-set"]),
+  classified("refuse", ["galleryCommand", "field-record", "record-create,record-set,record-delete"]),
+  classified("serve pending composition", ["registerTagCommand", "field-record", "record-create"]),
+  classified("serve pending composition", ["addPersonCommand", "field-record", "record-create"]),
+  classified("serve pending composition", ["deletePersonCommand", "field-record", "record-delete,record-set"]),
+  classified("serve pending composition", ["updateTagsCommand", "field-record", "record-create,record-set,status"]),
+  classified("serve pending composition", ["gearQuickAddCommand", "field-record", "record-create,record-delete"]),
+  classified("serve pending composition", ["addShotCommand", "field-record", "record-create"]),
+  classified("serve pending composition", ["setShotsCommand", "field-record", "record-create,record-set,status"]),
+  classified("serve pending composition", ["deleteShotCommand", "field-record", "record-delete"]),
+  classified("serve pending composition", ["addShotPropCommand", "field-record", "record-create,record-set"]),
+  classified("serve pending composition", ["removeShotPropCommand", "field-record", "record-set"]),
+  classified("serve pending composition", ["targetLengthCommand", "field-record", "scalar"]),
+  classified("serve pending composition", ["wordsPerMinuteCommand", "field-record", "scalar"]),
+  classified("could not classify", ["editStamp", "field-record", "scalar"]),
+  classified("refuse", ["documentIdStamp", "field-record", "scalar"]),
+  classified("refuse", ["initializeFlowParagraphs", "field-record", "scalar"]),
+  classified("could not classify", ["titleCommand", "field-record", "whole-field today, needs package 9"]),
+  classified("could not classify", ["fileTitleCommand", "field-record", "text-insert,text-delete,scalar"]),
+  classified("could not classify", ["renameSceneCommand", "field-record", "whole-field today, needs package 9"]),
+  classified("refuse", ["cellTextCommand", "text-mark", "record-create | whole-field today, needs package 9", [
     ["whole-field native runs / comment-anchor-only capability exception", ["whole-field today, needs package 9"]],
     ["new tag/shot records", ["record-create"]],
     ["missing row/unchanged/capability refusal", []]
-  ]],
-  ["pasteCommand", "text-mark", "text-insert,text-delete,record-create,record-set", [
+  ]]),
+  classified("serve pending composition", ["pasteCommand", "text-mark", "text-insert,text-delete,record-create,record-set", [
     ["text/runs appended with insertion attributes, visual cue/direction flattening", ["text-insert"]],
     ["replace selected observed content", ["text-delete", "text-insert"]],
     ["fresh b-roll records / new gallery picture, video or file", ["record-create"]],
     ["fill an existing gallery slot or update its links", ["record-set"]],
     ["cut comment anchors already carried by inserted runs", []],
     ["missing row/no-op", []]
-  ]],
-  ["cutCommand", "text-mark", "text-delete", [
+  ]]),
+  classified("serve pending composition", ["cutCommand", "text-mark", "text-delete", [
     ["clamped observed range", ["text-delete"]],
     ["surviving mark normalization is a projection rule", []],
     ["empty range/missing row/no-op", []]
-  ]],
-  ["rewriteCellsCommand", "text-mark", "text-insert,text-delete,mark", [
+  ]]),
+  classified("could not classify", ["rewriteCellsCommand", "text-mark", "text-insert,text-delete,mark", [
     ["planner replaces cell text", ["text-insert", "text-delete"]],
     ["planner changes marks on observed content", ["mark"]],
     ["stamped/unstamped and capability options do not add text intent", []],
     ["unchanged/missing-row filtering", []]
-  ]],
-  ["tagCellsCommand", "text-mark", "text-insert,text-delete,mark,record-create", [
+  ]]),
+  classified("could not classify", ["tagCellsCommand", "text-mark", "text-insert,text-delete,mark,record-create", [
     ["planner replaces cell text", ["text-insert", "text-delete"]],
     ["planner changes observed tags/marks, including null-tag unlabel", ["mark"]],
     ["register alongside rewrites or register alone", ["record-create"]],
     ["no-op trial", []]
-  ]],
-  ["retagCommand", "text-mark", "text-insert,text-delete,mark,record-set,record-delete,status", [
+  ]]),
+  classified("could not classify", ["retagCommand", "text-mark", "text-insert,text-delete,mark,record-set,record-delete,status", [
     ["planner replaces cell text", ["text-insert", "text-delete"]],
     ["planner renames marks or null name unlabels them", ["mark"]],
     ["rename registry fields / merge owner and notes / repoint shot props", ["record-set"]],
     ["collision removes the old registry record", ["record-delete"]],
     ["collision raises the surviving tag status", ["status"]],
     ["no-op trial", []]
-  ]],
-  ["deleteTagsCommand", "text-mark", "text-insert,text-delete,mark,record-delete", [
+  ]]),
+  classified("serve pending composition", ["deleteTagsCommand", "text-mark", "text-insert,text-delete,mark,record-delete", [
     ["planner replaces cell text", ["text-insert", "text-delete"]],
     ["planner unlabels observed content", ["mark"]],
     ["registry removal with or without rewrites", ["record-delete"]],
     ["missing tags/no-op trial", []]
-  ]],
-  ["deleteCommentCommand", "text-mark", "text-insert,text-delete,mark,record-delete", [
+  ]]),
+  classified("serve pending composition", ["deleteCommentCommand", "text-mark", "text-insert,text-delete,mark,record-delete", [
     ["planner replaces cell text", ["text-insert", "text-delete"]],
     ["planner unwraps observed comment marks", ["mark"]],
     ["comment/reply record deletion", ["record-delete"]],
     ["missing comment/no rewrites", []]
-  ]],
-  ["unwrapCommentAnchorCommand", "text-mark", "text-insert,text-delete,mark", [
+  ]]),
+  classified("serve pending composition", ["unwrapCommentAnchorCommand", "text-mark", "text-insert,text-delete,mark", [
     ["planner replaces cell text", ["text-insert", "text-delete"]],
     ["planner unwraps observed comment marks", ["mark"]],
     ["record retained / unstamped capability exception / no rewrites", []]
-  ]],
-  ["restoreConflictCommand", "text-mark", "text-insert,text-delete,mark,scalar,record-create,record-set,record-delete", [
+  ]]),
+  classified("refuse", ["restoreConflictCommand", "text-mark", "text-insert,text-delete,mark,scalar,record-create,record-set,record-delete", [
     ["title or cell text replacement", ["text-insert", "text-delete"]],
     ["cell value restores different marks on observed words", ["mark"]],
     ["image replacement creates or changes a gallery record", ["record-create", "record-set"]],
     ["image replacement clears the legacy visualImage field", ["scalar"]],
     ["conflict comment deletion", ["record-delete"]],
     ["missing comment/row", []]
-  ]],
-  ["addBeatCommand", "structure", "segment-create", [
+  ]]),
+  classified("serve pending composition", ["addBeatCommand", "structure", "segment-create", [
     ["append or insert after existing beat, with initial defaults", ["segment-create"]],
     ["missing predecessor", []]
-  ]],
-  ["deleteBeatCommand", "structure", "remove,scalar", [
+  ]]),
+  classified("serve pending composition", ["deleteBeatCommand", "structure", "remove,scalar", [
     ["observed beat removal", ["remove"]],
     ["surviving paragraph flags", ["scalar"]],
     ["scene first-beat derivation / empty-scene recovery / missing beat", []]
-  ]],
-  ["moveBeatCommand", "structure", "segment-move,scalar | move-in-shared-session", [
+  ]]),
+  classified("refuse", ["moveBeatCommand", "structure", "segment-move,scalar | move-in-shared-session", [
     ["before versus after", ["segment-move"]],
     ["destination membership and source paragraph repair", ["scalar"]],
     ["source occupies part of segment", ["move-in-shared-session"]],
     ["unchanged order with changed scene", ["scalar"]],
     ["missing/self/no-op", []]
-  ]],
-  ["swapBeatsCommand", "structure", "segment-move,scalar | move-in-shared-session", [
+  ]]),
+  classified("refuse", ["swapBeatsCommand", "structure", "segment-move,scalar | move-in-shared-session", [
     ["previous/next delegates whole-beat movement", ["segment-move"]],
     ["delegated paragraph repair", ["scalar"]],
     ["source occupies part of segment", ["move-in-shared-session"]],
     ["edge/missing beat", []]
-  ]],
-  ["splitBeatCommand", "structure", "text-delete,split,segment-create,record-create", [
+  ]]),
+  classified("serve pending composition", ["splitBeatCommand", "structure", "text-delete,split,segment-create,record-create", [
     ["narration split", ["split"]],
     ["visual component split with a new empty narration segment", ["split", "segment-create", "record-create"]],
     ["delete selected observed span before splitting", ["text-delete"]],
     ["initial beat defaults belong to creation / unsupported field/missing row", []]
-  ]],
-  ["joinBeatsCommand", "structure", "join", [
+  ]]),
+  classified("serve pending composition", ["joinBeatsCommand", "structure", "join", [
     ["join narration with glue and retained visual/gallery origins", ["join"]],
     ["status rank derives from the join group", []],
     ["missing next/header/gallery-limit guards", []]
-  ]],
-  ["pasteBeatsCommand", "structure", "segment-create,text-insert,text-delete,remove,restore,segment-move,heading-create,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
+  ]]),
+  classified("could not classify", ["pasteBeatsCommand", "structure", "segment-create,text-insert,text-delete,remove,restore,segment-move,heading-create,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
     ["append/insert copied beats, including prefix/trailing blanks", ["segment-create", "text-insert"]],
     ["replace blank beat", ["remove"]],
     ["carries scene header", ["heading-create", "text-insert"]],
@@ -132,37 +142,37 @@ export const builderOperationCoverage = [
     ["restore an existing cut comment's fallback row", ["record-set"]],
     ["partial-source/cross-scene structural cut-paste", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["null/empty plan or incomplete apply", []]
-  ]],
-  ["removeBeatsCommand", "structure", "remove,scalar | cross-scene-structural-paste", [
+  ]]),
+  classified("serve pending composition", ["removeBeatsCommand", "structure", "remove,scalar | cross-scene-structural-paste", [
     ["observed distinct existing beats", ["remove"]],
     ["surviving paragraph repair", ["scalar"]],
     ["cross-scene structural cut", ["cross-scene-structural-paste"]],
     ["scene-anchor derivation / empty-scene recovery / missing/duplicate/no-op ids", []]
-  ]],
-  ["addSceneCommand", "structure", "heading-create,text-insert", [
+  ]]),
+  classified("could not classify", ["addSceneCommand", "structure", "heading-create,text-insert", [
     ["new header with first-beat membership carried by creation", ["heading-create"]],
     ["initial heading name", ["text-insert"]],
     ["empty/overlong name and invalid/duplicate id guards", []]
-  ]],
-  ["removeSceneCommand", "structure", "heading-remove,scalar", [
+  ]]),
+  classified("serve pending composition", ["removeSceneCommand", "structure", "heading-remove,scalar", [
     ["discard observed header without demotion", ["heading-remove"]],
     ["first beat paragraph flag", ["scalar"]],
     ["missing header", []]
-  ]],
-  ["moveSceneCommand", "structure", "segment-move | move-in-shared-session", [
+  ]]),
+  classified("refuse", ["moveSceneCommand", "structure", "segment-move | move-in-shared-session", [
     ["before/after whole scene, moving its header with beat segments", ["segment-move"]],
     ["scene cuts through a segment", ["move-in-shared-session"]],
     ["derived scene order / missing/self/unchanged guards", []]
-  ]],
-  ["importRowsCommand", "structure", "segment-create,text-insert,remove,heading-remove,record-create", [
+  ]]),
+  classified("refuse", ["importRowsCommand", "structure", "segment-create,text-insert,remove,heading-remove,record-create", [
     ["append imported narration with initial defaults", ["segment-create", "text-insert"]],
     ["import nonempty visual/gallery components", ["record-create", "text-insert"]],
     ["replace all observed rows", ["remove"]],
     ["replace clears scene headers", ["heading-remove"]],
     ["initial fields omit paragraph flags; scanner anchors new b-roll atoms before insertion", []],
     ["empty import", []]
-  ]],
-  ["standaloneFlowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
+  ]]),
+  classified("refuse", ["standaloneFlowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
     ["standalone typing and range-replacement policy", ["text-insert", "text-delete", "segment-create", "remove", "heading-remove"]],
     ["standalone mark and inline-markdown policy", ["mark"]],
     ["standalone ordinary and prefix-isolation split policy", ["split", "split-before"]],
@@ -172,8 +182,8 @@ export const builderOperationCoverage = [
     ["standalone paragraph and retained-record fields", ["scalar"]],
     ["shared classification of partial-source/cross-scene clipboard policy", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["standalone application only; no shared plan, optional selection, null/caret-only/refused/no-change", []]
-  ]],
-  ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
+  ]]),
+  classified("serve", ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
     ["typing and arbitrary range-replacement outcomes", ["text-insert", "text-delete", "segment-create", "remove", "heading-remove"]],
     ["observed mark and inline-markdown outcomes", ["mark"]],
     ["ordinary and prefix-isolation split outcomes", ["split", "split-before"]],
@@ -183,7 +193,7 @@ export const builderOperationCoverage = [
     ["paragraph/retained-record field edits", ["scalar"]],
     ["partial-source/cross-scene structural clipboard guards", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["removed comment words stay in recovery / optional selection / null/caret-only/refused/no-change", []]
-  ]]
+  ]])
 ] as const;
 
 export const flowOperationCoverage = [

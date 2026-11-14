@@ -17,6 +17,7 @@ import { fakeClock } from "../session-fakes.ts";
 import type { FakeClock } from "../session-fakes.ts";
 
 export interface SharedHarnessHooks {
+  refused?: (reason: string) => void;
   record?: () => void;
   effect?: (name: "dirty" | "draft" | "save") => void;
   asked?: () => void;
@@ -50,6 +51,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
   let denied: string | null = null;
   const can = (): Capability => { hooks.asked?.(); return denied === null ? { allowed: true } : { allowed: false, reason: denied }; };
   const session = createSharedSession({
+    refused: hooks.refused,
     replica: {
       revision: replica.revision,
       project: () => { log.push("project"); return replica.project(); },

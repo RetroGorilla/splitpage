@@ -43,7 +43,7 @@ export type CommandOutcome =
   | { readonly kind: "applied"; readonly generation: number; readonly changes: ChangeSet }
   | { readonly kind: "committed"; readonly generation: number; readonly changes: ChangeSet; readonly errors: readonly unknown[] }
   | { readonly kind: "noop" }
-  | { readonly kind: "rejected"; readonly reason: string }
+  | { readonly kind: "rejected"; readonly reason: string; readonly notified?: true }
   | { readonly kind: "failed"; readonly error: unknown };
 
 export interface ReplayPlan {

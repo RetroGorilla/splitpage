@@ -8,7 +8,7 @@ import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts"
 import type { ProductionSelection } from "../../application/editing/production-selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
-import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { DocumentEdits, SharedCommandGuard } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
@@ -81,6 +81,7 @@ export interface WhoListMount extends WhoListControl {
 }
 
 export interface TagPanelPorts {
+  readonly sharedCommands: SharedCommandGuard;
   readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setGearGroupBy" | "setProductionGroupBy" | "setTagAddingPerson" | "setTagExpanded" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
   readonly preferences: Pick<Preferences, "panelGrouping">;
   readonly changes: PreferenceChanges;
