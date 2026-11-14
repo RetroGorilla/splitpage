@@ -31,6 +31,8 @@ When composing a shared Writer, construct `shared = sharedBufferPorts(handle, se
 
 The feature literals compare complete projected documents on both live copies and a fresh handle loaded from encoded state. They cover typing, deletion, whole replacement, plain record-looking multiline text, selection isolation followed by typing, idle caret remapping, close/reopen, hidden-cell admission, missing visuals and joined visuals. Duplicate and reversed delivery cover two Writer visual boxes, the Split column, another writer's insertion and beat removal. A seeded history runs all three native command kinds with three writers, duplicate/reordered delivery and an encoded late joiner; no convergence exceptions are declared.
 
+The C2 undo seam is exercised with the real shared undo owner: two visual keys form one typing group, undo keeps another copy's insertion in that visual, and redo restores the local text. Each checkpoint compares both live copies and an encoded late joiner, including the retained beat stamp.
+
 ## For later cuts
 
 `sharedPeopleIntroducedByText` still takes a caller-supplied id, so a typed `@Pat` and a pasted Pat created at the same moment would not meet in one record until the cut that wires that builder uses the same name-derived id; this remains with the lane that owns that builder.

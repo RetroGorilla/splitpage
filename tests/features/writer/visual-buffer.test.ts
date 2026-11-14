@@ -33,6 +33,8 @@ import { replaceRange, beatPos } from "../../../src/core/flow/flow.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { deliveryReplica } from "../../adapters/collab/helpers.ts";
 import { createFlowVisualBox } from "../../../src/features/writer/flow-visual-box.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
 
 const changed = { updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" };
 
@@ -45,7 +47,7 @@ function expected(visualText: string, by = "Alice", rows?: readonly Record<strin
     comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 };
 }
 
-function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
+function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUndo = false) {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (value: string) => value } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
   document.body.innerHTML = '<div class="writer-bar"></div><section><div id="writer-doc" contenteditable="true"></div></section>';
@@ -53,7 +55,10 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
   const h = replicas(2, { rows: [{ id: "R1", audioText: "abc", visualText: "ab" }, { id: "R2", audioText: "def", visualText: secondVisual }] });
   const runtime = createFlowLoadRuntime();
   for (const handle of [h.a, h.b]) registerSharedOperationFamilies(handle, { cells: runtime.cells });
-  const a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
+  let reversals = 0;
+  const undoOwner = recordUndo ? sharedUndoOwner(h.a, () => ({ id: "visual_undo_" + ++reversals, by: "Alice" }), () => 0, error => { assert.fail(String(error)); }) : null;
+  const a = sharedHarness(adapterReplica(h.a, undoOwner ?? undefined)), b = sharedHarness(adapterReplica(h.b));
+  const undo = undoOwner ? sharedUndoActions(a.session, undoOwner) : null;
   const { effects: bufferEffects, reports, missing, recovered } = fakeWriterBufferEffects();
   const { effects, notices } = fakeFlowCommandEffects(), guard = createPaintGuard();
   const unexpected: string[] = [];
@@ -142,7 +147,7 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
     cell.focus(); setCellSelection(cell, 1);
     return { key: (from: number, to: number, data: string) => input(target, from, to, data, "insertText", undefined, false) };
   }
-  return { h, a, b, writer, root, cell, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, otherVisual, reports, missing, recovered, notices, guard,
+  return { h, a, b, writer, root, cell, undo, undoOwner, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, otherVisual, reports, missing, recovered, notices, guard,
     close: () => {
       try { splitClose?.(); stop(); writer.dispose(); assert.deepEqual(unexpected, []); }
       finally { a.session.dispose(); b.session.dispose(); h.close(); root.parentElement?.remove(); document.querySelector(".writer-bar")?.remove(); }
@@ -326,6 +331,23 @@ test("a closed Writer visual never admits its stale hidden cell into a narration
     page.writer.place({ anchor: beatPos("R1", 1), head: beatPos("R1", 2) }); page.writer.format("bold");
     page.agrees(expected("", "Alice", [row("R1", "a<strong>b</strong>c", "Qab", changed), row("R2", "def", "")]));
     assert.deepEqual([page.reports, page.missing, page.notices], [[], [], []]);
+  } finally { page.close(); }
+});
+
+test("Writer visual typing reaches the shared undo owner as one group and leaves a remote visual insertion", () => {
+  const page = visualWriter("dup", "", true);
+  try {
+    assert.ok(page.undo); assert.ok(page.undoOwner);
+    assert.equal(page.key(1, 1, "X"), true);
+    assert.equal(page.key(2, 2, "Y"), true);
+    assert.deepEqual(page.undoOwner.sizes(), { undo: 1, redo: 0, dropped: 0 });
+    remoteInsert(page, "Q"); page.h.queue.deliverFrom("B", "dup");
+    page.agrees(expected("QaXYb"));
+    assert.equal(page.undo.undo().ok, true);
+    page.agrees(expected("Qab"));
+    assert.deepEqual(page.undoOwner.sizes(), { undo: 0, redo: 1, dropped: 0 });
+    assert.equal(page.undo.redo().ok, true);
+    page.agrees(expected("QaXYb"));
   } finally { page.close(); }
 });
 
