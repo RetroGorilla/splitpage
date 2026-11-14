@@ -14,16 +14,15 @@ export function recoveryCommand(action: "restore" | "discard", name: SharedRecov
   return { name: "recovery-" + action, needs: "edit", plan: doc => {
     const entry = ports.recovery.recovery().find(item => { const key = sharedRecoveryEntryName(item); return key.kind === name.kind && key.key === name.key; });
     if (!entry) return { refused: "recovery-entry-unavailable" };
+    const removed = entry.kind === "removed-beat" || entry.kind === "removed-heading";
+    const removals = removed ? entry.removal?.ids.map(readSharedContentRef) : null;
+    if (removed && (!removals?.length || removals.some(id => id === null))) return { refused: "recovery-removal-unavailable" };
     const author = ports.author();
     if (!author) return { refused: "recovery-no-author" };
     let operation: SharedOperation | null = null;
     if (action === "discard") operation = sharedRecoveryDiscardOperation(entry, author);
     else if (entry.kind === "deleted-person") operation = sharedRecoveryPersonRestore(entry, doc.people, author);
-    else if (entry.kind === "removed-beat" || entry.kind === "removed-heading") {
-      const removals = entry.removal?.ids.map(readSharedContentRef);
-      if (!removals?.length || removals.some(id => id === null)) return { refused: "recovery-removal-unavailable" };
-      operation = { kind: "restore", ...author, removals: removals.filter(id => id !== null) };
-    }
+    else if (removed) operation = { kind: "restore", ...author, removals: removals!.filter(id => id !== null) };
     if (!operation) return { refused: "recovery-" + action + "-unavailable" };
     return { changes: WHOLE_DOCUMENT, apply: () => { throw new Error("recovery-shared-only"); },
       shared: { operations: [operation], description: { label: "recovery-" + action, selection: null, typing: null } } };

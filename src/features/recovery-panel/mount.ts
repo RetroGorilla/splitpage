@@ -25,10 +25,11 @@ export function createRecoveryPanel(ports: RecoveryPanelPorts): RecoveryPanelCon
     row.appendChild(document.createElement("p")).textContent = content.by || "No author recorded";
     row.appendChild(document.createElement("pre")).textContent = content.text;
     const actions = row.appendChild(document.createElement("div")); actions.className = "history-card-actions";
+    const removed = entry.kind === "removed-beat" || entry.kind === "removed-heading";
     const restore = entry.kind === "deleted-person" ? sharedRecoveryPersonRestore(entry, ports.document.current()?.people ?? [], preview) !== null
-      : (entry.kind === "removed-beat" || entry.kind === "removed-heading") && !!entry.removal?.ids.length;
+      : removed && !!entry.removal?.ids.length;
     if (restore) button(actions, "Restore", () => { if (ports.session.current()) report(ports.restore(name)); });
-    if (sharedRecoveryDiscardOperation(entry, preview)) button(actions, "Discard", () => { if (ports.session.current()) report(ports.discard(name)); });
+    if (sharedRecoveryDiscardOperation(entry, preview) && (!removed || !!entry.removal?.ids.length)) button(actions, "Discard", () => { if (ports.session.current()) report(ports.discard(name)); });
   }
   function paint(): void {
     panel?.remove(); panel = null;

@@ -34,19 +34,33 @@ test("C9 follows mode changes, registers once, releases a vanished session and d
   const off = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
   try {
     f.state.shared = true; f.changed(); f.changed();
-    assert.equal(registry.list().length, 1); assert.equal(f.state.subscriptions, 1);
+    assert.equal(registry.list().length, 1); assert.equal(f.state.subscriptions, 1); assert.equal(f.state.openedReaders, 1);
+    assert.equal(f.ports.host.childElementCount, 0);
     assert.equal(registry.invoke("recovery", "command-menu").kind, "ran");
     assert.equal(f.ports.host.querySelector("pre")?.textContent, "Kept <text>");
     const old = [...f.ports.host.querySelectorAll("button")].find(button => button.textContent === "Restore"); assert.ok(old);
     f.state.shared = false; f.changed();
     assert.equal(f.ports.host.childElementCount, 0); assert.equal(f.state.subscriptions, 0); assert.deepEqual(registry.list(), []);
     old.click(); assert.deepEqual(f.calls, []);
-    f.state.shared = true; f.changed(); panel.open();
+    f.state.shared = true; f.changed(); old.click(); assert.deepEqual(f.calls, []); panel.open();
     const late = [...f.mode]; off(); panel.dispose();
     for (const callback of late) callback();
     assert.equal(f.ports.host.childElementCount, 0); assert.equal(f.state.subscriptions, 0); assert.equal(f.mode.size, 0);
-    assert.deepEqual(registry.list(), []); panel.open(); assert.equal(f.ports.host.childElementCount, 0);
+    assert.deepEqual(registry.list(), []); const reads = f.state.currentReads; panel.open(); assert.equal(f.state.currentReads, reads); assert.equal(f.ports.host.childElementCount, 0);
   } finally { off(); panel.dispose(); f.ports.host.remove(); }
+});
+
+test("C9 an unavailable action and a still-connected button cannot call a controller after the session ends", () => {
+  const f = fakeRecoveryPanelPorts([removed]); let opened = 0;
+  const definition = recoveryPanelActions(() => ({ open: () => { opened++; }, dispose: () => {} }), f.ports)[0]; assert.ok(definition);
+  definition.run("command-menu"); assert.equal(opened, 0);
+  f.state.shared = true; const panel = createRecoveryPanel(f.ports);
+  try {
+    panel.open(); const buttons = [...f.ports.host.querySelectorAll("article button")]; assert.equal(buttons.length, 2);
+    f.state.shared = false;
+    for (const button of buttons) button.click();
+    assert.deepEqual(f.calls, []);
+  } finally { panel.dispose(); f.ports.host.remove(); }
 });
 
 for (const outcome of [{ kind: "rejected", reason: "recovery-no-author" }, { kind: "rejected", reason: "viewing-only", notified: true },
@@ -73,7 +87,7 @@ test("C9 hides unsupported actions for damaged removals, unnamed fragments and a
   f.state.shared = true; const panel = createRecoveryPanel(f.ports);
   try {
     panel.open(); const rows = [...f.ports.host.querySelectorAll("article")];
-    assert.deepEqual(rows.map(row => [...row.querySelectorAll("button")].map(button => button.textContent)), [["Discard"], [], ["Discard"]]);
+    assert.deepEqual(rows.map(row => [...row.querySelectorAll("button")].map(button => button.textContent)), [[], [], ["Discard"]]);
     assert.deepEqual(rows.map(row => row.querySelector("p")?.textContent), ["No author recorded", "No author recorded", "Alice"]);
     const close = [...f.ports.host.querySelectorAll("button")].find(button => button.textContent === "Close"); assert.ok(close); close.click();
     assert.equal(f.ports.host.childElementCount, 0);

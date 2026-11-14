@@ -582,10 +582,10 @@ import { changeSet } from "../../src/application/session/change-set.ts";
 export function fakeRecoveryPanelPorts(entries: readonly SharedRecoveryEntry[] = [], initial: DocumentView | null = null) {
   const mode = new Set<() => void>(), published = new Set<() => void>(), calls: { action: string; entry: Parameters<RecoveryPanelPorts["restore"]>[0] }[] = [];
   const notices = fakeNotices(), doc = fakeDocument(initial), host = document.body.appendChild(document.createElement("div"));
-  const state = { shared: false, currentReads: 0, reads: 0, subscriptions: 0, docReads: 0, outcome: { kind: "noop" } as CommandOutcome };
+  const state = { shared: false, currentReads: 0, reads: 0, subscriptions: 0, openedReaders: 0, docReads: 0, outcome: { kind: "noop" } as CommandOutcome };
   const reader: NonNullable<ReturnType<RecoveryPanelPorts["session"]["current"]>> = {
     recovery: () => { state.reads++; return entries; },
-    subscribe: listener => { state.subscriptions++; const run = () => listener({ kind: "remote", epoch: 1, generation: 1, changes: changeSet({}) }); published.add(run);
+    subscribe: listener => { state.subscriptions++; state.openedReaders++; const run = () => listener({ kind: "remote", epoch: 1, generation: 1, changes: changeSet({}) }); published.add(run);
       return () => { state.subscriptions--; published.delete(run); }; }
   };
   const ports: RecoveryPanelPorts = { host,

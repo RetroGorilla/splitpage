@@ -7,13 +7,12 @@ import { readSharedRevision, transactSharedDocument } from "../../../src/adapter
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
-import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { recoveryCommand } from "../../../src/application/commands/recovery.ts";
+import { recoveryPanelPorts } from "../../../src/bootstrap/wiring/recovery-panel.ts";
 import { createRecoveryPanel } from "../../../src/features/recovery-panel/mount.ts";
 import { startRecoveryPanelActions } from "../../../src/features/recovery-panel/actions.ts";
 import type { RecoveryPanelPorts } from "../../../src/features/recovery-panel/ports.ts";
@@ -25,9 +24,9 @@ export function send(handle: SharedDocumentHandle, ...ops: unknown[]): void {
   assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true });
 }
 
-export function fixture(source: Record<string, unknown> = { rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }] }) {
-  const set = replicas(2, source), runtime = createFlowLoadRuntime();
-  for (const handle of [set.a, set.b]) registerSharedOperationFamilies(handle, runtime);
+export function fixture(source: Record<string, unknown> = { rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }] }, copies = 2) {
+  const set = replicas(copies, source), runtime = createFlowLoadRuntime();
+  for (const handle of [set.a, set.b, ...(copies === 3 ? [set.c] : [])]) registerSharedOperationFamilies(handle, runtime);
   return set;
 }
 
@@ -46,19 +45,17 @@ export function fragment(handle: SharedDocumentHandle): void {
   });
 }
 
-export function page(handle: SharedDocumentHandle) {
+export function page(handle: SharedDocumentHandle, name = "Bob") {
   let serial = 0;
-  const undo = sharedUndoOwner(handle, () => ({ id: "reverse" + ++serial, by: "Bob" }), () => 0, error => { throw error; });
+  const undo = sharedUndoOwner(handle, () => ({ id: "reverse" + ++serial, by: name }), () => 0, error => { throw error; });
   const h = sharedHarness(adapterReplica(handle, undo)), notices = fakeNotices(), registry = createActionRegistry();
   const host = document.body.appendChild(document.createElement("div")), listeners = new Set<() => void>();
-  const state = { shared: true, author: true };
-  const ports: RecoveryPanelPorts = { host, session: { current: () => state.shared ? h.session : null,
+  const state = { shared: true, author: true, parts: true, badIdentity: false };
+  const ports: RecoveryPanelPorts = recoveryPanelPorts({ host, session: { current: () => state.shared ? h.session : null,
     onChange: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     document: { current: () => h.session.read(doc => doc) }, text: { htmlToPlainText },
-    reply: key => readSharedRecords(handle, "replies").find(reply => reply.key === key)?.fields ?? null,
-    restore: name => h.session.run(recoveryCommand("restore", name, { recovery: h.session, author: author })),
-    discard: name => h.session.run(recoveryCommand("discard", name, { recovery: h.session, author: author })), notices: notices.notices };
-  function author() { return state.author ? { id: ref("action" + ++serial), by: "Bob" } : null; }
+    parts: () => state.parts ? { handle, author: { next: () => state.author ? { id: state.badIdentity ? " " : "action" + ++serial, by: name } : null } } : null,
+    run: h.session.run, notices: notices.notices });
   const panel = createRecoveryPanel(ports), off = startRecoveryPanelActions({ registry, current: () => panel, session: ports.session });
   const open = () => { assert.equal(registry.invoke("recovery", "command-menu").kind, "ran"); };
   return { h, undo, notices, registry, state, ports, panel, host, open,

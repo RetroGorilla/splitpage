@@ -23,10 +23,10 @@ for (const action of ["restore", "discard"] as const) test("C9 command refuses a
   assert.deepEqual(recoveryCommand(action, { kind: "removed-beat", key: "R1" }, { recovery: { recovery: () => [beat] }, author: () => null }).plan(doc, capability), { refused: "recovery-no-author" });
 });
 
-for (const ids of [undefined, [], [" "]]) test("C9 restore refuses missing, empty or unreadable removal provenance: " + JSON.stringify(ids), () => {
+for (const action of ["restore", "discard"] as const) for (const ids of [undefined, [], [" "]]) test("C9 " + action + " refuses missing, empty or unreadable removal provenance: " + JSON.stringify(ids), () => {
   const entry: SharedRecoveryEntry = { kind: "removed-beat", row: { id: "R1", audioText: "Kept" }, members: ["R1"],
     ...(ids ? { removal: { ids, by: "Alice", edited: [] } } : {}) };
-  assert.deepEqual(recoveryCommand("restore", { kind: "removed-beat", key: "R1" }, { recovery: { recovery: () => [entry] }, author: () => ({ id, by: "Bob" }) }).plan(doc, capability), { refused: "recovery-removal-unavailable" });
+  assert.deepEqual(recoveryCommand(action, { kind: "removed-beat", key: "R1" }, { recovery: { recovery: () => [entry] }, author: () => ({ id, by: "Bob" }) }).plan(doc, capability), { refused: "recovery-removal-unavailable" });
 });
 
 for (const action of ["restore", "discard"] as const) test("C9 scene with no beats has no recovery " + action + " operation", () => {
