@@ -23,6 +23,11 @@ function statusChanges(rowId: string): ChangeSet {
   });
 }
 
+function statusList(rowId: string, status: RowStatusId, shared: SharedListPorts | undefined) {
+  const by = shared?.author();
+  return shared && by ? { shared: { operations: [sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)] } } : {};
+}
+
 export function beatStatus(rowId: string): (doc: DocumentView | null) => unknown {
   return function (doc) {
     if (!doc) return undefined;
@@ -35,11 +40,6 @@ export function shotGrace(before: unknown, after: unknown): ShotGrace {
   if (before !== "shot" && after === "shot") return "arm";
   if (before === "shot" && after !== "shot") return "clear";
   return null;
-}
-
-function statusList(rowId: string, status: RowStatusId, shared: SharedListPorts | undefined) {
-  const by = shared?.author();
-  return shared && by ? { shared: { operations: [sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)] } } : {};
 }
 
 export function beatStatusCommand(rowId: string, stamps: StampPorts, shared?: SharedListPorts): Command {
