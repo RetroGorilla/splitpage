@@ -1,0 +1,106 @@
+{
+  "tests": [
+    "tests/features/writer/visual-buffer.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "Writer visual loses its shared feature port",
+      "file": "src/features/writer/flow-writer.ts",
+      "find": "...(ports.visualBuffer ? { buffer: ports.visualBuffer } : {}),",
+      "replace": "",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer shared visual uses standalone synchronization",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "if (!first) return range;",
+      "replace": "if (!first) return ports.save(range, html, first);",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer shared visual invokes standalone shortcut creators",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,",
+      "replace": "input: ports.input, leave: ports.leave, keydown: ports.keydown, beforeWrite: () => null,",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer visual hidden cell remains a writable field",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "target.dataset.field = \"inactive-visual\";",
+      "replace": "target.dataset.field = \"visualText\";",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer visual selection hold never releases",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "edit?.cancel();",
+      "replace": "",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer visual selection never holds narration ingress",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "selectionEdit = base ? shared.bufferedText.open(range.head.rowId, base) : null;",
+      "replace": "selectionEdit = null;",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer visual idle caret remains at numeric offsets",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "placeSelection(cell, root.ownerDocument.getSelection(), resolved);",
+      "replace": "",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer visual fresh text is tracked by a temporary owner",
+      "file": "src/adapters/collab/executor-text-plan.ts",
+      "find": "[provenance(located.target.owner, units, 0, target.field)]",
+      "replace": "[provenance(target.owner, units, 0, target.field)]",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer visual disposal ignores composition",
+      "file": "src/features/writer/flow-writer.ts",
+      "find": "if (visual?.settle && !visual.settle()) return;\n      if (surface.settle",
+      "replace": "if (surface.settle",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer opens another visual during composition",
+      "file": "src/features/writer/flow-writer.ts",
+      "find": "if (visual?.settle && !visual.settle()) return;\n      surface.place",
+      "replace": "surface.place",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer standalone visual key gains a document walk",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "function onInput(event: Event): void {",
+      "replace": "function onInput(event: Event): void { ports.doc().rows.forEach(row => row.id);",
+      "tests": [
+        "tests/features/writer/visual-buffer-cost.test.ts"
+      ]
+    }
+  ]
+}

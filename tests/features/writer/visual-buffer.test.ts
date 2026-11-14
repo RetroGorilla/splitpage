@@ -30,6 +30,9 @@ import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts
 import { operation, ref } from "../../adapters/collab/executor-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { replaceRange, beatPos } from "../../../src/core/flow/flow.ts";
+import type { DeliveryOrder } from "../../collab/delivery.ts";
+import { deliveryReplica } from "../../adapters/collab/helpers.ts";
+import { createFlowVisualBox } from "../../../src/features/writer/flow-visual-box.ts";
 
 const changed = { updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" };
 
@@ -42,12 +45,12 @@ function expected(visualText: string, by = "Alice", rows?: readonly Record<strin
     comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 };
 }
 
-function visualWriter() {
+function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (value: string) => value } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
   document.body.innerHTML = '<div class="writer-bar"></div><section><div id="writer-doc" contenteditable="true"></div></section>';
   const root = document.getElementById("writer-doc"); assert.ok(root);
-  const h = replicas(2, { rows: [{ id: "R1", audioText: "abc", visualText: "ab" }, { id: "R2", audioText: "def" }] });
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "abc", visualText: "ab" }, { id: "R2", audioText: "def", visualText: secondVisual }] });
   const runtime = createFlowLoadRuntime();
   for (const handle of [h.a, h.b]) registerSharedOperationFamilies(handle, { cells: runtime.cells });
   const a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
@@ -71,21 +74,27 @@ function visualWriter() {
   writer.repaint();
   const stop = a.session.subscribe(() => { if (!guard.shown()) writer.repaint(); });
   writer.openVisual("R1");
-  const cell = document.querySelector<HTMLElement>(".wr-flow-visual-text"); assert.ok(cell);
-  function input(target: HTMLElement, from: number, to: number, data: string, type = "insertText", during?: () => void): boolean {
-    target.focus(); setCellSelection(target, from, to);
+  const foundCell = document.querySelector<HTMLElement>(".wr-flow-visual-text"); assert.ok(foundCell);
+  const cell: HTMLElement = foundCell;
+  function input(target: HTMLElement, from: number, to: number, data: string, type = "insertText", during?: () => void, focus = true): boolean {
+    if (focus) { target.focus(); setCellSelection(target, from, to); }
     const start = posToDom(target, from), end = posToDom(target, to), range = document.createRange();
     range.setStart(start.node, start.offset); range.setEnd(end.node, end.offset);
     const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type, data });
     Object.defineProperty(event, "getTargetRanges", { value: () => [range.cloneRange()] });
     if (!target.dispatchEvent(event)) return false;
-    during?.(); range.deleteContents(); if (data) range.insertNode(document.createTextNode(data));
-    setCellSelection(target, from + data.length);
+    during?.(); range.deleteContents();
+    if (data) {
+      const content = document.createDocumentFragment();
+      for (const [index, line] of data.split("\n").entries()) { if (index) content.append(document.createElement("br")); content.append(document.createTextNode(line)); }
+      range.insertNode(content);
+    }
+    if (focus) setCellSelection(target, from + data.length);
     target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data }));
     return true;
   }
   function agrees(value: unknown) {
-    h.queue.flush("dup");
+    h.queue.flush(order);
     const late = createMonitoredSharedDocument(); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
     const c = sharedHarness(adapterReplica(late));
     try {
@@ -111,9 +120,27 @@ function visualWriter() {
       readable: key => otherShared.paintedText.read(key, "visualText") !== null
     } });
     splitClose = () => { buffer.dispose(); stopOther(); other.remove(); };
-    return { target, key: (from: number, to: number, data: string, type = "insertText") => input(target, from, to, data, type) };
+    return { target, key: (from: number, to: number, data: string, type = "insertText") => input(target, from, to, data, type, undefined, false) };
   }
-  return { h, a, b, writer, cell, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, reports, missing, recovered, notices, guard,
+  function otherVisual() {
+    const holder = document.body.appendChild(document.createElement("section")), otherRoot = holder.appendChild(document.createElement("div"));
+    const otherGuard = createPaintGuard(), otherAuthor = sharedAuthorPort({ handle: () => h.b, name: () => "Bob" });
+    const otherShared = sharedBufferPorts(h.b, b.session, { ...bufferEffects, readers: bufferReaders, stamps: bufferStamps("Bob"), author: () => { const next = otherAuthor.next(); assert.ok(next); return next; } });
+    const doc = () => { const view = b.session.read(doc => doc); assert.ok(view); return view; };
+    const at = { anchor: beatPos("R1", 0), head: beatPos("R1", 0) };
+    const forbidden = () => { throw new Error("Shared visual reached a standalone callback"); };
+    const box = createFlowVisualBox({ root: otherRoot, buffer: writerVisualBuffer(otherShared, { document: doc, lifetime: b.session, decode: fromHtml, storedHtml: html => html, shown: otherGuard.whileShown }),
+      doc, selection: () => at, prepare: range => range, place: () => {}, current: () => true, blocked: () => otherGuard.painting(),
+      plainVisual: () => "", thumbnails: () => "", save: forbidden, input: forbidden, leave: forbidden, keydown: forbidden,
+      notice: forbidden, undo: forbidden, paste: forbidden });
+    const stopOther = b.session.subscribe(() => { if (!otherGuard.shown()) box.refresh(); });
+    box.open(at);
+    const target = box.element.querySelector<HTMLElement>(".wr-flow-visual-text"); assert.ok(target);
+    splitClose = () => { box.dispose(); stopOther(); holder.remove(); };
+    cell.focus(); setCellSelection(cell, 1);
+    return { key: (from: number, to: number, data: string) => input(target, from, to, data, "insertText", undefined, false) };
+  }
+  return { h, a, b, writer, root, cell, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, otherVisual, reports, missing, recovered, notices, guard,
     close: () => { splitClose?.(); stop(); writer.dispose(); a.session.dispose(); b.session.dispose(); h.close(); root.parentElement?.remove(); document.querySelector(".writer-bar")?.remove(); } };
 }
 
@@ -133,14 +160,14 @@ for (const literal of [
   } finally { page.close(); }
 });
 
-test("Writer visual holds same-visual remote typing until its native input commits, then restores the caret by identity", () => {
-  const page = visualWriter();
+for (const order of ["dup", "rev"] as const) test("Writer visual holds same-visual remote typing until its native input commits, then restores the caret by identity: " + order, () => {
+  const page = visualWriter(order);
   try {
     assert.equal(page.key(1, 1, "X", "insertText", () => {
       const target = { owner: ref("R1"), segment: ref("R1"), field: "visualText" as const };
       const anchor = createSharedAnchor(page.h.b, target, 0, "after"); assert.ok(anchor);
       assert.deepEqual(executeSharedOperations(page.h.b, [operation({ kind: "text-insert", id: "remote", by: "Bob", target, at: { left: anchor, right: null, affinity: "after" }, content: [{ value: "Q", marks: [] }] })]), { ok: true });
-      page.h.queue.deliverFrom("B", "dup");
+      page.h.queue.deliverFrom("B", order);
       assert.deepEqual(page.a.session.read(doc => doc?.rows[0]?.visualText), "ab");
       assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
     }), true);
@@ -150,13 +177,13 @@ test("Writer visual holds same-visual remote typing until its native input commi
   } finally { page.close(); }
 });
 
-test("Writer visual and Split visual race through the same buffered binding", () => {
-  const page = visualWriter();
+for (const order of ["dup", "rev"] as const) test("Writer visual and Split visual race through the same buffered binding: " + order, () => {
+  const page = visualWriter(order);
   try {
     const split = page.split();
     assert.equal(page.key(1, 1, "X", "insertText", () => {
       assert.equal(split.key(1, 1, "Y"), true);
-      page.h.queue.deliverFrom("B", "D2");
+      page.h.queue.deliverFrom("B", order);
       assert.equal(page.a.session.read(doc => doc?.rows[0]?.visualText), "ab");
     }), true);
     page.agrees(expected("aXYb", "Bob"));
@@ -164,18 +191,168 @@ test("Writer visual and Split visual race through the same buffered binding", ()
   } finally { page.close(); }
 });
 
-test("Writer visual typing racing beat removal stays in the removed beat and releases its hold", () => {
-  const page = visualWriter();
+for (const order of ["dup", "rev"] as const) test("Writer visual typing racing beat removal stays in the removed beat and releases its hold: " + order, () => {
+  const page = visualWriter(order);
   try {
     const runtime = createFlowLoadRuntime(), author = sharedAuthorPort({ handle: () => page.h.b, name: () => "Bob" });
     const commands = writerFlowCommands(runtime.ports, { author, writer: () => "2" });
     assert.equal(page.key(1, 1, "X", "insertText", () => {
       const prepared = commands.commands.prepare("remove", doc => replaceRange(doc, { anchor: beatPos("R1", 0), head: beatPos("R2", 0) }, [], commands.flow, true), bufferStamps("Bob"));
       assert.equal(page.b.session.run(prepared.command).kind, "applied");
-      page.h.queue.deliverFrom("B", "dup");
+      page.h.queue.deliverFrom("B", order);
       assert.equal(page.a.session.read(doc => doc?.rows.length), 2);
     }), true);
     page.agrees(expected("", "Alice", [row("R2", "def", "")]));
     assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
   } finally { page.close(); }
+});
+
+function remoteInsert(page: ReturnType<typeof visualWriter>, text: string, offset = 0) {
+  const target = { owner: ref("R1"), segment: ref("R1"), field: "visualText" as const };
+  const anchor = createSharedAnchor(page.h.b, target, offset, "after"); assert.ok(anchor);
+  assert.deepEqual(executeSharedOperations(page.h.b, [operation({ kind: "text-insert", id: "remote_" + text, by: "Bob", target,
+    at: { left: anchor, right: null, affinity: "after" }, content: [...text].map(value => ({ value, marks: [] })) })]), { ok: true });
+}
+
+test("Writer visual idle repaint keeps the caret with its character", () => {
+  const page = visualWriter();
+  try {
+    page.cell.focus(); setCellSelection(page.cell, 1);
+    remoteInsert(page, "Q"); page.h.queue.deliverFrom("B", "dup");
+    assert.deepEqual(cellSelection(page.cell), { from: 2, to: 2 });
+    page.agrees(expected("Qab", "Alice", [row("R1", "abc", "Qab"), row("R2", "def", "")]));
+  } finally { page.close(); }
+});
+
+for (const order of ["dup", "rev"] as const) test("two Writer visual boxes race through their own bindings: " + order, () => {
+  const page = visualWriter(order);
+  try {
+    const other = page.otherVisual();
+    assert.equal(page.key(1, 1, "X", "insertText", () => {
+      assert.equal(other.key(1, 1, "Y"), true);
+      page.h.queue.deliverFrom("B", order);
+      assert.equal(page.cell.textContent, "ab");
+    }), true);
+    page.agrees(expected("aXYb", "Bob"));
+    assert.deepEqual([page.reports, page.missing], [[], []]);
+  } finally { page.close(); }
+});
+
+test("Writer visual composition holds remote edits and refuses close until composition ends", () => {
+  const page = visualWriter();
+  try {
+    page.cell.focus(); setCellSelection(page.cell, 1);
+    page.cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    page.cell.innerHTML = "a漢b"; setCellSelection(page.cell, 2);
+    page.cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "漢", isComposing: true }));
+    remoteInsert(page, "Q"); page.h.queue.deliverFrom("B", "dup");
+    const box = page.cell.closest<HTMLElement>(".wr-flow-visual-box"); assert.ok(box);
+    box.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+    assert.equal(box.hidden, false);
+    assert.equal(page.writer.settle?.(), false);
+    page.writer.openVisual("R2");
+    assert.equal(page.cell.dataset.id, "R1");
+    page.writer.dispose();
+    assert.equal(document.querySelector(".wr-flow-visual-text"), page.cell);
+    assert.equal(page.cell.textContent, "a漢b");
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
+    page.cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "漢" }));
+    page.agrees(expected("Qa漢b"));
+    assert.deepEqual(cellSelection(page.cell), { from: 3, to: 3 });
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+    box.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+    assert.equal(box.hidden, true);
+    assert.equal(page.cell.dataset.field, "inactive-visual");
+    page.writer.openVisual("R1");
+    assert.equal(page.key(4, 4, "!"), true);
+    page.agrees(expected("Qa漢b!"));
+    box.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+    page.writer.place({ anchor: beatPos("R2", 0), head: beatPos("R2", 3) });
+    page.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true, cancelable: true }));
+    page.agrees(expected("", "Alice", [row("R1", "abc", "Qa漢b!", changed), row("R2", "<strong>def</strong>", "", changed)]));
+  } finally { page.close(); }
+});
+
+test("Writer visual without a visual record refuses buffer-no-visual and writes nothing", () => {
+  const page = visualWriter();
+  try {
+    assert.deepEqual(executeSharedOperations(page.h.b, [operation({ kind: "record-delete", id: "drop_visual", by: "Bob", target: { collection: "visuals", record: "R1" } })]), { ok: true });
+    page.h.queue.deliverFrom("B", "dup");
+    assert.equal(page.key(0, 0, "X"), false);
+    assert.deepEqual(page.reports, [{ kind: "rejected", reason: "buffer-no-visual" }]);
+    assert.deepEqual(page.a.executed, []);
+    page.agrees(expected("", "Alice", [row("R1", "abc", ""), row("R2", "def", "")]));
+  } finally { page.close(); }
+});
+
+test("Writer joined visual stays read-only under rule 93", () => {
+  const page = visualWriter("dup", "cd");
+  try {
+    assert.deepEqual(executeSharedOperations(page.h.b, [operation({ kind: "join", id: "join", by: "Bob", from: "R2", into: "R1", glue: " " })]), { ok: true });
+    page.h.queue.deliverFrom("B", "dup");
+    assert.equal(page.key(1, 1, "X"), false);
+    assert.deepEqual(page.missing, [bufferedFieldKey("R1", "visualText")]);
+    assert.deepEqual(page.a.executed, []);
+    page.agrees(expected("ab<br>cd", "Alice", [row("R1", "abc def", "ab<br>cd")]));
+  } finally { page.close(); }
+});
+
+test("Writer narration selection uses visual-selection once, then the visual buffer", () => {
+  const page = visualWriter();
+  try {
+    page.cell.closest(".wr-flow-visual-box")?.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+    page.writer.place({ anchor: beatPos("R1", 1), head: beatPos("R1", 2) });
+    document.getElementById("wr-visual")?.click();
+    assert.equal(page.cell.dataset.field, "selection-visual");
+    assert.equal(page.key(0, 0, "X"), true);
+    assert.deepEqual(page.notices, []);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+    assert.equal(page.key(1, 1, "Y"), true);
+    page.agrees(expected("", "Alice", [row("R1", "a", "ab", changed), row("structure_1_00770031005f0031005f006f005f0030_beat_0", "b", "XY", changed), row("structure_1_00770031005f0031005f006f005f0031_beat_0", "c", "", changed), row("R2", "def", "")]));
+    assert.deepEqual(page.a.executed.map(command => command.operations.map(op => op.kind)), [["split", "split", "text-insert", "scalar", "scalar", "scalar"], ["text-insert", "scalar"]]);
+  } finally { page.close(); }
+});
+
+test("a closed Writer visual never admits its stale hidden cell into a narration command", () => {
+  const page = visualWriter();
+  try {
+    page.cell.closest(".wr-flow-visual-box")?.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+    remoteInsert(page, "Q"); page.h.queue.deliverFrom("B", "dup");
+    page.writer.place({ anchor: beatPos("R1", 1), head: beatPos("R1", 2) }); page.writer.format("bold");
+    page.agrees(expected("", "Alice", [row("R1", "a<strong>b</strong>c", "Qab", changed), row("R2", "def", "")]));
+    assert.deepEqual([page.reports, page.missing, page.notices], [[], [], []]);
+  } finally { page.close(); }
+});
+
+test("seeded Writer visual histories: three writers, native command kinds, reordered duplicates and an encoded late joiner", () => {
+  const histories = [
+    { from: 1, to: 1, data: "X", type: "insertText", b: "Q", bAt: 0, c: "Z", cAt: 2, text: "QaXbZ" },
+    { from: 1, to: 2, data: "", type: "deleteContentBackward", b: "Q", bAt: 0, c: "Z", cAt: 0, text: "QZa" },
+    { from: 0, to: 2, data: "New", type: "insertReplacementText", b: "Y", bAt: 2, c: "Z", cAt: 2, text: "NewYZ" }
+  ];
+  let seed = 0x86c6;
+  for (let step = 0; step < 24; step++) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    const history = histories[step % histories.length]; assert.ok(history);
+    const order = seed & 1 ? "dup" : "rev", page = visualWriter(order);
+    try {
+      registerSharedOperationFamilies(page.h.c, { cells: createFlowLoadRuntime().cells });
+      page.h.queue.addReplica("C", deliveryReplica(page.h.c));
+      assert.equal(page.key(history.from, history.to, history.data, history.type, () => {
+        remoteInsert(page, history.b, history.bAt);
+        const target = { owner: ref("R1"), segment: ref("R1"), field: "visualText" as const };
+        const anchor = createSharedAnchor(page.h.c, target, history.cAt, "after"); assert.ok(anchor);
+        assert.deepEqual(executeSharedOperations(page.h.c, [operation({ kind: "text-insert", id: "third", by: "Cara", target,
+          at: { left: anchor, right: null, affinity: "after" }, content: [{ value: history.c, marks: [] }] })]), { ok: true });
+        for (const from of seed & 2 ? ["B", "C"] as const : ["C", "B"] as const) page.h.queue.deliverFrom(from, order);
+        assert.equal(page.a.session.read(doc => doc?.rows[0]?.visualText), "ab");
+      }), true);
+      const value = expected(history.text);
+      page.agrees(value);
+      const third = sharedHarness(adapterReplica(page.h.c));
+      try { assert.deepEqual(third.session.read(doc => doc), value); } finally { third.session.dispose(); }
+      assert.deepEqual([page.reports, page.missing, page.recovered, page.notices], [[], [], [], []]);
+      assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+    } finally { page.close(); }
+  }
 });

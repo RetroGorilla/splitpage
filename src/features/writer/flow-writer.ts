@@ -289,6 +289,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const writer: FlowWriter = {
     openVisual: (rowId, highlight) => {
       if (!isCurrent() || !rowOf(rowId)) return;
+      if (visual?.settle && !visual.settle()) return;
       surface.place(caretAt(beatPos(rowId, 0)), true);
       visual?.open(caretAt(beatPos(rowId, 0)), highlight);
     },
@@ -338,7 +339,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         return index < 0 ? 0 : index;
       }
     },
-    ...(surface.settle ? { settle: surface.settle } : {}),
+    ...(visual.settle ? { settle: () => !!visual?.settle?.() && (surface.settle?.() ?? true) } : surface.settle ? { settle: surface.settle } : {}),
     isCurrent,
     finish: () => { visual?.close(false); return isCurrent() ? surface.finish() : null; },
     repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
@@ -357,6 +358,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
     dispose: () => {
+      if (visual?.settle && !visual.settle()) return;
       if (surface.settle && !surface.settle()) return;
       ports.closeFind?.();
       observer.disconnect();

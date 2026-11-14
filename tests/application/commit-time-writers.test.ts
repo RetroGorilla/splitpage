@@ -256,7 +256,8 @@ const FIELDS: readonly Site[] = [
   ["features/comments/comments.ts#postComment", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
   ["features/comments/comments.ts#postReply", "createdAt 1", "comment-stamp"],
   ["features/merge/local-merge.ts#offerFileMerge", "docId 1", "local-merge"],
-  ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"]
+  ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"],
+  ["features/writer/flow-visual-box.ts#bufferedVisualBox", "field 4", "no-document"]
 ];
 
 const RECORDS: readonly Site[] = [

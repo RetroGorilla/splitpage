@@ -43,11 +43,11 @@ export interface FlowVisualBufferControl {
 
 export type FlowVisualBufferMount = (root: HTMLElement, repaint: () => void) => FlowVisualBufferControl;
 
-export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
+export function createFlowVisualBox(ports: FlowVisualBoxPorts): ReturnType<typeof standaloneVisualBox> & { readonly settle?: () => boolean } {
   return ports.buffer ? bufferedVisualBox(ports, ports.buffer) : standaloneVisualBox(ports);
 }
 
-function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMount): ReturnType<typeof standaloneVisualBox> {
+function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMount) {
   let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false;
   const control = standaloneVisualBox({ ...ports,
     input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,
@@ -93,7 +93,7 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   for (const type of types) box.addEventListener(type, stopped, true);
   const released = (): void => { if (!composing && selection) binding?.selectionEnd(); };
   box.addEventListener("keyup", released);
-  return { ...control, dispose: () => {
+  return { ...control, settle: () => binding?.finish() ?? true, dispose: () => {
     if (!binding?.dispose()) return;
     for (const type of types) { box.removeEventListener(type, gate, true); box.removeEventListener(type, stopped, true); }
     box.removeEventListener("keyup", released); binding = null; control.dispose();
@@ -190,6 +190,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
 
   function open(range: FlowRange | null, highlight?: { from: number; to: number }): void {
     close(false);
+    if (!box.hidden) return;
     if (!ports.current() || !range) return;
     if (!withinOneBeat(range)) { ports.notice("Visuals must stay within one beat."); return; }
     if (range.head.kind !== "beat") { ports.notice("Put the caret in a beat to edit its visual."); return; }

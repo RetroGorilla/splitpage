@@ -48,7 +48,10 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
     const selectionEnd = (): void => { const edit = selectionEdit; selectionEdit = null; edit?.cancel(); };
     return {
       painted: record,
-      finish: buffer.binding.finish,
+      finish: () => {
+        if (selectionEdit?.isOpen()) { shared.bufferedText.report({ kind: "rejected", reason: "buffer-pending" }); return false; }
+        return buffer.binding.finish();
+      },
       selectionStart: range => {
         if (selectionEdit?.isOpen()) return true;
         if (range.head.kind !== "beat") return false;
