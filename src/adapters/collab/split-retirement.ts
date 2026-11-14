@@ -89,15 +89,25 @@ function append(into: unknown[], insert: unknown): void {
   if (typeof insert === "string" && typeof before === "string") into[last] = before + insert; else into.push(insert);
 }
 
-// why: a picture's undo writes what it saw only as it applies, so a list cannot know it; the watch reads that it is retired.
+// why: a picture's undo writes what it saw only as it applies, so a list cannot know it; the watch reads only retired.
 function retirementShown(record: unknown): unknown {
   return record && typeof record === "object" && Object.hasOwn(record, SHARED_GALLERY_RETIREMENT_FIELD) ? { ...record, [SHARED_GALLERY_RETIREMENT_FIELD]: true } : record;
 }
 
 function stamped(key: string): boolean { return key === "stamp" || key.startsWith("stamp:"); }
 
-function born(_key: string, value: unknown): boolean {
-  return !!value && typeof value === "object" && (value as { readonly type?: unknown }).type === "birth";
+function typed(value: unknown): unknown { return value && typeof value === "object" ? (value as { readonly type?: unknown }).type : null; }
+
+// why: a mark record counts only while its mark shows: a birth record shows nothing, and a removal takes back the marks
+// it observed, so a mark added and taken back leaves the visual as the undo saw it (rule 103).
+function shownMarks(view: SharedSplitReadView, path: readonly string[]): unknown {
+  const records = canonical(view, path);
+  if (!records || typeof records !== "object" || Array.isArray(records)) return records;
+  const entries = Object.entries(records), taken = new Set(entries.flatMap(([, value]) => {
+    const observed = typed(value) === "remove" ? (value as { readonly observed?: unknown }).observed : null;
+    return Array.isArray(observed) ? observed.filter((item): item is string => typeof item === "string") : [];
+  }));
+  return Object.fromEntries(entries.filter(([key, value]) => typed(value) === "add" && !taken.has(key)));
 }
 
 interface SharedSplitWatchedPart {
@@ -141,8 +151,8 @@ export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Obj
   },
   staged: ([root, key, field], segment, candidates) => root === "segments" ? inSegment(key, segment, candidates)
     : root === "meta" && key !== undefined && readSharedSplitRetiredBeat(key) !== null || root === "beats" && field === "segment" ? [...candidates] : [] },
-  // why: an undone creation drops the new beat with its text, so the undo holds only while that text is as the undo saw it;
-  // an undone split's boundary is text of the beat before it, so that text runs on past it, and its own text is not read.
+  // why: an undone creation drops its beat with its text, so it holds only while that text is as the undo saw it; an
+  // undone split's boundary is text of the beat before it, so the text runs past it, and the split's own text is unread.
   { name: "content", observe: (view, all, visit) => {
     const found = new Map<string, unknown[]>(), joined = new Set([...readSharedSplitMarks({ keys: () => view.keys(["meta"]) })]
       .filter(beat => readSharedSplitMarkMode(view.get(["meta", sharedSplitRetiredField(beat)])) === "join"));
@@ -181,8 +191,7 @@ export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Obj
       visit(1);
       const beat = view.get([collection, key, "beat"]);
       if (typeof beat !== "string" || !beats.has(beat)) continue;
-      // why: every insertion leaves a birth record, so only records that show a mark count; typing taken back leaves none.
-      found.get(beat)?.push([collection, key, retirementShown(canonical(view, [collection, key], field => field === "markRecords")), canonical(view, [collection, key, "markRecords"], born)]);
+      found.get(beat)?.push([collection, key, retirementShown(canonical(view, [collection, key], field => field === "markRecords")), shownMarks(view, [collection, key, "markRecords"])]);
     }
     return found;
   },

@@ -31,7 +31,7 @@ import { FORMAT_MARKS } from "../../core/text/runs.ts";
 import type { FormatMark } from "../../core/text/runs.ts";
 import { sharedJoinRetirementGroup } from "./join-record.ts";
 import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, planSharedJoinGlueUndo, readSharedJoinBeforeRetire, readSharedJoinNeighbours, readSharedJoinOf,
-  readSharedJoinPlace, readSharedJoinSeparator, recordSharedJoin } from "./undo-join.ts";
+  readSharedJoinPlace, readSharedJoinSeparator, readSharedJoinedSeparators, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedCreateUndo, planSharedSplitUndo, recordSharedCreate, recordSharedSplit } from "./undo-split.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
@@ -401,19 +401,19 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   const recordKey = (target: SharedRecordAddress): string => JSON.stringify([target.collection, target.record]);
   const inserts = new Set(operations.flatMap(operation => operation.kind === "text-insert" ? [textKey(operation.target)] : []));
   const scopes = new Map<SharedOperation, { readonly pieces: readonly SharedTextAddress[]; readonly spaces: ReadonlyMap<string, boolean> }>();
-  for (const operation of operations) if (operation.kind === "mark") {
-    const row = joinedRow(handle, operation.target), format = formatOf(operation.mark);
+  for (const operation of operations) if (operation.kind === "mark" || operation.kind === "text-delete") {
+    const row = joinedRow(handle, operation.target), format = operation.kind === "mark" ? formatOf(operation.mark) : null;
     scopes.set(operation, { pieces: row?.pieces ?? [operation.target], spaces: new Map(row && format ? row.groups.map(group => [group, spaceFormat(handle, group, format)]) : []) });
   }
   for (const operation of operations) if (operation.kind === "text-delete" || operation.kind === "mark") inserts.delete(textKey(operation.target));
   for (const scope of scopes.values()) for (const piece of scope.pieces) inserts.delete(textKey(piece));
   for (const operation of operations) {
-    if (operation.kind === "mark") {
+    if (operation.kind === "mark" || operation.kind === "text-delete") {
       for (const piece of scopes.get(operation)?.pieces ?? []) {
         const key = textKey(piece);
         if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, piece));
       }
-    } else if (operation.kind === "text-insert" || operation.kind === "text-delete") {
+    } else if (operation.kind === "text-insert") {
       const key = textKey(operation.target), visible = inserts.has(key) && !typed.has(key) ? readSharedVisibleUnits(handle, operation.target) : null;
       if (visible) typed.set(key, visible);
       else if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, operation.target));
@@ -429,6 +429,9 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   const unjoins = new Map(operations.flatMap(operation => operation.kind === "join-retire" ? [[operation, operation.joins.map(join => readSharedJoinBeforeRetire(handle, join))] as const] : []));
   const glues = new Map(operations.flatMap(operation => operation.kind === "join-glue"
     ? [[operation, operation.joins.map(join => { const found = readSharedJoinSeparator(handle, join); return found && { join, ...found }; })] as const] : []));
+  // why: deleting joined text can also delete its separator, which has no text unit for the text undo to restore.
+  const deletedGlues = new Map(operations.flatMap(operation => operation.kind === "text-delete" && operation.target.field === "audioText"
+    ? readSharedJoinedSeparators(handle, operation.target.owner).map(item => [item.join, item] as const) : []));
   // why: which beats a removal or a restore took away or brought back is read from the live beats around it.
   const live = removals.length === 1 ? readSharedLiveStructure(handle) : null;
   const result = executeSharedOperations(handle, operations, options);
@@ -441,17 +444,19 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
   };
   for (const operation of operations) {
     if (operation.kind === "text-insert" || operation.kind === "text-delete") {
-      const key = textKey(operation.target), was = before.get(key), visible = typed.get(key);
-      if (described.has(key) || !was && !visible) continue;
-      const is = now(operation.target);
-      if (!is) continue;
-      described.add(key);
-      const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
-      // why: a character the command moved into another beat of the same text was not deleted by it, so its undo never
-      // brings that character back, even after someone else deleted it, as a heading made from that line does.
-      const gone = was ? was.units.filter(unit => !is.live(unit.unit)) : [], kept = gone.length ? readSharedVisibleUnits(handle, operation.target) : null;
-      const deleted = undoUnits(gone.filter(unit => !kept?.has(unit.unit.client + ":" + unit.unit.clock)));
-      if (inserted.length || deleted.length) parts.push({ kind: "text", target: operation.target, inserted, deleted });
+      for (const target of scopes.get(operation)?.pieces ?? [operation.target]) {
+        const key = textKey(target), was = before.get(key), visible = typed.get(key);
+        if (described.has(key) || !was && !visible) continue;
+        const is = now(target);
+        if (!is) continue;
+        described.add(key);
+        const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
+        // why: a character the command moved into another beat of the same text was not deleted by it, so its undo never
+        // brings that character back, even after someone else deleted it, as a heading made from that line does.
+        const gone = was ? was.units.filter(unit => !is.live(unit.unit)) : [], kept = gone.length ? readSharedVisibleUnits(handle, target) : null;
+        const deleted = undoUnits(gone.filter(unit => !kept?.has(unit.unit.client + ":" + unit.unit.clock)));
+        if (inserted.length || deleted.length) parts.push({ kind: "text", target, inserted, deleted });
+      }
     } else if (operation.kind === "mark") {
       const scope = scopes.get(operation);
       for (const piece of scope?.pieces ?? []) {
@@ -521,6 +526,12 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
       && operation.kind !== "split-retire" && operation.kind !== "create-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
+    }
+  }
+  for (const item of deletedGlues.values()) {
+    const now = readSharedJoinSeparator(handle, item.join);
+    if (now && now.separator !== item.separator && !parts.some(part => part.kind === "join-glue" && part.join === item.join)) {
+      parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
   return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing } : null };

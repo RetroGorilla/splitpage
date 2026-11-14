@@ -11,7 +11,7 @@ import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 import { focusMemory, rowDrag, sceneView } from "./editor-owners.ts";
 import { stopDragScroll, updateDragScroll } from "./rows.ts";
-import { undoOwner } from "./undo.ts";
+import { breakUndoGroup } from "./undo.ts";
 
 export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): { confirmMove: (rowId: string, dir: -1 | 1) => boolean; dispose: () => void } {
   const controls = mountSceneControls(window, {
@@ -27,12 +27,12 @@ export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes
     },
     hint: controls.hint,
     remove: (id, key) => {
-      if (key.startsWith("Alt+")) { undoOwner().breakCoalescing(); return; }
+      if (key.startsWith("Alt+")) { breakUndoGroup(); return; }
       const doc = documentReader.current();
       const group = doc && sceneGroups(doc).find(item => item.scene.id === id);
       const previous = doc && group && doc.rows[group.start - 1];
       if (doc && previous) sceneView().reveal(doc, previous.id);
-      undoOwner().breakCoalescing();
+      breakUndoGroup();
       edits.run(removeSceneCommand(id));
     }
   });

@@ -1,5 +1,7 @@
 import { createUndo } from "../../application/editing/undo/undo.ts";
-import type { ReplayRunner, Undo, UndoHooks, UndoPorts } from "../../application/editing/undo/undo.ts";
+import type { ReplayRunner, Undo, UndoDirection, UndoHooks, UndoPorts } from "../../application/editing/undo/undo.ts";
+import type { SharedUndo, SharedUndoOutcome } from "../../application/editing/undo/shared-undo.ts";
+import type { SharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
 import type { StampPorts, UndoPort } from "../../application/session/ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { heldDocument, liveSession } from "./session-owner.ts";
@@ -7,6 +9,37 @@ import { heldDocument, liveSession } from "./session-owner.ts";
 const WITH_MEDIA = Object.freeze({ media: true });
 
 let started: Undo | null = null;
+
+export interface SharedUndoRoute {
+  readonly actions: SharedUndoActions;
+  readonly breakGroup: SharedUndo["breakGroup"];
+}
+
+let sharedRoute: SharedUndoRoute | null = null;
+
+export const SHARED_UNDO_REFUSED = "This step cannot be undone in a shared session yet.";
+
+export function routeSharedUndo(route: SharedUndoRoute): () => void {
+  sharedRoute = route;
+  return function () {
+    if (sharedRoute === route) sharedRoute = null;
+  };
+}
+
+export function sharedUndoRoute(): SharedUndoRoute | null {
+  return sharedRoute;
+}
+
+export function stepSharedUndo(route: SharedUndoRoute, direction: UndoDirection, warn: (message: string) => void): SharedUndoOutcome {
+  const outcome = direction === "undo" ? route.actions.undo() : route.actions.redo();
+  if (!outcome.ok && "reason" in outcome && outcome.reason.startsWith("undo-unsupported:")) warn(SHARED_UNDO_REFUSED);
+  return outcome;
+}
+
+export function breakUndoGroup(): void {
+  if (sharedRoute) sharedRoute.breakGroup();
+  else undoOwner().breakCoalescing();
+}
 
 function announceCleared(count: number): void {
   if (typeof document === "undefined") return;

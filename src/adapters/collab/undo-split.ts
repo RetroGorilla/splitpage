@@ -37,8 +37,8 @@ function storedBoundary(handle: SharedDocumentHandle, beat: string): boolean {
   });
 }
 
-// why: a split's undo needs the new beat's boundary where the split left it, after the source, as the readers' hold does;
-// a creation's undo needs the new beat's text as the creation left it instead.
+// why: a split's undo needs the new beat's boundary after the source, as the readers' hold does; a creation's
+// undo needs the new beat's text as the creation left it instead.
 function shape(handle: SharedDocumentHandle, beat: string, left: "predecessor" | "content" = "predecessor"): string {
   const view = sharedSplitStoreView(collabState(handle).roots), beats = new Set([beat]);
   return JSON.stringify([readSharedBeatShape(handle, beat), ...(["boundaries", left] as const).map(part => readSharedSplitObservationPart(view, beats, part).get(beat) ?? null)]);
@@ -118,7 +118,7 @@ export function recordSharedCreate(handle: SharedDocumentHandle, operation: Shar
   return { kind: "beat-create", beat: beat as SharedContentRef, retired: false, content: shape(handle, beat, "content") };
 }
 
-// why: a creation is undone only while the new beat stands as the creation left it, with its text; a redo only shows more.
+// why: a creation is undone only while its beat stands as the creation left it, with its text; a redo only shows more.
 export function planSharedCreateUndo(handle: SharedDocumentHandle, part: SharedCreateUndoPart, author: () => { id: string; by: string },
   push: (raw: Record<string, unknown>) => void): { readonly effective: boolean; readonly inverse: () => SharedCreateUndoPart } {
   const hidden = sharedSplitRetireHolds(collabState(handle).roots, part.beat);

@@ -128,6 +128,27 @@ function record(run) {
 
 beforeEach(() => { clock += 10_000; });
 
+for (const field of ["audioText", "visualText"]) for (const ending of [" ", "\u00a0"]) {
+  test(`shared ${field} text drag uses the existing row route and preserves stored ${ending === " " ? "plain" : "nonbreaking"} space`, async () => {
+    await open();
+    const cell = cellOf("r1", field), stored = "Word" + ending;
+    cell.textContent = stored;
+    const { paintTrailingCellSpaces } = await import("../features/common/cell-dom.ts");
+    const { connectSharedCellSpaceForm } = await import("../bootstrap/wiring/ports/shared-cell-space.ts");
+    const disconnect = connectSharedCellSpaceForm(target => target === cell ? stored : null);
+    paintTrailingCellSpaces(cell);
+    cell.focus(); selectAll(cell);
+    const data = {}, event = new window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { setData: (type, value) => { data[type] = value; } } });
+    try { cell.dispatchEvent(event); } finally { disconnect(); }
+    assert.equal(event.defaultPrevented, false);
+    assert.equal(data["text/plain"], stored);
+    assert.equal(data["text/html"], ending === " " ? "Word " : "Word&nbsp;");
+    assert.equal(cell.textContent, stored);
+    assert.equal(cell.closest(".row").classList.contains("is-dragging"), false);
+  });
+}
+
 test("a copy writes the words and their formatting, prevents the default and changes nothing", async () => {
   await open();
   const el = cellOf("r2", "audioText");

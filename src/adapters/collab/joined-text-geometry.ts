@@ -9,8 +9,10 @@ import { readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint
 import { sharedPlannedJoins, sharedPlannedJoinEnds } from "./join-plan.ts";
 import { readPlannedStructureIndex } from "./structure-order-index.ts";
 
-export interface SharedJoinedTextFragment { readonly owner: string; readonly segment: string; readonly from: number; readonly to: number; readonly glue: "" | " "; readonly group: string | null; readonly glueSet?: true }
-export interface SharedJoinedTextGeometry { readonly root: string; readonly removed: boolean; readonly cyclic: boolean; readonly parts: readonly SharedJoinedTextFragment[] }
+export interface SharedJoinedTextFragment { readonly owner: string; readonly segment: string; readonly from: number; readonly to: number; readonly length: number; readonly glue: "" | " "; readonly group: string | null; readonly glueSet?: true }
+export interface SharedJoinedTextGeometry {
+  readonly root: string; readonly removed: boolean; readonly cyclic: boolean; readonly parts: readonly SharedJoinedTextFragment[]; readonly fields: readonly string[];
+}
 function value(view: SharedStructureReadView, path: readonly string[]) { return view.kind(path) === "value" ? view.get(path) : undefined; }
 
 export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owner: string): SharedJoinedTextGeometry | null {
@@ -60,10 +62,18 @@ export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owne
   });
   const selected = projectSharedJoinedLayout(ordered as (typeof ordered[number] & { id: string })[], structures).find(group => group.members.some(member => member.id === owner));
   if (!selected) return null;
-  return { root: selected.root, removed: selected.removed, cyclic: selected.cyclic, parts: selected.members.flatMap(member => {
+  return { root: selected.root, removed: selected.removed, cyclic: selected.cyclic, fields: selected.fields, parts: selected.members.flatMap(member => {
     const block = byId.get(member.id); if (!block) return [];
-    return [{ owner: member.id, segment: block.segment, from: block.from, to: block.to, glue: member.glue, group: member.join ? groups.get(member.join) ?? null : null, ...(member.glueSet ? { glueSet: true as const } : {}) }];
+    // why: retired boundaries keep physical positions for anchors, but do not contribute to narration observations.
+    const length = readSharedStructureStream(view, block.segment)?.parts.reduce((size, part) => size + (part.boundary ? 0
+      : Math.max(0, Math.min(block.to, part.to) - Math.max(block.from, part.from))), 0) ?? 0;
+    return [{ owner: member.id, segment: block.segment, from: block.from, to: block.to, length, glue: member.glue, group: member.join ? groups.get(member.join) ?? null : null, ...(member.glueSet ? { glueSet: true as const } : {}) }];
   }) };
+}
+
+export function readSharedJoinedVisualOwners(view: SharedStructureReadView, owner: string): readonly string[] | null {
+  const read = readSharedJoinedTextGeometry(view, owner);
+  return read && !read.removed ? read.fields : null;
 }
 
 export function sharedJoinedTextBaseline(view: SharedStructureReadView, target: SharedTextAddress): SharedJoinedTextGeometry | null {

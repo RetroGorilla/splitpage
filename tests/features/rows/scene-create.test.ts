@@ -153,7 +153,7 @@ test("shared creation waits for compositionend, leaves a cancelled composition b
   } finally { pages.close(); }
 });
 
-test("the two shared creation commands give the same complete document in one list or separate lists; creation is one refused undo step", () => {
+test("the two shared creation commands give the same complete document in one list or separate lists; rule 71: creation is one undo step, skipped while not supported", () => {
   const pages = sceneCreationPages();
   const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "next" }] });
   try {
@@ -169,8 +169,8 @@ test("the two shared creation commands give the same complete document in one li
       assert.deepEqual(execution.result, { ok: true }); return execution.record;
     });
     assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
-    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:heading-create" });
-    assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
+    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:heading-create", skipped: true });
+    assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 0, dropped: 0 }, 1]);
     assert.deepEqual(executeSharedOperations(set.b, commands[1] ?? [], { base: readSharedRevision(set.b) }), { ok: true });
     agree("scene creation lists", "D1", [set.a, set.b], projectSharedDocumentWithRecovery,
       { document: createdDocument([{ id: HA, name: "N", firstSceneId: "R1" },

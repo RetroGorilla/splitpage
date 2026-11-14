@@ -222,8 +222,11 @@ the reader lists the beat's keys.
 `tests/collab/buffer-stamps.test.ts` holds the rule over four delivery orders,
 with the names swapped between the copies and with one author id on both copies.
 
-Other commands send no shared list yet; each one that does adds its stamp the same
-way.
+The status, filmed and beat length commands add the same step to their shared
+lists through `SharedValuePorts.beatStamp` (`src/application/commands/shared-values.ts`),
+which the wiring builds from `sharedBeatStamp` (`sharedValuePorts` in
+`src/bootstrap/wiring/ports/shared-values.ts`). Each other command that sends a
+shared list adds its stamp the same way.
 
 ## Stamp on undo
 
@@ -242,8 +245,9 @@ undo puts back is not stamped.
 
 Assumed rule 49 on #1414: a comment's resolution follows the stamp rule. In a
 shared session the comment commands in `application/commands/comments.ts` send
-their own record operations when given a shared author; their callers in
-`features/comments` pass none yet (package 14).
+their own record operations when given a shared author. Their callers in
+`features/comments` pass the ports `CommentStatePorts.shared()` answers, which
+the wiring leaves `null` until the shared session is composed (D26).
 
 - Adding a comment or a reply is one `record-create` each. `createdAt` is written
   once with the record; the record executor refuses any later change to it.
