@@ -116,7 +116,8 @@ Not a package 14 duty: the cross-beat composition limit of rule 31 ([stage-2-buf
 
 The shared session refuses every plan without `shared`. The original audit below
 predates the shared flow command (#1557), including visual replacement (#1560),
-and paste/cut in the title and name bindings (#1558). Those bindings use shared
+and paste/cut in the title and name bindings (#1558). Whole-beat flow paste is
+served through `sharedFlowPaste` (#1561). The title and name bindings use shared
 text, not the whole-field `titleCommand` or `renameSceneCommand`. Native typing
 uses buffers, not `cellTextCommand`. The current builder inventory and composition
 classes extend the Stage 0 table in `tests/core/collab/coverage-fixture.ts`;
@@ -136,7 +137,7 @@ command's change maps onto; "none" means no kind or no planner. Line numbers are
 | Beats | `addBeatCommand` (`rows.ts:26`), `deleteBeatCommand` (`:47`) | Exists: `segment-create`, `remove` | Serve |
 | Moves | `moveBeatCommand` (`rows.ts:94`), `swapBeatsCommand` (`:123`), `moveSceneCommand` (`scenes.ts:63`) | `segment-move` is registered as a refusal (rule 40) | Refuse with `moves` |
 | Scenes | `addSceneCommand`, `renameSceneCommand`, `removeSceneCommand` (`scenes.ts`) | `heading-create`, `heading-remove`; name typing and clipboard use the shared binding | Remove: serve pending composition. Whole-field rename: could not classify, refuse. Add: could not classify, refuse until #1562 supplies its shared form (rule 87) |
-| Beat selection | `removeBeatsCommand`, `pasteBeatsCommand` (`beats.ts`) | `remove` over several beats; paste needs structure, text and records together | Remove: serve pending composition. Paste: could not classify, refuse until #1561 supplies its shared form (rule 88) |
+| Beat selection | `removeBeatsCommand`, `pasteBeatsCommand` (`beats.ts`) | `remove` over several beats; Writer whole-beat paste uses `flowCommand` and `sharedFlowPaste` (#1561) | Remove: serve pending composition. Legacy `pasteBeatsCommand`: could not classify, refuse; its builder still has no shared plan |
 | Cell clipboard | `pasteCommand` (`clipboard.ts:227`), `cutCommand` (`:315`) | Exists: `text-insert`, `text-delete`; attachments are records | Q11; attachments refused (rule 11) |
 | Status | `beatStatusCommand` (`beat-status.ts:37`), `setBeatFilmedCommand` (`:59`) | Exists: `status` | Serve |
 | Numbers and settings | `beatLengthCommand` (`beat-length.ts:41`), `targetLengthCommand` (`document-settings.ts:18`), `wordsPerMinuteCommand` (`:36`) | Exists: `scalar` on beat and document | Serve |
@@ -267,6 +268,15 @@ Found in the same review, for other cuts:
 - **C5c.** `src/features/tags/production-tags.ts:142` skips registry healing
   when its stamp is refused and then runs `plan.commit()` anyway.
 
+Found in the review of #1559 (C2):
+
+- **C4.** The same shared undo owner goes to the replica (`createSharedReplica(handle,
+  count, undo)`) and to the undo actions (`sharedUndoActions(session, undo)`); the
+  grouping breaks C2 left at the standalone `breakCoalescing` call sites are routed
+  to it; the owner is reset on entering and on leaving.
+- **C6.** The Writer consumes the selection anchors an undo or redo returns
+  (`SharedUndoOutcome.selection`) to put the caret back.
+
 ### Order of leaving
 
 `leaveSharedSession()`:
@@ -387,49 +397,49 @@ on #1414 (Q6 and Q9 retain the earlier decisions); rules 84–88 add the title/n
 clipboard, visual, add-scene and whole-beat-paste duties. The recommendations below
 record the proposal, not permission to override those decisions.
 
-- **Q1. The flag.** Recommended: the `__sharedTest` hook in test builds only,
+- **Q1. The flag.** **Decided: rule 79** (the test hook only). Recommended: the `__sharedTest` hook in test builds only,
   no URL parameter and no setting, until Stage 4 adds the handoff.
-- **Q2. Whole-document entries while shared.** Restore and recover are already
+- **Q2. Whole-document entries while shared.** **Decided: rule 77** (leave first). Restore and recover are already
   refused (#1519). Open (rule 37): open, new, last-file resume, inbound open,
   prompter launch and plain Open. Recommended: open, new, inbound open and plain
   Open leave the shared session first (section 4, leaving), then run as today;
   last-file resume never runs while shared (it runs only at startup, Q3); the
   prompter launch reads the projection and is allowed.
-- **Q3. Startup while shared.** Recommended: a shared session cannot exist
+- **Q3. Startup while shared.** **Decided: rule 74.** Recommended: a shared session cannot exist
   until `openInitialDocument` has settled, so D11 and rule 53 item 2 cannot
   occur in Stage 2. Hydrating a retained replica at startup is Stage 3.
-- **Q4. The `docId`.** Plan section 3 decides that an instance's `docId` is
+- **Q4. The `docId`.** **Decided: rule 75** (new ids at both ends). Plan section 3 decides that an instance's `docId` is
   minted when the instance is created, that the source file keeps its own, and
   that each standalone export gets a new one. Stage 2 has no instance, so two
   things are open: whether the test hook's hydration counts as creating one
   (recommended: yes, mint at entry), and what the document left behind on leaving
   is. Recommended: it is a standalone copy, so it gets a new `docId`, as an
   export would.
-- **Q5. Unsaved standalone work at entry, and a pending draft restore.**
+- **Q5. Unsaved standalone work at entry, and a pending draft restore.** **Decided: rule 76.**
   Recommended: refuse entry while a draft restore is pending; on entry, the
   existing standalone draft stays on disk (drafts are refused while shared) and
   is not deleted on leaving until the standalone document is saved or
   explicitly discarded. This changes rule 53 item 3's behaviour and needs a
   ruling.
-- **Q6. The unsaved mark and the close question for a shared edit.** Saving and
+- **Q6. The unsaved mark and the close question for a shared edit.** **Decided: rule 60** (assumed, now decided). Saving and
   drafts are settled by package 13. Open: whether `dirty` marks the shared
   document unsaved, and whether closing asks. Recommended: no unsaved mark and no
   close question in Stage 2 (there is no local replica storage to be unsaved
   against); the save status shows nothing new until Stage 3's wording.
-- **Q7. Snapshots in a shared session** (rule 53 item 6). Recommended: keep
+- **Q7. Snapshots in a shared session** **Decided: rule 80** (none while shared). (rule 53 item 6). Recommended: keep
   the conservative reading of #1519 (none) until the plan review.
-- **Q8. The four commit-time writer questions** (person colour, cue rename,
+- **Q8. The four commit-time writer questions** **Decided: rules 81, 82 and 83** (items 1 to 3) **and rule 78** (item 4: paragraphs derived until the first paragraph edit). (person colour, cue rename,
   owner from `@Name`, paragraph starts). For the product owner. The first three
   block only commit-time writer cuts after C10. Paragraph starts blocks C6
   (D28); recommended for that cut only: the Writer writes no paragraph starts on
   open in a shared session and shows them as derived, which is option (b) up to
   the first paragraph edit, and needs the ruling before C6.
-- **Q9. A heading name over 200 characters.** Stage 0 decided "shown in full
+- **Q9. A heading name over 200 characters.** **Decided: rule 61** (assumed, now decided). Stage 0 decided "shown in full
   with a notice" (rule 46 item 4). Open: how that meets rule 42 item 4, where a
   pasted name is cut as the standalone app cuts it, when another person's typing
   lengthens a pasted name. Recommended: the paste command keeps cutting what it
   writes; a name that becomes longer later shows in full with the notice.
-- **Q10. A refused undo entry** (gallery, visuals, unsupported structure). The
+- **Q10. A refused undo entry** **Decided: rule 71** (skipped with a message). (gallery, visuals, unsupported structure). The
   documented and tested design is the opposite of the recommendation:
   [stage-2-shared-undo.md](stage-2-shared-undo.md), "A refused undo keeps its
   entry, so it can be asked again", pinned by "a refusal from the executor leaves
@@ -437,7 +447,7 @@ record the proposal, not permission to override those decisions.
   then drop the entry and count it, as the standalone owner drops an entry it
   cannot apply, so older entries stay reachable. This changes the owner and that
   pinned test.
-- **Q11. Enter, formatting, paste and cut in a shared session.** Assumed rule 31
+- **Q11. Enter, formatting, paste and cut in a shared session.** **Decided: rule 72** (served). Assumed rule 31
   refuses ordinary cross-beat input until removal and join handlers land, and
   rule 55 R5 refuses Enter, formatting, paste and cut in a Split cell, "as in the
   Writer". D25 makes them work through C5a and C5b. This overturns those

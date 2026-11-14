@@ -35,6 +35,7 @@ test("commit refreshes the painted base before the next keystroke", () => {
     assert.deepEqual([page.surface.paintedBase("R1")?.text, page.surface.paintedBase("R1")?.revision], ["abZ", 2]);
     assert.equal(page.native(3, 3, "Y"), true);
     assert.deepEqual([page.text(), page.a.executed.map(command => command.base)], ["abZY", [1, 2]]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "Z", true], ["typing", "Y", true]]);
     assert.deepEqual(page.reports, []);
   } finally { page.close(); }
 });

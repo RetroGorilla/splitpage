@@ -39,6 +39,30 @@ with a reason, or whether anything changed, the inverse record and the selection
 the clock for typing groups. A command is recorded with `perform(run)`: `run`
 makes the change and returns its record, or `null` when it changed nothing.
 
+## The seam to the shared session (composition C2)
+
+- **Recording.** A shared plan may carry a description (`SharedCommandDescription`
+  in `src/core/collab/undo-record.ts`: a label, the selection as anchors, a typing
+  key). The shared session hands it to the replica's `execute`; a plan with
+  `undo: false` (the rule 29 recovery write) hands `null`, and a plan without one
+  is described by its command's name with no selection or typing key.
+  `createSharedReplica(handle, count, undo)` runs a described list through
+  `executeSharedCommand` inside `undo.perform`, so its record reaches the one owner
+  once; an undescribed list, or a replica built without an owner, runs through
+  `executeSharedOperations` and records nothing.
+- **Typing.** Every buffered commit (`createSharedBufferedText`, which the Writer's
+  text and headings, the Split cells and visual column, the rename form and the
+  title all use) is described as `typing`, with the inserted text as its typing
+  key and a collapsed selection where the edit began.
+- **Undo and redo.** `sharedUndoActions(session, owner)` asks the session's
+  `admit()` first: open typing commits through the `beforeCommand` listeners, and
+  a refused admission reverses nothing. `sharedUndoOwner(handle, author, now)` in
+  `src/bootstrap/wiring/ports/shared-undo.ts` builds the owner over
+  `reverseSharedUndoRecord`.
+- **Not here.** `breakGroup` at the standalone owner's `breakCoalescing` call sites
+  waits for C4, which puts a shared owner in the app; dropping a refused entry
+  (rule 71) is the undo lane's change to the owner.
+
 ## Kept from standalone undo
 
 | Rule | Test in `tests/application/editing/undo/shared-undo.test.ts` |
@@ -149,7 +173,13 @@ beyond Stage 1 on purpose (assumed rule 24 on issue #1414):
   unit to its restoration.
 - **Deleted text**: restore each unit as a new unit at the place of the deleted
   one, with the marks the deleted one would show now. Skip a unit someone has
-  already restored, and a unit whose character is visible again.
+  already restored, and a unit whose character is visible again. A unit the
+  command moved into another beat of the same text (Enter over a selection
+  moves the text after it into the new beat) was not deleted by the command,
+  so its record does not list it, and its undo never brings it back, even after
+  someone else deleted it. A heading made from the new beat's first line is
+  such a deletion: it consumes the `# ` and the line break. Literals in
+  `undo-heading-consumed.test.ts`, on three copies in every delivery order.
 - **A mark added**: take the command's own occurrences away. The cancellation
   stays with the occurrence: an occurrence of the same mark over the same
   range, made without either having seen the other, is cancelled with it,

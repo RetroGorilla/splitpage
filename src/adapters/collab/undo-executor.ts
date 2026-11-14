@@ -2,7 +2,7 @@ import type {
   SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
   SharedTextAddress
 } from "../../core/collab/operations.ts";
-import type { SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
@@ -44,7 +44,6 @@ export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
-export interface SharedCommandDescription { readonly label: string; readonly selection: SharedUndoSelection | null; readonly typing: string | null }
 export interface SharedCommandExecution { readonly result: SharedBaseExecutionResult; readonly record: SharedUndoRecord | null }
 
 type Planned = { readonly inverse: (after: (target: SharedTextAddress) => SharedTextHistory | null) => { readonly effective: boolean; readonly part: SharedUndoPart } };
@@ -340,8 +339,13 @@ function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author
 // why: a record holds only what its own command wrote, so it is read before the updates held meanwhile are applied.
 function beforeHeldUpdates<T>(handle: SharedDocumentHandle, run: () => T): T { return sharedWriteFrame(collabState(handle), run); }
 
-export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
-  return beforeHeldUpdates(handle, () => reverseRecord(handle, record, writer));
+export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter,
+  done?: (reversal: SharedUndoReversal) => void): SharedUndoReversal {
+  return beforeHeldUpdates(handle, () => {
+    const reversal = reverseRecord(handle, record, writer);
+    done?.(reversal);
+    return reversal;
+  });
 }
 
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
@@ -377,8 +381,12 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
 
 export function executeSharedCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
-  options: { readonly base?: number } = {}): SharedCommandExecution {
-  return beforeHeldUpdates(handle, () => executeCommand(handle, operations, description, options));
+  options: { readonly base?: number; readonly done?: (execution: SharedCommandExecution) => void } = {}): SharedCommandExecution {
+  return beforeHeldUpdates(handle, () => {
+    const execution = executeCommand(handle, operations, description, options);
+    options.done?.(execution);
+    return execution;
+  });
 }
 
 function executeCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
@@ -435,7 +443,10 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (!is) continue;
       described.add(key);
       const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
-      const deleted = was ? undoUnits(was.units.filter(unit => !is.live(unit.unit))) : [];
+      // why: a character the command moved into another beat of the same text was not deleted by it, so its undo never
+      // brings that character back, even after someone else deleted it, as a heading made from that line does.
+      const gone = was ? was.units.filter(unit => !is.live(unit.unit)) : [], kept = gone.length ? readSharedVisibleUnits(handle, operation.target) : null;
+      const deleted = undoUnits(gone.filter(unit => !kept?.has(unit.unit.client + ":" + unit.unit.clock)));
       if (inserted.length || deleted.length) parts.push({ kind: "text", target: operation.target, inserted, deleted });
     } else if (operation.kind === "mark") {
       const scope = scopes.get(operation);

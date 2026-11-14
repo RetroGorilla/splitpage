@@ -1,11 +1,12 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
+import type { SharedCommandDescription } from "../../core/collab/undo-record.ts";
 import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
 import type { SharedRecoveryEntry } from "../../core/collab/recovery.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { WHOLE_DOCUMENT, changeSet } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
 import { DISPOSED, NO_DOCUMENT } from "./document-session.ts";
-import type { Command, CommandOutcome, CommandRefusal, CommonDocumentSession, DocumentView, Plan, SessionCounters, SessionListener } from "./document-session.ts";
+import type { Command, CommandOutcome, CommandRefusal, CommonDocumentSession, DocumentView, Plan, SessionCounters, SessionListener, SharedPlan } from "./document-session.ts";
 import { attempt, createEffectScheduler } from "./effects.ts";
 import type { RefreshTiming } from "./effects.ts";
 import type { CapabilityPort, DocumentEntry, EffectPort, ReportPort, TimerPort, UndoPort } from "./ports.ts";
@@ -22,7 +23,7 @@ export interface ReplicaPort {
   readonly project: () => unknown;
   readonly changes: () => SharedProjectionChanges;
   readonly recovery: () => readonly SharedRecoveryEntry[];
-  readonly execute: (operations: readonly SharedOperation[], options: { readonly base: number }) => ReplicaExecution;
+  readonly execute: (operations: readonly SharedOperation[], options: { readonly base: number; readonly description: SharedCommandDescription | null }) => ReplicaExecution;
   readonly observe: (listener: (origin: ReplicaOrigin | null, failure?: ReplicaFailure) => void) => () => void;
 }
 
@@ -39,9 +40,12 @@ export interface SharedSessionPorts {
   readonly refused?: ((reason: string) => void) | undefined;
 }
 
+export type SharedAdmissionRefusal = Extract<CommandOutcome, { readonly kind: "rejected" | "failed" }>;
+
 export interface SharedDocumentSession extends CommonDocumentSession {
   refuse: (reason: string) => CommandOutcome;
   revision: () => number;
+  admit: () => SharedAdmissionRefusal | null;
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
   beforeCommand: (listener: () => boolean) => () => void;
   subscribeRows: (listener: ChangedRowsListener) => () => void;
@@ -185,11 +189,12 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     }
   }
 
-  function execute(plan: Plan, operations: readonly SharedOperation[], base: number): CommandOutcome {
+  function execute(name: string, plan: Plan, shared: SharedPlan, base: number): CommandOutcome {
     const mine: Running = { plan: plan, landed: null, lost: null };
     running = mine;
     try {
-      const result = ports.replica.execute(operations, { base: base });
+      const description = shared.undo === false ? null : shared.description ?? { label: name, selection: null, typing: null };
+      const result = ports.replica.execute(shared.operations, { base: base, description: description });
       if (!result.ok) return { kind: "rejected", reason: result.reason };
     } catch (error) {
       if (!mine.landed) return { kind: "failed", error: error };
@@ -206,17 +211,21 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     return { kind: "applied", generation: done.generation, changes: done.changes };
   }
 
-  function run(command: Command): CommandOutcome {
+  function admit(): SharedAdmissionRefusal | null {
     if (disposed) return { kind: "rejected", reason: DISPOSED };
     if (entered || delivering) return { kind: "rejected", reason: REENTERED };
-    if (!admitting) {
-      admitting = true;
-      try {
-        for (const listener of admissions.slice()) if (!listener()) return { kind: "rejected", reason: "buffer-pending" };
-      } catch (error) { return { kind: "failed", error }; }
-      finally { admitting = false; }
-      if (disposed) return { kind: "rejected", reason: DISPOSED };
-    }
+    if (admitting) return null;
+    admitting = true;
+    try {
+      for (const listener of admissions.slice()) if (!listener()) return { kind: "rejected", reason: "buffer-pending" };
+    } catch (error) { return { kind: "failed", error }; }
+    finally { admitting = false; }
+    return disposed ? { kind: "rejected", reason: DISPOSED } : null;
+  }
+
+  function run(command: Command): CommandOutcome {
+    const refused = admit();
+    if (refused) return refused;
     entered = true;
     try {
       const outcome = decide(command);
@@ -244,7 +253,8 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     if (!plan.shared) return { kind: "rejected", reason: NOT_SHARED };
     if (!plan.shared.operations.length) return { kind: "noop" };
-    return execute(plan, plan.shared.operations, plan.shared.base ?? planned);
+    const shared = plan.shared;
+    return execute(command.name, plan, shared, shared.base ?? planned);
   }
 
   const stop = ports.replica.observe(receive);
@@ -254,6 +264,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     epoch: function () { return epoch; },
     generation: function () { return generation; },
     revision: function () { return revision; },
+    admit: admit,
     read: function (select) { return select(document); },
     readAt: function (select) { return select(document, revision); },
     recovery: function () { return recovery; },

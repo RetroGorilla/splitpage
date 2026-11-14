@@ -21,7 +21,7 @@ export interface PreparedFlowCommand {
 }
 
 export interface FlowCommandSource {
-  readonly prepare: (name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">, before?: FlowRange | null) => PreparedFlowCommand;
+  readonly prepare: (name: string, operation: (doc: DocumentView) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">, before?: FlowRange | null) => PreparedFlowCommand;
 }
 
 export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolean, settled: (starts: readonly string[]) => void): Replay {
@@ -55,6 +55,7 @@ export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutco
       if (plan && "refused" in plan) return plan;
       if (!result || !("rows" in result)) return plan;
       if (!result.ops) return { refused: "flow-operations-unavailable" };
+      if (plan && !result.ops.length) return { refused: "flow-operations-empty" };
       const clipboard = result.clipboard;
       if (clipboard && (["comments", "people", "productionTags", "brollShots"] as const).some(field =>
         JSON.stringify(clipboard[field]) !== JSON.stringify(doc[field]))) {
