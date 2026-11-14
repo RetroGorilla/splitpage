@@ -4,6 +4,8 @@ import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { PaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { SelectionModel } from "../../application/editing/selection.ts";
+import type { PaintedText } from "../../application/editing/ports.ts";
 
 export interface CellReachPorts {
   readonly window: Window;
@@ -27,4 +29,9 @@ export interface CellBufferPorts {
   readonly onPainted: (listener: () => void) => () => void;
   readonly beforePaint: (check: () => void) => () => void;
   readonly readable: (key: string) => boolean;
+  readonly caret?: {
+    readonly selection: Pick<SelectionModel, "snapshot">;
+    readonly afterPaint: PaintGuard["afterThisPaint"];
+    readonly text: (key: string) => PaintedText | null;
+  };
 }

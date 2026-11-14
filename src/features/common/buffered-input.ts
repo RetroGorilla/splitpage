@@ -1,5 +1,6 @@
 import type { BufferedFieldBinding, BufferedFieldSurface } from "../../application/editing/buffered-field.ts";
 import type { PaintedBeats } from "../../application/editing/painted-beats.ts";
+import { followPaintedCaret } from "../../application/editing/painted-selection.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import type { FlowPos, FlowRange } from "../../core/flow/flow.ts";
@@ -48,15 +49,6 @@ interface KeptCaret {
   readonly end: number;
   readonly direction: "forward" | "backward" | "none";
   readonly base: PaintedText | null;
-}
-
-function followed(before: PaintedText | null, after: PaintedText | null, offset: number, length: number): number {
-  if (!before || !after) return Math.min(offset, length);
-  for (let at = offset - 1; at >= 0; at--) {
-    const identity = before.identity(at);
-    for (let next = 0; identity && next < after.text.length; next++) if (after.identity(next) === identity) return next + 1;
-  }
-  return 0;
 }
 
 export function bindBufferedInput(form: BufferedInputField, ports: BufferedInputPorts): BufferedInput {
@@ -206,7 +198,8 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     if (doc.activeElement !== input) input.focus({ preventScroll: true });
     if (putRange(input, selection)) return;
     const after = ports.painted.base(key), length = input.value.length;
-    const map = (offset: number) => dirty ? Math.min(offset, length) : followed(caret.base, after, offset, length);
+    const map = (offset: number) => dirty ? Math.min(offset, length)
+      : followPaintedCaret(caret.base, [{ key, base: after, length }], offset, key)?.offset ?? 0;
     input.setSelectionRange(map(caret.start), map(caret.end), caret.direction);
   }
   function settleHeld(): void {

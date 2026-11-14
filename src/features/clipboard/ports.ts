@@ -16,6 +16,7 @@ import type { DocumentRow, ValidatedDocument } from "../../core/document/validat
 import type { Run } from "../../core/text/runs.ts";
 
 export interface CellClipboardPorts {
+  readonly sharedSpaceForm?: (cell: Element) => string | null;
   readonly document: Pick<DocumentReader, "read">;
   readonly edits: Pick<DocumentEdits, "run" | "text">;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush">;
