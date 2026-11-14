@@ -101,6 +101,51 @@
       "tests": [
         "tests/features/writer/visual-buffer-cost.test.ts"
       ]
+    },
+    {
+      "label": "Writer first visual save uses the numeric range captured on open",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "const resolved = binding?.selectionResolve(true); if (!resolved) return null;",
+      "replace": "const resolved = selection ?? range;",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer first visual input skips the narration hold",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "if (!resolved || !binding?.selectionStart(resolved))",
+      "replace": "if (!resolved)",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer deleted narration selection becomes a visual edit at a collapsed caret",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "if (!resolved || resolved.anchor === resolved.head)",
+      "replace": "if (!resolved)",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer joined selection keeps its vanished numeric owner",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "if (resolved) control.retarget(resolved);",
+      "replace": "",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
+    },
+    {
+      "label": "Writer vanished visual remains in DOM ownership admission",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "cell.dataset.field = \"inactive-visual\";",
+      "replace": "",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
     }
   ]
 }

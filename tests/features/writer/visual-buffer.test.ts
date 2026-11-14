@@ -29,7 +29,8 @@ import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { operation, ref } from "../../adapters/collab/executor-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { replaceRange, beatPos } from "../../../src/core/flow/flow.ts";
+import { replaceRange, beatPos, enterAt, joinWithPrevious } from "../../../src/core/flow/flow.ts";
+import type { FlowDoc, FlowOutcome, FlowPorts } from "../../../src/core/flow/flow.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { deliveryReplica } from "../../adapters/collab/helpers.ts";
 import { createFlowVisualBox } from "../../../src/features/writer/flow-visual-box.ts";
@@ -99,13 +100,16 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUnd
     target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type, data }));
     return true;
   }
-  function agrees(value: unknown) {
+  function agrees(value: unknown, recoveredRows?: readonly Record<string, unknown>[]) {
     assert.deepEqual(unexpected, []);
     h.queue.flush(order);
     const late = createMonitoredSharedDocument(); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
     const c = sharedHarness(adapterReplica(late));
     try {
-      for (const harness of [a, b, c]) assert.deepEqual(harness.session.read(doc => doc), value);
+      for (const harness of [a, b, c]) {
+        assert.deepEqual(harness.session.read(doc => doc), value);
+        if (recoveredRows) assert.deepEqual(harness.session.recovery().flatMap(entry => entry.kind === "removed-beat" ? [entry.row] : []), recoveredRows);
+      }
       assertReplicasAgree("Writer visual", [{ order: "D1", replica: "A", output: documentView() }, { order: "D2", replica: "B", output: b.session.read(doc => doc) }, { order: "late-C", replica: "C", output: c.session.read(doc => doc) }]);
     } finally { c.session.dispose(); destroySharedDocument(late); }
   }
@@ -307,21 +311,118 @@ test("Writer joined visual stays read-only under rule 93", () => {
   } finally { page.close(); }
 });
 
-test("Writer narration selection uses visual-selection once, then the visual buffer", () => {
+test("Writer narration selection uses visual-selection once, then the visual buffer while narration arrives during native input", () => {
   const page = visualWriter();
   try {
     page.cell.closest(".wr-flow-visual-box")?.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
     page.writer.place({ anchor: beatPos("R1", 1), head: beatPos("R1", 2) });
     document.getElementById("wr-visual")?.click();
     assert.equal(page.cell.dataset.field, "selection-visual");
-    assert.equal(page.key(0, 0, "X"), true);
+    assert.equal(page.key(0, 0, "X", "insertText", () => {
+      bobNarration(page, 0, "Q"); page.h.queue.deliverFrom("B", "dup");
+      assert.equal(page.a.session.read(doc => doc?.rows[0]?.audioText), "abc");
+      assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
+    }), true);
     assert.deepEqual(page.notices, []);
     assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
     assert.equal(page.key(1, 1, "Y"), true);
-    page.agrees(expected("", "Alice", [row("R1", "a", "ab", changed), row("structure_1_00770031005f0031005f006f005f0030_beat_0", "b", "XY", changed), row("structure_1_00770031005f0031005f006f005f0031_beat_0", "c", "", changed), row("R2", "def", "")]));
+    page.agrees(expected("", "Alice", [row("R1", "Qa", "ab", changed), row("structure_1_00770031005f0031005f006f005f0030_beat_0", "b", "XY", changed), row("structure_1_00770031005f0031005f006f005f0031_beat_0", "c", "", changed), row("R2", "def", "")]));
     assert.deepEqual(page.a.executed.map(command => command.operations.map(op => op.kind)), [["split", "split", "text-insert", "scalar", "scalar", "scalar"], ["text-insert", "scalar"]]);
   } finally { page.close(); }
 });
+
+function openSelectedVisual(page: ReturnType<typeof visualWriter>, rowId: string, from: number, to: number) {
+  page.cell.closest(".wr-flow-visual-box")?.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+  page.writer.place({ anchor: beatPos(rowId, from), head: beatPos(rowId, to) });
+  document.getElementById("wr-visual")?.click();
+  assert.equal(page.cell.dataset.field, "selection-visual");
+}
+
+function bobNarration(page: ReturnType<typeof visualWriter>, offset: number, text: string) {
+  const target = { owner: ref("R1"), segment: ref("R1"), field: "audioText" as const };
+  const anchor = createSharedAnchor(page.h.b, target, offset, "after"); assert.ok(anchor);
+  assert.deepEqual(executeSharedOperations(page.h.b, [operation({ kind: "text-insert", id: "narration", by: "Bob", target,
+    at: { left: anchor, right: null, affinity: "after" }, content: [{ value: text, marks: [] }] })]), { ok: true });
+}
+
+function bobFlow(page: ReturnType<typeof visualWriter>, run: (doc: FlowDoc, ports: FlowPorts) => FlowOutcome) {
+  const commands = writerFlowCommands(createFlowLoadRuntime().ports, { author: sharedAuthorPort({ handle: () => page.h.b, name: () => "Bob" }), writer: () => "2" });
+  const prepared = commands.commands.prepare("other-edit", doc => run(doc, commands.flow), bufferStamps("Bob"));
+  assert.equal(page.b.session.run(prepared.command).kind, "applied");
+}
+
+for (const order of ["D1", "rev", "dup"] as const) {
+  test("Writer idle visual selection follows the selected narration characters through a remote prefix: " + order, () => {
+    const page = visualWriter(order);
+    try {
+      openSelectedVisual(page, "R1", 1, 2); bobNarration(page, 0, "Q"); page.h.queue.deliverFrom("B", order);
+      assert.equal(page.key(0, 0, "X"), true);
+      page.agrees(expected("", "Alice", [row("R1", "Qa", "ab", changed), row("structure_1_00770031005f0031005f006f005f0030_beat_0", "b", "X", changed), row("structure_1_00770031005f0031005f006f005f0031_beat_0", "c", "", changed), row("R2", "def", "")]));
+      assert.deepEqual(page.reports, []);
+    } finally { page.close(); }
+  });
+  test("Writer idle visual selection whose narration was deleted refuses without a write: " + order, () => {
+    const page = visualWriter(order);
+    try {
+      openSelectedVisual(page, "R1", 1, 2); bobFlow(page, (doc, ports) => replaceRange(doc, { anchor: beatPos("R1", 1), head: beatPos("R1", 2) }, [], ports));
+      page.h.queue.deliverFrom("B", order);
+      assert.equal(page.key(0, 0, "X"), false); assert.deepEqual(page.a.executed, []);
+      assert.deepEqual(page.reports, [{ kind: "rejected", reason: "visual-selection-unavailable" }]);
+      page.agrees(expected("", "Alice", [row("R1", "ac", "ab", { ...changed, updatedBy: "Bob" }), row("R2", "def", "")]));
+    } finally { page.close(); }
+  });
+  test("Writer idle visual selection split over beats refuses without a write: " + order, () => {
+    const page = visualWriter(order);
+    try {
+      openSelectedVisual(page, "R1", 1, 3); bobFlow(page, (doc, ports) => enterAt(doc, { anchor: beatPos("R1", 2), head: beatPos("R1", 2) }, ports)); page.h.queue.deliverFrom("B", order);
+      assert.equal(page.key(0, 0, "X"), false); assert.deepEqual(page.a.executed, []);
+      assert.deepEqual(page.reports, [{ kind: "rejected", reason: "visual-selection-unavailable" }]);
+      page.agrees(expected("", "Alice", [row("R1", "ab", "ab", { ...changed, updatedBy: "Bob" }), row("structure_2_00770032005f0031005f006f005f0030_beat_0", "c", "", { ...changed, updatedBy: "Bob" }), row("R2", "def", "")]));
+    } finally { page.close(); }
+  });
+  test("Writer idle visual selection follows its characters into a new split beat: " + order, () => {
+    const page = visualWriter(order);
+    try {
+      openSelectedVisual(page, "R1", 1, 2); bobFlow(page, (doc, ports) => enterAt(doc, { anchor: beatPos("R1", 1), head: beatPos("R1", 1) }, ports)); page.h.queue.deliverFrom("B", order);
+      assert.equal(page.key(0, 0, "X"), true);
+      assert.deepEqual(page.notices, []);
+      page.agrees(expected("", "Alice", [row("R1", "a", "ab", { ...changed, updatedBy: "Bob" }), row("structure_1_00770031005f0031005f006f005f0030_beat_0", "b", "X", changed), row("structure_2_00770032005f0031005f006f005f0030_beat_0", "c", "", changed), row("R2", "def", "")]));
+    } finally { page.close(); }
+  });
+  test("Writer idle visual selection follows a join but retains the isolation handler's invalid-reference refusal: " + order, () => {
+    const page = visualWriter(order);
+    try {
+      openSelectedVisual(page, "R2", 1, 2); bobFlow(page, (doc, ports) => joinWithPrevious(doc, "R2", ports)); page.h.queue.deliverFrom("B", order);
+      assert.equal(page.cell.closest<HTMLElement>(".wr-flow-visual-box")?.hidden, false);
+      assert.equal(page.cell.dataset.id, "R1");
+      const before = encodeSharedState(page.h.a);
+      assert.equal(page.key(0, 0, "X"), true);
+      assert.deepEqual(page.notices, ["invalid-reference"]);
+      assert.deepEqual(encodeSharedState(page.h.a), before);
+      assert.deepEqual(page.a.executed[0]?.operations[0], { kind: "split", id: "w1_1_o_0", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
+        at: { left: null, right: '["flow-base","R1","audioText",5,5]', affinity: "before" }, observed: ['["flow-base","R1","audioText",0,7]'], boundary: "new1", beat: "new1", fields: { visualText: "", imageRef: null, status: "todo" } });
+      page.agrees(expected("", "Alice", [row("R1", "abc def", "ab", { ...changed, updatedBy: "Bob" })]));
+    } finally { page.close(); }
+  });
+  for (const edit of [{ name: "insertion", from: 1, to: 1, text: "X", type: "insertText", recovered: "aXb" }, { name: "deletion", from: 1, to: 2, text: "", type: "deleteContentBackward", recovered: "a" }, { name: "replacement", from: 0, to: 2, text: "New", type: "insertReplacementText", recovered: "New" }]) {
+    test("Writer visual removed during " + edit.name + " closes and immediately admits another beat's edits: " + order, () => {
+      const page = visualWriter(order);
+      try {
+        assert.equal(page.key(edit.from, edit.to, edit.text, edit.type, () => {
+          bobFlow(page, (doc, ports) => replaceRange(doc, { anchor: beatPos("R1", 0), head: beatPos("R2", 0) }, [], ports, true));
+          page.h.queue.deliverFrom("B", order);
+        }), true);
+        assert.equal(page.cell.closest<HTMLElement>(".wr-flow-visual-box")?.hidden, true);
+        assert.equal(page.writer.settle?.(), true);
+        page.writer.openVisual("R2"); assert.equal(page.cell.dataset.id, "R2"); assert.equal(page.key(0, 0, "Y"), true);
+        page.cell.closest(".wr-flow-visual-box")?.querySelector<HTMLButtonElement>(".wr-flow-visual-close")?.click();
+        page.writer.place({ anchor: beatPos("R2", 0), head: beatPos("R2", 3) }); page.writer.format("bold");
+        page.agrees(expected("", "Alice", [row("R2", "<strong>def</strong>", "Y", changed)]), [row("R1", "abc", edit.recovered, changed)]);
+        assert.deepEqual([page.notices, page.reports, [...collabState(page.h.a).ingress.holds]], [[], [], []]);
+      } finally { page.close(); }
+    });
+  }
+}
 
 test("a closed Writer visual never admits its stale hidden cell into a narration command", () => {
   const page = visualWriter();

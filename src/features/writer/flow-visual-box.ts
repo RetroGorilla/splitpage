@@ -37,6 +37,8 @@ export interface FlowVisualBufferControl {
   readonly refresh: (paint: () => void) => void;
   readonly finish: () => boolean;
   readonly selectionStart: (range: FlowRange) => boolean;
+  readonly selectionKeep: (range: FlowRange | null) => void;
+  readonly selectionResolve: (report?: boolean) => FlowRange | null;
   readonly selectionEnd: () => void;
   readonly dispose: () => boolean;
 }
@@ -51,15 +53,20 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false;
   const control = standaloneVisualBox({ ...ports,
     input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,
-    opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.painted(); },
+    opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.selectionKeep(selection); binding?.painted(); },
     closing: () => { if (binding && !binding.finish()) return false; binding?.selectionEnd(); return true; },
-    closed: target => { target.dataset.field = "inactive-visual"; selection = null; binding?.painted(); },
-    repaint: paint => { if (binding) binding.refresh(paint); else paint(); },
+    closed: target => { target.dataset.field = "inactive-visual"; selection = null; binding?.selectionKeep(null); binding?.painted(); },
+    repaint: paint => { if (binding) binding.refresh(() => {
+      const resolved = selection ? binding?.selectionResolve() : null;
+      if (resolved) control.retarget(resolved);
+      paint();
+    }); else paint(); },
     save: (range, html, first) => {
       if (!first) return range;
       try {
-        const next = ports.save(range, html, first);
-        if (next?.head.kind === "beat") { cell.dataset.id = next.head.rowId; cell.dataset.field = "visualText"; selection = null; }
+        const resolved = binding?.selectionResolve(true); if (!resolved) return null;
+        const next = ports.save(resolved, html, first);
+        if (next?.head.kind === "beat") { cell.dataset.id = next.head.rowId; cell.dataset.field = "visualText"; selection = null; binding?.selectionKeep(null); }
         return next;
       } finally { binding?.selectionEnd(); binding?.painted(); }
     },
@@ -82,8 +89,9 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
     }
     if (event.type === "compositionstart") composing = true;
     if (event.type === "compositionend") composing = false;
-    if (selection && (event.type === "beforeinput" || event.type === "compositionstart") && !binding?.selectionStart(selection)) {
-      event.preventDefault(); event.stopImmediatePropagation();
+    if (selection && (event.type === "beforeinput" || event.type === "compositionstart")) {
+      const resolved = binding?.selectionResolve(true);
+      if (!resolved || !binding?.selectionStart(resolved)) { event.preventDefault(); event.stopImmediatePropagation(); }
     }
   };
   const types = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop"];
@@ -363,6 +371,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
   listeners.forEach(([element, event, handler]) => element.addEventListener(event, handler));
   return {
     element: box,
+    retarget: (range: FlowRange) => { target = range; if (range.head.kind === "beat") cell.dataset.id = range.head.rowId; },
     open,
     refresh,
     close,

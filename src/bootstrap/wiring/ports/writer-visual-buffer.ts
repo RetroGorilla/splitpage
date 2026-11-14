@@ -12,6 +12,7 @@ import { createCellPage } from "../../../features/editing/cell-page.ts";
 import { ensureTrailingCaretSpot } from "../../../features/common/dom.ts";
 import { placeSelection, readSelection } from "../../../features/common/cell-dom.ts";
 import type { FlowVisualBufferMount } from "../../../features/writer/flow-visual-box.ts";
+import { beatPos } from "../../../core/flow/flow.ts";
 
 function identities(base: PaintedText | null): readonly string[] | null {
   if (!base) return null;
@@ -33,7 +34,9 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
     let selectionEdit: BufferedTextEdit | null = null, painting = false;
     const key = () => bufferedFieldKey(cell.dataset.id ?? "", "visualText");
     const order = () => source.document()?.rows.map(row => row.id) ?? [];
-    const selection = createSelectionModel({ epoch: source.lifetime.epoch, order, keys: rowId => identities(shared.paintedText.read(bufferedFieldKey(rowId, "visualText"), "visualText")) });
+    const model = () => createSelectionModel({ epoch: source.lifetime.epoch, order,
+      keys: (rowId, field) => identities(shared.paintedText.read(field === "audioText" ? rowId : bufferedFieldKey(rowId, field), field)) });
+    const selection = model(), narration = model();
     const record = () => { for (const listener of listeners) listener(); };
     const buffer = mountCellBuffer({ root, ports: {
       field: surface => createBufferedField(shared.bufferedText, surface), painted,
@@ -60,9 +63,27 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
         if (!selectionEdit) shared.bufferedText.report({ kind: "rejected", reason: "buffer-unavailable" });
         return selectionEdit !== null;
       },
+      selectionKeep: range => {
+        const keys = range?.head.kind === "beat" ? identities(shared.paintedText.read(range.head.rowId, "audioText")) : null;
+        if (!keys || range?.anchor.kind !== "beat" || range.head.kind !== "beat") { narration.forget(); return; }
+        narration.remember({ epoch: source.lifetime.epoch(), order: order(), rowId: range.head.rowId, field: "audioText", keys,
+          anchor: range.anchor.offset, head: range.head.offset, affinity: "forward" });
+      },
+      selectionResolve: report => {
+        const resolved = narration.resolve();
+        if (!resolved || resolved.anchor === resolved.head) {
+          if (report) shared.bufferedText.report({ kind: "rejected", reason: "visual-selection-unavailable" });
+          return null;
+        }
+        return { anchor: beatPos(resolved.rowId, resolved.anchor), head: beatPos(resolved.rowId, resolved.head) };
+      },
       selectionEnd,
       refresh: paint => {
-        if (painting || !buffer.binding.canPaint()) return;
+        if (painting) return;
+        if (cell.dataset.field === "visualText" && !source.document()?.rows.some(row => row.id === cell.dataset.id)) {
+          cell.dataset.field = "inactive-visual";
+        }
+        if (!buffer.binding.canPaint()) return;
         const focused = root.ownerDocument.activeElement === cell;
         const points = focused ? readSelection(cell, root.ownerDocument.getSelection()) : null, keys = identities(painted.base(key()));
         if (points && keys) selection.remember({ ...points, epoch: source.lifetime.epoch(), rowId: cell.dataset.id ?? "", field: "visualText", keys, order: order() });
