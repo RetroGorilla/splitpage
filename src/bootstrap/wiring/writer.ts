@@ -30,6 +30,10 @@ import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { standaloneSession } from "./session-owner.ts";
+import { writerFlowCommands } from "./ports/writer-flow.ts";
+import type { PaintedTextSource } from "../../application/editing/ports.ts";
+import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
+import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
 import { pictures } from "./ports/pictures.ts";
@@ -78,7 +82,15 @@ export function connectWriter(controlChanged: (control: ReturnType<typeof startW
   };
 }
 
-export function mountWriterRuntimeFeature() {
+export interface SharedWriterSource {
+  readonly text: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts };
+  readonly author: { readonly next: () => { readonly id: string; readonly by: string } | null };
+  readonly writer: () => string;
+  readonly handle: () => SharedDocumentHandle | null;
+}
+
+export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
+  const commands = shared ? writerFlowCommands(flowPorts, { author: shared.author, writer: shared.writer, handle: shared.handle }) : null;
   return writer.replace(() => {
     const render = currentRowsRender();
     if (!render) throw new Error("Writer needs the row renderer to be mounted");
@@ -94,11 +106,15 @@ export function mountWriterRuntimeFeature() {
           }
         },
         create: (root, selectionMoved, undoStep) => {
-          undoOwner().flush();
-          const initialized = standaloneSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
-          if (initialized.kind === "failed") throw initialized.error;
+          // why: rule 78: opening the Writer in a shared session writes no paragraphs
+          if (!shared) {
+            undoOwner().flush();
+            const initialized = standaloneSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
+            if (initialized.kind === "failed") throw initialized.error;
+          }
           let dismissedGhost: typeof tagGhost = null;
           return createFlowWriter({
+            ...(shared && commands ? { paintedText: shared.text.paintedText, bufferedText: shared.text.bufferedText, commands: commands.commands } : {}),
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,
@@ -149,7 +165,7 @@ export function mountWriterRuntimeFeature() {
             heldSelection: writerEditing.selection(),
             root,
             doc: () => documentReader.current() as unknown as FlowDoc,
-            flow: flowPorts,
+            flow: commands ? commands.flow : flowPorts,
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,
@@ -160,10 +176,10 @@ export function mountWriterRuntimeFeature() {
             text: edits.text,
             undo: {
               step: undoStep,
-              flush: () => { undoOwner().flush(); },
+              flush: () => { if (!shared) undoOwner().flush(); },
               breakCoalescing: breakUndoGroup,
-              last: () => undoOwner().last(),
-              nextRedo: () => undoOwner().nextRedo()
+              last: () => shared ? null : undoOwner().last(),
+              nextRedo: () => shared ? null : undoOwner().nextRedo()
             },
             caretAfterStep: step => caretAfterStep(html => flowCell(html as string | null | undefined), step),
             notice: (message, tone) => { notices.show(message, tone); },

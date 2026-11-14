@@ -321,7 +321,8 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
     return { dispose: installCellEditing(editing) };
   }, () => [() => connectWriter((control) => {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
-    undoRoutePorts.writerStep = control?.writerUndoStep ?? skipWriterUndo;
+    const step = control?.writerUndoStep;
+    undoRoutePorts.writerStep = step ? dir => !sharedUndoRoute() && step(dir) : skipWriterUndo;
     writerReplayed = control?.writerReplayed ?? noWriterReplay;
     control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
