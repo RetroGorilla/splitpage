@@ -18,7 +18,7 @@ import type { DocumentIdentityOwner, IdentityEntry } from "../identity/ports.ts"
 import type { StandaloneDocumentSession } from "./document-session.ts";
 import type { CapabilityPort } from "./ports.ts";
 
-export type SessionMergePorts = Omit<DocumentMergePorts<OperationContext>, "view" | "capability">;
+export type SessionMergePorts = Omit<DocumentMergePorts<OperationContext>, "view" | "capability" | "entryCapability">;
 
 export interface SnapshotRestoreRequest {
   readonly older?: boolean;

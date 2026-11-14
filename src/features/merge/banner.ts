@@ -23,6 +23,7 @@ export interface RestoreRequest {
 
 export interface MergeBannerPorts {
   readonly capability: Pick<CapabilityPort, "merge" | "history">;
+  readonly entryCapability: Pick<CapabilityPort, "merge" | "history">;
   readonly lastUndo: () => MergeUndoRecord | null;
   readonly sameDocument: (docId: string | null | undefined) => boolean;
   readonly restore: (id: string, request: RestoreRequest) => PromiseLike<RestoreAnswer>;
@@ -122,7 +123,7 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
 
   function undoMerge(): void {
     if (!open) return;
-    const can = ports.capability.merge();
+    const can = ports.entryCapability.merge();
     if (!can.allowed) { disarm(); ports.warn(can.reason); return; }
     const undo = ports.lastUndo();
     if (!undo) { ports.warn("No merge snapshot to undo."); return; }
@@ -144,7 +145,7 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
           forceFor = undo;
           ports.warn("Could not keep a backup of your current version. Undo the merge again to discard your edits anyway.");
         } else if (r === "refused") {
-          const can = ports.capability.history();
+          const can = ports.entryCapability.history();
           if (!can.allowed) ports.warn(can.reason);
         } else if (RESTORE_SAYS[r]) {
           ports.warn(RESTORE_SAYS[r]);

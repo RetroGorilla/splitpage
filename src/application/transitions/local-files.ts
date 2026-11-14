@@ -49,14 +49,18 @@ function projectFileSource(): ReturnType<LocalFilesOwner["projectFileSource"]> {
     id: "project-file",
     takes: function (opening: LocalFileOpening) { return opening.kind === "file"; },
     open: function (opening: LocalFileOpening) {
-      const parsed = opening.parsed;
-      if (parsed) return adoptProjectState(parsed.state, opening.file, opening.handle || null, parsed.kind, opening.options);
-      return openProjectFile(opening.file, opening.handle || null, opening.options);
+      if (!active || ports.entry.before()) return false;
+      return ports.opening.track(() => {
+        const parsed = opening.parsed;
+        if (parsed) return adoptProjectState(parsed.state, opening.file, opening.handle || null, parsed.kind, opening.options);
+        return openProjectFile(opening.file, opening.handle || null, opening.options);
+      });
     }
   };
 }
 
 async function openProjectFile(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions | null, permitted: () => boolean = unconditional) {
+  if (!active || ports.entry.before()) return false;
   opts = opts || {};
   const parsed = await parseProjectFileState(file);
   if (!active) return false;
@@ -75,6 +79,7 @@ async function openProjectFile(file: LocalFileData | null | undefined, handle: L
 
 function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, kind: string, opts?: FileOptions | null) {
   if (!active) return false;
+  if (ports.entry.before()) return false;
   opts = opts || {};
   sidePanels().close("newtab-page");
 
@@ -100,28 +105,38 @@ function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | nu
   return true;
 }
 
-async function tryResumeLastProject() {
+function tryResumeLastProject(): Promise<void> {
+  if (!active || !ports.lastFile.permitted()) return Promise.resolve();
+  return ports.opening.track(resumeLastProject);
+}
+
+async function resumeLastProject() {
   const handle = await loadLastFileHandle();
-  if (!active || !handle) return;
+  if (!active || !ports.lastFile.permitted() || !handle) return;
   let perm;
   try {
     perm = await ports.files.permission(handle, { mode: "readwrite" });
-    if (!active) return;
+    if (!active || !ports.lastFile.permitted()) return;
   } catch (e) {
     return;
   }
   if (perm === "granted") {
-    await resumeFromHandle(handle);
+    await readResume(handle, ports.lastFile.permitted);
   } else if (perm === "prompt") {
     showResumeBanner(handle);
   }
 }
 
-async function resumeFromHandle(handle: LocalFileReference | null | undefined) {
+function resumeFromHandle(handle: LocalFileReference | null | undefined, permitted: () => boolean = unconditional): Promise<void> {
+  if (!active || !permitted() || ports.entry.before()) return Promise.resolve();
+  return ports.opening.track(() => readResume(handle, permitted));
+}
+
+async function readResume(handle: LocalFileReference | null | undefined, permitted: () => boolean) {
   try {
     const file = await ports.files.read(handle);
-    if (!active) return;
-    await openProjectFile(file, handle, { skipSnapshot: !unsavedChanges(), resumed: true });
+    if (!active || !permitted()) return;
+    await openProjectFile(file, handle, { skipSnapshot: !unsavedChanges(), resumed: true }, permitted);
   } catch (e) {
   }
 }
@@ -171,6 +186,7 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
 
   if (!active) return;
   if (!permitted()) return;
+  if (ports.entry.before()) return;
   if (!newRows || !newRows.length) { showToast("No beats found in that file.", "warn"); return; }
 
 
@@ -215,7 +231,12 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
       " — as a new document", "ok");
 }
 
-async function openLocalFile() {
+function openLocalFile(): Promise<void> {
+  if (!active || ports.entry.before()) return Promise.resolve();
+  return ports.opening.track(chooseLocalFile);
+}
+
+async function chooseLocalFile() {
   if (runningOnDesktop()) {
     const entry = await desktopPort().openFileDialog();
     if (!active || !entry) return;
