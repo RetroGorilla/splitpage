@@ -5,6 +5,12 @@ function classified<const Row extends readonly unknown[]>(shared: CompositionCla
 }
 
 export const builderOperationCoverage = [
+  classified("serve", ["recoveryCommand", "structure", "restore,discard,record-create", [
+    ["restore a removed beat or heading with its observed removal ids", ["restore"]],
+    ["restore a kept person with the original id", ["record-create"]],
+    ["hide a named recovery entry with its observed removals", ["discard"]],
+    ["stale entry, missing author, unreadable removal, unsupported kind and namesake guards", []]
+  ]]),
   classified("refuse", ["createBulkTagRows", "text-mark", "mark", [
     ["preview counts without writing", []],
     ["standalone bulk writer behind tagCellsCommand; shared callers refuse before preview or undo", ["mark"]]

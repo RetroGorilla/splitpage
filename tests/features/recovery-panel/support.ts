@@ -3,10 +3,9 @@ import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { replicas, operation, ref } from "../../adapters/collab/executor-support.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
-import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -23,12 +22,12 @@ import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
 import { fakeNotices } from "../fakes.ts";
 
 export function send(handle: SharedDocumentHandle, ...ops: unknown[]): void {
-  assert.deepEqual(executeSharedOperations(handle, ops.map(operation)), { ok: true });
+  assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true });
 }
 
 export function fixture(source: Record<string, unknown> = { rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }] }) {
   const set = replicas(2, source), runtime = createFlowLoadRuntime();
-  for (const handle of [set.a, set.b]) { registerSharedOperationFamilies(handle, runtime); registerSharedUndoOperationHandlers(handle); }
+  for (const handle of [set.a, set.b]) registerSharedOperationFamilies(handle, runtime);
   return set;
 }
 

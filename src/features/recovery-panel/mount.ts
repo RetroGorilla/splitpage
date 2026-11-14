@@ -16,7 +16,7 @@ export function createRecoveryPanel(ports: RecoveryPanelPorts): RecoveryPanelCon
   }
   function button(parent: HTMLElement, label: string, run: () => void): void {
     const button = parent.appendChild(document.createElement("button")); button.type = "button"; button.textContent = label;
-    button.addEventListener("click", run);
+    button.addEventListener("click", () => { if (!disposed && button.isConnected) run(); });
   }
   function entryRow(parent: HTMLElement, entry: SharedRecoveryEntry): void {
     const row = parent.appendChild(document.createElement("article")); row.className = "history-card"; row.dataset.recoveryKind = entry.kind;
@@ -44,6 +44,7 @@ export function createRecoveryPanel(ports: RecoveryPanelPorts): RecoveryPanelCon
     for (const entry of entries) entryRow(list, entry);
   }
   function changed(): void {
+    if (disposed) return;
     const next = ports.session.current();
     if (reader !== next) { off?.(); reader = next; off = reader?.subscribe(paint) ?? null; }
     if (!reader) close();

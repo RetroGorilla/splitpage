@@ -1,7 +1,13 @@
 {
   "loadOnly": [
     "src/application/recovery/drafts.ts",
-    "src/bootstrap/wiring/drafts.ts"
+    "src/bootstrap/wiring/drafts.ts",
+    "src/application/commands/recovery.ts",
+    "src/bootstrap/wiring/recovery-panel.ts",
+    "src/features/recovery-panel/ports.ts",
+    "src/features/recovery-panel/actions.ts",
+    "src/features/recovery-panel/content.ts",
+    "src/features/recovery-panel/mount.ts"
   ],
-  "expectedLoads": 2
+  "expectedLoads": 8
 }

@@ -214,6 +214,7 @@ const FIELDS: readonly Site[] = [
   ["application/commands/flow.ts#initializeFlowParagraphs", "paragraphStart 1, paragraphsDecided 1", "paragraph-start"],
   ["application/commands/gallery.ts#galleryPlan", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/import-rows.ts#importRowsCommand", "paragraphStart 1, updatedAt 1, updatedBy 1", "beat-stamp", "stated-write"],
+  ["application/commands/recovery.ts#recoveryCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/paragraphs.ts#applyParagraphFlags", "paragraphStart 2", "stated-write"],
   ["application/commands/production-records.ts#updateTagsCommand", "owner 1", "record-stated"],
   ["application/commands/rows.ts#addBeatCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],

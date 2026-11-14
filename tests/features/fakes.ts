@@ -575,3 +575,27 @@ export function fakeOnboardingPorts() {
   };
   return { ports, state, actions, panels, recorded, choices };
 }
+import type { RecoveryPanelPorts } from "../../src/features/recovery-panel/ports.ts";
+import type { SharedRecoveryEntry } from "../../src/core/collab/recovery.ts";
+import { changeSet } from "../../src/application/session/change-set.ts";
+
+export function fakeRecoveryPanelPorts(entries: readonly SharedRecoveryEntry[] = [], initial: DocumentView | null = null) {
+  const mode = new Set<() => void>(), published = new Set<() => void>(), calls: { action: string; entry: Parameters<RecoveryPanelPorts["restore"]>[0] }[] = [];
+  const notices = fakeNotices(), doc = fakeDocument(initial), host = document.body.appendChild(document.createElement("div"));
+  const state = { shared: false, currentReads: 0, reads: 0, subscriptions: 0, docReads: 0, outcome: { kind: "noop" } as CommandOutcome };
+  const reader: NonNullable<ReturnType<RecoveryPanelPorts["session"]["current"]>> = {
+    recovery: () => { state.reads++; return entries; },
+    subscribe: listener => { state.subscriptions++; const run = () => listener({ kind: "remote", epoch: 1, generation: 1, changes: changeSet({}) }); published.add(run);
+      return () => { state.subscriptions--; published.delete(run); }; }
+  };
+  const ports: RecoveryPanelPorts = { host,
+    session: { current: () => { state.currentReads++; return state.shared ? reader : null; },
+      onChange: listener => { mode.add(listener); return () => { mode.delete(listener); }; } },
+    document: { current: () => { state.docReads++; return doc.document.current(); } },
+    text: { htmlToPlainText: html => String(html ?? "") }, reply: () => null, notices: notices.notices,
+    restore: entry => { calls.push({ action: "restore", entry }); return state.outcome; },
+    discard: entry => { calls.push({ action: "discard", entry }); return state.outcome; }
+  };
+  return { ports, state, calls, notices, doc, mode, published,
+    changed: () => { for (const listener of mode) listener(); }, publish: () => { for (const listener of published) listener(); } };
+}
