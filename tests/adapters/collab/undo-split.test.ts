@@ -257,3 +257,31 @@ for (const order of ORDERS) test(`a split undone while another writer heads the 
   const undone = run.reverse(record, true, false); headRs(run, beat); run.flush(); same("headed", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
   run.unchanged(undone, "redo used up", [["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]]); same("still headed", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
 }, HEADED));
+
+const gallery = (beat: string) => ({ kind: "record-create", id: "g", by: "Writer", target: { collection: "gallery", record: "G1" },
+  fields: { beat, rank: "0", picture: { imageRef: pictureA, name: "" }, links: [] } });
+for (const order of ORDERS) test(`one list that brings an undone split's new beat back prepares what follows against the split it brought back: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  const list = [operation(gallery(beat)), operation({ kind: "text-delete", id: "cut", by: "Writer", target, observed: [flowBaseReference("R1", "audioText", 2, 3)] })];
+  const revision = readSharedRevision(run.set.a), result = executeSharedOperations(run.set.a, list, { base: revision });
+  assert.deepEqual(result, { ok: false, index: 1, operation: list[1], reason: "invalid-reference" });
+  assert.equal(readSharedRevision(run.set.a), revision); run.flush(); run.check("nothing written", whole);
+}));
+
+for (const order of ORDERS) test(`one list that brings an undone split's new beat back can set a field on that beat, as two lists can: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  run.send(gallery(beat), run.set.a); run.send({ kind: "scalar", id: "f", by: "Writer", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 9 }, run.set.a);
+  run.flush(); run.check("two lists", split2);
+  assert.deepEqual(projectSharedDocumentWithRecovery(run.set.b).document.rows.map(row => row.lengthSeconds ?? null), [null, 9, null]);
+}));
+
+for (const order of ORDERS) test(`one list of a gallery picture and a field on an undone split's new beat brings the split back with both: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  const list = [operation(gallery(beat)), operation({ kind: "scalar", id: "f", by: "Writer", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 9 })];
+  assert.deepEqual(executeSharedOperations(run.set.a, list, { base: readSharedRevision(run.set.a) }), { ok: true });
+  run.flush(); run.check("one list", split2);
+  for (const handle of [run.set.a, run.set.b]) assert.deepEqual(projectSharedDocumentWithRecovery(handle).document.rows.map(row => row.lengthSeconds ?? null), [null, 9, null]);
+}));

@@ -20,6 +20,18 @@ export function sharedStructurePlanIndex(view: StructurePlanScratch): SharedStru
 }
 export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment, retired: false }); }
 export function planSharedSplitRetirement(view: StructurePlanScratch, beat: string, retired: boolean): void { context(view).retired.set(beat, retired); }
+export function readSharedSplitCandidates(view: StructurePlanScratch, index: SharedStructureIndex): ReadonlySet<string> {
+  const state = context(view);
+  return new Set([...index.retired().filter(beat => state.retired.get(beat) !== false), ...[...state.retired].flatMap(([beat, retired]) => retired ? [beat] : [])]);
+}
+
+// why: a staged write to what an undone split watches ends its retirement for the rest of the list, as the copy
+// that applies it reads it after that write; only a boundary's own beat moves it, and a hidden beat never resolves.
+export function planSharedSplitWrite(view: StructurePlanScratch, candidates: ReadonlySet<string>, beats: Iterable<string>): void {
+  const state = context(view);
+  for (const beat of beats) if (candidates.has(beat)) state.retired.set(beat, false);
+}
+
 export function readSharedSplitRetired(view: StructurePlanScratch, beat: string): boolean {
   const state = context(view);
   return state.retired.get(beat) ?? state.index?.records(beat).find(record => record.id === beat)?.retired ?? false;

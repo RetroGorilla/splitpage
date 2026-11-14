@@ -16,7 +16,10 @@ import type { CollabRoots } from "./roots.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { sharedJoinEndpointField, sharedJoinEndpointOffset } from "./join-endpoint.ts";
 import { readSharedActiveDiscards } from "./discard.ts";
-import { readSharedSplitMarks, readSharedSplitObservationPart, readSharedSplitRetiredBeat, sharedSplitMarkMatches, sharedSplitRetiredField } from "./split-retirement.ts";
+import { composeSharedSplitObservation, readSharedSplitMarks, readSharedSplitObservationPart, readSharedSplitRetiredBeat, sharedSplitMarkMatches,
+  sharedSplitRetiredField } from "./split-retirement.ts";
+import type { SharedSplitObservationPart } from "./split-retirement.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
 import type { SharedActiveDiscard, SharedDeletedPerson } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
@@ -83,18 +86,19 @@ export class SharedProjectionSource {
       () => readProjectionFields(scope === "document" ? this.inputRoots.meta : this.inputRoots[name].get(key), scope));
   }
 
-  private splitRetired(id: string): boolean {
+  private splitRetirements(): ReadonlySet<string> {
     const marks = this.cache.read(["split-marks"], [this.version("meta:keys")], () => readSharedSplitMarks(this.inputRoots.meta));
-    if (!marks.has(id)) return false;
-    const segment = this.fields("beat", id)?.segment, roots = this.inputRoots, beat = this.keyVersion("beats", id);
-    const part = (name: "record" | "boundaries" | "joins" | "attachments" | "status", dependencies: readonly unknown[]) =>
-      this.cache.read(["split-observation", name, id], dependencies, () => readSharedSplitObservationPart(roots, id, name));
-    const parts = [part("record", [beat]), part("boundaries", [beat, typeof segment === "string" ? this.keyVersion("segments", segment) : null]),
-      part("joins", [this.version("beat-joins"), this.version("retiredJoins")]), part("attachments", [this.version("visuals"), this.version("gallery")]),
-      part("status", [this.version("statusEvents"), this.version("retiredStatus")])];
-    const field = sharedSplitRetiredField(id);
-    return this.cache.read(["split-retired", id], [roots.beats.get(id) instanceof Y.Map, this.keyVersion("meta", field), ...parts],
-      () => sharedSplitMarkMatches(roots.meta.get(field), JSON.stringify(parts)));
+    if (!marks.size) return marks;
+    const roots = this.inputRoots, ids = [...marks], beats = ids.map(id => this.keyVersion("beats", id)), visit = (count: number) => this.cache.counted("split-observation", "visits", count);
+    // why: the structure index follows boundary atoms by identity, so typing reads no boundary again; a moved atom does.
+    const index = observeSharedStructureIndex(this.handle);
+    const segments = [...new Set(ids.map(id => this.fields("beat", id)?.segment))].map(segment => typeof segment === "string" ? index.boundaryVersion(segment) : null);
+    const part = (name: SharedSplitObservationPart, dependencies: readonly unknown[]) =>
+      this.cache.read(["split-observation", name], [marks, ...dependencies], () => readSharedSplitObservationPart(roots, marks, name, visit));
+    const parts = [part("record", beats), part("boundaries", [...beats, ...segments]), part("joins", [this.version("beat-joins"), this.version("retiredJoins")]),
+      part("attachments", [this.version("visuals"), this.version("gallery")]), part("status", [this.version("statusEvents"), this.version("retiredStatus")])];
+    return this.cache.read(["split-retired"], [marks, ...ids.map(id => this.keyVersion("meta", sharedSplitRetiredField(id))), ...parts], () => new Set(ids.filter(id =>
+      roots.beats.get(id) instanceof Y.Map && sharedSplitMarkMatches(roots.meta.get(sharedSplitRetiredField(id)), composeSharedSplitObservation(parts, id)))));
   }
 
   headingRemoved(id: string): boolean { return this.heading(id).removed; }
@@ -174,7 +178,8 @@ export class SharedProjectionSource {
   }
 
   blocks(includeUnits = true) {
-    const streams = this.streams(includeUnits), fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id), retired: this.splitRetired(id) }));
+    const streams = this.streams(includeUnits), retirements = this.splitRetirements();
+    const fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id), retired: retirements.has(id) }));
     const records = this.cache.read(["block-records"], fields.flatMap(value => [value.id, value.fields, value.retired]), () => fields.map(({ id, fields, retired }) =>
       ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired })));
     return this.cache.read(["blocks", String(includeUnits)], [streams, records], () => {
@@ -184,7 +189,7 @@ export class SharedProjectionSource {
   }
 
   private structureToken(): string {
-    const streams = this.streams(false);
+    const streams = this.streams(false), retirements = this.splitRetirements();
     return JSON.stringify([streams.map(stream => {
       let gap = false;
       const boundaries = stream.parts.flatMap(part => {
@@ -193,7 +198,7 @@ export class SharedProjectionSource {
       });
       return [stream.segment, stream.inOrder, stream.head, boundaries];
     }),
-    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, this.splitRetired(id)]; })]);
+    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, retirements.has(id)]; })]);
   }
 
   status(target: SharedStatusEvent["target"]): string {

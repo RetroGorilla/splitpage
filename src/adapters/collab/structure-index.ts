@@ -16,7 +16,7 @@ import { readSharedActiveRemovalSources } from "./removal-record.ts";
 import type { SharedJoinIndex } from "./join-index.ts";
 import { sharedJoinEndpointOffset, readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
-import { readSharedSplitRetiredBeat, sharedSplitRetireHolds } from "./split-retirement.ts";
+import { readSharedSplitRetiredBeat, readSharedSplitRetirements } from "./split-retirement.ts";
 
 export interface SharedAttachmentOwnership {
   readonly keys: (collection: "visuals" | "gallery", beat: string) => readonly string[];
@@ -32,6 +32,8 @@ export interface SharedStructureIndex {
   readonly removed: (id: string) => boolean;
   readonly coveredBy: (id: string) => readonly string[];
   readonly attachments: () => SharedAttachmentOwnership;
+  readonly retired: () => readonly string[];
+  readonly boundaryVersion: (segment: string) => number;
   readonly joins: () => SharedJoinIndex;
   readonly endpoint: (position: SharedJoinEndpointPosition) => number | null;
   readonly joinSegments: (join: string) => readonly string[];
@@ -47,6 +49,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const order = observeSharedStructureOrder(handle), segments = new Map<string, IndexedStructureSegment>(), embeds = sharedEmbedChangeReader(handle);
   const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>(), removedHeadings = new Set<string>();
   const removed = new Set<string>(), marked = new Set<string>(), coverage = new Map<string, ReadonlyMap<string, readonly string[]>>();
+  const boundaryVersions = new Map<string, number>(), bump = (key: string) => { boundaryVersions.set(key, (boundaryVersions.get(key) ?? 0) + 1); };
   let joinIndex: ReturnType<typeof createSharedJoinIndex> | null = null;
   const bindingSegments = new Map<string, readonly string[]>(), segmentBindings = new Map<string, Set<string>>();
   const updateBinding = (field: string) => {
@@ -101,16 +104,16 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       }
     }
     const value = { head: readProjectionHead(sharedPreparedValue(raw.get("head"))), text: text instanceof Y.Text ? text : null, boundaries };
-    segments.set(key, value); membership(key, value, true);
+    segments.set(key, value); membership(key, value, true); bump(key);
     return text instanceof Y.Text && previous?.text !== text ? text : null;
   };
-  const updateRecord = (key: string) => {
+  const updateRecord = (key: string, retired = marked.has(key) && readSharedSplitRetirements(state.roots, new Set([key])).has(key)) => {
     records.delete(key); removed.delete(key); member(recordNames, cleanId(key), key, false);
     const beat = state.roots.beats.get(key); if (beat === undefined && !state.roots.beats.has(key)) return;
     const fields = readProjectionFields(beat, "beat"), flags: unknown = beat instanceof Y.Map ? beat.get("removals") : null;
     if (readSharedRemovalState(flags instanceof Y.Map ? flags : []).removed) removed.add(key);
     records.set(key, Object.freeze({ id: key, valid: fields?.id === key, segment: typeof fields?.segment === "string" ? fields.segment : null,
-      retired: marked.has(key) && sharedSplitRetireHolds(state.roots, key) }));
+      retired }));
     member(recordNames, cleanId(key), key, true);
   };
   const updateHeading = (key: string) => {
@@ -146,9 +149,10 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
         reread = true; membership(key, value, false);
         const identity = change.identity, id = identity.client + ":" + identity.clock;
         if (change.delta === 1) value.boundaries.set(id, { identity, boundary }); else value.boundaries.delete(id);
+        bump(key);
         membership(key, value, true);
       }
-      if (reread && marked.size) { coverage.clear(); for (const key of [...marked]) updateRecord(key); }
+      if (reread && marked.size) { coverage.clear(); const held = readSharedSplitRetirements(state.roots, marked); for (const key of [...marked]) updateRecord(key, held.has(key)); }
     });
     root.observeDeep(listener); return () => root.unobserveDeep(listener);
   };
@@ -193,6 +197,8 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       for (const key of state.roots.gallery.keys()) updateGallery(key);
       attachmentsReady = true;
     } return attachmentIndex; },
+    boundaryVersion: (segment: string) => boundaryVersions.get(segment) ?? 0,
+    retired: () => Object.freeze([...marked].filter(key => records.get(key)?.retired).sort()),
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),
     candidates: (name: string, heading: boolean) => Object.freeze([...(heading ? headingNames.get(name) : names.get(cleanId(name))) ?? []]),
     segment: (key: string) => {

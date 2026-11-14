@@ -36,7 +36,7 @@ function storedBoundary(handle: SharedDocumentHandle, beat: string): boolean {
 
 // why: a heading made from the new beat's first line writes its boundary again, which is a change like any other.
 function shape(handle: SharedDocumentHandle, beat: string): string {
-  return JSON.stringify([readSharedBeatShape(handle, beat), readSharedSplitObservationPart(collabState(handle).roots, beat, "boundaries")]);
+  return JSON.stringify([readSharedBeatShape(handle, beat), readSharedSplitObservationPart(collabState(handle).roots, new Set([beat]), "boundaries").get(beat) ?? []]);
 }
 
 function stable(operation: { readonly id: string; readonly by: string; readonly beat: string }): boolean {

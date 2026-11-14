@@ -452,6 +452,34 @@ Every reader of beat records gives the interpreter the same answer (the full
 and incremental projections, the structure index and the preparation's
 planned state), so every copy agrees in every delivery order.
 
+Within one operation list, the planned state follows the list. A staged write
+to something a mark watches ends that retirement for the rest of the list, as
+the copy that applies the list reads it after that write: a record entry other
+than a stamp, a join into the beat, a visual or gallery record, or a status
+event. Literals: one list of a gallery picture on the hidden beat and a
+deletion in the source beat is prepared against the split the picture brings
+back, so the deletion is refused; one list of a gallery picture and a field on
+the hidden beat succeeds, as the two lists do. A boundary atom is moved only by
+an operation on its own beat, which a hidden beat never resolves, so a list
+cannot move it.
+
+Cost. All marks are read in one pass per part: one walk of each segment that
+holds a marked beat, and one scan each of the beats' joins, the visuals and
+gallery, and the status events. The incremental projection keeps each part
+until something it reads changes. The boundary part follows the structure
+index's count of boundary changes per segment, so typing reads no part again.
+Pinned in `split-retirement-cost.test.ts`: typing one character beside 1 or 100
+undone splits of one beat reads 0 observation entries; a fresh projection
+reads 9 with 1 mark and 207 with 100.
+
+Declared limit, retention: a redo deletes its mark, but a mark whose redo is
+used up, because a change made without seeing the undo stopped it matching,
+stays in `meta` (100 such marks took about 59,000 characters). A mark that stopped matching can never match
+again, because every write gets a new identity, so a later cut may delete it.
+That cut is the retention work in section 6 of the collaboration plan
+(garbage collection, retained recovery content and quotas). Nothing deletes a
+mark today.
+
 When another writer changes or removes the new beat without having seen the
 undo (a field, its status, a visual or gallery record, a removal, or a join of
 another beat into it), what the mark lists no longer matches on any copy

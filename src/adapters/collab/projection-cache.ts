@@ -1,7 +1,7 @@
 import { canonicalSharedProjection } from "../../core/collab/projection/canonical.ts";
 import type { SharedProjectionKind } from "../../core/collab/projection/canonical.ts";
 
-export type SharedProjectionWork = "segment" | "visual" | "record" | "fields" | "group" | "cell" | "snapshot" | "compare-row" | "compare-field" | "broll-scan" | "who-scan";
+export type SharedProjectionWork = "segment" | "visual" | "record" | "fields" | "group" | "cell" | "snapshot" | "compare-row" | "compare-field" | "broll-scan" | "who-scan" | "split-observation";
 
 export class SharedProjectionCache {
   private readonly slots = new Map<string, { readonly dependencies: readonly unknown[]; readonly value: unknown; readonly children: ReadonlySet<string> }>();
