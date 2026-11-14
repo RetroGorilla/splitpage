@@ -16,8 +16,7 @@ import { scalarTarget } from "./scalar-executor.ts";
 import { sharedStampOperation } from "./stamp.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit, sharedAnchorCharacterEnd } from "./anchors.ts";
-import { readSharedPaintedText } from "./paint-base.ts";
-import type { PaintedText } from "../../application/editing/ports.ts";
+import { readSharedPaintedTextMarks } from "./paint-base.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
@@ -365,7 +364,7 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
     if (error instanceof SharedUndoRefusal) return { ok: false, reason: error.message };
     throw error;
   }
-  const shown = record.caretText ? readSharedPaintedText(handle, record.caretText) : null;
+  const shown = record.caretText ? readSharedPaintedTextMarks(handle, record.caretText) : null;
   if (operations.length) {
     const result = executeSharedOperations(handle, operations, { origin: "local-undo" });
     if (!result.ok) return { ok: false, reason: result.reason };
@@ -378,17 +377,19 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   };
   const parts = planned.map(plan => plan.inverse(after));
   const inverse = parts.map(part => part.part);
-  const caret = record.caretText ? stepCaret(shown, readSharedPaintedText(handle, record.caretText)) : null;
+  const caret = record.caretText ? stepCaret(shown, readSharedPaintedTextMarks(handle, record.caretText)) : null;
   return { ok: true, effective: parts.some(part => part.effective), selection: caret ?? record.selection,
     inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };
 }
 
 // why: as standalone caretAfterStep, the caret goes to the end of the visible change: before the row's unchanged suffix
-function stepCaret(before: PaintedText | null, after: PaintedText | null): SharedUndoSelection | null {
-  if (!before || !after || before.text === after.text) return null;
-  const a = before.text, b = after.text;
+function stepCaret(before: ReturnType<typeof readSharedPaintedTextMarks>, shown: ReturnType<typeof readSharedPaintedTextMarks>): SharedUndoSelection | null {
+  if (!before || !shown) return null;
+  const a = before.painted.text, b = shown.painted.text, after = shown.painted;
+  const kept = (index: number): boolean => a[a.length - 1 - index] === b[b.length - 1 - index] && before.marks[a.length - 1 - index] === shown.marks[b.length - 1 - index];
+  if (a === b && before.marks.every((key, index) => key === shown.marks[index])) return null;
   let same = 0;
-  while (same < a.length && same < b.length && a[a.length - 1 - same] === b[b.length - 1 - same]) same++;
+  while (same < a.length && same < b.length && kept(same)) same++;
   let offset = b.length - same;
   if (offset > 0 && offset < b.length) {
     const high = b.charCodeAt(offset - 1), low = b.charCodeAt(offset);

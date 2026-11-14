@@ -54,8 +54,8 @@ const REPLACE_SAME_END: Record<Peer, Literal> = {
   after: { edited: "aZcdX", undone: "abcdX", undoAt: 2, redoAt: 2 }
 };
 
-function world() {
-  const h = new Stage1ExecutorHarness([{ id: "R1", text: "abcd" }, { id: "R2", text: "ef" }]);
+function world(seed = "abcd") {
+  const h = new Stage1ExecutorHarness([{ id: "R1", text: seed }, { id: "R2", text: "ef" }]);
   [h.a, h.b].forEach(registerSharedUndoOperationHandlers);
   let reversals = 0, serial = 0;
   const owner = sharedUndoOwner(h.a, () => ({ id: "undo" + ++reversals, by: "Alice" }), () => 0, error => { throw error; });
@@ -126,6 +126,20 @@ test("undo selection, one typing group of typing and two forward Deletes puts th
     assert.deepEqual([w.step(w.actions.undo()), w.all()], [[3, 3], ["abcd", "abcd", "abcd"]]);
     assert.deepEqual([w.step(w.actions.redo()), w.all()], [[2, 2], ["aZd", "aZd", "aZd"]]);
     assert.deepEqual([w.step(w.actions.undo()), w.all()], [[3, 3], ["abcd", "abcd", "abcd"]]);
+  } finally { w.close(); }
+});
+
+for (const order of ["D1", "rev", "dup"] as const) test(`undo selection, marks count as in standalone: bold kept text is not an unchanged suffix of plain restored text: ${order}`, () => {
+  const w = world("the the");
+  try {
+    const base = readSharedPaintedText(w.h.a, w.h.target("R1")); assert.ok(base);
+    const open = w.port.open("R1", base); assert.ok(open);
+    open.replace(3, 7, "");
+    assert.equal(open.commit([{ text: "the", marks: {} }]).kind, "applied");
+    w.h.execute("B", [w.h.mark("B", "R1", w.h.range("B", "R1", 0, 3), { kind: "b", value: true })]);
+    w.h.queue.flush(order); w.h.join();
+    assert.deepEqual([w.step(w.actions.undo()), w.all()], [[7, 7], ["the the", "the the", "the the"]]);
+    assert.deepEqual([w.step(w.actions.redo()), w.all()], [[3, 3], ["the", "the", "the"]]);
   } finally { w.close(); }
 });
 
