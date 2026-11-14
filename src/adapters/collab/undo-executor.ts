@@ -2,7 +2,7 @@ import type {
   SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
   SharedTextAddress
 } from "../../core/collab/operations.ts";
-import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoUnit } from "../../core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
@@ -15,7 +15,7 @@ import { collabState, sharedWriteFrame } from "./state.ts";
 import { scalarTarget } from "./scalar-executor.ts";
 import { sharedStampOperation } from "./stamp.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
-import { readSharedAnchorUnit } from "./anchors.ts";
+import { readSharedAnchorUnit, sharedAnchorCharacterEnd } from "./anchors.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
@@ -374,8 +374,18 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
     return histories.get(key) ?? null;
   };
   const parts = planned.map(plan => plan.inverse(after));
-  return { ok: true, effective: parts.some(part => part.effective), selection: record.selection,
-    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null } };
+  const inverse = parts.map(part => part.part);
+  // why: as standalone caretAfterStep, the caret lands after the last character the step brought back
+  return { ok: true, effective: parts.some(part => part.effective), selection: record.caretAfterRestored ? restoredCaret(inverse) ?? record.selection : record.selection,
+    inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretAfterRestored ? { caretAfterRestored: true } : {} } };
+}
+
+function restoredCaret(parts: readonly SharedUndoPart[]): SharedUndoSelection | null {
+  const restored = parts.filter(part => part.kind === "text" && part.inserted.length > 0);
+  const only = restored.length === 1 ? restored[0] : undefined;
+  const last = only?.kind === "text" ? only.inserted.at(-1) : undefined;
+  const end = last ? sharedAnchorCharacterEnd(last) : null;
+  return end ? { anchor: end, focus: end } : null;
 }
 
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
@@ -528,5 +538,6 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
-  return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing } : null };
+  return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing,
+    ...description.caretAfterRestored ? { caretAfterRestored: true } : {} } : null };
 }

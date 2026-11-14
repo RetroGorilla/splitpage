@@ -465,6 +465,46 @@
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); }",
       "replace": "track: (): void => { undoOwner().track(); }"
+    },
+    {
+      "label": "undo puts the caret at the old offsets",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "selection: record.caretAfterRestored ? restoredCaret(inverse) ?? record.selection : record.selection",
+      "replace": "selection: record.caretAfterRestored ? restoredCaret(record.parts.map(part => part.kind === \"text\" ? { ...part, inserted: part.deleted.map(unit => unit.identity) } : part)) ?? record.selection : record.selection",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "undo collapses to the start",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "const end = last ? sharedAnchorCharacterEnd(last) : null;",
+      "replace": "const end = only?.kind === \"text\" ? only.inserted[0] ?? null : null;",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "redo keeps the undo caret",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "inverse: { label: record.label, parts: inverse, selection: record.selection,",
+      "replace": "inverse: { label: record.label, parts: inverse, selection: (record.caretAfterRestored ? restoredCaret(inverse) : null) ?? record.selection,",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "undo after redo forgets the caret rule",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "typing: null, ...record.caretAfterRestored ? { caretAfterRestored: true } : {} } };",
+      "replace": "typing: null } };",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
     }
   ]
 }
