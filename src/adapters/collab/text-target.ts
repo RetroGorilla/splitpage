@@ -7,11 +7,13 @@ import { transactSharedDocument } from "./document.ts";
 import { resolveSharedTextLocation } from "./text-location.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { bindSharedStructurePlan, resolveSharedStructureOwner, readIndexedStructureSpans } from "./structure-plan.ts";
-import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
+import { readSharedJoinedTextGeometry, readSharedJoinedVisualOwners } from "./joined-text-geometry.ts";
 import type { SharedStructureReadView } from "./structure-read-view.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
 import { readSharedJoinGroup } from "./join-record.ts";
+import { sortSharedRecordReadings } from "./record-reader.ts";
+import { readStoredSharedRecord } from "./record-codec.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
   assertSharedDocumentIdle(collabState(handle));
@@ -84,6 +86,26 @@ export function collabProjectedTextTarget(handle: SharedDocumentHandle, raw: Sha
     if (!span) return null;
     const part = { ...physical, from: span.from, to: span.to, glue: "" as const, group: null, cyclic: false };
     return { ...part, parts: [part] };
+  } catch { return null; }
+}
+
+export function collabProjectedVisualTargets(handle: SharedDocumentHandle, raw: SharedTextAddress) {
+  try {
+    if (raw.field !== "visualText") return null;
+    const { view } = nativeStructureView(handle), owners = readSharedJoinedVisualOwners(view, raw.owner);
+    if (!owners) return null;
+    const root = collabState(handle).roots.visuals;
+    const visuals = sortSharedRecordReadings("visuals", [...root.keys()].sort().flatMap(key => {
+      const fields = readStoredSharedRecord("visuals", key, root.get(key));
+      if (!fields) return [];
+      // why: wire encoding replaces lone surrogates, so rank ties must agree before and after a late join.
+      return [{ key, fields: { beat: fields.beat, rank: String(fields.rank).replace(/\p{Cs}/gu, "\ufffd") } }];
+    }));
+    const parts = owners.flatMap(owner => visuals.filter(visual => visual.fields.beat === owner).flatMap(visual => {
+      const physical = physicalTextTarget(handle, { owner: owner as SharedTextAddress["owner"], segment: visual.key as SharedTextAddress["segment"], field: "visualText" });
+      return physical ? [{ ...physical, from: 0, to: physical.text.length, glue: "" as const, group: null, cyclic: false }] : [];
+    }));
+    return { parts };
   } catch { return null; }
 }
 

@@ -2,12 +2,17 @@ import * as Y from "yjs";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import type { SharedContentRef, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { encodeCollabTextAnchor, readSharedAnchor } from "./anchors.ts";
+import { encodeCollabTextAnchor, readSharedAnchor, readSharedAnchorUnit } from "./anchors.ts";
 import { readSharedRevision } from "./document.ts";
-import { collabProjectedTextTarget } from "./text-target.ts";
+import { collabProjectedTextTarget, collabProjectedVisualTargets } from "./text-target.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
+
+export function paintedCaretIdentity(reference: SharedContentRef): string {
+  const unit = readSharedAnchorUnit(reference);
+  return unit ? JSON.stringify([unit.client, unit.clock]) : reference;
+}
 
 function partReading(part: { readonly text: Y.Text; readonly target: SharedTextAddress; readonly from: number; readonly to: number }) {
   const runs = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!runs) return null;
@@ -31,19 +36,24 @@ function partReading(part: { readonly text: Y.Text; readonly target: SharedTextA
   return { text: runs.text, identity, endGap: encodeCollabTextAnchor(part.text, part.target, part.to, "before") };
 }
 
-export function readSharedPaintedText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {
-  const found = collabProjectedTextTarget(handle, address); if (!found) return null;
+function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, selection: boolean): PaintedText | null {
+  const visuals = selection && address.field === "visualText";
+  const found = visuals ? collabProjectedVisualTargets(handle, address) : collabProjectedTextTarget(handle, address); if (!found) return null;
   const pieces: { readonly from: number; readonly length: number; readonly identity: (index: number) => SharedContentRef | null }[] = [];
   let text = "", endGap: SharedContentRef | null = null;
+  let preceding: string | null = null;
   for (const [index, part] of found.parts.entries()) {
-    const reading = partReading(part); if (!reading) return null;
-    const glue = projectSharedJoinSeparator(text, reading.text, part.glue, index, part.cyclic, "glueSet" in part && part.glueSet === true);
-    if (glue && part.group) {
-      const reference = sharedJoinGlueReference(part.group);
+    const read = partReading(part); if (!read) return null;
+    const reading = selection ? { ...read, text: read.text.replace(/\p{Cs}/gu, "\ufffd") } : read;
+    const glue = visuals ? text.length && reading.text.length ? "\n" : ""
+      : projectSharedJoinSeparator(text, reading.text, part.glue, index, part.cyclic, "glueSet" in part && part.glueSet === true);
+    if (glue && (part.group || visuals)) {
+      const reference = visuals ? JSON.stringify(["painted-visual-break", preceding, part.target.segment]) as SharedContentRef : sharedJoinGlueReference(part.group as string);
       pieces.push({ from: text.length, length: 1, identity: () => reference }); text += glue;
     }
     if (reading.text.length) pieces.push({ from: text.length, length: reading.text.length, identity: reading.identity });
     text += reading.text; endGap = reading.endGap;
+    if (reading.text.length) preceding = part.target.segment;
   }
   if (!endGap) return null;
   const length = text.length;
@@ -54,4 +64,12 @@ export function readSharedPaintedText(handle: SharedDocumentHandle, address: Sha
     const part = pieces[low]; return part && index < part.from + part.length ? part.identity(index - part.from) : null;
   }
   return Object.freeze({ revision: readSharedRevision(handle), text, identity, endGap, ...(length ? {} : { emptyGap: endGap }) });
+}
+
+export function readSharedPaintedText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {
+  return paintedText(handle, address, false);
+}
+
+export function readSharedPaintedSelectionText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {
+  try { return paintedText(handle, address, true); } catch { return null; }
 }

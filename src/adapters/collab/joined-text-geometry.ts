@@ -13,7 +13,7 @@ export interface SharedJoinedTextFragment { readonly owner: string; readonly seg
 export interface SharedJoinedTextGeometry { readonly root: string; readonly removed: boolean; readonly cyclic: boolean; readonly parts: readonly SharedJoinedTextFragment[] }
 function value(view: SharedStructureReadView, path: readonly string[]) { return view.kind(path) === "value" ? view.get(path) : undefined; }
 
-export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owner: string): SharedJoinedTextGeometry | null {
+function joinedTextGeometry(view: SharedStructureReadView, owner: string): { readonly geometry: SharedJoinedTextGeometry; readonly fields: readonly string[] } | null {
   const index = sharedStructurePlanIndex(view), joins = index.joins(), planned = sharedPlannedJoins(view);
   const names = [owner], visited = new Set<string>(), segments = new Set<string>();
   const blocks: ReturnType<typeof interpretSharedStructure> = [];
@@ -60,10 +60,19 @@ export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owne
   });
   const selected = projectSharedJoinedLayout(ordered as (typeof ordered[number] & { id: string })[], structures).find(group => group.members.some(member => member.id === owner));
   if (!selected) return null;
-  return { root: selected.root, removed: selected.removed, cyclic: selected.cyclic, parts: selected.members.flatMap(member => {
+  return { fields: selected.fields, geometry: { root: selected.root, removed: selected.removed, cyclic: selected.cyclic, parts: selected.members.flatMap(member => {
     const block = byId.get(member.id); if (!block) return [];
     return [{ owner: member.id, segment: block.segment, from: block.from, to: block.to, glue: member.glue, group: member.join ? groups.get(member.join) ?? null : null, ...(member.glueSet ? { glueSet: true as const } : {}) }];
-  }) };
+  }) } };
+}
+
+export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owner: string): SharedJoinedTextGeometry | null {
+  return joinedTextGeometry(view, owner)?.geometry ?? null;
+}
+
+export function readSharedJoinedVisualOwners(view: SharedStructureReadView, owner: string): readonly string[] | null {
+  const read = joinedTextGeometry(view, owner);
+  return read && !read.geometry.removed ? read.fields : null;
 }
 
 export function sharedJoinedTextBaseline(view: SharedStructureReadView, target: SharedTextAddress): SharedJoinedTextGeometry | null {

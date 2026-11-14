@@ -5,9 +5,12 @@ import { beatPos } from "../../core/flow/flow.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
-import { domToPos } from "../common/cell-dom.ts";
+import { domToPos, posToDom, readSelection, placeSelection, paintTrailingCellSpaces } from "../common/cell-dom.ts";
 import { cssAttr } from "../common/dom.ts";
 import type { CellBufferPorts } from "./ports.ts";
+import type { PaintedText } from "../../application/editing/ports.ts";
+import { followPaintedCaret } from "../../application/editing/painted-selection.ts";
+import type { CellPoints } from "../../core/text/selection.ts";
 
 const CELLS = '.cell-editable[data-field="audioText"], .cell-editable[data-field="visualText"]';
 const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop", "focusout"] as const;
@@ -19,8 +22,12 @@ export interface CellBuffer {
 }
 
 export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly ports: CellBufferPorts }): CellBuffer {
-  const { root, ports } = mount;
+  const { root, ports } = mount, caret = ports.caret;
   let composing = false;
+  let open = true;
+  let kept: { readonly key: string; readonly points: CellPoints; readonly base: PaintedText | null } | null = null;
+  let fallback: { readonly key: string; readonly base: PaintedText | null } | null = null;
+  let lastSnapshot = caret?.selection.snapshot() ?? null;
   const cellOf = (key: string) => {
     const { rowId, field } = readBufferedFieldKey(key);
     return root.querySelector<HTMLElement>('.cell-editable[data-field="' + field + '"][data-id="' + cssAttr(rowId) + '"]');
@@ -40,6 +47,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     const found = shown(key);
     if (!found) return;
     ports.page.write(found.cell, found.html);
+    if (caret) paintTrailingCellSpaces(found.cell);
     ports.notePainted(found.cell, found.field, found.row);
     ports.painted.field(key, projection(ports.decode(found.html)));
   }
@@ -49,6 +57,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     if (found) {
       const painted = ports.decode(found.html), text = projection(painted), current = alignSpaceForm(runs(found.cell), text);
       if (!current || toHtml(current) !== toHtml(painted)) ports.page.write(found.cell, found.html);
+      if (caret) paintTrailingCellSpaces(found.cell);
       ports.notePainted(found.cell, found.field, found.row);
       ports.painted.field(key, text);
     }
@@ -60,9 +69,61 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     if (!doc) { ports.painted.clear(); return; }
     const painted = doc.rows.flatMap(row => FIELDS.flatMap(field => {
       const id = bufferedFieldKey(row.id, field), cell = cellOf(id);
+      if (caret && cell) paintTrailingCellSpaces(cell);
       return cell !== null && ports.paintedFrom(cell, field, row) ? [{ id, html: stored(row, field) }] : [];
     }));
     ports.painted.record(painted, entry => projection(ports.decode(entry.html)));
+  }
+
+  function focused(): HTMLElement | null {
+    const active = root.ownerDocument.activeElement;
+    return active instanceof HTMLElement && root.contains(active) && active.matches(CELLS) ? active : null;
+  }
+  function base(key: string): PaintedText | null {
+    return ports.painted.base(key) ?? (fallback?.key === key ? fallback.base : null);
+  }
+  function focus(): void {
+    if (!caret) return;
+    const cell = focused();
+    fallback = cell ? { key: keyOf(cell), base: ports.painted.base(keyOf(cell)) ?? caret.text(keyOf(cell)) } : null;
+  }
+  function painted(): void {
+    if (!caret) return;
+    const snapshot = caret.selection.snapshot();
+    const previous = kept ?? (snapshot && snapshot !== lastSnapshot ? {
+      key: bufferedFieldKey(snapshot.selection.rowId, snapshot.selection.field),
+      points: snapshot.selection,
+      base: base(bufferedFieldKey(snapshot.selection.rowId, snapshot.selection.field))
+    } : null);
+    kept = null; lastSnapshot = snapshot;
+    record();
+    if (!previous || binding.dirty()) { focus(); return; }
+    const field = readBufferedFieldKey(previous.key).field;
+    const rows = ports.document()?.rows ?? [], own = rows.find(row => bufferedFieldKey(row.id, field) === previous.key);
+    const targets = (selected: typeof rows) => selected.flatMap(row => {
+      const key = bufferedFieldKey(row.id, field), cell = cellOf(key);
+      if (!cell) return [];
+      const length = projection(runs(cell)).length;
+      if (!own && !length) return [];
+      const current = ports.painted.base(key) ?? caret.text(key);
+      return [{ key, base: current, length: current?.text.length ?? length }];
+    });
+    const after = targets(own ? [own] : []), more = () => targets(rows.filter(row => row !== own));
+    const anchor = followPaintedCaret(previous.base, after, previous.points.anchor, previous.key, caret.identity, more);
+    const head = followPaintedCaret(previous.base, after, previous.points.head, previous.key, caret.identity, more);
+    caret.afterPaint(() => {
+      if (!open || !anchor || !head || binding.dirty()) return;
+      const cell = cellOf(anchor.key), end = cellOf(head.key), active = root.ownerDocument.activeElement;
+      if (!cell || !end || active !== root.ownerDocument.body && !root.contains(active)) return;
+      cell.focus({ preventScroll: true });
+      const selection = root.ownerDocument.getSelection();
+      if (cell === end) placeSelection(cell, selection, { anchor: anchor.offset, head: head.offset, affinity: previous.points.affinity });
+      else {
+        const a = posToDom(cell, anchor.offset), h = posToDom(end, head.offset);
+        try { selection?.setBaseAndExtent(a.node, a.offset, h.node, h.offset); } catch {}
+      }
+      focus();
+    });
   }
 
   const binding = ports.field({
@@ -126,14 +187,23 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   }
 
   for (const type of TYPES) root.addEventListener(type, listener, true);
-  const stopPainted = ports.onPainted(record), stopCheck = ports.beforePaint(() => { binding.canPaint(); });
+  if (caret) root.addEventListener("focusin", focus);
+  const stopPainted = ports.onPainted(caret ? painted : record), stopCheck = ports.beforePaint(() => {
+    binding.canPaint();
+    if (!caret) return;
+    const cell = focused(), points = cell ? readSelection(cell, root.ownerDocument.getSelection()) : null;
+    kept = cell && points ? { key: keyOf(cell), points, base: base(keyOf(cell)) } : null;
+  });
   record();
+  focus();
   return {
     binding,
     dispose: () => {
       if (!ports.shown(() => binding.dispose())) return false;
+      open = false;
       stopPainted(); stopCheck();
       for (const type of TYPES) root.removeEventListener(type, listener, true);
+      root.removeEventListener("focusin", focus);
       ports.painted.clear();
       return true;
     }

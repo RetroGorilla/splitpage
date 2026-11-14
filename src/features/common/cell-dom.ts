@@ -2,6 +2,29 @@ import { MEDIA_KEY, atomKey, unitKey } from "../../core/text/selection.ts";
 import type { Affinity, CellPoints } from "../../core/text/selection.ts";
 import { protectedTagAt } from "./dom.ts";
 
+export function paintTrailingCellSpaces(cell: Element): void {
+  const edits: { readonly node: Text; readonly text: string }[] = [];
+  let node: Node | null = cell.lastChild;
+  while (node && node !== cell) {
+    if (node.nodeType === 3) {
+      const text = node as Text, spaces = / +$/.exec(text.data)?.[0] ?? "";
+      if (spaces) edits.push({ node: text, text: text.data.slice(0, -spaces.length) + "\u00a0".repeat(spaces.length) });
+      if (text.data.length > spaces.length) break;
+    } else if (node.nodeType === 1) {
+      const element = node as Element;
+      if (element.tagName === "BR" || isAtomEl(element) || element.getAttribute("contenteditable") === "false") break;
+      if (node.lastChild) { node = node.lastChild; continue; }
+    }
+    while (node && node !== cell && !node.previousSibling) node = node.parentNode;
+    if (!node || node === cell) break;
+    node = node.previousSibling;
+  }
+  if (!edits.length) return;
+  const selection = cell.ownerDocument.getSelection(), points = readSelection(cell, selection);
+  for (const edit of edits) edit.node.data = edit.text;
+  if (points) placeSelection(cell, selection, points);
+}
+
 interface DomPoint {
   readonly node: Node;
   readonly offset: number;

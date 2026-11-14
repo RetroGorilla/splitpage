@@ -206,8 +206,8 @@
   }, {
     "label": "Split paint runs without checking the cells",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "stopCheck = ports.beforePaint(() => { binding.canPaint(); });",
-    "replace": "stopCheck = () => {};",
+    "find": "    binding.canPaint();\n    if (!caret) return;",
+    "replace": "    if (!caret) return;",
     "tests": ["tests/features/editing/cell-buffer.test.ts"]
   }, {
     "label": "Split visual cells left out of the binding",
@@ -719,5 +719,125 @@
     "find": "active = null; target = null; label = undefined;",
     "replace": "active = null; target = null;",
     "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Split idle repaint ignores the renderer selection snapshot",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "snapshot && snapshot !== lastSnapshot",
+    "replace": "false && snapshot !== lastSnapshot",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split caret restoration runs before the renderer restores its text diff selection",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "caret.afterPaint(() => {",
+    "replace": "((task: () => void) => task())(() => {",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split maps the selection head as its anchor",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "followPaintedCaret(previous.base, after, previous.points.head, previous.key, caret.identity, more)",
+    "replace": "followPaintedCaret(previous.base, after, previous.points.anchor, previous.key, caret.identity, more)",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split sorts away a backward selection",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "{ anchor: anchor.offset, head: head.offset, affinity: previous.points.affinity }",
+    "replace": "{ anchor: Math.min(anchor.offset, head.offset), head: Math.max(anchor.offset, head.offset), affinity: previous.points.affinity }",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "a disposed Split binding restores focus from a queued paint callback",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (!open || !anchor || !head || binding.dirty()) return;",
+    "replace": "if (!anchor || !head || binding.dirty()) return;",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split never remembers the joined visual character snapshot on focus",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (caret) root.addEventListener(\"focusin\", focus);",
+    "replace": "",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split caret reads only the first visual component",
+    "file": "src/bootstrap/wiring/ports/shared-buffer.ts",
+    "find": "readSharedPaintedSelectionText(handle, sharedBufferedTarget(handle, key))",
+    "replace": "readSharedPaintedText(handle, sharedBufferedTarget(handle, key))",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "joined visual caret text omits its projected line break",
+    "file": "src/adapters/collab/paint-base.ts",
+    "find": "text.length && reading.text.length ? \"\\n\" : \"\"",
+    "replace": "\"\"",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "joined visual caret components use the opposite owner order",
+    "file": "src/adapters/collab/text-target.ts",
+    "find": "const parts = owners.flatMap(owner =>",
+    "replace": "const parts = [...owners].reverse().flatMap(owner =>",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "caret visual rank order differs before and after wire normalization",
+    "file": "src/adapters/collab/text-target.ts",
+    "find": "String(fields.rank).replace(/\\p{Cs}/gu, \"\\ufffd\")",
+    "replace": "String(fields.rank)",
+    "tests": ["tests/adapters/collab/painted-selection.test.ts"]
+  }, {
+    "label": "caret visual records bypass their existing validator",
+    "file": "src/adapters/collab/text-target.ts",
+    "find": "const fields = readStoredSharedRecord(\"visuals\", key, root.get(key));",
+    "replace": "const fields = (root.get(key) as { toJSON: () => Record<string, unknown> }).toJSON();",
+    "tests": ["tests/adapters/collab/painted-selection.test.ts"]
+  }, {
+    "label": "caret text keeps a malformed string that the wire changes",
+    "file": "src/adapters/collab/paint-base.ts",
+    "find": "selection ? { ...read, text: read.text.replace(/\\p{Cs}/gu, \"\\ufffd\") } : read",
+    "replace": "read",
+    "tests": ["tests/adapters/collab/painted-selection.test.ts"]
+  }, {
+    "label": "Split repaint leaves a plain trailing space collapsed",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (caret && cell) paintTrailingCellSpaces(cell);",
+    "replace": "",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "the trailing space paint throws away inline formatting",
+    "file": "src/features/common/cell-dom.ts",
+    "find": "for (const edit of edits) edit.node.data = edit.text;",
+    "replace": "cell.textContent = edits.map(edit => edit.text).reverse().join(\"\");",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "a deleted caret walks to the first surviving character instead of the closest one",
+    "file": "src/application/editing/painted-selection.ts",
+    "find": "for (let at = offset - 1; at >= 0; at--) {",
+    "replace": "for (let at = 0; at < offset; at++) {",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "a caret with no preceding survivor keeps its old offset",
+    "file": "src/application/editing/painted-selection.ts",
+    "find": "\n  return same ? { key: same.key, offset: 0 } : null;",
+    "replace": "\n  return same ? { key: same.key, offset: Math.min(offset, same.length) } : null;",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split caret restoration rescans the whole field for every deleted character",
+    "file": "src/application/editing/painted-selection.ts",
+    "find": "const location = identity ? locations.get(identity) : null;",
+    "replace": "const location = (() => { for (const field of after) if (field.base) for (let next = 0; next < field.base.text.length; next++) { if (field.base.identity(next) === identity) return { key: field.key, offset: next + 1 }; } return null; })();",
+    "tests": ["tests/application/editing/painted-selection.test.ts"]
+  }, {
+    "label": "a moved character loses its caret identity when its logical owner changes",
+    "file": "src/adapters/collab/paint-base.ts",
+    "find": "return unit ? JSON.stringify([unit.client, unit.clock]) : reference;",
+    "replace": "return reference;",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split does not look for a character in the cell it moved to",
+    "file": "src/application/editing/painted-selection.ts",
+    "find": "index(additional()); expanded = true;",
+    "replace": "expanded = true;",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
+  }, {
+    "label": "Split drops the selection when a split moves only one endpoint",
+    "file": "src/features/editing/cell-buffer.ts",
+    "find": "if (!open || !anchor || !head || binding.dirty()) return;",
+    "replace": "if (!open || !anchor || !head || anchor.key !== head.key || binding.dirty()) return;",
+    "tests": ["tests/features/editing/split-caret.test.ts"]
   }]
 }
