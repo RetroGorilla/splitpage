@@ -26,7 +26,7 @@ export interface UndoReplica {
   readonly observe: (beat: string, from: number, to: number) => ModelObservation;
   readonly caretAfter: (character: string) => SharedUndoSelection;
   readonly edit: (input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[];
-    readonly caret?: ModelObservation; readonly command?: string }) => string[];
+    readonly caret?: ModelObservation; readonly command?: string; readonly standaloneCaret?: true }) => string[];
   readonly mark: (observed: ModelObservation, mark: SharedMarkValue) => readonly string[];
   readonly length: (beat: string) => number;
   readonly rootOf: (id: string) => string;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { SharedContentRef, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordCollection, SharedTextAddress } from "../../../src/core/collab/operations.ts";
-import type { SharedUndoRecord, SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoRecord, SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import type { SharedUndo, SharedUndoReversal } from "../../../src/application/editing/undo/shared-undo.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -81,7 +81,7 @@ export class AdapterReplica {
 
   private author(): { id: string; by: string } { return { id: this.name + ":" + ++this.serial, by: modelWriters[this.name].by }; }
 
-  private command(operations: readonly SharedOperation[], description: { label: string; selection: SharedUndoSelection | null; typing: string | null }): SharedUndoRecord | null {
+  private command(operations: readonly SharedOperation[], description: SharedCommandDescription): SharedUndoRecord | null {
     if (!this.typing) this.world.now += 2000;
     let recorded: SharedUndoRecord | null = null;
     this.undo.perform(() => {
@@ -112,13 +112,14 @@ export class AdapterReplica {
     throw new Error("No character " + character);
   }
 
-  edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string }): string[] {
+  edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string;
+    readonly standaloneCaret?: true }): string[] {
     const target = address(input.at.beat), operations: SharedOperation[] = [], removed = (input.remove ?? input.at).ids;
     if (input.text) operations.push(operation({ kind: "text-insert", ...this.author(), target, at: { left: input.at.left, right: null, affinity: "after" },
       content: [{ value: input.text, marks: input.marks ?? [] }] }));
     if (removed.length) operations.push(operation({ kind: "text-delete", ...this.author(), target, observed: removed }));
     const record = this.command(operations, { label: input.command ?? "typing", selection: (input.caret ?? input.at).selection,
-      typing: input.command === undefined ? input.text ?? "" : null });
+      typing: input.command === undefined ? input.text ?? "" : null, ...input.standaloneCaret ? { caretText: target } : {} });
     return (record?.parts ?? []).flatMap(part => part.kind === "text" ? part.inserted : []).map(identity => {
       const unit = readSharedAnchorUnit(identity);
       assert.ok(unit);

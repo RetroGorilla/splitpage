@@ -19,15 +19,13 @@ key ctrl KeyZ
 eval JSON.stringify(W.selection())
 expect text(0) === 'the then' && beat('r1') === 'the then'
 expect same()
-expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 7
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 7 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 7
 eval window.projection=S.read().app;S.leave()
 expect S.read().peer === null
 expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
-goto /index.html
-wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T03 replace duplicate','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'the the','visualText':''}],'comments':[]})],'trace.splitpage'))
 wait F.state().title === 'T03 replace duplicate'
-click #btn-write
+eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
 eval S.enter()
 wait S.read().peer !== null
@@ -44,15 +42,13 @@ key ctrl KeyZ
 eval JSON.stringify(W.selection())
 expect text(0) === 'the then' && beat('r1') === 'the then'
 expect same()
-expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 7
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 7 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 7
 eval window.projection=S.read().app;S.leave()
 expect S.read().peer === null
 expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
-goto /index.html
-wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T03 replace composed','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'the the','visualText':''}],'comments':[]})],'trace.splitpage'))
 wait F.state().title === 'T03 replace composed'
-click #btn-write
+eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
 eval S.enter()
 wait S.read().peer !== null
@@ -71,7 +67,7 @@ key ctrl KeyZ
 eval JSON.stringify(W.selection())
 expect text(0) === 'the then' && beat('r1') === 'the then'
 expect same()
-expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 7
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 7 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 7
 eval window.projection=S.read().app;S.leave()
 expect S.read().peer === null
 expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)

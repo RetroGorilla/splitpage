@@ -160,7 +160,8 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
     return unit;
   }
 
-  edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string }): string[] {
+  edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string;
+    readonly standaloneCaret?: true }): string[] {
     const created: string[] = [];
     this.command(() => {
       let after = input.at.left;
@@ -171,7 +172,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
       const deleted = (input.remove ?? input.at).ids.filter(id => this.view.live(id)).map(id => this.remove(id));
       if (!created.length && !deleted.length) return null;
       return { label: input.command ?? "typing", selection: (input.caret ?? input.at).selection, typing: input.command === undefined ? input.text ?? "" : null,
-        parts: [{ kind: "text", target: address(input.at.beat), inserted: created.map(ref), deleted }] };
+        parts: [{ kind: "text", target: address(input.at.beat), inserted: created.map(ref), deleted }], ...input.standaloneCaret ? { caretText: address(input.at.beat) } : {} };
     });
     return created;
   }
@@ -265,14 +266,31 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
         throw new Error(message);
       }
       const inverse: SharedUndoPart[] = [];
+      const beat = record.caretText ? String(record.caretText.owner) : null, shown = beat === null ? null : this.shownText(beat);
       let effective = false;
       for (const part of [...record.parts].reverse()) {
         const reversed = this.reversePart(part);
         effective ||= reversed.effective;
         inverse.unshift(reversed.inverse);
       }
-      return { ok: true, effective, inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null }, selection: record.selection };
+      const caret = beat === null || shown === null ? null : this.stepCaret(beat, shown);
+      return { ok: true, effective, inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} },
+        selection: caret ?? record.selection };
     });
+  }
+
+  private shownText(beat: string): string[] {
+    return this.view.visible(beat).map(id => JSON.stringify([this.view.characters.get(id)?.value ?? "", this.marksOf(id)]));
+  }
+
+  private stepCaret(beat: string, before: readonly string[]): SharedUndoSelection | null {
+    const visible = this.view.visible(beat), after = this.shownText(beat);
+    if (after.length === before.length && after.every((key, index) => key === before[index])) return null;
+    let same = 0;
+    while (same < before.length && same < after.length && before[before.length - 1 - same] === after[after.length - 1 - same]) same++;
+    const offset = after.length - same, previous = visible[offset - 1], next = visible[offset];
+    const caret = previous !== undefined ? point(previous, "after") : next !== undefined ? point(next, "before") : ref(JSON.stringify({ b: beat }));
+    return { anchor: caret, focus: caret };
   }
 
   private reversePart(part: SharedUndoPart): { effective: boolean; inverse: SharedUndoPart } {
