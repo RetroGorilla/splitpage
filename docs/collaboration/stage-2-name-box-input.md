@@ -90,22 +90,116 @@ cover separated and overlapping deletions, prefix removal, and insertion inside
 the text or at its end, with results `aXfY`, `bPQefZ`, `XcYd` and `aXefY`.
 Their declared-limits table is empty.
 
-## Rule 85 dependency
+## Creating a scene from its name (rules 87 and 99)
 
-Undo, redo and Escape wait for composition cut C2. `SharedPlan` currently carries
-operations, base and the recovery undo exclusion; `ReplicaPort.execute` receives
-only operations and base. The session's `undo.record` gets a change set and an
-offset selection, after execution. The Writer heading buffer uses that same
-path today. It does not produce the identity record that `SharedUndo.perform`
-needs, and the missing before-state cannot be reconstructed from the change set.
+Split's `add-section` opens a blank input directly above the selected beat;
+`name-automatic` opens it on the automatic scene's first beat. Opening selects
+the empty input, with caret zero and no default stored name. In standalone,
+submit or blur saves a nonblank name. That path is unchanged.
 
-C2 must carry a command description through the plan to replica execution, run
-`executeSharedCommand` around the actual execution, and record its result in one
-per-writer `SharedUndo.perform` stack. The description needs a label, anchored
-selection, and typing text for a keystroke or null for cut, paste and Escape's
-replacement. Recovery's `undo: false` must still bypass recording. C2 also supplies
-the shared replay entry and routes it to that same owner from the Writer, inputs
-and global shortcuts. The next cut can then test the boxes and Writer against
-one stack, without a parallel undo history or a second execution to learn its
-record. Escape additionally needs the stored opening name and a check that no
-other writer changed it while the form was open.
+In shared mode, the first nonblank `input` creates the heading; during IME it
+waits for `compositionend`. Blank input, blank submit, blank blur and a cancelled
+first composition store nothing. One `add-section` command contains ordinary
+`heading-create` followed by its first `text-insert`, using a list-local heading
+alias. The returned canonical writer/operation identity binds the same input to
+the existing name-box buffer. The native input's first paste fits its prefix in
+200 UTF-16 units without splitting a surrogate pair. After creation the existing
+typing verdict, paste limit, stored whitespace, empty hold and caret mapping
+apply. Enter closes over the stored name and focuses the scene-name button.
+Drop and native history remain refused before and after creation.
+
+Before creation, the same ingress hold defers remote delivery during the first
+native edit or composition. It ends after creation has bound the heading, or
+after a cancelled or blank edit. A no-op clipboard event takes no hold. Command
+admission refuses a first composition, and repaint re-homes its form and keeps
+its selection. Cancelling that composition stores nothing and releases the hold.
+
+Assumed rule 99 retains ordinary heading-create concurrency: when two people
+name the same automatic scene, both names survive. The higher writer's heading
+owns the beat; the lower writer's name becomes `scene-with-no-beats` in recovery.
+The same rule applies to two add-sections above the same beat only while neither
+copy has seen the other's creation. Once a heading starts at that beat locally,
+the unbound form closes on repaint or at its first input; it writes nothing and
+does not switch to renaming the observed heading. Repaint closes
+the losing form through the existing detached-heading lifecycle. A key already
+in progress stays with its own heading in recovery. Before repaint, another key
+on that stale form is prevented and reported as `buffer-unavailable`; the
+existing ownership checks can report it more than once. It never targets the
+winning heading. No new reconciliation or operation intent is introduced.
+
+`scene-create.test.ts` compares complete projected documents and recovery on two
+copies and an encoded late joiner under normal, reversed and duplicate delivery.
+It pins both forms, typing in the first beat, removal of that beat, removal of
+the last beat, exact emitted operations, limits and a first composition. Its
+seeded three-writer histories also interleave naming, later typing, cut/paste
+and neighbouring beat typing. Concatenating the two complete creation command
+lists equals executing them separately. The undo-owner test records creation
+once and pins `undo-unsupported:heading-create`, leaving its one entry intact.
+
+Composition must give `mountSceneHeaders` both `sharedBufferedInputPorts` and
+`sharedSceneCreation(handle, session, author)` from the shared wiring ports.
+The author uses the existing clean operation-id source. The command runs once
+through the shared session. C2 passes its default `add-section` description with
+`typing: null` to the same `executeSharedCommand`/`SharedUndo.perform` path as
+other commands; no after-the-fact recording or second undo stack is used here.
+
+Composition must settle any beat buffer before the naming form gets keys:
+`holdSharedBuffer` throws if another buffer hold is already open, and setup's
+`beforeinput` does not catch it. The `shown` function must be the same guard as
+`wiring/buffered-input.ts`, deferring the sections paint until creation has bound
+the form. Teardown must account for a first composition: as for the bound
+binding, a refused dispose retains the hold and admission listener, and a later
+`compositionend` can still create the heading on disposed controls.
+
+## Rule 85 connection
+
+C2 now carries `SharedPlan.description` through replica execution and produces
+the identity record around the actual `executeSharedCommand` call. Composition
+uses one `sharedUndoOwner(handle, author, now, report)` with its replica, so each
+record enters the same per-writer `SharedUndo.perform` stack. Creation uses the
+session's default `add-section` description with `typing: null`; buffered typing
+supplies its own description. Recovery's `undo: false` still bypasses recording.
+
+The boxes' Ctrl+Z, Ctrl+Y and redo shortcuts prevent native history and call the
+same admitted shared actions. Composition gives
+`sharedBufferedInputPorts(shared, sharedBufferedInputHistory(handle, session, owner))` to the name
+and title routes, using the owner already passed to the replica. The Writer and
+global routes use that owner's same actions and arrange their normal repaint and
+selection restoration. Input history uses `resolveSharedBufferedSelection`, as
+the existing binding does, to restore the recorded caret even if it was moved
+before undo. Until the composed shared app connects them, the tests
+exercise the owner and replay entry directly. Nothing records a change after the
+fact or executes it twice. A missing history port retains the explicit refusal.
+
+The recorded native sequences above already include Ctrl+Z, Ctrl+Y, their
+no-history forms and Escape. The helper's explicit `escape` sends the same
+keydown/keyup pair; the browser sent no Escape beforeinput or input. Preventing
+the shortcut keydown means its native history events do not follow. Paste and cut
+now carry their own command descriptions with `typing: null`; Escape's whole-name
+replacement is `rename-cancel` with `typing: null`. They cannot coalesce into
+typing. Ordinary keys keep C2's typing description and grouping.
+
+An existing scene's form remembers its stored opening name. Its own commits
+retain the painted identity snapshot taken before the buffer releases ingress.
+Before subsequent events and repaint, the form compares that snapshot with the
+current field, including the units' identities. Observing another change is
+remembered even if the person then types again. A remote replacement with the
+same letters is a change; an unrelated field or revision is not. Escape settles
+any hold, then either writes the opening name as one ordinary replacement, or
+closes without writing and reports `buffer-heading-changed`. An unchanged name
+needs no command. The stored opening name can be restored even if it already
+exceeded the typing stop: this is a reversal, not another lengthening keystroke.
+Undo of that replacement restores the name Escape took back.
+
+Rules 59 and 64 still consume undo/redo that end an empty-name hold: restore the
+stored name, report once and do not act on text the person had not seen. Escape
+also ends the hold before closing. Composition still refuses settlement while
+an IME composition is open. A new-scene form had no stored opening name; Escape
+keeps its existing close behaviour after creation, and heading-create remains
+an explicitly unsupported shared undo step.
+
+The existing six-surface table in `tests/features/shared-undo-surfaces.test.ts`
+holds the name boxes' own shortcut cases, Writer/box/global stack ordering,
+Escape races and 48 seeded three-writer histories. Each history checks input
+values, selection, reports, stored text and an encoded late joiner. There is no
+parallel box history or record reconstruction.
