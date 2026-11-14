@@ -40,7 +40,7 @@ Rows with fewer than five repetitions are interim and do not yet meet the timing
 | --- | --- |
 | short / fresh | 5 / 5 |
 | short / edited | 5 / 5 |
-| long / fresh | unmeasured |
+| long / fresh | 5 / 5 |
 | long / edited | unmeasured |
 | large / fresh | unmeasured |
 | large / edited | unmeasured |
@@ -57,11 +57,13 @@ Values are medians [min–max] of per-round statistics, not pooled updates.
 | --- | --- |
 | short / fresh | 324052 |
 | short / edited | 324052 |
+| long / fresh | 325052 |
 
 | Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |
 | --- | --- | --- | --- | --- | --- | --- |
 | short / fresh | 3.51 [3.18–4.07] | 14.43 [5.72–19.55] | 30.78 [8.48–37.03] | 0.03 [0.02–0.03] | 0.04 [0.03–0.04] / 0.06 [0.06–0.08] | 99.11 [98.50–99.42] / 98.81 [98.07–99.19] |
 | short / edited | 202.67 [193.24–254.00] | 317.41 [214.29–563.55] | 507.09 [249.42–902.76] | 0.02 [0.02–0.03] | 0.02 [0.02–0.04] / 0.04 [0.03–0.06] | 99.98 [99.96–99.98] / 99.97 [99.96–99.98] |
+| long / fresh | 3.48 [3.35–3.58] | 5.77 [5.54–5.96] | 9.59 [8.72–12.14] | 0.02 [0.02–0.02] | 0.02 [0.02–0.02] / 0.04 [0.04–0.04] | 99.42 [99.40–99.49] / 99.28 [99.22–99.32] |
 
 Input budget screen only; passing admission alone does not establish end-to-end input latency.
 
@@ -69,6 +71,7 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | --- | --- | --- | --- | --- | --- |
 | short / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
 | short / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
+| long / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
 
 | Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -76,11 +79,14 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | short / fresh / 1000 | 9491.26 [5823.66–10494.96] | 32.16 [27.73–36.23] | 42.37 [36.54–63.80] | 95.96 [53.79–108.68] | 290.38 [209.99–326.38]x | 65.77 [65.26–161.01] | 1.11 [1.04–1.13] | 5 |
 | short / edited / 100 | 21318.66 [19103.14–29996.84] | 17.74 [15.12–26.26] | 16.95 [14.90–24.06] | 262.20 [236.18–286.08] | 1237.04 [727.37–1519.80]x | 266.05 [266.05–266.05] | 0.12 [0.12–0.12] | 1 |
 | short / edited / 1000 | 245457.95 [195951.60–296163.71] | 32.32 [29.50–66.89] | 37.96 [34.31–60.17] | 285.79 [261.18–304.73] | 6236.48 [4427.47–7991.79]x | 265.18 [265.18–265.18] | 29.41 [29.41–29.41] | 1 |
+| long / fresh / 100 | 232.14 [225.16–236.23] | 2.53 [2.24–2.67] | 3.58 [3.30–3.69] | 9.92 [9.86–11.49] | 91.63 [85.54–100.72]x | 74.43 [74.43–74.43] | 0.10 [0.10–0.10] | 1 |
+| long / fresh / 1000 | 5448.59 [5407.65–5611.96] | 18.68 [16.65–19.76] | 22.62 [22.20–25.14] | 39.84 [39.18–40.35] | 291.63 [280.82–324.75]x | 157.86 [157.86–157.86] | 1.12 [1.12–1.12] | 1 |
 
 | Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |
 | --- | --- | --- | --- | --- |
 | short / fresh | 0.004 [-0.880–0.004] | 0.133 [0.119–0.152] | 0.129 [0.115–1.022] | 30.44 [-0.16–35.76]x |
 | short / edited | 0.004 [-0.348–0.004] | 27.301 [27.288–27.328] | 27.300 [27.295–27.676] | 6447.12 [-128.37–6895.59]x |
+| long / fresh | 0.042 [-0.097–0.042] | 0.846 [0.826–0.873] | 0.814 [0.795–0.923] | 20.29 [-8.52–20.93]x |
 
 Full lint and type checking, dependency and comment gates, and all four focused tests pass after installing the existing desktop and prototype dependencies. No dependency rule or baseline changed. The full verification command was not run.
 
