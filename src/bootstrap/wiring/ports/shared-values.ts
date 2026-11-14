@@ -1,5 +1,7 @@
 import type { SharedValuePorts } from "../../../application/commands/shared-values.ts";
+import type { SharedStructurePorts } from "../../../application/commands/shared-structure.ts";
 import type { StampPorts } from "../../../application/session/ports.ts";
+import type { CellDecoder } from "../../../core/text/ports.ts";
 import type { SharedContentRef } from "../../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
@@ -14,4 +16,12 @@ export function sharedValuePorts(source: { readonly handle: () => SharedDocument
       return handle ? readSharedStatusHeads(handle, { scope: "beat", record: beat as SharedContentRef }) : [];
     }
   } : null;
+}
+
+export function sharedStructurePorts(source: Parameters<typeof sharedValuePorts>[0] & { readonly cells: CellDecoder }): () => SharedStructurePorts | null {
+  const values = sharedValuePorts(source);
+  return () => {
+    const ports = values();
+    return ports && { author: ports.author, beatStamp: ports.beatStamp, cells: html => source.cells(html ?? "") };
+  };
 }
