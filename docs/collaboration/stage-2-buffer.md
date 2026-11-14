@@ -400,17 +400,20 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
   is not an insertion: emptying a name and then pasting a new one ends the hold
   with the report, while selecting the name and pasting over it replaces it. A
   removal of the heading by someone else waits behind the hold and lands once it
-  ends. A composition records
+  ends. A key held down to clear the name repeats on the emptied heading: Edge
+  sends each repeat as a `keydown` with `repeat` set, then its `beforeinput`, and
+  one `keyup` at release. While a heading is held, the binding prevents a repeated
+  `keydown`, so neither it nor the `beforeinput` it would cause ends the hold or
+  reports; a fresh press still ends it. A repeat always repeats the last fresh
+  press, and a fresh press made while held ends the hold itself. A composition records
   at `compositionstart` whether it began in a heading held empty; cancelling it
   then puts the name back with the one report, whatever text the cancel leaves.
   A composition that began elsewhere and is cancelled is a plain cancel.
 - In a shared session the projected scene name is the stored text, character for
   character, spaces at its edges included, so the screen, the painted record,
   Find and Replace, copy and every flow command count on one string. The session's
-  entry port must keep each scene name as projected: the file loader
-  (`migrateRows`) trims names, and the stand-in entry in
-  `tests/application/session/shared-session-support.ts` puts the projected names
-  back. Removing edge spaces is a write that belongs to heading finalization
+  entry port (`enterSharedDocument`) keeps each scene name as projected; the
+  file loader (`migrateRows`) trims names and is not used for shared entry. Removing edge spaces is a write that belongs to heading finalization
   (package 10); until then a shared name may carry them. Places that already trim
   a name when printing it (outline, numbering, export, through `normalizeScenes`)
   still do.
@@ -425,8 +428,104 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
 remote change mid-typing, mid-composition and while the heading is held empty,
 compared on the typist, the other copy and a late joiner. "standalone heading
 keystroke" in `tests/features/writer/buffer-cost.test.ts` pins that the
-standalone rename builds no buffer or painted record and reads no key. The
-Split view's rename form and the title are not bound yet.
+standalone rename builds no buffer or painted record and reads no key.
+
+### The Split view's rename form (package 9d, cut 1b)
+
+In a shared session the Split view's rename form binds its input to the same
+buffered field under the heading's key (`bindBufferedInput` in
+`src/features/common/buffered-input.ts`, given by `sharedBufferedInputPorts` in
+the wiring). Each keystroke settles as the heading's `text-insert` or `text-delete`;
+the form runs no rename command, and closing it (Enter, Escape, focus loss)
+closes it over what is already shared and repaints the rows once. The form shows
+the stored name (`storedSceneName`, edge spaces included), and the empty and
+200-character verdicts are the Writer's (`unsettledHeading`). Assumed rules, for
+the plan review:
+
+- An input gives no target range, so a collapsed Backspace or Delete is left to
+  the browser and adopted at its `input` event. Paste, drop, `historyUndo`,
+  `historyRedo` and other input types are refused with `buffer-unsupported-input`,
+  after settling typing; a refused undo restores nothing.
+- Enter on a settled name lets its `insertLineBreak` through, so the form's
+  submit closes it. A shared form sets no native `maxlength`: the binding refuses
+  the 201st character at its `input` event (rule 5), which native truncation
+  would suppress.
+- A name held empty ends as in the Writer (rule 59 as merged): a command
+  admitted, a cancelled composition that began held, or the input losing focus
+  (any blur that a same-task refocus, as a repaint's re-homing, does not undo) or
+  the document selection leaving the form, each with the stored name back and one
+  report. Enter, paste, drop, `historyUndo` and `historyRedo` end it the same way
+  at their `beforeinput` and are consumed: nothing else happens and the form stays
+  open on the stored name; Escape then closes it. A focus transfer to another
+  element, or a submit from elsewhere, also closes the form after the one report.
+  Some keys on an input send no `input` event (Backspace and Delete in an empty
+  input, Ctrl+X with nothing selected, Ctrl+Z or Ctrl+Y with no history, arrows),
+  so a key pressed while the
+  name is held that is not a bare modifier (Shift, Control, Alt, Meta, AltGraph,
+  CapsLock, a dead key) or a composition key ends the hold at its `keyup` if
+  nothing inserted by then; a hold already ended does not report again. A repeat
+  of a key held down to clear the name is prevented and is not a key press, as
+  in the Writer, so releasing it keeps the hold. A letter,
+  with or without Shift or after a dead key, and a committed composition replace
+  the name once. Paste is not an insertion: emptying a name and then pasting a new
+  one gives the report, while selecting the name and pasting is refused as any
+  paste is.
+- A paint during an edit re-homes the form into the rebuilt header. The caret and
+  selection, with their direction, follow the shared units: each end stays after
+  the unit it followed, so text others insert at either side or between equal
+  letters does not move it.
+- Adding a scene, or naming an automatic one, opens no form in a shared session
+  and tells the person (`not shared`): scene creation has no shared operation yet.
+- Name text the document refuses goes to recovery through the rule 29 write, as
+  in the Writer.
+
+`tests/features/rows/scene-name-buffer.test.ts` holds each case, compared on
+the typist, the other copy and a late joiner. It drives the input through
+`tests/features/edge-input.ts`, one helper per user action, each dispatching the
+sequence Edge sends for an `<input>`; the test file's `EDGE_SEQUENCES` table holds
+the sequences recorded in Edge 157 and checks each helper against it on a plain
+input; `tests/features/rows/scene-controls.test.ts`
+pins the standalone form, which binds nothing.
+
+### The script title (package 9d, cut 2)
+
+In a shared session `mountTitleRoutes` binds both title inputs (`#doc-title` and
+`#writer-title`) to one buffered field under `TITLE_FIELD_KEY`, through the same
+`bindBufferedInput`; it runs no `set-title` command. Each keystroke settles as a
+`text-insert` or `text-delete` on the document's title text, with no beat stamp.
+The input being typed in is the field; a settle or a repaint writes the stored
+title into both inputs and updates the page title. The stored title is the
+replica's text (`PaintedBeats.stored`), read from the replica rather than the
+session view. The shared entry (`enterSharedDocument`) cuts nothing, so the
+session view holds the stored title too; only loading a file caps a title at
+`TITLE_MAX` (300 code points). Assumed rules, for the plan review:
+
+- An emptied title is written empty at once, with no hold and no report, as a
+  local title may be empty.
+- A settle that would leave the title over `TITLE_MAX` and longer than the stored
+  title is refused and put back (`unsettledTitle`, `buffer-title-length`, no
+  hold); what was settled before stays. This covers typing and a composition.
+  Two writers each typing at the cap at the same moment can still
+  leave the replica over it: every session view and both title inputs then show
+  the whole stored title, in full (as a scene name over 200 characters, assumed
+  rule 61), typing that lengthens it is
+  refused, and any deletion is written, so the title can be brought back under
+  the cap.
+- Shared typing leaves `titleOrigin` and `titleVersion` as they are. Saving is
+  refused in a shared session, so the first-save rename from the file name cannot
+  overwrite a typed title yet; this needs a rule when shared saving lands.
+- Paste, cut, drop, `historyUndo`, `historyRedo` and other input types are
+  refused with `buffer-unsupported-input`, after settling typing, as in the
+  rename form. Enter changes nothing.
+- A paint keeps the caret and selection, with their direction, on the same
+  shared units, as in the rename form.
+- For the wiring cut: `paintSessionChange` in `src/features/rows/render.ts`
+  writes the title inputs only when `titleVersion` changes or on replay, so it
+  must be checked that a remote change to the title alone reaches `onPainted`.
+
+`tests/features/title/title-buffer.test.ts` holds each case through
+`tests/features/edge-input.ts`, compared on the typist, the other copy and a late
+joiner; `tests/features/title/routes.test.ts` pins the standalone routes.
 
 ## Mapping and coverage
 

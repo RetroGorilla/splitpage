@@ -34,6 +34,29 @@ export function headedWriter(name = "Scene", command?: SurfacePorts["commit"], o
     releaseKey(page.root, key);
     return true;
   }
+  function holdHeading(key: "Backspace" | "Delete", from: number, to: number, repeats: number): number {
+    const type = key === "Backspace" ? "deleteContentBackward" : "deleteContentForward";
+    let count = 0, anchor = from, head = to;
+    page.surface.place({ anchor: headingPos("H1", from), head: headingPos("H1", to) });
+    for (let stroke = 0; stroke <= repeats; stroke++) {
+      if (!press({ key, repeat: stroke > 0 })) continue;
+      const value = element().textContent ?? "";
+      const [start, end] = anchor !== head ? [anchor, head] : key === "Backspace" ? [Math.max(0, anchor - 1), anchor] : [anchor, Math.min(value.length, anchor + 1)];
+      const range = page.surface.domRange({ anchor: headingPos("H1", start), head: headingPos("H1", end) }); assert.ok(range);
+      const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: type });
+      const nativeTarget = range.cloneRange();
+      Object.defineProperty(event, "getTargetRanges", { value: () => [nativeTarget] });
+      if (!page.root.dispatchEvent(event) || start === end) continue;
+      const heading = element();
+      heading.textContent = value.slice(0, start) + value.slice(end);
+      const node = heading.firstChild ?? heading.appendChild(document.createTextNode(""));
+      window.getSelection()?.setBaseAndExtent(node, start, node, start);
+      page.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: type }));
+      anchor = head = start; count++;
+    }
+    releaseKey(page.root, key);
+    return count;
+  }
   function selectionMoved(): void {
     document.dispatchEvent(new window.Event("selectionchange"));
   }
@@ -42,7 +65,7 @@ export function headedWriter(name = "Scene", command?: SurfacePorts["commit"], o
     selectionMoved();
   }
   return {
-    ...page, element, typeHeading, press, selectionMoved, leaveTo,
+    ...page, element, typeHeading, holdHeading, press, selectionMoved, leaveTo,
     name: () => page.a.session.read(doc => sceneNames(doc as FlowDoc | null)[0]),
     startHeading: (from: number, to = from) => {
       page.surface.place({ anchor: headingPos("H1", from), head: headingPos("H1", to) });

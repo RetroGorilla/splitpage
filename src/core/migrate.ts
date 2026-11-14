@@ -5,6 +5,7 @@ import { SCHEMA_VERSION, STATE_FIELDS } from "./document/fields.ts";
 import type { StateField } from "./document/fields.ts";
 import { migrateGallery } from "./document/gallery.ts";
 import type { GalleryRow } from "./document/gallery.ts";
+import { TITLE_MAX } from "./document/file-title.ts";
 import { deriveDocId, docIdEmbeddedIn } from "./document/ids.ts";
 import { createLoadIds } from "./document/load-ids.ts";
 import { mediaComments } from "./document/media.ts";
@@ -377,12 +378,17 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     else s[f.key] = value;
   });
 
-  s.title = cappedLongText(plainText(s.title), 300);
+  s.title = cappedLongText(plainText(s.title), TITLE_MAX);
   if (!Number.isFinite(s.rev)) s.rev = 0;
   if ("sections" in s) writeScenes(s, scenesInOrder({ rows: s.rows as { id: string }[], sections: s.sections }));
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;
   return s as ValidatedDocument;
+}
+
+export function enterSharedDocument(projected: unknown): ValidatedDocument {
+  if (!isDocumentObject(projected) || !Array.isArray(projected.rows)) throw new TypeError("A shared session enters only a projected document");
+  return projected as ValidatedDocument;
 }
 
 export function migrateDocument(raw: unknown, origin: DocumentOrigin | null | undefined, ports: MigratePorts): ValidatedDocument {
