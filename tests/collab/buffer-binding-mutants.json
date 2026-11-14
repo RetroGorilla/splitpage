@@ -710,7 +710,7 @@
   }, {
     "label": "plain input redo follows its restored typing instead of the recorded boundary",
     "file": "src/adapters/collab/buffer.ts",
-    "find": "const anchor = !first ? null : target.field === \"audioText\" || target.field === \"visualText\"",
+    "find": "const anchor = !first ? null : cell",
     "replace": "const anchor = !first ? null : true",
     "tests": ["tests/features/shared-undo-surfaces.test.ts"]
   }, {
