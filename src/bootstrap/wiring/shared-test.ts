@@ -12,6 +12,7 @@ import { createSharedTestPeer } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
 import { documentReader } from "./ports/document.ts";
+import { openingStatus } from "./ports/transitions.ts";
 import { getEditorName } from "./preferences-owner.ts";
 import { undoOwner } from "./undo.ts";
 import { writerControls } from "./writer.ts";
@@ -108,7 +109,8 @@ function startSharedTestHook(): () => void {
         bindings, common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
         structure: { cells: html => fromHtml(html) }, report,
         timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
-        now: () => Date.now()
+        now: () => Date.now(),
+        opening: openingStatus
       };
       ports = entering;
       const kept = await keepDraftBeforeEntry(entering, refusal);

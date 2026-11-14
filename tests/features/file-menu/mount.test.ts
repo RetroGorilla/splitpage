@@ -112,6 +112,8 @@ const expected: readonly Registration[] = [
 export function setup() {
   const h = viewHarness();
   const p0: SaveRecoveryPorts = {
+    entry: { before: () => null },
+    opening: { track: work => work() },
     hideResumeBanner: h.log("hideResumeBanner"),
     resumeFromHandle: async () => undefined,
     showToast: h.log("showToast"),
@@ -154,6 +156,17 @@ test("file-menu: every target, event, phase and multiplicity across dispose and 
   const h = setup();
   h.assertRemount(h.mount, expected);
   h.window.close();
+});
+
+test("C8 refused manual resume does not ask permission, capture, track or hide the banner", () => {
+  const h = setup(); let asked = 0, tracked = 0, captured = 0;
+  const owner = mountSaveRecovery({ window: h.window, ports: { ...h.p0,
+    pendingHandle: () => ({ requestPermission: async () => { asked++; return "granted"; } }),
+    entry: { before: () => ({ refused: "buffer-composition" }) },
+    opening: { track: work => { tracked++; return work(); } },
+    capture: () => { captured++; return () => true; } } });
+  try { h.fire(h.el("resume-continue"), "click"); assert.deepEqual([asked, tracked, captured, h.calls], [0, 0, 0, []]); }
+  finally { owner.dispose(); h.window.close(); }
 });
 
 for (const work of ["resume", "copy"]) {

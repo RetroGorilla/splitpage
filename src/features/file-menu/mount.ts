@@ -1,11 +1,14 @@
 import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { NoticeKind, NoticePort } from "../../application/effects/ports.ts";
 import type { CapabilityPort } from "../../application/session/ports.ts";
+import type { DocumentEntryAdmission, DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export type ResumeHandle = Partial<Pick<LocalFileHandle, "name" | "requestPermission">>;
 
 export interface SaveRecoveryPorts {
+  readonly entry: DocumentEntryAdmission;
+  readonly opening: Pick<DocumentOpeningActivity, "track">;
   readonly hideResumeBanner: () => void;
   readonly resumeFromHandle: (handle: ResumeHandle) => Promise<void>;
   readonly showToast: (message: string, kind: NoticeKind) => void;
@@ -20,10 +23,12 @@ export function mountSaveRecovery(mount: { window: Window; ports: SaveRecoveryPo
   const document = window.document;
   const life = createViewLifetime(window);
   const element = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
-  life.listen(element("resume-continue"), "click", async function () {
+  life.listen(element("resume-continue"), "click", function () {
     const handle = ports.pendingHandle();
-    const owns = ports.capture();
     if (!handle) { ports.hideResumeBanner(); return; }
+    if (ports.entry.before()) return;
+    const owns = ports.capture();
+    return ports.opening.track(async () => {
     try {
       const perm = await (handle.requestPermission as NonNullable<ResumeHandle["requestPermission"]>)({ mode: "readwrite" });
       if (!life.active() || !owns() || ports.pendingHandle() !== handle) return;
@@ -34,6 +39,7 @@ export function mountSaveRecovery(mount: { window: Window; ports: SaveRecoveryPo
       ports.showToast("Could not reopen that file.", "error");
     }
     if (life.active() && ports.pendingHandle() === handle) ports.hideResumeBanner();
+    });
   });
   life.listen(element("resume-dismiss"), "click", ports.hideResumeBanner);
 

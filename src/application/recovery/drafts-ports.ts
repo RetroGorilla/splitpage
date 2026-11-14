@@ -15,8 +15,10 @@ import type { CellDecoder } from "../../core/text/ports.ts";
 import type { CapabilityPort } from "../session/ports.ts";
 
 export const DRAFTS_DETACHED = "DETACHED";
+export const DRAFTS_NOT_KEPT = "NOT_KEPT";
 
-export type DraftDetachRefusal = "disposed" | "detached" | "stopped" | "writing" | "discarding" | "restoring" | "flushing" | "retrying" | "pending" | "no-owner";
+export type DraftDetachRefusal = "disposed" | "detached" | "stopped" | "writing" | "discarding" | "restoring" | "taken" | "flushing" | "retrying"
+  | "pending" | "no-owner";
 
 export type DraftDetach = { readonly ok: true } | { readonly ok: false; readonly reason: DraftDetachRefusal };
 
@@ -57,6 +59,7 @@ export interface DraftRecovery {
 
 export interface DraftsPorts {
   readonly capability: Pick<CapabilityPort, "drafts">;
+  readonly entryCapability: Pick<CapabilityPort, "drafts">;
   readonly running: () => boolean;
   readonly clock: { readonly now: () => number };
   readonly timers: CaptureTimers;

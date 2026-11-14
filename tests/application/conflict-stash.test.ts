@@ -23,8 +23,22 @@ function failingStorage(): KeyValueStorage {
 }
 
 function stashWith(storage: KeyValueStorage | null, interned: string[] = []) {
-  return createConflictStash({ capability: MAY_EDIT, storage: () => storage, internImage: (dataUrl: string) => { interned.push(dataUrl); } });
+  return createConflictStash({ capability: MAY_EDIT, entryCapability: MAY_EDIT, storage: () => storage, internImage: (dataUrl: string) => { interned.push(dataUrl); } });
 }
+
+test("an entry refusal blocks stash read and accept while admitted stash bookkeeping still writes and clears", () => {
+  const calls = { read: 0, write: 0, clear: 0, intern: 0 };
+  const stash = createConflictStash({ capability: MAY_EDIT, entryCapability: { stash: () => ({ allowed: false, reason: "session-switching" }) },
+    storage: () => ({ getItem: () => { calls.read++; return "{}"; }, setItem: () => { calls.write++; }, removeItem: () => { calls.clear++; } }),
+    internImage: () => { calls.intern++; } });
+  const work = { imagesStripped: true, mine: { rows: [{ id: "R1", visualImage: "__IMAGE__" }] }, blobs: { [SHA]: "data:image/png;base64,AAAA" } };
+  assert.equal(stash.save(work), true);
+  assert.equal(stash.read(), null);
+  assert.equal(stash.accept(work, { rows: [] }), work);
+  assert.equal(work.imagesStripped, true);
+  stash.clear(); stash.dropReloadGuard();
+  assert.deepEqual(calls, { read: 0, write: 1, clear: 2, intern: 0 });
+});
 
 test("a saved stash reads back as written, under the conflict-stash key in session storage, until it is cleared", () => {
   const storage = memoryStorage();
@@ -54,7 +68,7 @@ test("a stash that is not JSON, or storage that is missing or throws, reads as n
     assert.doesNotThrow(() => stash.clear());
     assert.doesNotThrow(() => stash.dropReloadGuard());
   }
-  const throwing = createConflictStash({ capability: MAY_EDIT, storage: () => { throw new Error("no access"); }, internImage: () => {} });
+  const throwing = createConflictStash({ capability: MAY_EDIT, entryCapability: MAY_EDIT, storage: () => { throw new Error("no access"); }, internImage: () => {} });
   assert.equal(throwing.save({}), false, "a storage getter that throws is a failed write");
   assert.equal(throwing.read(), null);
 });

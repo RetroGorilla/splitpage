@@ -1178,7 +1178,12 @@ function showPrompterForLaunch(): void {
   if (!ports.state.isOpen()) openPrompter();
 }
 
-async function launchPrompterFromScript(token: string): Promise<boolean> {
+function launchPrompterFromScript(token: string): Promise<boolean> {
+  if (ports.entry.before()) return Promise.resolve(false);
+  return ports.openingActivity.track(() => readPrompterScript(token));
+}
+
+async function readPrompterScript(token: string): Promise<boolean> {
   const owner = ports;
   let body: { name?: unknown; text?: unknown } | null = null;
   try {
@@ -1211,6 +1216,7 @@ async function launchPrompterFromScript(token: string): Promise<boolean> {
 }
 
 function startPrompterLaunch(launch: PrompterLaunch): void {
+  if (launch.token && ports.entry.before()) return;
   const owner = ports;
   ports.preferences.skipOnboardingForPrompter();
   whenInitialStateReady().then(function () {
