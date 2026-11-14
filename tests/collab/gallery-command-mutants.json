@@ -1,0 +1,103 @@
+{
+  "tests": [
+    "tests/application/commands/gallery-shared.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "gallery slots matched only by position",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "found = key ? before.findIndex((old, at) => !used.has(at) && identity(old) === key) : -1;",
+      "replace": "found = -1 as number;"
+    },
+    {
+      "label": "gallery slot changed in place made a new record",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (owner[index] === null && index < before.length && !used.has(index))",
+      "replace": "if (owner[index] === null && index < 0 && !used.has(index))"
+    },
+    {
+      "label": "hydrated empty gallery record counted as a picture",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "return Object.keys(slot).every(key => key === \"imageRef\") && !slot.imageRef; }",
+      "replace": "return false; }"
+    },
+    {
+      "label": "picture held twice aligned as two slots",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (seen.has(sha)) return false;",
+      "replace": "if (seen.has(sha)) return true;"
+    },
+    {
+      "label": "second record of a picture held twice kept",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (!kept.has(record.key)) operations.push(",
+      "replace": "if (!kept.has(record.key) && records.includes(record)) operations.push("
+    },
+    {
+      "label": "moved picture keeps its rank",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "    if (rank !== record.fields.rank) set(record.key, \"rank\", rank);\n",
+      "replace": ""
+    },
+    {
+      "label": "first picture's empty image compared as stored",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "const shown = index ? canonical : shownPicture;",
+      "replace": "const shown = canonical;"
+    },
+    {
+      "label": "dropped record fields left in place",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "    if (canonical(extraOf(slot)) !== canonical(sharedProjectionExtra(record.fields))) set(record.key, \"extra\", JSON.stringify(extraOf(slot)));\n",
+      "replace": ""
+    },
+    {
+      "label": "link with a file location sent to the document",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "  if (after.some(slot => linksOf(slot).some(link => link.location !== undefined))) return { refused: \"gallery-local-file\" };\n",
+      "replace": ""
+    },
+    {
+      "label": "old-style embedded image sent to the document",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (edit.after.visualImage ||",
+      "replace": "if ("
+    },
+    {
+      "label": "gallery past its first 61 entries edited",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "  if (grouped.overflow.length) return { refused: \"gallery-overflow\" };\n",
+      "replace": ""
+    },
+    {
+      "label": "beat's last gallery record removed without an empty one",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (!after.length && edit.records.every(",
+      "replace": "if (after.length < 0 && edit.records.every("
+    },
+    {
+      "label": "rank between two pictures equal to the lower one",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (above - below > 1) return",
+      "replace": "if (above - below > 0) return"
+    },
+    {
+      "label": "gallery list sent without the beat stamp",
+      "file": "src/application/commands/gallery.ts",
+      "find": "operations: [...result.operations, shared.beatStamp(rowId as SharedContentRef, { id: author.id + \"_stamp_0\", by: author.by })]",
+      "replace": "operations: [...result.operations]"
+    },
+    {
+      "label": "gallery command builds a shared list without an author",
+      "file": "src/application/commands/gallery.ts",
+      "find": "if (!shared || !author) return plan;",
+      "replace": "if (!shared) return plan;"
+    },
+    {
+      "label": "gallery port reads every beat's pictures",
+      "file": "src/bootstrap/wiring/ports/shared-gallery.ts",
+      "find": ".filter(record => record.fields.beat === beat)",
+      "replace": ""
+    }
+  ]
+}
