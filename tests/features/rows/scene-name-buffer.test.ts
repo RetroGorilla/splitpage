@@ -72,6 +72,21 @@ const EDGE_SEQUENCES: readonly {
     events: [["keydown", "x", true], ["cut", null, true], ["keyup", "x", true]] },
   { label: "Ctrl+V", value: "", act: edge => edge.paste("Q"), after: ["Q", 1, 1],
     events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "empty Ctrl+V at a caret", value: "Draft", act: edge => { edge.select(2); edge.paste(""); }, after: ["Draft", 2, 2],
+    events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "empty Ctrl+V over a selection", value: "Draft", act: edge => { edge.select(1, 4); edge.paste(""); }, after: ["Dt", 1, 1],
+    events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "Ctrl+V at a surrogate boundary with maxlength", value: "aaaaaaaZ", max: 10,
+    act: edge => { edge.select(7); edge.paste("X😀Q"); }, after: ["aaaaaaaXZ", 8, 8],
+    events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "Ctrl+X over a selection", value: "abcdef", act: edge => { edge.select(1, 4); edge.cut(); }, after: ["aef", 1, 1],
+    events: [["keydown", "x", true], ["cut", null, true], ["beforeinput", "deleteByCut", true], ["input", "deleteByCut", false], ["keyup", "x", true]] },
+  { label: "Ctrl+Z with native history", value: "aef", act: edge => edge.undo("aXYef", [1, 3]), after: ["aXYef", 1, 3],
+    events: [["keydown", "z", true], ["beforeinput", "historyUndo", true], ["input", "historyUndo", false], ["keyup", "z", true]] },
+  { label: "Ctrl+Y with native history", value: "aXYef", act: edge => edge.redo("aef", [1, 1]), after: ["aef", 1, 1],
+    events: [["keydown", "y", true], ["beforeinput", "historyRedo", true], ["input", "historyRedo", false], ["keyup", "y", true]] },
+  { label: "Escape", value: "Scene", act: edge => edge.press("Escape"), after: ["Scene", 5, 5],
+    events: [["keydown", "Escape", true], ["keyup", "Escape", true]] },
   { label: "a drop", value: "", act: edge => edge.drop("Q"), after: ["Q", 0, 1],
     events: [["drop", null, true], ["beforeinput", "insertFromDrop", true], ["input", "insertFromDrop", false]] },
   { label: "Ctrl+Y with nothing to redo", value: "", act: edge => edge.redo(null), after: ["", 0, 0],
@@ -121,6 +136,7 @@ test("Split rename typing settles each keystroke as heading text operations, wit
     assert.equal(page.edge.backspace(), true);
     assert.deepEqual([page.stored(), input.value, caret(page), page.reports, page.commands], ["SneX", "SneX", [1, 1], [], []]);
     assert.deepEqual(written(page), [[inserted("X")], [{ kind: "text-delete", target: TARGET, observed: 2 }]]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "X", true], ["typing", "", true]]);
     assert.deepEqual([holds(page), page.shownDepth(), page.repaints()], [[], 0, 0]);
     copies(page, ["SneX"]);
   } finally { page.close(); }
@@ -260,6 +276,17 @@ function emptied(name = "Scene"): RenamePage {
 
 const EMPTY_REPORT = [{ kind: "rejected", reason: "buffer-heading-empty" }];
 
+test("Split rename: a cancelled paste on an already empty held name ends only the existing hold at keyup", () => {
+  const page = emptied();
+  try {
+    page.input().addEventListener("beforeinput", event => { event.preventDefault(); }, { once: true });
+    assert.equal(page.edge.paste("Q"), false);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page), holds(page)],
+      ["Scene", "Scene", [0, 0], EMPTY_REPORT, [], []]);
+    copies(page, ["Scene"]);
+  } finally { page.close(); }
+});
+
 test("Split rename rule 4: Enter on a held empty name only ends the hold: the form stays open on the stored name and tells once; Escape then closes it", () => {
   const page = emptied();
   try {
@@ -322,16 +349,16 @@ test("Split rename rule 5: a letter typed into a full 200-character name is refu
   } finally { page.close(); }
 });
 
-test("Split rename rule 3: paste settles typing first, then is refused and the person is told", () => {
+test("Split rename rule 84: paste after typing inserts at the caret without a refusal", () => {
   const page = sharedRename();
   try {
     const input = page.open();
     page.edge.select(5);
     page.edge.type("X");
     page.edge.select(2);
-    assert.equal(page.edge.paste("Q"), false);
-    assert.deepEqual([page.stored(), input.value, page.reports, written(page)], ["SceneX", "SceneX", UNSUPPORTED, [[inserted("X")]]]);
-    copies(page, ["SceneX"]);
+    assert.equal(page.edge.paste("Q"), true);
+    assert.deepEqual([page.stored(), input.value, caret(page), page.reports, written(page)], ["ScQeneX", "ScQeneX", [3, 3], [], [[inserted("X")], [inserted("Q")]]]);
+    copies(page, ["ScQeneX"]);
   } finally { page.close(); }
 });
 
@@ -344,6 +371,80 @@ test("Split rename: Ctrl+Z after settled typing is refused and the person is tol
     assert.equal(page.edge.undo("Scene"), false);
     assert.deepEqual([page.stored(), input.value, caret(page), page.reports, written(page)], ["SceneX", "SceneX", [6, 6], UNSUPPORTED, [[inserted("X")]]]);
     copies(page, ["SceneX"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 84: paste replaces a selection and its caret follows the pasted letters through another writer's change", () => {
+  const page = sharedRename();
+  try {
+    page.open(); page.edge.select(1, 4);
+    page.edge.paste("XY", () => { remote(page, 0, "!"); page.h.queue.deliverFrom("B", "D1"); });
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page)],
+      ["!SXYe", "!SXYe", [4, 4], [], [[inserted("XY"), { kind: "text-delete", target: TARGET, observed: 3 }]]]);
+    copies(page, ["!SXYe"]);
+    page.edge.select(2, 4); assert.equal(page.edge.cut(), true);
+    assert.deepEqual([page.edge.copied(), page.stored(), page.input().value, caret(page), page.reports, written(page)],
+      ["XY", "!Se", "!Se", [2, 2], [], [[inserted("XY"), { kind: "text-delete", target: TARGET, observed: 3 }], [{ kind: "text-delete", target: TARGET, observed: 2 }]]]);
+    copies(page, ["!Se"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 84: cutting the whole name copies it and holds empty; paste writes a new name once without a report", () => {
+  const page = sharedRename();
+  try {
+    page.open(); page.edge.selectAll(); assert.equal(page.edge.cut(), true);
+    assert.deepEqual([page.edge.copied(), page.stored(), page.input().value, caret(page), page.reports, written(page), holds(page)],
+      ["Scene", "Scene", "", [0, 0], [], [], ["buffer"]]);
+    remote(page, 0, "!"); page.h.queue.deliverFrom("B", "D1");
+    assert.equal(page.edge.paste("New"), true);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page), holds(page)],
+      ["New!", "New!", [3, 3], [], [[inserted("New"), { kind: "text-delete", target: TARGET, observed: 5 }]], []]);
+    copies(page, ["New!"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 84: paste into a held emptied name replaces it instead of consuming the paste", () => {
+  const page = emptied();
+  try {
+    assert.equal(page.edge.paste("Q"), true);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page), holds(page)],
+      ["Q", "Q", [1, 1], [], [[inserted("Q"), { kind: "text-delete", target: TARGET, observed: 5 }]], []]);
+    copies(page, ["Q"]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 84: paste fits its prefix in 200 UTF-16 units, preserving the suffix and a whole surrogate pair", () => {
+  const page = sharedRename("a".repeat(196) + "END");
+  try {
+    page.open(); page.edge.select(196, 198); page.edge.paste("X😀YZ");
+    const expected = "a".repeat(196) + "X😀D";
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page)],
+      [expected, expected, [199, 199], [], [[inserted("X😀"), { kind: "text-delete", target: TARGET, observed: 2 }]]]);
+    copies(page, [expected]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 84: native paste folds line breaks to spaces and retains tabs and control characters", () => {
+  const page = sharedRename();
+  try {
+    page.open(); page.edge.paste("A\r\nB\nC\rD\tE\u0001F\u000bG\u007fH");
+    const expected = "A B C D\tE\u0001F\u000bG\u007fH";
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page)],
+      [expected, expected, [15, 15], [], [[inserted(expected), { kind: "text-delete", target: TARGET, observed: 5 }]]]);
+    copies(page, [expected]);
+  } finally { page.close(); }
+});
+
+test("Split rename rule 84: paste at a full name writes nothing; drop stays refused", () => {
+  const page = sharedRename("a".repeat(200));
+  try {
+    page.open(); page.edge.select(200); page.edge.paste("XYZ");
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page), holds(page)],
+      ["a".repeat(200), "a".repeat(200), [200, 200], [], [], []]);
+    assert.equal(page.edge.drop("Z"), false);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page)],
+      ["a".repeat(200), "a".repeat(200), [200, 200], UNSUPPORTED, []]);
+    copies(page, ["a".repeat(200)]);
   } finally { page.close(); }
 });
 
@@ -368,7 +469,6 @@ const HELD_ENDINGS: readonly (readonly [string, (page: RenamePage) => boolean])[
   ["Delete", page => page.edge.delete()],
   ["Enter", page => page.edge.enter()],
   ["Ctrl+X with nothing selected", page => page.edge.cut()],
-  ["Ctrl+V", page => page.edge.paste("Q")],
   ["a drop", page => page.edge.drop("Q")],
   ["Ctrl+Z", page => page.edge.undo("Scene")],
   ["Ctrl+Z with nothing to undo", page => page.edge.undo(null)],

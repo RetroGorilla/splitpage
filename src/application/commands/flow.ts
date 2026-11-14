@@ -7,6 +7,22 @@ import type { FlowPorts } from "../../core/flow/flow.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Replay } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
+import type { FlowOperationRequest } from "../../core/flow/operations.ts";
+import type { SharedContentRef, SharedOperation } from "../../core/collab/operations.ts";
+
+export type FlowCommandPorts = Pick<CellTextPorts, "clock" | "editor"> & (
+  | { readonly operations: FlowOperationRequest; readonly beatStamp: (beat: SharedContentRef, author: FlowOperationRequest) => SharedOperation }
+  | { readonly operations?: undefined }
+);
+
+export interface PreparedFlowCommand {
+  readonly command: Command;
+  readonly result: () => FlowOutcome;
+}
+
+export interface FlowCommandSource {
+  readonly prepare: (name: string, operation: (doc: DocumentView) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">, before?: FlowRange | null) => PreparedFlowCommand;
+}
 
 export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolean, settled: (starts: readonly string[]) => void): Replay {
   return {
@@ -27,7 +43,36 @@ export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolea
   };
 }
 
-export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">, before?: FlowRange | null): Command {
+export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: FlowCommandPorts, before?: FlowRange | null): Command {
+  if (!ports.operations) return standaloneFlowCommand(name, operation, ports, before);
+  const shared = ports;
+  let result: FlowOutcome = null;
+  const command = standaloneFlowCommand(name, doc => { result = operation(doc); return result; }, ports, before);
+  return {
+    ...command,
+    plan: (doc, capability) => {
+      const plan = command.plan(doc, capability);
+      if (plan && "refused" in plan) return plan;
+      if (!result || !("rows" in result)) return plan;
+      if (!result.ops) return { refused: "flow-operations-unavailable" };
+      if (plan && !result.ops.length) return { refused: "flow-operations-empty" };
+      const clipboard = result.clipboard;
+      if (clipboard && (["comments", "people", "productionTags", "brollShots"] as const).some(field =>
+        JSON.stringify(clipboard[field]) !== JSON.stringify(doc[field]))) {
+        return { refused: "flow-clipboard-records-unavailable" };
+      }
+      if (!plan && !result.ops.length) return null;
+      const stamped = new Set(plan ? plan.changes.cells.filter(cell => cell.field === "updatedAt").map(cell => cell.rowId).concat(plan.changes.rowsInserted)
+        : result.ops.flatMap(op => (op.kind === "text-insert" || op.kind === "text-delete" || op.kind === "mark") && op.target.field !== "heading" ? [op.target.owner] : []));
+      const base = plan ?? { changes: changeSet({}), apply: () => { throw new Error("Shared intent requires a shared session"); } };
+      return { ...base, shared: { operations: [...result.ops, ...[...stamped].map((beat, index) =>
+        shared.beatStamp(beat as SharedContentRef, { id: shared.operations.id + "_stamp_" + index, by: shared.operations.by }))] } };
+    }
+  };
+}
+
+// why: Writer selects this builder at creation so standalone keys never read shared ports or allocate operation lists.
+export function standaloneFlowCommand(name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">, before?: FlowRange | null): Command {
   return {
     name,
     needs: "edit",

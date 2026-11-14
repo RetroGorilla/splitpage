@@ -229,6 +229,9 @@ export function readRecoveryDiscard(raw: unknown) {
 export function readDiscardRetire(raw: unknown) {
   return readKind(raw, "discard-retire", { discard: string });
 }
+export function readGalleryRetire(raw: unknown, kind: "gallery-retire" | "gallery-restore") {
+  return readKind(raw, kind, { record: ref });
+}
 
 export function readOperation(raw: unknown): SharedOperation | null {
   try {
@@ -262,6 +265,8 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "status-retire": return readStatusRetire(value);
       case "discard": return readRecoveryDiscard(value);
       case "discard-retire": return readDiscardRetire(value);
+      case "gallery-retire": return readGalleryRetire(value, "gallery-retire");
+      case "gallery-restore": return readGalleryRetire(value, "gallery-restore");
       default: return null;
     }
   } catch { return null; }

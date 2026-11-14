@@ -2,6 +2,7 @@ import { titleCommand } from "../../application/commands/title.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import { TITLE_FIELD_KEY, unsettledTitle } from "../../application/editing/buffered-field-key.ts";
 import { beatPos } from "../../core/flow/flow.ts";
+import { TITLE_MAX } from "../../core/document/file-title.ts";
 import { bindBufferedInput } from "../common/buffered-input.ts";
 import type { BufferedInputPorts } from "../common/buffered-input.ts";
 
@@ -29,7 +30,7 @@ export function mountTitleRoutes(mount: TitleRoutesMount): TitleRoutes {
   if (mount.shared) {
     const painted = mount.shared.painted, stored = () => painted.stored(TITLE_FIELD_KEY);
     const bound = bindBufferedInput({
-      inputs: [mount.main, mount.writer], key: TITLE_FIELD_KEY, stored, changed: ports.pageTitle,
+      inputs: [mount.main, mount.writer], key: TITLE_FIELD_KEY, stored, changed: ports.pageTitle, pasteLimit: TITLE_MAX,
       unsettled: text => unsettledTitle(text, stored() ?? ""),
       position: offset => beatPos(TITLE_FIELD_KEY, offset), owns: pos => pos.kind === "beat" && pos.rowId === TITLE_FIELD_KEY
     }, mount.shared);

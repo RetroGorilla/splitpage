@@ -31,6 +31,7 @@ const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   "heading-create": "heading", "heading-finalize": "heading",
   "segment-move": "move refusal",
   "text-restore": "undo", "mark-retract": "undo", "status-retire": "undo", "split-retire": "undo", "split-restore": "undo",
+  "gallery-retire": "undo", "gallery-restore": "undo",
   scalar: "executor", status: "executor"
 };
 
@@ -57,7 +58,7 @@ test("every operation kind has one owner: a family the composition registers, or
   try {
     const registered = Object.keys(registeredSharedOperationHandlers(handle)).sort();
     assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor").map(([kind]) => kind).sort());
-    assert.deepEqual(registered, ["discard", "discard-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
+    assert.deepEqual(registered, ["discard", "discard-retire", "gallery-restore", "gallery-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
       "mark", "mark-retract", "record-create", "record-delete", "record-set", "remove", "restore", "segment-create", "segment-move", "split",
       "split-before", "split-restore", "split-retire", "status-retire", "text-delete", "text-insert", "text-restore"]);
   } finally { destroySharedDocument(handle); }
@@ -168,10 +169,10 @@ test("seeded list, moves: a segment move reaches the registered refusal and writ
   } finally { set.close(); }
 });
 
-test("the composition's registration is inert: nothing under src calls it yet", () => {
+test("the composition's registration stays inert; Writer command ports name the author port", () => {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const files = (dir: string): string[] => readdirSync(root + dir, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? files(dir + "/" + entry.name) : /\.ts$/.test(entry.name) ? [dir + "/" + entry.name] : []);
   assert.deepEqual(files("src").filter(path => /registerSharedOperationFamilies|operation-families\.ts|sharedAuthorPort|shared-author\.ts/.test(readFileSync(root + path, "utf8"))).sort(),
-    ["src/adapters/collab/operation-families.ts", "src/bootstrap/wiring/ports/shared-author.ts"]);
+    ["src/adapters/collab/operation-families.ts", "src/bootstrap/wiring/ports/shared-author.ts", "src/bootstrap/wiring/ports/writer-flow.ts"]);
 });
