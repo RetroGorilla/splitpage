@@ -136,6 +136,6 @@ test("text and mark operations agree with range-flow generators and only the dec
     test: (_name: string, run: (ctx: { diagnostic: (value: string) => void }) => void) => run({ diagnostic: () => {} }) };
   Function(...Object.keys(inputs), compile(driver))(...Object.values(inputs));
   assert.deepEqual({ executedText, executedMarks, skippedStructure, skippedRecords, deferredText, fields, unavailableFields, limits },
-    { executedText: 18508, executedMarks: 2887, skippedStructure: 25179, skippedRecords: 15685, deferredText: 9697, fields: 15509, unavailableFields: 0, limits: 98 });
+    { executedText: 19005, executedMarks: 2887, skippedStructure: 25179, skippedRecords: 15167, deferredText: 9846, fields: 15823, unavailableFields: 0, limits: 98 });
   t.diagnostic(JSON.stringify({ executedText, executedMarks, skippedStructure, skippedRecords, deferredText, fields, unavailableFields, limits: [{ description: headingLimit, cases: limits }] }));
 });
