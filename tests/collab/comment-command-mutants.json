@@ -1,0 +1,104 @@
+{
+  "tests": [
+    "tests/application/commands/comments-shared.test.ts",
+    "tests/features/comments/shared-ports.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "shared comment delete leaves the anchor marks",
+      "file": "src/application/commands/comments.ts",
+      "find": "shared: { operations: [...marks.operations, ...removed] }",
+      "replace": "shared: { operations: [...removed] }"
+    },
+    {
+      "label": "shared comment delete leaves its replies",
+      "file": "src/application/commands/comments.ts",
+      "find": "[...replies.map(function (reply) { return JSON.stringify([commentId, reply.id]); }), null]",
+      "replace": "[null]"
+    },
+    {
+      "label": "refused comment delete marks planned as a standalone delete",
+      "file": "src/application/commands/comments.ts",
+      "find": "if (rewritesRefused(doc, planned, anchor, shared)) return { refused: \"comment-unwrap-rewrite\" };",
+      "replace": "if (rewritesRefused(doc, planned, anchor, shared)) return plan;"
+    },
+    {
+      "label": "refused comment unwrap planned without its marks",
+      "file": "src/application/commands/comments.ts",
+      "find": "if (rewritesRefused(doc, planned, shared.anchor, shared.ports)) return { refused: \"comment-unwrap-rewrite\" };",
+      "replace": "if (rewritesRefused(doc, planned, shared.anchor, shared.ports)) return plan;"
+    },
+    {
+      "label": "a rewrite naming an absent beat dropped before it is checked",
+      "file": "src/application/commands/comments.ts",
+      "find": "  if (planned.some(function (rewrite, index) { return !rows[index] || !textField(rewrite.field); })) return true;\n",
+      "replace": ""
+    },
+    {
+      "label": "shared removal built from the first beat only",
+      "file": "src/application/commands/comments.ts",
+      "find": "const cells: SharedCommentCell[] = doc.rows.flatMap(",
+      "replace": "const cells: SharedCommentCell[] = doc.rows.slice(0, 1).flatMap("
+    },
+    {
+      "label": "shared removal searches the audio cells only",
+      "file": "src/application/commands/comments.ts",
+      "find": "return TEXT_FIELDS.map(function (field) { return { owner: row.id, field, runs",
+      "replace": "return ([\"audioText\"] as const).map(function (field) { return { owner: row.id, field, runs"
+    },
+    {
+      "label": "shared comment delete records no undo entry",
+      "file": "src/application/commands/comments.ts",
+      "find": "shared: { operations: [...marks.operations, ...removed] }",
+      "replace": "shared: { operations: [...marks.operations, ...removed], undo: false as const }"
+    },
+    {
+      "label": "shared comment unwrap records no undo entry",
+      "file": "src/application/commands/comments.ts",
+      "find": "shared: { operations: removal.operations } };",
+      "replace": "shared: { operations: removal.operations, undo: false as const } };"
+    },
+    {
+      "label": "comment unwrap that changes the words trusted",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "return rest(was) !== rest(now) || anchors(now)",
+      "replace": "return anchors(now)"
+    },
+    {
+      "label": "comment unwrap that adds an anchor trusted",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "anchors(now).some(id => !anchors(was).includes(id)) || ",
+      "replace": ""
+    },
+    {
+      "label": "comment unwrap that takes away another comment's mark trusted",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": " || anchors(was).some(id => id !== anchor && !anchors(now).includes(id));",
+      "replace": ";"
+    },
+    {
+      "label": "a token compared with its comment anchors",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "JSON.stringify(sorted({ ...char.atom, marks: withoutAnchors(char.atom.marks) }))",
+      "replace": "JSON.stringify(sorted(char.atom))"
+    },
+    {
+      "label": "a token's comment mark not seen",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "(\"atom\" in char && char.atom ? char.atom.marks : ",
+      "replace": "(\"atom\" in char && char.atom ? undefined : "
+    },
+    {
+      "label": "comment anchor offsets joined across a gap",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "while (end < offsets.length && offsets[end] === (offsets[i] as number) + end - i) end++;",
+      "replace": "while (end < offsets.length) end++;"
+    },
+    {
+      "label": "comment feature passes no shared ports",
+      "file": "src/features/comments/comments.ts",
+      "find": "return (ports as CommentsRuntimePorts).shared() ?? undefined;",
+      "replace": "return undefined;"
+    }
+  ]
+}
