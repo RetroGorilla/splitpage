@@ -212,15 +212,16 @@ test("shared title: Enter changes nothing and tells nothing", () => {
 for (const [label, act] of [
   ["Ctrl+Z", (page: TitlePage) => page.edge.undo("Draft")]
 ] as const) {
-  test(`shared title: ${label} after typing is refused and the person is told; nothing changes`, () => {
+  test(`shared title rule 85: ${label} after typing uses the shared undo and restores the title`, () => {
     const page = sharedTitle();
     try {
       page.main.focus();
       page.edge.select(5);
       page.edge.type("X");
       assert.equal(act(page), false);
-      assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, written(page)], ["DraftX", "DraftX", "DraftX", UNSUPPORTED, [[inserted("X")]]]);
-      copies(page, ["DraftX", "user"]);
+      assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, written(page)], ["Draft", "Draft", "Draft", [], [[inserted("X")]]]);
+      copies(page, ["Draft", "user"]);
+      assert.equal(page.pageTitles(), 2);
     } finally { page.close(); }
   });
 }

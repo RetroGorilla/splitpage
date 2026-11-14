@@ -110,7 +110,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (!parent.isConnected) return;
     cancelName();
     if (naming) return;
-    const returnTo = doc.activeElement as HTMLElement | null;
+    const returnTo = doc.activeElement as HTMLElement | null, opening = sceneId === null ? undefined : value;
     const made = doc.createElement("form");
     made.className = "section-rename";
     const input = doc.createElement("input");
@@ -144,7 +144,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     input.addEventListener("blur", event => { if (!pointerAway && event.relatedTarget) settle(false); });
     made.addEventListener("keydown", event => {
       if (naming?.line !== made || event.isComposing) return;
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelName(true); }
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
+        if (!bound || bound.revert()) cancelName(true);
+      }
     });
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
     if (heading) heading.append(made); else parent.before(made);
@@ -167,6 +170,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       if (!shared) return;
       bound = bindBufferedInput({
         inputs: [input], key: headingFieldKey(id), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200,
+        ...opening === undefined ? {} : { opening },
         position: offset => headingPos(id, offset), owns: pos => pos.kind === "heading" && pos.sceneId === id
       }, shared);
       input.removeAttribute("maxlength");
@@ -191,7 +195,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
         if (caret && input.isConnected) { input.focus({ preventScroll: true }); input.setSelectionRange(...caret); }
         caret = null;
       });
-      pending = { held: () => release !== null, finish, dispose: () => {
+      pending = { held: () => release !== null, finish, revert: finish, dispose: () => {
         if (!finish()) return false;
         stopAdmission?.(); stopCheck(); stopPainted(); return true;
       } };
