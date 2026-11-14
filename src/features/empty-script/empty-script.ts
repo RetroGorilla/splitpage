@@ -48,7 +48,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
       if (!release) { input.value = ""; paint(); }
       return;
     }
-    if (!release && !begin(event)) return;
+    if (!release && !begin(event)) { input.value = ""; paint(); return; }
     pending = false;
     if (!composing && !(event as InputEvent).isComposing) finish();
   };

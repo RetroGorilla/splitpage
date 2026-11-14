@@ -15,7 +15,11 @@ import { assertReplicasAgree } from "../../collab/agreement.ts";
 
 function ref(value: string) { const result = readSharedContentRef(value); assert.ok(result); return result; }
 
-for (const order of ["dup", "rev"] as const) test("empty shared script first input is one literal creation command; its existing undo refusal stays named/" + order, () => {
+for (const value of [
+  { text: "A<&\nB", html: "A&lt;&amp;<br>B" },
+  { text: "   ", html: "   " },
+  { text: "  both ends  ", html: "  both ends  " }
+]) for (const order of ["dup", "rev"] as const) test("empty shared script first input is one literal creation command; its existing undo refusal stays named/" + order + "/" + JSON.stringify(value.text), () => {
   const h = replicas(2, { rows: [] }), late = createMonitoredSharedDocument();
   for (const handle of [h.a, h.b]) registerSharedOperationFamilies(handle, createFlowLoadRuntime());
   const undo = sharedUndoOwner(h.a, () => ({ id: "undo", by: "Alice" }), () => 0, error => { throw error; });
@@ -23,10 +27,10 @@ for (const order of ["dup", "rev"] as const) test("empty shared script first inp
   const ports = { ...bufferStamps("Alice"), author: { id: ref("start"), by: "Alice" },
     gap: { left: null, right: null, affinity: "before" as const }, created: ref("structure_1_00730074006100720074_beat_0") };
   try {
-    assert.equal(a.session.run(emptyScriptCommand("A<&\nB", ports)).kind, "applied");
+    assert.equal(a.session.run(emptyScriptCommand(value.text, ports)).kind, "applied");
     assert.deepEqual(a.executed.map(entry => entry.operations), [[{ kind: "segment-create", id: "start", by: "Alice",
       segment: "structure_1_00730074006100720074_beat_0", beat: "structure_1_00730074006100720074_beat_0", at: { left: null, right: null, affinity: "before" },
-      fields: { status: "todo", visualText: "", audioText: "A&lt;&amp;<br>B", imageRef: null, updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" } }]]);
+      fields: { status: "todo", visualText: "", audioText: value.html, imageRef: null, updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" } }]]);
     assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
     const before = encodeSharedState(h.a);
     assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:segment-create" });
@@ -34,7 +38,7 @@ for (const order of ["dup", "rev"] as const) test("empty shared script first inp
     h.queue.flush(order); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
     const readings = [h.a, h.b, late].map(handle => projectSharedDocumentWithRecovery(handle));
     for (const output of readings) assert.deepEqual(output, { document: { schema: 2, title: "", docId: "d00000000000000000000000000000000", rows: [
-      { id: "structure_1_00730074006100720074_beat_0", status: "todo", visualText: "", audioText: "A&lt;&amp;<br>B", imageRef: null, updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" }
+      { id: "structure_1_00730074006100720074_beat_0", status: "todo", visualText: "", audioText: value.html, imageRef: null, updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" }
     ], comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 }, recovery: [] });
     assertReplicasAgree("empty-script first command", readings.map((output, index) => ({ replica: index === 0 ? "A" : index === 1 ? "B" : "C", order: index === 2 ? "late-C" : order === "rev" ? "D2" : "D1", output })));
     assert.equal(a.session.run(emptyScriptCommand("", { ...ports, clock: { ...ports.clock, nowIso: () => { assert.fail("Empty input read the clock"); } } })).kind, "noop");

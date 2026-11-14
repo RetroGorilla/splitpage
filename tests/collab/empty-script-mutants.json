@@ -1,6 +1,27 @@
 {
   "mutants": [
     {
+      "label": "refused input fallback retains unadmitted DOM text",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release && !begin(event)) { input.value = \"\"; paint(); return; }",
+      "replace": "if (!release && !begin(event)) return;",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "first input trims the textarea value",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "const text = input.value, result = ports.create(text);",
+      "replace": "const text = input.value.trim(), result = ports.create(text);",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "first command trims initial narration",
+      "file": "src/application/commands/empty-script.ts",
+      "find": "audioText: toHtml([{ text, marks: {} }])",
+      "replace": "audioText: toHtml([{ text: text.trim(), marks: {} }])",
+      "tests": ["tests/application/commands/empty-script.test.ts"]
+    },
+    {
       "label": "cancelled key leaves a retained draft pending",
       "file": "src/features/empty-script/empty-script.ts",
       "find": "if (!composing && pending && input.value === beforeInput)",
@@ -194,7 +215,7 @@
     {
       "label": "input without beforeinput loses its first text",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "if (!release && !begin(event)) return;",
+      "find": "if (!release && !begin(event)) { input.value = \"\"; paint(); return; }",
       "replace": "if (!release) return;",
       "tests": [
         "tests/features/empty-script/guards.test.ts"
