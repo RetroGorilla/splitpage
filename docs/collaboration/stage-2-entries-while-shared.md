@@ -37,11 +37,20 @@ completed leave release them; a refused or pre-landing failed leave keeps the
 running session and its ports for a retry, as the existing fault model requires.
 
 The shared `documentEntry` port performs leave-first admission. Feature callers
-receive it by name. The canonical capability port makes every mode-only read
-hold-aware before consulting the current mode, including draft, history, reload
-and automatic-resume access. Its mode-only fields come from the existing mode
-capability names, so a later mode capability also receives the hold gate.
-The common edit and comment readers keep their existing forwarding.
+receive it by name. The canonical `capabilities` port keeps exactly the mode-only
+forwarding on main. `entryCapabilities` consults `sessionEntryRefusal()` before
+the mode answer, and is provided only to content intake and replacement routes.
+Its fields come from the existing mode capability names, so a later entry read
+also receives the gate. No reader takes a flag to choose between these roles.
+
+Mixed owners receive both named ports. Merge apply and states use entry permission;
+the report of a landed merge uses mode permission. Draft take, apply and file
+restore use entry permission; notification, capture and flush use mode permission.
+Stash read and accept use entry permission; stash save, clear and reload-guard
+cleanup use mode permission. Version restore, reload and automatic resume use
+entry permission; history snapshot and touch, saves and autosave use mode permission.
+The merge banner paints an admitted report with mode permission and starts its
+restore with entry permission. Cancelled merge-review UI also reads mode only.
 
 The wrapped transition owner explicitly lists all of its methods. `open` and
 `startNew` take leave-first admission; `recover` and `restore` take the same
@@ -69,6 +78,18 @@ both runtime methods and declared methods (including inherited capability fields
 against literal classifications, so a new transition or capability needs an audit.
 Close and Present keep their existing non-replacement behavior and composed tests.
 
+The caller census classifies every permission call site and every binding of the
+two canonical ports. It includes receiving field names, so swapping mode and entry
+ports in a mixed owner fails the inventory. An additional caller of either read
+fails. The classifications are literal data in `shared-entry-callers.json`.
+
+Six regression literals were observed failing before this split: a landed merge
+lost dirty accounting, settlement lost autosave scheduling, a due autosave was
+dropped, draft flush answered success without writing, and both leave-first
+transitions lost their requested history snapshot. They now retain that admitted
+work even when shared entry fails. Draft notification starts from an empty pending
+queue, so its assertion cannot be satisfied by an earlier notification.
+
 Pending openings belong to the existing transition `Started` lifetime. Each
 tracked operation has an epoch token, retired on completion, failure, cancellation
 or document replacement. Old completion cannot clear a later operation's token
@@ -88,12 +109,12 @@ ports, so file-entry callers need no hook-owned accessor or binding defaults.
 
 ## Standalone and interface text
 
-Standalone decisions and results stay unchanged. With no hold, command admission
-keeps its existing single null check. Each mode-only capability read now reads
-the shared hold state before forwarding to the existing owner capability; it
-allocates nothing on that path. This includes callers such as autosave and draft
-scheduling that already ask those capabilities. Common edit and comment reads
-and typing and undo admission gain no work from this gate.
+Standalone decisions and results stay unchanged. Mode-only capability forwarding
+is identical to main and performs no entry-hold read. Save, Save As, conflict
+overwrite and copy keep those mode-only ports; they are not document entries.
+Typing path: a keystroke reads nothing new. Real text and comment edits, including
+autosave scheduling and desktop draft effects, perform zero entry-hold reads.
+Command admission keeps its existing single null check.
 Entry admission also reads the mode; a direct open or New reads it twice.
 Direct recovery and restore read the entry permission before their existing work.
 A file opening adds token/Set bookkeeping and promise-completion handlers.

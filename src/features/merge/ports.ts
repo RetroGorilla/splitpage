@@ -20,6 +20,7 @@ export interface MergeFileOptions {
 
 export interface MergeReviewPorts {
   readonly capability: Pick<CapabilityPort, "merge">;
+  readonly entryCapability: Pick<CapabilityPort, "merge">;
   readonly notices: Pick<NoticePort, "show">;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: { readonly mergeBase: DocumentReader["current"] };

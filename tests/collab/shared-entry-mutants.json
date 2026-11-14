@@ -49,7 +49,7 @@
     {
       "label": "draft recovery tries its restore while shared",
       "file": "src/application/recovery/drafts.ts",
-      "find": "outcome = draftsRefused() ? \"kept\" : await runDraftRestore(t);",
+      "find": "outcome = draftEntryRefused() ? \"kept\" : await runDraftRestore(t);",
       "replace": "outcome = await runDraftRestore(t);"
     },
     {
@@ -495,8 +495,8 @@
     {
       "label": "a new capability method is not in the table",
       "file": "src/bootstrap/wiring/ports/capabilities.ts",
-      "find": "  ...standaloneReads,",
-      "replace": "  unlisted: () => AVAILABLE, ...standaloneReads,",
+      "find": "  ...entryReads,",
+      "replace": "  unlisted: () => AVAILABLE, ...entryReads,",
       "tests": [
         "tests/bootstrap/shared-entry-inventory.test.ts"
       ]
@@ -506,6 +506,159 @@
       "file": "src/bootstrap/wiring/ports/document-entry.ts",
       "find": "if (permission.allowed && !sharedSession()) return null;",
       "replace": "if (!sharedSession()) return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "landed merge reporting takes entry permission",
+      "file": "src/application/session/document-merge.ts",
+      "find": "if (!ports.capability.merge().allowed) return;",
+      "replace": "if (!ports.entryCapability.merge().allowed) return;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "autosave bookkeeping takes entry permission",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "autosave: () => currentCapabilities().autosave(),",
+      "replace": "autosave: entryRead(() => currentCapabilities().autosave()),",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "draft flush takes entry permission",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "if (draftStopped || !runningOnDesktop() || draftsRefused()) return false;",
+      "replace": "if (draftStopped || !runningOnDesktop() || draftEntryRefused()) return false;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "draft notification drops admitted work under the entry hold",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "function noteDraftChange(): void {",
+      "replace": "function noteDraftChange(): void {\n    if (draftEntryRefused()) return;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "history bookkeeping takes entry permission",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "history: () => currentCapabilities().history(),",
+      "replace": "history: entryRead(() => currentCapabilities().history()),",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "a standalone key reads the entry hold without using it",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "autosave: () => currentCapabilities().autosave(),",
+      "replace": "autosave: () => { sessionEntryRefusal(); return currentCapabilities().autosave(); },",
+      "tests": [
+        "tests/bootstrap/shared-entry-typing-cost.test.ts"
+      ]
+    },
+    {
+      "label": "draft restore receives the mode reader",
+      "file": "src/bootstrap/wiring/drafts.ts",
+      "find": "function draftsPorts(): DraftsPorts {\n  return {\n    capability: portCapabilities,\n    entryCapability: entryCapabilities,",
+      "replace": "function draftsPorts(): DraftsPorts {\n  return {\n    capability: portCapabilities,\n    entryCapability: portCapabilities,",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "new merges receive only the mode reader",
+      "file": "src/bootstrap/wiring.ts",
+      "find": "merge: () => ({ ...sessionMergePorts(), capability: capabilities, entryCapability: entryCapabilities }),",
+      "replace": "merge: () => ({ ...sessionMergePorts(), capability: capabilities, entryCapability: capabilities }),",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "stash intake receives only the mode reader",
+      "file": "src/bootstrap/wiring/recovery-owners.ts",
+      "find": "stashedWork: createStashedWork<ValidatedDocument, MergedStates>({\n      capability: ports.entryCapability,",
+      "replace": "stashedWork: createStashedWork<ValidatedDocument, MergedStates>({\n      capability: ports.capability,",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "stash read bypasses entry admission",
+      "file": "src/application/recovery/conflict-stash.ts",
+      "find": "read: function (): StashedWork | null {\n      if (!ports.entryCapability.stash().allowed) return null;",
+      "replace": "read: function (): StashedWork | null {",
+      "tests": [
+        "tests/application/conflict-stash.test.ts"
+      ]
+    },
+    {
+      "label": "stash accept bypasses entry admission",
+      "file": "src/application/recovery/conflict-stash.ts",
+      "find": "accept: function <T>(stash: T, theirs: unknown): T {\n      if (!ports.entryCapability.stash().allowed) return stash;",
+      "replace": "accept: function <T>(stash: T, theirs: unknown): T {",
+      "tests": [
+        "tests/application/conflict-stash.test.ts"
+      ]
+    },
+    {
+      "label": "an unlisted mode permission caller escapes the census",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "export const capabilities: CapabilityPort = {",
+      "replace": "function unlistedModeCaller() { return capabilities.autosave(); }\nexport const capabilities: CapabilityPort = {",
+      "tests": [
+        "tests/bootstrap/shared-entry-callers.test.ts"
+      ]
+    },
+    {
+      "label": "an unlisted entry permission caller escapes the census",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "export const entryCapabilities: EntryCapabilityPort = {",
+      "replace": "function unlistedEntryCaller() { return entryCapabilities.merge(); }\nexport const entryCapabilities: EntryCapabilityPort = {",
+      "tests": [
+        "tests/bootstrap/shared-entry-callers.test.ts"
+      ]
+    },
+    {
+      "label": "merge wiring accepts a missing entry port",
+      "file": "src/bootstrap/wiring.ts",
+      "find": "  if (!present(ports.entryCapability, \"object\") || !present(ports.entryCapability.merge, \"function\")) throw new WiringError(\"merge\", \"Wiring: the merge dependency returned no entry capability port\");",
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/wiring.test.ts"
+      ]
+    },
+    {
+      "label": "recovery wiring accepts a missing entry port",
+      "file": "src/bootstrap/wiring.ts",
+      "find": "  if (!present(ports.entryCapability, \"object\") || !present(ports.entryCapability.stash, \"function\") || !present(ports.entryCapability.merge, \"function\")) throw new WiringError(\"recovery\", \"Wiring: the recovery dependency returned no entry capability port\");",
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/wiring.test.ts"
+      ]
+    },
+    {
+      "label": "landed merge banner takes entry permission",
+      "file": "src/features/merge/banner.ts",
+      "find": "if (!ports.capability.merge().allowed) return false;",
+      "replace": "if (!ports.entryCapability.merge().allowed) return false;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "draft entry permission is ignored",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "function draftEntryRefused(): boolean { return !live().entryCapability.drafts().allowed; }",
+      "replace": "function draftEntryRefused(): boolean { return false; }",
       "tests": [
         "tests/bootstrap/shared-entry-inventory-enter.test.ts"
       ]

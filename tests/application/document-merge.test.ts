@@ -26,6 +26,7 @@ function world(): World {
     held: doc("held"),
     ports: {
       capability: MAY_EDIT,
+      entryCapability: MAY_EDIT,
       states: (base, mine, theirs): MergedStates => {
         seen.push("states " + (base ? base.title : "-") + " " + mine.title + " " + theirs.title);
         return { merged: doc("merged"), conflicts: [], stats: { rowsFromThem: 1, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 } };

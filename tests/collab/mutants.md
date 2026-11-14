@@ -685,3 +685,20 @@ reload reads the file before the refusal | src/application/transitions/local-fil
 a new owner method is not in the table | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-inventory.test.ts | tests/collab/shared-entry-mutants.json
 a new capability method is not in the table | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-inventory.test.ts | tests/collab/shared-entry-mutants.json
 standalone entry ignores its refused permission | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+landed merge reporting takes entry permission | src/application/session/document-merge.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+autosave bookkeeping takes entry permission | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+draft flush takes entry permission | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+draft notification drops admitted work under the entry hold | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+history bookkeeping takes entry permission | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+a standalone key reads the entry hold without using it | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-typing-cost.test.ts | tests/collab/shared-entry-mutants.json
+draft restore receives the mode reader | src/bootstrap/wiring/drafts.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+new merges receive only the mode reader | src/bootstrap/wiring.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+stash intake receives only the mode reader | src/bootstrap/wiring/recovery-owners.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+stash read bypasses entry admission | src/application/recovery/conflict-stash.ts | tests/application/conflict-stash.test.ts | tests/collab/shared-entry-mutants.json
+stash accept bypasses entry admission | src/application/recovery/conflict-stash.ts | tests/application/conflict-stash.test.ts | tests/collab/shared-entry-mutants.json
+an unlisted mode permission caller escapes the census | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-callers.test.ts | tests/collab/shared-entry-mutants.json
+an unlisted entry permission caller escapes the census | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-callers.test.ts | tests/collab/shared-entry-mutants.json
+merge wiring accepts a missing entry port | src/bootstrap/wiring.ts | tests/bootstrap/wiring.test.ts | tests/collab/shared-entry-mutants.json
+recovery wiring accepts a missing entry port | src/bootstrap/wiring.ts | tests/bootstrap/wiring.test.ts | tests/collab/shared-entry-mutants.json
+landed merge banner takes entry permission | src/features/merge/banner.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+draft entry permission is ignored | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json

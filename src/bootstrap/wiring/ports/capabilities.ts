@@ -17,13 +17,28 @@ function entryRead(read: () => Capability): () => Capability {
   };
 }
 
-const standaloneReads = Object.fromEntries((Object.keys(SHARED_SESSION_DISABLED) as StandaloneCapabilityName[])
-  .map(name => [name, entryRead(() => currentCapabilities()[name]())])) as Pick<CapabilityPort, StandaloneCapabilityName>;
-
-export const capabilities: EntryCapabilityPort = {
-  ...standaloneReads,
+export const capabilities: CapabilityPort = {
   edit: () => currentCapabilities().edit(),
   comment: () => currentCapabilities().comment(),
+  saveDestinations: () => currentCapabilities().saveDestinations(),
+  autosave: () => currentCapabilities().autosave(),
+  merge: () => currentCapabilities().merge(),
+  reload: () => currentCapabilities().reload(),
+  stash: () => currentCapabilities().stash(),
+  drafts: () => currentCapabilities().drafts(),
+  history: () => currentCapabilities().history(),
+  folders: () => currentCapabilities().folders(),
+  bundles: () => currentCapabilities().bundles(),
+  moves: () => currentCapabilities().moves()
+};
+
+const entryReads = Object.fromEntries((Object.keys(SHARED_SESSION_DISABLED) as StandaloneCapabilityName[])
+  .map(name => [name, entryRead(() => capabilities[name]())])) as Pick<CapabilityPort, StandaloneCapabilityName>;
+
+export const entryCapabilities: EntryCapabilityPort = {
+  ...entryReads,
+  edit: capabilities.edit,
+  comment: capabilities.comment,
   documentEntry: entryRead(() => AVAILABLE),
   lastFileResume: entryRead(() => sharedSession() ? SHARED_RESUME : AVAILABLE)
 };

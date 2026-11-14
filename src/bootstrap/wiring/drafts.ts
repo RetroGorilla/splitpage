@@ -22,13 +22,14 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
 import { transitions as portTransitions } from "./ports/transitions.ts";
-import { capabilities as portCapabilities } from "./ports/capabilities.ts";
+import { capabilities as portCapabilities, entryCapabilities } from "./ports/capabilities.ts";
 
 const drafts = owned<DraftsMount>();
 
 function draftsPorts(): DraftsPorts {
   return {
     capability: portCapabilities,
+    entryCapability: entryCapabilities,
     running: presence.running,
     clock: { now: () => Date.now() },
     timers: {
@@ -106,6 +107,7 @@ export function draftsTesting(): DraftsMount["testing"] | undefined {
 export function draftRecoveryPorts() {
   return {
     capability: portCapabilities,
+    entryCapability: entryCapabilities,
     desktop: desktopPort,
     sessionStorage: function () { return sessionStorage; },
     localStorage: function () { return localStorage; },

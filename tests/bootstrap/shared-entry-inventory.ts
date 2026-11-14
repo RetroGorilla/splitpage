@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { currentDocument, liveSession, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions, openDocument, documentOpenings } from "../../src/bootstrap/wiring/transition-owners.ts";
-import { capabilities } from "../../src/bootstrap/wiring/ports/capabilities.ts";
+import { entryCapabilities as capabilities } from "../../src/bootstrap/wiring/ports/capabilities.ts";
 import { localFilesOwnerPorts } from "../../src/bootstrap/wiring/ports/local-files.ts";
 import { documentEntry } from "../../src/bootstrap/wiring/ports/document-entry.ts";
 import { createLocalFilesOwner } from "../../src/application/transitions/local-files.ts";
@@ -93,6 +93,7 @@ interface EntryCase {
   readonly owner?: keyof typeof OWNER_ENTRY_METHODS;
   readonly prepare?: (context: EntryFixture) => void;
   readonly result?: string;
+  readonly resultReason?: true;
   readonly run: (context: EntryFixture) => unknown;
 }
 const arrival = () => ({ from: { raw: structuredClone(TARGET) }, reason: "inventory entry" });
@@ -133,8 +134,8 @@ export const ENTRY_CASES: readonly EntryCase[] = [
   { name: "history card", capability: "history", result: "refused", run: () => { const item = document.createElement("button"); item.dataset.id = "snapshot"; return restoreSnapshotFromCard(item); } },
   { name: "project reload", capability: "reload", prepare: c => { setHome("file", { name: c.file.name, handle: c.handle, format: "splitpage" }); }, run: c => c.owner.reloadProjectFromDisk() },
   { name: "import reload", capability: "reload", prepare: c => { setHome("import", { name: c.imported.name, handle: c.handle, format: "txt" }); }, run: c => c.owner.reloadFileFromDisk() },
-  { name: "local merge", capability: "merge", run: () => applyMerge({ theirs: migrateRows(structuredClone(TARGET)), unchanged: true }) },
-  { name: "stashed work", capability: "stash", run: () => applyStashedWork(migrateRows(structuredClone(TARGET)), null) },
+  { name: "local merge", capability: "merge", resultReason: true, run: () => applyMerge({ theirs: migrateRows(structuredClone(TARGET)), unchanged: true }) },
+  { name: "stashed work", capability: "stash", resultReason: true, run: () => applyStashedWork(migrateRows(structuredClone(TARGET)), null) },
   ...ENTRY_CAPABILITIES.map(name => ({ name: "capability " + name, capability: name, run: () => capabilities[name]() }))
 ];
 
@@ -170,6 +171,7 @@ export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leav
     assert.equal(entry.owner ? caught === "session-switching" : caught === null, true, "named owner refusal: " + caught);
     assert.equal(context.capabilityCalls.some(call => call.name === entry.capability && call.reason === "session-switching"), true, "named capability refusal");
     if (entry.result !== undefined) assert.equal(result, entry.result);
+    if (entry.resultReason) assert.equal(result && typeof result === "object" && "reason" in result ? result.reason : null, "session-switching");
     assert.deepEqual(entered, { ok: true });
     assert.deepEqual([currentDocument()?.title, currentDocument()?.rows.map(row => [row.id, row.audioText])], ["Captured script", [["R1", "Captured words"]]]);
     if (phase === "leave") {

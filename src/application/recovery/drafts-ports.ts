@@ -51,6 +51,7 @@ export interface DraftRecovery {
 
 export interface DraftsPorts {
   readonly capability: Pick<CapabilityPort, "drafts">;
+  readonly entryCapability: Pick<CapabilityPort, "drafts">;
   readonly running: () => boolean;
   readonly clock: { readonly now: () => number };
   readonly timers: CaptureTimers;

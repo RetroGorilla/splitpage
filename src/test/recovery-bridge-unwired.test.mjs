@@ -8,6 +8,7 @@ const bridge = await import("../bootstrap/wiring/recovery-owners.ts");
 function ports(over) {
   return Object.assign({
     capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
+    entryCapability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
     desktop: () => null, sessionStorage: () => null, localStorage: () => null, internImage: () => {}
   }, over);
 }

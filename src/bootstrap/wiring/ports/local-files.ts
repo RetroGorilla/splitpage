@@ -13,7 +13,7 @@ import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts"
 import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.ts";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
-import { capabilities } from "./capabilities.ts";
+import { capabilities, entryCapabilities } from "./capabilities.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
@@ -46,7 +46,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
   return {
     opening: openingActivity,
     entry: documentEntry,
-    capability: capabilities,
+    capability: entryCapabilities,
     document: documentReader,
     session: { noteAbsorbedDirty, noteReload: (content) => { noteReload(content as Parameters<typeof noteReload>[0]); } },
     transitions,
@@ -55,7 +55,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
     saves,
     conflicts: fileConflicts,
     location: { amendHome, setHome, fileHome, importHome },
-    lastFile: { permitted: () => capabilities.lastFileResume().allowed, load: loadLastFileHandle, remember: rememberLastFileHandle },
+    lastFile: { permitted: () => entryCapabilities.lastFileResume().allowed, load: loadLastFileHandle, remember: rememberLastFileHandle },
     syncIdentity: () => { documentIdentity.syncDocIdentity(); },
     stamps: { stampRow },
     notices,

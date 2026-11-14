@@ -12,7 +12,7 @@ import { currentHome } from "./location-owner.ts";
 import { confirmedGeneration } from "./save-owners.ts";
 import { holdSessionCommands, liveSession, onDocumentReplaced, sharedSession } from "./session-owner.ts";
 import { documentEntry } from "./ports/document-entry.ts";
-import { capabilities } from "./ports/capabilities.ts";
+import { entryCapabilities } from "./ports/capabilities.ts";
 
 export interface LegacyTransitionPorts {
   readonly live: LiveDocumentPort;
@@ -72,7 +72,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
   });
   function entered<T>(run: () => T, leaveFirst: boolean): T {
     const shared = leaveFirst && sharedSession();
-    const permission = leaveFirst ? null : capabilities.documentEntry();
+    const permission = leaveFirst ? null : entryCapabilities.documentEntry();
     const refusal = leaveFirst ? documentEntry.before() : permission && !permission.allowed ? { refused: permission.reason } : null;
     if (refusal) throw new Error(refusal.refused);
     if (!shared) return run();

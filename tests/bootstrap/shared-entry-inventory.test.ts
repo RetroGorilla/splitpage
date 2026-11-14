@@ -4,7 +4,7 @@ import ts from "typescript";
 import { bootEntrySwitchFixture, stopEntrySwitchFixture } from "./shared-entry-switch-support.ts";
 import { OWNER_ENTRY_METHODS, ENTRY_CAPABILITIES, COMMON_CAPABILITIES, ENTRY_CASES } from "./shared-entry-inventory.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
-import { capabilities } from "../../src/bootstrap/wiring/ports/capabilities.ts";
+import { capabilities as modeCapabilities, entryCapabilities as capabilities } from "../../src/bootstrap/wiring/ports/capabilities.ts";
 import { holdSessionCommands } from "../../src/bootstrap/wiring/session-owner.ts";
 
 before(bootEntrySwitchFixture);
@@ -25,6 +25,7 @@ test("C8 the entry matrix classifies every transition and capability method, inc
   assert.deepEqual(Object.keys(documentTransitions()).sort(), owners);
   assert.deepEqual(methods(files[1], "EntryCapabilityPort"), permissions);
   assert.deepEqual(Object.keys(capabilities).sort(), permissions);
+  assert.deepEqual(Object.keys(modeCapabilities).sort(), permissions.filter(name => name !== "documentEntry" && name !== "lastFileResume"));
   for (const [name, kind] of Object.entries(OWNER_ENTRY_METHODS)) if (kind === "replace") assert.ok(ENTRY_CASES.some(entry => entry.owner === name), name);
   for (const name of ENTRY_CAPABILITIES) assert.ok(ENTRY_CASES.some(entry => entry.capability === name), name);
   assert.equal(new Set(ENTRY_CASES.map(entry => entry.name)).size, ENTRY_CASES.length);
@@ -38,6 +39,7 @@ test("C8 unheld capabilities retain their mode answers and a switch hold leaves 
   try {
     for (const name of ENTRY_CAPABILITIES) assert.deepEqual(capabilities[name](), { allowed: false, reason: "session-switching" });
     for (const name of COMMON_CAPABILITIES) assert.deepEqual(capabilities[name](), { allowed: true });
+    for (const read of Object.values(modeCapabilities)) assert.deepEqual(read(), { allowed: true });
   } finally { release(); }
   for (const name of ENTRY_CAPABILITIES) assert.deepEqual(capabilities[name](), { allowed: true });
 });

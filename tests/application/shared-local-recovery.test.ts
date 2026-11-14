@@ -29,7 +29,7 @@ function document() {
 test("shared stash storage refuses capture, read, clear, accept and reload-guard changes without accessing storage or blobs", () => {
   const calls: unknown[][] = [];
   const unused = recorder(calls);
-  const stash = createConflictStash({ capability: SHARED, storage: unused("storage"), internImage: unused("intern") });
+  const stash = createConflictStash({ capability: SHARED, entryCapability: SHARED, storage: unused("storage"), internImage: unused("intern") });
   const input = { mine: { rows: [{ id: "r1", visualImage: "__IMAGE__" }] }, blobs: { ["a".repeat(64)]: "data:image/png;base64,AA==" }, imagesStripped: true };
   assert.equal(stash.save(input), false);
   assert.equal(stash.read(), null);
@@ -83,7 +83,7 @@ test("shared document merge refuses planning, applying and reporting before docu
   const calls: unknown[][] = [];
   const unused = recorder(calls);
   const ports: DocumentMergePorts<unknown> = {
-    capability: SHARED, states: unused("states"), entry: unused("entry"), isDocument: unused("validate"), snapshot: unused("snapshot"),
+    capability: SHARED, entryCapability: SHARED, states: unused("states"), entry: unused("entry"), isDocument: unused("validate"), snapshot: unused("snapshot"),
     current: unused("current"), adopt: unused("adopt"), documentId: unused("id"), noteHistoryFrom: unused("history"), armUndo: unused("undo"),
     setBase: unused("base"), capture: unused("capture"), stillOwns: unused("owns"),
     view: { banner: unused("banner"), absorbed: unused("absorbed"), autoSave: unused("autosave"), toast: unused("toast") }
