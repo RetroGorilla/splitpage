@@ -8,6 +8,7 @@ import * as tagPanelCommands from "../../application/tag-panel-commands.ts";
 import { installTagPanelCommands } from "../../application/tag-panel-commands.ts";
 import { documentReader as portDocument, documentLifetime as portLifetime } from "./ports/document.ts";
 import { edits as portEdits, focus as portFocus, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
+import { sharedRecordCommands } from "./ports/shared-commands.ts";
 import { text as portText } from "./ports/text.ts";
 import { production as portProduction, deletion as portDeletion, tagPanelState as portView } from "./ports/production.ts";
 import { panelControl as portPanels, sidePanels } from "./ports/panels.ts";
@@ -79,7 +80,7 @@ export function mountTagPanelsFeature(): TagPanelMount {
       sharedCommands: sharedCommandGuard(sharedSession, portNotices),
       focus: portFocus, footage: productionFootage,
       beats: { setFilmed: setBeatFilmed, reveal: (id) => { portActions.invoke("reveal-row", "button", id); } },
-      view: portView, preferences: { panelGrouping: preferenceValues.panelGrouping }, changes, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
+      view: portView, preferences: { panelGrouping: preferenceValues.panelGrouping }, changes, document: portDocument, lifetime: portLifetime, edits: portEdits, shared: sharedRecordCommands, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
       panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
       notices: portNotices, undo: portUndo, ids: portIds, bulkTag: bulkTagRows

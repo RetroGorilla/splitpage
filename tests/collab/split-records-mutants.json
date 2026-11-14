@@ -1,0 +1,181 @@
+{
+  "tests": [
+    "src/test/shared-split-records-app.test.mjs"
+  ],
+  "mutants": [
+    {
+      "label": "registering a production tag still calls the standalone command in a shared session",
+      "file": "src/features/tags/production-tags.ts",
+      "find": "registerTagCommand({ cat: cat, name: String(name == null ? \"\" : name) }, shared)",
+      "replace": "registerTagCommand({ cat: cat, name: String(name == null ? \"\" : name) })"
+    },
+    {
+      "label": "finding or adding a person still calls the standalone command in a shared session",
+      "file": "src/features/tags/production-tags.ts",
+      "find": "addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>), shared)",
+      "replace": "addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>))"
+    },
+    {
+      "label": "adding a prop to a shot still calls the standalone command in a shared session",
+      "file": "src/features/broll/records.ts",
+      "find": "addShotPropCommand(shotId, rawName, shared)",
+      "replace": "addShotPropCommand(shotId, rawName)"
+    },
+    {
+      "label": "the b-roll status toggle still calls the standalone command in a shared session",
+      "file": "src/features/broll/panel.ts",
+      "find": "setShotsCommand([(id as string)], fields, undefined, undefined, shared)",
+      "replace": "setShotsCommand([(id as string)], fields, undefined, undefined)"
+    },
+    {
+      "label": "the b-roll bulk update still calls the standalone command in a shared session",
+      "file": "src/features/broll/panel.ts",
+      "find": "setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids, shared)",
+      "replace": "setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids)"
+    },
+    {
+      "label": "the b-roll bulk assign to a new person still calls the standalone command in a shared session",
+      "file": "src/features/broll/panel.ts",
+      "find": "setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids, shared)",
+      "replace": "setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids)"
+    },
+    {
+      "label": "the b-roll delete still calls the standalone command in a shared session",
+      "file": "src/features/broll/panel.ts",
+      "find": "deleteShotCommand((id as string), shared)",
+      "replace": "deleteShotCommand((id as string))"
+    },
+    {
+      "label": "the b-roll new person for a shot still calls the standalone command in a shared session",
+      "file": "src/features/broll/panel.ts",
+      "find": "setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids, shared)",
+      "replace": "setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids)"
+    },
+    {
+      "label": "adding a shot from the b-roll panel still calls the standalone command in a shared session",
+      "file": "src/application/commands/production-actions.ts",
+      "find": "runRecord(ports, shared => addShotCommand(rec, shared));",
+      "replace": "ports.run(addShotCommand(rec));"
+    },
+    {
+      "label": "removing a prop from a shot still calls the standalone command in a shared session",
+      "file": "src/application/commands/production-actions.ts",
+      "find": "return runRecord(ports, shared => removeShotPropCommand(shotId, ref, shared));",
+      "replace": "return ports.run(removeShotPropCommand(shotId, ref));"
+    },
+    {
+      "label": "the gear quick add still calls the standalone command in a shared session",
+      "file": "src/features/tags/panels.ts",
+      "find": "gearQuickAddCommand(planned, shared)",
+      "replace": "gearQuickAddCommand(planned)"
+    },
+    {
+      "label": "updating tags still calls the standalone command in a shared session",
+      "file": "src/features/tags/panels.ts",
+      "find": "updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids, shared)",
+      "replace": "updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids)"
+    },
+    {
+      "label": "deleting a tag from its card still calls the standalone command in a shared session",
+      "file": "src/features/tags/panels.ts",
+      "find": "function () { return []; }, (ports as TagPanelPorts).edits.stamps, shared)",
+      "replace": "function () { return []; }, (ports as TagPanelPorts).edits.stamps)"
+    },
+    {
+      "label": "bulk deleting selected tags still calls the standalone command in a shared session",
+      "file": "src/features/tags/panels.ts",
+      "find": "retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps, shared)",
+      "replace": "retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps)"
+    },
+    {
+      "label": "adding a person from the production panel still calls the standalone command in a shared session",
+      "file": "src/features/tags/panels.ts",
+      "find": "addPersonCommand(value, (ports as TagPanelPorts).ids, shared)",
+      "replace": "addPersonCommand(value, (ports as TagPanelPorts).ids)"
+    },
+    {
+      "label": "deleting a person still calls the standalone command in a shared session",
+      "file": "src/features/tags/panels.ts",
+      "find": "(personId, shared)",
+      "replace": "(personId)"
+    },
+    {
+      "label": "editing the gallery still calls the standalone command in a shared session",
+      "file": "src/application/editing/cell-editing.ts",
+      "find": "const shared = ports.gallery.ports();",
+      "replace": "const shared = null;"
+    },
+    {
+      "label": "assigning a comment still calls the standalone command in a shared session",
+      "file": "src/features/comments/comments.ts",
+      "find": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, shared)",
+      "replace": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock)"
+    },
+    {
+      "label": "cancelling a comment still calls the standalone unwrap in a shared session",
+      "file": "src/features/comments/comments.ts",
+      "find": "shared && { ports: shared, anchor: pending.id }",
+      "replace": "undefined"
+    },
+    {
+      "label": "posting a comment still calls the standalone command in a shared session",
+      "file": "src/features/comments/comments.ts",
+      "find": "    replies: []\n  }, shared));",
+      "replace": "    replies: []\n  }));"
+    },
+    {
+      "label": "resolving a comment still calls the standalone command in a shared session",
+      "file": "src/features/comments/comments.ts",
+      "find": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, shared)",
+      "replace": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps)"
+    },
+    {
+      "label": "deleting a comment still calls the standalone command in a shared session",
+      "file": "src/features/comments/comments.ts",
+      "find": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), shared)",
+      "replace": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId))"
+    },
+    {
+      "label": "replying to a comment still calls the standalone command in a shared session",
+      "file": "src/features/comments/comments.ts",
+      "find": "addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, shared)",
+      "replace": "addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock)"
+    },
+    {
+      "label": "a refused record command shows no notice",
+      "file": "src/application/commands/shared-records.ts",
+      "find": "  if (outcome.kind === \"rejected\") records.refused(outcome);\n",
+      "replace": "\n"
+    },
+    {
+      "label": "a shared record command runs through the silent edit that drops its refusal",
+      "file": "src/application/commands/shared-records.ts",
+      "find": "  const outcome = edits.run(build(shared));",
+      "replace": "  const outcome = edits.edit(build(shared)) ? { kind: \"applied\" as const } : { kind: \"noop\" as const };"
+    },
+    {
+      "label": "a refused bulk tag delete still shows its success toast",
+      "file": "src/features/tags/panels.ts",
+      "find": "  if (!done && (ports as TagPanelPorts).shared.ports()) return;\n  const n = items.length;",
+      "replace": "  const n = items.length;"
+    },
+    {
+      "label": "rule 152: the shared picture toast offers an Undo that reads the standalone owner",
+      "file": "src/application/editing/cell-editing.ts",
+      "find": "      ports.gallery.done(message);",
+      "replace": "      ports.announce(message, null);"
+    },
+    {
+      "label": "the comment wiring passes no shared port",
+      "file": "src/bootstrap/wiring/comments.ts",
+      "find": "      shared: sharedCommentCommands",
+      "replace": "      shared: { ports: () => null, refused: () => {} }"
+    },
+    {
+      "label": "the record wiring for the production tags passes no shared port",
+      "file": "src/bootstrap/wiring/production-tags.ts",
+      "find": "shared: sharedRecordCommands,",
+      "replace": "shared: { ports: () => null, refused: () => {} },"
+    }
+  ]
+}

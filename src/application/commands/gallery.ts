@@ -4,7 +4,7 @@ import { sharedGalleryOperations, sharedGalleryProbe } from "../../core/collab/g
 import type { SharedPictureRecord } from "../../core/collab/gallery-operations.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DeepReadonly, Plan } from "../session/document-session.ts";
+import type { Command, CommandOutcome, DeepReadonly, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 
 export type GalleryEdit = (row: DocumentRow) => unknown;
@@ -14,6 +14,12 @@ export interface SharedGalleryPorts {
   readonly pictures: (beat: string) => readonly SharedPictureRecord[];
   readonly joined: (beat: string) => readonly SharedPictureRecord[];
   readonly beatStamp: (beat: SharedContentRef, author: { readonly id: string; readonly by: string }) => SharedOperation;
+}
+
+export interface SharedGalleryCommands {
+  readonly ports: () => SharedGalleryPorts | null;
+  readonly refused: (outcome: CommandOutcome) => void;
+  readonly done: (message: string) => void;
 }
 
 const STAMPS: readonly string[] = Object.freeze(["updatedAt", "updatedBy"]);

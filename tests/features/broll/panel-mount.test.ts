@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
 import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.ts";
 import type { BrollPanelPorts } from "../../../src/features/broll/ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeScreen, fakeStandaloneRecords } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -32,6 +32,7 @@ function fixture() {
     changes: { onChange: () => () => {} },
     document: fakeDocument().document,
     edits: fakeEdits().edits,
+    shared: fakeStandaloneRecords(),
     text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) } },
     ids: { id: (prefix) => prefix + "test", docId: () => "test" },
     production: { entries: () => [] },

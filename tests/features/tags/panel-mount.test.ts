@@ -11,7 +11,7 @@ import { createProductionIndex } from "../../../src/application/production/produ
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeScreen, fakeSharedCommands } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeScreen, fakeSharedCommands, fakeStandaloneRecords } from "../fakes.ts";
 import { tagPanelActions } from "../../../src/features/tags/actions.ts";
 import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
 import { tagKey } from "../../../src/core/document/tags.ts";
@@ -71,6 +71,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
     document: document.document,
     lifetime: document.lifetime,
     edits: edits.edits,
+    shared: fakeStandaloneRecords(),
     production: createProductionIndex(migration.ports.readers, deepFreeze),
     text: {
       productionReaders: migration.ports.readers,

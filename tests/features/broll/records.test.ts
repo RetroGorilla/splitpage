@@ -11,7 +11,7 @@ import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
 import { cellOf, inertBody, sanitizeHtml } from "../../../src/bootstrap/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeEdits } from "../fakes.ts";
+import { fakeEdits, fakeStandaloneRecords } from "../fakes.ts";
 
 function setup(doc: ValidatedDocument | null) {
   const edits = fakeEdits({ kind: "applied", generation: 1, changes: { whole: false, cells: [], rowsInserted: [], rowsRemoved: [], rowsMoved: false, runsMoved: false, docFields: [], derive: [], saveNow: false } });
@@ -22,6 +22,7 @@ function setup(doc: ValidatedDocument | null) {
   const ports: BrollRecordsPorts = {
     document: { numbering: () => deriveDocumentNumbering(doc ?? { rows: [] }), current: () => doc, read: (select) => select(doc) },
     edits: { ...edits.edits, text: { ...edits.edits.stamps, cells: (html: string) => cellOf(html) } },
+    shared: fakeStandaloneRecords(),
     cells: { edit: (cell, change) => { cellEdits.push(change); return cell; } },
     paint: { whileShown: (edit) => edit() },
     text: { cellOf, inertBody, sanitizeHtml, htmlToPlainText, productionReaders },

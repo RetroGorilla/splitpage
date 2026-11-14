@@ -103,6 +103,7 @@ import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-med
 import { videoFiles } from "./video-files.ts";
 import { desktopVideo } from "./desktop-video.ts";
 import { externalLinks } from "./ports/desktop.ts";
+import { sharedGalleryCommands } from "./ports/shared-commands.ts";
 import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
   acceptTagGhost,
@@ -335,7 +336,8 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       stale: screenIsStale,
       painted: noteFieldPainted,
       shown: function <T>(edit: () => T): T { return paintGuard().whileShown(edit); },
-      announce: announceGalleryEdit
+      announce: announceGalleryEdit,
+      gallery: sharedGalleryCommands
     });
     return { dispose: installCellEditing(editing) };
   }, () => [() => connectWriter((control) => {

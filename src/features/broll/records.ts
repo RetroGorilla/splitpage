@@ -1,4 +1,5 @@
 import { addShotPropCommand } from "../../application/commands/broll-records.ts";
+import { runRecordCommand } from "../../application/commands/shared-records.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { rewriteCellsCommand } from "../../application/commands/document-edit.ts";
 import type { CellRewrite } from "../../application/commands/document-edit.ts";
@@ -114,7 +115,7 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
     brollEntries,
     scheduleBrollRefresh,
     addBrollProp: function (shotId, rawName) {
-      return ports.edits.edit(addShotPropCommand(shotId, rawName));
+      return runRecordCommand(ports.edits, ports.shared, shared => addShotPropCommand(shotId, rawName, shared));
     },
     brollShotsByProp: function () {
       const out: Record<string, string[]> = Object.create(null);

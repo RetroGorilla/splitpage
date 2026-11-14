@@ -2,12 +2,13 @@ import { numberHtml } from "../common/number-html.ts";
 import { groupItemsByScene } from "../../core/document/scene-items.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { CommentStatePorts } from "./ports.ts";
-import type { DocumentView } from "../../application/session/document-session.ts";
+import type { Command, DocumentView } from "../../application/session/document-session.ts";
 import type { OperationContext } from "../../application/session/operation.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
 import type { CommentFilter } from "../../application/preferences/preferences.ts";
-import type { ConflictValue } from "../../application/commands/comments.ts";
+import type { ConflictValue, SharedCommentPorts } from "../../application/commands/comments.ts";
 import type { RewritePlanner } from "../../application/commands/document-edit.ts";
+import { runRecordCommand } from "../../application/commands/shared-records.ts";
 
 type CommentRenderReply = NonNullable<DocumentView["comments"][number]["replies"]>[number] & {
   readonly author: string; readonly body: string; readonly createdAt?: string | null | undefined;
@@ -324,7 +325,7 @@ function commentAssigneeCandidates() {
 export function setCommentAssignee(id: string | null, name: string | null) {
   const idx = findCommentIndex(id);
   if (idx === -1) return;
-  (ports as CommentsRuntimePorts).edits.edit(setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, sharedComments()));
+  editComments(shared => setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, shared));
 }
 
 function commentAssigneeOptionsHtml(current: string | undefined) {
@@ -471,8 +472,8 @@ function anchorLiveText(cmtId: string) {
   return anchorTextFromState(cmtId);
 }
 
-function sharedComments() {
-  return (ports as CommentsRuntimePorts).shared() ?? undefined;
+function editComments(build: (shared?: SharedCommentPorts) => Command) {
+  return runRecordCommand((ports as CommentsRuntimePorts).edits, (ports as CommentsRuntimePorts).shared, build);
 }
 
 function anchorUnwrapped(rowId: string, field: string, cmtId: string): RewritePlanner {
@@ -532,9 +533,8 @@ export function closeCommentComposer(cancelled?: boolean) {
   composerVersion++;
   (document.getElementById("comment-modal") as HTMLElement).hidden = true;
   if (cancelled && pendingComment) {
-    const shared = sharedComments();
-    (ports as CommentsRuntimePorts).edits.edit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id),
-      shared && { ports: shared, anchor: pendingComment.id }));
+    const pending = pendingComment;
+    editComments(shared => unwrapCommentAnchorCommand(anchorUnwrapped(pending.rowId, pending.field, pending.id), shared && { ports: shared, anchor: pending.id }));
   }
   pendingComment = null;
   (ports as CommentsRuntimePorts).selection.dropLink();
@@ -555,12 +555,13 @@ export function postComment() {
     (ports as CommentsRuntimePorts).notices.show("Write a comment before posting.", "warn");
     return;
   }
-  (ports as CommentsRuntimePorts).edits.edit(addCommentCommand({
-    id: pendingComment.id,
-    rowId: pendingComment.rowId,
-    field: pendingComment.field,
-    anchorId: pendingComment.id,
-    quotedText: pendingComment.quotedText,
+  const pending = pendingComment;
+  editComments(shared => addCommentCommand({
+    id: pending.id,
+    rowId: pending.rowId,
+    field: pending.field,
+    anchorId: pending.id,
+    quotedText: pending.quotedText,
     author: author,
     body: bodyHtml,
     resolved: false,
@@ -571,7 +572,7 @@ export function postComment() {
     updatedAt: (ports as CommentsRuntimePorts).clock.nowIso(),
     kind: "anchor",
     replies: []
-  }, sharedComments()));
+  }, shared));
   (document.getElementById("comment-modal") as HTMLElement).hidden = true;
   composerVersion++;
   pendingComment = null;
@@ -603,7 +604,7 @@ export function openCommentsPanel() {
 }
 
 export function toggleResolve(id: string | null) {
-  (ports as CommentsRuntimePorts).edits.edit(toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, sharedComments()));
+  editComments(shared => toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, shared));
 }
 
 function deleteComment(id: string | null) {
@@ -615,7 +616,7 @@ function deleteComment(id: string | null) {
   Reflect.deleteProperty(expandedReplyIds, id as string);
   Reflect.deleteProperty(replyDrafts, id as string);
   if (commentMenuFor === id) commentMenuFor = null;
-  (ports as CommentsRuntimePorts).edits.edit(deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), sharedComments()));
+  editComments(shared => deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), shared));
 }
 
 export function armDeleteComment(btn: Element, id: string | null) {
@@ -658,12 +659,8 @@ export function postReply(id: string | null) {
   }
   Reflect.deleteProperty(expandedReplyIds, id as string);
   Reflect.deleteProperty(replyDrafts, id as string);
-  (ports as CommentsRuntimePorts).edits.edit(addReplyCommand(id as string, {
-    id: (ports as CommentsRuntimePorts).ids.id("rp"),
-    author: author,
-    body: bodyHtml,
-    createdAt: (ports as CommentsRuntimePorts).clock.nowIso()
-  }, (ports as CommentsRuntimePorts).edits.stamps.clock, sharedComments()));
+  const reply = { id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: bodyHtml, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
+  editComments(shared => addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, shared));
   sendNow();
 }
 

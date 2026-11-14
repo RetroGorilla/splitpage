@@ -16,6 +16,7 @@ import { createRecordsReconciler } from "../../application/production/broll-reco
 import { text as portText } from "./ports/text.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits } from "./ports/editing.ts";
+import { sharedRecordCommands } from "./ports/shared-commands.ts";
 import { production as portProduction } from "./ports/production.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
@@ -37,6 +38,7 @@ export function mountBrollFeature(): BrollRecordsMount {
     const records = createBrollRecords({
       document: { current: portDocument.current, read: portDocument.read, numbering: portDocument.numbering },
       edits: portEdits,
+      shared: sharedRecordCommands,
       cells: { edit: (cell, change) => cellEditing().edit(cell, change) },
       paint: { whileShown: (edit) => paintGuard().whileShown(edit) },
       text,
@@ -99,6 +101,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       changes,
       document: portDocument,
       edits: portEdits,
+      shared: sharedRecordCommands,
       text: portText,
       ids: portIds,
       production: portProduction,

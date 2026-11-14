@@ -4,7 +4,7 @@ import { jsdomWindow } from "../editing/jsdom.mjs";
 import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer, applyTag, healTagRegistry } from "../../../src/features/tags/production-tags.ts";
 import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { ProductionTagPorts } from "../../../src/features/tags/ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeSharedCommands } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeSharedCommands, fakeStandaloneRecords } from "../fakes.ts";
 import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
@@ -34,6 +34,7 @@ function fixture() {
     sharedCommands: fakeSharedCommands(),
     document: reader.document,
     edits: edits.edits,
+    shared: fakeStandaloneRecords(),
     refresh: { request: (job) => { jobs.push(job); }, cancel: () => {} },
     stamping: { stamp: () => { throw new Error("No stamp expected"); } },
     text: {

@@ -6,12 +6,18 @@ import { addShotCommand, removeShotPropCommand } from "./broll-records.ts";
 import { retagCommand } from "./production-records.ts";
 import type { TagRef } from "./production-records.ts";
 import type { ShotFields } from "./broll-records.ts";
+import type { SharedRecordPorts } from "./shared-records.ts";
 import type { RewritePlanner } from "./document-edit.ts";
 import type { Command, CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 
 export interface ProductionActionPorts {
   readonly run: (command: Command) => boolean;
+  readonly edit?: (build: (shared?: SharedRecordPorts) => Command) => boolean;
+}
+
+function runRecord(ports: ProductionActionPorts, build: (shared?: SharedRecordPorts) => Command): boolean {
+  return ports.edit ? ports.edit(build) : ports.run(build());
 }
 
 export interface RenameTagPorts extends ProductionActionPorts {
@@ -43,10 +49,10 @@ export function removeTag(cat: string, name: string, ports: RemoveTagPorts): num
 
 export function newBrollRecord(fields: ShotFields | null | undefined, ports: NewBrollPorts): DocumentShot {
   const rec = newBrollShot(ports.ids.id("bs"), fields || {});
-  ports.run(addShotCommand(rec));
+  runRecord(ports, shared => addShotCommand(rec, shared));
   return rec;
 }
 
 export function removeBrollProp(shotId: string, ref: string, ports: ProductionActionPorts): boolean {
-  return ports.run(removeShotPropCommand(shotId, ref));
+  return runRecord(ports, shared => removeShotPropCommand(shotId, ref, shared));
 }

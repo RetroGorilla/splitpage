@@ -35,6 +35,8 @@ import { idMap } from "../../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml, plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { planQuickAdd } from "../../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
+import { runRecordCommand } from "../../application/commands/shared-records.ts";
+import type { SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../../core/production/records.ts";
 import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
 
@@ -205,7 +207,7 @@ export function applyGearQuickAdd() {
   const plan = (ports as TagPanelPorts).document.read(planned);
   const added = plan.added, removed = plan.removed;
 
-  if (!(ports as TagPanelPorts).edits.edit(gearQuickAddCommand(planned))) { fillGearQuickAdd(); return; }
+  if (!editRecords(shared => gearQuickAddCommand(planned, shared))) { fillGearQuickAdd(); return; }
   renderProduction();
   fillGearQuickAdd();
   const parts = [];
@@ -847,8 +849,12 @@ function entryValue(item: PresentedProductionEntry, field: "owner") {
   return entry ? entry[field] || "" : "";
 }
 
+function editRecords(build: SharedRecordBuild) {
+  return runRecordCommand((ports as TagPanelPorts).edits, (ports as TagPanelPorts).shared, build);
+}
+
 function updateTags(items: readonly PresentedProductionEntry[], change: TagChange) {
-  return (ports as TagPanelPorts).edits.edit(updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids));
+  return editRecords(shared => updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids, shared));
 }
 
 function findTagByKey(key: string | null) {
@@ -917,7 +923,8 @@ export function armDeleteTag(btn: Element, key: string | null) {
     (ports as TagPanelPorts).deletion.disarm("tag");
     const item = findTagByKey(key);
     if (!item) return;
-    (ports as TagPanelPorts).edits.edit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, (ports as TagPanelPorts).edits.stamps));
+    const done = editRecords(shared => deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, (ports as TagPanelPorts).edits.stamps, shared));
+    if (!done && (ports as TagPanelPorts).shared.ports()) return;
     (ports as TagPanelPorts).notices.show("Deleted " + item.name + " from the production list", "ok");
     return;
   }
@@ -1000,9 +1007,10 @@ export function bulkDeleteSelected() {
   const labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
   const unlabelled = (ports as TagPanelPorts).document.read(function (doc) { return retagMentions((ports as TagPanelPorts).text, doc, labelled); });
   (ports as TagPanelPorts).selection.clear();
-  (ports as TagPanelPorts).edits.edit(deleteTagsCommand(items.map(function (item) {
+  const done = editRecords(shared => deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps));
+  }), retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps, shared));
+  if (!done && (ports as TagPanelPorts).shared.ports()) return;
   const n = items.length;
   (ports as TagPanelPorts).undo.breakCoalescing();
   (ports as TagPanelPorts).notices.show("Deleted " + n + " item" + (n === 1 ? "" : "s") +
@@ -1101,7 +1109,7 @@ export function addPersonForTag(key: string | null, value: string) {
   (ports as TagPanelPorts).view.setTagAddingPerson(null);
   const item = findTagByKey(key);
   if (item) updateTags([item], { owner: { name: value } });
-  else (ports as TagPanelPorts).edits.edit(addPersonCommand(value, (ports as TagPanelPorts).ids));
+  else editRecords(shared => addPersonCommand(value, (ports as TagPanelPorts).ids, shared));
   renderProduction();
 }
 
@@ -1109,8 +1117,9 @@ export function armPersonDelete(btn: Element, personId: string | null) {
   if ((ports as TagPanelPorts).deletion.armedId("tag") === "person:" + personId) {
     (ports as TagPanelPorts).deletion.disarm("tag");
     const person = personById(personId);
-    (ports as TagPanelPorts).edits.edit((deletePersonCommand as PanelNullableCall<typeof deletePersonCommand, "0">)(personId));
+    const done = editRecords(shared => (deletePersonCommand as PanelNullableCall<typeof deletePersonCommand, "0">)(personId, shared));
     renderProduction();
+    if (!done && (ports as TagPanelPorts).shared.ports()) return;
     (ports as TagPanelPorts).notices.show("Removed " + (person ? person.name : "that person") +
       " — their items are now unassigned", "ok");
     return;

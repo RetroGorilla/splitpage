@@ -4,6 +4,7 @@ import { tagComposerActions as composerDefinitions } from "../../features/tags/a
 import { owned } from "../../features/routing/owned.ts";
 import { documentReader, refresh, stamping } from "./ports/document.ts";
 import { edits, tagEditing, undoControl } from "./ports/editing.ts";
+import { sharedRecordCommands } from "./ports/shared-commands.ts";
 import { text } from "./ports/text.ts";
 import { productionOwner } from "./ports/production.ts";
 import { tagView } from "./ports/preferences.ts";
@@ -20,7 +21,7 @@ export function mountProductionTagsFeature() {
   return production.replace(() => {
     const ports: ProductionTagPorts = {
       sharedCommands: sharedCommandGuard(sharedSession, notices),
-      document: documentReader, edits, refresh, stamping, text, production: productionOwner,
+      document: documentReader, edits, shared: sharedRecordCommands, refresh, stamping, text, production: productionOwner,
       editing: tagEditing, undo: undoControl, view: tagView, notices, ids
     };
     return productionTags.startProductionTags(ports);

@@ -205,10 +205,17 @@ C7 part two connects the Split structure and value callers through
 (Alt+Enter, the split core), the delete button, deleting and cutting selected beats, the
 scene menu's remove, status, Filmed, beat length, target length and words per minute.
 Those ten builders move from `serve pending composition` to `serve`. An added or split
-beat's id is the one the executor minted, read from the row that follows. `joinBeatsCommand`
-has no app caller and stays pending. Legacy `pasteBeatsCommand` has no shared port: its
-caller runs it without reading the held standalone undo, so the session's rule 73 refusal
-shows once.
+beat's id is the one the executor minted, which the command reports through `created()`.
+`joinBeatsCommand` has no app caller and stays pending. Legacy `pasteBeatsCommand` has no
+shared port: its caller runs it without reading the held standalone undo, so the session's
+rule 73 refusal shows once.
+
+C7 part two's second cut connects the record, picture and comment callers the same way:
+registering a tag and finding a person, adding a shot's prop, the b-roll panel's status,
+bulk, assign, delete and add, the production panel's quick add, tag updates, deletes and
+people, `editGallery`, and the six comment callers. A refusal shows the shared-session
+notice once; a comment or reply under another name than the session's is refused by the
+executor (`foreign-author`).
 
 ## 4 The switch
 

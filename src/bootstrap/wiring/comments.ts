@@ -21,6 +21,7 @@ import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { writerControls } from "./writer.ts";
 import { runFromButton } from "./ports/actions.ts";
+import { sharedCommentCommands } from "./ports/shared-commands.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.ts";
 import { storedImageHtml } from "../../core/document/text-policy.ts";
@@ -156,7 +157,7 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       shots: shotHiding,
       pictures: portPictures,
       clearDraftUndo: resetDraftHistory,
-      shared: () => null
+      shared: sharedCommentCommands
     };
     return mountCommentState(ports);
   });

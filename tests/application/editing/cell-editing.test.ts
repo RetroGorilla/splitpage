@@ -9,6 +9,7 @@ import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 import { harness } from "../session-fakes.ts";
+import { fakeStandaloneGallery } from "../../features/fakes.ts";
 
 const STAMP = "2026-10-22T12:00:00.000Z";
 
@@ -87,6 +88,7 @@ function rig(opts: { failing?: boolean } = {}): Rig {
     document: function () { return h.session.read(function (doc) { return doc; }); },
     run,
     text,
+    gallery: fakeStandaloneGallery(),
     wholeFieldText: createWholeFieldTextCommit({ run, text }),
     decode: { text: plain, withMedia: plain },
     undo: {

@@ -12,6 +12,8 @@ import { cappedLongText, cappedText, escapeHtml, plainText } from "../../core/do
 import { mountBroll } from "./mount.ts";
 import { deleteShotCommand, setShotsCommand } from "../../application/commands/broll-records.ts";
 import { newBrollRecord, removeBrollProp } from "../../application/commands/production-actions.ts";
+import { runRecordCommand } from "../../application/commands/shared-records.ts";
+import type { SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../../core/production/records.ts";
 
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "./ports.ts";
@@ -42,7 +44,15 @@ type PanelEvent = Parameters<Parameters<typeof mountBroll>[0]["ports"]["click"]>
 
 let ports: BrollPanelPorts | null = null;
 
-const shotEditPorts: NewBrollPorts = { run: (...args) => (ports as PanelPortUse).edits.edit(...args), get ids() { return (ports as PanelPortUse).ids; } };
+const shotEditPorts: NewBrollPorts = {
+  run: (...args) => (ports as PanelPortUse).edits.edit(...args),
+  edit: build => runRecordCommand((ports as PanelPortUse).edits, (ports as PanelPortUse).shared, build),
+  get ids() { return (ports as PanelPortUse).ids; }
+};
+
+function editShots(build: SharedRecordBuild) {
+  return runRecordCommand((ports as PanelPortUse).edits, (ports as PanelPortUse).shared, build);
+}
 
 function productionEntries() {
   return ((ports as PanelPortUse).production.entries as (doc: ReturnType<PanelPortUse["document"]["current"]>) => ReturnType<BrollPanelPorts["production"]["entries"]>)((ports as PanelPortUse).document.current());
@@ -706,7 +716,7 @@ function personById(id: unknown) {
 
 function writeRecord(id: string | null, fields: ShotFields) {
   if (!brollRecord(id)) return false;
-  (ports as PanelPortUse).edits.edit(setShotsCommand([(id as string)], fields));
+  editShots(shared => setShotsCommand([(id as string)], fields, undefined, undefined, shared));
   return true;
 }
 
@@ -729,7 +739,7 @@ function bulkUpdate(fields: ShotFields, describe: (n: number) => string, owner?:
     const rec = brollRecord(id);
     return rec && Object.keys(fields).some(function (k) { return (rec as NonNullable<ReturnType<typeof brollRecord>>)[k] !== fields[k]; });
   }).length;
-  if (!n || !(ports as PanelPortUse).edits.edit(setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids))) { renderBrollViews(); return; }
+  if (!n || !editShots(shared => setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids, shared))) { renderBrollViews(); return; }
   renderBrollViews();
   (ports as PanelPortUse).notices.show(describe(n), "ok");
 }
@@ -772,7 +782,7 @@ function bulkAssignNewPerson(name: string) {
     const rec = brollRecord(sid);
     return rec && (!known || rec.owner !== known.id);
   }).length;
-  if (!(ports as PanelPortUse).edits.edit(setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids))) { renderBrollViews(); return; }
+  if (!editShots(shared => setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids, shared))) { renderBrollViews(); return; }
   renderBrollViews();
   const who = (ports as PanelPortUse).document.read(function (doc) { return personNamed(doc, name); });
   (ports as PanelPortUse).notices.show("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
@@ -860,7 +870,7 @@ function renameShot(id: string | null, box: PanelInput | null) {
 function deleteShot(id: string | null) {
   const e = entryById(id);
   if (!e) return;
-  (ports as PanelPortUse).edits.edit(deleteShotCommand((id as string)));
+  editShots(shared => deleteShotCommand((id as string), shared));
   if (openId === id) openId = null;
   menuFor = null;
   Reflect.deleteProperty(selection, (id as string));
@@ -964,7 +974,7 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     addingPersonFor = null;
     (ports as PanelPortUse).undo.breakCoalescing();
     const named = nameBox ? nameBox.value : "";
-    if (brollRecord(id)) (ports as PanelPortUse).edits.edit(setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids));
+    if (brollRecord(id)) editShots(shared => setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids, shared));
     renderBrollViews();
   } else if (action === "broll-person-cancel") {
     addingPersonFor = null;

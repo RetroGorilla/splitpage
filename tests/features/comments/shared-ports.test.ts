@@ -28,7 +28,8 @@ function fixture(shared: SharedCommentPorts | null) {
   const ports: CommentStatePorts = {
     sort: { current: () => "position", choose: () => "position" },
     document: { numbering: () => deriveDocumentNumbering({ rows: [] }), current: () => DOC, read: (select) => select(DOC) },
-    edits: { edit: (command) => { commands.push(command); return true; }, stamps: { clock, editor: { name: () => "Ada" } } },
+    edits: { edit: (command) => { commands.push(command); return true; }, run: (command) => { commands.push(command); return { kind: "noop" }; },
+      stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => ({ isConnected: false, dismiss: () => {}, removeEventListener: () => {} }) },
     preferences: {
       clock: () => "24", commentAuthor: () => "Ada", rememberCommentAuthor: () => {}, commentsSort: () => "position", setCommentsSort: () => {},
@@ -48,7 +49,7 @@ function fixture(shared: SharedCommentPorts | null) {
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
     clearDraftUndo: () => {},
-    shared: () => shared
+    shared: { ports: () => shared, refused: () => { throw new Error("no refusal expected"); } }
   };
   return { ports, commands };
 }

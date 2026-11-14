@@ -60,7 +60,7 @@ const READ_ONLY_CALLERS = {
   "application/session/document-reader.ts:DocumentReader": caller<DocumentReader>()("current", "read", "onChange", "numbering", "onReplaced", "onRefresh"),
   "application/save/capture.ts:CapturePorts": caller<CapturePorts>()("read", "readModels", "clock"),
   "application/save/export-kit.ts:ExportKitPorts": caller<ExportKitPorts>()("read", "preferences", "clock", "ids", "services", "entry", "assets", "following"),
-  "application/commands/production-actions.ts:RemoveTagPorts": caller<RemoveTagPorts>()("read", "mentions", "run", "rewrites", "stamps"),
+  "application/commands/production-actions.ts:RemoveTagPorts": caller<RemoveTagPorts>()("read", "mentions", "run", "edit", "rewrites", "stamps"),
   "application/editing/selection.ts:SelectionPorts": caller<SelectionPorts>()("epoch", "order", "keys"),
   "application/session/operation.ts:OperationPorts.session": caller<OperationPorts["session"]>()("epoch", "generation"),
   "application/recovery/history-ports.ts:HistoryOwnerPorts.document": caller<HistoryOwnerPorts["document"]>()("current"),

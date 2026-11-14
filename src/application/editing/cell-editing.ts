@@ -4,7 +4,7 @@ import type { Run } from "../../core/text/runs.ts";
 import { cellRuns, cellTextCommand } from "../commands/cell-text.ts";
 import type { CellRecords } from "../commands/cell-text.ts";
 import { galleryCommand } from "../commands/gallery.ts";
-import type { GalleryEdit } from "../commands/gallery.ts";
+import type { GalleryEdit, SharedGalleryCommands } from "../commands/gallery.ts";
 import { moveBeatCommand } from "../commands/rows.ts";
 import type { CommandOutcome, CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
@@ -55,6 +55,7 @@ export interface CellEditingPorts<E, Html = never> {
   readonly painted: (cell: E, field: string, row: ShownRow) => void;
   readonly shown: <T>(edit: () => T) => T;
   readonly announce: (message: string, before: unknown) => void;
+  readonly gallery: SharedGalleryCommands;
 }
 
 export interface OpenCell {
@@ -158,6 +159,15 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
 
   function editGallery(rowId: string, message: string, change: GalleryEdit): boolean {
     if (rowIndexOf(ports.document(), rowId) === -1) return false;
+    const shared = ports.gallery.ports();
+    if (shared) {
+      ports.undo.breakCoalescing();
+      const outcome = ports.run(galleryCommand(rowId, change, ports.text, shared));
+      if (outcome.kind === "rejected") ports.gallery.refused(outcome);
+      if (!took(outcome)) return false;
+      ports.gallery.done(message);
+      return true;
+    }
     const before = ports.undo.latest();
     ports.undo.breakCoalescing();
     if (!took(ports.run(galleryCommand(rowId, change, ports.text)))) return false;
