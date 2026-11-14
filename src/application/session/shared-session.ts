@@ -46,6 +46,7 @@ export interface SharedDocumentSession extends CommonDocumentSession {
   refuse: (reason: string) => CommandOutcome;
   revision: () => number;
   admit: () => SharedAdmissionRefusal | null;
+  hold: (reason: string) => () => void;
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
   beforeCommand: (listener: () => boolean) => () => void;
   subscribeRows: (listener: ChangedRowsListener) => () => void;
@@ -105,6 +106,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   const admissions: (() => boolean)[] = [];
   const rowListeners: ChangedRowsListener[] = [];
   let admitting = false;
+  const holds: string[] = [];
   let missed = false;
   let document: ValidatedDocument | null = null;
   let recovery: readonly SharedRecoveryEntry[] = [];
@@ -213,6 +215,8 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
 
   function admit(): SharedAdmissionRefusal | null {
     if (disposed) return { kind: "rejected", reason: DISPOSED };
+    const held = holds.at(-1);
+    if (held !== undefined) return { kind: "rejected", reason: held };
     if (entered || delivering) return { kind: "rejected", reason: REENTERED };
     if (admitting) return null;
     admitting = true;
@@ -265,6 +269,16 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     generation: function () { return generation; },
     revision: function () { return revision; },
     admit: admit,
+    hold: function (reason: string) {
+      holds.push(reason);
+      let open = true;
+      return function () {
+        if (!open) return;
+        open = false;
+        const at = holds.lastIndexOf(reason);
+        if (at !== -1) holds.splice(at, 1);
+      };
+    },
     read: function (select) { return select(document); },
     readAt: function (select) { return select(document, revision); },
     recovery: function () { return recovery; },
