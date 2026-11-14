@@ -12,7 +12,7 @@ import { startBeatMedia as mountBeatMedia } from "../../../src/features/rows/bea
 import { startBeatRows as mountBeats } from "../../../src/features/rows/beats.ts";
 import { cellOf, storedHtmlFromDom } from "../../../src/bootstrap/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeOwnership, fakePictures, fakeStandaloneStructure } from "../fakes.ts";
 
 window.Element.prototype.scrollIntoView = function () {};
 
@@ -52,7 +52,8 @@ function setup() {
       armedId: (area) => armed.get(area) ?? null,
       arm: (area, id, _expired, show) => { armed.set(area, id); show?.(); },
       disarm: (area) => { armed.delete(area); }
-    }
+    },
+    shared: fakeStandaloneStructure()
   };
   return { edits, notices, calls, owner: mountBeats(ports) };
 }

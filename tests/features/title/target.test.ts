@@ -6,7 +6,7 @@ import type { TargetPorts } from "../../../src/features/rundown/ports.ts";
 import { startTarget as mountOverlay, paintTargetOverlay } from "../../../src/features/rundown/target.ts";
 import { startTargetSection as mountTarget } from "../../../src/features/title/target-section.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeStandaloneValues } from "../fakes.ts";
 
 function setup(targetSeconds: number | null = null) {
   document.body.innerHTML = '<div id="rundown-overlay"></div><div id="popover"></div>';
@@ -16,6 +16,7 @@ function setup(targetSeconds: number | null = null) {
   const ports: TargetPorts = {
     document: fakeDocument(doc).document,
     edits: edits.edits,
+    shared: fakeStandaloneValues(),
     notices: notices.notices
   };
   const overlay = mountOverlay(ports);

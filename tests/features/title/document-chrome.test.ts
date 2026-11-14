@@ -5,7 +5,7 @@ import { startDocumentChrome } from "../../../src/features/title/document-chrome
 import type { DocumentChromeControl, DocumentChromePorts } from "../../../src/features/title/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeStandaloneValues } from "../fakes.ts";
 import { PERSON_COLORS } from "../../../src/core/document/person-colors.ts";
 
 function setup() {
@@ -22,7 +22,7 @@ function setup() {
       nameOf: () => "commentAuthor"
     },
     personColors: { personColor: () => PERSON_COLORS[0] ?? "" },
-    edits: edits.edits, notices: fakeNotices().notices
+    edits: edits.edits, shared: fakeStandaloneValues(), notices: fakeNotices().notices
   };
   const owner: DocumentChromeControl = startDocumentChrome(ports);
   return { owner, edits, name: () => name, colour: () => colour };

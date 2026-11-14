@@ -8,7 +8,7 @@ import { startBeatClip as mountBeatClip, parseBeatPayload } from "../../../src/f
 import { startBeatSelect as mountBeatSelect, selectBeats } from "../../../src/features/clipboard/beat-select.ts";
 import type { ScreenState } from "../../../src/application/screen.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakePictures } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakePictures, fakeStandaloneStructure } from "../fakes.ts";
 
 function scriptDoc() {
   return migrateRows({ title: "Scenes", rows: [
@@ -52,6 +52,7 @@ function beatSelect(rowsHtml = "", screen: ScreenState = CLEAR_SCREEN) {
     document: held.document,
     lifetime: held.lifetime,
     edits: edits.edits,
+    structure: fakeStandaloneStructure(),
     undo: {
       breakCoalescing: () => { calls.push("break"); },
       flush: () => { calls.push("flush"); },

@@ -25,6 +25,15 @@ import type { SharedCommandGuard } from "../../src/application/session/document-
 export function fakeSharedCommands(): SharedCommandGuard {
   return { refuseUnsupported: () => false };
 }
+const standaloneRefusal = (): never => { throw new Error("a standalone caller reported a shared refusal"); };
+export function fakeStandaloneStructure(): SharedStructureCommands {
+  return { ports: () => null, refused: standaloneRefusal };
+}
+export function fakeStandaloneValues(): SharedValueCommands {
+  return { ports: () => null, refused: standaloneRefusal };
+}
+import type { SharedStructureCommands } from "../../src/application/commands/shared-structure.ts";
+import type { SharedValueCommands } from "../../src/application/commands/shared-values.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";

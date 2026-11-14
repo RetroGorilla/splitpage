@@ -1,5 +1,6 @@
 import type { BeatSelectPorts } from "./ports.ts";
 import type { DocumentView, Command } from "../../application/session/document-session.ts";
+import type { SharedStructurePorts } from "../../application/commands/shared-structure.ts";
 import { refsIn } from "../../../shared/blob-policy.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -386,7 +387,9 @@ function sameDocument(started: DocumentView | null, startedId: string | null, ep
 
 function afterCut(w: ReturnType<typeof writeBeats>) {
   setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
-  const entry = takeOut(w.ids);
+  const shared = (ports as BeatSelectPorts).structure.ports();
+  if (shared && !takeOutShared(w.ids, shared)) return;
+  const entry = shared ? null : takeOut(w.ids);
   const msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
   else offerUndo(msg, entry);
@@ -396,6 +399,19 @@ function runBeatCommand(command: Command) {
   const outcome = (ports as BeatSelectPorts).edits.run(command);
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed";
+}
+
+function takeOutShared(ids: string[], shared: SharedStructurePorts) {
+  (ports as BeatSelectPorts).undo.breakCoalescing();
+  const outcome = (ports as BeatSelectPorts).edits.run(removeBeatsCommand(ids, shared));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected") (ports as BeatSelectPorts).structure.refused(outcome);
+  sel = null;
+  paint();
+  (ports as BeatSelectPorts).undo.breakCoalescing();
+  const done = outcome.kind === "applied" || outcome.kind === "committed";
+  if (done) (ports as BeatSelectPorts).production.scheduleRefresh();
+  return done;
 }
 
 function takeOut(ids: string[]) {
@@ -415,6 +431,8 @@ export function deleteSelectedBeats() {
   const ids = selectedBeatIds();
   if (!ids.length) return;
   closeBeatMenu();
+  const shared = (ports as BeatSelectPorts).structure.ports();
+  if (shared) { if (takeOutShared(ids, shared)) offerUndo(count(ids.length) + " deleted", null); return; }
   offerUndo(count(ids.length) + " deleted", takeOut(ids));
 }
 
@@ -429,6 +447,13 @@ function offerUndo(msg: string, entry: ReturnType<BeatSelectPorts["undo"]["last"
 function pasteClip(clip: NonNullable<ReturnType<typeof parseBeatPayload>>, afterRowId: string | null | undefined, opts?: Pick<NonNullable<Parameters<typeof beatPaste>[1]>, "title"> & { message?: string }) {
   opts = opts || {};
   (ports as BeatSelectPorts).undo.breakCoalescing();
+  if ((ports as BeatSelectPorts).structure.ports()) {
+    // why: legacy beat paste has no shared plan, so the session refuses it; the standalone undo it reads is held
+    const outcome = (ports as BeatSelectPorts).edits.run(pasteBeatsCommand(beatPaste(clip, { afterRowId: afterRowId, title: opts.title, stamp: (ports as BeatSelectPorts).stampRow })));
+    if (outcome.kind === "failed") throw outcome.error;
+    if (outcome.kind === "rejected") (ports as BeatSelectPorts).structure.refused(outcome);
+    return null;
+  }
   const before = (ports as BeatSelectPorts).undo.last();
   const paste = beatPaste(clip, { afterRowId: afterRowId, title: opts.title, stamp: (ports as BeatSelectPorts).stampRow });
   if (!runBeatCommand(pasteBeatsCommand(paste))) return null;
