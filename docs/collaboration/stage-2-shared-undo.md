@@ -648,13 +648,16 @@ emptied script. Rule 139's declared creation limit is lifted.
 The observation compares the beat's unstamped fields, its boundary and local
 heading, narration characters and active marks, incoming and
 outgoing joins, active status events, visuals, gallery, comments and replies.
+Joins include effective separators, format register values and causal writers
+(including deleted registers), and narration throughout the connected component.
 A split records its source on its new beat, so that source's creation guard
 also sees a split that was later undone. A new neighbouring beat is separate
 work and does not use the existing beat's creation undo up.
 A new heading names its first beat, so adding a scene above a newly created
 beat also uses its undo up, including when it is the script's only beat.
-A restored character is compared by its original identity, and copied marks
-by their source. A value last written by another copy remains that copy's
+Only the creator's own restorations compare by original character identity;
+another copy's restoration retains its new identity. Copied marks compare by
+their source. A value last written by another copy remains that copy's
 work even if it equals the original value; a same-value operation that writes
 nothing is no change. Stamps are excluded under rule 35.
 Own formatting is compared by its meaning after undo; a copied foreign mark
@@ -732,52 +735,61 @@ and prevents a runtime import cycle. Every importer names the owning module.
 
 #### Typing path costs
 
-An unmarked beat takes an in-memory marker-presence lookup and returns before
-reading a creation observation. With a marked beat, the first read in each
-settled document revision checks its observation; subsequent reads reuse the
-boolean. Open transactions and guarded callbacks bypass that result cache.
-An edit in a different segment still advances the document revision and rechecks marked creations;
-the cache does not claim segment-local invalidation.
+Projection reads the hidden-creation set before traversing beat records. With
+no retirement markers it performs zero retirement checks and builds zero
+observations, independent of script size. Only marked beat IDs enter the
+retirement checker. A settled set is reused throughout the revision.
 
-The ownership indexes queue only changed collection keys or changed ownership
-fields. A warm gallery retarget refreshes one child record and reads its owner
-once, with no collection enumeration; the next lookup reads no child. The
-literal checks this with zero and 100 unrelated children.
+`creation-observation-cache.ts` tracks the native map keys, child ownership
+and physical text ranges read by an observation. A dependency change marks
+that result dirty; typing before a watched range shifts its offsets without
+rebuilding it. Birth records outside the range do not invalidate it. Open
+writes and callbacks that run before the dependency observer read fresh data.
+Stable callbacks can reuse the result. False results are cached too: an
+invalidated retirement causes no further checks or builds for unrelated
+keystrokes or plain or formatted typing plus stamps in the invalidated beat. Deletions,
+restorations, formatting and value changes can recheck it, including taking back extra text;
+this preserves agreement with an encoded joiner rather than making local
+invalidation sticky. The dependency bookkeeping and retained marker remain.
 
-`tests/adapters/collab/creation-undo-cost.test.ts` measures a text insert, its
-stamp and undo recording, and incremental publication. R1 is edited; R1 and
-R2 each begin as three characters split after their first character. Each
-retired creation has one narration character, an empty visual and the default
-gallery slot. The native counts below are for the first key after retirement;
-the source's eligibility result is initially uncached. A second key also pins
-the steady observation count. Both sets are identical with zero and 100
-additional unmarked beats. These are operation counts, not timings.
+The ownership index refreshes one child and reads one ownership field after
+a warm retarget, then zero on the next lookup, with zero or 100 other children.
 
-| Retired creations | First-key observations | Next-key observations | Native text reads | Mark-entry visits | Record accesses | Text units returned |
-| --- | --- | --- | --- | --- | --- | --- |
-| None | 0 | 0 | 7 | 5 | 46 | 35 |
-| One in R1 | 3 | 2 | 16 | 12 | 130 | 89 |
-| One in R2 | 1 | 1 | 10 | 6 | 74 | 47 |
-| Two in R1 | 6 | 4 | 25 | 25 | 214 | 167 |
-| Two in R2 | 2 | 2 | 13 | 9 | 102 | 67 |
-| One in each | 4 | 3 | 19 | 13 | 158 | 101 |
+`tests/adapters/collab/creation-undo-cost.test.ts` pins a text insert, stamp,
+undo recording and incremental publication. R1 is edited; R1 and R2 each
+start as three characters split after their first character. Each creation
+has one narration character, an empty visual and a default gallery slot.
+First-key counts include initially uncached eligibility results.
+Every number is identical with zero and 100 additional unmarked beats.
 
-Status-entry and order-entry visits are zero in every row. The no-retirement
-row reads no unrelated text, mark entry or record. A retirement in another
-segment still costs observation reads: one in R2 adds three text reads, one
-mark-entry visit and 28 record accesses to this keystroke. Observations read
-the marked beat's fields and children and the physical narration segment;
-more retained creations in one segment can therefore revisit a larger text.
-The literal also pins 100 unchanged guard queries to one observation read,
-two reads during two writes in an open transaction, and one read in the next
-settled revision. Two guarded callbacks do two fresh reads without replacing
-the settled cache. Larger content and child collections cost more than this
-small fixture; these pins do not claim a constant cost per keystroke.
-Native counts exclude in-memory index lookups, sorting and JSON comparison.
-A contribution that invalidates retirement does not erase its marker: the
-false result is also rechecked after a later revision, and can become true
-again if all the changed content is taken back. Retained marker count, not
-only the number of currently hidden beats, determines this observation work.
+| Retired creations | First checks / builds | Next checks / builds | After invalidation checks / builds | Native text reads | Mark-entry visits | Record accesses | Text units returned |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| None | 0 / 0 | 0 / 0 | 0 / 0 | 7 | 5 | 46 | 35 |
+| One in R1 | 1 / 1 | 0 / 0 | 0 / 0 | 10 | 8 | 74 | 61 |
+| One in R2 | 1 / 1 | 0 / 0 | 0 / 0 | 10 | 6 | 74 | 47 |
+| Two in R1 | 2 / 2 | 0 / 0 | 0 / 0 | 13 | 13 | 102 | 95 |
+| Two in R2 | 2 / 2 | 0 / 0 | 0 / 0 | 13 | 9 | 102 | 67 |
+| One in each | 2 / 2 | 0 / 0 | 0 / 0 | 13 | 9 | 102 | 73 |
+
+Native totals describe the first key, including the baseline command work.
+Status/order-entry visits are zero. No-marker unrelated text/mark/record
+reads are zero. Separate controls exercise open writes, an early guarded
+callback, invalidation and reactivation. Native counts exclude in-memory
+indexes, sorting and JSON comparison. Observation builds still read the
+physical segment and child data, so larger observed content costs more.
+These are operation counts, not timings or a constant-cost claim.
+
+#### Retained storage limit
+
+The inverse retains the beat and children and persists the full canonical
+observation. The encoded-state growth literal pins **638 bytes for one
+character** and **17,673 bytes for 1,000 characters** in its fixture (including
+three bytes added by the joined-text observation list). Growth is per undo
+and scales with observed text and children; it is not a fixed-size record.
+A fixed-size digest would introduce collision semantics into the equality
+check, so this cut keeps the exact comparison. There is no persisted cleanup
+path for either effective or invalidated retirements. The plan review must
+decide that storage policy; this cut adds no cleanup mechanism.
 
 ### The provenance marker
 

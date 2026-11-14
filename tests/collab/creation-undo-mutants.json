@@ -14,28 +14,28 @@
       "replace": "const pending = [...root.keys()];"
     },
     {
-      "label": "creation retirement reuses an earlier revision",
-      "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "previous && previous.revision === state.revision",
+      "label": "creation retirement ignores dependency changes",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "previous && !previous.dirty",
       "replace": "previous"
     },
     {
       "label": "creation retirement recomputes every settled read",
-      "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "previous && previous.revision === state.revision",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "previous && !previous.dirty",
       "replace": "false"
     },
     {
       "label": "creation retirement reuses a result during writes",
-      "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "if (!state.reads.settled || state.ingress.notifications > 0) return read();",
-      "replace": ""
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "if (!state.reads.settled || held.revision !== state.revision) return read();",
+      "replace": "if (held.revision !== state.revision) return read();"
     },
     {
-      "label": "creation retirement reuses a result inside callbacks",
-      "file": "src/adapters/collab/creation-retirement.ts",
-      "find": " || state.ingress.notifications > 0",
-      "replace": ""
+      "label": "creation retirement reuses a result before its dependency observer",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "if (!state.reads.settled || held.revision !== state.revision) return read();",
+      "replace": "if (!state.reads.settled) return read();"
     },
     {
       "label": "creation ownership ignores retargeted children",
@@ -52,14 +52,14 @@
     {
       "label": "creation ignores an initial join's retirement",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "roots.retiredJoins.has(entry.id), roots.retiredJoins.has(sharedJoinRetirementGroup(from, entry))",
+      "find": "roots.retiredJoins.has(entry.id), roots.retiredJoins.has(group)",
       "replace": "false, false"
     },
     {
       "label": "creation forgets a new heading attached to it",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "splits, headings]);",
-      "replace": "splits, []]);"
+      "find": "splits, headings, joinedText]);",
+      "replace": "splits, [], joinedText]);"
     },
     {
       "label": "creation forgets a split that was undone",
@@ -70,8 +70,8 @@
     {
       "label": "a new neighbour consumes creation undo",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "splits, headings]);",
-      "replace": "splits, headings, [...roots.beats.keys()].sort()]);"
+      "find": "splits, headings, joinedText]);",
+      "replace": "splits, headings, [...roots.beats.keys()].sort(), joinedText]);"
     },
     {
       "label": "creation remains unsupported",
@@ -122,7 +122,7 @@
       "replace": "narration(handle, beat, record, writer), [], joins, status"
     },
     {
-      "label": "creation does not watch incoming joins",
+      "label": "creation does not watch join observations",
       "file": "src/adapters/collab/creation-retirement.ts",
       "find": "attachments, joins, status",
       "replace": "attachments, [], status"
@@ -186,6 +186,54 @@
       "file": "src/adapters/collab/undo-handlers.ts",
       "find": "\"segment-retire\": prepareSharedSegmentRetire, ",
       "replace": ""
+    },
+    {
+      "label": "creation ignores separator registers and their writers",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "register(glue, entry.glue), FORMAT_MARKS.map(format => register(sharedJoinFormatRegisterField(group, format), false))",
+      "replace": "null, []"
+    },
+    {
+      "label": "creation ignores text in the initial joined component",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "splits, headings, joinedText]);",
+      "replace": "splits, headings, []]);"
+    },
+    {
+      "label": "creation normalizes another copy's restorations",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "source && record.type === \"birth\" && String(record.writer) === writer",
+      "replace": "source && record.type === \"birth\""
+    },
+    {
+      "label": "creation checks every beat instead of only markers",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "for (const beat of markers) if (sharedCreationObservationDirty(handle, beat))",
+      "replace": "for (const beat of state.roots.beats.keys()) if (sharedCreationObservationDirty(handle, beat))"
+    },
+    {
+      "label": "creation repeatedly checks invalidated markers",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "|| !entry || entry.dirty;",
+      "replace": "|| !entry || entry.dirty || !entry.value;"
+    },
+    {
+      "label": "creation ignores changes inside its watched text range",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "if (subs && (entry.value ? moved(range, transaction, subs, entry.value) : deletedText(range.text))) entry.dirty = true;",
+      "replace": "if (subs && !entry.value && deletedText(range.text)) entry.dirty = true;"
+    },
+    {
+      "label": "creation forgets separator register ownership",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "item !== undefined && String(item.lastId.client) !== writer",
+      "replace": "false"
+    },
+    {
+      "label": "creation rechecks invalidated markers for born formatting",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "record.type !== \"birth\" && !(record.type === \"add\" && \"born\" in record && record.born !== null)",
+      "replace": "record.type !== \"birth\""
     }
   ]
 }

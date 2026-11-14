@@ -18,7 +18,7 @@ import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
 import { readSharedSplitMarks, readSharedSplitRetirements } from "./split-retirement.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
-import { isSharedCreationRetired } from "./creation-retirement.ts";
+import { readSharedCreationRetirements } from "./creation-retirement.ts";
 
 function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
@@ -87,7 +87,9 @@ export function readProjectionBlocks(handle: SharedDocumentHandle, readUnits?: (
     const fields = readProjectionFields(beats.get(id), "beat");
     return { id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired: retired.has(id) };
   });
-  return projectSharedBlocks(streams, records).filter(block => block.kind !== "b" || block.id === null || !isSharedCreationRetired(handle, block.id));
+  const hidden = readSharedCreationRetirements(handle);
+  const projected = projectSharedBlocks(streams, records);
+  return hidden.size ? projected.filter(block => block.kind !== "b" || block.id === null || !hidden.has(block.id)) : projected;
 }
 
 export function readProjectionStream(key: string, segment: Y.Map<unknown>, inOrder: boolean, all: readonly SharedProjectionUnit[]): SharedProjectionStream {

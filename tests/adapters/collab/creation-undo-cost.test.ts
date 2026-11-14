@@ -7,11 +7,11 @@ import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { executeSharedCommand, reverseSharedUndoRecord } from "../../../src/adapters/collab/undo-executor.ts";
-import { readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { readSharedRevision, transactSharedDocument, applySharedUpdate, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { collabState, guardSharedCallback } from "../../../src/adapters/collab/state.ts";
 import { sharedCreationRecordKeys } from "../../../src/adapters/collab/creation-record-index.ts";
-import { isSharedCreationRetired } from "../../../src/adapters/collab/creation-retirement.ts";
+import { isSharedCreationRetired, sharedCreationObservationCost } from "../../../src/adapters/collab/creation-retirement.ts";
 import { SHARED_CREATION_RETIREMENT_FIELD } from "../../../src/adapters/collab/creation-marker.ts";
 import { measureSharedReads } from "../../../src/adapters/collab/read-counts.ts";
 import { measureLibraryReads } from "../../collab/library-read-counts.ts";
@@ -37,11 +37,11 @@ function fixture(unrelated: number) {
 const placements = [[], ["R1"], ["R2"], ["R1", "R1"], ["R2", "R2"], ["R1", "R2"]] as const;
 const costs = {
   none: { native: [7, 5, 46, 0, 0], unrelated: [0, 0, 0, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 35, observations: 0 },
-  R1: { native: [16, 12, 130, 0, 0], unrelated: [3, 0, 84, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 89, observations: 3 },
+  R1: { native: [10, 8, 74, 0, 0], unrelated: [1, 0, 28, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 61, observations: 1 },
   R2: { native: [10, 6, 74, 0, 0], unrelated: [3, 1, 28, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 47, observations: 1 },
-  "R1,R1": { native: [25, 25, 214, 0, 0], unrelated: [6, 0, 168, 0, 0], rules: [2, 18, 2, 12, 6, 0], textUnits: 167, observations: 6 },
+  "R1,R1": { native: [13, 13, 102, 0, 0], unrelated: [2, 0, 56, 0, 0], rules: [2, 18, 2, 12, 6, 0], textUnits: 95, observations: 2 },
   "R2,R2": { native: [13, 9, 102, 0, 0], unrelated: [6, 4, 56, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 67, observations: 2 },
-  "R1,R2": { native: [19, 13, 158, 0, 0], unrelated: [6, 1, 112, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 101, observations: 4 }
+  "R1,R2": { native: [13, 9, 102, 0, 0], unrelated: [4, 1, 56, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 73, observations: 2 }
 };
 for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation retirement typing cost: ${hosts.join(",") || "none"}, unrelated=${unrelated}`, t => {
   const h = fixture(unrelated), records: SharedUndoRecord[] = [], previous = new Map<string, string>(); let serial = 0;
@@ -54,6 +54,14 @@ for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation
       const part = result.record.parts[0]; assert.ok(part?.kind === "beat-create"); previous.set(host, part.beat);
       const raw = collabState(h.a).roots.beats.get(part.beat); assert.ok(raw instanceof Y.Map); assert.equal(raw.get("segment"), "b:" + host);
     }
+    assert.equal(applySharedUpdate(h.c, encodeSharedState(h.a)).ok, true);
+    registerSharedOperationFamilies(h.c, { cells: createFlowLoadRuntime().cells });
+    for (const record of records) {
+      const part = record.parts[0]; assert.ok(part?.kind === "beat-create");
+      assert.deepEqual(executeSharedOperations(h.c, [operation({ kind: "scalar", id: "invalidate-" + part.beat, by: "Bob",
+        target: { scope: "beat", record: part.beat }, field: "lengthSeconds", value: 9 })], { base: readSharedRevision(h.c) }), { ok: true });
+    }
+    const invalidated = encodeSharedState(h.c);
     for (const record of records.reverse()) {
       const result = reverseSharedUndoRecord(h.a, record, { by: "Alice", nextId: () => "undo-" + ++serial });
       assert.equal(result.ok && result.effective, true);
@@ -74,11 +82,15 @@ for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation
         if (key === SHARED_CREATION_RETIREMENT_FIELD) observations++;
         const value: unknown = getMap.call(this, key); return value;
       });
+      sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
       const measured = measureLibraryReads(h.a, "R1", () => measureSharedReads(() => executeSharedCommand(h.a, [
         operation({ kind: "text-insert", id: "key", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
           at: { left: null, right: flowBaseReference("R1", "audioText", 0), affinity: "before" }, content: [{ value: "z", marks: [] }] }),
         operation({ kind: "scalar", id: "stamp", by: "Alice", target: { scope: "beat", record: "R1" }, field: "stamp", value: { by: "Alice", at: "2026-11-14T00:00:00Z" } })
       ], { label: "typing", selection: null, typing: "z" }, { base: readSharedRevision(h.a) })), docs);
+      const firstCost = { ...sharedCreationObservationCost };
+      assert.deepEqual(firstCost, { checks: hosts.length, builds: hosts.length });
+      t.diagnostic(JSON.stringify({ cost: firstCost, hosts, unrelated, measured: measured.totals, unrelatedReads: measured.unrelated, textUnits, observations }));
       mock.mock.restore();
       maps.mock.restore();
       assert.deepEqual(measured.result.result.result, { ok: true });
@@ -95,18 +107,55 @@ for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation
         if (key === SHARED_CREATION_RETIREMENT_FIELD) nextObservations++;
         const value: unknown = getMap.call(this, key); return value;
       });
+      sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
       const next = executeSharedCommand(h.a, [operation({ kind: "text-insert", id: "next-key", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
         at: { left: null, right: flowBaseReference("R1", "audioText", 0), affinity: "before" }, content: [{ value: "z", marks: [] }] }),
       operation({ kind: "scalar", id: "next-stamp", by: "Alice", target: { scope: "beat", record: "R1" }, field: "stamp", value: { by: "Alice", at: "2026-11-14T00:00:01Z" } })],
       { label: "typing", selection: null, typing: "z" }, { base: readSharedRevision(h.a) });
       nextMaps.mock.restore(); assert.deepEqual(next.result, { ok: true });
-      assert.equal(nextObservations, ({ none: 0, R1: 2, R2: 1, "R1,R1": 4, "R2,R2": 2, "R1,R2": 3 })[(hosts.join(",") || "none") as keyof typeof costs]);
+      assert.equal(nextObservations, 0);
+      assert.deepEqual(sharedCreationObservationCost, { checks: 0, builds: 0 });
       assert.equal(projector.read().document.rows.find(row => row.id === "R1")?.audioText, "zza"); assertIncremental(h.a, projector);
+      assert.equal(applySharedUpdate(h.a, invalidated).ok, true);
+      for (const record of records) {
+        const part = record.parts[0]; assert.ok(part?.kind === "beat-create");
+        assert.equal(isSharedCreationRetired(h.a, part.beat), false);
+      }
+      sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
+      const continued = executeSharedCommand(h.a, [operation({ kind: "text-insert", id: "after-invalidated", by: "Alice",
+        target: { owner: "R1", segment: "R1", field: "audioText" },
+        at: { left: null, right: flowBaseReference("R1", "audioText", 0), affinity: "before" }, content: [{ value: "z", marks: [] }] })],
+      { label: "typing", selection: null, typing: "z" }, { base: readSharedRevision(h.a) });
+      assert.deepEqual(continued.result, { ok: true });
+      assert.deepEqual(sharedCreationObservationCost, { checks: 0, builds: 0 });
+      assert.equal(projector.read().document.rows.filter(row => row.audioText === "x").length, hosts.length);
+      assertIncremental(h.a, projector);
+      for (const record of records) {
+        const part = record.parts[0]; assert.ok(part?.kind === "beat-create");
+        sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
+        const typed = executeSharedCommand(h.a, [operation({ kind: "text-insert", id: "retired-key-" + part.beat, by: "Alice",
+          target: { owner: part.beat, segment: part.beat, field: "audioText" },
+          at: { left: null, right: flowBaseReference(part.beat, "audioText", 0), affinity: "before" }, content: [{ value: "y", marks: [] }] }),
+        operation({ kind: "scalar", id: "retired-stamp-" + part.beat, by: "Alice", target: { scope: "beat", record: part.beat },
+          field: "stamp", value: { by: "Alice", at: "2026-11-14T00:00:03Z" } })],
+        { label: "typing", selection: null, typing: "y" }, { base: readSharedRevision(h.a) });
+        assert.deepEqual(typed.result, { ok: true });
+        assert.deepEqual(sharedCreationObservationCost, { checks: 0, builds: 0 });
+        assert.equal(projector.read().document.rows.find(row => row.id === part.beat)?.audioText, "yx"); assertIncremental(h.a, projector);
+        sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
+        const formatted = executeSharedCommand(h.a, [operation({ kind: "text-insert", id: "retired-bold-key-" + part.beat, by: "Alice",
+          target: { owner: part.beat, segment: part.beat, field: "audioText" },
+          at: { left: null, right: flowBaseReference(part.beat, "audioText", 0), affinity: "before" }, content: [{ value: "z", marks: [{ kind: "b", value: true }] }] })],
+        { label: "typing", selection: null, typing: "z" }, { base: readSharedRevision(h.a) });
+        assert.deepEqual(formatted.result, { ok: true });
+        assert.deepEqual(sharedCreationObservationCost, { checks: 0, builds: 0 });
+        assert.equal(projector.read().document.rows.find(row => row.id === part.beat)?.audioText, "<strong>z</strong>yx"); assertIncremental(h.a, projector);
+      }
     } finally { projector.dispose(); }
   } finally { h.close(); }
 });
 
-test("creation retirement reads once per settled revision and sees writes inside a transaction", t => {
+test("creation retirement follows changed dependencies and sees writes inside a transaction", t => {
   const h = fixture(0);
   try {
     const result = executeSharedCommand(h.a, [operation({ kind: "segment-create", id: "create", by: "Alice", beat: "N1", segment: "N1",
@@ -131,15 +180,15 @@ test("creation retirement reads once per settled revision and sees writes inside
       assert.equal(isSharedCreationRetired(h.a, part.beat), true);
       assert.equal(isSharedCreationRetired(h.a, part.beat), true);
     });
-    assert.equal(reads, 6);
-    assert.equal(isSharedCreationRetired(h.a, part.beat), true); assert.equal(reads, 6);
+    assert.equal(reads, 4);
+    assert.equal(isSharedCreationRetired(h.a, part.beat), true); assert.equal(reads, 4);
     transactSharedDocument(h.a, "local-command", () => { record.set("lengthSeconds", 9); });
     for (let index = 0; index < 100; index++) assert.equal(isSharedCreationRetired(h.a, part.beat), false);
-    assert.equal(reads, 7); assert.equal(record.has(SHARED_CREATION_RETIREMENT_FIELD), true);
+    assert.equal(reads, 5); assert.equal(record.has(SHARED_CREATION_RETIREMENT_FIELD), true);
     h.send([operation({ kind: "scalar", id: "unrelated", by: "Alice", target: { scope: "beat", record: "R2" }, field: "stamp", value: { by: "Alice", at: "2026-11-14T00:00:02Z" } })]);
-    assert.equal(isSharedCreationRetired(h.a, part.beat), false); assert.equal(reads, 8);
+    assert.equal(isSharedCreationRetired(h.a, part.beat), false); assert.equal(reads, 5);
     transactSharedDocument(h.a, "local-command", () => { record.delete("lengthSeconds"); });
-    assert.equal(isSharedCreationRetired(h.a, part.beat), true); assert.equal(reads, 9);
+    assert.equal(isSharedCreationRetired(h.a, part.beat), true); assert.equal(reads, 6);
   } finally { h.close(); }
 });
 
@@ -164,4 +213,24 @@ for (const unrelated of [0, 100]) test(`creation ownership index reads only a re
     assert.deepEqual(visited, []);
     assert.deepEqual(fields, []);
   } finally { h.close(); }
+});
+
+test("creation retirement sees a guarded callback before its dependency observer", () => {
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "abc" }] });
+  const state = collabState(h.a); let beat = "", inspect = false, callbacks = 0;
+  const listener = () => guardSharedCallback(state, () => {
+    if (inspect) { callbacks++; assert.equal(isSharedCreationRetired(h.a, beat), false); }
+  });
+  state.doc.on("beforeObserverCalls", listener);
+  try {
+    registerSharedOperationFamilies(h.a, { cells: createFlowLoadRuntime().cells });
+    const result = executeSharedCommand(h.a, [operation({ kind: "segment-create", id: "create", by: "Alice", beat: "N1", segment: "N1",
+      at: { left: "R1", right: null, affinity: "after" }, fields: { audioText: "x" } })], { label: "create", selection: null, typing: null }, { base: readSharedRevision(h.a) });
+    assert.deepEqual(result.result, { ok: true }); assert.ok(result.record); const part = result.record.parts[0]; assert.ok(part?.kind === "beat-create"); beat = part.beat;
+    assert.equal(reverseSharedUndoRecord(h.a, result.record, { by: "Alice", nextId: () => "undo" }).ok, true);
+    assert.equal(isSharedCreationRetired(h.a, beat), true); inspect = true;
+    const record = state.roots.beats.get(beat); assert.ok(record instanceof Y.Map);
+    transactSharedDocument(h.a, "local-command", () => { record.set("lengthSeconds", 9); });
+    assert.equal(callbacks, 1); assert.equal(isSharedCreationRetired(h.a, beat), false);
+  } finally { state.doc.off("beforeObserverCalls", listener); h.close(); }
 });

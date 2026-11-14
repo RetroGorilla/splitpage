@@ -459,3 +459,134 @@ for (const change of ["typing", "value", "comment", "reply"] as const) for (cons
     if (!seen) assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
   } finally { h.close(); }
 });
+
+for (const change of ["separator format", "separator value", "separator format taken back", "separator value taken back", "joined typing"] as const) for (const order of ORDERS) for (const seen of [true, false]) test(`initial join protects ${change}, seen=${seen}/${order}`, () => {
+  const h = start(order);
+  try {
+    const record = h.command([{ kind: "segment-create", id: "add", by: "Alice", beat: "N1", segment: "N1",
+      at: { left: "R1", right: "R2", affinity: "before" }, fields: { audioText: "x", status: "todo" } },
+    { kind: "join", id: "join", by: "Alice", from: "R2", into: "N1", glue: " " }]); h.flush();
+    const part = record.parts[0]; assert.ok(part?.kind === "beat-create"); const beat = part.beat;
+    const target = { owner: beat, segment: beat, field: "audioText" };
+    h.send(change === "separator format" ? [{ kind: "mark", id: "bold", by: "Bob", target,
+      observed: [flowBaseReference(beat, "audioText", 1, 2)], mark: { kind: "b", value: true } }]
+      : change === "separator value" ? [{ kind: "join-glue", id: "glue", by: "Bob", joins: [sharedStructureKey("1", "join", "join")], glue: "" }]
+      : change === "joined typing" ? [{ kind: "text-insert", id: "joined-type", by: "Bob", target,
+        at: { left: null, right: flowBaseReference(beat, "audioText", 2), affinity: "before" }, content: [{ value: "Y", marks: [] }] }] : []);
+    if (change === "separator format taken back") {
+      h.send([{ kind: "mark", id: "bold-away", by: "Bob", target, observed: [flowBaseReference(beat, "audioText", 1, 2)], mark: { kind: "b", value: true } }]);
+      h.send([{ kind: "mark", id: "bold-back", by: "Bob", target, observed: [flowBaseReference(beat, "audioText", 1, 2)], mark: { kind: "b", value: null } }]);
+    }
+    if (change === "separator value taken back") {
+      h.send([{ kind: "join-glue", id: "glue-away", by: "Bob", joins: [sharedStructureKey("1", "join", "join")], glue: "" }]);
+      h.send([{ kind: "join-glue", id: "glue-back", by: "Bob", joins: [sharedStructureKey("1", "join", "join")], glue: " " }]);
+    }
+    const other = projectSharedDocumentWithRecovery(h.b);
+    assert.equal(other.document.rows.find(row => row.id === beat)?.audioText,
+      change === "separator format" ? "x<strong> </strong>d" : change === "separator value" ? "xd" : change === "joined typing" ? "x Yd" : "x d");
+    if (seen) h.flush(); const encoded = encodeSharedState(h.a);
+    assert.deepEqual(h.owner.undo(), seen ? { ok: true, effective: false, label: "create", selection: null, reason: "used-up" }
+      : { ok: true, effective: true, label: "create", selection: null });
+    if (seen) { assert.deepEqual(encodeSharedState(h.a), encoded); assert.equal(h.owner.sizes().redo, 0); }
+    h.check(other);
+    if (!seen) { assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" }); h.check(other); }
+  } finally { h.close(); }
+});
+
+for (const order of ORDERS) for (const seen of [true, false]) test(`another copy's real deletion undo preserves its restored characters, seen=${seen}/${order}`, () => {
+  const h = start(order);
+  try {
+    const beat = h.create("x"), before = projectSharedDocumentWithRecovery(h.a), target = { owner: beat, segment: beat, field: "audioText" } as const;
+    const observed = captureSharedTextRange(h.b, target, 0, 1); assert.ok(observed);
+    const deletion = executeSharedCommand(h.b, [operation({ kind: "text-delete", id: "delete", by: "Bob", target, observed: [observed] })],
+      { label: "delete", selection: null, typing: null }, { base: readSharedRevision(h.b) });
+    assert.deepEqual(deletion.result, { ok: true }); assert.ok(deletion.record); let serial = 0;
+    assert.deepEqual(reverseSharedUndoRecord(h.b, deletion.record, { by: "Bob", nextId: () => "restore-" + ++serial }).ok, true);
+    assert.deepEqual(projectSharedDocumentWithRecovery(h.b), before);
+    if (seen) h.flush(); const encoded = encodeSharedState(h.a);
+    assert.deepEqual(h.owner.undo(), seen ? { ok: true, effective: false, label: "create", selection: null, reason: "used-up" }
+      : { ok: true, effective: true, label: "create", selection: null });
+    if (seen) { assert.deepEqual(encodeSharedState(h.a), encoded); assert.equal(h.owner.sizes().redo, 0); }
+    h.check(before);
+    if (!seen) { assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" }); h.check(before); }
+  } finally { h.close(); }
+});
+
+for (const kind of ["text", "value", "picture"] as const) for (const order of ORDERS) for (const seen of [true, false]) test(`taken-back ${kind} race keeps its ownership policy, seen=${seen}/${order}`, () => {
+  const h = start(order);
+  try {
+    const before = projectSharedDocumentWithRecovery(h.a), beat = kind === "picture" ? withRecords(h) : h.create("x", { lengthSeconds: 4 });
+    const made = projectSharedDocumentWithRecovery(h.a);
+    const values = kind === "text" ? [typed(beat, "Y")] : kind === "value"
+      ? [{ kind: "scalar", id: "away", by: "Bob", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 8 }]
+      : [setRecord("gallery", "G1", "picture", { imageRef: { sha256: "d".repeat(64) } }, "Bob")];
+    const result = executeSharedCommand(h.b, values.map(operation), { label: kind, selection: null, typing: null }, { base: readSharedRevision(h.b) });
+    assert.deepEqual(result.result, { ok: true }); assert.ok(result.record); let serial = 0;
+    assert.equal(reverseSharedUndoRecord(h.b, result.record, { by: "Bob", nextId: () => "take-back-" + ++serial }).ok, true);
+    assert.deepEqual(projectSharedDocumentWithRecovery(h.b), made);
+    if (seen) h.flush(); const encoded = encodeSharedState(h.a);
+    const used = kind !== "text" && seen;
+    assert.deepEqual(h.owner.undo(), used ? { ok: true, effective: false, label: "create", selection: null, reason: "used-up" }
+      : { ok: true, effective: true, label: "create", selection: null });
+    if (used) assert.deepEqual(encodeSharedState(h.a), encoded);
+    h.check(kind === "text" ? before : made);
+    if (kind === "text") { assert.equal(h.owner.redo().ok, true); h.check(made); }
+    else if (!seen) { assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" }); h.check(made); }
+  } finally { h.close(); }
+});
+
+for (const order of ORDERS) test(`continued typing after an invalidated retirement stays visible: ${order}`, () => {
+  const h = start(order);
+  try {
+    const beat = h.create("x"); h.send([typed(beat, "Y")]);
+    assert.equal(h.owner.undo().ok, true); h.flush();
+    assert.equal(projectSharedDocumentWithRecovery(h.a).document.rows.find(row => row.id === beat)?.audioText, "Yx");
+    h.send([{ ...typed(beat, "Z"), id: "continued" }]); h.flush();
+    const after = projectSharedDocumentWithRecovery(h.b);
+    assert.equal(after.document.rows.find(row => row.id === beat)?.audioText, "ZYx"); h.check(after);
+    const encoded = encodeSharedState(h.a);
+    assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
+    assert.deepEqual(encodeSharedState(h.a), encoded); h.check(after);
+  } finally { h.close(); }
+});
+
+for (const order of ORDERS) test(`another copy restores text before the pending creation redo: ${order}`, () => {
+  const h = start(order);
+  try {
+    const beat = h.create("x"), made = projectSharedDocumentWithRecovery(h.a), target = { owner: beat, segment: beat, field: "audioText" } as const;
+    const observed = captureSharedTextRange(h.b, target, 0, 1); assert.ok(observed);
+    const deletion = executeSharedCommand(h.b, [operation({ kind: "text-delete", id: "delete", by: "Bob", target, observed: [observed] })],
+      { label: "delete", selection: null, typing: null }, { base: readSharedRevision(h.b) });
+    assert.deepEqual(deletion.result, { ok: true }); assert.ok(deletion.record);
+    assert.equal(h.owner.undo().ok, true); let serial = 0;
+    assert.equal(reverseSharedUndoRecord(h.b, deletion.record, { by: "Bob", nextId: () => "restore-" + ++serial }).ok, true);
+    h.check(made); const encoded = encodeSharedState(h.a);
+    assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
+    assert.deepEqual(encodeSharedState(h.a), encoded); h.check(made);
+  } finally { h.close(); }
+});
+
+for (const order of ORDERS) test(`inside-segment creation and later typing undo and redo in order: ${order}`, () => {
+  const h = start(order);
+  try {
+    h.send([{ kind: "split", id: "inside", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
+      at: { left: null, right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, observed: [], boundary: "tail", beat: "tail", fields: {} }], h.a); h.flush();
+    const before = projectSharedDocumentWithRecovery(h.a), tail = sharedStructureKey("1", "inside", "beat"); assert.ok(tail);
+    const record = h.command([{ kind: "segment-create", id: "add", by: "Alice", beat: "N1", segment: "N1",
+      at: { left: "R1", right: tail, affinity: "after" }, fields: { audioText: "x" } }]); h.flush();
+    const part = record.parts[0]; assert.ok(part?.kind === "beat-create"); const beat = part.beat, made = projectSharedDocumentWithRecovery(h.a);
+    assert.equal((collabState(h.a).roots.beats.get(beat) as { readonly get: (key: string) => unknown }).get("segment"), "b:R1");
+    h.command([{ ...typed(beat, "y", 1), by: "Alice" }], "typing"); h.flush(); const after = projectSharedDocumentWithRecovery(h.a);
+    assert.equal(h.owner.undo().ok, true); h.check(made); assert.equal(h.owner.undo().ok, true); h.check(before);
+    assert.equal(h.owner.redo().ok, true); h.check(made); assert.equal(h.owner.redo().ok, true); h.check(after);
+    assert.equal(h.owner.undo().ok, true); h.check(made); assert.equal(h.owner.undo().ok, true); h.check(before);
+  } finally { h.close(); }
+});
+for (const length of [1, 1000]) test(`creation retirement encoded storage growth: ${length} characters`, t => {
+  const h = start("D1");
+  try {
+    h.create("x".repeat(length)); const before = encodeSharedState(h.a).length;
+    assert.equal(h.owner.undo().ok, true); const growth = encodeSharedState(h.a).length - before;
+    t.diagnostic(JSON.stringify({ length, growth })); assert.equal(growth, length === 1 ? 638 : 17673);
+  } finally { h.close(); }
+});
