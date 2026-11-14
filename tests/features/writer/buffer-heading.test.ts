@@ -252,6 +252,33 @@ for (const [label, act] of HELD_ENDINGS) {
   });
 }
 
+test("rule 4: Backspace held down until a heading is gone keeps it held: the repeats change nothing and tell nothing, and the next letter replaces it once", () => {
+  const page = headedWriter();
+  try {
+    assert.equal(page.holdHeading("Backspace", 5, 5, 8), 5);
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, [...collabState(page.h.a).ingress.holds], page.a.executed.length, page.notices],
+      ["S", "", [], ["buffer"], 4, []]);
+    page.typeHeading(0, 0, "N");
+    assert.deepEqual([page.name(), page.element().textContent, page.reports, [...collabState(page.h.a).ingress.holds]], ["N", "N", [], []]);
+    copies(page, ["N"]);
+  } finally { page.close(); }
+});
+
+for (const [name, type] of [["Backspace", "deleteContentBackward"], ["Delete", "deleteContentForward"]] as const) {
+  test(`rule 4: ${name} held down over a selected heading keeps it held through the repeats; a fresh ${name} then ends the hold once`, () => {
+    const page = headedWriter();
+    try {
+      assert.equal(page.holdHeading(name, 0, 5, 3), 1);
+      assert.deepEqual([page.name(), page.element().textContent, page.reports, [...collabState(page.h.a).ingress.holds], page.a.executed.length],
+        ["Scene", "", [], ["buffer"], 0]);
+      assert.equal(page.typeHeading(0, 0, "", type), false);
+      endedOnce(page);
+      assert.equal(page.a.executed.length, 0);
+      copies(page, ["Scene"]);
+    } finally { page.close(); }
+  });
+}
+
 test("rule 4: someone else removing a heading while it is held empty lands once the hold ends, and the hold ends as told", () => {
   const page = emptied();
   registerSharedRemovalHandlers(page.h.b);
