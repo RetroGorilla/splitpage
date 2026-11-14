@@ -349,8 +349,56 @@
     {
       "label": "leaving clears the author only after the owner swap",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  ports.bindings.leave();\n  now.end();\n  try {\n    adoptReplacement(ports.migrate(raw), ports.standalone);\n  } finally {\n",
-      "replace": "  ports.bindings.leave();\n  try {\n    adoptReplacement(ports.migrate(raw), ports.standalone);\n  } finally {\n    now.end();\n"
+      "find": "  now.live(false);\n  try {\n    adoptReplacement(landed, ports.standalone);\n",
+      "replace": "  try {\n    adoptReplacement(landed, ports.standalone);\n    now.live(false);\n"
+    },
+    {
+      "label": "entry unwinding leaves the bridge shared",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (sharedSession()) attempt(errors, () => { adoptReplacement(ports.migrate(entering.kept), ports.standalone); });\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding keeps the undo route",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  entering.stopRoute?.();\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding leaves the shared bindings on",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (entering.bound) attempt(errors, () => { ports.bindings.leave(); });\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding forgets the merge base",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  attempt(errors, () => { holdMergeBase(entering.base); });\n",
+      "replace": ""
+    },
+    {
+      "label": "failed leaving leaves the bindings off",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  attempt(errors, () => { ports.bindings.enter(now.parts); });\n",
+      "replace": ""
+    },
+    {
+      "label": "leaving lands a copy taken before the bindings restarted",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    const current = currentDocument();\n    landed = ports.migrate",
+      "replace": "    const current = null;\n    landed = ports.migrate"
+    },
+    {
+      "label": "the undo route arrives only after the shared owner is seen",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    entering.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    adoptShared(owner => {\n      made.session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      return made.session;\n    }, createSessionCapabilities(\"shared\", ports.common));\n",
+      "replace": "    adoptShared(owner => {\n      made.session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      return made.session;\n    }, createSessionCapabilities(\"shared\", ports.common));\n    entering.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
+    },
+    {
+      "label": "the standalone undo reset runs after the bindings",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    undoOwner().adopt(null);\n    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n",
+      "replace": "    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n    undoOwner().adopt(null);\n"
     },
     {
       "label": "Ctrl+Z in a shared Writer ignores the returned selection",

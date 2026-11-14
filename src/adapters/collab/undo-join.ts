@@ -30,6 +30,19 @@ export function isSharedJoinRetired(handle: SharedDocumentHandle, join: string, 
   return retired.get(join) === true || retired.get(group) === true;
 }
 
+export function readSharedJoinedBeats(handle: SharedDocumentHandle, beat: string): string[] {
+  const linked = new Map<string, Set<string>>(), link = (a: string, b: string) => {
+    for (const [from, to] of [[a, b], [b, a]] as const) { const set = linked.get(from) ?? new Set<string>(); set.add(to); linked.set(from, set); }
+  };
+  for (const from of collabState(handle).roots.beats.keys()) {
+    for (const join of storedJoins(handle, from)) if (!isSharedJoinRetired(handle, join.id, sharedJoinRetirementGroup(from, join))) link(from, join.into);
+  }
+  const seen = new Set<string>([beat]), queue = [beat];
+  while (queue.length) for (const next of linked.get(queue.shift() as string) ?? []) if (!seen.has(next)) { seen.add(next); queue.push(next); }
+  seen.delete(beat);
+  return [...seen].sort();
+}
+
 function liveJoins(handle: SharedDocumentHandle, from: string, into: string): StoredJoin[] {
   return storedJoins(handle, from).filter(item => item.into === into && !isSharedJoinRetired(handle, item.id, sharedJoinRetirementGroup(from, item)));
 }
