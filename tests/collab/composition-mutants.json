@@ -1,7 +1,9 @@
 {
   "tests": [
     "tests/adapters/collab/operation-families.test.ts",
-    "tests/bootstrap/shared-author.test.ts"
+    "tests/bootstrap/shared-author.test.ts",
+    "tests/collab/undo-seam.test.ts",
+    "tests/features/writer/buffer-undo.test.ts"
   ],
   "mutants": [
     {
@@ -261,6 +263,36 @@
       "tests": [
         "tests/application/commands/flow-shared.test.ts"
       ]
+    },
+    {
+      "label": "the replica drops the command's undo record",
+      "file": "src/adapters/collab/replica.ts",
+      "find": "          kept = done.result.ok ? done.record : null;",
+      "replace": "          kept = null;"
+    },
+    {
+      "label": "the replica hands one record to the undo owner twice",
+      "file": "src/adapters/collab/replica.ts",
+      "find": "      return kept;\n    });\n",
+      "replace": "      Object.assign(failed, { kept: kept });\n      return kept;\n    });\n    undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n"
+    },
+    {
+      "label": "undo skips the session's admission",
+      "file": "src/application/editing/undo/shared-undo-actions.ts",
+      "find": "    const refused = session.admit();",
+      "replace": "    const refused = null as ReturnType<typeof session.admit>;"
+    },
+    {
+      "label": "a callback failing after the commit loses the command's record",
+      "file": "src/adapters/collab/replica.ts",
+      "find": "      } catch (error) { failed.thrown = true; failed.error = error; }",
+      "replace": "      } catch (error) { failed.thrown = true; failed.error = error; kept = null; }"
+    },
+    {
+      "label": "the shared undo owner swallows a callback's failure during undo",
+      "file": "src/bootstrap/wiring/ports/shared-undo.ts",
+      "find": "        report(error);\n",
+      "replace": ""
     }
   ]
 }

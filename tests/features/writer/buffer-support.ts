@@ -13,6 +13,7 @@ import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import type { BufferedTextCommit, BufferedTextEdit } from "../../../src/application/editing/ports.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 
 export function keyOf(type: string, insert: string): string | null {
   if (type === "insertText" && Array.from(insert).length === 1) return insert;
@@ -34,8 +35,9 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     key?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
     author?: (serial: number) => string;
     fields?: Record<string, unknown>;
+    undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform">;
   } = {}) {
-  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a));
+  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a, options.undo?.(h)));
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
