@@ -416,6 +416,27 @@ The undo rows have one key, so p95 equals p50. The other cases (short and long s
 
 No case is slower than its spread. For every row, the head p50 sits inside the range that the base and head runs cover together, and every head p50 is well inside its limit (the closest is long undo, 41.4 ms against 70). Several cases moved far more than that: short undo +32.1%, long undo +56.2%, long delete every scene +28.7%, long stamp +22.4%, and the long exports +49% to +56%. Their spreads are wide. Long undo runs span 26.2 to 51.2 ms in base and 26.9 to 54 ms in head, and the long export runs overlap. Five rounds on this machine can't separate those moves from noise, so none is called a slowdown. The two undo cases and the long exports are the watch items for the next batch. The open-tag spaces cases doubled their `Range.getClientRects` calls in head (40 to 80 per run). That is a call count, not a latency, and no latency case in that group left its spread.
 
+## Collaboration Stage 2, 0add8ba2 to a6d8b4a0
+
+Recorded 2026-11-13 on the Windows PC by `node tools/perf-ab.mjs 0add8ba2 a6d8b4a0 --only short,long --rounds 5`, with smoke.lock and perf.lock held by this run. Limits are the ones the 2026-11-08 batch used. The range brings in collaboration Stage 2: emitted operation lists in `cell-text.ts`, `flow.ts` and `operations.ts`, the painted read on the typing path in `paint-base.ts`, the save-path checks from #1483, Writer dispatch from #1484, and the buffered-field bindings for cells, scene headings, the rename form and the title, which stay inactive outside a shared session.
+
+### Input latency, median of 5 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 3.1 | 3 | 14.3 | 15.7 | 8 |
+| long typing | 3.3 | 3.3 | 13.9 | 16.9 | 8 |
+| short new scene | 23.3 | 21.4 | 32.4 | 34.2 | 65 |
+| long new scene | 33.4 | 34.4 | 35.4 | 37.4 | 65 |
+| short undo the delete | 13.3 | 13.3 | 13.3 | 13.3 | 45 |
+| long undo the delete | 35.7 | 31.3 | 35.7 | 31.3 | 70 |
+
+The undo rows have one key, so p95 equals p50. The other cases (short and long split open tag spaces and name, short and long writer open tag spaces and name, short and long delete every scene, long stamp a scene, long hide shot scenes, long display preference, and the six exports) moved between -43.4% and +60.5% at p50 on base values of 0.5 to 19 ms. The largest rise is long writer open tag spaces, 4.3 to 6.9 ms (+60.5%); the largest fall is short split open tag name, 5.3 to 3 ms (-43.4%). Limits apply to the p50.
+
+### Reading it
+
+No case is slower than its spread. For every row, the head p50 sits inside the range that the base and head runs cover together, and every head p50 is well inside its limit (the closest is long new scene, 34.4 ms against 65). Typing p50 is flat at both fixtures; long typing p95 rose from 13.9 to 16.9 ms (+21.6%), with base p95 runs of 13 to 17 ms and head runs of 13.6 to 17.4 ms. Long undo, a watch item from the previous batch, fell 12.3% (35.7 to 31.3 ms) and short undo is unchanged. The other moves above 20% are long writer open tag spaces (+60.5%, base runs 3.1 to 9.3 ms, head 5.2 to 9.3 ms), short split open tag spaces (+29.4%, 8.5 to 11 ms) and the short exports, all under 1.5 ms. `Range.getClientRects` calls per run are the same in base and head.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
