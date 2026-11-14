@@ -612,8 +612,7 @@ for (const literal of [...cases, { name: "visual split", make: visualSplit }]) t
   for (const shared of [undefined, absent ?? undefined, nobody]) {
     const command = literal.make(stamps, shared), plan = command.plan(before, capabilities());
     assert.ok(plan && !("refused" in plan));
-    const { apply: _apply, ...details } = plan, { apply: _baselineApply, ...expectedDetails } = baseline;
-    assert.deepEqual(details, expectedDetails);
+    assert.deepEqual({ ...plan, apply: null }, { ...baseline, apply: null });
     assert.deepEqual(observe(command), expected);
   }
 });
