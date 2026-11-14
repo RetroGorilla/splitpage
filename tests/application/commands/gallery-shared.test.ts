@@ -12,6 +12,8 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { sharedRankBetween } from "../../../src/core/collab/gallery-operations.ts";
@@ -176,7 +178,7 @@ function removal(beat: string) {
     boundaries: [beat], components: [], gallery: [], at: IDS.indexOf(beat as typeof IDS[number]) };
 }
 function standalone(before: Fields, literal: GalleryLiteral): Fields {
-  const live = JSON.parse(JSON.stringify(before)) as ValidatedDocument;
+  const live: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(before) };
   const plan = galleryCommand(literal.beat, literal.edit, alice).plan(live, createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }));
   assert.ok(plan && !("refused" in plan) && plan.shared === undefined);
   plan.apply(live);
@@ -343,13 +345,13 @@ test("shared gallery command writes no operation for an edit that changes nothin
 });
 
 test("a gallery command without shared ports, or with no author, plans as before and allocates no operation list", () => {
-  const before = project(setup().a).document;
+  const before: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(project(setup().a).document) };
   const capability = createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
   const asked: string[] = [];
   const quiet = { author: () => { asked.push("author"); return null; }, pictures: () => { asked.push("pictures"); return []; },
     beatStamp: () => { asked.push("stamp"); return operation(stamp("R1")) as SharedOperation; } };
-  for (const plan of [galleryCommand("R1", r => removeGallerySlot(r, 0), alice).plan(before as unknown as ValidatedDocument, capability),
-    galleryCommand("R1", r => removeGallerySlot(r, 0), alice, quiet).plan(before as unknown as ValidatedDocument, capability)]) {
+  for (const plan of [galleryCommand("R1", r => removeGallerySlot(r, 0), alice).plan(before, capability),
+    galleryCommand("R1", r => removeGallerySlot(r, 0), alice, quiet).plan(before, capability)]) {
     assert.ok(plan && !("refused" in plan));
     assert.equal(plan.shared, undefined);
     assert.deepEqual(plan.changes.cells.map(cell => cell.field), ["imageName", "imageRef", "moreImages", "updatedAt", "updatedBy"]);
