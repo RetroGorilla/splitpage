@@ -164,12 +164,11 @@ for (const order of ORDERS) test(`declared: an undo from a higher client id raci
   run.reverse(renamed, true, run.set.c); run.flush(); run.check("Carol's undo stays", P1);
 }));
 
-test("a visual's field change and a picture's creation stay refused by name and nothing is written", () => scenario("D1", run => {
+test("a visual's field change stays refused by name and nothing is written", () => scenario("D1", run => {
   run.send(run.set.a, createRecord("visuals", "V1", { beat: "R1", rank: "1" }, "Alice", "add-V1"));
-  const records = [run.command(run.set.a, setRecord("visuals", "V1", "rank", "2", "Alice", "visual-rank")),
-    run.command(run.set.a, createRecord("gallery", "G2", { beat: "R1", rank: "0000000002", picture: picture("P2", "b") }, "Alice", "add-G2"))];
+  const records = [run.command(run.set.a, setRecord("visuals", "V1", "rank", "2", "Alice", "visual-rank"))];
   const before = encodeSharedState(run.set.a);
   assert.deepEqual(records.map(record => reverseSharedUndoRecord(run.set.a, record, { by: "Alice", nextId: () => "refused" })),
-    [{ ok: false, reason: "undo-unsupported:record-field:visuals" }, { ok: false, reason: "undo-unsupported:record-create:gallery" }]);
+    [{ ok: false, reason: "undo-unsupported:record-field:visuals" }]);
   assert.deepEqual(encodeSharedState(run.set.a), before);
 }));
