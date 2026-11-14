@@ -150,15 +150,32 @@ export interface OwnerSwap {
   readonly restore: () => void;
 }
 
-let commandHold: string | null = null;
-
-function heldOutcome(): CommandOutcome | null {
-  return commandHold ? { kind: "rejected", reason: commandHold } : null;
+interface SessionCommandHold {
+  readonly reason: string;
+  readonly scope: "all" | "entries";
+  readonly outer: SessionCommandHold | null;
 }
 
-export function holdSessionCommands(reason: string): () => void {
+let commandHold: SessionCommandHold | null = null;
+
+function heldCommandOutcome(hold: SessionCommandHold): CommandOutcome | null {
+  for (let current: SessionCommandHold | null = hold; current; current = current.outer) {
+    if (current.scope === "all") return { kind: "rejected", reason: current.reason };
+  }
+  return null;
+}
+
+function heldOutcome(): CommandOutcome | null {
+  return commandHold ? heldCommandOutcome(commandHold) : null;
+}
+
+export function sessionEntryRefusal(): string | null {
+  return commandHold ? commandHold.reason : null;
+}
+
+export function holdSessionCommands(reason: string, scope: "all" | "entries" = "all"): () => void {
   const outer = commandHold;
-  commandHold = reason;
+  commandHold = { reason, scope, outer };
   let open = true;
   return function () {
     if (!open) return;

@@ -37,11 +37,11 @@ let ports: MergeReviewPorts | null = null;
 let mergeCandidate: MergeCandidate | null = null;
 let mergeProbeToken = 0;
 
-function mergeAllowed() { return (ports as MergeReviewPorts).capability.merge().allowed; }
+function mergeAllowed() { return (ports as MergeReviewPorts).entryCapability.merge().allowed; }
 
 function mergePermitted(): boolean {
   const current = ports as MergeReviewPorts;
-  const can = current.capability.merge();
+  const can = current.entryCapability.merge();
   if (can.allowed) return true;
   current.notices.show(can.reason, "warn");
   return false;
@@ -294,7 +294,7 @@ function openMergeReview() {
 function cancelMergeReview() {
   (document.getElementById("merge-review-modal") as HTMLElement).hidden = true;
   (document.getElementById("merge-review-list") as HTMLElement).innerHTML = "";
-  if (mergeCandidate && mergeAllowed()) (document.getElementById("file-conflict-modal") as HTMLElement).hidden = false;
+  if (mergeCandidate && (ports as MergeReviewPorts).capability.merge().allowed) (document.getElementById("file-conflict-modal") as HTMLElement).hidden = false;
 }
 
 function confirmFileMerge() {

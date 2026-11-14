@@ -18,6 +18,7 @@ test("shared draft resume follows recovery restarts without capturing the owner"
   const resume = portDraftResume;
   const start = () => startRecovery({
     capability: MAY_EDIT,
+    entryCapability: MAY_EDIT,
     desktop: () => null, sessionStorage: () => null, localStorage: () => null,
     internImage: () => {}, merge: () => { throw new Error("Unexpected merge"); },
     drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }

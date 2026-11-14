@@ -10,9 +10,10 @@ import { sharedUndoActions } from "../../application/editing/undo/shared-undo-ac
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
 import { createSharedSession } from "../../application/session/shared-session.ts";
+import type { DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sharedSession } from "./session-owner.ts";
+import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
 import type { OwnerSwap } from "./session-owner.ts";
 import { routeSharedUndo, undoOwner } from "./undo.ts";
 import { sharedAuthorPort } from "./ports/shared-author.ts";
@@ -46,6 +47,7 @@ export interface SharedSwitchPorts {
   readonly report: ReportPort;
   readonly timers: TimerPort;
   readonly now: () => number;
+  readonly opening: Pick<DocumentOpeningActivity, "openingPending">;
 }
 
 export type SharedSwitchOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };
@@ -58,6 +60,7 @@ export const SHARED_LEAVE_FAILED = "leave-failed";
 export const SHARED_SWITCHING = "session-switching";
 
 interface Running {
+  readonly ports: SharedSwitchPorts;
   readonly parts: SharedSessionParts;
   readonly replica: SharedReplica;
   readonly kept: Record<string, unknown>;
@@ -95,7 +98,7 @@ function destroy(faults: Faults, handle: SharedDocumentHandle): void {
 function refusedNow(ports: SharedSwitchPorts, faults: Faults): string | null {
   if (running || sharedSession()) return SHARED_ALREADY;
   let reason: string | null = null;
-  return faults.attempt(() => { reason = ports.refusal(); }) ? reason : SHARED_ENTER_FAILED;
+  return faults.attempt(() => { reason = ports.opening.openingPending() ? "opening-pending" : ports.refusal(); }) ? reason : SHARED_ENTER_FAILED;
 }
 
 function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): SharedSwitchOutcome {
@@ -104,6 +107,13 @@ function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): Share
 }
 
 export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {
+  const holdReason = sessionEntryRefusal();
+  if (holdReason) return { ok: false, reason: holdReason };
+  const release = holdSessionCommands(SHARED_SWITCHING, "entries");
+  try { return await enterAvailableSession(ports); } finally { release(); }
+}
+
+async function enterAvailableSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {
   const faults = new Faults();
   const first = refusedNow(ports, faults);
   if (first) return failed(ports, faults, first);
@@ -156,7 +166,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     }, createSessionCapabilities("shared", ports.common)));
     if (!made.session) throw new Error("The shared session was not built");
     const parts: SharedSessionParts = { handle, session: made.session, undo, author };
-    running = { parts, replica, kept, live: value => { on = value; }, stopRoute: made.stopRoute, end: () => { alive = false; } };
+    running = { ports, parts, replica, kept, live: value => { on = value; }, stopRoute: made.stopRoute, end: () => { alive = false; } };
     undoOwner().adopt(null);
     holdMergeBase(null);
     made.bound = true;
@@ -194,9 +204,21 @@ function sameDocument(landed: ValidatedDocument): boolean {
   return current !== null && JSON.stringify(current) === JSON.stringify(landed);
 }
 
+export function leaveRunningSharedSession(): SharedSwitchOutcome {
+  return running ? leaveSharedSession(running.ports) : { ok: false, reason: SHARED_NOT_RUNNING };
+}
+
 export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
+  const holdReason = sessionEntryRefusal();
+  if (holdReason) return { ok: false, reason: holdReason };
+  const release = holdSessionCommands(SHARED_SWITCHING, "entries");
+  try { return leaveAvailableSession(ports); } finally { release(); }
+}
+
+function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
+  ports = now.ports;
   const faults = new Faults();
   let holding: string | null = null;
   if (!faults.attempt(() => { holding = ports.bindings.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);

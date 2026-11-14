@@ -5,6 +5,8 @@ import { stopApp } from "../../src/bootstrap/app.ts";
 import { enterSharedSession, leaveSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { currentCapabilities } from "../../src/bootstrap/wiring/session-owner.ts";
+import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
+import { localFilesOwner } from "../../src/bootstrap/wiring/local-files.ts";
 import { appActions } from "../../src/bootstrap/wiring/ports/actions.ts";
 import { recoveryPanelBinding } from "../../src/bootstrap/wiring/recovery-panel.ts";
 import { stopRowsRenderFeature, mountRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
@@ -12,13 +14,16 @@ import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { fromHtml } from "../../src/bootstrap/richtext.ts";
 import { fakeClock } from "../application/session-fakes.ts";
 
-before(async () => { await bootApp(JSON.stringify({ title: "Recovery lifecycle", rows: [{ id: "R1", audioText: "Words" }] })); });
+before(async () => {
+  await bootApp(JSON.stringify({ title: "Recovery lifecycle", rows: [{ id: "R1", audioText: "Words" }] }));
+  await localFilesOwner().tryResumeLastProject();
+});
 after(() => { stopApp(); closeApp(); });
 
 test("C9 the real switch binding registers and releases recovery on normal leave and rolled-back enter", async () => {
   let serial = 0;
   const standalone = currentCapabilities(), reported: unknown[] = [];
-  const ports: SharedSwitchPorts = { refusal: () => null, settle: () => {}, detach: () => {},
+  const ports: SharedSwitchPorts = { opening: openingStatus, refusal: () => null, settle: () => {}, detach: () => {},
     bindings: { ...recoveryPanelBinding, settle: () => null, leave: () => {
       recoveryPanelBinding.leave();
       assert.equal(appActions.has("recovery"), false);
