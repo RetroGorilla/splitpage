@@ -19,12 +19,13 @@ import { registerSharedOperationFamilies } from "../../../src/adapters/collab/op
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { fakeNotices } from "../fakes.ts";
 
 function mounted(handle: SharedDocumentHandle, session: ReturnType<typeof sharedHarness>["session"], host: HTMLElement, writer: string,
   place: EmptyScriptPorts["place"], author = sharedAuthorPort({ handle: () => handle, name: () => writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara" })) {
-  const notices: string[] = [];
+  const notices: string[] = [], display = fakeNotices();
   const control = mountSharedEmptyScript({ handle, session, author, writer: () => writer, stamps: bufferStamps(writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara") },
-    { host, edits: { allowed: () => true }, notices: { show: (message, kind) => { assert.equal(kind, "warn"); notices.push(message); } }, report: outcome => { assert.notEqual(outcome.kind, "rejected"); notices.push(outcome.kind); }, place });
+    { host, edits: { allowed: () => true }, notices: { show: (message, kind) => { assert.equal(kind, "warn"); notices.push(message); return display.notices.show(message, kind); } }, report: outcome => { assert.notEqual(outcome.kind, "rejected"); notices.push(outcome.kind); }, place });
   const area = host.previousElementSibling; assert.ok(area instanceof HTMLElement);
   const input = area.querySelector("textarea"); assert.ok(input);
   return { control, input, area, notices };
@@ -157,8 +158,8 @@ for (const refusal of ["empty-script-no-author", "empty-script-identity-unavaila
 }
 
 test("rule 91: a session refusal shows once through the shared notice and retains the draft", () => {
-  const h = removedEmptyScript("last beat", "D1"), shown: unknown[] = [], refused: string[] = [];
-  const notice = sharedCommandRefusalNotice({ show: (message, kind) => { shown.push([message, kind]); } });
+  const h = removedEmptyScript("last beat", "D1"), display = fakeNotices(), refused: string[] = [];
+  const notice = sharedCommandRefusalNotice(display.notices);
   const a = sharedHarness(adapterReplica(h.a), { refused: reason => { refused.push(reason); notice(reason); } });
   a.deny("viewing-only");
   document.body.innerHTML = "<div id=host></div>";
@@ -169,7 +170,7 @@ test("rule 91: a session refusal shows once through the shared notice and retain
     type(page.input, "kept");
     assert.equal(page.input.value, "kept"); assert.equal(page.area.hidden, false);
     assert.deepEqual(refused, ["viewing-only"]);
-    assert.deepEqual(shown, [["This is not available in a shared session yet.", "warn"]]);
+    assert.deepEqual(display.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
     assert.deepEqual(page.notices, []); assert.deepEqual(a.executed, []);
     assert.deepEqual(encodeSharedState(h.a), before); agrees(h, "last beat", [], "D1");
   } finally { page.input.value = ""; page.control.dispose(); a.session.dispose(); h.close(); }
