@@ -11,7 +11,7 @@ import { operationExamples } from "./operation-examples.ts";
 import { beatPos, caretAt, moveBeats, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
 import type { FlowPorts } from "../../../src/core/flow/flow.ts";
 
-test("Stage 0: exported command builders cannot escape the literal 50-builder operation decision table", () => {
+test("Stage 0: exported command builders cannot escape the literal 51-builder operation decision table", () => {
   const directory = new URL("../../../src/application/commands/", import.meta.url);
   const files = readdirSync(directory).filter(file => file.endsWith(".ts")).map(file => fileURLToPath(new URL(file, directory)));
   const program = ts.createProgram(files, { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext, allowJs: true, types: [] });
@@ -32,9 +32,9 @@ test("Stage 0: exported command builders cannot escape the literal 50-builder op
       if (builds) builders.push(exported.name);
     }
   }
-  assert.equal(builders.length, 50);
+  assert.equal(builders.length, 51);
   assert.deepEqual(builders.sort(), builderOperationCoverage.map(row => row[0]).sort());
-  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 10, 14]);
+  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 10, 15]);
 });
 
 test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one lost-intent classes", () => {
@@ -67,9 +67,9 @@ test("coverage decisions name only defined operations, the two refusals or the p
     ["titleCommand", "renameSceneCommand", "cellTextCommand"]);
 });
 
-test("the 24 text/structure builders and 24 flow rows record their audited branches", () => {
+test("the 25 text/structure builders and 24 flow rows record their audited branches", () => {
   const builders = builderOperationCoverage.filter(row => row[1] === "text-mark" || row[1] === "structure");
-  assert.equal(builders.length, 24);
+  assert.equal(builders.length, 25);
   for (const row of builders) {
     assert.equal(row.length, 4, row[0]);
     if (row.length === 4) assert.ok(row[3].length > 0 && row[3].every(branch => branch[0].length > 0), row[0]);
@@ -94,7 +94,7 @@ test("each audited row declares exactly the union of its literal branch requirem
     assert.deepEqual(declared.sort(), [...required].sort(), row[0]);
     rows++;
   }
-  assert.equal(rows, 48);
+  assert.equal(rows, 49);
   assert.equal(flowOperationCoverage.find(row => row[0] === "typeWithMarks")?.[2], "text-insert");
   assert.equal(flowOperationCoverage.find(row => row[0] === "replaceAll")?.[2], "text-insert,text-delete,heading-remove,scalar");
   context.diagnostic(`${rows} rows equal the union of ${branches} literal branch requirements`);
