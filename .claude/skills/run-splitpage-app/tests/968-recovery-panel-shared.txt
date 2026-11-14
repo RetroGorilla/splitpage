@@ -25,6 +25,7 @@ expect document.querySelector('#shared-recovery-panel [data-recovery-kind="remov
 expect getComputedStyle(document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] pre')).userSelect !== 'none'
 eval window.getSelection().selectAllChildren(document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] pre'));true
 expect window.getSelection().toString().includes('Removed words')
+wait (function(){var b=document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:first-child');var r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()
 click #shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:first-child
 eval S.peer.deliver();true
 wait S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r2'
@@ -33,6 +34,7 @@ expect document.querySelector('#shared-recovery-panel [data-recovery-kind="remov
 expect document.querySelectorAll('#rows .row').length === 2
 eval S.peer.remove('r2');S.peer.deliver();true
 wait document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]') !== null
+wait (function(){var b=document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:last-child');var r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()
 click #shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:last-child
 eval S.peer.deliver();true
 wait document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]') === null
