@@ -9,13 +9,16 @@ import { createCellPage } from "../../features/editing/cell-page.ts";
 import { noteFieldPainted, onBeforePaint, onPainted, paintedFromRow, render } from "../../features/rows/render.ts";
 import { fromHtml, storedHtmlFromDom } from "../richtext.ts";
 import { readBufferedFieldKey } from "../../core/collab/buffer.ts";
-import { paintGuard } from "./editor-owners.ts";
+import { paintGuard, editorSelection } from "./editor-owners.ts";
 import { documentReader } from "./ports/document.ts";
+import { connectSharedCellSpaceForm } from "./ports/shared-cell-space.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 
-export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): CellBuffer {
-  return mountCellBuffer({
+export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): CellBuffer {
+  let mounted: CellBuffer | null = null;
+  const disconnect = connectSharedCellSpaceForm(cell => mounted?.spaceForm(cell) ?? null);
+  try { mounted = mountCellBuffer({
     root: document.getElementById("rows") as HTMLElement,
     ports: {
       field: surface => createBufferedField(shared.bufferedText, surface),
@@ -30,7 +33,15 @@ export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTe
       repaintRows: render,
       onPainted,
       beforePaint: onBeforePaint,
-      readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null
+      readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null,
+      caret: { selection: editorSelection(), afterPaint: task => paintGuard().afterThisPaint(task),
+        text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field) }
     }
-  });
+  }); } catch (error) { disconnect(); throw error; }
+  const buffer = mounted;
+  return { binding: buffer.binding, spaceForm: buffer.spaceForm, dispose: () => {
+    if (!buffer.dispose()) return false;
+    disconnect(); mounted = null;
+    return true;
+  } };
 }

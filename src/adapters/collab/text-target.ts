@@ -40,7 +40,7 @@ export function readSharedTextTarget(raw: unknown): SharedTextAddress | null {
   return readMarkChange({ kind: "mark", id: "target", by: "", target: raw, observed: [], mark: { kind: "b", value: true } })?.target ?? null;
 }
 
-function nativeStructureView(handle: SharedDocumentHandle) {
+export function nativeStructureView(handle: SharedDocumentHandle) {
   const state = collabState(handle);
   const index = observeSharedStructureIndex(handle);
   const get = (path: readonly string[]): unknown => {

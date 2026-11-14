@@ -19,6 +19,7 @@ import type { EditorFocusPorts } from "../../features/editing/focus.ts";
 import { mountEditorToolbar } from "../../features/editing/toolbar.ts";
 import type { EditorToolbarPorts } from "../../features/editing/toolbar.ts";
 import { mountClipboardRoutes } from "../../features/clipboard/routes.ts";
+import { sharedCellSpaceForm } from "./ports/shared-cell-space.ts";
 import { mountMediaRoutes } from "../../features/media/routes.ts";
 import type { MediaRoutePorts } from "../../features/media/routes.ts";
 import { mountMergeBanner } from "../../features/merge/banner.ts";
@@ -463,6 +464,7 @@ function openLinkInNewWindow(href: string): void {
 }
 
 const rowRoutePorts: RowRoutePorts = {
+  cellDragStart: event => clipboardRoutes.owner()?.dragStart(event) ?? false,
   mac: IS_MAC,
   scriptCell: isScriptCell,
   openLink: openLinkInNewWindow,
@@ -716,6 +718,7 @@ const clipboardRoutes = owned<ReturnType<typeof mountClipboardRoutes>>();
 
 const clipboardRoutePorts = {
   scriptCell: isScriptCell,
+  sharedCell: (cell: Element) => sharedCellSpaceForm(cell) !== null,
   copy: copyFromCell,
   afterCut: afterScriptCellChange,
   pasteBeats: pasteBeatsAt,
