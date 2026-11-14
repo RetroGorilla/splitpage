@@ -14,6 +14,8 @@ Every entry kind has readable, selectable text. Removed groups include narration
 | Removed heading | Existing `restore`, naming its removal ids | Existing `discard`, naming the removals it saw |
 | Deleted person | Existing person restore builder; same original id, existing caseless namesake rule | Existing `discard` |
 | Deleted record (a removal an edit raced) | `record-revive`, which brings it back with the edit; for a person, refused while another person has the name | Existing `discard` |
+
+A deleted record's text lists every value it keeps, one per line: its name or words, then "Description", "Notes", "Location", "Owner", "Audio cue", "Reshoot", "Props", "Video links", "Caption", "Status" and "Assigned to" where set, and last "Changed after it was deleted:" with the changed fields. A removal with no recorded author shows "No author recorded".
 | Crossing tag, deleted tag | None in the model | Existing `discard` when the first character names it |
 | Gallery overflow | None in the model | Existing `discard` |
 | Unprojectable fragment | None in the model | Existing `discard` when the first character names it |

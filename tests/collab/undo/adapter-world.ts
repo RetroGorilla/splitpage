@@ -186,9 +186,15 @@ export class AdapterReplica {
       : { kind: "record-set", ...this.author(), target, field: main, value };
     let reason: string | null = null;
     this.world.now += 2000;
+    const statused = collection === "tags" || collection === "shots", status = () => statused ? readSharedStatus(this.handle, { scope, record: ref(key) }) : undefined, before = status();
     this.undo.perform(() => {
       const execution = executeSharedCommand(this.handle, [operation(made)], { label: "record", selection: null, typing: null });
       if (!execution.result.ok) reason = execution.result.reason;
+      // why: an undo record holds a record as it shows, its status included, whichever way the undo later uses it.
+      for (const part of execution.record?.parts ?? []) if (part.kind === "record-create" || part.kind === "record-delete") {
+        const shows = part.kind === "record-create" ? status() : before;
+        assert.equal(part.fields.status, shows, `a recorded ${part.kind} of ${collection} ${key} does not hold the status the record shows`);
+      }
       return execution.record;
     });
     return reason;

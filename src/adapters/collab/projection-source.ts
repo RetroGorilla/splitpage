@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import type { SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
+import type { SharedContentRef, SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import { sharedJoinGlueRegisterField, isSharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { isStableSharedIdentity } from "./identity.ts";
@@ -133,18 +133,22 @@ export class SharedProjectionSource {
       () => this.keys(collection).flatMap(key => this.deletedRecord(collection, key))));
   }
 
+  // why: every way a record or a list entry stops being shown leaves a mark on its own map, so each raced edit is in
+  // exactly one entry: an entry's in the entry's, also inside a removed record, and the rest in the record's.
   private deletedRecord(collection: SharedDeletedRecordEntry["collection"], key: string): readonly SharedDeletedRecordEntry[] {
-    const raw: unknown = this.inputRoots[collection].get(key), deletion = readStoredRecordDeletion(raw);
+    const raw: unknown = this.inputRoots[collection].get(key), deletion = readStoredRecordDeletion(raw), scope = isSharedStatusScope(collection);
     const entry = (path: readonly string[], mark: SharedRecordDeletion, fields: Record<string, unknown> | null, field: "props" | "links" | null, nested: string | null) => {
       const now = readStoredRecordObservation(this.inputRoots, collection, path), changed = sharedRecordChanges(mark.seen, now);
-      return changed.length && fields ? [{ kind: "deleted-record" as const, collection, record: key, field, entry: nested, fields, by: mark.by, changed, state: sharedRecordState(mark, now) }] : [];
+      const shown = fields && scope && field === null ? { ...fields, status: this.status({ scope, record: key as SharedContentRef } as SharedStatusEvent["target"]) } : fields;
+      return changed.length && shown ? [{ kind: "deleted-record" as const, collection, record: key, field, entry: nested, fields: shown, by: mark.by, changed, state: sharedRecordState(mark, now) }] : [];
     };
-    if (deletion) return entry([collection, key], deletion, readSharedDeletedRecordFields(collection, key, raw), null, null);
+    const parent = deletion ? readSharedDeletedRecordFields(collection, key, raw) : readStoredSharedRecord(collection, key, raw);
+    const own = deletion ? entry([collection, key], deletion, parent, null, null) : [];
     const field = collection === "shots" ? "props" as const : collection === "gallery" ? "links" as const : null, list: unknown = field && raw instanceof Y.Map ? raw.get(field) : null;
-    if (!field || !(list instanceof Y.Map)) return [];
+    if (!field || !(list instanceof Y.Map)) return own;
     const marked = [...list.keys()].sort().flatMap(item => { const mark = readStoredRecordDeletion(list.get(item)); return mark ? [[item, mark] as const] : []; });
-    if (!marked.length || !readStoredSharedRecord(collection, key, raw)) return [];
-    return marked.flatMap(([item, mark]) => entry([collection, key, field, item], mark, readSharedDeletedEntryFields(field, item, list.get(item)), field, item));
+    if (!marked.length || !parent) return own;
+    return [...own, ...marked.flatMap(([item, mark]) => entry([collection, key, field, item], mark, readSharedDeletedEntryFields(field, item, list.get(item)), field, item))];
   }
 
   deletedPeople(): readonly SharedDeletedPerson[] {

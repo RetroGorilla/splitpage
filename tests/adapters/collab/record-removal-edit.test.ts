@@ -242,3 +242,7 @@ for (const order of ORDERS) test(`a reorder made without seeing a removal is no 
     agree("reordered", order, w.handles, handle => entries(handle).length, 0);
   } finally { w.close(); }
 });
+
+for (const order of ORDERS) test(`the entry for a shot whose status was set without seeing its removal shows the status a restore will give: ${order}`, () => raced(KINDS[1] as Kind, order, w => {
+  agree("status shown", order, w.handles, handle => entries(handle).map(entry => [entry.changed, entry.fields.status]), [[["status"], "shot"]]);
+}));

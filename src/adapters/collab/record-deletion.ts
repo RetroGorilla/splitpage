@@ -29,9 +29,11 @@ function digest(text: string): string {
   return (4294967296 * (2097151 & b) + (a >>> 0)).toString(36);
 }
 
+// why: a list entry removed with its own mark holds its own raced edits, so the record around it does not count them.
 function tree(view: SharedDeletionView, path: readonly string[]): unknown {
   if (view.kind(path) !== "map") return sharedJson(view.get(path)) ?? null;
-  return Object.fromEntries([...view.keys(path)].sort().map(key => [key, tree(view, [...path, key])]));
+  return Object.fromEntries([...view.keys(path)].sort().filter(key => !readSharedRecordDeletion(view.get([...path, key, SHARED_RECORD_DELETION_FIELD])))
+    .map(key => [key, tree(view, [...path, key])]));
 }
 
 export function readSharedRecordDeletion(raw: unknown): SharedRecordDeletion | null {

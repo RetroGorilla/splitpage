@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import type { SharedRecordCollection, SharedStatusEvent } from "../../../src/core/collab/operations.ts";
 import { readSharedStatus } from "../../../src/adapters/collab/status.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
-import { encodeSharedState, observeSharedTransactions } from "../../../src/adapters/collab/document.ts";
+import { encodeSharedState, observeSharedTransactions, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import { executeSharedCommand, reverseSharedUndoRecord, SHARED_UNDO_RECORDS, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -119,6 +120,19 @@ test("a removal is undone by putting the record back with the fields it had; ano
     assert.equal(one(run.a, "comments", "C1"), null);
     run.queue.flush("D1");
     assert.equal(one(run.b, "comments", "C1"), null);
+  } finally { run.close(); }
+});
+
+test("a comment whose map a hand-made update deleted outright is brought back by the undo of its removal as its author's, not the undoer's", () => {
+  const run = recordReplicas();
+  try {
+    const alice = writer("Alice");
+    command(run.b, createRecord("comments", "C1", { createdAt: 0, text: "Look here", rowId: "R1", field: "audioText" }, "Bob"));
+    run.queue.flush("D1");
+    const removed = command(run.a, deleteRecord("comments", "C1"));
+    transactSharedDocument(run.a, "local-command", () => collabState(run.a).roots.comments.delete("C1"));
+    assert.equal(reversed(run.a, removed, alice).effective, true);
+    assert.deepEqual(one(run.a, "comments", "C1"), { id: "C1", rowId: "R1", field: "audioText", author: "Bob", createdAt: 0, text: "Look here" });
   } finally { run.close(); }
 });
 

@@ -40,8 +40,18 @@ export function recoveryPanelContent(entry: SharedRecoveryEntry, ports: Pick<Rec
     case "deleted-record": {
       const fields = entry.fields, picture = fields.picture && typeof fields.picture === "object" ? fields.picture as Record<string, unknown> : {};
       const label = entry.field === "props" ? "Deleted prop" : entry.field === "links" ? "Deleted video link" : RECORD_LABELS[entry.collection];
-      const text = [string(fields.name), plain(fields.text), string(fields.desc), string(fields.notes), string(fields.href), string(picture.name)].filter(Boolean);
-      return { label, by: "Deleted by " + entry.by, text: [...text, "Changed after it was deleted: " + entry.changed.join(", ")].join("\n") };
+      const person = (id: unknown) => string(doc?.people.find(item => item.id === id)?.name) || string(id);
+      const names = (list: unknown) => (Array.isArray(list) ? list : []).flatMap(item => {
+        const value = item && typeof item === "object" ? (item as { fields?: Record<string, unknown> }).fields : null;
+        return value ? [string(value.name) || string(value.href)] : [];
+      }).filter(Boolean).join(", ");
+      // why: each kept value is shown, so a person can weigh Restore against Discard by what they would bring back.
+      const values = [string(fields.name), string(fields.text), string(fields.href),
+        ["Description", string(fields.desc)], ["Notes", string(fields.notes)], ["Location", string(fields.location)], ["Owner", fields.owner ? person(fields.owner) : ""],
+        ["Audio cue", string(fields.audioRef)], ["Reshoot", fields.reshoot === true ? "yes" : ""], ["Props", names(fields.props)], ["Video links", names(fields.links)],
+        ["Caption", string(picture.name)], ["Status", string(fields.status)], ["Assigned to", fields.assignee ? person(fields.assignee) : ""]]
+        .flatMap(item => typeof item === "string" ? item ? [item] : [] : item[1] ? [item[0] + ": " + item[1]] : []);
+      return { label, by: entry.by ? "Deleted by " + entry.by : "", text: [...values, "Changed after it was deleted: " + entry.changed.join(", ")].join("\n") };
     }
   }
 }

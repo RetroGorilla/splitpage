@@ -146,6 +146,11 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
   if (sharedResolutionOperation(operation)) {
     if (operation.clear || !sharedResolutionEntryAccepted(operation.value)) return { ok: false, reason: "invalid-record-field" };
     writes.push(...sharedResolutionWrites(view.keys(path), key => view.get([...path, key]), view.writer, operation.value).map(({ key, ...write }) => ({ ...write, path: [...path, key] })));
+  } else if (operation.clear && isSharedRecordNestedField(collection, field)) {
+    // why: clearing a list takes each entry out with its own mark, so an edit made to one without seeing the clear is kept.
+    if (view.kind([...path, field]) === "map" && !nestedWrites(view, writes, [...path, field], field, [], operation, value[field] as readonly { readonly key: string }[] | undefined)) {
+      return { ok: false, reason: "invalid-record-field" };
+    }
   } else if (operation.clear) { if (view.keys(path).includes(field)) writes.push({ path: [...path, field], kind: "delete" }); }
   else if (isSharedRecordNestedField(collection, field)) {
     if (!nestedWrites(view, writes, [...path, field], field, operation.value, operation, value[field] as readonly { readonly key: string }[] | undefined)) return { ok: false, reason: "invalid-record-field" };
@@ -173,17 +178,19 @@ function prepareRevive(operation: SharedRecordRevive, view: SharedPreparationVie
   const { collection, record: key } = operation.target, path = [collection, key];
   if (![operation.id, operation.by, key, ...operation.entry === undefined ? [] : [operation.entry]].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
   if (collection === "visuals" || (operation.field === undefined) !== (operation.entry === undefined)) return { ok: false, reason: "invalid-revival" };
-  let mark: readonly string[];
+  let mark: readonly string[], parent: SharedPreparedWrite[] = [];
   if (operation.field !== undefined && operation.entry !== undefined) {
     if (!isSharedRecordNestedField(collection, operation.field)) return { ok: false, reason: "invalid-revival" };
-    if (!readPreparedSharedRecord(collection, key, view)) return { ok: false, reason: "missing-or-invalid-record" };
+    // why: an entry kept inside a removed record comes back with that record, so its edit can be shown again.
+    if (readPreparedDeletedRecord(collection, key, view)) parent = [{ path: [...path, SHARED_RECORD_DELETION_FIELD], kind: "delete" }];
+    else if (!readPreparedSharedRecord(collection, key, view)) return { ok: false, reason: "missing-or-invalid-record" };
     mark = [...path, operation.field, operation.entry];
   } else {
     if (!readPreparedDeletedRecord(collection, key, view)) return { ok: false, reason: readPreparedSharedRecord(collection, key, view) ? "record-not-deleted" : "missing-or-invalid-record" };
     mark = path;
   }
   if (!readPreparedRecordDeletion(view, mark)) return { ok: false, reason: "record-not-deleted" };
-  const writes: SharedPreparedWrite[] = [{ path: [...mark, SHARED_RECORD_DELETION_FIELD], kind: "delete" }];
+  const writes: SharedPreparedWrite[] = [...parent, { path: [...mark, SHARED_RECORD_DELETION_FIELD], kind: "delete" }];
   return readPreparedSharedRecord(collection, key, candidate(view, writes)) ? accepted(view, writes) : { ok: false, reason: "invalid-record-shape" };
 }
 
