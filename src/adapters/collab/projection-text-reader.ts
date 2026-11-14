@@ -3,7 +3,7 @@ import { chooseSharedProjectionPayload } from "../../core/collab/projection/text
 import type { SharedProjectionUnit } from "../../core/collab/projection/units.ts";
 import type { SharedInlineValue } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { readCollabMarkState } from "./mark-store.ts";
+import { readCollabMarkState } from "./mark-state.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedStoredMark } from "./stored-mark.ts";
 import { readProjectionInlineValue } from "./projection-reader.ts";

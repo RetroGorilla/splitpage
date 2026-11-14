@@ -1,0 +1,154 @@
+{
+  "tests": [
+    "tests/adapters/collab/undo-creation.test.ts",
+    "tests/application/commands/empty-script.test.ts",
+    "tests/application/commands/flow-paste-shared.test.ts",
+    "tests/features/empty-script/shared.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "creation treats an own restored format as foreign work",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "markWriters.get(source) === writer ? \"own\" : source",
+      "replace": "source"
+    },
+    {
+      "label": "creation ignores an initial join's retirement",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "roots.retiredJoins.has(entry.id), roots.retiredJoins.has(sharedJoinRetirementGroup(from, entry))",
+      "replace": "false, false"
+    },
+    {
+      "label": "creation forgets a new heading attached to it",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "splits, headings]);",
+      "replace": "splits, []]);"
+    },
+    {
+      "label": "creation forgets a split that was undone",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "const splits = sharedCreationRecordKeys(handle, \"beats\", \"splitSource\", beat);",
+      "replace": "const splits: readonly string[] = [];"
+    },
+    {
+      "label": "a new neighbour consumes creation undo",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "splits, headings]);",
+      "replace": "splits, headings, [...roots.beats.keys()].sort()]);"
+    },
+    {
+      "label": "creation remains unsupported",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": ", \"beat-create\"]",
+      "replace": "]"
+    },
+    {
+      "label": "changed creation reverses anyway",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "part.kind === \"beat-create\" && !canReverseSharedCreation(handle, part)",
+      "replace": "part.kind === \"beat-create\" && false"
+    },
+    {
+      "label": "creation leaves initial child records as independent undo parts",
+      "file": "src/adapters/collab/undo-creation.ts",
+      "find": "if (part.kind !== \"record-create\") return true;",
+      "replace": "if (part.kind === \"record-create\") return true; if (part.kind !== \"record-create\") return true;"
+    },
+    {
+      "label": "creation retirement ignores an unseen change",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "readSharedCreationContent(handle, beat, writer) === observed",
+      "replace": "true"
+    },
+    {
+      "label": "creation redo retires the beat again",
+      "file": "src/adapters/collab/undo-creation.ts",
+      "find": "const retired = operation.kind === \"segment-retire\";",
+      "replace": "const retired = true;"
+    },
+    {
+      "label": "creation undo creates no shared marker",
+      "file": "src/adapters/collab/undo-creation.ts",
+      "find": "field = [...path, SHARED_CREATION_RETIREMENT_FIELD]",
+      "replace": "field = [...path, \"creationIgnored\"]"
+    },
+    {
+      "label": "creation does not watch narration",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "narration(handle, beat, record, writer), attachments, joins, status",
+      "replace": "null, attachments, joins, status"
+    },
+    {
+      "label": "creation does not watch attachments",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "narration(handle, beat, record, writer), attachments, joins, status",
+      "replace": "narration(handle, beat, record, writer), [], joins, status"
+    },
+    {
+      "label": "creation does not watch incoming joins",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "attachments, joins, status",
+      "replace": "attachments, [], status"
+    },
+    {
+      "label": "creation does not watch status events",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "attachments, joins, status",
+      "replace": "attachments, joins, []"
+    },
+    {
+      "label": "creation does not watch comments",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "comments.map(([id, value]) => [id, fields(value, writer, key => key === \"updatedAt\")])",
+      "replace": "[]"
+    },
+    {
+      "label": "creation forgets the copy that owns a value",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "String(raw._map.get(key)?.lastId.client) !== writer",
+      "replace": "false"
+    },
+    {
+      "label": "creation counts stamps as content",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "fields(record, writer, unstamped)",
+      "replace": "fields(record, writer, key => key === SHARED_CREATION_RETIREMENT_FIELD)"
+    },
+    {
+      "label": "creation forgets restored character identity",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "const key = at.client + \":\" + at.clock, previous = restored.get(key);",
+      "replace": "const key = at.client + \":\" + at.clock, previous = undefined;"
+    },
+    {
+      "label": "creation forgets copied mark identity",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "provenance?.source(addition.record) ?? addition.record",
+      "replace": "addition.record"
+    },
+    {
+      "label": "projection shows an undone creation",
+      "file": "src/adapters/collab/projection-source.ts",
+      "find": ".filter(block => block.kind !== \"b\" || block.id === null || !hidden.has(block.id))",
+      "replace": ".filter(() => true)"
+    },
+    {
+      "label": "projection shows the retired creation's child records",
+      "file": "src/adapters/collab/projection-source.ts",
+      "find": "shown && isSharedCreationRecordShown(this.input, collection, shown.fields)",
+      "replace": "shown"
+    },
+    {
+      "label": "public reads show the retired creation's child records",
+      "file": "src/adapters/collab/record-reader.ts",
+      "find": "&& isSharedCreationRecordShown(copy as unknown as SharedDocumentHandle, collection, fields)",
+      "replace": ""
+    },
+    {
+      "label": "composition leaves creation retirement unregistered",
+      "file": "src/adapters/collab/undo-handlers.ts",
+      "find": "\"segment-retire\": prepareSharedSegmentRetire, ",
+      "replace": ""
+    }
+  ]
+}

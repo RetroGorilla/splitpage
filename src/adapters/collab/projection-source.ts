@@ -21,6 +21,7 @@ import { readSharedSplitHolds, readSharedSplitMarks, readSharedSplitObservationP
   sharedSplitStoreView } from "./split-retirement.ts";
 import type { SharedSplitObservationPart } from "./split-retirement.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
+import { isSharedCreationRecordShown, isSharedCreationRetired } from "./creation-retirement.ts";
 import type { SharedActiveDiscard, SharedDeletedPerson } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
@@ -88,6 +89,8 @@ export class SharedProjectionSource {
       () => readProjectionFields(scope === "document" ? this.inputRoots.meta : this.inputRoots[name].get(key), scope));
   }
 
+  private creationRetired(id: string): boolean { return isSharedCreationRetired(this.input, id); }
+
   private splitRetirements(): ReadonlySet<string> {
     const marks = this.cache.read(["split-marks"], [this.version("meta:keys")], () => readSharedSplitMarks(this.inputRoots.meta));
     if (!marks.size) return marks;
@@ -153,7 +156,7 @@ export class SharedProjectionSource {
       // why: only a picture an undo retired reads its beat's removals, so a document without one reads nothing more.
       const shown = value && collection === "gallery" && this.retiredGallery.has(key) ? this.cache.read(["record-retired", key], [value, this.keyVersion("beats", String(value.fields.beat))],
         () => isSharedGalleryShown(this.inputRoots, key, readSharedStoredPicture(this.inputRoots, key)) ? value : null) : value;
-      return shown ? [shown] : [];
+      return shown && isSharedCreationRecordShown(this.input, collection, shown.fields) ? [shown] : [];
     });
     return this.cache.read(["records", collection], records, () => sortSharedRecordReadings(collection, [...records]));
   }
@@ -190,12 +193,14 @@ export class SharedProjectionSource {
 
   blocks(includeUnits = true) {
     const streams = this.streams(includeUnits), retirements = this.splitRetirements();
-    const fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id), retired: retirements.has(id) }));
-    const records = this.cache.read(["block-records"], fields.flatMap(value => [value.id, value.fields, value.retired]), () => fields.map(({ id, fields, retired }) =>
-      ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired })));
+    const fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id), retired: retirements.has(id), hidden: this.creationRetired(id) }));
+    const records = this.cache.read(["block-records"], fields.flatMap(value => [value.id, value.fields, value.retired, value.hidden]), () => fields.map(({ id, fields, retired, hidden }) =>
+      ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired, hidden })));
     return this.cache.read(["blocks", String(includeUnits)], [streams, records], () => {
       let index = 0;
-      return projectSharedBlocks(streams, records, (parts, build) => this.cache.read(["block-units", String(includeUnits), String(index++)], parts, build));
+      const hidden = new Set(records.filter(record => record.hidden).map(record => record.id));
+      return projectSharedBlocks(streams, records, (parts, build) => this.cache.read(["block-units", String(includeUnits), String(index++)], parts, build))
+        .filter(block => block.kind !== "b" || block.id === null || !hidden.has(block.id));
     });
   }
 
@@ -209,7 +214,7 @@ export class SharedProjectionSource {
       });
       return [stream.segment, stream.inOrder, stream.head, boundaries];
     }),
-    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, retirements.has(id)]; })]);
+    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, retirements.has(id), this.creationRetired(id)]; })]);
   }
 
   status(target: SharedStatusEvent["target"]): string {

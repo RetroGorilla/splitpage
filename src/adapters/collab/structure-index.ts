@@ -11,7 +11,7 @@ import { sharedEmbedChangeReader } from "./embed-changes.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState, readSharedHeadingRemovalState } from "./removal-state.ts";
 import { isSharedGalleryShown, readSharedStoredPicture, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
-import { createSharedJoinIndex } from "./join-index.ts";
+import { observeSharedJoinIndex } from "./shared-join-index.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import { projectSharedCoveredBeats } from "../../core/collab/recovery.ts";
 import { readSharedActiveRemovalSources } from "./removal-record.ts";
@@ -20,6 +20,7 @@ import { sharedJoinEndpointOffset, readSharedJoinEndpoint, sharedJoinEndpointFie
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
 import { SHARED_SPLIT_OBSERVATION_PARTS, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, sharedSplitStoreView } from "./split-retirement.ts";
 import type { SharedSplitObservationPart, SharedSplitObservations } from "./split-retirement.ts";
+import { isSharedCreationRetired } from "./creation-retirement.ts";
 
 export interface SharedAttachmentOwnership {
   readonly keys: (collection: "visuals" | "gallery", beat: string) => readonly string[];
@@ -33,6 +34,7 @@ export interface SharedStructureIndex {
   readonly candidates: (name: string, heading: boolean) => readonly string[];
   readonly order: ReturnType<typeof observeSharedStructureOrder>;
   readonly removed: (id: string) => boolean;
+  readonly hidden: (id: string) => boolean;
   readonly coveredBy: (id: string) => readonly string[];
   readonly attachments: () => SharedAttachmentOwnership;
   readonly retired: () => readonly string[];
@@ -55,7 +57,6 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), headings = new Set<string>(), removedHeadings = new Set<string>();
   const removed = new Set<string>(), marked = new Set<string>(), coverage = new Map<string, ReadonlyMap<string, readonly string[]>>();
   const boundaryVersions = new Map<string, number>(), bump = (key: string) => { boundaryVersions.set(key, (boundaryVersions.get(key) ?? 0) + 1); };
-  let joinIndex: ReturnType<typeof createSharedJoinIndex> | null = null;
   const bindingSegments = new Map<string, readonly string[]>(), segmentBindings = new Map<string, Set<string>>();
   let building = true;
   const splitParts = new Map<SharedSplitObservationPart, SharedSplitObservations>();
@@ -153,7 +154,6 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const observe = (root: Y.Map<unknown>, update: (key: string) => unknown, fields: readonly string[], textChanges = false) => {
     const listener: Parameters<typeof root.observeDeep>[0] = (events, transaction) => guardSharedCallback(state, () => {
       if (root === state.roots.beats || root === state.roots.segments) coverage.clear();
-      if (root === state.roots.beats) joinIndex?.changed(events);
       const changed = new Set<string>(), texts = new Map<Y.Text, string>(), rescanned = new Set<Y.Text>();
       const reread = new Set<SharedSplitObservationPart>(root === state.roots.visuals || root === state.roots.gallery ? ["attachments"]
         : root === state.roots.statusEvents || root === state.roots.retiredStatus ? ["status"] : root === state.roots.retiredJoins ? ["joins"] : []);
@@ -222,8 +222,10 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const coveredBy = (id: string): readonly string[] => removed.size === 0 || removed.has(id) ? []
     : [...new Set([...names.get(cleanId(id)) ?? []].flatMap(key => coveredIn(key).get(id) ?? []))].sort();
   const attachmentIndex: SharedAttachmentOwnership = Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) });
-  const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), headingRemoved: (id: string) => removedHeadings.has(id), removed: (id: string) => removed.has(id), coveredBy,
-    joins: () => { if (!joinIndex) { assertSharedDocumentIdle(state); joinIndex = createSharedJoinIndex(state.roots.beats); } return joinIndex.index; },
+  const hidden = (id: string) => isSharedCreationRetired(handle, id);
+  const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), headingRemoved: (id: string) => removedHeadings.has(id),
+    hidden, removed: (id: string) => removed.has(id) || hidden(id), coveredBy,
+    joins: () => observeSharedJoinIndex(handle),
     endpoint: (position: SharedJoinEndpointPosition) => sharedJoinEndpointOffset(position, state.doc, segments.get(position.segment)?.text),
     joinSegments: (join: string) => Object.freeze([...(bindingSegments.get(join) ?? [])]),
     segmentJoins: (segment: string) => Object.freeze([...(segmentBindings.get(segment) ?? [])].sort()),

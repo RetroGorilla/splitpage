@@ -96,7 +96,7 @@ A refusal leaves both stacks as they were. The reasons:
   The executor is not called. Every structure command but a join, an unjoin, a
   separator change, a split, a beat removal, a heading removal without a new
   beat and a restore of either is refused this way until its executor lands:
-  `segment-create`, `segment-move`, `heading-create`, `heading-finalize`, and
+  `segment-move`, `heading-create`, `heading-finalize`, and
   `heading-remove` with a new beat (a demotion). A split whose part cannot be
   recorded keeps the generic part, named `split` or `split-before`. A
   removal of another kind (range, became-heading) is named `remove` and
@@ -574,10 +574,9 @@ Declared, refused by name (`undo-unsupported:split`): a command with two
 splits (a middle selection to its own beat, where the second split names the
 first's new beat by an alias), and Enter inside a scene heading name.
 
-Not undone yet: blank-beat creation, a heading created by paste and a
-demotion. Blank creation and every pasted heading add an entry to the segment
-order, which no operation takes back yet; a demotion also needs the heading
-removal raced with it to show what its undo writes.
+Not undone yet: a heading created by paste and a demotion. A pasted heading
+needs its own inverse; a demotion also needs the heading removal raced with
+it to show what its undo writes. Beat creation is supported below.
 
 ### Undo of a removal and a restore
 
@@ -633,9 +632,79 @@ and marks, and the first beat as compared for a beat. Literals in
 Not undone yet, each refused by name with a literal: a demotion (a
 `heading-remove` with a new beat), because restoring the removal leaves the
 name in the new beat and undoing the split has no operation yet; a heading
-created by paste, because every paste that creates a heading also creates a
-beat (`segment-create`); a command that removes a heading and a beat together;
+created by paste, because the heading creation has no inverse yet;
+a command that removes a heading and a beat together;
 and a restore of a heading removal and a beat removal at once.
+
+### Undo of beat creation
+
+`segment-create` records a `beat-create` part after the whole command has
+applied. The part names the stored beat and the creating copy, and keeps an
+observation of the result. A split still records only its `beat-split` part.
+The shared owner no longer skips an ordinary add or the first input in an
+emptied script. Rule 139's declared creation limit is lifted.
+
+The observation compares the beat's unstamped fields, its boundary and local
+heading, narration characters and active marks, incoming and
+outgoing joins, active status events, visuals, gallery, comments and replies.
+A split records its source on its new beat, so that source's creation guard
+also sees a split that was later undone. A new neighbouring beat is separate
+work and does not use the existing beat's creation undo up.
+A new heading names its first beat, so adding a scene above a newly created
+beat also uses its undo up, including when it is the script's only beat.
+A restored character is compared by its original identity, and copied marks
+by their source. A value last written by another copy remains that copy's
+work even if it equals the original value; a same-value operation that writes
+nothing is no change. Stamps are excluded under rule 35.
+Own formatting is compared by its meaning after undo; a copied foreign mark
+still names its foreign source, including an identical format over the same
+characters. An initial join's retirement also uses the creation up.
+
+Assumed: a retained split boundary, join entry or removal flag counts as a
+structural change even after that change was undone, whoever made it. Later
+typing or value changes by the creator have their own later steps; undoing
+them first can leave the creation unchanged again. Attachments or comments
+that remain, and characters or marks from another copy, use the step up.
+Changes taken back completely leave no foreign content to protect.
+
+Before planning any inverse, every creation part is checked. If one has
+changed, the whole entry is used up: no write, no redo, and one result for
+that key press. The following press reaches the older step. A command with
+an unsupported heading part still follows rule 71 for that part.
+
+Undo emits `segment-retire`, retaining the beat, its segment, visual and
+identities. Its `creationRetired` marker carries what the undo saw; all
+structure and projection readers hide the beat only while that observation
+still matches. It is absent from both script and recovery. Redo emits
+`segment-restore`, clearing the marker and revealing the same beat. The
+initial text, values, pictures, comments, replies and joins are absorbed into
+that creation part. Their records remain stored and follow the parent beat's
+conditional visibility, so an unseen edit to an initial child cannot be lost
+to a separate record deletion. Comment `updatedAt` is excluded like other
+stamps; changing comment content or ownership still uses the creation up.
+
+Assumed for an unseen concurrent change: the local undo can succeed before
+that change arrives. Once delivered, the changed observation invalidates the
+retirement on every copy, keeping that person's content with the beat in the
+script (or in the recovery selected by their own removal). A subsequent
+redo reports used up and writes nothing. If the change was already seen,
+undo itself reports used up and writes nothing.
+
+Two copies, reversed and duplicated deliveries, an encoded late joiner and
+incremental projection are checked by
+`tests/adapters/collab/undo-creation.test.ts`. The structure command tests
+check add undo/redo through the session; the empty-script command and mounted
+feature tests check the first input returns to the emptied document with its
+previous recovery entries intact. C7 still passes the existing structure
+ports and resolves the minted beat identity for focus; no new port is needed.
+
+The guard and projection share the unchanged mark reader in `mark-state.ts`.
+Anchor decoding and physical text lookup now live in `anchor-codec.ts` and
+`text-address.ts`, below projected ownership; the write and projected anchor
+routes remain in `anchors.ts`, `text-target.ts` and `mark-store.ts`. The join
+index has one lazy observer in `shared-join-index.ts`, shared by structure and
+the guard. This keeps observation independent of structure interpretation
+and prevents a runtime import cycle. Every importer names the owning module.
 
 ### The provenance marker
 
@@ -799,6 +868,8 @@ the end of every generated history).
 | Field writes | `record-executor.ts` | notes the planned state |
 | Picture undo and redo | `undo-executor.ts` | shown pictures for the undo, the stored picture for the recorder and the redo's retirement |
 | Split and restore guards | `undo-removal.ts` | shown pictures, without the retirement key |
+| Creation undo guard | `creation-retirement.ts` | shown pictures, with their beat's text, fields and ownership |
+| Creation record ownership | `creation-record-index.ts` | ownership keys; the guard reads picture values through the shared gallery reader |
 | Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
 | Undone split watch | `split-retirement.ts` | the stored record, hidden or not, through its read view of the store |
 | Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |

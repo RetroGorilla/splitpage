@@ -15,9 +15,10 @@ import { projectSharedJoinGlue, sharedJoinGlueRegisterField, readSharedJoinGlue,
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 import { readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
-import type { CollabRoots } from "./roots.ts";
 import { readSharedSplitMarks, readSharedSplitRetirements } from "./split-retirement.ts";
-import type { SharedSplitRetirementRoots } from "./split-retirement.ts";
+import type { SharedDocumentHandle } from "./types.ts";
+import { collabState } from "./state.ts";
+import { isSharedCreationRetired } from "./creation-retirement.ts";
 
 function bag(value: unknown): Record<string, unknown> {
   const json = sharedJson(value);
@@ -73,7 +74,8 @@ export function readProjectionInlineValue(raw: unknown): SharedInlineValue | nul
   return read && (typeof read === "string" || read.atom !== "broll" || isStableSharedIdentity(read.id)) ? read : null;
 }
 
-export function readProjectionBlocks(roots: Pick<CollabRoots, "order" | "segments"> & SharedSplitRetirementRoots, readUnits?: (container: Y.Map<unknown>) => readonly SharedProjectionUnit[]) {
+export function readProjectionBlocks(handle: SharedDocumentHandle, readUnits?: (container: Y.Map<unknown>) => readonly SharedProjectionUnit[]) {
+  const roots = collabState(handle).roots;
   const { order, segments, beats } = roots, streams: SharedProjectionStream[] = [], retired = readSharedSplitRetirements(roots, readSharedSplitMarks(roots.meta));
   const ordered = new Set(order.toArray());
   for (const key of new Set([...ordered, ...[...segments.keys()].sort()])) {
@@ -85,7 +87,7 @@ export function readProjectionBlocks(roots: Pick<CollabRoots, "order" | "segment
     const fields = readProjectionFields(beats.get(id), "beat");
     return { id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired: retired.has(id) };
   });
-  return projectSharedBlocks(streams, records);
+  return projectSharedBlocks(streams, records).filter(block => block.kind !== "b" || block.id === null || !isSharedCreationRetired(handle, block.id));
 }
 
 export function readProjectionStream(key: string, segment: Y.Map<unknown>, inOrder: boolean, all: readonly SharedProjectionUnit[]): SharedProjectionStream {

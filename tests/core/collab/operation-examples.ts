@@ -37,5 +37,7 @@ export const operationExamples = [
     id: "undo-delete-A", by: "Alice", target, units: [{ unit: "s2", left: "s1", value: "b", marks: ["bold-A"] }] } },
   { fixture: "T21 undo of a format", operation: { kind: "mark-retract", id: "undo-bold-A", by: "Alice", target, occurrences: ["bold-A"] } },
   { fixture: "T21 scalar undo of a status", operation: { kind: "status-retire", id: "undo-status-A", by: "Alice",
-    target: { scope: "beat", record: "R1" }, event: "c", value: "ready" } }
+    target: { scope: "beat", record: "R1" }, event: "c", value: "ready" } },
+  { fixture: "creation undo retains the beat", operation: { kind: "segment-retire", id: "undo-create-A", by: "Alice", beat: "R1", creator: "1", observed: "created-beat" } },
+  { fixture: "creation redo keeps the beat identity", operation: { kind: "segment-restore", id: "redo-create-A", by: "Alice", beat: "R1", creator: "1", observed: "created-beat" } }
 ] as const;

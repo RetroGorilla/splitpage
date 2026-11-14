@@ -3,10 +3,11 @@ import { exceedsBufferQueue } from "../../core/collab/buffer.ts";
 import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, assertSharedIngressAllowed, guardSharedCallback } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
+import { observeSharedCreationMarkers } from "./creation-marker.ts";
 
 export function createSharedDocument(): SharedDocumentHandle {
   const handle = new CollabDocumentState() as unknown as SharedDocumentHandle;
-  observeSharedStructureIndex(handle); return handle;
+  observeSharedCreationMarkers(handle); observeSharedStructureIndex(handle); return handle;
 }
 
 export function shouldDeliverSharedUpdate(origin: SharedTransactionOrigin | null): boolean { return origin !== "remote"; }

@@ -15,6 +15,7 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState, readShared
 import { createMonitoredSharedDocument } from "../../adapters/collab/helpers.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
+import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
 import { sharedHarness, adapterReplica } from "../session/shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
@@ -254,11 +255,11 @@ for (const refused of [
   } finally { a.session.dispose(); runtime.close(); h.close(); }
 });
 
-test("one whole paste is one command and undo step; rule 71: its creation undo, not supported yet, is skipped", () => {
+test("one whole paste is one command and undo step whose creation and picture undo and redo together", () => {
   const h = replicas(2, { rows: [{ id: "R1", audioText: "A" }, { id: "R2", audioText: "B" }] });
-  const runtime = clipboardRuntime(); let executions = 0;
+  const runtime = clipboardRuntime(); let executions = 0, serial = 0;
   const undo = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
-    reverse: record => reverseSharedUndoRecord(h.a, record, { by: "Alice", nextId: () => "undo" }) });
+    reverse: record => reverseSharedUndoRecord(h.a, record, { by: "Alice", nextId: () => "undo" + ++serial }) });
   const replica = adapterReplica(h.a);
   const a = sharedHarness({ ...replica, execute: (operations, options) => {
     let result: ReturnType<typeof executeSharedCommand>["result"] = { ok: true };
@@ -271,8 +272,12 @@ test("one whole paste is one command and undo step; rule 71: its creation undo, 
     const data = wire([{ id: "old", audioText: "X", imageRef: image }]);
     const prepared = ports.commands.prepare("paste", doc => pasteSharedFlowClipboard(doc, at, data, ports.flow, runtime.rich.inertBody, runtime.load) ?? null, stamps, at);
     assert.equal(a.session.run(prepared.command).kind, "applied");
+    const pasted = projectSharedDocumentWithRecovery(h.a);
     assert.equal(executions, 1); assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
-    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:segment-create", skipped: true });
+    assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "paste", selection: null });
+    assert.deepEqual(projectSharedDocumentWithRecovery(h.a), { document: expectedDocument([expectedRow("R1", "A"), expectedRow("R2", "B")]), recovery: [] });
+    assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "paste", selection: null });
+    assert.deepEqual(projectSharedDocumentWithRecovery(h.a), pasted);
   } finally { a.session.dispose(); runtime.close(); h.close(); }
 });
 
