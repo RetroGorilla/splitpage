@@ -224,7 +224,7 @@ test("native typing reads nothing from the source and keeps the painted record",
   } finally { h.surface.dispose(); }
 });
 
-test("standalone: painting, typing and a beat split never create or call the painted-beat record", () => {
+test("standalone: painting, typing and a beat split never create or call the painted-beat record; the Writer wiring passes painted text only while shared", () => {
   const script = String.raw`
     import assert from "node:assert/strict";
     import { mock } from "node:test";
@@ -248,7 +248,8 @@ test("standalone: painting, typing and a beat split never create or call the pai
     { cwd: fileURLToPath(new URL("../../../", import.meta.url)), encoding: "utf8", windowsHide: true });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const wiring = readFileSync(new URL("../../../src/bootstrap/wiring/writer.ts", import.meta.url), "utf8");
-  assert.equal(wiring.includes("paintedText"), false);
+  assert.deepEqual(wiring.match(/paintedText/g), ["paintedText", "paintedText", "paintedText"]);
+  assert.equal(wiring.includes("...(shared && commands ? { paintedText: shared.text.paintedText,"), true);
 });
 
 test("the Writer hands its painted-text source to the surface: one read per painted beat per paint, none per keystroke", () => {
