@@ -1,3 +1,4 @@
+import * as Y from "yjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { replicas, agree, operation } from "./executor-support.ts";
@@ -8,6 +9,14 @@ import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/head
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { pictureA } from "./projection-record-support.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
+import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
+import type { SharedPreparedWrite } from "../../../src/adapters/collab/prepare.ts";
+import { readSharedSplitRetired } from "../../../src/adapters/collab/structure-plan.ts";
+import { SHARED_SPLIT_OBSERVATION_PARTS, SHARED_SPLIT_WATCHED_PARTS, sharedSplitRetireHolds } from "../../../src/adapters/collab/split-retirement.ts";
+import type { CollabRoots } from "../../../src/adapters/collab/roots.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
@@ -258,7 +267,7 @@ for (const order of ORDERS) test(`a split undone while another writer heads the 
   run.unchanged(undone, "redo used up", [["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]]); same("still headed", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
 }, HEADED));
 
-const gallery = (beat: string) => ({ kind: "record-create", id: "g", by: "Writer", target: { collection: "gallery", record: "G1" },
+const gallery = (beat: string, by = "Writer") => ({ kind: "record-create", id: "g", by, target: { collection: "gallery", record: "G1" },
   fields: { beat, rank: "0", picture: { imageRef: pictureA, name: "" }, links: [] } });
 for (const order of ORDERS) test(`one list that brings an undone split's new beat back prepares what follows against the split it brought back: ${order}`, () => scenario(order, run => {
   const record = run.command(split()), beat = run.beat(record);
@@ -284,4 +293,140 @@ for (const order of ORDERS) test(`one list of a gallery picture and a field on a
   assert.deepEqual(executeSharedOperations(run.set.a, list, { base: readSharedRevision(run.set.a) }), { ok: true });
   run.flush(); run.check("one list", split2);
   for (const handle of [run.set.a, run.set.b]) assert.deepEqual(projectSharedDocumentWithRecovery(handle).document.rows.map(row => row.lengthSeconds ?? null), [null, 9, null]);
+}));
+
+const statusOf = (beat: string) => ({ scope: "beat", record: beat as SharedContentRef }) as const;
+const takenBack: readonly (readonly [string, (run: Run, beat: string) => readonly Record<string, unknown>[], boolean])[] = [
+  ["sets a field on the new beat and clears it", (_run, beat) => [
+    { kind: "scalar", id: "f", by: "Other", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 9 },
+    { kind: "scalar", id: "g", by: "Other", target: { scope: "beat", record: beat }, field: "lengthSeconds", clear: true }], true],
+  ["adds a gallery picture to the new beat and deletes it", (_run, beat) => [gallery(beat, "Other"),
+    { kind: "record-delete", id: "gone", by: "Other", target: { collection: "gallery", record: "G1" } }], true],
+  ["sets the new beat's status and retracts it", (run, beat) => [
+    { kind: "status", id: "s", by: "Other", target: statusOf(beat), value: "ready", parents: readSharedStatusHeads(run.set.b, statusOf(beat)) },
+    { kind: "status-retire", id: "r", by: "Other", target: statusOf(beat), value: "ready", event: JSON.stringify([String(collabState(run.set.b).doc.clientID), "s"]) }], true],
+  ["joins another beat into the new beat and unjoins it", (run, beat) => [
+    { kind: "join", id: "j", by: "Other", from: "R2", into: beat, glue: " " },
+    { kind: "join-retire", id: "u", by: "Other", joins: [sharedStructureIdentity(String(collabState(run.set.b).doc.clientID), "j", "join")] }], true],
+  ["types in the new beat's visual and deletes it", (run, beat) => {
+    const visual = { owner: beat as SharedContentRef, segment: beat as SharedContentRef, field: "visualText" as const }, gap = readSharedPaintedText(run.set.b, visual)?.emptyGap;
+    assert.ok(gap);
+    return [{ kind: "text-insert", id: "v", by: "Other", target: visual, at: { left: null, right: gap, affinity: "before" }, content: [{ value: "V", marks: [] }] }];
+  }, false]
+];
+for (const [name, ops, oneList] of takenBack) for (const shape of oneList ? ["one list", "separate lists"] as const : ["separate lists"] as const)
+  for (const order of ORDERS) test(`a split undone while another writer ${name}, in ${shape}, without seeing the undo stays split: ${order}`, () => scenario(order, run => {
+    const record = run.command(split()), beat = run.beat(record);
+    const undone = run.reverse(record, true, false), list = ops(run, beat);
+    if (shape === "one list") assert.deepEqual(executeSharedOperations(run.set.b, list.map(operation), { base: readSharedRevision(run.set.b) }), { ok: true });
+    else for (const op of list) run.send(op);
+    if (name.startsWith("types in the new beat's visual")) {
+      const visual = { owner: beat as SharedContentRef, segment: beat as SharedContentRef, field: "visualText" as const };
+      run.send({ kind: "text-delete", id: "w", by: "Other", target: visual, observed: [createSharedAnchor(run.set.b, visual, 0, "after")] });
+    }
+    run.flush(); run.check("kept", split2);
+    for (const handle of [run.set.a, run.set.b]) assert.deepEqual(projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.lengthSeconds ?? null, row.visualText]),
+      [[null, ""], [null, ""], [null, ""]]);
+    run.unchanged(undone, "redo used up", split2);
+  }));
+
+for (const order of ORDERS) test(`a gallery picture added to an undone split's new beat and deleted brings the split back, in one list as in separate lists: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  const insert = { kind: "text-insert", id: "x", by: "Writer", target: { owner: beat, segment: beat, field: "audioText" },
+    at: { left: flowBaseReference(beat, "audioText", 0), right: null, affinity: "after" }, content: [{ value: "X", marks: [] }] };
+  const list = [gallery(beat), { kind: "record-delete", id: "gone", by: "Writer", target: { collection: "gallery", record: "G1" } }, insert];
+  assert.deepEqual(executeSharedOperations(run.set.a, list.map(operation), { base: readSharedRevision(run.set.a) }), { ok: true });
+  run.flush(); run.check("one list", [["R1", "ab"], ["Rs", "cXd"], ["R2", "ef"]]);
+}));
+
+for (const order of ORDERS) test(`the same three as separate lists give the same document: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  run.send(gallery(beat), run.set.a); run.send({ kind: "record-delete", id: "gone", by: "Writer", target: { collection: "gallery", record: "G1" } }, run.set.a);
+  run.send({ kind: "text-insert", id: "x", by: "Writer", target: { owner: beat, segment: beat, field: "audioText" },
+    at: { left: flowBaseReference(beat, "audioText", 0), right: null, affinity: "after" }, content: [{ value: "X", marks: [] }] }, run.set.a);
+  run.flush(); run.check("separate lists", [["R1", "ab"], ["Rs", "cXd"], ["R2", "ef"]]);
+}));
+
+for (const order of ORDERS) test(`a gallery picture added and deleted, then a deletion past the source beat: refused in one list as in separate lists: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  const cut = { kind: "text-delete", id: "cut", by: "Writer", target, observed: [flowBaseReference("R1", "audioText", 2, 3)] };
+  const list = [gallery(beat), { kind: "record-delete", id: "gone", by: "Writer", target: { collection: "gallery", record: "G1" } }, cut].map(operation);
+  const revision = readSharedRevision(run.set.a);
+  assert.deepEqual(executeSharedOperations(run.set.a, list, { base: revision }), { ok: false, index: 2, operation: list[2], reason: "invalid-reference" });
+  assert.equal(readSharedRevision(run.set.a), revision);
+  run.send(list[0], run.set.a); run.send(list[1], run.set.a);
+  const alone = operation(cut);
+  assert.deepEqual(executeSharedOperations(run.set.a, [alone], { base: readSharedRevision(run.set.a) }), { ok: false, index: 0, operation: alone, reason: "invalid-reference" });
+  run.flush(); run.check("separate lists", split2);
+}));
+
+for (const shape of ["one list", "separate lists"] as const) for (const order of ORDERS) test(`retiring a status the new beat had before the undo brings the split back, in ${shape}: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.send({ kind: "status", id: "s", by: "Writer", target: statusOf(beat), value: "ready", parents: readSharedStatusHeads(run.set.a, statusOf(beat)) }, run.set.a); run.flush();
+  run.send({ kind: "split-retire", id: "hand", by: "Writer", beat }, run.set.a); run.flush(); run.check("retired by hand", whole);
+  const retire = { kind: "status-retire", id: "r", by: "Writer", target: statusOf(beat), value: "ready", event: JSON.stringify([String(collabState(run.set.a).doc.clientID), "s"]) };
+  const cut = { kind: "text-delete", id: "cut", by: "Writer", target, observed: [flowBaseReference("R1", "audioText", 2, 3)] };
+  if (shape === "one list") {
+    const list = [retire, cut].map(operation);
+    assert.deepEqual(executeSharedOperations(run.set.a, list, { base: readSharedRevision(run.set.a) }), { ok: false, index: 1, operation: list[1], reason: "invalid-reference" });
+    run.send(retire, run.set.a);
+  } else {
+    run.send(retire, run.set.a);
+    const alone = operation(cut);
+    assert.deepEqual(executeSharedOperations(run.set.a, [alone], { base: readSharedRevision(run.set.a) }), { ok: false, index: 0, operation: alone, reason: "invalid-reference" });
+  }
+  run.flush(); run.check("split back", split2);
+  void record;
+}));
+
+type Watched = { readonly change: (roots: CollabRoots, beat: string) => void; readonly writes: (beat: string) => readonly SharedPreparedWrite[];
+  readonly unrelated: { readonly change: (roots: CollabRoots, beat: string) => void; readonly writes: (beat: string) => readonly SharedPreparedWrite[] } };
+const event = (beat: string) => ({ kind: "status", id: "seed", by: "Writer", target: { scope: "beat", record: beat }, value: "ready", parents: [] });
+const WATCHED: Readonly<Record<string, Watched | null>> = {
+  record: { change: (roots, beat) => (roots.beats.get(beat) as Y.Map<unknown>).set("lengthSeconds", 9), writes: beat => [{ kind: "set", path: ["beats", beat, "lengthSeconds"], value: 9 }],
+    unrelated: { change: (roots, beat) => (roots.beats.get(beat) as Y.Map<unknown>).set("stamp:Other", { at: "2026-11-13T10:00:00.000Z", by: "Other" }),
+      writes: beat => [{ kind: "set", path: ["beats", beat, "stamp:Other"], value: { at: "2026-11-13T10:00:00.000Z", by: "Other" } }] } },
+  boundaries: null,
+  joins: { change: (roots, beat) => ((roots.beats.get("R2") as Y.Map<unknown>).get("joins") as Y.Map<unknown>).set("jX", { into: beat, glue: " ", generation: 0 }),
+    writes: beat => [{ kind: "set", path: ["beats", "R2", "joins", "jX"], value: { into: beat, glue: " ", generation: 0 } }],
+    unrelated: { change: roots => ((roots.beats.get("R2") as Y.Map<unknown>).get("joins") as Y.Map<unknown>).set("jY", { into: "R1", glue: " ", generation: 0 }),
+      writes: () => [{ kind: "set", path: ["beats", "R2", "joins", "jY"], value: { into: "R1", glue: " ", generation: 0 } }] } },
+  attachments: { change: (roots, beat) => roots.gallery.set("G9", new Y.Map<unknown>([["beat", beat]])),
+    writes: beat => [{ kind: "map", path: ["gallery", "G9"] }, { kind: "set", path: ["gallery", "G9", "beat"], value: beat }],
+    unrelated: { change: roots => roots.gallery.set("G8", new Y.Map<unknown>([["beat", "R1"]])), writes: () => [{ kind: "map", path: ["gallery", "G8"] }, { kind: "set", path: ["gallery", "G8", "beat"], value: "R1" }] } },
+  status: { change: roots => roots.retiredStatus.set("seed", true), writes: () => [{ kind: "set", path: ["retiredStatus", "seed"], value: true }],
+    unrelated: { change: roots => roots.retiredStatus.set("other", true), writes: () => [{ kind: "set", path: ["retiredStatus", "other"], value: true }] } }
+};
+
+test("every part an undone split watches is read the same way by the readers and by the planned state of a list", () => {
+  assert.deepEqual(Object.keys(WATCHED).sort(), [...SHARED_SPLIT_OBSERVATION_PARTS].sort());
+  for (const part of SHARED_SPLIT_OBSERVATION_PARTS) for (const related of [true, false]) scenario("D1", run => {
+    const record = run.command(split()), beat = run.beat(record), roots = collabState(run.set.a).roots;
+    collabState(run.set.a).doc.transact(() => { roots.statusEvents.set("seed", event(beat)); roots.statusEvents.set("other", event("R1")); });
+    run.send({ kind: "split-retire", id: "hand", by: "Writer", beat }, run.set.a); run.flush(); run.check("retired by hand", whole);
+    const watched = WATCHED[part];
+    if (!watched) {
+      assert.deepEqual(SHARED_SPLIT_WATCHED_PARTS.find(entry => entry.name === part)?.staged({ get: () => undefined, keys: () => [] }, ["segments", "b:R1", "text"]), []);
+      return;
+    }
+    const used = related ? watched : watched.unrelated, prep = createSharedPreparation(run.set.a);
+    try {
+      assert.equal(prep.view.resolveOwner("R1", "audioText")?.owner, "R1"); assert.equal(readSharedSplitRetired(prep.view, beat), true);
+      prep.include(used.writes(beat));
+      assert.equal(readSharedSplitRetired(prep.view, beat), !related, part + (related ? " planned" : " unrelated planned"));
+    } finally { prep.close(); }
+    collabState(run.set.a).doc.transact(() => used.change(roots, beat));
+    assert.equal(sharedSplitRetireHolds(roots, beat), !related, part + (related ? " read" : " unrelated read"));
+  });
+});
+
+for (const order of ORDERS) test(`an embed that names the new beat but is no boundary is read the same way by the index and the watch: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); run.check("undone", whole);
+  const text = (collabState(run.set.a).roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
+  collabState(run.set.a).doc.transact(() => text.insertEmbed(1, { b: beat, extra: true }));
+  run.flush(); run.check("still undone", whole);
 }));

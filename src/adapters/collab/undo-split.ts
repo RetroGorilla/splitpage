@@ -7,8 +7,8 @@ import { applySharedMapWrites, createSharedPreparation } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
 import { planSharedSplitRetirement, readSharedSplitRetired, readSharedStructureStream } from "./structure-plan.ts";
-import { readProjectionFields, readProjectionHead } from "./projection-reader.ts";
-import { sharedPreparedTextInsert } from "./prepare-value.ts";
+import { readProjectionFields } from "./projection-reader.ts";
+import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
 import { markSharedSplitRetired, readSharedSplitObservationPart, sharedSplitRetiredField, sharedSplitRetireHolds } from "./split-retirement.ts";
 import { readSharedBeatShape, readSharedLiveStructure } from "./undo-removal.ts";
 import { collabState } from "./state.ts";
@@ -29,7 +29,7 @@ function storedBoundary(handle: SharedDocumentHandle, beat: string): boolean {
   const roots = collabState(handle).roots, segment = readProjectionFields(roots.beats.get(beat), "beat")?.segment;
   const stored = typeof segment === "string" ? roots.segments.get(segment) : null, text: unknown = stored instanceof Y.Map ? stored.get("text") : null;
   return text instanceof Y.Text && (text.toDelta() as { insert: unknown }[]).some(delta => {
-    const boundary = readProjectionHead(sharedPreparedTextInsert(delta.insert));
+    const boundary = readSharedBoundaryEmbed(delta.insert);
     return boundary?.kind === "b" && boundary.id === beat;
   });
 }

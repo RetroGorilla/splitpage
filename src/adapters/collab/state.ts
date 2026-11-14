@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 import { declareCollabRoots } from "./roots.ts";
 import { CollabReadCaches } from "./read-cache.ts";
+import { collectSharedAttachmentItem } from "./attachment-retention.ts";
 
 function formattingCleanup(transaction: Y.Transaction): boolean {
   if (transaction.beforeState.size !== transaction.afterState.size) return false;
@@ -29,7 +30,7 @@ export class IngressGate {
 }
 
 export class CollabDocumentState {
-  readonly doc = new Y.Doc();
+  readonly doc = new Y.Doc({ gcFilter: collectSharedAttachmentItem });
   readonly roots = declareCollabRoots(this.doc);
   fresh = true;
   destroyed = false;

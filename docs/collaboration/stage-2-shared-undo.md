@@ -452,16 +452,48 @@ Every reader of beat records gives the interpreter the same answer (the full
 and incremental projections, the structure index and the preparation's
 planned state), so every copy agrees in every delivery order.
 
-Within one operation list, the planned state follows the list. A staged write
-to something a mark watches ends that retirement for the rest of the list, as
-the copy that applies the list reads it after that write: a record entry other
-than a stamp, a join into the beat, a visual or gallery record, or a status
-event. Literals: one list of a gallery picture on the hidden beat and a
-deletion in the source beat is prepared against the split the picture brings
-back, so the deletion is refused; one list of a gallery picture and a field on
-the hidden beat succeeds, as the two lists do. A boundary atom is moved only by
-an operation on its own beat, which a hidden beat never resolves, so a list
-cannot move it.
+The match is monotonic: the watch compares what has ever been there, not only
+what is live, so a change taken back still counts, and a mark that stopped
+matching never matches again. Per watched part:
+
+| Part | What "ever there" reads |
+| --- | --- |
+| record entries | every key of the beat's record with the identity of its last write; a deleted key keeps its entry and identity in the map |
+| boundary atoms | the identities of the beat's live boundary atoms; deleting one is final, and only an operation on the beat itself writes one, deleting the old one in the same step |
+| joins into the beat | every join entry into the beat on other beats, with its retirement; join entries are only ever retired, never deleted |
+| visual and gallery records | every version of every record of the beat, live or deleted, and inside a live one every entry and the text it shows; each insertion into a text leaves an entry in its mark records |
+| status events | every status event of the beat, with its retirement; both are only ever added |
+
+Garbage collection removes the content of deleted entries but keeps their keys
+and identities, which is enough for the beat's record, its joins and its
+status. A deleted visual or gallery record would lose the field naming its
+beat, so every shared document keeps, through garbage collection, a deleted
+visual or gallery record and its `beat` entry (`attachment-retention.ts`);
+its other fields and its text are collected as usual. A boundary atom deleted
+and collected cannot be seen; no operation creates and then deletes an extra
+one.
+
+One table, `SHARED_SPLIT_WATCHED_PARTS`, defines both what the readers watch
+and which staged writes of an operation list touch it. Within one list, a
+staged write to a watched part ends the retirement for the rest of the list,
+as every copy reads it after that write, and a staged delete of something that
+is not there changes nothing. A test iterates the table: for every part, a
+write it recognises ends the retirement both in the planned state and in the
+readers, and an unrelated write ends neither. Literals, each as one list and as
+separate lists, in both delivery orders with a late joiner:
+- another writer, without seeing the undo, sets a field and clears it, adds a
+  picture and deletes it, sets a status and retracts it, joins a beat in and
+  unjoins it, or types in the visual and deletes it (separate lists only: a
+  list cannot name text it inserts): the split stays and the redo is used up;
+- on the copy that saw the undo, a picture added to the hidden beat and deleted
+  brings the split back, so text inserted into the new beat afterwards lands in
+  it, and a deletion past the source beat is refused, in one list as in
+  separate lists;
+- retiring a status the hidden beat had brings the split back.
+
+The structure index and the watch recognise a boundary atom with the same
+reader, so an embed that names the beat but is no boundary changes neither
+(literal: a hand-made `{ b, extra }` embed).
 
 Cost. All marks are read in one pass per part: one walk of each segment that
 holds a marked beat, and one scan each of the beats' joins, the visuals and
@@ -474,11 +506,12 @@ reads 9 with 1 mark and 207 with 100.
 
 Declared limit, retention: a redo deletes its mark, but a mark whose redo is
 used up, because a change made without seeing the undo stopped it matching,
-stays in `meta` (100 such marks took about 59,000 characters). A mark that stopped matching can never match
-again, because every write gets a new identity, so a later cut may delete it.
-That cut is the retention work in section 6 of the collaboration plan
-(garbage collection, retained recovery content and quotas). Nothing deletes a
-mark today.
+stays in `meta` (100 such marks took about 59,000 characters). A mark that
+stopped matching can never match again, because the match is monotonic, so a
+later cut may delete it. The deleted visual and gallery records kept for the
+watch stay too, one record entry and one `beat` entry each. That cut is the
+retention work in section 6 of the collaboration plan (garbage collection,
+retained recovery content and quotas). Nothing deletes either today.
 
 When another writer changes or removes the new beat without having seen the
 undo (a field, its status, a visual or gallery record, a removal, or a join of

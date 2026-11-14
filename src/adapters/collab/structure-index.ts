@@ -5,7 +5,8 @@ import { cleanId } from "../../core/document/text-policy.ts";
 import { collabState, assertSharedDocumentIdle, guardSharedCallback } from "./state.ts";
 import { observeSharedStructureOrder } from "./structure-order-index.ts";
 import { readProjectionFields, readProjectionHead } from "./projection-reader.ts";
-import { freezeSharedPreparedValue, sharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
+import { freezeSharedPreparedValue, sharedPreparedValue } from "./prepare-value.ts";
+import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
 import { sharedEmbedChangeReader } from "./embed-changes.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState, readSharedHeadingRemovalState } from "./removal-state.ts";
@@ -97,7 +98,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     if (text instanceof Y.Text && previous?.text !== text) {
       let offset = 0;
       for (const delta of text.toDelta() as { insert: unknown }[]) {
-        const boundary = readProjectionHead(sharedPreparedTextInsert(delta.insert));
+        const boundary = readSharedBoundaryEmbed(delta.insert);
         const identity = boundary ? Y.createRelativePositionFromTypeIndex(text, offset).item : null;
         if (boundary && identity) boundaries.set(identity.client + ":" + identity.clock, { identity: { client: identity.client, clock: identity.clock }, boundary });
         offset += typeof delta.insert === "string" ? delta.insert.length : 1;
@@ -145,7 +146,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       if (texts.size) for (const change of embeds.read(transaction)) {
         const key = texts.get(change.text), value = key === undefined ? undefined : segments.get(key);
         if (key === undefined || rescanned.has(change.text) || value?.text !== change.text) continue;
-        const boundary = readProjectionHead(sharedPreparedTextInsert(change.value)); if (!boundary) continue;
+        const boundary = readSharedBoundaryEmbed(change.value); if (!boundary) continue;
         reread = true; membership(key, value, false);
         const identity = change.identity, id = identity.client + ":" + identity.clock;
         if (change.delta === 1) value.boundaries.set(id, { identity, boundary }); else value.boundaries.delete(id);
