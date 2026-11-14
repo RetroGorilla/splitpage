@@ -301,7 +301,7 @@ test("shared title: a composition that would take the title past 300 units is re
   } finally { page.close(); }
 });
 
-test("shared title: two writers each typing the 300th unit leave 301 stored; the inputs show it, growth is refused and a deletion is written", () => {
+test("shared title: two writers each typing the 300th unit leave 301 stored; the inputs and the session view show it in full, growth is refused and a deletion is written", () => {
   const page = sharedTitle("a".repeat(299));
   try {
     page.main.focus();
@@ -311,7 +311,7 @@ test("shared title: two writers each typing the 300th unit leave 301 stored; the
     page.h.queue.flush("dup");
     page.paint();
     const both = "Y" + "a".repeat(299) + "X";
-    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.viewTitle(), page.reports], [both, both, both, "Y" + "a".repeat(299), []]);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.viewTitle(), page.reports], [both, both, both, both, []]);
     copies(page, [both, "user"]);
     page.edge.select(301);
     page.edge.type("Z");
@@ -323,7 +323,7 @@ test("shared title: two writers each typing the 300th unit leave 301 stored; the
   } finally { page.close(); }
 });
 
-test("shared title: two writers each committing two units onto 298 leave 302 stored, and it shortens one deletion at a time", () => {
+test("shared title: two writers each committing two units onto 298 leave 302 stored, the session view shows it in full, and it shortens one deletion at a time", () => {
   const page = sharedTitle("a".repeat(298));
   try {
     page.main.focus();
@@ -334,7 +334,7 @@ test("shared title: two writers each committing two units onto 298 leave 302 sto
     page.h.queue.flush("dup");
     page.paint();
     const both = "YZ" + "a".repeat(298) + "漢字";
-    assert.deepEqual([page.stored(), page.main.value, page.viewTitle(), page.reports], [both, both, "YZ" + "a".repeat(298), []]);
+    assert.deepEqual([page.stored(), page.main.value, page.viewTitle(), page.reports], [both, both, both, []]);
     page.edge.select(302);
     assert.equal(page.edge.backspace(), true);
     assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length],

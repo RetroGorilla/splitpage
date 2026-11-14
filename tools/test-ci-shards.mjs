@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
@@ -57,7 +58,7 @@ const prMutants = mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")
 assert.equal(prMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --baseline-timeout 900 --fail-on-survivor\n');
 const nightly = parse(readFileSync(join(REPO, ".github/workflows/nightly.yml"), "utf8"));
 const nightlyMutants = nightly.jobs.mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
-assert.equal(nightlyMutants, "node tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor");
+assert.equal(nightlyMutants, 'set -o pipefail\nnode tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor 2>&1 | tee "$RUNNER_TEMP/nightly-mutants.log"\n');
 assert.equal(nightly.jobs.mutants["runs-on"], nightly.jobs.suites["runs-on"]);
 assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke", "mutants"]);
 assert.equal(gate.if, "always()");
@@ -150,9 +151,14 @@ for (const needed of bash ? ["true", "false"] : []) {
 if (bash) {
   const manifestsRunBy = (script) => {
     const echo = 'node() { for arg in "$@"; do case "$arg" in *-mutants.json) printf "%s\\n" "$arg";; esac; done; }\n';
-    const result = spawnSync(bash, ["-e", "-c", echo + script.replaceAll("${{ matrix.shard }}", "1")], { cwd: REPO, encoding: "utf8", timeout: 5000 });
-    assert.equal(result.status, 0, result.stderr);
-    return result.stdout.split("\n").filter(Boolean);
+    const work = mkdtempSync(join(tmpdir(), "splitpage-manifests-"));
+    try {
+      const result = spawnSync(bash, ["-e", "-c", echo + script.replaceAll("${{ matrix.shard }}", "1")], { cwd: REPO, env: { ...process.env, RUNNER_TEMP: work.replaceAll("\\", "/") }, encoding: "utf8", timeout: 5000 });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.split("\n").filter(Boolean);
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   };
   const pr = manifestsRunBy(prMutants), night = manifestsRunBy(nightlyMutants);
   const manifests = readdirSync(join(REPO, "tests/collab")).filter((name) => name.endsWith("-mutants.json")).map((name) => `tests/collab/${name}`).sort();
