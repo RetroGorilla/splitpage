@@ -160,8 +160,46 @@ record enters the same per-writer `SharedUndo.perform` stack. Creation uses the
 session's default `add-section` description with `typing: null`; buffered typing
 supplies its own description. Recovery's `undo: false` still bypasses recording.
 
-The rule 85 cut connects the boxes' undo/redo shortcuts and Escape to this owner
-and replay entry. It adds the boxes' cases to the existing shared-surface table.
-No record is reconstructed from the later change set, and no second history or
-second execution is used to learn it. Escape additionally needs the stored
-opening name and a check that no other writer changed it while the form was open.
+The boxes' Ctrl+Z, Ctrl+Y and redo shortcuts prevent native history and call the
+same admitted shared actions. Composition gives
+`sharedBufferedInputPorts(shared, sharedBufferedInputHistory(handle, session, owner))` to the name
+and title routes, using the owner already passed to the replica. The Writer and
+global routes use that owner's same actions and arrange their normal repaint and
+selection restoration. Input history uses `resolveSharedBufferedSelection`, as
+the existing binding does, to restore the recorded caret even if it was moved
+before undo. Until the composed shared app connects them, the tests
+exercise the owner and replay entry directly. Nothing records a change after the
+fact or executes it twice. A missing history port retains the explicit refusal.
+
+The recorded native sequences above already include Ctrl+Z, Ctrl+Y, their
+no-history forms and Escape. The helper's explicit `escape` sends the same
+keydown/keyup pair; the browser sent no Escape beforeinput or input. Preventing
+the shortcut keydown means its native history events do not follow. Paste and cut
+now carry their own command descriptions with `typing: null`; Escape's whole-name
+replacement is `rename-cancel` with `typing: null`. They cannot coalesce into
+typing. Ordinary keys keep C2's typing description and grouping.
+
+An existing scene's form remembers its stored opening name. Its own commits
+retain the painted identity snapshot taken before the buffer releases ingress.
+Before subsequent events and repaint, the form compares that snapshot with the
+current field, including the units' identities. Observing another change is
+remembered even if the person then types again. A remote replacement with the
+same letters is a change; an unrelated field or revision is not. Escape settles
+any hold, then either writes the opening name as one ordinary replacement, or
+closes without writing and reports `buffer-heading-changed`. An unchanged name
+needs no command. The stored opening name can be restored even if it already
+exceeded the typing stop: this is a reversal, not another lengthening keystroke.
+Undo of that replacement restores the name Escape took back.
+
+Rules 59 and 64 still consume undo/redo that end an empty-name hold: restore the
+stored name, report once and do not act on text the person had not seen. Escape
+also ends the hold before closing. Composition still refuses settlement while
+an IME composition is open. A new-scene form had no stored opening name; Escape
+keeps its existing close behaviour after creation, and heading-create remains
+an explicitly unsupported shared undo step.
+
+The existing six-surface table in `tests/features/shared-undo-surfaces.test.ts`
+holds the name boxes' own shortcut cases, Writer/box/global stack ordering,
+Escape races and 48 seeded three-writer histories. Each history checks input
+values, selection, reports, stored text and an encoded late joiner. There is no
+parallel box history or record reconstruction.
