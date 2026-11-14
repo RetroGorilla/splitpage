@@ -31,15 +31,18 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   missingBase: () => {}, recovered: () => {}, report: ports.report });
   const structure = sharedStructurePorts({ handle: () => live ? handle : null, author: () => author.next(),
     stamps: { clock: sessionStamps.clock, editor: { name: () => "Peer" } }, cells: html => ports.structure.cells(html) });
-  const pending: { readonly side: "app" | "peer"; readonly update: Uint8Array }[] = [];
+  const pending: { readonly side: "app" | "peer"; readonly id: number; readonly update: Uint8Array }[] = [];
+  const applied: { readonly to: "app" | "peer"; readonly update: number }[] = [];
+  let sent = 0;
   const enqueue = (side: "app" | "peer", update: Uint8Array): void => {
     if (!live) return;
-    pending.push({ side, update: Uint8Array.from(update) });
+    pending.push({ side, id: ++sent, update: Uint8Array.from(update) });
     if (!paused) queueMicrotask(() => { if (live && !paused) deliver(); });
   };
-  const receive = (side: "app" | "peer", update: Uint8Array): void => {
+  const receive = (side: "app" | "peer", update: Uint8Array, id?: number): void => {
     const result = applySharedUpdate(side === "app" ? app.handle : handle, update);
     if (!result.ok && result.reason !== "queue-full") throw new Error(result.reason);
+    if (result.ok && id !== undefined) applied.push({ to: side, update: id });
   };
   const resend = (side: "app" | "peer"): void => {
     if (!live) return;
@@ -51,8 +54,8 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     const updates = pending.splice(0);
     if (order === "reverse") updates.reverse();
     for (const item of updates) {
-      receive(item.side, item.update);
-      if (order === "duplicate") receive(item.side, item.update);
+      receive(item.side, item.update, item.id);
+      if (order === "duplicate") receive(item.side, item.update, item.id);
     }
     return updates.length;
   }
@@ -81,6 +84,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     release: (order: "forward" | "reverse" | "duplicate" = "forward") => { paused = false; return deliver(order); },
     read: () => session.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null),
     queued: () => pending.length,
+    appliedUpdates: () => applied.map(entry => ({ ...entry })),
     dispose: () => {
       live = false;
       for (const release of releases) release();

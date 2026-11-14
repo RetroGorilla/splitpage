@@ -5,15 +5,32 @@ import assert from "node:assert/strict";
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
+const globalListeners = new Map();
+const listenerProto = window.EventTarget.prototype, realAdd = listenerProto.addEventListener, realRemove = listenerProto.removeEventListener;
+const listenerSlot = (target, type, options) => (target === window ? "window " : "document ") + type
+  + ((typeof options === "boolean" ? options : Boolean(options?.capture)) ? "/C" : "/B");
+listenerProto.addEventListener = function (type, listener, options) {
+  if ((this === window || this === document) && listener) {
+    const slot = listenerSlot(this, type, options);
+    if (!globalListeners.has(slot)) globalListeners.set(slot, new Set());
+    globalListeners.get(slot).add(listener);
+  }
+  return realAdd.call(this, type, listener, options);
+};
+listenerProto.removeEventListener = function (type, listener, options) {
+  if (this === window || this === document) globalListeners.get(listenerSlot(this, type, options))?.delete(listener);
+  return realRemove.call(this, type, listener, options);
+};
+const listenerCounts = () => Object.fromEntries([...globalListeners].map(([slot, set]) => [slot, set.size]).filter(([, size]) => size > 0).sort());
 await bootApp();
-after(closeApp);
+after(() => { listenerProto.addEventListener = realAdd; listenerProto.removeEventListener = realRemove; closeApp(); });
 
 const { adoptReplacement, currentDocument, noteSessionEdit, runCommand, sharedSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { undoOwner, sharedUndoRoute, stepSharedUndo } = await import("../bootstrap/wiring/undo.ts");
 const { draftResume, flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
-const { draftsTesting } = await import("../bootstrap/wiring/drafts.ts");
+const { draftSource, draftsTesting } = await import("../bootstrap/wiring/drafts.ts");
 const { useDesktopForTest, restoreDesktop } = await import("../adapters/desktop/desktop-port.ts");
 const { autoSavePolicy, requestSave, confirmSavedNow, scheduleAutoSave } = await import("../bootstrap/wiring/save-owners.ts");
 const { currentHome, setHome } = await import("../bootstrap/wiring/location-owner.ts");
@@ -22,7 +39,11 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
-const hook = window.__sharedTest;
+const { notices } = await import("../bootstrap/wiring/ports/effects.ts");
+let hook = window.__sharedTest;
+const DRAFT_NOT_KEPT_NOTICE = "The shared session did not start: your recovery copy could not be saved.";
+const warnings = () => Array.from(document.querySelectorAll("#toast-host .toast.warn")).map(toast => toast.textContent);
+const settled = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); };
 
 async function releaseDesktop() {
   if (sharedSession()) hook.leave();
@@ -41,20 +62,34 @@ test("the test hook composes the running Writer and exchanges encoded peer updat
   script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "World", visualText: "" }]);
   assert.deepEqual(await hook.enter(), { ok: true });
   try {
+    const start = hook.peer.appliedUpdates().length;
     hook.peer.hold();
     assert.equal(hook.peer.type("r1", 0, "Y").kind, "applied");
     assert.equal(hook.peer.type("r2", 5, "!").kind, "applied");
+    await settled();
     assert.equal(hook.read().app.rows[0].audioText, "Hello");
     assert.equal(hook.counters().queued, 2);
+    assert.deepEqual(hook.peer.appliedUpdates().length, start);
     assert.equal(hook.peer.release("reverse"), 2);
+    const reversed = hook.peer.appliedUpdates().slice(start);
+    assert.deepEqual(reversed, [{ to: "app", update: reversed[1].update + 1 }, { to: "app", update: reversed[1].update }]);
     assert.deepEqual(hook.read().app, hook.read().peer);
     assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["YHello", "World!"]);
     assert.equal(document.querySelector('#writer-doc .wr-beat[data-id="r1"]').textContent, "YHello");
     hook.peer.hold();
     hook.peer.type("r1", 6, "?");
+    const held = hook.peer.appliedUpdates().length;
     assert.equal(hook.peer.release("duplicate"), 1);
+    const duplicated = hook.peer.appliedUpdates().slice(held);
+    assert.deepEqual(duplicated, [{ to: "app", update: reversed[0].update + 1 }, { to: "app", update: reversed[0].update + 1 }]);
     assert.deepEqual(hook.read().app, hook.read().peer);
     assert.equal(hook.read().app.rows[0].audioText, "YHello?");
+    hook.peer.type("r1", 7, "!");
+    assert.equal(hook.counters().queued, 1);
+    await settled();
+    assert.equal(hook.counters().queued, 0, "a released peer delivers the next update by itself");
+    assert.equal(hook.read().app.rows[0].audioText, "YHello?!");
+    assert.deepEqual(hook.peer.appliedUpdates().at(-1), { to: "app", update: reversed[0].update + 2 });
     const shared = hook.read().app;
     assert.deepEqual(hook.leave(), { ok: true });
     assert.notEqual(currentDocument().docId, shared.docId);
@@ -301,6 +336,46 @@ test("after a shared stretch over a stored draft, the next flush writes the land
   }
 });
 
+test("a final draft detach refusal after a passing preflight rolls entry back, keeps the draft reason and warns once", async () => {
+  script();
+  const before = JSON.stringify(currentDocument());
+  const detach = draftSource.detachSource, report = console.error, show = notices.show, reported = [], shown = [];
+  draftSource.detachSource = () => ({ ok: false, reason: "pending" });
+  console.error = error => { reported.push(String(error)); };
+  notices.show = (message, ...rest) => { shown.push([message, sharedSession()]); return show(message, ...rest); };
+  try {
+    assert.deepEqual(await hook.enter(), { ok: false, reason: "draft-pending" });
+  } finally { draftSource.detachSource = detach; console.error = report; notices.show = show; }
+  assert.equal(sharedSession(), false);
+  assert.equal(JSON.stringify(currentDocument()), before);
+  assert.deepEqual(shown.filter(([message]) => message === DRAFT_NOT_KEPT_NOTICE), [[DRAFT_NOT_KEPT_NOTICE, false]], "one draft warning, after the rollback");
+  assert.deepEqual(shown.at(-1), [DRAFT_NOT_KEPT_NOTICE, false]);
+  assert.ok(warnings().includes(DRAFT_NOT_KEPT_NOTICE));
+  assert.ok(reported.some(text => text.includes("The draft writer did not detach: pending")));
+  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(hook.leave(), { ok: true });
+});
+
+test("after leaving, the ordinary draft schedule writes the changed landed copy without an explicit flush", async () => {
+  const store = draftStore();
+  try {
+    script();
+    await flushDraftNow();
+    draftsTesting().setTiming({ idle: 5, max: 5 });
+    assert.deepEqual(await hook.enter(), { ok: true });
+    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    store.writes.length = 0;
+    assert.deepEqual(hook.leave(), { ok: true });
+    const landed = currentDocument().docId;
+    await new Promise(resolve => { setTimeout(resolve, 60); });
+    assert.deepEqual(store.writes.map(write => [write.text, write.docId, write.shared, write.kept]), [["Shared Hello", landed, false, true]]);
+    assert.deepEqual(store.discards, []);
+  } finally {
+    draftsTesting().setTiming({ idle: 1500, max: 5000 });
+    await releaseDesktop();
+  }
+});
+
 test("the composed recovery panel binding offers the Recovery action only while shared, restores and discards a peer's removal, and closes on leave", async () => {
   script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "Removed words", visualText: "" }]);
   assert.equal(appActions.has("recovery"), false);
@@ -346,4 +421,30 @@ test("the composed undo route warns once for skipped and used-up steps in both d
     assert.deepEqual(warned, [outcome === skipped ? `This step cannot be ${direction === "undo" ? "undone" : "redone"} in a shared session yet.`
       : `That step could not be ${direction === "undo" ? "undone" : "redone"} because someone else changed it.`]);
   }
+});
+
+test("stopping the app in a shared session leaves it and releases the hook and its listeners, and the restarted app enters again", async () => {
+  const app = await import("../bootstrap/app.ts");
+  const { rewireApp } = await import("./_app-boot.mjs");
+  const { startupReady } = await import("../application/startup-signal.ts");
+  const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
+  script();
+  const standalone = listenerCounts();
+  assert.equal(standalone["document compositionstart/C"], 1);
+  assert.deepEqual(await hook.enter(), { ok: true });
+  hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+  app.stopApp();
+  assert.equal(sharedSessionParts(), null);
+  assert.equal(sharedSession(), false);
+  assert.equal(window.__sharedTest, undefined);
+  assert.equal(listenerCounts()["document compositionstart/C"], undefined);
+  assert.equal(listenerCounts()["document compositionend/C"], undefined);
+  app.startApp(await rewireApp({}));
+  await startupReady();
+  hook = window.__sharedTest;
+  assert.deepEqual(listenerCounts(), standalone);
+  script();
+  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(hook.leave(), { ok: true });
+  assert.deepEqual(listenerCounts(), standalone);
 });

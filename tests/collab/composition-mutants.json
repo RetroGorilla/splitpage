@@ -477,15 +477,15 @@
     {
       "label": "entry detaches without flushing the pending standalone draft",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "  if ((await flushDraftNow()).ok) return draftDetachRefusal();\n",
-      "replace": "  if (true) return draftDetachRefusal();\n",
+      "find": "  const flushed = await flushDraftNow();\n",
+      "replace": "  const flushed = { ok: true };\n",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
       "label": "entry ignores a failed draft flush",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "  if ((await flushDraftNow()).ok) return draftDetachRefusal();\n",
-      "replace": "  if ((await flushDraftNow()) || true) return draftDetachRefusal();\n",
+      "find": "  if (flushed.ok) return draftDetachRefusal();\n",
+      "replace": "  if (flushed || true) return draftDetachRefusal();\n",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
@@ -505,8 +505,8 @@
     {
       "label": "leaving does not resume the draft writer",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "            peer?.dispose(); peer = null; ports = null;\n            if (detached) { detached = false; draftSource.resumeWriting(); }\n",
-      "replace": "            peer?.dispose(); peer = null; ports = null;\n",
+      "find": "      peer?.dispose(); peer = null; ports = null;\n      resume();\n",
+      "replace": "      peer?.dispose(); peer = null; ports = null;\n",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
@@ -575,8 +575,8 @@
     {
       "label": "encoded peer updates never reach the app",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
-      "find": "      receive(item.side, item.update);\n",
-      "replace": "      if (item.side === \"peer\") receive(item.side, item.update);\n",
+      "find": "      receive(item.side, item.update, item.id);\n",
+      "replace": "      if (item.side === \"peer\") receive(item.side, item.update, item.id);\n",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
@@ -591,6 +591,83 @@
       "file": "src/bootstrap/wiring/undo.ts",
       "find": "const notice = sharedUndoNotice(outcome, direction);",
       "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the release build keeps the shared hook and its peer",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "const startForTest = typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS ? startSharedTestHook : null;",
+      "replace": "const startForTest = startSharedTestHook;",
+      "tests": ["tests/bootstrap/shared-test-release.test.ts"]
+    },
+    {
+      "label": "the shared hook lives outside the app's start and stop",
+      "file": "src/bootstrap/app.ts",
+      "find": "    run([mountSharedSessionFeature, stopSharedSessionFeature]);\n",
+      "replace": "    mountSharedSessionFeature();\n",
+      "tests": ["src/test/shared-hook-app.test.mjs", "tests/bootstrap/wiring.test.ts"]
+    },
+    {
+      "label": "stopping the app does not leave the shared session",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "        const left = leaveNow(ports);\n        if (!left.ok) throw new Error(`The shared session did not end before the app stopped: ${left.reason}`);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "stopping the app keeps the hook's composition listeners",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "      document.removeEventListener(\"compositionstart\", composition, true);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs", "tests/bootstrap/wiring.test.ts"]
+    },
+    {
+      "label": "a final draft detach refusal answers enter-failed with no notice",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "      if (!result.ok && detachRefused) {",
+      "replace": "      if (!result.ok && detachRefused && false) {",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "peer hold leaves delivery unpaused",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    hold: () => { paused = true; },",
+      "replace": "    hold: () => {},",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "peer release leaves delivery paused",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "=> { paused = false; return deliver(order); },",
+      "replace": "=> { return deliver(order); },",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "reverse delivery becomes forward",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    if (order === \"reverse\") updates.reverse();\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "duplicate delivery applies once",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      if (order === \"duplicate\") receive(item.side, item.update, item.id);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "Writer disposal reports success on a refused settlement",
+      "file": "src/features/writer/writer.ts",
+      "find": "if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return false;",
+      "replace": "if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return true;",
+      "tests": ["tests/features/writer/runtime-mount.test.ts"]
+    },
+    {
+      "label": "leaving schedules no draft for the landed copy",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "noteSaveChange(); noteDraftChange();",
+      "replace": "noteSaveChange();",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     }
   ]

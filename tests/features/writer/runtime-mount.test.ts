@@ -52,7 +52,7 @@ test("a refused buffer settlement keeps the Writer open through close, undo and 
     assert.equal(root.textContent, "held native text");
     assert.equal(writer.writerUndoStep("undo"), true);
     assert.equal(replayed, false);
-    writer.dispose();
+    assert.equal(writer.dispose(), false);
     assert.equal(h.state.open, true);
     assert.equal(root.textContent, "held native text");
     allowed = true;
