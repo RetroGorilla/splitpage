@@ -275,7 +275,21 @@ replacement, in the same task:
   `src/application/session/apply-merge.ts:133` calls `current()`, which throws
   while shared, so `keptForNextLaunch()` never runs.
 
-Found in the same review, for other cuts:
+Found in the review of #1557 (C5a):
+
+- **C4, leaving.** While the author's handle is live, a Writer still on the shared
+  ports goes wrong on the standalone session: that session ignores `plan.shared`
+  and applies the standalone plan while the caret and undo selection hold
+  committed ids that do not exist, and the identical-replacement path throws
+  "Shared intent requires a shared session". Leaving restarts the bindings and
+  clears the handle no later than the owner swap.
+  `tests/bootstrap/shared-switch.test.ts` pins it (the author answers `null` and
+  the bindings have left when the standalone entry runs).
+- **C6.** The `writer` passed to `writerFlowCommands` is the adapter's writer,
+  `String(collabState(handle).doc.clientID)` (`src/adapters/collab/prepare.ts:56`),
+  taken from the same handle as the author port so the two cannot differ.
+
+Found in the review of #1551, for other cuts:
 
 - **C8.** `src/application/identity/document-identity.ts:92` ignores the
   rejected outcome of its stamp after a `BroadcastChannel` message from another
@@ -285,6 +299,29 @@ Found in the same review, for other cuts:
   when its stamp is refused and then runs `plan.commit()` anyway. Fixed in C5c:
   it commits only after an applied stamp, or when there was nothing to apply.
 
+Wiring notes from pull requests merged or in review since the plan, each for the cut
+that wires its surface:
+
+- **C6 or later, Writer paste** (paste is outside C6's typing scope). The shared
+  Writer selects `pasteSharedFlowClipboard` and passes the handle to
+  `writerFlowCommands(flow, { author, writer })`, with `writer` from the same handle
+  as the author port (`String(collabState(handle).doc.clientID)`), and consumes the
+  returned selection anchors.
+- **C7, people.** `sharedPeopleIntroducedByText` uses the name-derived person id,
+  as `personIdentity` in `src/application/commands/flow-paste.ts` does
+  ("person_" and the hex of the normalized name's UTF-16 units). Rule 101.
+- **C7, pictures** (#1564). Cell editing's `editGallery` passes
+  `sharedGalleryPorts({ handle, author: () => authorPort.next(), stamps: ports.text })`
+  as the fourth argument of `galleryCommand`: a plain author function, since only
+  the Writer's ports may name the author port (`operation-families.test.ts`).
+- **C7, scene name boxes** (#1562). `mountSceneHeaders` gets
+  `sharedBufferedInputPorts` and `sharedSceneCreation(handle, session, author)`, with
+  the same `shown` as `src/bootstrap/wiring/buffered-input.ts`. No beat buffer may
+  be holding when the add-scene form gets keys, and teardown handles a dispose
+  during a first composition.
+- **The cut that wires add-section.** It describes its plan with `typing: null`, so
+  the replica records it at execution like any described command (C2).
+
 Found in the review of #1559 (C2):
 
 - **C4.** The same shared undo owner goes to the replica (`createSharedReplica(handle,
@@ -293,6 +330,63 @@ Found in the review of #1559 (C2):
   to it; the owner is reset on entering and on leaving.
 - **C6.** The Writer consumes the selection anchors an undo or redo returns
   (`SharedUndoOutcome.selection`) to put the caret back.
+
+Found in the review of #1567 (C4):
+
+- **The switch's order.** Entering and leaving are each one sequence with one way
+  back (`src/bootstrap/wiring/shared-session.ts`).
+  - Entering routes undo before the shared owner can be seen, resets the
+    standalone undo owner before the bindings, hydrates, and detaches last: the
+    detach port is the one step with no way back. Any failure after the first
+    change lands the kept copy as standalone, with the merge base restored, the
+    bindings left, the route cleared and the handle destroyed.
+  - Leaving restarts the bindings first, copies the projection after that
+    restart, migrates it, silences the author, swaps the owner, and only then
+    clears the route and destroys the handle. A failure before the landing puts
+    the shared bindings back and leaves a shared session that can be left again.
+- **The switch's fault model** (second review of #1567). This is the bar, and
+  nothing wider:
+  - **A. Single fault.** Any one port call, or any one listener or callback run
+    during a step, throws once. Then exactly one session is current and whole
+    (standalone on the kept document, or shared and working), and Ctrl+Z reaches
+    that session's owner. The other session's handle, replica, route, bindings and
+    listeners are gone, the original error is reported, and entering or leaving can
+    be called again and works.
+  - **B. A further fault while unwinding** (a rollback step, a cleanup step or
+    `report` itself throws). Then the user's document is not lost (the kept copy or
+    the projection is the current standalone document, or the shared session still
+    holds it and can be left), every remaining cleanup step is still attempted, and
+    the first error is reported first. Leftovers are accepted, and named:
+    - an undisposed shared session when its `dispose` throws during a restore or
+      a commit;
+    - an undisposed replica when its `dispose` throws;
+    - Yjs observers on a handle whose destroy listener throws on both attempts;
+    - errors after the first left unreported when `report` throws.
+  - **C.** Nothing is accepted between the capture of a document and its landing.
+    A command or an undo issued in that window is refused as `session-switching`.
+- **How the switch meets it.**
+  - Callbacks are not steps: replacement listeners run inside
+    `collectReplacementErrors`, and their errors are reported once the state is
+    consistent.
+  - Entering prepares before it changes anything: it holds commands, copies the
+    kept document, migrates the hydration copy and allocates the handle.
+  - Both replacements are two-phase (`OwnerSwap`): the previous owner stays alive
+    until `commit`. A failed entry `restore`s the kept standalone owner itself,
+    which changes no document and runs no migration, and re-tracks the standalone
+    undo owner.
+  - Leaving reports success only when the landed standalone document equals the
+    captured copy; otherwise it restores the shared owner.
+  - Cleanup is a list of guarded steps, and destroying a handle is tried twice.
+- **The cut that supplies the real ports (the hook).** Detaching cancels pending
+  draft and autosave timers, a late save completion cannot land in the shared
+  session, and the source draft survives entering and leaving untouched (rule 76).
+  It owes a literal through the real wiring: real draft owner, write the unsaved
+  source draft, arm `noteChange`, enter, edit, leave, fire the pending timer, and
+  the source draft is unchanged. The same mount supplies the real refusal,
+  settlement, detachment and binding ports, and verifies autosave cancellation,
+  draft preservation and late save completion through them.
+- **C6.** It replaces the Writer's standalone history readers while shared, and
+  consumes the shared undo selection anchors.
 
 ### Order of leaving
 
