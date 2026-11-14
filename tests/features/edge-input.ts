@@ -20,7 +20,12 @@ export function edgeInput(current: () => HTMLInputElement) {
   const composition = (field: HTMLInputElement, type: string, data: string) => {
     field.dispatchEvent(new window.CompositionEvent(type, { bubbles: true, cancelable: true, data }));
   };
-  const clipboard = (field: HTMLInputElement, type: "cut" | "paste") => field.dispatchEvent(new window.Event(type, { bubbles: true, cancelable: true }));
+  let copied = "";
+  const clipboard = (field: HTMLInputElement, type: "cut" | "paste", text = "") => {
+    const event = new window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { getData: (format: string) => format === "text/plain" ? text : "" } });
+    return field.dispatchEvent(event);
+  };
   const span = (field: HTMLInputElement) => { const from = field.selectionStart ?? 0; return [from, field.selectionEnd ?? from] as const; };
   function replace(field: HTMLInputElement, from: number, to: number, text: string): void {
     field.value = field.value.slice(0, from) + text + field.value.slice(to);
@@ -28,7 +33,11 @@ export function edgeInput(current: () => HTMLInputElement) {
   }
   function fitted(field: HTMLInputElement, text: string): string {
     const [from, to] = span(field);
-    return field.maxLength < 0 ? text : text.slice(0, Math.max(0, field.maxLength - field.value.length + to - from));
+    if (field.maxLength < 0) return text;
+    const available = Math.max(0, field.maxLength - field.value.length + to - from);
+    let put = "";
+    for (const character of text) { if (put.length + character.length > available) break; put += character; }
+    return put;
   }
   function chord(name: string, modifiers: Modifiers, act: (field: HTMLInputElement) => boolean): boolean {
     const field = current();
@@ -67,10 +76,12 @@ export function edgeInput(current: () => HTMLInputElement) {
     key(field, "keyup", name);
     return count;
   }
-  function history(name: string, type: string, restored: string | null): boolean {
+  function history(name: string, type: string, restored: string | null, selection?: readonly [number, number]): boolean {
     return chord(name, { ctrlKey: true }, field => {
       if (restored === null || !before(field, type, null)) return false;
-      field.value = restored; after(field, type, null);
+      field.value = restored;
+      field.setSelectionRange(selection?.[0] ?? restored.length, selection?.[1] ?? restored.length);
+      after(field, type, null);
       return true;
     });
   }
@@ -107,18 +118,24 @@ export function edgeInput(current: () => HTMLInputElement) {
     }),
     cut: () => chord("x", { ctrlKey: true }, field => {
       const [from, to] = span(field);
-      if (!clipboard(field, "cut") || from === to || !before(field, "deleteByCut", null)) return false;
+      if (!clipboard(field, "cut") || from === to) return false;
+      copied = field.value.slice(from, to);
+      if (!before(field, "deleteByCut", null)) return false;
       replace(field, from, to, ""); after(field, "deleteByCut", null);
       return true;
     }),
-    paste: (text: string) => chord("v", { ctrlKey: true }, field => {
-      if (!clipboard(field, "paste") || !before(field, "insertFromPaste", text)) return false;
-      const [from, to] = span(field), put = fitted(field, text);
+    copied: () => copied,
+    paste: (text: string, during?: () => void) => chord("v", { ctrlKey: true }, field => {
+      const native = text.replace(/\r\n|\r|\n/g, "\r\n");
+      if (!clipboard(field, "paste", native) || !before(field, "insertFromPaste", native)) return false;
+      during?.();
+      const [from, to] = span(field), put = fitted(field, native.replace(/\r\n/g, " "));
+      if (!put && from === to) return false;
       replace(field, from, to, put); after(field, "insertFromPaste", put);
       return true;
     }),
-    undo: (restored: string | null) => history("z", "historyUndo", restored),
-    redo: (restored: string | null) => history("y", "historyRedo", restored),
+    undo: (restored: string | null, selection?: readonly [number, number]) => history("z", "historyUndo", restored, selection),
+    redo: (restored: string | null, selection?: readonly [number, number]) => history("y", "historyRedo", restored, selection),
     drop: (text: string) => {
       const field = current();
       if (!field.dispatchEvent(new window.Event("drop", { bubbles: true, cancelable: true })) || !before(field, "insertFromDrop", text)) return false;

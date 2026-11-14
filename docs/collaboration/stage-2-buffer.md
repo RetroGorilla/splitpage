@@ -445,7 +445,7 @@ the stored name (`storedSceneName`, edge spaces included), and the empty and
 the plan review:
 
 - An input gives no target range, so a collapsed Backspace or Delete is left to
-  the browser and adopted at its `input` event. Paste, drop, `historyUndo`,
+  the browser and adopted at its `input` event. Drop, `historyUndo`,
   `historyRedo` and other input types are refused with `buffer-unsupported-input`,
   after settling typing; a refused undo restores nothing.
 - Enter on a settled name lets its `insertLineBreak` through, so the form's
@@ -456,7 +456,7 @@ the plan review:
   admitted, a cancelled composition that began held, or the input losing focus
   (any blur that a same-task refocus, as a repaint's re-homing, does not undo) or
   the document selection leaving the form, each with the stored name back and one
-  report. Enter, paste, drop, `historyUndo` and `historyRedo` end it the same way
+  report. Enter, drop, `historyUndo` and `historyRedo` end it the same way
   at their `beforeinput` and are consumed: nothing else happens and the form stays
   open on the stored name; Escape then closes it. A focus transfer to another
   element, or a submit from elsewhere, also closes the form after the one report.
@@ -469,9 +469,10 @@ the plan review:
   of a key held down to clear the name is prevented and is not a key press, as
   in the Writer, so releasing it keeps the hold. A letter,
   with or without Shift or after a dead key, and a committed composition replace
-  the name once. Paste is not an insertion: emptying a name and then pasting a new
-  one gives the report, while selecting the name and pasting is refused as any
-  paste is.
+  the name once. Rule 84 now accepts paste as a replacement, including into an
+  emptied held name; a cut copies before its native deletion, and cutting the
+  whole name holds it empty. [Native evidence and exact truncation](stage-2-name-box-input.md)
+  pin line breaks, control characters, the 200-unit paste limit and the caret.
 - A paint during an edit re-homes the form into the rebuilt header. The caret and
   selection, with their direction, follow the shared units: each end stays after
   the unit it followed, so text others insert at either side or between equal
@@ -514,9 +515,11 @@ review:
 - Shared typing leaves `titleOrigin` and `titleVersion` as they are. Saving is
   refused in a shared session, so the first-save rename from the file name cannot
   overwrite a typed title yet; this needs a rule when shared saving lands.
-- Paste, cut, drop, `historyUndo`, `historyRedo` and other input types are
+- Drop, `historyUndo`, `historyRedo` and other input types are
   refused with `buffer-unsupported-input`, after settling typing, as in the
-  rename form. Enter changes nothing.
+  rename form. Enter changes nothing. Rule 84 accepts paste and cut through
+  the native input replacement, with a 300-unit paste limit; its
+  [recorded evidence](stage-2-name-box-input.md) is shared with the rename form.
 - A paint keeps the caret and selection, with their direction, on the same
   shared units, as in the rename form.
 - For the wiring cut: `paintSessionChange` in `src/features/rows/render.ts`

@@ -536,8 +536,8 @@
   }, {
     "label": "a buffered input reads every field from the input being typed in",
     "file": "src/features/common/buffered-input.ts",
-    "find": "runs: input => [{ text: input.value, marks: {} }],",
-    "replace": "runs: () => [{ text: typing().value, marks: {} }],",
+    "find": "text: input => input.value,",
+    "replace": "text: () => typing().value,",
     "tests": ["tests/features/title/title-buffer.test.ts"]
   }, {
     "label": "a shared title has no length verdict",
@@ -593,5 +593,59 @@
     "find": "      refuse(event, \"buffer-no-visual\"); return;",
     "replace": "      void event;",
     "tests": ["tests/features/editing/cell-buffer-visual.test.ts"]
+  }, {
+    "label": "a name box still refuses paste",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "type === \"insertFromPaste\" || type === \"deleteByCut\"",
+    "replace": "type === \"deleteByCut\"",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "a title box still refuses cut",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "type === \"insertFromPaste\" || type === \"deleteByCut\"",
+    "replace": "type === \"insertFromPaste\"",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "paste writes past the name box limit",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "Math.max(0, form.pasteLimit - before.length + to - from)",
+    "replace": "Infinity",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "paste discards the unselected name suffix",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "before.slice(0, from) + inserted + before.slice(to)",
+    "replace": "before.slice(0, from) + inserted",
+    "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "a plain name input loses native control characters",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "    text: input => input.value,\n",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a pasted title caret no longer resolves through shared characters",
+    "file": "src/adapters/collab/buffer-selection.ts",
+    "find": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {",
+    "replace": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {\n  if (field?.target.field === \"title\") return undefined;",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "plain name operations clean native control characters as cell text",
+    "file": "src/core/collab/buffer-operations.ts",
+    "find": "const plain = target.field === \"heading\" || target.field === \"title\";",
+    "replace": "const plain = false;",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "paste truncation cuts a surrogate pair in half",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "unitSafePrefix(input.value.slice(from, end), Math.max(0, form.pasteLimit - before.length + to - from))",
+    "replace": "input.value.slice(from, end).slice(0, Math.max(0, form.pasteLimit - before.length + to - from))",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "paste masks unproved changes outside its selection",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "end >= from && input.value.slice(0, from) === before.slice(0, from) && input.value.slice(end) === before.slice(to)",
+    "replace": "true",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
   }]
 }

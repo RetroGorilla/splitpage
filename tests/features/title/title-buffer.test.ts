@@ -139,8 +139,6 @@ test("shared title: Enter changes nothing and tells nothing", () => {
 });
 
 for (const [label, act] of [
-  ["Ctrl+V", (page: TitlePage) => page.edge.paste("Q")],
-  ["Ctrl+X over a selection", (page: TitlePage) => { page.edge.select(0, 2); return page.edge.cut(); }],
   ["Ctrl+Z", (page: TitlePage) => page.edge.undo("Draft")]
 ] as const) {
   test(`shared title: ${label} after typing is refused and the person is told; nothing changes`, () => {
@@ -155,6 +153,106 @@ for (const [label, act] of [
     } finally { page.close(); }
   });
 }
+
+test("shared title rule 84: paste replaces the selection, cut copies before deleting, and the caret follows remote text", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.select(1, 4);
+    assert.equal(page.edge.paste("XY", () => { remote(page, 0, "!"); page.h.queue.deliverFrom("B", "D1"); }), true);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports], ["!DXYt", "!DXYt", "!DXYt", [4, 4, "none"], []]);
+    assert.deepEqual(written(page), [[inserted("XY"), { kind: "text-delete", observed: 3 }]]);
+    copies(page, ["!DXYt", "user"]);
+    page.edge.select(2, 4); assert.equal(page.edge.cut(), true);
+    assert.deepEqual([page.edge.copied(), page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports], ["XY", "!Dt", "!Dt", "!Dt", [2, 2, "none"], []]);
+    assert.deepEqual(written(page), [[inserted("XY"), { kind: "text-delete", observed: 3 }], [{ kind: "text-delete", observed: 2 }]]);
+    copies(page, ["!Dt", "user"]);
+  } finally { page.close(); }
+});
+
+for (const [label, act, expected, offset, operation] of [
+  ["Ctrl+V", (page: TitlePage) => page.edge.paste("Q"), "DraftXQ", 7, inserted("Q")],
+  ["Ctrl+X over a selection", (page: TitlePage) => { page.edge.select(0, 2); return page.edge.cut(); }, "aftX", 0, { kind: "text-delete", observed: 2 }]
+] as const) {
+  test(`shared title rule 84: ${label} after typing writes a shared edit without a report`, () => {
+    const page = sharedTitle();
+    try {
+      page.main.focus(); page.edge.select(5); page.edge.type("X");
+      assert.equal(act(page), true);
+      assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page)],
+        [expected, expected, expected, [offset, offset, "none"], [], [[inserted("X")], [operation]]]);
+      copies(page, [expected, "user"]);
+    } finally { page.close(); }
+  });
+}
+
+test("shared title rule 84: paste cannot mask a native difference outside its captured selection", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.select(2);
+    page.edge.paste("Q", () => { page.main.value = "Xraft"; page.main.setSelectionRange(2, 2); });
+    assert.deepEqual([page.stored(), page.main.value, caret(page.main), page.reports, written(page), holds(page)],
+      ["Draft", "XrQaft", [3, 3, "none"], [{ kind: "rejected", reason: "buffer-native-evidence" }], [], ["buffer"]]);
+    copies(page, ["Draft", "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title rule 84: paste during composition is consumed, and the final composition still commits", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.select(5); page.edge.imeSet("漢");
+    assert.equal(page.edge.paste("Q"), false);
+    assert.deepEqual([page.stored(), page.main.value, page.reports, written(page)], ["Draft", "Draft漢", [{ kind: "rejected", reason: "buffer-composition" }], []]);
+    page.edge.imeCommit("漢");
+    assert.deepEqual([page.stored(), page.main.value, caret(page.main), written(page)], ["Draft漢", "Draft漢", [6, 6, "none"], [[inserted("漢")]]]);
+    copies(page, ["Draft漢", "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title rule 84: paste keeps its prefix up to 300 UTF-16 units without splitting a pair or deleting the suffix", () => {
+  const page = sharedTitle("a".repeat(297) + "Z");
+  try {
+    page.main.focus(); page.edge.select(297);
+    assert.equal(page.edge.paste("X😀Q"), true);
+    const expected = "a".repeat(297) + "XZ";
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page)],
+      [expected, expected, expected, [298, 298, "none"], [], [[inserted("X")]]]);
+    copies(page, [expected, "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title rule 84: native paste folds line breaks to spaces and retains tabs and control characters", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.selectAll(); page.edge.paste("A\r\nB\nC\rD\tE\u0001F\u000bG\u007fH");
+    const expected = "A B C D\tE\u0001F\u000bG\u007fH";
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page)],
+      [expected, expected, expected, [15, 15, "none"], [], [[inserted(expected), { kind: "text-delete", observed: 5 }]]]);
+    copies(page, [expected, "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title rule 84: cutting everything writes empty immediately and pasting at a full title writes nothing", () => {
+  const page = sharedTitle("a".repeat(300));
+  try {
+    page.main.focus(); page.edge.select(300); page.edge.paste("XYZ");
+    assert.deepEqual([page.stored(), page.main.value, caret(page.main), page.reports, written(page), holds(page)],
+      ["a".repeat(300), "a".repeat(300), [300, 300, "none"], [], [], []]);
+    page.edge.selectAll(); assert.equal(page.edge.cut(), true);
+    assert.deepEqual([page.edge.copied(), page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page), holds(page)],
+      ["a".repeat(300), "", "", "", [0, 0, "none"], [], [[{ kind: "text-delete", observed: 300 }]], []]);
+    copies(page, ["", "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title rule 84: drop stays refused after paste and preserves the pasted text and caret", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.select(2); page.edge.paste("Q"); assert.equal(page.edge.drop("Z"), false);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page)],
+      ["DrQaft", "DrQaft", "DrQaft", [3, 3, "none"], UNSUPPORTED, [[inserted("Q")]]]);
+    copies(page, ["DrQaft", "user"]);
+  } finally { page.close(); }
+});
 
 test("shared title: a composition settles once at compositionend", () => {
   const page = sharedTitle();

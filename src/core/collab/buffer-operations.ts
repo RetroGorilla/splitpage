@@ -38,7 +38,8 @@ export function bufferedTextOperations(
   runs: readonly Run[],
   author: { readonly id: string; readonly by: string }
 ): readonly SharedOperation[] {
-  const units = explode(runs), value = units.map(unit => unit.atom ? OBJ : unit.ch).join("");
+  const plain = target.field === "heading" || target.field === "title";
+  const units = explode(runs), value = plain ? runs.map(run => run.text).join("") : units.map(unit => unit.atom ? OBJ : unit.ch).join("");
   if (commit.base !== painted.revision || commit.text !== value) throw new Error("Buffered text does not match its native evidence");
   const cutsPair = (offset: number): boolean => value.charCodeAt(offset - 1) >= 0xd800 && value.charCodeAt(offset - 1) <= 0xdbff
     && value.charCodeAt(offset) >= 0xdc00 && value.charCodeAt(offset) <= 0xdfff;
@@ -53,9 +54,9 @@ export function bufferedTextOperations(
     const at = splice.from + delta;
     if (splice.insert.length) {
       const from = at - Number(cutsPair(at)), end = at + splice.insert.length, to = end + Number(cutsPair(end));
-      const piece = implode(units.slice(from, to));
+      const piece = plain ? [{ text: value.slice(from, to), marks: {} }] : implode(units.slice(from, to));
       const trace = new FlowOperationTrace({ rows: [] }, { cells: () => [] }, { id: author.id + ":" + index, by: author.by });
-      trace.insert(target.owner, [], 0, piece);
+      trace.insert(target.owner, [], 0, piece, plain ? "heading" : "audioText");
       const insertion = trace.ops[0];
       if (insertion?.kind !== "text-insert") throw new Error("Missing buffered insertion");
       const right = splice.from < painted.text.length ? identity(splice.from) : painted.emptyGap ?? null;

@@ -3,6 +3,7 @@ import type { PaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import type { FlowPos, FlowRange } from "../../core/flow/flow.ts";
+import { unitSafePrefix } from "../../core/document/text-policy.ts";
 
 export interface BufferedInputPorts {
   readonly field: (surface: BufferedFieldSurface<HTMLInputElement>) => BufferedFieldBinding;
@@ -21,6 +22,7 @@ export interface BufferedInputField {
   readonly owns: (pos: FlowPos) => boolean;
   readonly stored: () => string | null;
   readonly unsettled?: (text: string) => { readonly reason: string; readonly hold: boolean } | null;
+  readonly pasteLimit: number;
   readonly place?: () => void;
   readonly changed?: () => void;
 }
@@ -57,6 +59,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   if (!first) throw new Error("A buffered input needs an input element");
   const doc = first.ownerDocument;
   let composing = false, kept: KeptCaret | null = null, open = true, pressed = false;
+  let paste: { readonly before: string; readonly from: number; readonly to: number } | null = null;
   const active = () => inputs.find(input => doc.activeElement === input) ?? null;
   const typing = () => active() ?? first;
   const caretNow = (input: HTMLInputElement): KeptCaret => {
@@ -84,6 +87,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     normalize: () => {},
     reset, repaint: reset,
     runs: input => [{ text: input.value, marks: {} }],
+    text: input => input.value,
     selection: () => { const input = active(); return input ? range(input) : null; },
     composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (_rowId, selection) => {
@@ -104,12 +108,30 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       if (binding.held() && !key.isComposing && key.keyCode !== 229 && !MODIFIERS.has(key.key)) pressed = true;
       return;
     }
-    if (event.type === "input") { binding.input(); return; }
+    if (event.type === "input") {
+      if (paste) {
+        const { before, from, to } = paste; paste = null;
+        const end = input.value.length - (before.length - to);
+        if (end >= from && input.value.slice(0, from) === before.slice(0, from) && input.value.slice(end) === before.slice(to)) {
+          const inserted = unitSafePrefix(input.value.slice(from, end), Math.max(0, form.pasteLimit - before.length + to - from));
+          input.value = before.slice(0, from) + inserted + before.slice(to);
+          input.setSelectionRange(from + inserted.length, from + inserted.length);
+        }
+      }
+      binding.input(); return;
+    }
     if (event.type === "compositionstart") { binding.start(event, range(input)); return; }
     if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
     const native = event as InputEvent, type = native.inputType;
     if (native.isComposing || /Composition/.test(type)) return;
     if (!binding.dirty() && input.value === ports.painted.text(key)) ports.painted.field(key, input.value);
+    if (type === "insertFromPaste" || type === "deleteByCut") {
+      if (composing) { binding.settledFor(native); return; }
+      if (type === "insertFromPaste") paste = { before: input.value, from: input.selectionStart ?? 0, to: input.selectionEnd ?? 0 };
+      binding.beforeInput({ type: native.type, inputType: type === "insertFromPaste" ? "insertText" : "deleteContentBackward",
+        isComposing: false, data: native.data, preventDefault: () => { paste = null; native.preventDefault(); } }, range(input), range(input));
+      return;
+    }
     // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event
     if (type.startsWith("delete") && type !== "deleteByCut" && type !== "deleteByDrag" && input.selectionStart === input.selectionEnd) return;
     // why: Enter sends this before the form's submit, which closes a settled name; a held one is consumed below
