@@ -95,7 +95,7 @@ const cases: readonly CommentLiteral[] = [
     after: { audio: "abcd" }, recovery: [{ kind: "comment-without-words", comment: "C1", rowId: "R1", field: "audioText" }] }
 ];
 
-function setup(source: unknown = SOURCE) {
+function setup(source: Record<string, unknown> = SOURCE) {
   const set = replicas(2, source);
   for (const handle of [set.a, set.b, set.c]) registerSharedOperationFamilies(handle, { cells: createFlowLoadRuntime().cells });
   return set;
@@ -316,7 +316,7 @@ const comment = (id: string, quotedText: string, createdAt: string, replies: rea
 const splitAt = (id: string, owner: string, offset: number, beat: string) => ({ kind: "split", id, by: "Bob", target: { owner, segment: owner, field: "audioText" },
   at: { left: flowBaseReference("R1", "audioText", offset), right: null, affinity: "after" }, observed: [], boundary: beat, beat, fields: {} });
 const JOIN = { kind: "join", id: "joined", by: "Bob", from: "R2", into: "R1", glue: " " };
-interface Scenario { readonly name: string; readonly source: unknown; readonly prep: readonly unknown[]; readonly make: (shared: SharedCommentPorts | undefined) => Command }
+interface Scenario { readonly name: string; readonly source: Record<string, unknown>; readonly prep: readonly unknown[]; readonly make: (shared: SharedCommentPorts | undefined) => Command }
 const deleting = (s: SharedCommentPorts | undefined) => deleteCommentCommand("C1", unwrapping("R1", "audioText", "C1"), s);
 const unwrapC1 = (s: SharedCommentPorts | undefined) => unwrapCommentAnchorCommand(unwrapping("R1", "audioText", "C1"), s && { ports: s, anchor: "C1" });
 const single = (audio: string, r2 = "ef") => ({ rows: [{ id: "R1", audioText: audio }, { id: "R2", audioText: r2 }], comments: [comment("C1", "bc", at(0), [REPLY])] });
