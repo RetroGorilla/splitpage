@@ -18,6 +18,7 @@ import type { SharedDocumentSession } from "../../src/application/session/shared
 import { headingFieldKey, TITLE_FIELD_KEY } from "../../src/application/editing/buffered-field-key.ts";
 import { bufferedFieldKey } from "../../src/core/collab/buffer.ts";
 import { sharedUndoOwner } from "../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedWriterVisualBox } from "./writer/visual-undo-support.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
 
 type Hook = (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform">;
@@ -45,6 +46,7 @@ const SURFACES: readonly Surface[] = [
     const page = headedWriter("Scene", undefined, { undo });
     return { h: page.h, session: page.a.session, typeA: () => { assert.equal(page.typeHeading(5, 5, "x"), true); }, close: page.close };
   } },
+  { name: "Writer visual box", key: bufferedFieldKey("R1", "visualText"), start: "", open: sharedWriterVisualBox },
   { name: "Split narration cell", key: "R1", start: "ab", open: undo => {
     const page = bufferedSplit([{ id: "R1", text: "ab" }], true, { undo });
     return { h: page.h, session: page.a.session, typeA: () => { assert.equal(page.key("R1", 2, 2, "insertText", "x"), true); }, close: page.close };

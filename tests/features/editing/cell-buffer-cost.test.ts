@@ -73,5 +73,5 @@ test("the shared Split wiring is not called by the running app", () => {
   const files = (dir: string): string[] => readdirSync(REPO + dir, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? files(dir + "/" + entry.name) : /\.ts$/.test(entry.name) ? [dir + "/" + entry.name] : []);
   const importers = files("src").filter(path => /split-buffer\.ts|mountSharedSplitBuffer|mountCellBuffer/.test(readFileSync(REPO + path, "utf8")));
-  assert.deepEqual(importers.sort(), ["src/bootstrap/wiring/split-buffer.ts", "src/features/editing/cell-buffer.ts"]);
+  assert.deepEqual(importers.sort(), ["src/bootstrap/wiring/ports/writer-visual-buffer.ts", "src/bootstrap/wiring/split-buffer.ts", "src/features/editing/cell-buffer.ts"]);
 });

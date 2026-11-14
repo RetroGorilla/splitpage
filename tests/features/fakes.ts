@@ -104,7 +104,7 @@ export function fakeWriterBufferEffects() {
   return { effects, reports, missing, recovered };
 }
 
-export function fakeWriterPorts(initial: DocumentView) {
+export function fakeWriterPorts(initial: DocumentView, visual: Pick<FlowWriterPorts, "visualBuffer"> = {}) {
   const reader = fakeDocument(initial);
   const notices = fakeNotices();
   const editing = fakeEdits();
@@ -114,6 +114,7 @@ export function fakeWriterPorts(initial: DocumentView) {
   const state = { open: false, allowed: true, size: null as number | null, lifetime: 1, serial: 0 };
   const ports: WriterFeaturePorts = {
     flow: { prepareSplit: () => {}, splitReady: () => true, create: (root, selectionMoved, step) => createFlowWriter({
+      ...visual,
       root, selectionMoved, doc: () => initial, lifetime: { epoch: () => 0 }, heldSelection: selection,
       flow: { cells: html => [{ text: String(html ?? ""), marks: {} }], newId: () => "new", hasVisual: row => !!row.visualText },
       decode: html => [{ text: html, marks: {} }], storedHtml: html => html, run: editing.edits.run, moveBeat: swapBeatsCommand,

@@ -69,7 +69,7 @@ export function sharedTextCommandPlan(view: SharedPreparationView, target: Share
     if (!facade && JSON.stringify(view.get(located.path)) !== "[]") throw new SharedTextPreparationError("missing-target");
     const units = (facade?.units ?? []).map(unit => ({ value: unit.value, additions: unit.marks.flatMap(group => group.additions.map(addition => addition.record)) }));
     const spans = target.field === "audioText" || target.field === "heading" ? sharedStructureSpans(view, located.target.segment, units) : [];
-    return { ...located, units, points: sharedTextPoints(view, located.path), native: provenance("", units, 0, target.field), sources: spans.length ? spans.flatMap(span => [...new Set([span.owner, span.field === "audioText" ? cleanId(span.owner) : span.owner])].map(owner => projectedProvenance(owner, units, span.positions, span.from, span.to, span.field))) : [provenance(target.owner, units, 0, target.field)], recordKeys: [...facade?.recordKeys ?? []],
+    return { ...located, units, points: sharedTextPoints(view, located.path), native: provenance("", units, 0, target.field), sources: spans.length ? spans.flatMap(span => [...new Set([span.owner, span.field === "audioText" ? cleanId(span.owner) : span.owner])].map(owner => projectedProvenance(owner, units, span.positions, span.from, span.to, span.field))) : [provenance(located.target.owner, units, 0, target.field)], recordKeys: [...facade?.recordKeys ?? []],
       additions: (facade?.records ?? []).flatMap(item => item.record.type === "add" ? [{ identity: item.identity, mark: item.record.mark }] : []) };
   })();
   return { ...slot.plan, target: located.target };
