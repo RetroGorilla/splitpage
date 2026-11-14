@@ -597,7 +597,7 @@
       "label": "undo puts the caret at the old offsets",
       "file": "src/adapters/collab/undo-executor.ts",
       "find": "const previous = offset > 0 ? after.identity(offset - 1) : null;",
-      "replace": "const previous = offset > 0 ? before.identity(offset - 1) : null;",
+      "replace": "const previous = offset > 0 ? before.painted.identity(offset - 1) : null;",
       "tests": [
         "tests/collab/undo-selection.test.ts",
         "tests/features/undo-selection.test.ts"
@@ -638,6 +638,16 @@
       "file": "src/core/collab/undo-record.ts",
       "find": ",\n    ...first.caretText ? { caretText: first.caretText } : {} } : null;",
       "replace": " } : null;",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "the caret ignores marks",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": " && before.marks[a.length - 1 - index] === shown.marks[b.length - 1 - index]",
+      "replace": "",
       "tests": [
         "tests/collab/undo-selection.test.ts",
         "tests/features/undo-selection.test.ts"
