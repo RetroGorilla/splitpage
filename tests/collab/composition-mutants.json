@@ -3,7 +3,8 @@
     "tests/adapters/collab/operation-families.test.ts",
     "tests/bootstrap/shared-author.test.ts",
     "tests/collab/undo-seam.test.ts",
-    "tests/features/writer/buffer-undo.test.ts"
+    "tests/features/writer/buffer-undo.test.ts",
+    "tests/bootstrap/shared-switch.test.ts"
   ],
   "mutants": [
     {
@@ -148,6 +149,24 @@
       "file": "src/application/editing/undo/shared-undo-actions.ts",
       "find": "    const refused = session.admit();",
       "replace": "    const refused = null as ReturnType<typeof session.admit>;"
+    },
+    {
+      "label": "entering never detaches the standalone destination",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  ports.detach();\n",
+      "replace": ""
+    },
+    {
+      "label": "entering swaps the owner in the task that settled",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  await Promise.resolve();\n",
+      "replace": ""
+    },
+    {
+      "label": "leaving clears the author only after the owner swap",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  ports.bindings.leave();\n  now.end();\n  try {\n    adoptReplacement(ports.migrate(raw), ports.standalone);\n  } finally {\n",
+      "replace": "  ports.bindings.leave();\n  try {\n    adoptReplacement(ports.migrate(raw), ports.standalone);\n  } finally {\n    now.end();\n"
     }
   ]
 }
