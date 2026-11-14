@@ -10,6 +10,8 @@ import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { projection } from "../../../src/core/text/runs.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
+import { assertReplicasAgree } from "../../collab/agreement.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 
 test("caret visual readings use the existing record validator and wire rank order on the writer and encoded late joiner", () => {
   const cases = [
@@ -28,7 +30,7 @@ test("caret visual readings use the existing record validator and wire rank orde
     const index = (seed >>> 8) % cases.length, scenario = cases[index]; assert.ok(scenario); visited.add(index);
     const p = splitCaretPage("Word"), late = createMonitoredSharedDocument();
     try {
-      transactSharedDocument(p.h.a, "record-fixture", () => {
+      transactSharedDocument(p.h.a, "local-command", () => {
         const visuals = collabState(p.h.a).roots.visuals, first = visuals.get("R1"); assert.ok(first instanceof Y.Map);
         first.set("rank", scenario.rank);
         const second = new Y.Map<unknown>(); visuals.set("AA", second);
@@ -43,6 +45,16 @@ test("caret visual readings use the existing record validator and wire rank orde
         const actual = Array.from({ length: read.text.length }, (_, at) => read.identity(at));
         if (identity) assert.deepEqual(actual, identity); else identity = actual;
       }
+      const reading = (handle: SharedDocumentHandle) => {
+        const read = readSharedPaintedSelectionText(handle, sharedBufferedTarget(handle, p.key("visualText"))); assert.ok(read);
+        return { text: read.text, identities: Array.from({ length: read.text.length }, (_, at) => read.identity(at)),
+          projected: projectSharedDocumentWithRecovery(handle) };
+      };
+      assertReplicasAgree("caret visual reading", [
+        { order: "dup", replica: "A", output: reading(p.h.a) },
+        { order: "dup", replica: "B", output: reading(p.h.b) },
+        { order: "late-C", replica: "C", output: reading(late) }
+      ]);
       assert.deepEqual([p.a.executed, p.reports], [[], []]);
     } finally { destroySharedDocument(late); p.close(); }
   }
@@ -52,7 +64,7 @@ test("caret visual readings use the existing record validator and wire rank orde
 test("caret readings use the wire text form for a malformed unit without writing into the shared text", () => {
   const p = splitCaretPage("Word"), late = createMonitoredSharedDocument();
   try {
-    transactSharedDocument(p.h.a, "text-fixture", () => {
+    transactSharedDocument(p.h.a, "local-command", () => {
       const visual = collabState(p.h.a).roots.visuals.get("R1"); assert.ok(visual instanceof Y.Map);
       const text = visual.get("text"); assert.ok(text instanceof Y.Text); text.insert(0, "\ud800");
     });

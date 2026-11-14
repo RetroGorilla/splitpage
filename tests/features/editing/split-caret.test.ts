@@ -9,6 +9,7 @@ import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { createMonitoredSharedDocument } from "../../adapters/collab/helpers.ts";
 import { applySharedUpdate, encodeSharedState, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { domToPos, paintTrailingCellSpaces } from "../../../src/features/common/cell-dom.ts";
+import { assertReplicasAgree } from "../../collab/agreement.ts";
 
 test("the shared space paint preserves formatting and leaves space before a break or atom untouched", () => {
   for (const [html, expected] of [
@@ -200,6 +201,11 @@ for (const field of ["audioText", "visualText"] as const) {
           assert.equal(readSharedPaintedSelectionText(handle, sharedBufferedTarget(handle, p.key(field)))?.text, expected);
           assert.deepEqual(doc.recovery, []);
         }
+        assertReplicasAgree("Split caret complete projection", [
+          { order, replica: "A", output: projectSharedDocumentWithRecovery(p.h.a) },
+          { order, replica: "B", output: projectSharedDocumentWithRecovery(p.h.b) },
+          { order: "late-C", replica: "C", output: projectSharedDocumentWithRecovery(late) }
+        ]);
       } catch (error) { violations.push("round " + round); throw error; }
       finally { destroySharedDocument(late); p.close(); }
     }

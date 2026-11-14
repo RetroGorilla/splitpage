@@ -11,12 +11,10 @@ import { fromHtml, storedHtmlFromDom } from "../richtext.ts";
 import { readBufferedFieldKey } from "../../core/collab/buffer.ts";
 import { paintGuard, editorSelection } from "./editor-owners.ts";
 import { documentReader } from "./ports/document.ts";
-import type { SharedContentRef } from "../../core/collab/operations.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 
-export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource;
-  readonly selectionIdentity: (reference: SharedContentRef) => string; readonly bufferedText: BufferedFieldPorts }): CellBuffer {
+export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): CellBuffer {
   return mountCellBuffer({
     root: document.getElementById("rows") as HTMLElement,
     ports: {
@@ -34,7 +32,7 @@ export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTe
       beforePaint: onBeforePaint,
       readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null,
       caret: { selection: editorSelection(), afterPaint: task => paintGuard().afterThisPaint(task),
-        text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field), identity: shared.selectionIdentity }
+        text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field) }
     }
   });
 }

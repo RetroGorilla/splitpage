@@ -74,7 +74,7 @@ export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceRead
     beforePaint: check => { checks.add(check); return () => { checks.delete(check); }; },
     readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null,
     caret: { selection: { snapshot: () => null }, afterPaint: task => guard.afterThisPaint(task),
-      text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field), identity: shared.selectionIdentity }
+      text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field) }
   } });
   function key(rowId: string, from: number, to: number, inputType: string, data: string | null,
     options: { readonly field?: Field; readonly during?: () => void; readonly shown?: (cell: HTMLElement) => void; readonly input?: false } = {}): boolean {

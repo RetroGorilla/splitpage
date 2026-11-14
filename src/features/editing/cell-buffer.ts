@@ -109,8 +109,8 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
       return [{ key, base: current, length: current?.text.length ?? length }];
     });
     const after = targets(own ? [own] : []), more = () => targets(rows.filter(row => row !== own));
-    const anchor = followPaintedCaret(previous.base, after, previous.points.anchor, previous.key, caret.identity, more);
-    const head = followPaintedCaret(previous.base, after, previous.points.head, previous.key, caret.identity, more);
+    const anchor = followPaintedCaret(previous.base, after, previous.points.anchor, previous.key, more);
+    const head = followPaintedCaret(previous.base, after, previous.points.head, previous.key, more);
     caret.afterPaint(() => {
       if (!open || !anchor || !head || binding.dirty()) return;
       const cell = cellOf(anchor.key), end = cellOf(head.key), active = root.ownerDocument.activeElement;

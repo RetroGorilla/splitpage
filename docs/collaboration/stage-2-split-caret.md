@@ -43,9 +43,8 @@ deleted old unit. The long-deletion test pins a linear bound on identity reads.
 The Split binding uses the selection snapshot that the rows renderer already
 captures before replacing DOM. It resolves both endpoints against the old and
 new painted bases, then restores them after the renderer's ordinary selection
-restoration. It retains the direction. The native character identity is the
-existing anchor's client and clock; a new logical owner after splitting does
-not change that identity. Other cells are read only when a followed unit has
+restoration. It retains the direction. The existing painted character anchors
+already retain their identity through a split. Other cells are read only when a followed unit has
 left the opening cell. Disposal invalidates queued restoration, and moving
 focus outside Split prevents it from taking focus back.
 

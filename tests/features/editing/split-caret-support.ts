@@ -69,7 +69,7 @@ export function splitCaretPage(text = "abcdef", second = "uvwx") {
     page: createCellPage({ storedHtml: html => html, caretSpot: ensureTrailingCaretSpot }), decode: html => fromHtml(html, { media: true }), document: current,
     paintedFrom: paintedFromRow, notePainted: render.noteFieldPainted, shown: edit => guard.whileShown(edit), repaintRows: render.render,
     onPainted: render.onPainted, beforePaint: onBeforePaint, readable: key => shared.paintedText.read(key, readBufferedFieldKey(key).field) !== null,
-    caret: { selection, afterPaint: task => { if (deferred) pending.push(task); else guard.afterThisPaint(task); }, text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field), identity: shared.selectionIdentity }
+    caret: { selection, afterPaint: task => { if (deferred) pending.push(task); else guard.afterThisPaint(task); }, text: key => shared.selectionText.read(key, readBufferedFieldKey(key).field) }
   } });
   const stop = a.session.subscribe(change => { render.screenListeners().session(change); });
   const cell = (field: Field, row = "R1") => { const el = root.querySelector<HTMLElement>('.cell-editable[data-id="' + row + '"][data-field="' + field + '"]'); assert.ok(el); return el; };

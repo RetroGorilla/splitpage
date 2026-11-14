@@ -734,8 +734,8 @@
   }, {
     "label": "Split maps the selection head as its anchor",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "followPaintedCaret(previous.base, after, previous.points.head, previous.key, caret.identity, more)",
-    "replace": "followPaintedCaret(previous.base, after, previous.points.anchor, previous.key, caret.identity, more)",
+    "find": "followPaintedCaret(previous.base, after, previous.points.head, previous.key, more)",
+    "replace": "followPaintedCaret(previous.base, after, previous.points.anchor, previous.key, more)",
     "tests": ["tests/features/editing/split-caret.test.ts"]
   }, {
     "label": "Split sorts away a backward selection",
@@ -821,12 +821,6 @@
     "find": "const location = identity ? locations.get(identity) : null;",
     "replace": "const location = (() => { for (const field of after) if (field.base) for (let next = 0; next < field.base.text.length; next++) { if (field.base.identity(next) === identity) return { key: field.key, offset: next + 1 }; } return null; })();",
     "tests": ["tests/application/editing/painted-selection.test.ts"]
-  }, {
-    "label": "a moved character loses its caret identity when its logical owner changes",
-    "file": "src/adapters/collab/paint-base.ts",
-    "find": "return unit ? JSON.stringify([unit.client, unit.clock]) : reference;",
-    "replace": "return reference;",
-    "tests": ["tests/features/editing/split-caret.test.ts"]
   }, {
     "label": "Split does not look for a character in the cell it moved to",
     "file": "src/application/editing/painted-selection.ts",

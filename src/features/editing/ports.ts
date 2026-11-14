@@ -6,7 +6,6 @@ import type { DocumentView } from "../../application/session/document-session.ts
 import type { TextServices } from "../../application/text/services.ts";
 import type { SelectionModel } from "../../application/editing/selection.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
-import type { SharedContentRef } from "../../core/collab/operations.ts";
 
 export interface CellReachPorts {
   readonly window: Window;
@@ -34,6 +33,5 @@ export interface CellBufferPorts {
     readonly selection: Pick<SelectionModel, "snapshot">;
     readonly afterPaint: PaintGuard["afterThisPaint"];
     readonly text: (key: string) => PaintedText | null;
-    readonly identity: (reference: SharedContentRef) => string;
   };
 }

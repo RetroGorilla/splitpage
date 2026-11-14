@@ -2,17 +2,12 @@ import * as Y from "yjs";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import type { SharedContentRef, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { encodeCollabTextAnchor, readSharedAnchor, readSharedAnchorUnit } from "./anchors.ts";
+import { encodeCollabTextAnchor, readSharedAnchor } from "./anchors.ts";
 import { readSharedRevision } from "./document.ts";
 import { collabProjectedTextTarget, collabProjectedVisualTargets } from "./text-target.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
-
-export function paintedCaretIdentity(reference: SharedContentRef): string {
-  const unit = readSharedAnchorUnit(reference);
-  return unit ? JSON.stringify([unit.client, unit.clock]) : reference;
-}
 
 function partReading(part: { readonly text: Y.Text; readonly target: SharedTextAddress; readonly from: number; readonly to: number }) {
   const runs = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!runs) return null;
