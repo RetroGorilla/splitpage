@@ -4,7 +4,8 @@
     "tests/bootstrap/shared-author.test.ts",
     "tests/collab/undo-seam.test.ts",
     "tests/features/writer/buffer-undo.test.ts",
-    "tests/bootstrap/shared-switch.test.ts"
+    "tests/bootstrap/shared-switch.test.ts",
+    "src/test/shared-writer-app.test.mjs"
   ],
   "mutants": [
     {
@@ -398,6 +399,18 @@
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    undoOwner().adopt(null);\n    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n",
       "replace": "    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n    undoOwner().adopt(null);\n"
+    },
+    {
+      "label": "Ctrl+Z in a shared Writer ignores the returned selection",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "      if (outcome.ok && outcome.selection) placeSharedSelection(outcome.selection);\n",
+      "replace": ""
+    },
+    {
+      "label": "the row paint reads the standalone undo owner while shared",
+      "file": "src/bootstrap/wiring/ports/editing.ts",
+      "find": "track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); }",
+      "replace": "track: (): void => { undoOwner().track(); }"
     }
   ]
 }

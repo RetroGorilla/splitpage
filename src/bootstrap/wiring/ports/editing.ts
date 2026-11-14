@@ -4,7 +4,7 @@ import { productionSelection as productionSelectionOwner } from "../production-e
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
 import { createWholeFieldTextCommit } from "../../../application/editing/whole-field-text.ts";
-import { breakUndoGroup, undoOwner } from "../undo.ts";
+import { breakUndoGroup, sharedUndoRoute, undoOwner } from "../undo.ts";
 import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../editor-owners.ts";
 import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../session-owner.ts";
@@ -14,7 +14,7 @@ import { isDraftBox, isScriptCell } from "../../../features/editing/cell-page.ts
 
 export const renderEditing = { cells: cellEditing, selection: editorSelection, paint: paintGuard, undo: undoGuard };
 export const renderDraft = { appendMedia: appendDraftMedia, model: draftModel, edit: editDraft, isDraft: isDraftBox, isScript: isScriptCell };
-export const renderUndo = { track: (): void => { undoOwner().track(); } };
+export const renderUndo = { track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); } };
 
 export const edits: DocumentEdits = {
   run: runCommand,
@@ -65,7 +65,9 @@ export const focus = { lastRow: () => focusMemory().lastRow() };
 export const tagEditing = { cells: cellEditing, focus: focusMemory };
 
 export const writerEditing = { cells: cellEditing, selection: editorSelection, focus: focusMemory, paint: paintGuard };
+// why: while shared, Ctrl+Z goes to the shared owner and the standalone owner refuses its held document,
+// so the Writer's undo marks stay neutral
 export const writerUndo = {
-  breakCoalescing: breakUndoGroup, last: () => undoOwner().last(), nextRedo: () => undoOwner().nextRedo(),
-  lifetime: () => undoOwner().lifetime(), mark: () => undoOwner().mark(), serial: () => undoOwner().serial()
+  breakCoalescing: breakUndoGroup, last: () => sharedUndoRoute() ? null : undoOwner().last(), nextRedo: () => sharedUndoRoute() ? null : undoOwner().nextRedo(),
+  lifetime: () => sharedUndoRoute() ? 0 : undoOwner().lifetime(), mark: () => sharedUndoRoute() ? 0 : undoOwner().mark(), serial: () => sharedUndoRoute() ? 0 : undoOwner().serial()
 };
