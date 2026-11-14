@@ -24,7 +24,7 @@ import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
-import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
+import type { FlowWriterPorts, WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import type { BufferedFieldPorts } from "../../src/application/editing/buffered-field.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
@@ -54,6 +54,18 @@ export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): Capab
     moves: allowed
   } satisfies CapabilityPort;
   return { ...defaults, ...overrides };
+}
+
+export function fakeFlowCommandEffects() {
+  const notices: string[] = [];
+  const effects: Pick<FlowWriterPorts, "moveBeat" | "undo" | "caretAfterStep" | "notice" | "changed" | "selectionMoved" | "plainVisual" | "beatInput" | "typeAtBeatEdge" | "beatKeydown" | "beatSelection" | "leaveBeat" | "newCommentId" | "openComment"> = {
+    moveBeat: swapBeatsCommand,
+    undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
+    caretAfterStep: () => 0, notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
+    plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false,
+    beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "comment", openComment: () => {}
+  };
+  return { effects, notices };
 }
 
 export function fakePrintDialog() {
