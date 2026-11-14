@@ -154,6 +154,10 @@ export const builderOperationCoverage = [
     ["initial heading name", ["text-insert"]],
     ["empty/overlong name and invalid/duplicate id guards", []]
   ]]),
+  classified("serve", ["emptyScriptCommand", "structure", "segment-create", [
+    ["first native input creates a fresh beat with initial text and stamp", ["segment-create"]],
+    ["empty input is a no-op", []]
+  ]]),
   classified("serve", ["sharedSceneCommand", "structure", "heading-create,text-insert", [
     ["first shared name creates its heading before the selected beat and inserts that name in one list", ["heading-create", "text-insert"]]
   ]]),
