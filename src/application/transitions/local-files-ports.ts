@@ -36,6 +36,7 @@ export interface LocalFileImports {
 }
 
 export interface LocalFilesOwnerPorts {
+  readonly entry: import("./ports.ts").DocumentEntryAdmission;
   readonly capability: Pick<CapabilityPort, "reload">;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: {

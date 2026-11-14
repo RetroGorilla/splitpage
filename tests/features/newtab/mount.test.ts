@@ -43,6 +43,7 @@ function harness() {
   let pasted: Parameters<NewTabPorts["importText"]>[0] | null = null;
   const starter = { id: "sample", name: "Sample", desc: "A starter", state: { title: "Starter", rows: [{ id: "s", audioText: "Hello" }] } };
   const ports: NewTabPorts = {
+    entry: { before: () => null },
     screen: view.screen,
     document: { current: () => null },
     place: { home: () => state.home },

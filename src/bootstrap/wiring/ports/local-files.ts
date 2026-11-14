@@ -39,10 +39,12 @@ import { pdfPrinter, printDialog } from "./printing.ts";
 import { exportBrowserPdf } from "../../../features/file-menu/browser-pdf.ts";
 import { exportDesktopPdf } from "../../../features/file-menu/desktop-pdf.ts";
 import { exportScriptWithFiles } from "../gallery.ts";
+import { documentEntry } from "./document-entry.ts";
 
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
   return {
+    entry: documentEntry,
     capability: capabilities,
     document: documentReader,
     session: { noteAbsorbedDirty, noteReload: (content) => { noteReload(content as Parameters<typeof noteReload>[0]); } },

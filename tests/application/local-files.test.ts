@@ -18,6 +18,7 @@ function harness() {
   const state = { permission: "granted", dirty: false };
   const owner: LocalFilesOwner = createLocalFilesOwner();
   const ports: LocalFilesOwnerPorts = {
+    entry: { before: () => null },
     capability: MAY_EDIT,
     document: { current: () => doc },
     session: { noteAbsorbedDirty: (kind) => { log.push("dirty:" + kind); }, noteReload: () => { log.push("reload"); } },

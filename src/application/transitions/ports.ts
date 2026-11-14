@@ -32,6 +32,10 @@ export interface HistoryPort {
   readonly keep: (label: string, doc?: DocumentView | null) => unknown;
 }
 
+export interface DocumentEntryAdmission {
+  readonly before: () => { readonly refused: string } | null;
+}
+
 export interface TransitionPorts<D> {
   readonly entry: DocumentEntry;
   readonly live: LiveDocumentPort;

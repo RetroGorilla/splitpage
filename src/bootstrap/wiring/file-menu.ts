@@ -25,10 +25,12 @@ import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
+import { documentEntry } from "./ports/document-entry.ts";
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
   return fileMenu.replace(() => {
     const ports: FileMenuDropdownPorts = {
+      entry: documentEntry,
       document: documentReader,
       place,
       desktop: presence.running,

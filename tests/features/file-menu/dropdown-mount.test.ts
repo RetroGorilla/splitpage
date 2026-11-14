@@ -47,6 +47,7 @@ function harness() {
   };
   const notices = fakeNotices();
   const ports: FileMenuDropdownPorts = {
+    entry: { before: () => null },
     document: { current: () => state.document },
     place: { home: () => state.home },
     desktop: () => state.desktop,

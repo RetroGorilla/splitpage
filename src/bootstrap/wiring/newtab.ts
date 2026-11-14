@@ -23,12 +23,14 @@ import { importControls } from "./imports.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { STARTERS, starterById } from "../../starters/index.ts";
 import { screen } from "./ports/screen.ts";
+import { documentEntry } from "./ports/document-entry.ts";
 
 const newTab = owned<NewTabMount>();
 
 export function mountNewTabFeature(): NewTabMount {
   return newTab.replace(() => {
     const ports: NewTabPorts = {
+      entry: documentEntry,
       screen,
       document: documentReader,
       place,

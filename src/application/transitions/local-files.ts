@@ -57,6 +57,7 @@ function projectFileSource(): ReturnType<LocalFilesOwner["projectFileSource"]> {
 }
 
 async function openProjectFile(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions | null, permitted: () => boolean = unconditional) {
+  if (!permitted() || ports.entry.before()) return false;
   opts = opts || {};
   const parsed = await parseProjectFileState(file);
   if (!active) return false;
@@ -75,6 +76,7 @@ async function openProjectFile(file: LocalFileData | null | undefined, handle: L
 
 function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, kind: string, opts?: FileOptions | null) {
   if (!active) return false;
+  if (ports.entry.before()) return false;
   opts = opts || {};
   sidePanels().close("newtab-page");
 
@@ -119,6 +121,7 @@ async function tryResumeLastProject() {
 }
 
 async function resumeFromHandle(handle: LocalFileReference | null | undefined, permitted: () => boolean = unconditional) {
+  if (!permitted() || ports.entry.before()) return;
   try {
     const file = await ports.files.read(handle);
     if (!active || !permitted()) return;
@@ -172,6 +175,7 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
 
   if (!active) return;
   if (!permitted()) return;
+  if (ports.entry.before()) return;
   if (!newRows || !newRows.length) { showToast("No beats found in that file.", "warn"); return; }
 
 
@@ -217,6 +221,7 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
 }
 
 async function openLocalFile() {
+  if (ports.entry.before()) return;
   if (runningOnDesktop()) {
     const entry = await desktopPort().openFileDialog();
     if (!active || !entry) return;

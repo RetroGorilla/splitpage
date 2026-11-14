@@ -14,7 +14,7 @@ import {
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, stepSharedUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
-  enterSharedSession, leaveSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
+  enterSharedSession, leaveSharedSession, leaveRunningSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
 } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
@@ -133,6 +133,59 @@ function sharedGone(parts: SharedSessionParts): void {
   assert.deepEqual([handle.destroyed, handle.ingress.declineListeners.size, observers.size, parts.author.next(), parts.session.run(lengthCommand()).kind],
     [true, 0, 0, null, "rejected"]);
 }
+
+test("C8 no-argument leave equals the entry-owned explicit leave step for step", async () => {
+  const results: unknown[] = [];
+  for (const implicit of [false, true]) {
+    const s = start();
+    try {
+      assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
+      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      s.log.length = 0;
+      const result = implicit ? leaveRunningSharedSession() : leaveSharedSession(s.ports);
+      results.push([result, [...s.log], currentDocument(), state(), s.reported]);
+      assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
+    } finally { s.stop(); }
+  }
+  assert.deepEqual(results[0], results[1]);
+});
+
+test("C8 foreign leave ports cannot replace the mounted bindings or retained migration and identity", async () => {
+  const s = start();
+  try {
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    const wrong = (): never => { assert.fail("foreign switch ports were used"); };
+    const foreign: SharedSwitchPorts = { ...s.ports, bindings: { enter: wrong, settle: wrong, leave: wrong }, migrate: wrong, docId: wrong, report: wrong };
+    assert.deepEqual(leaveSharedSession(foreign), { ok: true });
+    assert.equal(currentDocument()?.docId, newId(2));
+  } finally { s.stop(); }
+});
+
+test("C8 rolled-back entry and a completed leave with a callback fault retain no running leave", async () => {
+  const s = start();
+  try {
+    s.arm("detach");
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    s.arm("destroy");
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
+  } finally { s.stop(); }
+});
+
+test("C8 a later shared session leaves through its own ports", async () => {
+  const s = start();
+  try {
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    let settled = 0, left = 0;
+    const next: SharedSwitchPorts = { ...s.ports, bindings: { enter: () => {}, settle: () => { settled++; return null; }, leave: () => { left++; } }, docId: () => newId(99) };
+    assert.deepEqual(await enterSharedSession(next), { ok: true });
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.deepEqual([settled, left, currentDocument()?.docId], [1, 1, newId(99)]);
+  } finally { s.stop(); }
+});
 
 async function roundTrip(s: Switch, title: string): Promise<void> {
   assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
