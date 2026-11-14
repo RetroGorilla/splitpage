@@ -32,7 +32,7 @@ import { prepareSharedDiscard, prepareSharedDiscardRetire, sharedRemovalDiscardR
 import { collabPreparedOperationTextTarget } from "./text-target.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import type { CollabRoots } from "./roots.ts";
-import { isSharedPlannedPictureShown, readSharedStoredPicture, sharedPlannedPictures } from "./gallery-retirement.ts";
+import { isSharedGalleryShown, isSharedPlannedPictureShown, readSharedStoredPicture, sharedPlannedPictures } from "./gallery-retirement.ts";
 
 function flags(view: SharedPreparationView, beat: string) {
   const path = ["beats", beat, "removals"];
@@ -56,10 +56,16 @@ function prepared(id: SharedContentRef, record: SharedStoredRemovalCommand, writ
 }
 
 function attachments(view: SharedPreparationView, index: SharedAttachmentOwnership, collection: "visuals" | "gallery", beat: string, roots: CollabRoots) {
-  return [...new Set([...index.keys(collection, beat), ...sharedPendingAttachmentKeys(view, collection), ...collection === "gallery" ? sharedPlannedPictures(view) : [],
+  const indexed = index.keys(collection, beat);
+  // why: the index already holds the stored pictures the beat shows, so only a picture outside it is read again.
+  const stored = (key: string) => (): boolean => {
+    if (indexed.includes(key)) return true;
+    const record = readSharedStoredPicture(roots, key);
+    return !record || isSharedGalleryShown(roots, key, record);
+  };
+  return [...new Set([...indexed, ...sharedPendingAttachmentKeys(view, collection), ...collection === "gallery" ? sharedPlannedPictures(view) : [],
     ...sharedCreatedAttachments(view).filter(item => item.collection === collection && item.beat === beat).map(item => item.record)])]
-    .sort().filter(key => readPreparedSharedRecord(collection, key, view)?.beat === beat
-      && (collection !== "gallery" || isSharedPlannedPictureShown(roots, view, key, readSharedStoredPicture(roots, key) ?? undefined)));
+    .sort().filter(key => readPreparedSharedRecord(collection, key, view)?.beat === beat && (collection !== "gallery" || isSharedPlannedPictureShown(view, key, stored(key))));
 }
 
 function remove(operation: SharedSoftRemove, view: SharedPreparationView, index: SharedAttachmentOwnership, identities: SharedStructureIdentityReservations, roots: CollabRoots): SharedPreparationResult {

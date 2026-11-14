@@ -94,7 +94,7 @@ export function sharedPlannedPictures(view: PlannedScratch): readonly string[] {
   return [...planned(view).keys()];
 }
 
-export function isSharedPlannedPictureShown(roots: RetirementRoots, view: PlannedScratch, key: string, record: unknown): boolean {
+export function isSharedPlannedPictureShown(view: PlannedScratch, key: string, stored: () => boolean): boolean {
   const noted = planned(view).get(key);
-  return noted === undefined ? record === undefined || isSharedGalleryShown(roots, key, record) : !noted;
+  return noted === undefined ? stored() : !noted;
 }
