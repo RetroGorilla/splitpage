@@ -60,7 +60,7 @@ The remaining fixture rows are accounted for below. The first commit moves only 
 | replaceFlowMatches | Covered, including visuals and heading removal |
 | replaceAll | Covered, including reverse replacement and heading removal |
 | setMarkAcross | Covered, including mixed formatting and identity-bearing marks |
-| setVisualForRange | Covered; existing visual HTML remains an explicit whole-field observation for package 9 |
+| setVisualForRange | Covered as text-insert and text-delete on the beat's visual text |
 | selectionToOwnBeat | Covered, including prefix, interior and suffix isolation |
 | insertBeats | Covered, including visual/gallery origins and heading splits |
 | moveBeats | Covered for the complete visible rows this API accepts |
@@ -72,14 +72,14 @@ No operation kind is added. Two optional vocabulary fields preserve observations
 
 The trace now retains owner, field and UTF-16 position per observed unit through insertions, deletions and splits. New-heading anchors are tracked through later repairs in the same paste. Consecutive references are compacted; inserted units refer to their producing operation. Heading provenance remains heading provenance when its tail becomes narration. Narration replacement separately clamps the deletion and the insertion into the remaining cell, matching the app. Headings continue to use raw UTF-16 offsets. By reading, recording consumes no additional ids.
 
-Marks carry kind, identity where present, value and observed ranges, emitted per beat in document order. Formatting records the requested on/off intent; identity-bearing changes retain the relevant comment/tag/link ids. A no-effect identity-mark attempt can still canonicalize a touched cell's HTML; a scalar audioText observation preserves that representation change without inventing an unrelated mark intent. Its concurrent interpretation is left to shared integration. The interpreter uses text serialization/normalization but no flow implementation or helper. Its atom formatting exclusions and tag-stack updates reproduce the low-level text policy. Visual creation carries initial HTML; replacing an existing visual uses record-set html. That whole-field value is deliberately not claimed as concurrent text intent.
+Marks carry kind, identity where present, value and observed ranges, emitted per beat in document order. Formatting records the requested on/off intent; identity-bearing changes retain the relevant comment/tag/link ids. A no-effect identity-mark attempt can still canonicalize a touched cell's HTML; a scalar audioText observation preserves that representation change without inventing an unrelated mark intent. Its concurrent interpretation is left to shared integration. The interpreter uses text serialization/normalization but no flow implementation or helper. Its atom formatting exclusions and tag-stack updates reproduce the low-level text policy. Visual creation with a new beat carries initial HTML. Setting the visual of an existing beat replaces its whole visual text: a text-insert of the new text at the start and a text-delete of the observed old text, in one list, so text undo covers it; an unchanged set emits nothing.
 
 Fixture corrections, demonstrated by the exact kind checks:
 
 - typeWithMarks retains text-insert for normalized-empty typing: an empty insertion observes the serialization of the touched cell.
 - setMarkAcross includes scalar for a no-effect identity-mark attempt that canonicalizes the stored HTML.
 - pasteFlowRange does not create registries/comments, restore cut records or move source segments; those are clipboard-caller responsibilities. Its row now lists only the kinds this flow entry emits.
-- setVisualForRange includes record-set for existing visual HTML and text-insert for overlapping surrogate slices; its package 9 handoff remains explicit.
+- setVisualForRange emits text-insert into an empty visual and text-insert plus text-delete for a replacement, and text-insert for overlapping surrogate slices.
 - selectionToOwnBeat includes text-insert for overlapping surrogate slices.
 - moveBeats includes heading-remove when detaching the last source-scene anchor, and describes moved-row normalization under scalar.
 

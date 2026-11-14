@@ -152,7 +152,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       return state && sceneId !== null ? storedSceneName(state, sceneId) : null;
     };
     const bound = shared && sceneId !== null ? bindBufferedInput({
-      inputs: [input], key: headingFieldKey(sceneId), stored: name, unsettled: unsettledHeading, place,
+      inputs: [input], key: headingFieldKey(sceneId), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200,
       position: offset => headingPos(sceneId, offset), owns: pos => pos.kind === "heading" && pos.sceneId === sceneId
     }, shared) : null;
     naming = { sceneId, beatId, line: made, returnTo, settle, bound };
