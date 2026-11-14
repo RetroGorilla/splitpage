@@ -2,6 +2,8 @@ import { targetLengthOf } from "../../core/document/timing.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, Plan } from "../session/document-session.ts";
+import { sharedScalar } from "./shared-list.ts";
+import type { SharedListPorts } from "./shared-list.ts";
 
 function targetChange(): ChangeSet {
   return changeSet({ docFields: ["targetSeconds"], saveNow: true });
@@ -15,14 +17,16 @@ export const WPM_MIN = 60;
 
 export const WPM_MAX = 400;
 
-export function targetLengthCommand(seconds: number | null | undefined): Command {
+export function targetLengthCommand(seconds: number | null | undefined, shared?: SharedListPorts): Command {
   const after = seconds == null ? null : targetLengthOf({ targetSeconds: seconds });
   return {
     name: "set-target-length",
     needs: "edit",
     plan: function (doc): Plan | null {
       if (targetLengthOf({ targetSeconds: doc["targetSeconds"] }) === after) return null;
+      const by = shared?.author();
       return {
+        ...by ? { shared: { operations: [sharedScalar(by, "document", doc.docId, "targetSeconds", after)] } } : {},
         changes: targetChange(),
         apply: function (live) {
           if (after === null) Reflect.deleteProperty(live, "targetSeconds");
@@ -33,14 +37,16 @@ export function targetLengthCommand(seconds: number | null | undefined): Command
   };
 }
 
-export function wordsPerMinuteCommand(value: number): Command {
+export function wordsPerMinuteCommand(value: number, shared?: SharedListPorts): Command {
   const wpm = Math.round(value);
   return {
     name: "set-words-per-minute",
     needs: "edit",
     plan: function (doc): Plan | null {
       if (!isFinite(wpm) || wpm < WPM_MIN || wpm > WPM_MAX || wpm === doc["wordsPerMinute"]) return null;
+      const by = shared?.author();
       return {
+        ...by ? { shared: { operations: [sharedScalar(by, "document", doc.docId, "wordsPerMinute", wpm)] } } : {},
         changes: paceChange(),
         apply: function (live) { live["wordsPerMinute"] = wpm; }
       };

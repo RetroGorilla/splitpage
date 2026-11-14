@@ -222,8 +222,11 @@ the reader lists the beat's keys.
 `tests/collab/buffer-stamps.test.ts` holds the rule over four delivery orders,
 with the names swapped between the copies and with one author id on both copies.
 
-Other commands send no shared list yet; each one that does adds its stamp the same
-way.
+The status, filmed and beat length commands add the same step to their shared
+lists through `SharedListPorts.beatStamp` (`src/application/commands/shared-list.ts`),
+which the wiring builds from `sharedBeatStamp` (`sharedListPorts` in
+`src/bootstrap/wiring/ports/shared-author.ts`). Each other command that sends a
+shared list adds its stamp the same way.
 
 ## Stamp on undo
 

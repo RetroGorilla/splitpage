@@ -5,6 +5,8 @@ import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DeepReadonly, DocumentView } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
+import { sharedScalar } from "./shared-list.ts";
+import type { SharedListPorts } from "./shared-list.ts";
 
 export interface BeatAt {
   readonly index: number;
@@ -38,7 +40,7 @@ export function beatAt(rowId: string): (doc: DocumentView | null) => BeatAt | nu
   };
 }
 
-export function beatLengthCommand(rowId: string, seconds: number | null | undefined, stamps: StampPorts): Command {
+export function beatLengthCommand(rowId: string, seconds: number | null | undefined, stamps: StampPorts, shared?: SharedListPorts): Command {
   const after = seconds == null ? null : seconds;
   return {
     name: "set-scene-length",
@@ -49,7 +51,9 @@ export function beatLengthCommand(rowId: string, seconds: number | null | undefi
       const held: LengthHolder = { lengthSeconds: row.lengthSeconds };
       const before = hasSetLength(held) ? held.lengthSeconds : null;
       if (before === after) return null;
+      const by = shared?.author();
       return {
+        ...shared && by ? { shared: { operations: [sharedScalar(by, "beat", rowId, "lengthSeconds", after), shared.beatStamp(rowId, by)] } } : {},
         changes: lengthChanges(rowId),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });

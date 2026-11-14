@@ -1,5 +1,5 @@
 {
-  "tests": ["tests/adapters/collab/operation-families.test.ts", "tests/bootstrap/shared-author.test.ts"],
+  "tests": ["tests/adapters/collab/operation-families.test.ts", "tests/bootstrap/shared-author.test.ts", "tests/adapters/collab/shared-values.test.ts"],
   "mutants": [{
     "label": "one family left out of the composition",
     "file": "src/adapters/collab/operation-families.ts",
@@ -15,5 +15,15 @@
     "file": "src/bootstrap/wiring/ports/shared-author.ts",
     "find": "by: source.name() } : null;",
     "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
+  }, {
+    "label": "a beat status list carries no stamp",
+    "file": "src/application/commands/beat-status.ts",
+    "find": "[sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)]",
+    "replace": "[sharedBeatStatus(shared, by, rowId, status)]"
+  }, {
+    "label": "words per minute aimed at the title instead of the document",
+    "file": "src/application/commands/document-settings.ts",
+    "find": "sharedScalar(by, \"document\", doc.docId, \"wordsPerMinute\", wpm)",
+    "replace": "sharedScalar(by, \"document\", doc.title, \"wordsPerMinute\", wpm)"
   }]
 }

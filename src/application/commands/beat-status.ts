@@ -3,6 +3,9 @@ import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DocumentView } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
+import type { RowStatusId } from "../../core/document/timing.ts";
+import { sharedBeatStatus } from "./shared-list.ts";
+import type { SharedListPorts } from "./shared-list.ts";
 
 export type ShotGrace = "arm" | "clear" | null;
 
@@ -34,7 +37,12 @@ export function shotGrace(before: unknown, after: unknown): ShotGrace {
   return null;
 }
 
-export function beatStatusCommand(rowId: string, stamps: StampPorts): Command {
+function statusList(rowId: string, status: RowStatusId, shared: SharedListPorts | undefined) {
+  const by = shared?.author();
+  return shared && by ? { shared: { operations: [sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)] } } : {};
+}
+
+export function beatStatusCommand(rowId: string, stamps: StampPorts, shared?: SharedListPorts): Command {
   return {
     name: "cycle-scene-status",
     needs: "edit",
@@ -43,6 +51,7 @@ export function beatStatusCommand(rowId: string, stamps: StampPorts): Command {
       if (!row) return null;
       const after = nextRowStatus(row.status);
       return {
+        ...statusList(rowId, after, shared),
         changes: statusChanges(rowId),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });
@@ -56,15 +65,16 @@ export function beatStatusCommand(rowId: string, stamps: StampPorts): Command {
   };
 }
 
-export function setBeatFilmedCommand(rowId: string, filmed: boolean, stamps: StampPorts): Command {
+export function setBeatFilmedCommand(rowId: string, filmed: boolean, stamps: StampPorts, shared?: SharedListPorts): Command {
   return {
     name: "set-beat-filmed",
     needs: "edit",
     plan: function (doc) {
       const row = doc.rows.find(r => r.id === rowId);
-      const status = filmed ? "shot" : "todo";
+      const status: RowStatusId = filmed ? "shot" : "todo";
       if (!row || row.status === status) return null;
       return {
+        ...statusList(rowId, status, shared),
         changes: statusChanges(rowId),
         apply: function (live) {
           const target = live.rows.find(r => r.id === rowId);
