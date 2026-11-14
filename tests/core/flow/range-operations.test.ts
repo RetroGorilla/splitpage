@@ -48,7 +48,7 @@ function runRange(input: RangeOperationCase, ports: FlowPorts): FlowOutcome {
     case "pasteFlowRange": return flow.pasteFlowRange(doc, range, input.clip, ports);
     case "replaceFlowMatches": return replaceFlowMatches(doc, input.matches, text, ports);
     case "setMarkAcross": return flow.setMarkAcross(doc, range, input.mark ?? "b", ports);
-    case "setVisualForRange": return setVisualForRange(doc, range, toHtml(input.piece), ports);
+    case "setVisualForRange": return setVisualForRange(doc, range, toHtml(cells(toHtml(input.piece))), ports);
     case "selectionToOwnBeat": return flow.selectionToOwnBeat(doc, range, ports);
     case "insertBeats": return flow.insertBeats(doc, pos, input.clip.rows, ports);
     case "moveBeats": return flow.moveBeats(doc, input.rowIds ?? doc.rows.slice(0, 1).map(row => row.id), pos, ports);
