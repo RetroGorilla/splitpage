@@ -61,7 +61,7 @@ export function fixtures() {
   ];
 }
 
-function open(state = null) {
+export function open(state = null) {
   const handle = createSharedDocument();
   collabState(handle).doc.clientID = state ? 0x81234568 : 0x81234567;
   if (state) Y.applyUpdate(collabState(handle).doc, state);
@@ -71,10 +71,10 @@ function open(state = null) {
   return handle;
 }
 
-export function writer(handle) {
+export function writer(handle, identity = {}) {
   let serial = 0;
   const ends = new Map();
-  const author = () => ({ id: "m" + ++serial, by: "Measurement" });
+  const author = () => ({ id: (identity.prefix ?? "m") + ++serial, by: identity.by ?? "Measurement" });
   const operationOf = raw => {
     const operation = readOperation({ ...raw, ...author() });
     assert.ok(operation, "invalid measurement operation");
@@ -89,7 +89,7 @@ export function writer(handle) {
     return execution.record;
   };
   const reverse = record => {
-    const result = reverseSharedUndoRecord(handle, record, { by: "Measurement", nextId: () => author().id });
+    const result = reverseSharedUndoRecord(handle, record, { by: identity.by ?? "Measurement", nextId: () => author().id });
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.effective, true);
     ends.clear();
@@ -151,7 +151,7 @@ export function workload(handle, document) {
   return { afterText, per1000Typed: (afterText - fresh) / 10 };
 }
 
-function growth(fixture) {
+export function growth(fixture) {
   const handle = open();
   try {
     hydrateSharedDocument(handle, enterSharedDocument(copy(fixture.document)));
@@ -176,7 +176,7 @@ function growth(fixture) {
   } finally { destroySharedDocument(handle); }
 }
 
-function updatesFor(state, owner) {
+export function updatesFor(state, owner) {
   const sender = open(state), updates = [];
   collabState(sender).doc.clientID = 0x81234569;
   const stop = observeSharedUpdates(sender, update => updates.push(update));
