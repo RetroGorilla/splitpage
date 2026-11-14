@@ -70,6 +70,7 @@ function start(): Switch {
   standaloneSession().adopt(source());
   const ports: SharedSwitchPorts = {
     refusal: () => { trip("refusal"); return refusal; },
+    commandRefused: undefined,
     settle: () => { log.push("settle"); settleHook(); trip("settle"); },
     detach: () => { log.push("detach"); trip("detach"); },
     bindings: {
@@ -121,6 +122,26 @@ function lengthCommand(value = 7): Command {
 
 const titleCommand = (title: string): Command => ({ name: "title", needs: "edit", plan: () => ({ changes: changeSet({ docFields: ["title"] }), apply: live => { live.title = title; } }) });
 const length = (): unknown => currentDocument()?.rows[0]?.["lengthSeconds"];
+
+test("command refusals reach the supplied callback once while entry refusal is consulted only on entry", async () => {
+  const s = start(), refusals: string[] = [];
+  let entries = 0;
+  const ports: SharedSwitchPorts = { ...s.ports,
+    refusal: () => { entries++; return s.ports.refusal(); },
+    commandRefused: reason => { refusals.push(reason); }
+  };
+  try {
+    assert.deepEqual(await enterSharedSession(ports), { ok: true });
+    assert.equal(entries, 2);
+    assert.deepEqual(s.entered().session.run({ name: "refused-command", needs: "edit", plan: () => ({ refused: "command-refused" }) }),
+      { kind: "rejected", reason: "command-refused", notified: true });
+    assert.deepEqual(refusals, ["command-refused"]);
+    assert.equal(entries, 2);
+    assert.equal(currentDocument()?.title, "Pilot");
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+    assert.equal(entries, 2);
+  } finally { s.stop(); }
+});
 const state = (): unknown[] => [sharedSession(), sharedUndoRoute() !== null, sharedSessionParts() !== null, currentDocument()?.title];
 
 function standaloneUsable(title = "Again"): void {

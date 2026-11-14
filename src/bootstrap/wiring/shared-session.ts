@@ -10,7 +10,7 @@ import { sharedUndoActions } from "../../application/editing/undo/shared-undo-ac
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
 import { createSharedSession } from "../../application/session/shared-session.ts";
-import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
+import type { SharedDocumentSession, SharedSessionPorts } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sharedSession } from "./session-owner.ts";
 import type { OwnerSwap } from "./session-owner.ts";
@@ -34,6 +34,7 @@ export interface SharedBindings {
 
 export interface SharedSwitchPorts {
   readonly refusal: () => string | null;
+  readonly commandRefused: SharedSessionPorts["refused"];
   readonly settle: () => void;
   readonly detach: () => void;
   readonly bindings: SharedBindings;
@@ -148,7 +149,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
       const session = createSharedSession({
         replica: replica, entry: owner.entry, undo: { record: () => {} },
         effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },
-        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after
+        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused
       });
       made.session = session;
       made.releaseSession = session.hold(SHARED_SWITCHING);

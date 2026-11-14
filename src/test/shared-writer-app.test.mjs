@@ -32,6 +32,7 @@ const reports = [], recovered = [], missing = [], errors = [];
 let ids = 0;
 const ports = {
   refusal: () => null,
+  commandRefused: undefined,
   settle: () => { undoOwner().flush(); },
   detach: () => {},
   bindings: sharedWriterBindings({ missingBase: rowId => { missing.push(rowId); }, recovered: rowId => { recovered.push(rowId); }, report: outcome => { reports.push(outcome); } }),
