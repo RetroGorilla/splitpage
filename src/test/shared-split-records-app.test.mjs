@@ -13,7 +13,7 @@ import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { sharedCommentCommands, sharedGalleryCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, openProductionPanel, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openProductionPanel, saveTagRename, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { removeGallerySlot } from "../core/document/gallery.ts";
@@ -250,7 +250,9 @@ const refusals = [
   { name: "rule 153: replying under another name than the session's", act: () => { reply("Bob"); } },
   { name: "rule 73: bulk deleting a tag the script labels needs a text rewrite", act: () => {
     openProductionPanel(); toggleCardSelection(tagKey("prop", "Mug")); bulkDeleteSelected();
-  } }
+  } },
+  { name: "rule 73: renaming a tag has no shared port", act: () => { openProductionPanel(); assert.equal(saveTagRename(tagKey("prop", "Mug"), "Cup"), tagKey("prop", "Mug")); } },
+  { name: "rule 73: removing a tag's labels has no shared port", act: () => { openProductionPanel(); twice(armRemoveTag, tagKey("prop", "Mug")); } }
 ];
 
 for (const literal of refusals) for (const order of ORDERS) test(`C7 record refusal: ${literal.name} is refused once and writes nothing, ${order}`, async () => {
@@ -288,9 +290,12 @@ test("C7 record standalone: the record, picture and comment callers read no shar
   assert.ok(pictureToast?.querySelector(".toast-action"), "the standalone picture toast keeps its Undo");
   toggleResolve("C1");
   post("Bob");
+  openProductionPanel();
+  assert.equal(saveTagRename(tagKey("gear", "Drone"), "Crane"), tagKey("gear", "Crane"));
+  twice(armRemoveTag, tagKey("prop", "Mug"));
   const s = shape(currentDocument());
-  assert.deepEqual([s.people, s.tags.map(t => t[1]), s.shots[0][4], s.rows[0][3], s.comments.map(c => [c[0], c[1]])],
-    [["Ann", "Bob", "Cy"], ["Drone", "Mug", "Park", "Lamp"], ["Mug", "Lamp"], ["a"], [["C1", true], ["C9", false]]]);
+  assert.deepEqual([s.people, s.tags.map(t => t[1]), s.shots[0][4], s.rows[0][3], s.rows[1][2], s.comments.map(c => [c[0], c[1]])],
+    [["Ann", "Bob", "Cy"], ["Crane", "Mug", "Park", "Lamp"], ["Mug", "Lamp"], ["a"], "A Mug", [["C1", true], ["C9", false]]]);
   assert.equal(currentDocument().comments[1].author, "Bob");
   assert.deepEqual(warnings(), []);
 });

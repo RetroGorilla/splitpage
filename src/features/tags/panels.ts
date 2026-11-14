@@ -894,6 +894,7 @@ export function armRemoveTag(btn: Element, key: string | null) {
     if (!item) return;
     (ports as TagPanelPorts).undo.breakCoalescing();
     const n = removeTag(item.cat.id, item.name, tagEditPorts as RemoveTagPorts);
+    if (!n && (ports as TagPanelPorts).shared.ports()) return;
     (ports as TagPanelPorts).undo.breakCoalescing();
     (ports as TagPanelPorts).notices.show("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
@@ -1309,7 +1310,7 @@ export function startTagPanels(nextPorts: TagPanelPorts) {
     renderProduction();
   });
   tagEditPorts = {
-    run: (ports as TagPanelPorts).edits.edit, read: (ports as TagPanelPorts).document.read, stamps: (ports as TagPanelPorts).edits.stamps,
+    run: command => editRecords(() => command), read: (ports as TagPanelPorts).document.read, stamps: (ports as TagPanelPorts).edits.stamps,
     rewrites: (tags, toName) => retagRewrites((ports as TagPanelPorts).text, tags, toName),
     mentions: (doc, tags) => retagMentions((ports as TagPanelPorts).text, doc, tags)
   };

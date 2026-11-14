@@ -160,6 +160,18 @@
       "replace": "  const n = items.length;"
     },
     {
+      "label": "rule 73: renaming a tag or removing its labels runs through the silent edit that drops the refusal",
+      "file": "src/features/tags/panels.ts",
+      "find": "    run: command => editRecords(() => command),",
+      "replace": "    run: (ports as TagPanelPorts).edits.edit,"
+    },
+    {
+      "label": "a refused label removal still shows its success toast",
+      "file": "src/features/tags/panels.ts",
+      "find": "    if (!n && (ports as TagPanelPorts).shared.ports()) return;\n",
+      "replace": "\n"
+    },
+    {
       "label": "rule 152: the shared picture toast offers an Undo that reads the standalone owner",
       "file": "src/application/editing/cell-editing.ts",
       "find": "      ports.gallery.done(message);",
