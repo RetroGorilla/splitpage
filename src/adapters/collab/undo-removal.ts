@@ -16,6 +16,7 @@ import { captureSharedTextRange } from "./executor-references.ts";
 import { readSharedJoinedTextGeometry } from "./joined-text-geometry.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedPaintedText } from "./paint-base.ts";
+import { readSharedBeatPictures, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 
 export type SharedRemovalUndoPart = Extract<SharedUndoPart, { kind: "remove" | "restore" }>;
 
@@ -61,14 +62,16 @@ function rowPieces(handle: SharedDocumentHandle, beat: string): readonly { reado
 // why: the attachment index cannot be read inside a write, so visuals and gallery are found by their beat.
 function attached(handle: SharedDocumentHandle, beat: string): unknown[] {
   const roots = collabState(handle).roots;
-  return (["visuals", "gallery"] as const).flatMap(collection => [...roots[collection].entries()]
-    .filter(([, record]) => record instanceof Y.Map && record.get("beat") === beat).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+  const visuals = [...roots.visuals.entries()].filter(([, record]) => record instanceof Y.Map && record.get("beat") === beat).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([key, record]) => {
       const fields = Object.fromEntries(Object.entries((record as Y.Map<unknown>).toJSON()).filter(([field]) => field !== "text" && field !== "markRecords"));
       // why: a visual is compared by what it shows, so typing undone in it leaves no difference behind in its mark records.
-      return collection === "gallery" ? [collection, key, (record as Y.Map<unknown>).toJSON()] : [collection, key, fields,
+      return ["visuals", key, fields,
         readSharedTextHistory(handle, { owner: beat as SharedContentRef, segment: key as SharedContentRef, field: "visualText" })?.units.map(unit => [unit.unit, unit.value, unit.marks]) ?? null];
-    }));
+    });
+  // why: a picture is compared by what the beat shows; an undone picture and the retirement it keeps are no change.
+  return [...visuals, ...readSharedBeatPictures(roots, beat).map(([key, record]) =>
+    ["gallery", key, Object.fromEntries(Object.entries(record.toJSON()).filter(([field]) => field !== SHARED_GALLERY_RETIREMENT_FIELD))])];
 }
 
 // why: rule 35 leaves a beat's stamp as it is through undo, so a stamp alone is no change that uses an undo up.

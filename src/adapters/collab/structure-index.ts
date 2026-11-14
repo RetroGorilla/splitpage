@@ -9,6 +9,7 @@ import { freezeSharedPreparedValue, sharedPreparedValue, sharedPreparedTextInser
 import { sharedEmbedChangeReader } from "./embed-changes.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState, readSharedHeadingRemovalState } from "./removal-state.ts";
+import { isSharedGalleryShown, readSharedStoredPicture, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 import { createSharedJoinIndex } from "./join-index.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import { projectSharedCoveredBeats } from "../../core/collab/recovery.ts";
@@ -60,13 +61,20 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   };
   let attachmentsReady = false;
   const attachments = { visuals: new Map<string, Set<string>>(), gallery: new Map<string, Set<string>>() };
+  const retiredGallery = new Map<string, Set<string>>();
   const attachmentUpdater = (collection: "visuals" | "gallery") => {
-    const owners = new Map<string, string>(), groups = attachments[collection];
+    const owners = new Map<string, string>(), retiredOwners = new Map<string, string>(), groups = attachments[collection];
     const update = (key: string) => {
       const previous = owners.get(key); if (previous) { const keys = groups.get(previous); keys?.delete(key); if (!keys?.size) groups.delete(previous); }
-      owners.delete(key);
-      const raw = state.roots[collection].get(key), beat: unknown = raw instanceof Y.Map ? raw.get("beat") : null;
+      const held = retiredOwners.get(key); if (held !== undefined) member(retiredGallery, held, key, false);
+      owners.delete(key); retiredOwners.delete(key);
+      const raw = collection === "gallery" ? readSharedStoredPicture(state.roots, key) : state.roots.visuals.get(key), beat: unknown = raw instanceof Y.Map ? raw.get("beat") : null;
       if (!key || !isStableSharedIdentity(key) || typeof beat !== "string" || !beat || !isStableSharedIdentity(beat)) return;
+      if (collection === "gallery" && raw instanceof Y.Map && raw.has(SHARED_GALLERY_RETIREMENT_FIELD)) {
+        // why: a retired picture is watched through its beat's removals, which can bring it back.
+        member(retiredGallery, beat, key, true); retiredOwners.set(key, beat);
+        if (!isSharedGalleryShown(state.roots, key, raw)) return;
+      }
       let keys = groups.get(beat); if (!keys) { keys = new Set(); groups.set(beat, keys); }
       keys.add(key); owners.set(key, beat);
     };
@@ -123,7 +131,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       const changed = new Set<string>(), texts = new Map<Y.Text, string>(), rescanned = new Set<Y.Text>();
       for (const event of events) {
         if (!event.path.length && event instanceof Y.YMapEvent) for (const key of event.keysChanged) { if (typeof key === "string") changed.add(key); }
-        else if (root === state.roots.meta && event.path.length) changed.add(String(event.path[0]));
+        else if ((root === state.roots.meta || root === state.roots.gallery) && event.path.length) changed.add(String(event.path[0]));
         else if (textChanges && event.path.length === 2 && event.path[1] === "text" && event.target instanceof Y.Text) texts.set(event.target, String(event.path[0]));
         else if (event.path.length === 1 && event instanceof Y.YMapEvent && [...event.keysChanged].some(key => fields.includes(key as string))) changed.add(String(event.path[0]));
         else if (root === state.roots.beats && event.path.length === 2 && event.path[1] === "removals") changed.add(String(event.path[0]));
@@ -146,7 +154,11 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
   for (const key of state.roots.meta.keys()) updateBinding(key);
-  const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment", "removals"]),
+  const updateBeat = (key: string) => {
+    updateRecord(key);
+    if (attachmentsReady) for (const picture of [...retiredGallery.get(key) ?? []]) updateGallery(picture);
+  };
+  const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateBeat, ["id", "segment", "removals"]),
     observe(state.roots.headings, updateHeading, ["id"]), observe(state.roots.visuals, key => { if (attachmentsReady) updateVisual(key); }, ["beat"]),
     observe(state.roots.gallery, key => { if (attachmentsReady) updateGallery(key); }, ["beat"]), observe(state.roots.meta, updateBinding, [])];
   state.doc.once("destroy", () => guardSharedCallback(state, () => { for (const stop of stops) stop(); }));
