@@ -16,6 +16,7 @@ import { bindBufferedInput } from "../common/buffered-input.ts";
 import type { BufferedInput, BufferedInputPorts } from "../common/buffered-input.ts";
 import { headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
 import { headingPos } from "../../core/flow/flow.ts";
+import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
 
 export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current" | "numbering">;
@@ -28,6 +29,7 @@ export interface SceneControlsPorts {
   readonly scroll: (x: number, y: number) => void;
   readonly stopScroll: () => void;
   readonly sharedNames?: BufferedInputPorts;
+  readonly sharedScenes?: SharedSceneCreation;
 }
 
 export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
@@ -113,9 +115,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const input = doc.createElement("input");
     input.type = "text"; input.value = value;
     // why: a shared name refuses its 201st character in the binding; native truncation would drop that input event
-    if (!shared) input.maxLength = 200;
+    if (!shared || sceneId === null) input.maxLength = 200;
     input.setAttribute("aria-label", "Scene name");
     made.append(input);
+    let bound: BufferedInput | null = null;
     function settle(focus: boolean): void {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
@@ -126,6 +129,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
         return;
       }
       if (!input.value.trim()) { if (!focus) cancelName(true, false); return; }
+      if (shared) return;
       if (!ports.edits.allowed()) return;
       const name = input.value;
       cancelName(false, false);
@@ -151,10 +155,44 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       const state = ports.document.current();
       return state && sceneId !== null ? storedSceneName(state, sceneId) : null;
     };
-    const bound = shared && sceneId !== null ? bindBufferedInput({
-      inputs: [input], key: headingFieldKey(sceneId), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200,
-      position: offset => headingPos(sceneId, offset), owns: pos => pos.kind === "heading" && pos.sceneId === sceneId
-    }, shared) : null;
+    function bind(id: string): void {
+      if (!shared) return;
+      bound = bindBufferedInput({
+        inputs: [input], key: headingFieldKey(id), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200,
+        position: offset => headingPos(id, offset), owns: pos => pos.kind === "heading" && pos.sceneId === id
+      }, shared);
+      input.removeAttribute("maxlength");
+    }
+    if (shared && sceneId !== null) bind(sceneId);
+    if (shared && sceneId === null) {
+      let composing = false;
+      const create = (): void => {
+        if (bound || composing || naming?.line !== made) return;
+        const verdict = unsettledHeading(input.value);
+        if (verdict?.hold) return;
+        if (verdict) { shared.report({ kind: "rejected", reason: verdict.reason }); return; }
+        const from = input.selectionStart, to = input.selectionEnd;
+        shared.shown(() => {
+          const result = ports.sharedScenes?.create(beatId, input.value);
+          if (!result?.heading) {
+            shared.report(result?.outcome ?? { kind: "rejected", reason: NOT_SHARED }); return;
+          }
+          sceneId = result.heading;
+          bind(sceneId);
+          naming = { sceneId, beatId, line: made, returnTo, settle, bound };
+          shared.repaint();
+          input.setSelectionRange(from, to);
+        });
+      };
+      input.addEventListener("compositionstart", () => { composing = true; });
+      input.addEventListener("compositionend", () => { composing = false; create(); });
+      input.addEventListener("input", create);
+      input.addEventListener("beforeinput", event => {
+        if (!bound && (event.inputType === "insertFromDrop" || /^history/.test(event.inputType))) {
+          event.preventDefault(); shared.report({ kind: "rejected", reason: "buffer-unsupported-input" });
+        }
+      });
+    }
     naming = { sceneId, beatId, line: made, returnTo, settle, bound };
     animateName(made, false);
     input.focus(); input.select();
@@ -170,7 +208,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     }, ports.sharedNames);
   }
   function newScene(): boolean {
-    if (!ports.sharedNames) return true;
+    if (!ports.sharedNames || ports.sharedScenes) return true;
     ports.sharedNames.report({ kind: "rejected", reason: NOT_SHARED });
     return false;
   }
@@ -238,7 +276,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(row.id, created, name));
         if (focus) header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-      });
+      }, ports.sharedNames);
       return;
     }
     if (action === "name-automatic" && divider) {
@@ -249,7 +287,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(first.id, created, name));
         if (focus) header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-      });
+      }, ports.sharedNames);
       return;
     }
     if (!id || !divider) return;

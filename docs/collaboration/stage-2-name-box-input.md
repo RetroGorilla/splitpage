@@ -90,6 +90,50 @@ cover separated and overlapping deletions, prefix removal, and insertion inside
 the text or at its end, with results `aXfY`, `bPQefZ`, `XcYd` and `aXefY`.
 Their declared-limits table is empty.
 
+## Creating a scene from its name (rules 87 and 99)
+
+Split's `add-section` opens a blank input directly above the selected beat;
+`name-automatic` opens it on the automatic scene's first beat. Opening selects
+the empty input, with caret zero and no default stored name. In standalone,
+submit or blur saves a nonblank name. That path is unchanged.
+
+In shared mode, the first nonblank `input` creates the heading; during IME it
+waits for `compositionend`. Blank input, blank submit, blank blur and a cancelled
+first composition store nothing. One `add-section` command contains ordinary
+`heading-create` followed by its first `text-insert`, using a list-local heading
+alias. The returned canonical writer/operation identity binds the same input to
+the existing name-box buffer. The native input's first paste fits its prefix in
+200 UTF-16 units without splitting a surrogate pair. After creation the existing
+typing verdict, paste limit, stored whitespace, empty hold and caret mapping
+apply. Enter closes over the stored name and focuses the scene-name button.
+Drop and native history remain refused before and after creation.
+
+Assumed rule 99 retains ordinary heading-create concurrency: when two people
+name the same automatic scene, both names survive. The higher writer's heading
+owns the beat; the lower writer's name becomes `scene-with-no-beats` in recovery.
+The same rule applies to two add-sections above the same beat. Repaint closes
+the losing form through the existing detached-heading lifecycle. A key already
+in progress stays with its own heading in recovery. Before repaint, another key
+on that stale form is prevented and reported as `buffer-unavailable`; the
+existing ownership checks can report it more than once. It never targets the
+winning heading. No new reconciliation or operation intent is introduced.
+
+`scene-create.test.ts` compares complete projected documents and recovery on two
+copies and an encoded late joiner under normal, reversed and duplicate delivery.
+It pins both forms, typing in the first beat, removal of that beat, removal of
+the last beat, exact emitted operations, limits and a first composition. Its
+seeded three-writer histories also interleave naming, later typing, cut/paste
+and neighbouring beat typing. Concatenating the two complete creation command
+lists equals executing them separately. The undo-owner test records creation
+once and pins `undo-unsupported:heading-create`, leaving its one entry intact.
+
+Composition must give `mountSceneHeaders` both `sharedBufferedInputPorts` and
+`sharedSceneCreation(handle, session, author)` from the shared wiring ports.
+The author uses the existing clean operation-id source. The command runs once
+through the shared session. C2 must pass its `add-section` description with
+`typing: null` to the same `executeSharedCommand`/`SharedUndo.perform` path as
+other commands; no after-the-fact recording or second undo stack is used here.
+
 ## Rule 85 dependency
 
 Undo, redo and Escape wait for composition cut C2. `SharedPlan` currently carries

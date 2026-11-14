@@ -1,0 +1,39 @@
+{
+  "tests": ["tests/features/rows/scene-create.test.ts"],
+  "mutants": [{
+    "label": "a first composition input creates before compositionend",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (bound || composing || naming?.line !== made) return;",
+    "replace": "if (bound || naming?.line !== made) return;"
+  }, {
+    "label": "a blank name attempts a shared creation",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (verdict?.hold) return;",
+    "replace": "if (false) return;"
+  }, {
+    "label": "a refused shared creation falls through to the standalone submit",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (shared) return;",
+    "replace": "if (false) return;"
+  }, {
+    "label": "the created form stays unbound",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "sceneId = result.heading;\n          bind(sceneId);",
+    "replace": "sceneId = result.heading;"
+  }, {
+    "label": "scene creation targets the script first beat instead of the selected one",
+    "file": "src/application/commands/shared-scenes.ts",
+    "find": "const beat = firstBeat as SharedContentRef",
+    "replace": "const beat = \"R1\" as SharedContentRef"
+  }, {
+    "label": "scene creation omits the first native name",
+    "file": "src/application/commands/shared-scenes.ts",
+    "find": "content: [{ value: name, marks: [] }]",
+    "replace": "content: [{ value: \"\", marks: [] }]"
+  }, {
+    "label": "the binding follows a caller alias instead of the canonical heading",
+    "file": "src/bootstrap/wiring/ports/shared-scenes.ts",
+    "find": "? heading : null, outcome",
+    "replace": "? \"scene_\" + next.id : null, outcome"
+  }]
+}
