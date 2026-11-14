@@ -6,6 +6,7 @@ import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../.
 import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { currentCapabilities, currentDocument, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
+import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { documentIdentityPorts } from "../../src/bootstrap/wiring/ports/document-identity.ts";
 import { createDocumentIdentityOwner } from "../../src/application/identity/document-identity.ts";
 import type { IdentityChannel } from "../../src/application/identity/ports.ts";
@@ -34,6 +35,7 @@ async function share() {
   const errors: unknown[] = [];
   const standalone = currentCapabilities();
   const ports: SharedSwitchPorts = {
+    opening: openingStatus,
     refusal: () => null, settle: () => {}, detach: () => {},
     bindings: { enter: () => {}, settle: () => null, leave: () => {} },
     common: standalone, standalone, migrate: migrateRows, docId: () => "d" + String(ids++).padStart(32, "0"),

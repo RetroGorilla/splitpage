@@ -10,6 +10,7 @@ import { sharedUndoActions } from "../../application/editing/undo/shared-undo-ac
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
 import { createSharedSession } from "../../application/session/shared-session.ts";
+import type { DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sharedSession } from "./session-owner.ts";
@@ -46,6 +47,7 @@ export interface SharedSwitchPorts {
   readonly report: ReportPort;
   readonly timers: TimerPort;
   readonly now: () => number;
+  readonly opening: Pick<DocumentOpeningActivity, "openingPending">;
 }
 
 export type SharedSwitchOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };
@@ -96,7 +98,7 @@ function destroy(faults: Faults, handle: SharedDocumentHandle): void {
 function refusedNow(ports: SharedSwitchPorts, faults: Faults): string | null {
   if (running || sharedSession()) return SHARED_ALREADY;
   let reason: string | null = null;
-  return faults.attempt(() => { reason = ports.refusal(); }) ? reason : SHARED_ENTER_FAILED;
+  return faults.attempt(() => { reason = ports.opening.openingPending() ? "opening-pending" : ports.refusal(); }) ? reason : SHARED_ENTER_FAILED;
 }
 
 function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): SharedSwitchOutcome {

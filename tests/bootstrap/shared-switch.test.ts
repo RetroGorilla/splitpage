@@ -69,6 +69,7 @@ function start(): Switch {
   }));
   standaloneSession().adopt(source());
   const ports: SharedSwitchPorts = {
+    opening: { openingPending: () => false },
     refusal: () => { trip("refusal"); return refusal; },
     settle: () => { log.push("settle"); settleHook(); trip("settle"); },
     detach: () => { log.push("detach"); trip("detach"); },

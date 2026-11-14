@@ -36,6 +36,11 @@ export interface DocumentEntryAdmission {
   readonly before: () => { readonly refused: string } | null;
 }
 
+export interface DocumentOpeningActivity {
+  readonly track: <T>(work: () => T) => T;
+  readonly openingPending: () => boolean;
+}
+
 export interface TransitionPorts<D> {
   readonly entry: DocumentEntry;
   readonly live: LiveDocumentPort;

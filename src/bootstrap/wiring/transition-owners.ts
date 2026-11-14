@@ -6,11 +6,11 @@ import { createDocumentSources } from "../../application/transitions/sources.ts"
 import type { DocumentSource, DocumentSources } from "../../application/transitions/sources.ts";
 import { createTransitions } from "../../application/transitions/transitions.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
-import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, LiveDocumentPort } from "../../application/transitions/ports.ts";
+import type { DestinationPort, DocumentDestination, DocumentOpeningActivity, HistoryPort, IdentityPort, LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { migrateRows } from "../document-ports.ts";
 import { currentHome } from "./location-owner.ts";
 import { confirmedGeneration } from "./save-owners.ts";
-import { holdSessionCommands, liveSession } from "./session-owner.ts";
+import { holdSessionCommands, liveSession, onDocumentReplaced, sharedSession } from "./session-owner.ts";
 import { documentEntry } from "./ports/document-entry.ts";
 
 export interface LegacyTransitionPorts {
@@ -34,6 +34,7 @@ interface Started {
   readonly operations: Operations;
   readonly sources: LegacyDocumentSources;
   readonly history: HistoryPort;
+  readonly openings: Set<OperationContext>;
 }
 
 let started: Started | null = null;
@@ -69,8 +70,10 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     history: ports.history
   });
   function entered<T>(run: () => T): T {
+    const shared = sharedSession();
     const refusal = documentEntry.before();
     if (refusal) throw new Error(refusal.refused);
+    if (!shared) return run();
     const release = holdSessionCommands("document-entry");
     try { return run(); } finally { release(); }
   }
@@ -81,10 +84,17 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     transitions: transitions,
     operations: operations,
     sources: createDocumentSources<LegacyOpening>(),
-    history: ports.history
+    history: ports.history,
+    openings: new Set<OperationContext>()
   });
   started = mine;
+  const releaseEpoch = onDocumentReplaced(() => {
+    const epoch = liveSession().epoch();
+    for (const context of mine.openings) if (context.epoch !== epoch) mine.openings.delete(context);
+  });
   return function () {
+    releaseEpoch();
+    mine.openings.clear();
     if (started === mine) started = null;
   };
 }
@@ -109,8 +119,24 @@ export function openDocument(opening: LegacyOpening): Promise<unknown> {
   const source = running().sources.taking(opening);
   if (!source) return Promise.resolve(false);
   if (documentEntry.before()) return Promise.resolve(false);
-  return Promise.resolve(source.open(opening));
+  return documentOpenings.track(() => Promise.resolve(source.open(opening)));
 }
+
+export const documentOpenings: DocumentOpeningActivity = {
+  openingPending: () => started !== null && started.openings.size > 0,
+  track: work => {
+    const mine = running(), context = mine.operations.capture();
+    mine.openings.add(context);
+    const close = () => { mine.openings.delete(context); };
+    try {
+      const result = work();
+      const then = result && (typeof result === "object" || typeof result === "function") ? (result as PromiseLike<unknown>).then : null;
+      if (typeof then === "function") void Promise.resolve(result).then(close, close);
+      else close();
+      return result;
+    } catch (error) { close(); throw error; }
+  }
+};
 
 export function keepSnapshot(label: string, doc?: DocumentView | null): unknown {
   return running().history.keep(label, doc);
