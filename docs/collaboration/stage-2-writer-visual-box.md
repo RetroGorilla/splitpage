@@ -6,7 +6,7 @@ Owner rule 86 on #1414 allows the Writer visual box to edit shared visual text. 
 
 `src/features/writer/flow-visual-box.ts` owns a floating contenteditable surface. `flow-writer.ts` supplies its save and shortcut callbacks. At a collapsed narration caret, each native input commits the entire visual through `wholeFieldText.commit`; composition waits until compositionend. For a narration selection, the first save runs `visual-selection` / `setVisualForRange`, isolating the selection into its own beat; later input uses whole-field commits. Standalone callbacks can create records from visual shortcuts.
 
-The standalone input, key, paste and composition handlers are retained. The factory selects the shared wrapper once at construction; standalone keys execute no added check, read, allocation, buffer construction or operation preparation. The production cost literal pins 12 row reads and five decodes for a visual key at both 2 and 200 rows, with no shared field, painted record or cell buffer constructed.
+The standalone input, key, paste and composition handlers are retained. The factory selects the shared wrapper once at construction; standalone keys execute no added check, read, allocation, buffer construction or operation preparation. With fixed effect ports, the cost literal for the Writer's handlers pins 12 row reads and five decodes for a visual key at both 2 and 200 rows, with no shared field, painted record or cell buffer constructed.
 
 ## Shared binding
 
