@@ -345,6 +345,7 @@ const ENGINES: readonly Site[] = [
   ["application/commands/production-records.ts#registerTagCommand", "addRegistryTag 1", "record-stated"],
   ["application/commands/production-records.ts#tagCellsCommand", "addRegistryTag 1", "record-with-text"],
   ["application/commands/production-records.ts#tagEntry", "addRegistryTag 1", "record-stated"],
+  ["application/commands/shared-scenes.ts#sharedSceneCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/production/broll-records.ts#createRecordsReconciler", "ProductionIndexOwner.recordsPlan 1, applyBrollRecords 1, applyOwnerSync 1, planBrollRecords 1, planOwnerSync 2", ...FROM_TEXT],
   ["application/production/broll-records.ts#recordPastedBroll", "addBrollRecord 1", "record-with-text"],
   ["application/production/production-index.ts#createProductionIndex", "ProductionIndexOwner.recordsPlan (provided) 1, planRegistryHealing 1", "tag-from-text", "cue-retitle"],
