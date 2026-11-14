@@ -53,6 +53,11 @@ export function newBrollRecord(fields: ShotFields | null | undefined, ports: New
   return rec;
 }
 
+export function addedBrollRecord(fields: ShotFields | null | undefined, ports: NewBrollPorts): DocumentShot | null {
+  const rec = newBrollShot(ports.ids.id("bs"), fields || {});
+  return runRecord(ports, shared => addShotCommand(rec, shared)) ? rec : null;
+}
+
 export function removeBrollProp(shotId: string, ref: string, ports: ProductionActionPorts): boolean {
   return runRecord(ports, shared => removeShotPropCommand(shotId, ref, shared));
 }

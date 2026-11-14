@@ -8,7 +8,7 @@ import type { SessionChange } from "../../application/session/change-set.ts";
 import type { CommentFilter } from "../../application/preferences/preferences.ts";
 import type { ConflictValue, SharedCommentPorts } from "../../application/commands/comments.ts";
 import type { RewritePlanner } from "../../application/commands/document-edit.ts";
-import { runRecordCommand } from "../../application/commands/shared-records.ts";
+import { recordCommandRun } from "../../application/commands/shared-records.ts";
 
 type CommentRenderReply = NonNullable<DocumentView["comments"][number]["replies"]>[number] & {
   readonly author: string; readonly body: string; readonly createdAt?: string | null | undefined;
@@ -473,7 +473,7 @@ function anchorLiveText(cmtId: string) {
 }
 
 function editComments(build: (shared?: SharedCommentPorts) => Command) {
-  return runRecordCommand((ports as CommentsRuntimePorts).edits, (ports as CommentsRuntimePorts).shared, build);
+  return recordCommandRun((ports as CommentsRuntimePorts).edits, (ports as CommentsRuntimePorts).shared, build);
 }
 
 function anchorUnwrapped(rowId: string, field: string, cmtId: string): RewritePlanner {
@@ -530,12 +530,12 @@ export function openCommentComposer(ctx: Readonly<Record<string, unknown>>) {
 }
 
 export function closeCommentComposer(cancelled?: boolean) {
-  composerVersion++;
-  (document.getElementById("comment-modal") as HTMLElement).hidden = true;
   if (cancelled && pendingComment) {
     const pending = pendingComment;
-    editComments(shared => unwrapCommentAnchorCommand(anchorUnwrapped(pending.rowId, pending.field, pending.id), shared && { ports: shared, anchor: pending.id }));
+    if (editComments(shared => unwrapCommentAnchorCommand(anchorUnwrapped(pending.rowId, pending.field, pending.id), shared && { ports: shared, anchor: pending.id })).held) return;
   }
+  composerVersion++;
+  (document.getElementById("comment-modal") as HTMLElement).hidden = true;
   pendingComment = null;
   (ports as CommentsRuntimePorts).selection.dropLink();
   closeFieldPopovers((document.getElementById("comment-modal") as HTMLElement));
@@ -556,7 +556,7 @@ export function postComment() {
     return;
   }
   const pending = pendingComment;
-  editComments(shared => addCommentCommand({
+  if (editComments(shared => addCommentCommand({
     id: pending.id,
     rowId: pending.rowId,
     field: pending.field,
@@ -572,7 +572,7 @@ export function postComment() {
     updatedAt: (ports as CommentsRuntimePorts).clock.nowIso(),
     kind: "anchor",
     replies: []
-  }, shared));
+  }, shared)).held) return;
   (document.getElementById("comment-modal") as HTMLElement).hidden = true;
   composerVersion++;
   pendingComment = null;
@@ -613,10 +613,23 @@ function deleteComment(id: string | null) {
   const idx = findCommentIndex(id);
   if (idx === -1) return;
   const c = doc.comments[idx] as CommentRenderRecord;
-  Reflect.deleteProperty(expandedReplyIds, id as string);
-  Reflect.deleteProperty(replyDrafts, id as string);
-  if (commentMenuFor === id) commentMenuFor = null;
-  editComments(shared => deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), shared));
+  const restore = dropCommentState(id, true);
+  if (editComments(build => deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build)).held) restore();
+}
+
+function dropCommentState(id: string | null, closeMenu: boolean) {
+  const key = id as string;
+  const expanded = expandedReplyIds[key];
+  const draft = replyDrafts[key];
+  const menu = commentMenuFor;
+  Reflect.deleteProperty(expandedReplyIds, key);
+  Reflect.deleteProperty(replyDrafts, key);
+  if (closeMenu && commentMenuFor === id) commentMenuFor = null;
+  return function () {
+    if (expanded !== undefined) expandedReplyIds[key] = expanded;
+    if (draft !== undefined) replyDrafts[key] = draft;
+    commentMenuFor = menu;
+  };
 }
 
 export function armDeleteComment(btn: Element, id: string | null) {
@@ -657,10 +670,13 @@ export function postReply(id: string | null) {
     (ports as CommentsRuntimePorts).notices.show("Write a reply before posting.", "warn");
     return;
   }
-  Reflect.deleteProperty(expandedReplyIds, id as string);
-  Reflect.deleteProperty(replyDrafts, id as string);
-  const reply = { id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: bodyHtml, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
-  editComments(shared => addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, shared));
+  const restore = dropCommentState(id, false);
+  const reply ={ id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: bodyHtml, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
+  if (editComments(build => addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)).held) {
+    restore();
+    captureReplyDrafts();
+    return;
+  }
   sendNow();
 }
 

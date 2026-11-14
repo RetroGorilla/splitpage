@@ -18,13 +18,23 @@ export interface SharedRecordCommands<Ports = SharedRecordPorts> {
 
 export type SharedRecordBuild = (shared?: SharedRecordPorts) => Command;
 
-export function runRecordCommand<Ports>(edits: Pick<DocumentEdits, "edit" | "run">, records: SharedRecordCommands<Ports>, build: (shared?: Ports) => Command): boolean {
+export interface RecordCommandRun {
+  readonly changed: boolean;
+  readonly held: boolean;
+}
+
+export function recordCommandRun<Ports>(edits: Pick<DocumentEdits, "edit" | "run">, records: SharedRecordCommands<Ports>, build: (shared?: Ports) => Command): RecordCommandRun {
   const shared = records.ports();
-  if (!shared) return edits.edit(build());
+  if (!shared) return { changed: edits.edit(build()), held: false };
   const outcome = edits.run(build(shared));
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind === "rejected") records.refused(outcome);
-  return outcome.kind === "applied" || outcome.kind === "committed";
+  const changed = outcome.kind === "applied" || outcome.kind === "committed";
+  return { changed, held: !changed };
+}
+
+export function runRecordCommand<Ports>(edits: Pick<DocumentEdits, "edit" | "run">, records: SharedRecordCommands<Ports>, build: (shared?: Ports) => Command): boolean {
+  return recordCommandRun(edits, records, build).changed;
 }
 
 export type SharedRecordTrial = (trial: DocumentShape | DocumentView) => SharedPlan | CommandRefusal | null;
