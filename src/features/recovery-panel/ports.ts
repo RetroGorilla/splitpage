@@ -20,6 +20,14 @@ export interface RecoveryPanelPorts {
 }
 
 export interface RecoveryPanelControl {
+  readonly enter: () => void;
+  readonly leave: () => void;
   readonly open: () => void;
+  readonly dispose: () => void;
+}
+
+export interface RecoveryActionsControl {
+  readonly enter: () => void;
+  readonly leave: () => void;
   readonly dispose: () => void;
 }

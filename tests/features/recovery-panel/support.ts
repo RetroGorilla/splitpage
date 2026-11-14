@@ -60,7 +60,7 @@ export function page(handle: SharedDocumentHandle, name = "Bob") {
   const open = () => { assert.equal(registry.invoke("recovery", "command-menu").kind, "ran"); };
   return { h, undo, notices, registry, state, ports, panel, host, open,
     mode: () => { for (const listener of listeners) listener(); },
-    close: () => { off(); panel.dispose(); h.session.dispose(); host.remove(); } };
+    close: () => { off.dispose(); panel.dispose(); h.session.dispose(); host.remove(); } };
 }
 
 export function rows(host: HTMLElement): readonly { readonly kind: string | undefined; readonly label: string | undefined;

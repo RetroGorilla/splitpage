@@ -15,7 +15,8 @@ test("C9 standalone: no DOM, no registered action, no recovery/document reads or
   const f = fakeRecoveryPanelPorts([removed]), panel = createRecoveryPanel(f.ports), registry = createActionRegistry();
   const off = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
   try {
-    panel.open(); assert.equal(f.ports.host.childElementCount, 0); assert.deepEqual(registry.list(), []);
+    panel.open(); assert.equal(f.ports.host.childElementCount, 0); assert.deepEqual(registry.list(), []); assert.equal(f.mode.size, 0);
+    const beforeReplacement = f.state.currentReads; f.changed(); assert.equal(f.state.currentReads, beforeReplacement);
     const reads = [f.state.currentReads, f.state.reads, f.state.docReads, f.state.subscriptions];
     for (let key = 0; key < 20; key++) {
       f.ports.host.dispatchEvent(new window.InputEvent("beforeinput", { bubbles: true, data: "x" }));
@@ -26,33 +27,64 @@ test("C9 standalone: no DOM, no registered action, no recovery/document reads or
     const definition = recoveryPanelActions({ current: () => panel, session: f.ports.session })[0]; assert.ok(definition);
     assert.deepEqual(definition.availability?.("command-menu"), { enabled: false, visible: false });
     definition.run("command-menu"); assert.equal(f.ports.host.childElementCount, 0);
-  } finally { off(); panel.dispose(); f.ports.host.remove(); }
+  } finally { off.dispose(); panel.dispose(); f.ports.host.remove(); }
 });
 
 test("C9 follows mode changes, registers once, releases a vanished session and disposes its readers", () => {
   const f = fakeRecoveryPanelPorts([removed]), panel = createRecoveryPanel(f.ports), registry = createActionRegistry();
   const off = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
   try {
-    assert.doesNotThrow(() => { f.state.shared = true; f.changed(); f.changed(); });
-    assert.equal(registry.list().length, 1); assert.equal(f.state.subscriptions, 1); assert.equal(f.state.openedReaders, 1);
+    assert.equal(f.mode.size, 0);
+    assert.doesNotThrow(() => { f.state.shared = true; panel.enter(); off.enter(); f.changed(); f.changed(); });
+    assert.equal(registry.list().length, 1); assert.equal(f.state.subscriptions, 0); assert.equal(f.state.openedReaders, 0);
+    assert.equal(f.mode.size, 2);
     assert.equal(f.ports.host.childElementCount, 0);
     assert.equal(registry.invoke("recovery", "command-menu").kind, "ran");
+    f.changed(); f.changed(); assert.equal(f.state.subscriptions, 1); assert.equal(f.state.openedReaders, 1);
     assert.equal(f.ports.host.querySelector("pre")?.textContent, "Kept <text>");
     const old = [...f.ports.host.querySelectorAll("button")].find(button => button.textContent === "Restore"); assert.ok(old);
     f.state.shared = false; f.changed();
     assert.equal(f.ports.host.childElementCount, 0); assert.equal(f.state.subscriptions, 0); assert.deepEqual(registry.list(), []);
     old.click(); assert.deepEqual(f.calls, []);
-    f.state.shared = true; f.changed(); old.click(); assert.deepEqual(f.calls, []); panel.open();
-    const late = [...f.mode]; off(); panel.dispose();
+    f.state.shared = true; panel.enter(); off.enter(); f.changed(); old.click(); assert.deepEqual(f.calls, []); panel.open();
+    const late = [...f.mode]; off.dispose(); panel.dispose(); const beforeLate = f.state.currentReads;
     for (const callback of late) callback();
+    assert.equal(f.state.currentReads, beforeLate);
     assert.equal(f.ports.host.childElementCount, 0); assert.equal(f.state.subscriptions, 0); assert.equal(f.mode.size, 0);
     assert.deepEqual(registry.list(), []); const reads = f.state.currentReads; panel.open(); assert.equal(f.state.currentReads, reads); assert.equal(f.ports.host.childElementCount, 0);
-  } finally { off(); panel.dispose(); f.ports.host.remove(); }
+  } finally { off.dispose(); panel.dispose(); f.ports.host.remove(); }
+});
+
+test("C9 binding lifetime has zero standalone listeners, open-only subscription and complete leave or rollback release", () => {
+  const f = fakeRecoveryPanelPorts([removed]), panel = createRecoveryPanel(f.ports), registry = createActionRegistry();
+  const actions = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
+  const counts = () => [f.mode.size, f.state.subscriptions, registry.list().length];
+  try {
+    assert.deepEqual(counts(), [0, 0, 0]);
+    for (const rollback of [false, true]) {
+      f.state.shared = true; panel.enter(); actions.enter(); panel.enter(); actions.enter();
+      assert.deepEqual(counts(), [2, 0, 1]);
+      panel.open(); assert.deepEqual(counts(), [2, 1, 1]);
+      const close = [...f.ports.host.querySelectorAll("button")].find(button => button.textContent === "Close"); assert.ok(close);
+      close.click(); assert.deepEqual(counts(), [2, 0, 1]);
+      const beforeClosed = f.state.reads; f.publish(); assert.equal(f.state.reads, beforeClosed);
+      panel.open(); assert.deepEqual(counts(), [2, 1, 1]);
+      if (!rollback) f.state.shared = false;
+      panel.leave(); actions.leave(); assert.deepEqual(counts(), [0, 0, 0]);
+      f.state.shared = false;
+      const beforeReplacement = [f.state.currentReads, f.state.reads, f.state.docReads];
+      f.changed(); f.publish();
+      assert.deepEqual([f.state.currentReads, f.state.reads, f.state.docReads], beforeReplacement);
+    }
+    actions.dispose(); panel.dispose(); const reads = f.state.currentReads;
+    f.state.shared = true; panel.enter(); actions.enter(); assert.equal(f.state.currentReads, reads);
+    assert.deepEqual(counts(), [0, 0, 0]);
+  } finally { actions.dispose(); panel.dispose(); f.ports.host.remove(); }
 });
 
 test("C9 an unavailable action and a still-connected button cannot call a controller after the session ends", () => {
   const f = fakeRecoveryPanelPorts([removed]); let opened = 0;
-  const definition = recoveryPanelActions({ current: () => ({ open: () => { opened++; }, dispose: () => {} }), session: f.ports.session })[0]; assert.ok(definition);
+  const definition = recoveryPanelActions({ current: () => ({ enter: () => {}, leave: () => {}, open: () => { opened++; }, dispose: () => {} }), session: f.ports.session })[0]; assert.ok(definition);
   definition.run("command-menu"); assert.equal(opened, 0);
   f.state.shared = true; const panel = createRecoveryPanel(f.ports);
   try {

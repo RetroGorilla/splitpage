@@ -609,7 +609,7 @@ export function fakeRecoveryPanelPorts(entries: readonly SharedRecoveryEntry[] =
   };
   const ports: RecoveryPanelPorts = { host,
     session: { current: () => { state.currentReads++; return state.shared ? reader : null; },
-      onChange: listener => { mode.add(listener); return () => { mode.delete(listener); }; } },
+      onChange: listener => { const run = () => listener(); mode.add(run); return () => { mode.delete(run); }; } },
     document: { current: () => { state.docReads++; return doc.document.current(); } },
     text: { htmlToPlainText: html => String(html ?? "") }, reply: () => null, notices: notices.notices,
     restore: entry => { calls.push({ action: "restore", entry }); return state.outcome; },

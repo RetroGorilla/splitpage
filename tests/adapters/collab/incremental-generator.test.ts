@@ -68,7 +68,14 @@ test("seeded incremental projection agrees at every authored and delivered revis
         const person = "P" + writer;
         submit({ kind: "record-create", target: { collection: "people", record: person }, fields: { id: person, name: "Ada" } });
         submit({ kind: "record-set", target: { collection: "people", record: person }, field: "name", value: "Ada" + pick(99) });
+        submit({ kind: "record-set", id: prefix + "owner", target: { collection: "tags", record: "t_1" }, field: "owner", value: person });
         submit({ kind: "record-delete", target: { collection: "people", record: person } });
+        const projector = projectors[writer]; assert.ok(projector);
+        assert.ok(projector.read().recovery.some(entry => entry.kind === "deleted-person" && entry.person === person));
+        const beforeDiscard = checkpoints;
+        submit({ kind: "discard", entry: { kind: "deleted-person", key: person }, removals: [] });
+        assert.equal(checkpoints, beforeDiscard + 1);
+        assert.equal(projector.read().recovery.some(entry => entry.kind === "deleted-person" && entry.person === person), false);
         for (const [kind, row] of [["split", "R2"], ["split-before", "R3"]] as const) submit({ kind,
           target: { owner: row, segment: "b:" + row, field: "audioText" }, at: { left: null, right: flowBaseReference(row, "audioText", 1 + pick(4)), affinity: "before" },
           observed: [], boundary: prefix + kind + "boundary", beat: prefix + kind + "beat", fields: { status: "todo" } });
@@ -117,11 +124,11 @@ test("seeded incremental projection agrees at every authored and delivered revis
     finally { for (const stop of stops) stop(); for (const projector of projectors) projector.dispose(); run.close(); }
   }
   assert.deepEqual(violations, declaredLimits);
-  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1320);
-  assert.equal(checkpoints, 2756);
-  assert.equal(incrementalReports.compared - reported, 2720);
+  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1440);
+  assert.equal(checkpoints, 3068);
+  assert.equal(incrementalReports.compared - reported, 3032);
   assert.equal(choices.size, 216);
-  assert.deepEqual([...kinds].sort(), ["heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
+  assert.deepEqual([...kinds].sort(), ["discard", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "status-retire", "text-delete", "text-insert", "text-restore"]);
   assert.deepEqual([...new Set(operationExamples.map(example => example.operation.kind))].sort(), [...kinds].sort());
   t.diagnostic(JSON.stringify({ histories, commands, checkpoints, lateJoiners, choices: choices.size, declaredLimits }));

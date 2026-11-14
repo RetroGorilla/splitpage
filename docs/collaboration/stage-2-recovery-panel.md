@@ -2,7 +2,7 @@
 
 The test build mounts the recovery panel after Settings, before the shared-session hook mount planned in section 4 of the composition plan. The bridge's `sharedRecoverySession()` returns only the running shared owner's `recovery` and `subscribe` ports, or null. It creates no owner and answers null before startup and after shutdown. This is the only addition to `session-owner.ts`.
 
-The feature receives named ports from its wiring. It imports no bridge, adapter or other feature. Its action registers when the bridge becomes shared and unregisters when it becomes standalone; no recovery action is registered in standalone. A closed panel reads no entry content. Standalone input installs no handler and does no new read, allocation or callback. Existing comments/history panel classes provide the presentation; no styles are added.
+The feature receives named ports from its wiring. It imports no bridge, adapter or other feature. The switch binding starts its mode listeners and action registration only for the shared lifetime, and releases them on leave or a rolled-back enter. Standalone has no recovery listener or action. Only an open panel subscribes to the shared owner: Close releases that subscription, as do leave and disposal. Standalone input installs no handler and does no new read, allocation or callback. Existing comments/history panel classes provide the presentation; no styles are added.
 
 ## Entries and actions
 
@@ -33,7 +33,7 @@ Both compiled entry points fold the build flag before constructing ports or call
 
 ## Hook cut
 
-The composition root calls `mountRecoveryPanelFeature()` and action startup calls `registerRecoveryPanelActions(registry)`. The hook cut starts/leaves the existing switch and delivers replica updates; the wiring follows the bridge's reader and the switch's current author/handle automatically. Invoke the `recovery` action after entering to open the panel. Dispose it on app teardown through `stopRecoveryPanelFeature()`. The browser suite belongs to that cut: `recovery-panel-shared`, covering opening the panel, copyable text and restore/discard through the composed app. No browser or timing run is part of C9.
+The composition root calls `mountRecoveryPanelFeature()` and action startup calls `registerRecoveryPanelActions(registry)`. The hook cut composes `recoveryPanelBinding.enter(parts)` and `recoveryPanelBinding.leave()` into the switch's binding port, including its rollback path. The feature follows the bridge's reader and the switch's current author/handle while bound. Invoke the `recovery` action after entering to open the panel. Dispose it on app teardown through `stopRecoveryPanelFeature()`. The browser suite belongs to that cut: `recovery-panel-shared`, covering opening the panel, copyable text and restore/discard through the composed app. No browser or timing run is part of C9.
 
 ## Assumed rules
 

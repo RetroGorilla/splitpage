@@ -4,7 +4,7 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 
 for (const enabled of [false, true]) test("C9 build gate: release has no panel or action path, test build keeps both: " + enabled, async () => {
-  const result = await build({ stdin: { contents: 'export { mountRecoveryPanelFeature, registerRecoveryPanelActions, stopRecoveryPanelFeature } from "./src/bootstrap/wiring/recovery-panel.ts";',
+  const result = await build({ stdin: { contents: 'export { mountRecoveryPanelFeature, registerRecoveryPanelActions, stopRecoveryPanelFeature, recoveryPanelBinding } from "./src/bootstrap/wiring/recovery-panel.ts";',
     resolveDir: fileURLToPath(new URL("../../", import.meta.url)), sourcefile: "recovery-build-entry.ts", loader: "ts" },
     bundle: true, write: false, format: "esm", platform: "browser", minify: true, treeShaking: true,
     define: { SPLITPAGE_TEST_HOOKS: String(enabled) }, logLevel: "silent" });
