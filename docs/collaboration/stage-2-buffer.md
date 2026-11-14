@@ -488,9 +488,10 @@ In a shared session `mountTitleRoutes` binds both title inputs (`#doc-title` and
 `text-insert` or `text-delete` on the document's title text, with no beat stamp.
 The input being typed in is the field; a settle or a repaint writes the stored
 title into both inputs and updates the page title. The stored title is the
-replica's text (`PaintedBeats.stored`), not the session view, which caps a title
-at `TITLE_MAX` (300 code points) as loading does. Assumed rules, for the plan
-review:
+replica's text (`PaintedBeats.stored`), read from the replica rather than the
+session view. The shared entry (`enterSharedDocument`) cuts nothing, so the
+session view holds the stored title too; only loading a file caps a title at
+`TITLE_MAX` (300 code points). Assumed rules, for the plan review:
 
 - An emptied title is written empty at once, with no hold and no report, as a
   local title may be empty.
@@ -498,8 +499,9 @@ review:
   title is refused and put back (`unsettledTitle`, `buffer-title-length`, no
   hold); what was settled before stays. This covers typing and a composition.
   Two writers each typing at the cap at the same moment can still
-  leave the replica over it: every session view then shows the first 300 units,
-  the title inputs show the whole stored title, typing that lengthens it is
+  leave the replica over it: every session view and both title inputs then show
+  the whole stored title, in full (as a scene name over 200 characters, assumed
+  rule 61), typing that lengthens it is
   refused, and any deletion is written, so the title can be brought back under
   the cap.
 - Shared typing leaves `titleOrigin` and `titleVersion` as they are. Saving is

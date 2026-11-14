@@ -379,9 +379,9 @@
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
     "label": "the shared entry trims scene names",
-    "file": "tests/application/session/shared-session-support.ts",
-    "find": "if (typeof name === \"string\") scene.name = name;",
-    "replace": "void name;",
+    "file": "src/core/migrate.ts",
+    "find": "  return projected as ValidatedDocument;\n}",
+    "replace": "  if (Array.isArray(projected.sections)) for (const scene of projected.sections) if (scene && typeof scene.name === \"string\") scene.name = scene.name.trim();\n  return projected as ValidatedDocument;\n}",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
     "label": "the Split rename form reads the trimmed name",
@@ -520,12 +520,6 @@
     "file": "src/features/title/routes.ts",
     "find": "      unsettled: text => unsettledTitle(text, stored() ?? \"\"),\n",
     "replace": "",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
-  }, {
-    "label": "a shared title is read from the capped session view",
-    "file": "src/features/title/routes.ts",
-    "find": "stored = () => painted.stored(TITLE_FIELD_KEY);",
-    "replace": "stored = ports.current;",
     "tests": ["tests/features/title/title-buffer.test.ts"]
   }, {
     "label": "a title past the cap cannot be shortened",
