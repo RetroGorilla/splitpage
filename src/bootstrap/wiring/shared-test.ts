@@ -4,7 +4,8 @@ import { startupReady } from "../../application/startup-signal.ts";
 import { migrateRows } from "../document-ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { currentCapabilities } from "./session-owner.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "./shared-session.ts";
+import { enterSharedSession, joinSharedBindings, leaveSharedSession, sharedSessionParts } from "./shared-session.ts";
+import { recoveryPanelBinding } from "./recovery-panel.ts";
 import type { SharedSwitchPorts } from "./shared-session.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
 import { createSharedTestPeer } from "./shared-test-peer.ts";
@@ -34,11 +35,11 @@ export function mountSharedSessionFeature(): void {
     const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
     document.addEventListener("compositionstart", composition, true);
     document.addEventListener("compositionend", composition, true);
-    const bindings = sharedWriterBindings({
+    const bindings = joinSharedBindings(sharedWriterBindings({
       recovered: () => { counts.recovered++; notices.show("Your writing was kept in recovery.", "warn"); },
       missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
       ownershipScan: () => { counts.ownershipScans++; }, report
-    });
+    }), recoveryPanelBinding);
     return {
       enter: async () => {
         if (switching) return { ok: false, reason: "session-switching" };

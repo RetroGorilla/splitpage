@@ -489,6 +489,27 @@
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
+      "label": "the hook leaves the recovery panel binding out",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "}), recoveryPanelBinding);",
+      "replace": "}), { enter: () => {}, leave: () => {} });",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "a throwing second leave skips the first binding",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
+      "replace": "leave: () => { second.leave(); first.leave(); }",
+      "tests": ["tests/bootstrap/shared-switch.test.ts"]
+    },
+    {
+      "label": "joined bindings never leave the second binding",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
+      "replace": "leave: () => { first.leave(); }",
+      "tests": ["tests/bootstrap/shared-switch.test.ts", "src/test/shared-hook-app.test.mjs"]
+    },
+    {
       "label": "detaching leaves standalone autosave pending",
       "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "documentLocation().markWrittenOut(false); confirmSavedNow();",

@@ -21,6 +21,7 @@ const { createHeldFileHandle } = await import("./_m4-matrix.mjs");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
+const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const hook = window.__sharedTest;
 
 function script(rows = [{ id: "r1", audioText: "Hello", visualText: "" }]) {
@@ -220,6 +221,21 @@ test("leaving shared mode keeps desktop draft sequence numbers increasing for th
     if (sharedSession()) hook.leave();
     restoreDesktop();
   }
+});
+
+test("the composed recovery panel binding offers the Recovery action only while shared and closes its panel on leave", async () => {
+  script();
+  assert.equal(appActions.has("recovery"), false);
+  assert.deepEqual(await hook.enter(), { ok: true });
+  try {
+    assert.equal(appActions.has("recovery"), true);
+    assert.deepEqual([appActions.view("recovery")?.enabled, appActions.view("recovery")?.visible], [true, true]);
+    appActions.invoke("recovery", "command-menu");
+    assert.ok(document.getElementById("shared-recovery-panel"));
+    assert.deepEqual(hook.leave(), { ok: true });
+    assert.equal(appActions.has("recovery"), false);
+    assert.equal(document.getElementById("shared-recovery-panel"), null);
+  } finally { if (sharedSession()) hook.leave(); }
 });
 
 test("the composed undo route warns once for skipped and used-up steps in both directions", () => {

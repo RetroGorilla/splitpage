@@ -639,6 +639,9 @@ empty target refusals miss the shared notice | src/bootstrap/wiring/ports/empty-
 the hook omits the real command refusal notice | src/bootstrap/wiring/shared-test.ts: omits commandRefused | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 detaching leaves the source draft timers armed | src/bootstrap/wiring/shared-test.ts: omits draftSource.detachSource | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 leaving does not resume the draft writer | src/bootstrap/wiring/shared-test.ts: omits draftSource.resumeWriting after a leave | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+the hook leaves the recovery panel binding out | src/bootstrap/wiring/shared-test.ts: joins an empty binding instead | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+a throwing second leave skips the first binding | src/bootstrap/wiring/shared-session.ts: joinSharedBindings leaves without finally | tests/bootstrap/shared-switch.test.ts | tests/collab/composition-mutants.json
+joined bindings never leave the second binding | src/bootstrap/wiring/shared-session.ts: joinSharedBindings leaves only the first | tests/bootstrap/shared-switch.test.ts, src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 detaching leaves standalone autosave pending | src/bootstrap/wiring/shared-test.ts: omits confirmSavedNow | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 the hook fails to count a missing painted base | src/bootstrap/wiring/shared-test.ts: omits the missingBase increment | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 native ownership scans are not counted | src/application/editing/buffered-field.ts: omits ownershipScan | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
