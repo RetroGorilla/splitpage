@@ -1,6 +1,8 @@
+import { hasSharedCellSpaceForm } from "../common/cell-dom.ts";
+
 interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
-  readonly copy: (e: ClipboardEvent, cell: Element, cut: boolean) => boolean;
+  readonly copy: (e: Pick<ClipboardEvent, "clipboardData" | "preventDefault">, cell: Element, cut: boolean) => boolean;
   readonly afterCut: (cell: Element) => void;
   readonly pasteBeats: (data: DataTransfer | null, cell: Element) => boolean;
   readonly pasteDraft: (cell: Element, html: string, text: string) => void;
@@ -66,6 +68,13 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
     ports.afterCut(fresh || cell);
   }
 
+  function dragStart(event: Event): void {
+    if (!open || event.defaultPrevented) return;
+    const cell = cellAround(event), data = (event as DragEvent).dataTransfer;
+    if (!cell || !data || !hasSharedCellSpaceForm(cell) || !ports.scriptCell(cell)) return;
+    ports.copy({ clipboardData: data, preventDefault: () => {} }, cell, false);
+  }
+
   function insert(cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined, fromPaste = false): void {
     if (!open) return;
     if (!ports.hasMedia(files, html)) {
@@ -110,6 +119,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
 
   roots.forEach(function (root) {
     ROUTES.forEach(function (type) { root.addEventListener(type, handlers[type]); });
+    root.addEventListener("dragstart", dragStart);
   });
 
   return {
@@ -120,6 +130,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
       open = false;
       roots.forEach(function (root) {
         ROUTES.forEach(function (type) { root.removeEventListener(type, handlers[type]); });
+        root.removeEventListener("dragstart", dragStart);
       });
     }
   };

@@ -42,10 +42,13 @@ caret therefore leaves the caret before the new text, as in the name boxes.
 The helper indexes the new units once instead of rescanning them for every
 deleted old unit. The long-deletion test pins a linear bound on identity reads.
 
-The Split binding uses the selection snapshot that the rows renderer already
-captures before replacing DOM. It resolves both endpoints against the old and
-new painted bases, then restores them after the renderer's ordinary selection
-restoration. It retains the direction. The existing painted character anchors
+The Split binding captures each endpoint's cell key, offset and painted base
+before a shared repaint, with the renderer's existing single-cell snapshot as
+a fallback. It retains the restored endpoints until the next paint and refreshes
+them on the browser's selectionchange event, so a full repaint also follows a
+selection spanning cells. It resolves both endpoints through the same helper,
+then restores them after the renderer's ordinary selection restoration. It
+retains the direction. The existing painted character anchors
 already retain their identity through a split. Other cells are read only when
 a followed unit is absent from the opening cell. Disposal invalidates queued restoration, and moving
 focus outside Split prevents it from taking focus back.
@@ -75,17 +78,43 @@ literal separately proves that the stored character stays U+0020.
 
 | Column | Native typed space | Plain space after repaint | Shared paint |
 | --- | --- | --- | --- |
-| Narration | U+00A0, 5.0625 px | U+0020, 0 px | U+00A0, 5.0625 px |
-| Visual | U+00A0, 4.21875 px | U+0020, 0 px | U+00A0, 4.21875 px |
+| Narration | U+00A0, 5.0625 px | U+0020, 0 px | U+0020, 5.0625 px |
+| Visual | U+00A0, 4.21875 px | U+0020, 0 px | U+0020, 4.21875 px |
 
 The native typing sequence is keydown, keypress, beforeinput (`insertText`,
 data ` `), input (`insertText`, data ` `), keyup. The fixture uses that sequence,
 including the native nonbreaking DOM space. The binding folds it to plain
-space under rule 55. A subsequent repaint replaces only terminal DOM text
-spaces with nonbreaking spaces, through formatting children while preserving
-their markup and selection. A break or atom ends that scan. There is no model
+space under rule 55. A subsequent repaint wraps terminal plain spaces in marked
+spans with `white-space: break-spaces`, through formatting children while
+preserving their markup and selection. The characters themselves stay plain.
+A break or atom ends that scan. There is no model
 write, new operation kind or export change. Typing after this repaint still
 operates on the same plain shared character.
+
+The first paint used nonbreaking stand-ins; review found that HTML copy then
+changed their decoded characters. The marked span now preserves width without
+substituting characters. The shared-cell marker also retains the painted stored
+space form. The serializer checks that the DOM differs only in space form,
+restores those known characters in its clone, and unwraps the paint spans. This
+also handles a freshly typed native nonbreaking space before any remote repaint
+without changing the live DOM. Real stored nonbreaking spaces are preserved. Shared
+text drag uses that same serializer without cancelling the drag. Copy, cut and
+drag payload literals cover plain space, real nonbreaking space, and a selection
+ending at the first of two painted spaces, plus a freshly typed space before a
+remote repaint, in both columns and both formats.
+The production paste decoder feeds existing shared text operations on another
+beat, and the resulting stored characters agree on two copies and a late joiner.
+Split's cut/paste commands themselves remain refused as not shared; this cut
+does not add their command builders or bypass their admission in the application.
+
+The cross-cell review literals select 2 to 5 in `abcdef`, split at 3, insert `X`
+before `abc`, repaint a surrounding mark, then perform a full repaint. Both
+directions retain the original `b` and `e` endpoints. Moving the selection and
+repainting again follows the new endpoints. Typing over a two-cell selection in
+this Split binding remains refused with `buffer-unsupported-target`, with no
+input event or shared write; the refusal and unchanged text are pinned after
+the third repaint. If a mapped field is no longer shown, the renderer's existing
+fallback still applies.
 
 ## Scope and checks
 

@@ -1,14 +1,16 @@
 import { MEDIA_KEY, atomKey, unitKey } from "../../core/text/selection.ts";
 import type { Affinity, CellPoints } from "../../core/text/selection.ts";
 import { protectedTagAt } from "./dom.ts";
+import { sameUpToSpaceForm } from "../../core/collab/buffer.ts";
 
-export function paintTrailingCellSpaces(cell: Element): void {
-  const edits: { readonly node: Text; readonly text: string }[] = [];
+export function paintTrailingCellSpaces(cell: Element, stored = ""): void {
+  cell.setAttribute("data-shared-cell-space-form", stored);
+  const edits: { readonly node: Text; readonly spaces: string }[] = [];
   let node: Node | null = cell.lastChild;
   while (node && node !== cell) {
     if (node.nodeType === 3) {
       const text = node as Text, spaces = / +$/.exec(text.data)?.[0] ?? "";
-      if (spaces) edits.push({ node: text, text: text.data.slice(0, -spaces.length) + "\u00a0".repeat(spaces.length) });
+      if (spaces && !text.parentElement?.hasAttribute("data-shared-cell-space")) edits.push({ node: text, spaces });
       if (text.data.length > spaces.length) break;
     } else if (node.nodeType === 1) {
       const element = node as Element;
@@ -21,8 +23,44 @@ export function paintTrailingCellSpaces(cell: Element): void {
   }
   if (!edits.length) return;
   const selection = cell.ownerDocument.getSelection(), points = readSelection(cell, selection);
-  for (const edit of edits) edit.node.data = edit.text;
+  for (const edit of edits) {
+    const span = cell.ownerDocument.createElement("span");
+    span.setAttribute("data-shared-cell-space", "");
+    span.style.whiteSpace = "break-spaces";
+    span.textContent = edit.spaces;
+    edit.node.splitText(edit.node.length - edit.spaces.length).replaceWith(span);
+  }
   if (points) placeSelection(cell, selection, points);
+}
+
+export function hasSharedCellSpaceForm(cell: Element): boolean { return cell.hasAttribute("data-shared-cell-space-form"); }
+
+export function readSharedCellSpaceForm(cell: Element): { readonly html: string } | null {
+  if (!hasSharedCellSpaceForm(cell)) return null;
+  const clone = cell.cloneNode(true) as Element;
+  const stored = cell.getAttribute("data-shared-cell-space-form") ?? "";
+  let shown = "";
+  walkCell(clone, (kind, node) => {
+    shown += kind === "text" ? (node.nodeValue ?? "").replace(/\u200b/g, "") : kind === "atom" ? "\ufffc" : "\n";
+    return false;
+  });
+  if (sameUpToSpaceForm(shown, stored)) {
+    let at = 0;
+    walkCell(clone, (kind, node, length) => {
+      if (kind === "text") {
+        const raw = node.nodeValue ?? ""; let text = "";
+        for (let index = 0; index < raw.length; index++) {
+          const char = raw[index] as string;
+          text += char === " " || char === "\u00a0" ? stored[at] ?? char : char;
+          if (char !== "\u200b") at++;
+        }
+        node.nodeValue = text;
+      } else at += length;
+      return false;
+    });
+  }
+  for (const span of clone.querySelectorAll("[data-shared-cell-space]")) span.replaceWith(...span.childNodes);
+  return { html: clone.innerHTML };
 }
 
 interface DomPoint {

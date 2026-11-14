@@ -13,8 +13,8 @@ import { assertReplicasAgree } from "../../collab/agreement.ts";
 
 test("the shared space paint preserves formatting and leaves space before a break or atom untouched", () => {
   for (const [html, expected] of [
-    ["Word  ", "Word&nbsp;&nbsp;"],
-    ["<b>Word </b><i> </i>", "<b>Word&nbsp;</b><i>&nbsp;</i>"],
+    ["Word  ", 'Word<span data-shared-cell-space="" style="white-space: break-spaces;">  </span>'],
+    ["<b>Word </b><i> </i>", '<b>Word<span data-shared-cell-space="" style="white-space: break-spaces;"> </span></b><i><span data-shared-cell-space="" style="white-space: break-spaces;"> </span></i>'],
     ["Word <br>", "Word <br>"],
     ['Word <img src="image">', 'Word <img src="image">']
   ]) {
@@ -93,7 +93,7 @@ for (const field of ["audioText", "visualText"] as const) {
       const target = sharedBufferedTarget(p.h.a, p.key(field)), space = readSharedPaintedText(p.h.a, target)?.identity(4);
       assert.ok(space);
       p.remote(field, "insert", 0, 0, "X");
-      assert.deepEqual([p.cell(field).innerHTML, p.points(field), p.reports, p.missing, p.recovered, p.a.executed.length], ["XWord&nbsp;", [6, 6], [], [], [], 1]);
+      assert.deepEqual([p.cell(field).innerHTML, p.points(field), p.reports, p.missing, p.recovered, p.a.executed.length], ['XWord<span data-shared-cell-space="" style="white-space: break-spaces;"> </span>', [6, 6], [], [], [], 1]);
       assert.equal(readSharedPaintedText(p.h.a, target)?.identity(5), space);
       assert.equal(p.type(field, 6, 6, "Q"), true);
       assert.equal(readSharedPaintedText(p.h.a, target)?.identity(5), space);
