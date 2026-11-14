@@ -48,6 +48,7 @@ export interface SharedCommandExecution { readonly result: SharedBaseExecutionRe
 
 type Planned = { readonly inverse: (after: (target: SharedTextAddress) => SharedTextHistory | null) => { readonly effective: boolean; readonly part: SharedUndoPart } };
 class SharedUndoRefusal extends Error {}
+class SharedUndoGone extends Error {}
 
 export function supportsSharedUndoPart(part: string): boolean { return SHARED_UNDO_PARTS.includes(part); }
 
@@ -140,7 +141,7 @@ function operationOf(raw: Record<string, unknown>): SharedOperation {
 
 function historyOf(handle: SharedDocumentHandle, target: SharedTextAddress): SharedTextHistory {
   const history = readSharedTextHistory(handle, target);
-  if (!history) throw new SharedUndoRefusal("missing-target");
+  if (!history) throw new SharedUndoGone();
   return history;
 }
 
@@ -188,7 +189,17 @@ function recordField(fields: SharedJsonFields, field: string): SharedFieldValue 
   return value === undefined ? { clear: true } : { value };
 }
 
+// why: rule 90 on #1414: text someone else's change took away, with its beat, uses the step up, so it says so and
+// the next undo reaches the step before; it is no refusal that keeps the step and blocks the older ones.
 function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: SharedUndoWriter, operations: SharedOperation[]): Planned {
+  try { return planKnownPart(handle, part, writer, operations); }
+  catch (error) {
+    if (error instanceof SharedUndoGone) return { inverse: () => ({ effective: false, part }) };
+    throw error;
+  }
+}
+
+function planKnownPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: SharedUndoWriter, operations: SharedOperation[]): Planned {
   const author = (): { id: string; by: string } => ({ id: writer.nextId(), by: writer.by });
   switch (part.kind) {
     case "text": {
