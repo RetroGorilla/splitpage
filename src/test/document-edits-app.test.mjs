@@ -129,7 +129,7 @@ test("document edits: renaming and removing a tag rewrite its mentions and undo 
 test("document edits: b-roll shots and their props undo and redo in one step", async () => {
   await open();
   await roundTrip(() => !!newBrollRecord({ name: "Gulls" }, { run: runDocumentEdit, ids: randomIds }), () => held().brollShots);
-  await roundTrip(() => addBrollProp("b1", "Rope"), () => ({ shots: held().brollShots, tags: held().productionTags }));
+  await roundTrip(() => addBrollProp("b1", "Rope").changed, () => ({ shots: held().brollShots, tags: held().productionTags }));
   const prop = held().brollShots.find((b) => b.id === "b1").props[0];
   await roundTrip(() => removeBrollProp("b1", prop.id, { run: runDocumentEdit }), () => held().brollShots);
 });

@@ -613,23 +613,15 @@ function deleteComment(id: string | null) {
   const idx = findCommentIndex(id);
   if (idx === -1) return;
   const c = doc.comments[idx] as CommentRenderRecord;
-  const restore = dropCommentState(id, true);
-  if (editComments(build => deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build)).held) restore();
+  if (editComments(build => deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build)).held) return;
+  dropCommentState(id, true);
 }
 
 function dropCommentState(id: string | null, closeMenu: boolean) {
   const key = id as string;
-  const expanded = expandedReplyIds[key];
-  const draft = replyDrafts[key];
-  const menu = commentMenuFor;
   Reflect.deleteProperty(expandedReplyIds, key);
   Reflect.deleteProperty(replyDrafts, key);
   if (closeMenu && commentMenuFor === id) commentMenuFor = null;
-  return function () {
-    if (expanded !== undefined) expandedReplyIds[key] = expanded;
-    if (draft !== undefined) replyDrafts[key] = draft;
-    commentMenuFor = menu;
-  };
 }
 
 export function armDeleteComment(btn: Element, id: string | null) {
@@ -670,13 +662,10 @@ export function postReply(id: string | null) {
     (ports as CommentsRuntimePorts).notices.show("Write a reply before posting.", "warn");
     return;
   }
-  const restore = dropCommentState(id, false);
   const reply ={ id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: bodyHtml, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
-  if (editComments(build => addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)).held) {
-    restore();
-    captureReplyDrafts();
-    return;
-  }
+  if (editComments(build => addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)).held) return;
+  dropCommentState(id, false);
+  renderComments();
   sendNow();
 }
 

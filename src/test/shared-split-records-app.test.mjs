@@ -14,7 +14,7 @@ import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import { sharedCommentCommands, sharedGalleryCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openProductionPanel, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
@@ -150,7 +150,7 @@ const served = [
     after: s => edit(s, n => { n.tags.push(["location", "Park", "", "needed"]); }) },
   { name: "finding or adding a person", act: () => { assert.notEqual(findOrAddPerson("Cy"), ""); },
     after: s => edit(s, n => { n.people.push("Cy"); }) },
-  { name: "adding a prop to a shot", act: () => { assert.equal(currentBrollRecords()?.addBrollProp("b1", "Lamp"), true); },
+  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: true, held: false }); },
     after: s => edit(s, n => { n.tags.push(["prop", "Lamp", "", "needed"]); n.shots[0][4].push("Lamp"); }) },
   { name: "the b-roll status toggle", act: () => { openBrollPanel(); brollButton("broll-status-toggle", "b1").click(); },
     after: s => edit(s, n => { n.shots[0][1] = "shot"; }) },
@@ -164,7 +164,18 @@ const served = [
     owner.value = "__new__"; owner.dispatchEvent(new window.Event("change", { bubbles: true }));
     const box = document.getElementById("broll-bulk-input"); assert.ok(box); box.value = "Cy";
     const save = document.querySelector('#broll-panel [data-action="broll-bulk-input-save"]'); assert.ok(save); save.click();
+    assert.equal(document.getElementById("broll-bulk-input"), null, "the bulk box closes");
   }, after: s => edit(s, n => { n.people.push("Cy"); n.shots[0][2] = "Cy"; }) },
+  { name: "the b-roll prop box", act: () => {
+    brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "Lamp", [4, 4]); FIRE.enter($(`#broll-panel .broll-prop-input${B1}`));
+    const box = $(`#broll-panel .broll-prop-input${B1}`); assert.equal(box.value, "", "the prop box empties"); assert.equal(document.activeElement, box);
+    box.blur();
+  }, after: s => edit(s, n => { n.tags.push(["prop", "Lamp", "", "needed"]); n.shots[0][4].push("Lamp"); }) },
+  { name: "the tag person box", act: () => {
+    productionCards(); tagPersonBox("#production-panel", "prop mug"); FIRE.enter($(`#production-panel .tag-person-input${MUG}`));
+    assert.equal(document.querySelector(`#production-panel .tag-person-input${MUG}`), null, "the person box closes");
+    assert.equal(document.activeElement, $(`#production-panel [data-action="tag-person-new"]${MUG}`));
+  }, after: s => edit(s, n => { n.people.push("Cy"); n.tags[1][2] = "Cy"; }) },
   { name: "the b-roll delete", act: () => {
     brollOpen("b1");
     if (!document.querySelector('#broll-panel [data-action="broll-delete"][data-id="b1"]')) brollButton("broll-menu", "b1").click();
@@ -206,14 +217,16 @@ const served = [
     after: s => edit(s, n => { n.people = ["Ann"]; }) },
   { name: "removing a picture from the gallery (rule 152: its toast has no Undo)", act: () => {
     clearWarnings(); noticeCalls.length = 0;
-    assert.doesNotThrow(() => { assert.equal(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), true); });
+    assert.doesNotThrow(() => { assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: true, held: false }); });
     assert.deepEqual(noticeCalls, [["Picture removed", "ok"]]);
     assert.deepEqual([...toastHost().querySelectorAll(".toast")].map(el => [el.firstChild.textContent, el.querySelector(".toast-action")]), [["Picture removed", null]]);
   }, after: s => edit(s, n => { n.rows[0][3] = ["a", "c"]; }) },
   { name: "resolving a comment (rule 35 on #1414: a resolve records no undo step)", act: () => { toggleResolve("C1"); }, undoable: false,
     after: s => edit(s, n => { n.comments[0][1] = true; }) },
   { name: "assigning a comment", act: () => { setCommentAssignee("C1", "Bob"); }, after: s => edit(s, n => { n.comments[0][2] = "Bob"; }) },
-  { name: "replying to a comment", act: () => { reply("Alice"); }, after: s => edit(s, n => { n.comments[0][3] = ["ok"]; }) },
+  { name: "replying to a comment", act: () => {
+    reply("Alice"); assert.equal(document.querySelector('.reply-composer[data-for="C1"]'), null, "the reply composer closes");
+  }, after: s => edit(s, n => { n.comments[0][3] = ["ok"]; }) },
   { name: "deleting a comment", act: () => { openCommentsPanel(); twice(armDeleteComment, "C1"); },
     after: s => edit(s, n => { n.comments = []; n.rows[0][1] = "abcdef"; }) },
   { name: "posting a comment on an anchored selection", act: () => { post("Alice"); }, after: s => edit(s, n => { n.comments.push(["C9", false, "", []]); }) },
@@ -263,14 +276,6 @@ const replyKept = name => () => {
   const card = document.querySelector('.reply-composer[data-for="C1"]'); assert.ok(card, "the reply composer stays open after a render");
   assert.deepEqual([card.querySelector(".reply-name-input").value, card.querySelector(".cell-editable").innerHTML], [name, "ok"]);
 };
-const boxKept = (selector, value, render) => () => {
-  const box = document.querySelector(selector); assert.ok(box, selector + " stays open"); assert.equal(box.value, value);
-  render?.();
-  assert.ok(document.querySelector(selector), selector + " stays open after a render");
-};
-const brollKept = id => () => {
-  openBrollPanel(); assert.ok(document.querySelector(`#broll-panel .broll-row.is-selected[data-id="${id}"]`), id + " stays selected");
-};
 const tagsKept = key => () => { openProductionPanel(); assert.deepEqual(selectedKeys(), [key]); };
 const refusals = [
   { name: "rule 153: posting a comment under another name than the session's", act: () => { post("Bob"); }, kept: composerKept("Bob", "new") },
@@ -284,7 +289,7 @@ const refusals = [
   { name: "gallery-order-unavailable: making the last of three pictures loaded together the cover", act: () => {
     const reasons = [], refused = sharedGalleryCommands.refused;
     sharedGalleryCommands.refused = outcome => { reasons.push(outcome.reason); refused(outcome); };
-    try { assert.equal(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 2, 0)), false); } finally { sharedGalleryCommands.refused = refused; }
+    try { assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 2, 0)), { changed: false, held: true }); } finally { sharedGalleryCommands.refused = refused; }
     assert.deepEqual(reasons, ["gallery-order-unavailable"]);
   } }
 ];
@@ -305,7 +310,10 @@ function refusedOnce(f, order, act, kept) {
 function tidy(f) {
   closeCommentComposer();
   clearProductionSelection();
+  document.querySelector('#broll-panel [data-action="broll-bulk-clear"]')?.click();
+  if (galleryState().open) $("#gallery-close").click();
   f.close();
+  document.activeElement?.blur?.();
 }
 
 for (const literal of refusals) for (const order of ORDERS) test(`C7 record refusal: ${literal.name} is refused once and writes nothing, ${order}`, async () => {
@@ -319,36 +327,224 @@ for (const literal of refusals) for (const order of ORDERS) test(`C7 record refu
   } finally { tidy(f); }
 });
 
-const HELD = {
-  "registering a production tag": { act: () => { assert.equal(registerProductionTag("location", "Park"), false); } },
-  "finding or adding a person": { act: () => { assert.equal(findOrAddPerson("Cy"), ""); } },
-  "adding a prop to a shot": { act: () => { assert.equal(currentBrollRecords()?.addBrollProp("b1", "Lamp"), false); } },
-  "the b-roll bulk Mark filmed": { kept: brollKept("b1") },
-  "the b-roll bulk assign to a new person": { kept: boxKept("#broll-bulk-input", "Cy", openBrollPanel) },
-  "the b-roll new person for a shot": { kept: boxKept('#broll-panel .broll-person-input[data-id="b1"]', "Cy", openBrollPanel) },
-  "adding a shot from the b-roll panel": { kept: boxKept("#broll-add-input", "Park") },
-  "the gear quick add": { kept: boxKept("#gear-quickadd-input", "Drone\nCrane") },
-  "bulk deleting selected tags": { kept: tagsKept(tagKey("gear", "Drone")) },
-  "removing a picture from the gallery (rule 152: its toast has no Undo)": { act: () => {
-    assert.equal(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), false);
-  } },
-  "replying to a comment": { kept: replyKept("Alice") },
-  "posting a comment on an anchored selection": { kept: composerKept("Alice", "new") },
-  "cancelling a comment unwraps its anchor": { kept: () => { assert.equal(document.getElementById("comment-modal").hidden, false, "the composer stays open"); } }
+const $ = selector => { const el = document.querySelector(selector); assert.ok(el, selector); return el; };
+const typeIn = (selector, text, range) => { const box = $(selector); box.focus(); box.value = text; box.setSelectionRange(...range); };
+const choose = (selector, value) => { const box = $(selector); box.focus(); box.value = value; };
+const optionNamed = (selector, name) => [...$(selector).options].find(o => o.textContent === name).value;
+const ctrlClick = selector => { $(selector).dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })); };
+const FIRE = {
+  click: el => { el.click(); },
+  enter: el => { press(el, "Enter"); },
+  change: el => { el.dispatchEvent(new window.Event("change", { bubbles: true })); },
+  blur: el => { el.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })); },
+  pick: el => { el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertReplacementText" })); }
 };
+function focused() {
+  const active = document.activeElement;
+  return { active, value: active && "value" in active ? active.value : null,
+    range: active && typeof active.selectionStart === "number" ? [active.selectionStart, active.selectionEnd] : null };
+}
+const textBoxes = root => [...document.querySelectorAll(`${root} input[type="text"], ${root} input:not([type]), ${root} textarea`)]
+  .map(el => [el.id || el.classList[0], el.getAttribute("data-id") ?? el.getAttribute("data-key") ?? "", el.value]);
+const brollState = () => ({
+  open: [...document.querySelectorAll('#broll-panel [data-action="broll-person-new"]')].map(el => el.getAttribute("data-id")),
+  selected: [...document.querySelectorAll("#broll-panel .broll-row.is-selected")].map(el => el.getAttribute("data-id")),
+  menu: [...document.querySelectorAll('#broll-panel [data-action="broll-delete"]')].map(el => el.getAttribute("data-id")),
+  boxes: textBoxes("#broll-panel")
+});
+const tagState = () => ({
+  expanded: [...document.querySelectorAll(".tag-entity.is-expanded")].map(el => el.getAttribute("data-key")),
+  selected: [...selectedKeys()], boxes: [...textBoxes("#production-panel"), ...textBoxes("#gear-panel")]
+});
+const commentState = () => ({
+  composer: [document.getElementById("comment-modal").hidden, document.getElementById("comment-name").value, document.getElementById("comment-body-editable").innerHTML],
+  replies: [...document.querySelectorAll(".reply-composer")].map(card => [card.getAttribute("data-for"), card.querySelector(".reply-name-input").value, card.querySelector(".cell-editable").innerHTML]),
+  menu: [...document.querySelectorAll('#comments-panel [data-action="delete-comment"]')].map(el => el.getAttribute("data-id"))
+});
+const galleryState = () => ({
+  open: [...document.querySelectorAll(".scene-gallery-remove")].filter(el => !el.closest("[hidden]")).length,
+  selected: [...document.querySelectorAll(".scene-gallery-grid-tile.is-selected")].map(el => el.getAttribute("data-slot"))
+});
+const B1 = '[data-id="b1"]', MUG = '[data-key="prop mug"]', DRONE = '[data-key="gear drone"]';
+function brollMenu() { brollOpen("b1"); if (!document.querySelector(`#broll-panel [data-action="broll-delete"]${B1}`)) brollButton("broll-menu", "b1").click(); }
+function brollBulkNew(kind) { brollSelect("b1"); choose(`#broll-bulk-${kind}`, "__new__"); FIRE.change($(`#broll-bulk-${kind}`)); }
+function productionCards() { openProductionPanel(); $('#production-modes [data-group="cat"]').click(); }
+function expandedCard(panel, key) {
+  if (!document.querySelector(`${panel} .tag-entity.is-expanded[data-key="${key}"]`)) $(`${panel} [data-action="tag-expand"][data-key="${key}"]`).click();
+}
+function tagPersonBox(panel, key) { expandedCard(panel, key); $(`${panel} [data-action="tag-person-new"][data-key="${key}"]`).click(); typeIn(`${panel} .tag-person-input[data-key="${key}"]`, "Cy", [1, 2]); }
+function productionPick(key) { productionCards(); clearProductionSelection(); openProductionPanel(); ctrlClick(`#production-panel .tag-entity[data-key="${key}"] .tag-entity-row`); assert.deepEqual(selectedKeys(), [key]); }
+function gearOpen() { openGearPanel(); }
+function composer(id) {
+  openCommentComposer({ id, rowId: "r1", field: "visualText", quotedText: "yz" });
+  document.getElementById("comment-name").value = "Alice"; document.getElementById("comment-body-editable").innerHTML = "new";
+}
+function replyOpen() {
+  openCommentsPanel();
+  if (!document.querySelector('.reply-composer[data-for="C1"]')) $('[data-action="toggle-reply"][data-id="C1"]').click();
+  const card = $('.reply-composer[data-for="C1"]');
+  card.querySelector(".reply-name-input").value = "Alice"; card.querySelector(".cell-editable").innerHTML = "ok";
+}
+function brollEditing(action, box, text, range) {
+  brollOpen("b1");
+  if (!document.querySelector(box)) brollButton(action, "b1").click();
+  typeIn(box, text, range);
+}
+const broll = (name, how, target, setup, kept = how !== "click") => ({ name, how, target, setup, state: brollState, render: openBrollPanel, kept });
+const tags = (name, how, target, setup, kept = false) => ({ name, how, target, setup, state: tagState, render: renderProduction, kept });
+const comments = (name, how, target, setup) => ({ name, how, target, setup, state: commentState, render: openCommentsPanel, kept: true });
+const LOC = `#broll-panel .broll-loc-input${B1}`, REF = `#broll-panel .broll-ref-input${B1}`;
+const HELD_PATHS = [
+  broll("the b-roll status button", "click", `#broll-panel .broll-status-btn${B1}`, () => { brollOpen("b1"); }),
+  broll("the b-roll reshoot flag", "click", `#broll-panel [data-action="broll-reshoot-toggle"]${B1}`, () => { brollOpen("b1"); }),
+  broll("the b-roll bulk Mark filmed", "click", '#broll-panel [data-action="broll-bulk-shot"]', () => { brollSelect("b1"); }),
+  broll("the b-roll bulk owner control", "change", "#broll-bulk-owner", () => { brollSelect("b1"); choose("#broll-bulk-owner", "p2"); }),
+  broll("the b-roll bulk new person box", "enter", "#broll-bulk-input", () => { brollBulkNew("owner"); typeIn("#broll-bulk-input", "Cy", [1, 2]); }),
+  broll("the b-roll bulk new location box", "enter", "#broll-bulk-input", () => { brollBulkNew("location"); typeIn("#broll-bulk-input", "Quay", [1, 3]); }),
+  broll("the b-roll delete", "click", `#broll-panel [data-action="broll-delete"]${B1}`, brollMenu),
+  broll("the b-roll shot owner control", "change", `#broll-panel .broll-owner-select${B1}`, () => { brollOpen("b1"); choose(`#broll-panel .broll-owner-select${B1}`, "p2"); }),
+  broll("the b-roll shot person box, Enter", "enter", `#broll-panel .broll-person-input${B1}`, () => {
+    brollOpen("b1"); brollButton("broll-person-new", "b1").click(); typeIn(`#broll-panel .broll-person-input${B1}`, "Cy", [1, 2]);
+  }),
+  broll("the b-roll shot person box, Add", "click", `#broll-panel [data-action="broll-person-save"]${B1}`, () => {
+    brollOpen("b1"); brollButton("broll-person-new", "b1").click(); typeIn(`#broll-panel .broll-person-input${B1}`, "Cy", [1, 2]);
+  }),
+  broll("the b-roll add box", "enter", "#broll-add-input", () => { openBrollPanel(); typeIn("#broll-add-input", "Park", [1, 3]); }),
+  broll("the b-roll prop remove", "click", `#broll-panel [data-action="broll-prop-remove"]${B1}[data-ref="${M}"]`, () => { brollOpen("b1"); }),
+  broll("the b-roll prop box, Enter", "enter", `#broll-panel .broll-prop-input${B1}`, () => { brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "Lamp", [1, 3]); }),
+  broll("the b-roll prop box, a suggestion pick", "pick", `#broll-panel .broll-prop-input${B1}`, () => { brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "Lamp", [1, 3]); }),
+  broll("the b-roll location box, Enter", "enter", LOC, () => { brollEditing("broll-loc-edit", LOC, "Quay", [1, 3]); }),
+  broll("the b-roll location box, blur", "blur", LOC, () => { brollEditing("broll-loc-edit", LOC, "Quay", [1, 3]); }),
+  broll("the b-roll audio box, blur", "blur", REF, () => { brollEditing("broll-ref-edit", REF, "0:12", [1, 2]); }),
+  broll("the b-roll notes box, blur", "blur", `#broll-panel .broll-notes-input${B1}`, () => { brollOpen("b1"); typeIn(`#broll-panel .broll-notes-input${B1}`, "Wide", [1, 2]); }),
+  tags("the gear status pill", "click", `#gear-panel [data-action="tag-status-cycle"]${DRONE}`, gearOpen),
+  tags("the gear status menu", "click", `#gear-panel [data-action="tag-status-set"]${DRONE}:not(.is-active)`, () => { gearOpen(); expandedCard("#gear-panel", "gear drone"); }),
+  tags("the tag owner control", "change", `#production-panel .tag-owner-select${MUG}`, () => {
+    productionCards(); expandedCard("#production-panel", "prop mug"); choose(`#production-panel .tag-owner-select${MUG}`, "p2");
+  }),
+  tags("the tag person box, Enter", "enter", `#production-panel .tag-person-input${MUG}`, () => { productionCards(); tagPersonBox("#production-panel", "prop mug"); }),
+  tags("the tag person box, Add", "click", `#production-panel [data-action="tag-person-save"]${MUG}`, () => { productionCards(); tagPersonBox("#production-panel", "prop mug"); }),
+  tags("the gear tag person box, Enter", "enter", `#gear-panel .tag-person-input${DRONE}`, () => { gearOpen(); tagPersonBox("#gear-panel", "gear drone"); }),
+  tags("the tag bulk owner control", "change", "#bulk-owner", () => { productionPick("prop mug"); choose("#bulk-owner", "p2"); }),
+  tags("the tag bulk status control", "change", "#bulk-status", () => { productionPick("prop mug"); choose("#bulk-status", $("#bulk-status").options[2].value); }),
+  tags("the tag bulk person box, Enter", "enter", "#bulk-person-input", () => {
+    productionPick("prop mug"); $('[data-action="bulk-person-new"]').click(); typeIn("#bulk-person-input", "Cy", [1, 2]);
+  }),
+  tags("the tag bulk person box, Add", "click", '[data-action="bulk-person-save"]', () => {
+    productionPick("prop mug"); $('[data-action="bulk-person-new"]').click(); typeIn("#bulk-person-input", "Cy", [1, 2]);
+  }),
+  tags("the tag bulk delete", "click", '#production-panel [data-action="bulk-delete"]', () => { productionPick("gear drone"); $('#production-panel [data-action="bulk-delete"]').click(); }),
+  tags("the gear delete from list", "click", `#gear-panel [data-action="tag-delete"]${DRONE}`, () => {
+    gearOpen(); expandedCard("#gear-panel", "gear drone"); $(`#gear-panel [data-action="tag-delete"]${DRONE}`).click();
+  }),
+  tags("the person remove", "click", '#production-panel [data-action="person-delete"][data-person="p2"]', () => {
+    openProductionPanel(); $('#production-modes [data-group="person"]').click(); $('#production-panel [data-action="person-delete"][data-person="p2"]').click();
+  }),
+  tags("the gear quick add", "click", "#gear-quickadd-save", () => { gearOpen(); typeIn("#gear-quickadd-input", "Drone\nCrane", [0, 5]); }, true),
+  comments("the comment Post button", "click", "#comment-post", () => { composer("C9"); }),
+  comments("the comment Cancel button", "click", "#comment-cancel", () => { composer("C9"); }),
+  comments("the reply Post button", "click", '[data-action="reply-post"][data-id="C1"]', replyOpen),
+  comments("the comment delete", "click", '#comments-panel [data-action="delete-comment"][data-id="C1"]', () => {
+    openCommentsPanel();
+    if (!document.querySelector('#comments-panel [data-action="delete-comment"][data-id="C1"]')) $('[data-action="comment-menu"][data-id="C1"]').click();
+    $('#comments-panel [data-action="delete-comment"][data-id="C1"]').click();
+  }),
+  comments("the comment resolve button", "click", '[data-action="toggle-resolve"][data-id="C1"]', () => { openCommentsPanel(); }),
+  comments("the comment assignee control", "change", '.comment-assignee-select[data-id="C1"]', () => {
+    openCommentsPanel(); choose('.comment-assignee-select[data-id="C1"]', optionNamed('.comment-assignee-select[data-id="C1"]', "Bob"));
+  }),
+  { name: "the gallery remove button", how: "click", target: ".scene-gallery-remove", state: galleryState, render: () => {}, kept: true,
+    setup: () => { $('[data-action="gallery-open"][data-id="r1"][data-slot="1"]').click(); } }
+];
 
-for (const literal of served) for (const order of ORDERS) test(`C7 record held: ${literal.name} refused by a pending buffer writes nothing, keeps its input and warns once, ${order}`, async () => {
+for (const path of HELD_PATHS) for (const order of ORDERS) test(`C7 record held: ${path.name} refused by a pending buffer writes nothing, keeps text, focus, selection and open state, and warns once, ${order}`, async () => {
   const f = await enter();
-  const stop = f.parts.session.beforeCommand(() => false);
+  let stop = () => {};
   try {
-    const held = HELD[literal.name] ?? {};
-    const start = refusedOnce(f, order, held.act ?? literal.act, held.kept);
+    path.setup();
+    const target = $(path.target);
+    if (path.how === "click") target.focus();
+    const view = focused(), state = path.state();
+    stop = f.parts.session.beforeCommand(() => false);
+    const start = refusedOnce(f, order, () => { FIRE[path.how](target); }, () => {
+      const now = focused();
+      assert.equal(now.active, view.active, "focus stays where it was");
+      assert.deepEqual([now.value, now.range], [view.value, view.range], "the text and its selection stay");
+      assert.deepEqual(path.state(), state, "the open state and its text stay");
+      path.render();
+      const shown = s => path.kept || !s.boxes ? s : { ...s, boxes: s.boxes.map(box => box.slice(0, 2)) };
+      assert.deepEqual(shown(path.state()), shown(state), path.kept ? "the open state and its text survive a render" : "the open state survives a render");
+    });
     stop();
     clearWarnings();
     exchange(f, order);
     agree(f, withZ(start));
     assert.deepEqual(warnings(), []);
   } finally { stop(); tidy(f); }
+});
+
+const HELD_OWNER_CALLS = [
+  { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), false); } },
+  { name: "finding or adding a person", act: () => { assert.equal(findOrAddPerson("Cy"), ""); } },
+  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true }); } },
+  { name: "a picture edit", act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: false, held: true }); } }
+];
+
+for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record held: the owner call for ${call.name} reports held, writes nothing and warns once, ${order}`, async () => {
+  const f = await enter();
+  const stop = f.parts.session.beforeCommand(() => false);
+  try {
+    const start = refusedOnce(f, order, call.act);
+    stop();
+    clearWarnings();
+    exchange(f, order);
+    agree(f, withZ(start));
+    assert.deepEqual(warnings(), []);
+  } finally { stop(); tidy(f); }
+});
+
+const NOOPS = [
+  { name: "the b-roll shot person box naming the owner it already has closes the box",
+    act: () => { brollOpen("b1"); brollButton("broll-person-new", "b1").click(); typeIn(`#broll-panel .broll-person-input${B1}`, "Ann", [3, 3]); FIRE.enter($(`#broll-panel .broll-person-input${B1}`)); },
+    cleaned: () => { assert.equal(document.querySelector(`#broll-panel .broll-person-input${B1}`), null); } },
+  { name: "the b-roll prop box naming a prop the shot already has empties the box and keeps it focused",
+    act: () => { brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "mug", [3, 3]); FIRE.enter($(`#broll-panel .broll-prop-input${B1}`)); },
+    cleaned: () => { const box = $(`#broll-panel .broll-prop-input${B1}`); assert.equal(box.value, ""); assert.equal(document.activeElement, box); } },
+  { name: "the gear tag person box naming the owner it already has closes the box and focuses Add person",
+    act: () => { gearOpen(); expandedCard("#gear-panel", "gear drone"); $(`#gear-panel [data-action="tag-person-new"]${DRONE}`).click();
+      typeIn(`#gear-panel .tag-person-input${DRONE}`, "Ann", [3, 3]); FIRE.enter($(`#gear-panel .tag-person-input${DRONE}`)); },
+    cleaned: () => {
+      assert.equal(document.querySelector(`#gear-panel .tag-person-input${DRONE}`), null);
+      assert.equal(document.activeElement, $(`#gear-panel [data-action="tag-person-new"]${DRONE}`));
+    } },
+  { name: "the comment Cancel button after a peer removed the anchor closes the composer",
+    act: () => { composer("C8"); $("#comment-cancel").click(); },
+    cleaned: () => { const [hidden, , body] = commentState().composer; assert.deepEqual([hidden, body], [true, ""]); } },
+  { name: "a picture edit that changes nothing",
+    act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 0, 0)), { changed: false, held: false }); },
+    cleaned: () => {} }
+];
+
+function noopOnce(act, cleaned, written) {
+  const start = shape(currentDocument()), before = written();
+  noticeCalls.length = 0;
+  act();
+  assert.deepEqual(noticeCalls, []);
+  assert.deepEqual(written(), before);
+  assert.deepEqual(shape(currentDocument()), start);
+  cleaned();
+}
+
+for (const noop of NOOPS) test(`C7 record no-op: ${noop.name}, shared and standalone alike, with nothing written and no warning`, async () => {
+  const f = await enter();
+  try {
+    noopOnce(noop.act, noop.cleaned, () => [encodeSharedState(f.parts.handle), f.parts.undo.sizes(), undoOwner().sizes()]);
+  } finally { tidy(f); }
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  try {
+    noopOnce(noop.act, noop.cleaned, () => [undoOwner().sizes()]);
+  } finally { closeCommentComposer(); clearProductionSelection(); }
 });
 
 test("C7 record standalone: the record, picture and comment callers read no shared ports", () => {
@@ -361,8 +557,8 @@ test("C7 record standalone: the record, picture and comment callers read no shar
   clearWarnings();
   assert.equal(registerProductionTag("location", "Park"), true);
   assert.notEqual(findOrAddPerson("Cy"), "");
-  assert.equal(currentBrollRecords()?.addBrollProp("b1", "Lamp"), true);
-  assert.equal(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), true);
+  assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: true, held: false });
+  assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: true, held: false });
   const pictureToast = [...toastHost().querySelectorAll(".toast")].find(el => el.firstChild.textContent === "Picture removed");
   assert.ok(pictureToast?.querySelector(".toast-action"), "the standalone picture toast keeps its Undo");
   toggleResolve("C1");
@@ -370,9 +566,12 @@ test("C7 record standalone: the record, picture and comment callers read no shar
   openProductionPanel();
   assert.equal(saveTagRename(tagKey("gear", "Drone"), "Crane"), tagKey("gear", "Crane"));
   twice(armRemoveTag, tagKey("prop", "Mug"));
+  brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "Rope", [4, 4]); FIRE.enter($(`#broll-panel .broll-prop-input${B1}`));
+  assert.deepEqual([$(`#broll-panel .broll-prop-input${B1}`).value, document.activeElement === $(`#broll-panel .broll-prop-input${B1}`)], ["", true]);
+  document.activeElement.blur();
   const s = shape(currentDocument());
   assert.deepEqual([s.people, s.tags.map(t => t[1]), s.shots[0][4], s.rows[0][3], s.rows[1][2], s.comments.map(c => [c[0], c[1]])],
-    [["Ann", "Bob", "Cy"], ["Crane", "Mug", "Park", "Lamp"], ["Mug", "Lamp"], ["a", "c"], "A Mug", [["C1", true], ["C9", false]]]);
+    [["Ann", "Bob", "Cy"], ["Crane", "Mug", "Park", "Lamp", "Rope"], ["Mug", "Lamp", "Rope"], ["a", "c"], "A Mug", [["C1", true], ["C9", false]]]);
   assert.equal(currentDocument().comments[1].author, "Bob");
   assert.deepEqual(warnings(), []);
 });

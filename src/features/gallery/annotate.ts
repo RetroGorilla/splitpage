@@ -730,12 +730,13 @@ function save(rec: ImageRef | null, marks: Mark[]) {
   if (at === -1) { lost(); return; }
   const original = (ed as AnnotatorState).original;
   (ed as AnnotatorState).committing = true;
-  const ok = (ports as AnnotatorPortUse).cells.editGallery((ed as AnnotatorState).rowId, marks.length ? "Picture annotated" : "Annotations removed", function (row) {
+  const run = (ports as AnnotatorPortUse).cells.editGallery((ed as AnnotatorState).rowId, marks.length ? "Picture annotated" : "Annotations removed", function (row) {
     return annotateGallerySlot(row, at, rec, original, marks);
   });
   if (!ed) return;
   ed.committing = false;
-  if (!ok) {
+  if (run.held) return;
+  if (!run.changed) {
     (ports as AnnotatorPortUse).notices.show("Could not save the annotations to this picture.", "warn");
     return;
   }

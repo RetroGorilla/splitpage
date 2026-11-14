@@ -1,4 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { NOTHING_RAN } from "../../application/commands/shared-records.ts";
 import { startBrollPanel as mountPanelState, mountBrollPanel } from "../../features/broll/panel.ts";
 import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
@@ -115,7 +116,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       rows: portRows,
       records: {
         brollEntries: () => broll.owner()?.brollEntries() ?? [],
-        addBrollProp: (id, name) => broll.owner()?.addBrollProp(id, name) ?? false,
+        addBrollProp: (id, name) => broll.owner()?.addBrollProp(id, name) ?? NOTHING_RAN,
         renameBrollInScript: (entry, name) => broll.owner()?.renameBrollInScript(entry, name) ?? false,
         updateBrollBadge: () => broll.owner()?.updateBrollBadge()
       }

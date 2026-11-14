@@ -148,6 +148,7 @@ test("a new shot gets an id with the shot prefix, the defaults, and the given fi
   const h = opened();
   const r = rig(h, 7);
   const rec = newBrollRecord({ name: "Nets drying", location: "Quay" }, r.ports);
+  assert.ok(rec);
   assert.equal(rec.id, "bs-7");
   assert.equal(rec.name, "Nets drying");
   assert.equal(rec.location, "Quay");
@@ -161,8 +162,16 @@ test("a new shot with no fields is built from the defaults alone", () => {
   const h = opened();
   const r = rig(h, 8);
   const rec = newBrollRecord(null, r.ports);
+  assert.ok(rec);
   assert.equal(rec.name, "");
   assert.equal(shots(h).length, 1);
+});
+
+test("a refused new shot returns no record and adds nothing", () => {
+  const h = opened();
+  h.deny("read-only");
+  assert.equal(newBrollRecord({ name: "Nets drying" }, rig(h, 9).ports), null);
+  assert.deepEqual(shots(h), []);
 });
 
 test("removing a shot prop reports whether anything was removed", () => {

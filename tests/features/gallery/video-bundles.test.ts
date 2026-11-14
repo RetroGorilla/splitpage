@@ -105,7 +105,7 @@ function setup(opts: Setup = {}) {
     ownership: ownership.ownership,
     undo: { fold: (entry, _touches, change) => { folds.push(entry); return opts.fold === false ? false : change(doc as unknown as UndoState); } },
     document: reader.document,
-    cells: { editGallery: (rowId, message, edit) => { edits.push(message); const row = doc.rows.find((r) => r.id === rowId); return !!row && !!edit(row); } },
+    cells: { editGallery: (rowId, message, edit) => { edits.push(message); const row = doc.rows.find((r) => r.id === rowId); return { changed: !!row && !!edit(row), held: false }; } },
     viewer: { refresh: () => {} }
   };
   const owner = startVideoBundles(ports);

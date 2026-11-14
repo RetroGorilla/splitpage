@@ -36,7 +36,7 @@ import { cappedLongText, cappedText, escapeHtml, plainText, safeId as safeIdFrom
 import { planQuickAdd } from "../../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
 import { recordCommandRun } from "../../application/commands/shared-records.ts";
-import type { SharedRecordBuild } from "../../application/commands/shared-records.ts";
+import type { RecordCommandRun, SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../../core/production/records.ts";
 import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
 
@@ -1012,12 +1012,10 @@ export function bulkDeleteSelected() {
   (ports as TagPanelPorts).undo.breakCoalescing();
   const labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
   const unlabelled = (ports as TagPanelPorts).document.read(function (doc) { return retagMentions((ports as TagPanelPorts).text, doc, labelled); });
-  const shared = (ports as TagPanelPorts).shared.ports();
-  if (!shared) (ports as TagPanelPorts).selection.clear();
   if (editRecords(build => deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
   }), retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps, build)).held) return;
-  if (shared) (ports as TagPanelPorts).selection.clear();
+  (ports as TagPanelPorts).selection.clear();
   const n = items.length;
   (ports as TagPanelPorts).undo.breakCoalescing();
   (ports as TagPanelPorts).notices.show("Deleted " + n + " item" + (n === 1 ? "" : "s") +
@@ -1112,12 +1110,13 @@ export function setTagNotes(key: string | null, text: string) {
   updateTags([item], { notes: cappedLongText(plainText(text), 2000) });
 }
 
-export function addPersonForTag(key: string | null, value: string) {
+export function addPersonForTag(key: string | null, value: string): RecordCommandRun {
   const item = findTagByKey(key);
   const run = item ? updateTags([item], { owner: { name: value } }) : editRecords(shared => addPersonCommand(value, (ports as TagPanelPorts).ids, shared));
-  if (run.held) return;
+  if (run.held) return run;
   (ports as TagPanelPorts).view.setTagAddingPerson(null);
   renderProduction();
+  return run;
 }
 
 export function armPersonDelete(btn: Element, personId: string | null) {
@@ -1334,7 +1333,7 @@ export function startTagPanels(nextPorts: TagPanelPorts) {
     openGearPanel: command(openGearPanel),
     renderProduction: command(renderProduction),
     saveTagRename: (...args: Parameters<typeof saveTagRename>) => command(saveTagRename)(...args) ?? null,
-    addPersonForTag: command(addPersonForTag),
+    addPersonForTag: (...args: Parameters<typeof addPersonForTag>) => command(addPersonForTag)(...args) ?? { changed: false, held: false },
     setTagOwner: command(setTagOwner),
     setTagNotes: command(setTagNotes),
     dispose: function () {

@@ -1,6 +1,8 @@
 {
   "tests": [
-    "src/test/shared-split-records-app.test.mjs"
+    "src/test/shared-split-records-app.test.mjs",
+    "tests/features/gallery/overlay.test.ts",
+    "tests/features/gallery/annotate-mount.test.ts"
   ],
   "mutants": [
     {
@@ -162,8 +164,8 @@
     {
       "label": "a refused bulk tag delete drops the selection before the command runs",
       "file": "src/features/tags/panels.ts",
-      "find": "  if (!shared) (ports as TagPanelPorts).selection.clear();\n",
-      "replace": "  (ports as TagPanelPorts).selection.clear();\n"
+      "find": "  if (editRecords(build => deleteTagsCommand(items.map(",
+      "replace": "  (ports as TagPanelPorts).selection.clear();\n  if (editRecords(build => deleteTagsCommand(items.map("
     },
     {
       "label": "rule 73: renaming a tag runs through the silent edit that drops the refusal",
@@ -180,8 +182,26 @@
     {
       "label": "a refused record command reports nothing held, so its caller closes and clears as if it had saved",
       "file": "src/application/commands/shared-records.ts",
-      "find": "  return { changed, held: !changed };",
-      "replace": "  return { changed, held: false };"
+      "find": "held: outcome.kind === \"rejected\" };",
+      "replace": "held: false };"
+    },
+    {
+      "label": "a shared record command that changes nothing reports itself held, so its caller keeps the box open instead of cleaning up",
+      "file": "src/application/commands/shared-records.ts",
+      "find": "held: outcome.kind === \"rejected\" };",
+      "replace": "held: outcome.kind !== \"applied\" && outcome.kind !== \"committed\" };"
+    },
+    {
+      "label": "a refused picture edit reports nothing held, so the gallery moves its selection as if it had removed",
+      "file": "src/application/editing/cell-editing.ts",
+      "find": "return { changed: false, held: outcome.kind === \"rejected\" };",
+      "replace": "return { changed: false, held: false };"
+    },
+    {
+      "label": "the gallery remove moves the selection without the outcome",
+      "file": "src/features/gallery/overlay.ts",
+      "find": "function (row) { return removeGallerySlot(row, at); }).held) return;",
+      "replace": "function (row) { return removeGallerySlot(row, at); }).held && false) return;"
     },
     {
       "label": "rule 154: a refused comment closes the composer and drops its text",
@@ -190,10 +210,28 @@
       "replace": "  }, shared)).held && false) return;\n  (document.getElementById(\"comment-modal\") as HTMLElement).hidden = true;"
     },
     {
-      "label": "rule 154: a refused reply drops its composer and draft",
+      "label": "rule 154: a refused reply drops its composer and draft before the outcome",
       "file": "src/features/comments/comments.ts",
-      "find": "    restore();\n    captureReplyDrafts();\n    return;",
-      "replace": "    return;"
+      "find": "  const reply ={ id:",
+      "replace": "  dropCommentState(id, false);\n  const reply ={ id:"
+    },
+    {
+      "label": "a refused reply drops its composer and draft",
+      "file": "src/features/comments/comments.ts",
+      "find": "(ports as CommentsRuntimePorts).edits.stamps.clock, build)).held) return;",
+      "replace": "(ports as CommentsRuntimePorts).edits.stamps.clock, build)).held && false) return;"
+    },
+    {
+      "label": "a served reply leaves its composer open",
+      "file": "src/features/comments/comments.ts",
+      "find": "  dropCommentState(id, false);\n  renderComments();\n  sendNow();",
+      "replace": "  dropCommentState(id, false);\n  sendNow();"
+    },
+    {
+      "label": "a refused comment delete closes the comment's menu before the outcome",
+      "file": "src/features/comments/comments.ts",
+      "find": "  if (editComments(build => deleteCommentCommand(",
+      "replace": "  dropCommentState(id, true);\n  if (editComments(build => deleteCommentCommand("
     },
     {
       "label": "a refused comment cancel closes the composer",
@@ -210,8 +248,50 @@
     {
       "label": "a refused bulk assignment to a new person closes its box",
       "file": "src/features/broll/panel.ts",
-      "find": "if (bulkAssignNewPerson(value)) bulkInput = mode;",
-      "replace": "bulkAssignNewPerson(value);"
+      "find": "    if (bulkInput === \"person\") bulkAssignNewPerson(value, closing);",
+      "replace": "    if (bulkInput === \"person\") { closing(); bulkAssignNewPerson(value, closing); }"
+    },
+    {
+      "label": "a refused bulk new location closes its box",
+      "file": "src/features/broll/panel.ts",
+      "find": "    else if (bulkInput === \"location\" && plainText(value).trim()) bulkLocation(value, closing);",
+      "replace": "    else if (bulkInput === \"location\" && plainText(value).trim()) { closing(); bulkLocation(value, closing); }"
+    },
+    {
+      "label": "the prop box clears the typed name before the outcome",
+      "file": "src/features/broll/panel.ts",
+      "find": "  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;",
+      "replace": "  input.value = \"\";\n  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;"
+    },
+    {
+      "label": "the prop box ignores the outcome and re-renders",
+      "file": "src/features/broll/panel.ts",
+      "find": "  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;",
+      "replace": "  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held && false) return;"
+    },
+    {
+      "label": "the tag person box moves focus to Add person whatever the outcome (Enter)",
+      "file": "src/features/tags/mount.ts",
+      "find": "if (!ports.addPersonForTag(e.target.getAttribute(\"data-key\"), e.target.value).held) refocus(",
+      "replace": "if (!ports.addPersonForTag(e.target.getAttribute(\"data-key\"), e.target.value).held || true) refocus("
+    },
+    {
+      "label": "the tag person box moves focus to Add person whatever the outcome (Add)",
+      "file": "src/features/tags/mount.ts",
+      "find": "if (!ports.addPersonForTag(personSaveBtn.getAttribute(\"data-key\"), input.value).held) refocus(",
+      "replace": "if (!ports.addPersonForTag(personSaveBtn.getAttribute(\"data-key\"), input.value).held || true) refocus("
+    },
+    {
+      "label": "a refused tag person box closes",
+      "file": "src/features/tags/panels.ts",
+      "find": "  if (run.held) return run;\n  (ports as TagPanelPorts).view.setTagAddingPerson(null);",
+      "replace": "  (ports as TagPanelPorts).view.setTagAddingPerson(null);"
+    },
+    {
+      "label": "a refused annotation removal adds its own warning to the refusal",
+      "file": "src/features/gallery/overlay.ts",
+      "find": "  if (run.held) return;\n  if (!run.changed) {\n    (ports as OverlayPortUse).notices.show(",
+      "replace": "  if (!run.changed) {\n    (ports as OverlayPortUse).notices.show("
     },
     {
       "label": "a refused new person for a shot closes its box",
@@ -222,8 +302,8 @@
     {
       "label": "a refused bulk Mark filmed drops the selection",
       "file": "src/features/broll/panel.ts",
-      "find": "  if (run.held) return true;\n  renderBrollViews();\n  if (run.changed)",
-      "replace": "  if (run.held) { clearSelection(); return true; }\n  renderBrollViews();\n  if (run.changed)"
+      "find": "  if (run.held) return;\n  closing();\n  renderBrollViews();\n  if (run.changed)",
+      "replace": "  if (run.held) { clearSelection(); return; }\n  closing();\n  renderBrollViews();\n  if (run.changed)"
     },
     {
       "label": "a refused gear quick add refills the box from the list",

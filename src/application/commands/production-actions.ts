@@ -47,13 +47,7 @@ export function removeTag(cat: string, name: string, ports: RemoveTagPorts): num
   return ports.run(retagCommand(tag, null, ports.rewrites([tag], null), ports.stamps)) ? n : 0;
 }
 
-export function newBrollRecord(fields: ShotFields | null | undefined, ports: NewBrollPorts): DocumentShot {
-  const rec = newBrollShot(ports.ids.id("bs"), fields || {});
-  runRecord(ports, shared => addShotCommand(rec, shared));
-  return rec;
-}
-
-export function addedBrollRecord(fields: ShotFields | null | undefined, ports: NewBrollPorts): DocumentShot | null {
+export function newBrollRecord(fields: ShotFields | null | undefined, ports: NewBrollPorts): DocumentShot | null {
   const rec = newBrollShot(ports.ids.id("bs"), fields || {});
   return runRecord(ports, shared => addShotCommand(rec, shared)) ? rec : null;
 }

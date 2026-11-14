@@ -6,6 +6,7 @@ import type { CellRecords } from "../commands/cell-text.ts";
 import { galleryCommand } from "../commands/gallery.ts";
 import type { GalleryEdit, SharedGalleryCommands } from "../commands/gallery.ts";
 import { moveBeatCommand } from "../commands/rows.ts";
+import type { RecordCommandRun } from "../commands/shared-records.ts";
 import type { CommandOutcome, CommonDocumentSession, DocumentView } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 import type { WholeFieldTextCommit } from "./ports.ts";
@@ -78,7 +79,7 @@ export interface CellEditing<E, Html = never> {
   readonly close: (cell: E, html: string | Html, sel: CellRange | null | undefined) => E;
   readonly edit: (cell: E, change: CellEdit) => E | null;
   readonly sync: (cell: E) => void;
-  readonly editGallery: (rowId: string, message: string, edit: GalleryEdit) => boolean;
+  readonly editGallery: (rowId: string, message: string, edit: GalleryEdit) => RecordCommandRun;
   readonly moveRow: (rowId: string, targetId: string, after: boolean) => void;
 }
 
@@ -157,22 +158,22 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     return close(cell, next, out.sel);
   }
 
-  function editGallery(rowId: string, message: string, change: GalleryEdit): boolean {
-    if (rowIndexOf(ports.document(), rowId) === -1) return false;
+  function editGallery(rowId: string, message: string, change: GalleryEdit): RecordCommandRun {
+    if (rowIndexOf(ports.document(), rowId) === -1) return { changed: false, held: false };
     const shared = ports.gallery.ports();
     if (shared) {
       ports.undo.breakCoalescing();
       const outcome = ports.run(galleryCommand(rowId, change, ports.text, shared));
       if (outcome.kind === "rejected") ports.gallery.refused(outcome);
-      if (!took(outcome)) return false;
+      if (!took(outcome)) return { changed: false, held: outcome.kind === "rejected" };
       ports.gallery.done(message);
-      return true;
+      return { changed: true, held: false };
     }
     const before = ports.undo.latest();
     ports.undo.breakCoalescing();
-    if (!took(ports.run(galleryCommand(rowId, change, ports.text)))) return false;
+    if (!took(ports.run(galleryCommand(rowId, change, ports.text)))) return { changed: false, held: false };
     ports.announce(message, before);
-    return true;
+    return { changed: true, held: false };
   }
 
   function moveRow(rowId: string, targetId: string, after: boolean): void {
