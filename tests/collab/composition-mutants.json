@@ -592,6 +592,56 @@
       "find": "const notice = sharedUndoNotice(outcome, direction);",
       "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
       "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "undo puts the caret at the old offsets",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "const previous = offset > 0 ? after.identity(offset - 1) : null;",
+      "replace": "const previous = offset > 0 ? before.identity(offset - 1) : null;",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "undo collapses to the start",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "let offset = b.length - same;",
+      "replace": "let offset = 0; while (offset < a.length && offset < b.length && a[offset] === b[offset]) offset++;",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "redo keeps the undo caret",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };",
+      "replace": "inverse: { label: record.label, parts: inverse, selection: caret ?? record.selection, typing: null } };",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "undo after redo forgets the caret rule",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };",
+      "replace": "typing: null } };",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
+    },
+    {
+      "label": "a merged typing group forgets the caret rule",
+      "file": "src/core/collab/undo-record.ts",
+      "find": ",\n    ...first.caretText ? { caretText: first.caretText } : {} } : null;",
+      "replace": " } : null;",
+      "tests": [
+        "tests/collab/undo-selection.test.ts",
+        "tests/features/undo-selection.test.ts"
+      ]
     }
   ]
 }

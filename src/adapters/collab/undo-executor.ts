@@ -2,7 +2,7 @@ import type {
   SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
   SharedTextAddress
 } from "../../core/collab/operations.ts";
-import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoUnit } from "../../core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
@@ -15,7 +15,9 @@ import { collabState, sharedWriteFrame } from "./state.ts";
 import { scalarTarget } from "./scalar-executor.ts";
 import { sharedStampOperation } from "./stamp.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
-import { readSharedAnchorUnit } from "./anchors.ts";
+import { readSharedAnchorUnit, sharedAnchorCharacterEnd } from "./anchors.ts";
+import { readSharedPaintedText } from "./paint-base.ts";
+import type { PaintedText } from "../../application/editing/ports.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
@@ -363,6 +365,7 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
     if (error instanceof SharedUndoRefusal) return { ok: false, reason: error.message };
     throw error;
   }
+  const shown = record.caretText ? readSharedPaintedText(handle, record.caretText) : null;
   if (operations.length) {
     const result = executeSharedOperations(handle, operations, { origin: "local-undo" });
     if (!result.ok) return { ok: false, reason: result.reason };
@@ -374,8 +377,26 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
     return histories.get(key) ?? null;
   };
   const parts = planned.map(plan => plan.inverse(after));
-  return { ok: true, effective: parts.some(part => part.effective), selection: record.selection,
-    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null } };
+  const inverse = parts.map(part => part.part);
+  const caret = record.caretText ? stepCaret(shown, readSharedPaintedText(handle, record.caretText)) : null;
+  return { ok: true, effective: parts.some(part => part.effective), selection: caret ?? record.selection,
+    inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };
+}
+
+// why: as standalone caretAfterStep, the caret goes to the end of the visible change: before the row's unchanged suffix
+function stepCaret(before: PaintedText | null, after: PaintedText | null): SharedUndoSelection | null {
+  if (!before || !after || before.text === after.text) return null;
+  const a = before.text, b = after.text;
+  let same = 0;
+  while (same < a.length && same < b.length && a[a.length - 1 - same] === b[b.length - 1 - same]) same++;
+  let offset = b.length - same;
+  if (offset > 0 && offset < b.length) {
+    const high = b.charCodeAt(offset - 1), low = b.charCodeAt(offset);
+    if (high >= 0xD800 && high <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF) offset--;
+  }
+  const previous = offset > 0 ? after.identity(offset - 1) : null;
+  const caret = (previous ? sharedAnchorCharacterEnd(previous) : null) ?? after.identity(offset) ?? (offset === b.length ? after.endGap ?? null : null);
+  return caret ? { anchor: caret, focus: caret } : null;
 }
 
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
@@ -528,5 +549,6 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
-  return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing } : null };
+  return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing,
+    ...description.caretText ? { caretText: description.caretText } : {} } : null };
 }
