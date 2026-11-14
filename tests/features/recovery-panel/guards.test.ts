@@ -56,7 +56,7 @@ test("C9 an unavailable action and a still-connected button cannot call a contro
   definition.run("command-menu"); assert.equal(opened, 0);
   f.state.shared = true; const panel = createRecoveryPanel(f.ports);
   try {
-    panel.open(); const buttons = [...f.ports.host.querySelectorAll("article button")]; assert.equal(buttons.length, 2);
+    panel.open(); const buttons = [...f.ports.host.querySelectorAll<HTMLButtonElement>("article button")]; assert.equal(buttons.length, 2);
     f.state.shared = false;
     for (const button of buttons) button.click();
     assert.deepEqual(f.calls, []);

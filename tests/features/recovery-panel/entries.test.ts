@@ -92,8 +92,9 @@ for (const example of EXAMPLES.filter(item => item.row.actions.includes("Restore
       for (const mounted of [one, two]) assert.deepEqual(rows(mounted.host).filter(row => row.kind === example.kind), []);
       const content = (handle: SharedDocumentHandle) => {
         const { document } = projectSharedDocumentWithRecovery(handle);
+        const sections = document.sections; assert.ok(sections === undefined || Array.isArray(sections));
         return { rows: document.rows.map(row => [row.id, row.audioText]), people: document.people.map(person => [person.id, person.name]),
-          headings: (document.sections ?? []).map(heading => [heading.id, heading.name, heading.firstSceneId]) };
+          headings: (sections ?? []).map((heading: Readonly<Record<string, unknown>>) => [heading.id, heading.name, heading.firstSceneId]) };
       };
       const expected = example.kind === "removed-beat" ? { rows: [["R1", "abcd"], ["R2", "ef"]], people: [], headings: [] }
         : example.kind === "removed-heading" ? { rows: [["R1", "abcd"]], people: [], headings: [["H1", "Scene", "R1"]] }

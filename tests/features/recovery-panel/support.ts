@@ -63,7 +63,8 @@ export function page(handle: SharedDocumentHandle, name = "Bob") {
     close: () => { off(); panel.dispose(); h.session.dispose(); host.remove(); } };
 }
 
-export function rows(host: HTMLElement) {
+export function rows(host: HTMLElement): readonly { readonly kind: string | undefined; readonly label: string | undefined;
+  readonly by: string | undefined; readonly text: string | undefined; readonly actions: readonly string[] }[] {
   return [...host.querySelectorAll<HTMLElement>("article")].map(row => ({ kind: row.dataset.recoveryKind,
     label: row.querySelector("h3")?.textContent, by: row.querySelector("p")?.textContent, text: row.querySelector("pre")?.textContent,
     actions: [...row.querySelectorAll("button")].map(button => button.textContent) }));

@@ -8,6 +8,8 @@ import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { deleteRecord } from "../../adapters/collab/record-support.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { sharedRecoveryEntryName } from "../../../src/core/collab/recovery.ts";
+import type { SharedRecoveryEntry } from "../../../src/core/collab/recovery.ts";
+import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { SharedUndoOutcome } from "../../../src/application/editing/undo/shared-undo.ts";
 
 for (const order of ["D1", "rev"] as const) test("C9 rule 52: restore racing an unseen discard wins; undo retires that still-active discard: " + order, () => {
@@ -95,9 +97,9 @@ test("C9 seeded three-writer restore, discard, undo and redo races converge with
       const kind = ["removed-beat", "removed-heading", "deleted-person"][seed % 3]; assert.ok(kind);
       for (const [index, actor] of actors.entries()) {
         const page = pages[actor]; assert.ok(page);
-        const entry = page.h.session.recovery().find(entry => entry.kind === kind); assert.ok(entry);
+        const entry: SharedRecoveryEntry | undefined = page.h.session.recovery().find(entry => entry.kind === kind); assert.ok(entry);
         const action = index === 1 ? "discard" : "restore";
-        const outcome = page.ports[action](sharedRecoveryEntryName(entry)); assert.equal(outcome.kind, "applied"); actions.add(action);
+        const outcome: CommandOutcome = page.ports[action](sharedRecoveryEntryName(entry)); assert.equal(outcome.kind, "applied"); actions.add(action);
         for (const operation of page.h.executed.flatMap(item => item.operations)) kinds.add(operation.kind);
       }
       set.queue.flush(order); agree("C9 seed " + seed + " command", order, [set.a, set.b, set.c], projectSharedDocumentWithRecovery); checkpoints++;
