@@ -4,7 +4,8 @@ import { startupReady } from "../../application/startup-signal.ts";
 import { migrateRows } from "../document-ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { currentCapabilities } from "./session-owner.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "./shared-session.ts";
+import { SHARED_ENTER_FAILED, enterSharedSession, joinSharedBindings, leaveSharedSession, sharedSessionParts } from "./shared-session.ts";
+import { recoveryPanelBinding } from "./recovery-panel.ts";
 import type { SharedSwitchPorts } from "./shared-session.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
 import { createSharedTestPeer } from "./shared-test-peer.ts";
@@ -14,15 +15,37 @@ import { documentReader } from "./ports/document.ts";
 import { getEditorName } from "./preferences-owner.ts";
 import { undoOwner } from "./undo.ts";
 import { writerControls } from "./writer.ts";
-import { draftResume } from "./recovery-owners.ts";
-import { mountDraftsFeature, stopDraftsFeature } from "./drafts.ts";
-import { confirmSavedNow } from "./save-owners.ts";
+import { draftResume, flushDraftNow, noteDraftChange } from "./recovery-owners.ts";
+import { draftSource } from "./drafts.ts";
+import { confirmSavedNow, noteSaveChange } from "./save-owners.ts";
 import { documentLocation, setHome } from "./location-owner.ts";
+
+const DRAFT_NOT_KEPT = "draft-not-kept";
+const DRAFT_NOT_KEPT_NOTICE ="The shared session did not start: your recovery copy could not be saved.";
 
 function sharedEntryRefusal(ready: boolean, composing: boolean): string | null {
   return (!ready ? "startup-pending" : null)
     ?? (composing ? "buffer-composition" : null)
     ?? (draftResume().restorePending() ? "draft-restore-pending" : null);
+}
+
+function draftDetachRefusal(): string | null {
+  const reason = draftSource.detachRefusal();
+  if (!reason) return null;
+  notices.show(DRAFT_NOT_KEPT_NOTICE, "warn");
+  return `draft-${reason}`;
+}
+
+async function keepDraftBeforeEntry(ports: SharedSwitchPorts, refusal: () => string | null): Promise<string | null> {
+  try {
+    const refused = refusal();
+    if (refused) return refused;
+    ports.settle();
+  } catch (error) { ports.report(error); return SHARED_ENTER_FAILED; }
+  await Promise.resolve();
+  if ((await flushDraftNow()).ok) return draftDetachRefusal();
+  notices.show(DRAFT_NOT_KEPT_NOTICE, "warn");
+  return DRAFT_NOT_KEPT;
 }
 
 export function mountSharedSessionFeature(): void {
@@ -34,11 +57,11 @@ export function mountSharedSessionFeature(): void {
     const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
     document.addEventListener("compositionstart", composition, true);
     document.addEventListener("compositionend", composition, true);
-    const bindings = sharedWriterBindings({
+    const bindings = joinSharedBindings(sharedWriterBindings({
       recovered: () => { counts.recovered++; notices.show("Your writing was kept in recovery.", "warn"); },
       missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
       ownershipScan: () => { counts.ownershipScans++; }, report
-    });
+    }), recoveryPanelBinding);
     return {
       enter: async () => {
         if (switching) return { ok: false, reason: "session-switching" };
@@ -51,14 +74,16 @@ export function mountSharedSessionFeature(): void {
           const standalone = currentCapabilities();
           const common = { edit: standalone.edit, comment: standalone.edit };
           ports = {
-            refusal: () => sharedEntryRefusal(ready, composing),
+            refusal: () => sharedEntryRefusal(ready, composing) ?? draftDetachRefusal(),
             commandRefused: sharedCommandRefusalNotice(notices),
             settle: () => {
               if (writerControls()?.writerFlowControl()?.settle?.() === false) throw new Error("The Writer could not settle");
               undoOwner().flush();
             },
             detach: () => {
-              stopDraftsFeature(); detached = true;
+              const draft = draftSource.detachSource();
+              if (!draft.ok) throw new Error(`The draft writer did not detach: ${draft.reason}`);
+              detached = true;
               setHome("none"); documentLocation().markWrittenOut(false); confirmSavedNow();
             },
             bindings, common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
@@ -66,10 +91,12 @@ export function mountSharedSessionFeature(): void {
             timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
             now: () => Date.now()
           };
+          const kept = await keepDraftBeforeEntry(ports, () => sharedEntryRefusal(ready, composing));
+          if (kept) return { ok: false, reason: kept };
           const result = await enterSharedSession(ports);
           const parts = sharedSessionParts();
           if (result.ok && parts) peer = createSharedTestPeer(parts, ports);
-          else if (detached) { detached = false; mountDraftsFeature(); }
+          else if (detached) { detached = false; draftSource.resumeWriting(); }
           return result;
         } finally { switching = false; }
       },
@@ -81,13 +108,16 @@ export function mountSharedSessionFeature(): void {
           const result = leaveSharedSession(ports);
           if (result.ok) {
             peer?.dispose(); peer = null; ports = null;
-            if (detached) { detached = false; mountDraftsFeature(); }
+            if (detached) { detached = false; draftSource.resumeWriting(); }
+            // why: the landed copy has a new docId and was never saved, so it is unsaved (rules 75 and 76)
+            noteSaveChange(); noteDraftChange();
           }
           return result;
         } finally { switching = false; }
       },
       peer: {
         type: (rowId: string, offset: number, text: string) => peer?.type(rowId, offset, text),
+        remove: (rowId: string) => peer?.remove(rowId),
         hold: () => { peer?.hold(); },
         deliver: (order?: "forward" | "reverse" | "duplicate") => peer?.deliver(order),
         release: (order?: "forward" | "reverse" | "duplicate") => peer?.release(order)

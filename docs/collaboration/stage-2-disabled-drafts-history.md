@@ -15,7 +15,7 @@ asks again after each wait.
 
 | Owner | Refusal | Shown |
 | --- | --- | --- |
-| `startDrafts`, writer | `drafts` is asked wherever the writer asks whether it may write: a change schedules no capture, a flush answers `{ ok: true }` as a store that cannot write does, nothing is written and no draft on disk is discarded | Nothing |
+| `startDrafts`, writer | `drafts` is asked wherever the writer asks whether it may write: a change schedules no capture, a flush or keep flush answers `{ ok: false, code: "DETACHED" }` (nothing was kept), nothing is written and no draft on disk is discarded | Nothing |
 | `startDrafts`, `taker` | Answers null, so the startup takes no draft | Nothing |
 | `startDrafts`, `applyTaken` | A draft already taken answers `kept` before it is read, and again after the file of a file draft is read; the desktop keeps it for the next launch | Nothing |
 | `HistoryOwner.captureSnapshot` | Answers null before it reads the document or mints an id | Nothing |
@@ -33,8 +33,19 @@ cannot replace the shared session.
 
 - Snapshots already captured before the session became shared still finish their
   write and their retries; only new captures are refused.
-- A keep flush (closing a file tab whose file is gone) answers as a store that
-  cannot write. A shared instance needs its own tab source, which package 14 adds.
+- A keep flush (closing a file tab whose file is gone) answers that nothing was
+  kept, so closing or quitting asks the unsaved-changes question again instead of
+  counting on a recovery copy. A shared instance needs its own tab source, which
+  package 14 adds.
+- The detached draft writer (`DraftsMount.detachSource`) answers the same way. It
+  detaches only a settled writer: no flush, write, discard, draft take or draft
+  restore outstanding (each is counted from its request until its answer has been
+  handled), no restore pending, no pending change or armed capture, no retry
+  scheduled and not stopped, whether or not the store is available. Otherwise it
+  refuses with that reason and changes nothing. While detached nothing is
+  scheduled or written; resuming arms nothing and continues the draft sequence. A
+  flush that captured nothing answers ok only if the writer is still live when the
+  answer is formed; otherwise it answers that nothing was kept.
 - A history copy for a standalone save that lands after the session became shared
   follows the current session, so it is not made; the snapshots stay under the old
   id. Package 14 decides captured-save effects together with the session owner.

@@ -16,7 +16,8 @@ import {
 import { desktopDraftOrigin, draftOriginSignature, draftPayloadFor, draftRefsFor, draftRefusal } from "./draft-origin.ts";
 import type { DraftOrigin, DraftPayload } from "./draft-origin.ts";
 import type { DraftCopy, DraftRestoreOutcome, HeaderedDraft, TakenDraft, TakenOrigin } from "./draft-restore.ts";
-import type { DraftFile, DraftFlush, DraftOpening, DraftParsedFile, DraftsMount, DraftsPorts } from "./drafts-ports.ts";
+import { DRAFTS_DETACHED } from "./drafts-ports.ts";
+import type { DraftDetach, DraftDetachRefusal, DraftFile, DraftFlush, DraftOpening, DraftParsedFile, DraftsMount, DraftsPorts } from "./drafts-ports.ts";
 
 interface DraftToast {
   readonly dismiss?: (() => void) | undefined;
@@ -107,6 +108,20 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   let draftSentEditSeq: number | null = null;
   let draftSentBase: unknown = {};
   let draftSentSignature = "";
+  let draftStopCode = "";
+  let detached = false;
+  const outstanding: Record<"write" | "discard" | "restore" | "flush", number> = { write: 0, discard: 0, restore: 0, flush: 0 };
+
+  function countRestore<T>(started: Promise<T>): Promise<T> {
+    outstanding.restore++;
+    return started.then(function (value) {
+      outstanding.restore--;
+      return value;
+    }, function (error: unknown) {
+      outstanding.restore--;
+      throw error;
+    });
+  }
   const draftStats: { writes: number; failures: number; discards: number; obsolete: number; lastCode: string | null } =
     { writes: 0, failures: 0, discards: 0, obsolete: 0, lastCode: null };
 
@@ -123,7 +138,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   }
 
   function draftWriterLive(): boolean {
-    if (draftStopped || !runningOnDesktop() || draftsRefused()) return false;
+    if (draftStopped || detached || !runningOnDesktop() || draftsRefused()) return false;
     return desktopDrafts().writable();
   }
 
@@ -155,15 +170,20 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       const discardSeq = ++draftSeq;
       draftOnDisk = false;
       draftStats.discards++;
+      outstanding.discard++;
       return Promise.resolve().then(function () {
         return draftBackendDiscard(discardSeq);
       }).then(function (r) {
-        if (r && r.ok === false) {
-          draftStats.lastCode = r.code || "error";
-          draftOnDisk = true;
-        }
-        return r || null;
-      }, function () { draftOnDisk = true; return null; });
+        try {
+          if (r && r.ok === false) {
+            draftStats.lastCode = r.code || "error";
+            draftOnDisk = true;
+          }
+          return r || null;
+        } finally { outstanding.discard--; }
+      }, function () {
+        try { draftOnDisk = true; return null; } finally { outstanding.discard--; }
+      });
     }
 
     const origin = draftOriginOf();
@@ -180,6 +200,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       stateJson = JSON.stringify(doc);
     } catch (e) {
       draftStopped = true;
+      draftStopCode = "TOO_LARGE";
       draftRetryOnChange = true;
       schedule().setSlow(true);
       showDraftPaused("TOO_LARGE");
@@ -213,50 +234,61 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     const draftRefs = draftRefsFor(doc, baseAtCapture, sendBase);
 
     schedule().dropPending();
-    const sent = draftRefs.length
-      ? persist(draftRefs).then(function (failed: string[]) {
-          if (!ports) return null;
-          if (failed.length) {
-            inlineFailed = failed;
-            payload.stateJson = inlineStateJson(payload.stateJson, failed);
-            if (baseTextCache !== null) baseTextCache = inlineStateJson(baseTextCache, failed);
-            if (payload.baseJson) payload.baseJson = baseTextCache;
-          }
-          return sendDraftPayload(payload, baseTextFor, false);
-        })
-      : sendDraftPayload(payload, baseTextFor, false);
+    outstanding.write++;
+    let sent: ReturnType<typeof sendDraftPayload>;
+    try {
+      sent = draftRefs.length
+        ? persist(draftRefs).then(function (failed: string[]) {
+            if (!ports) return null;
+            if (failed.length) {
+              inlineFailed = failed;
+              payload.stateJson = inlineStateJson(payload.stateJson, failed);
+              if (baseTextCache !== null) baseTextCache = inlineStateJson(baseTextCache, failed);
+              if (payload.baseJson) payload.baseJson = baseTextCache;
+            }
+            return sendDraftPayload(payload, baseTextFor, false);
+          })
+        : sendDraftPayload(payload, baseTextFor, false);
+    } catch (error) {
+      outstanding.write--;
+      throw error;
+    }
     draftInFlight = sent.then(function (r) {
-      draftInFlight = null;
-      if (!ports) return null;
-      if (r && r.ok) {
-        draftStats.writes++;
-        draftStats.lastCode = null;
-        if (r.obsolete) {
-          draftStats.obsolete++;
-          schedule().keepPending();
+      try {
+        draftInFlight = null;
+        if (!ports) return null;
+        if (r && r.ok) {
+          draftStats.writes++;
+          draftStats.lastCode = null;
+          if (r.obsolete) {
+            draftStats.obsolete++;
+            schedule().keepPending();
+          } else {
+            draftOnDisk = true;
+            draftSentEditSeq = editSeqAtCapture;
+            draftSentBase = baseAtCapture;
+            draftSentSignature = signature;
+          }
+          schedule().landed();
+          if (draftPausedReason) {
+            draftPausedReason = "";
+            clearDraftPausedToast();
+            showToast("Crash recovery is working again", "ok");
+          }
         } else {
-          draftOnDisk = true;
-          draftSentEditSeq = editSeqAtCapture;
-          draftSentBase = baseAtCapture;
-          draftSentSignature = signature;
+          noteDraftWriteRefused((r && r.code) || "error");
         }
-        schedule().landed();
-        if (draftPausedReason) {
-          draftPausedReason = "";
-          clearDraftPausedToast();
-          showToast("Crash recovery is working again", "ok");
-        }
-      } else {
-        noteDraftWriteRefused((r && r.code) || "error");
-      }
-      schedule().resume();
-      return r;
+        schedule().resume();
+        return r;
+      } finally { outstanding.write--; }
     }, function (err) {
-      draftInFlight = null;
-      if (!ports) return null;
-      reportError(err);
-      noteDraftWriteRefused("offline");
-      return { ok: false, code: "offline" };
+      try {
+        draftInFlight = null;
+        if (!ports) return null;
+        reportError(err);
+        noteDraftWriteRefused("offline");
+        return { ok: false, code: "offline" };
+      } finally { outstanding.write--; }
     });
     return draftInFlight;
   }
@@ -308,7 +340,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     if (code !== "HELD") draftStats.failures++;
 
     const refusal = draftRefusal(code);
-    if (refusal === "stop") { draftStopped = true; return; }
+    if (refusal === "stop") { draftStopped = true; draftStopCode = code; return; }
 
     if (refusal === "pause") showDraftPaused(code);
 
@@ -316,21 +348,65 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   }
 
   function flushDraftNow(opts?: { readonly keep?: boolean } | null): Promise<DraftFlush> {
+    if (detached || (runningOnDesktop() && draftsRefused())) return Promise.resolve({ ok: false, code: DRAFTS_DETACHED });
     if (!draftWriterLive()) return Promise.resolve({ ok: true });
     const keepClean = !!(opts && opts.keep === true);
     schedule().cancel();
     schedule().cancelRetry();
+    outstanding.flush++;
     return Promise.resolve(draftInFlight).then(function () {
       if (!ports) return null;
       return captureAndSendDraft(keepClean);
     }).then(function (r) {
-      if (!ports) return { ok: false, code: "CANCELLED" };
-      return r || { ok: true };
+      try {
+        if (!ports) return { ok: false, code: "CANCELLED" };
+        return r || quietAnswer();
+      } finally { outstanding.flush--; }
     }, function (err) {
-      if (!ports) return { ok: false, code: "CANCELLED" };
-      reportError(err);
-      return { ok: false, code: "EIO" };
+      try {
+        if (!ports) return { ok: false, code: "CANCELLED" };
+        reportError(err);
+        return { ok: false, code: "EIO" };
+      } finally { outstanding.flush--; }
     });
+  }
+
+  function quietAnswer(): DraftFlush {
+    if (draftWriterLive()) return { ok: true };
+    return { ok: false, code: draftStopped ? draftStopCode : DRAFTS_DETACHED };
+  }
+
+  function outstandingWork(): DraftDetachRefusal | null {
+    if (outstanding.write) return "writing";
+    if (outstanding.discard) return "discarding";
+    if (outstanding.restore) return "restoring";
+    if (outstanding.flush) return "flushing";
+    return null;
+  }
+
+  function detachRefusal(): DraftDetachRefusal | null {
+    if (!ports) return "disposed";
+    if (detached) return "detached";
+    const work = outstandingWork();
+    if (work) return work;
+    if (draftResume().restorePending()) return "restoring";
+    if (draftStopped) return "stopped";
+    if (schedule().backingOff()) return "retrying";
+    if (schedule().pending() || schedule().armed()) return "pending";
+    return null;
+  }
+
+  function detachSource(): DraftDetach {
+    const reason = detachRefusal();
+    if (reason) return { ok: false, reason };
+    detached = true;
+    return { ok: true };
+  }
+
+  function resumeWriting(): boolean {
+    if (!ports || !detached) return false;
+    detached = false;
+    return true;
   }
 
   function draftMigrate(json: unknown): ValidatedDocument | null {
@@ -393,7 +469,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     if (different) return recoverAsCopy(t, different, mine);
     if (refId) disk.docId = refId;
 
-    openDocument({ kind: "file", file: file, handle: handle, parsed: { state: disk, kind: parsed.kind }, options: { skipSnapshot: true, silent: true } });
+    void countRestore(openDocument({ kind: "file", file: file, handle: handle, parsed: { state: disk, kind: parsed.kind }, options: { skipSnapshot: true, silent: true } }));
     const diskCopy = cloneState(disk);
 
     if (sameDocContent(mine, disk)) {
@@ -464,27 +540,30 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     if (!runningOnDesktop() || draftsRefused()) return null;
     const take = desktopDrafts().taker();
     if (!(take && draftResume().restorePending())) return null;
-    return take;
+    return function () { return countRestore(take()); };
   }
 
   async function applyTakenDraft(taken: unknown): Promise<string> {
-    const t = taken as TakenDraft | null | undefined;
-    const resume = draftResume();
-    let outcome: string;
+    outstanding.restore++;
     try {
-      outcome = draftsRefused() ? "kept" : await runDraftRestore(t);
-    } catch (e) {
-      reportError(e);
-      outcome = "failed";
-      showToast(RESTORE_FAILED_NOTICE, "warn", true);
-    }
-    resume.setRestorePending(false);
-    if (runningOnDesktop()) {
-      try { desktopDrafts().restoreDone(outcome); } catch (e2) {}
-    }
-    notifyDesktopDocumentState();
-    noteDraftChange();
-    return outcome;
+      const t = taken as TakenDraft | null | undefined;
+      const resume = draftResume();
+      let outcome: string;
+      try {
+        outcome = draftsRefused() ? "kept" : await runDraftRestore(t);
+      } catch (e) {
+        reportError(e);
+        outcome = "failed";
+        showToast(RESTORE_FAILED_NOTICE, "warn", true);
+      }
+      resume.setRestorePending(false);
+      if (runningOnDesktop()) {
+        try { desktopDrafts().restoreDone(outcome); } catch (e2) {}
+      }
+      notifyDesktopDocumentState();
+      noteDraftChange();
+      return outcome;
+    } finally { outstanding.restore--; }
   }
 
   draftResume().setRestorePending(!!(runningOnDesktop() && desktopDrafts().hasDraftToRestore()));
@@ -496,6 +575,9 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     noteChange: noteDraftChange,
     taker: draftTaker,
     applyTaken: applyTakenDraft,
+    detachRefusal: detachRefusal,
+    detachSource: detachSource,
+    resumeWriting: resumeWriting,
     testing: {
       flushNow: function () { return flushDraftNow(); },
       status: function () {

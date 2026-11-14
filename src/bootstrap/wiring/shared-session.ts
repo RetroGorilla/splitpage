@@ -49,6 +49,14 @@ export interface SharedSwitchPorts {
   readonly now: () => number;
 }
 
+export function joinSharedBindings(first: SharedBindings, second: Pick<SharedBindings, "enter" | "leave">): SharedBindings {
+  return {
+    enter: parts => { first.enter(parts); second.enter(parts); },
+    settle: () => first.settle(),
+    leave: () => { try { second.leave(); } finally { first.leave(); } }
+  };
+}
+
 export type SharedSwitchOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export const SHARED_ALREADY = "already-shared";

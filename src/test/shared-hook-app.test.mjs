@@ -21,7 +21,14 @@ const { createHeldFileHandle } = await import("./_m4-matrix.mjs");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
+const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const hook = window.__sharedTest;
+
+async function releaseDesktop() {
+  if (sharedSession()) hook.leave();
+  await flushDraftNow();
+  restoreDesktop();
+}
 
 function script(rows = [{ id: "r1", audioText: "Hello", visualText: "" }]) {
   writerControls().closeWriter();
@@ -169,7 +176,7 @@ test("real draft and autosave owners cancel pending source work on detach and pr
     globalThis.clearTimeout = realClear;
     for (const timer of timers) clearTimeout(timer.id);
     if (sharedSession()) hook.leave();
-    autoSavePolicy().setEnabled(false); restoreDesktop();
+    autoSavePolicy().setEnabled(false); await releaseDesktop();
   }
 });
 
@@ -217,9 +224,116 @@ test("leaving shared mode keeps desktop draft sequence numbers increasing for th
     assert.equal(result.ok, true, JSON.stringify({ result, sent }));
     assert.ok(sent[1] > sent[0]);
   } finally {
-    if (sharedSession()) hook.leave();
-    restoreDesktop();
+    await releaseDesktop();
   }
+});
+
+function draftStore(accept = () => true) {
+  const store = { writes: [], discards: [] };
+  useDesktopForTest({ writeDraft: async payload => {
+    const doc = JSON.parse(payload.stateJson);
+    store.writes.push({ seq: payload.seq, docId: doc.docId, text: doc.rows[0].audioText, shared: sharedSession(), kept: accept() });
+    return store.writes.at(-1).kept ? { ok: true, seq: payload.seq } : { ok: false, code: "ENOSPC" };
+  }, discardDraft: async seq => { store.discards.push(seq); return { ok: true }; }, setDocumentState: () => {}, draftRestoreDone: () => {} });
+  return store;
+}
+
+test("entering with pending standalone typing writes that typing to the draft store before the session starts", async () => {
+  const store = draftStore();
+  try {
+    script();
+    await flushDraftNow();
+    store.writes.length = 0;
+    currentDocument().rows[0].audioText = "Typed before sharing"; noteSessionEdit(); undoOwner().flush();
+    await Promise.resolve();
+    assert.equal(draftsTesting().status().pending, true);
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(store.writes.map(write => [write.text, write.shared, write.kept]), [["Typed before sharing", false, true]]);
+    assert.deepEqual(store.discards, []);
+  } finally {
+    await releaseDesktop();
+  }
+});
+
+test("entering while the draft store refuses writes is refused with a visible notice, stays standalone and loses nothing", async () => {
+  let accepting = false;
+  const store = draftStore(() => accepting);
+  try {
+    script();
+    currentDocument().rows[0].audioText = "Typed before sharing"; noteSessionEdit(); undoOwner().flush();
+    const before = currentDocument();
+    const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast.warn")).map(toast => toast.textContent);
+    const shown = toasts().length;
+    assert.deepEqual(await hook.enter(), { ok: false, reason: "draft-not-kept" });
+    assert.equal(sharedSession(), false);
+    assert.equal(currentDocument(), before);
+    assert.equal(currentDocument().rows[0].audioText, "Typed before sharing");
+    assert.ok(toasts().slice(shown).includes("The shared session did not start: your recovery copy could not be saved."));
+    assert.ok(store.writes.length > 0);
+    assert.ok(store.writes.every(write => !write.kept && !write.shared && write.text === "Typed before sharing"));
+    accepting = true;
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual([store.writes.at(-1).text, store.writes.at(-1).shared, store.writes.at(-1).kept], ["Typed before sharing", false, true]);
+    assert.deepEqual(store.discards, []);
+  } finally {
+    await releaseDesktop();
+  }
+});
+
+test("after a shared stretch over a stored draft, the next flush writes the landed copy with the next sequence number", async () => {
+  const store = draftStore();
+  try {
+    script();
+    currentDocument().rows[0].audioText = "Stored"; noteSessionEdit(); undoOwner().flush();
+    assert.equal((await flushDraftNow()).ok, true);
+    const stored = store.writes.at(-1);
+    assert.equal(stored.text, "Stored");
+    assert.deepEqual(await hook.enter(), { ok: true });
+    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    assert.equal(hook.read().app.rows[0].audioText, "Shared Stored");
+    assert.deepEqual(hook.leave(), { ok: true });
+    assert.equal((await flushDraftNow()).ok, true);
+    assert.deepEqual(store.discards, []);
+    const landed = store.writes.at(-1);
+    assert.deepEqual([landed.seq, landed.text, landed.docId, landed.shared], [stored.seq + 1, "Shared Stored", currentDocument().docId, false]);
+  } finally {
+    await releaseDesktop();
+  }
+});
+
+test("the composed recovery panel binding offers the Recovery action only while shared, restores and discards a peer's removal, and closes on leave", async () => {
+  script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "Removed words", visualText: "" }]);
+  assert.equal(appActions.has("recovery"), false);
+  assert.deepEqual(await hook.enter(), { ok: true });
+  try {
+    assert.equal(appActions.has("recovery"), true);
+    assert.deepEqual([appActions.view("recovery")?.enabled, appActions.view("recovery")?.visible], [true, true]);
+    appActions.invoke("recovery", "command-menu");
+    const panel = () => document.getElementById("shared-recovery-panel");
+    assert.equal(panel()?.textContent.includes("Nothing in recovery."), true);
+    const ids = () => hook.read().app.rows.map(row => row.id);
+    const card = () => panel()?.querySelector('[data-recovery-kind="removed-beat"]');
+    const press = label => Array.from(card()?.querySelectorAll("button") ?? []).find(button => button.textContent === label)?.click();
+    assert.equal(hook.peer.remove("r2"), "applied");
+    hook.peer.deliver();
+    assert.deepEqual(ids(), ["r1"]);
+    assert.ok(card()?.querySelector("pre").textContent.includes("Removed words"));
+    press("Restore");
+    hook.peer.deliver();
+    assert.deepEqual(ids(), ["r1", "r2"]);
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    assert.equal(card(), null);
+    assert.equal(hook.peer.remove("r2"), "applied");
+    hook.peer.deliver();
+    press("Discard");
+    hook.peer.deliver();
+    assert.equal(card(), null);
+    assert.deepEqual(ids(), ["r1"]);
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    assert.deepEqual(hook.leave(), { ok: true });
+    assert.equal(appActions.has("recovery"), false);
+    assert.equal(document.getElementById("shared-recovery-panel"), null);
+  } finally { if (sharedSession()) hook.leave(); }
 });
 
 test("the composed undo route warns once for skipped and used-up steps in both directions", () => {

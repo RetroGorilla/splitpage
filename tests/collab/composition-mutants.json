@@ -475,11 +475,60 @@
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
-      "label": "detaching leaves the source draft timers armed",
+      "label": "entry detaches without flushing the pending standalone draft",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "stopDraftsFeature(); detached = true;",
-      "replace": "detached = true;",
+      "find": "  if ((await flushDraftNow()).ok) return draftDetachRefusal();\n",
+      "replace": "  if (true) return draftDetachRefusal();\n",
       "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "entry ignores a failed draft flush",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  if ((await flushDraftNow()).ok) return draftDetachRefusal();\n",
+      "replace": "  if ((await flushDraftNow()) || true) return draftDetachRefusal();\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "a refused entry over an unsaved recovery copy shows no notice",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  notices.show(DRAFT_NOT_KEPT_NOTICE, \"warn\");\n  return DRAFT_NOT_KEPT;\n",
+      "replace": "  return DRAFT_NOT_KEPT;\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "leaving keeps the landed copy clean, so the next flush discards the stored draft",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "noteSaveChange(); noteDraftChange();",
+      "replace": "noteDraftChange();",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "leaving does not resume the draft writer",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "            peer?.dispose(); peer = null; ports = null;\n            if (detached) { detached = false; draftSource.resumeWriting(); }\n",
+      "replace": "            peer?.dispose(); peer = null; ports = null;\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the hook leaves the recovery panel binding out",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "}), recoveryPanelBinding);",
+      "replace": "}), { enter: () => {}, leave: () => {} });",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "a throwing second leave skips the first binding",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
+      "replace": "leave: () => { second.leave(); first.leave(); }",
+      "tests": ["tests/bootstrap/shared-switch.test.ts"]
+    },
+    {
+      "label": "joined bindings never leave the second binding",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
+      "replace": "leave: () => { first.leave(); }",
+      "tests": ["tests/bootstrap/shared-switch.test.ts", "src/test/shared-hook-app.test.mjs"]
     },
     {
       "label": "detaching leaves standalone autosave pending",

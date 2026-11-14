@@ -14,7 +14,7 @@ import {
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, stepSharedUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
-  enterSharedSession, leaveSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
+  enterSharedSession, joinSharedBindings, leaveSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
 } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
@@ -142,7 +142,56 @@ test("command refusals reach the supplied callback once while entry refusal is c
     assert.equal(entries, 2);
   } finally { s.stop(); }
 });
-const state = (): unknown[] => [sharedSession(), sharedUndoRoute() !== null, sharedSessionParts() !== null, currentDocument()?.title];
+
+function panelBinding(log: string[], faults: { enter?: boolean; leave?: boolean } = {}) {
+  return {
+    enter: () => { log.push("panel.enter"); if (faults.enter) { faults.enter = false; throw new Error("panel enter"); } },
+    leave: () => { log.push("panel.leave"); if (faults.leave) { faults.leave = false; throw new Error("panel leave"); } }
+  };
+}
+
+test("joined bindings enter the first binding before the second, leave in reverse, settle through the first, and a throwing second leave still leaves the first", () => {
+  const log: string[] = [];
+  const first = { enter: () => { log.push("first.enter"); }, settle: () => { log.push("first.settle"); return "held"; }, leave: () => { log.push("first.leave"); } };
+  const faults = { leave: true };
+  const joined = joinSharedBindings(first, panelBinding(log, faults));
+  joined.enter({} as SharedSessionParts);
+  assert.equal(joined.settle(), "held");
+  assert.throws(() => { joined.leave(); }, /panel leave/);
+  joined.leave();
+  assert.deepEqual(log, ["first.enter", "panel.enter", "first.settle", "panel.leave", "first.leave", "panel.leave", "first.leave"]);
+});
+
+test("a rolled-back entry leaves both joined bindings, whether the second binding or a later step fails", async () => {
+  for (const fault of ["panel", "hydration"] as const) {
+    const s = start(), log: string[] = [];
+    const ports: SharedSwitchPorts = { ...s.ports, bindings: joinSharedBindings(s.ports.bindings, panelBinding(log, { enter: fault === "panel" })) };
+    try {
+      if (fault === "hydration") s.arm("hydration");
+      assert.deepEqual(await enterSharedSession(ports), { ok: false, reason: SHARED_ENTER_FAILED });
+      assert.deepEqual(log, ["panel.enter", "panel.leave"]);
+      assert.ok(s.log.some(entry => entry.startsWith("bindings.leave:")), fault);
+      assert.deepEqual([sharedSession(), sharedUndoRoute() !== null, sharedSessionParts() !== null, currentDocument()?.title], [false, false, false, "Pilot"]);
+    } finally { s.stop(); }
+  }
+});
+
+test("a failed leave of the second binding still leaves the first, enters both again, and a later leave lands", async () => {
+  const s = start(), log: string[] = [], faults = { leave: false };
+  const ports: SharedSwitchPorts = { ...s.ports, bindings: joinSharedBindings(s.ports.bindings, panelBinding(log, faults)) };
+  try {
+    assert.deepEqual(await enterSharedSession(ports), { ok: true });
+    faults.leave = true;
+    assert.deepEqual(leaveSharedSession(ports), { ok: false, reason: SHARED_LEAVE_FAILED });
+    assert.deepEqual(log, ["panel.enter", "panel.leave", "panel.enter"]);
+    assert.equal(s.log.filter(entry => entry.startsWith("bindings.leave:")).length, 1);
+    assert.equal(sharedSession(), true);
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+    assert.deepEqual(log, ["panel.enter", "panel.leave", "panel.enter", "panel.leave"]);
+    assert.equal(sharedSession(), false);
+  } finally { s.stop(); }
+});
+const state =(): unknown[] => [sharedSession(), sharedUndoRoute() !== null, sharedSessionParts() !== null, currentDocument()?.title];
 
 function standaloneUsable(title = "Again"): void {
   assert.equal(runCommand(titleCommand(title)).kind, "applied");
