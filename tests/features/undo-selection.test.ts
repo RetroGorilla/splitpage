@@ -15,30 +15,33 @@ import type { SharedDocumentSession } from "../../src/application/session/shared
 import { sharedUndoOwner } from "../../src/bootstrap/wiring/ports/shared-undo.ts";
 
 type Peer = "none" | "inside" | "before" | "after";
-type Kind = "delete" | "replace" | "composition";
+type Kind = "delete" | "replace" | "composition" | "same end" | "same end composition";
 type Caret = readonly [number, number];
 
 interface Literal {
   readonly edited: string;
   readonly undone: string;
-  readonly restored: number;
-  readonly caret: number;
+  readonly undoAt: number;
+  readonly redoAt: number;
 }
 
 const PEER_AT: Record<Peer, number | null> = { none: null, inside: 2, before: 0, after: 4 };
-const INSERT: Record<Kind, string> = { delete: "", replace: "Z", composition: "β" };
+const INSERT: Record<Kind, string> = { delete: "", replace: "Z", composition: "β", "same end": "Zc", "same end composition": "Zc" };
 
-const UNDONE: Record<Peer, { readonly undone: string; readonly restored: number }> = {
-  none: { undone: "abcd", restored: 3 },
-  inside: { undone: "abXcd", restored: 4 },
-  before: { undone: "Xabcd", restored: 4 },
-  after: { undone: "abcdX", restored: 3 }
+const UNDONE: Record<Peer, { readonly undone: string; readonly undoAt: number }> = {
+  none: { undone: "abcd", undoAt: 3 },
+  inside: { undone: "abXcd", undoAt: 4 },
+  before: { undone: "Xabcd", undoAt: 4 },
+  after: { undone: "abcdX", undoAt: 3 }
 };
+
+const SAME_END: Record<Peer, number> = { none: 2, inside: 4, before: 3, after: 2 };
 
 function literal(kind: Kind, peer: Peer): Literal {
   const typed = INSERT[kind];
   const edited = { none: "a" + typed + "d", inside: "a" + typed + "Xd", before: "Xa" + typed + "d", after: "a" + typed + "dX" }[peer];
-  return { edited, ...UNDONE[peer], caret: (peer === "before" ? 2 : 1) + typed.length };
+  if (typed.length > 1) return { edited, undone: UNDONE[peer].undone, undoAt: SAME_END[peer], redoAt: SAME_END[peer] };
+  return { edited, ...UNDONE[peer], redoAt: (peer === "none" || peer === "after" ? 1 : 2) + typed.length };
 }
 
 interface Opened {
@@ -79,7 +82,7 @@ function checks(page: Opened) {
   };
   const all = (): string[] => [text(h.a), text(h.b), text(h.c)];
   const cycle = (expected: Literal, caret: Caret): void => {
-    const restored: Caret = [expected.restored, expected.restored];
+    const restored: Caret = [expected.undoAt, expected.undoAt];
     h.queue.flush("D1"); h.join();
     assert.deepEqual(all(), [expected.edited, expected.edited, expected.edited]);
     assert.equal(peerCaret(), expected.edited.indexOf("d"));
@@ -92,7 +95,7 @@ function checks(page: Opened) {
   return { peer, cycle };
 }
 
-for (const kind of ["delete", "replace", "composition"] as const) for (const peer of Object.keys(PEER_AT) as Peer[]) for (const order of ["D1", "D3"] as const) {
+for (const kind of ["delete", "replace", "composition", "same end", "same end composition"] as const) for (const peer of Object.keys(PEER_AT) as Peer[]) for (const order of ["D1", "D3"] as const) {
   for (const backward of [false, true]) {
     if (backward && peer !== "inside") continue;
     test(`Writer undo leaves the caret after what came back, as standalone does, ${kind}${backward ? " backward" : ""}, peer ${peer}: ${order}`, () => {
@@ -102,7 +105,7 @@ for (const kind of ["delete", "replace", "composition"] as const) for (const pee
       try {
         const c = checks(page), at = PEER_AT[peer], typed = INSERT[kind], [from, to] = backward ? [3, 1] : [1, 3];
         const during = order === "D3" ? () => { c.peer(at); } : undefined;
-        if (kind === "composition") {
+        if (kind.endsWith("composition")) {
           w.start(from, to);
           assert.equal(w.native(from, to, typed, undefined, "insertCompositionText"), true);
           during?.();
@@ -110,7 +113,7 @@ for (const kind of ["delete", "replace", "composition"] as const) for (const pee
         } else assert.equal(w.native(from, to, typed, during, kind === "delete" ? "deleteContentBackward" : "insertText"), true);
         if (order === "D1") c.peer(at);
         const expected = literal(kind, peer);
-        c.cycle(expected, [expected.caret, expected.caret]);
+        c.cycle(expected, [expected.redoAt, expected.redoAt]);
         assert.deepEqual(w.reports, []);
       } finally { page.close(); }
     });
@@ -125,11 +128,11 @@ for (const order of ["D1", "D3"] as const) test(`Writer typing at a caret: undo 
     const c = checks(page);
     assert.equal(w.native(1, 1, "Z", order === "D3" ? () => { c.peer(0); } : undefined), true);
     if (order === "D1") c.peer(0);
-    c.cycle({ edited: "XaZbcd", undone: "Xabcd", restored: 2, caret: 3 }, [3, 3]);
+    c.cycle({ edited: "XaZbcd", undone: "Xabcd", undoAt: 2, redoAt: 3 }, [3, 3]);
   } finally { page.close(); }
 });
 
-for (const kind of ["delete", "replace"] as const) for (const peer of ["none", "inside"] as const) for (const order of ["D1", "D3"] as const) {
+for (const kind of ["delete", "replace", "same end"] as const) for (const peer of ["none", "inside"] as const) for (const order of ["D1", "D3"] as const) {
   test(`Split cell undo leaves the caret after what came back, as standalone does, ${kind}, peer ${peer}: ${order}`, () => {
     let split: ReturnType<typeof bufferedSplit> | null = null;
     const page = withUndo(undo => { split = bufferedSplit([{ id: "R1", text: "abcd" }, { id: "R2", text: "ef" }], true, { undo }); return { h: split.h, session: split.a.session, close: split.close }; });
@@ -139,8 +142,23 @@ for (const kind of ["delete", "replace"] as const) for (const peer of ["none", "
       assert.equal(s.key("R1", 1, 3, kind === "delete" ? "deleteContentBackward" : "insertText", typed || null, order === "D3" ? { during: () => { c.peer(at); } } : {}), true);
       if (order === "D1") c.peer(at);
       const expected = literal(kind, peer);
-      c.cycle(expected, [expected.caret, expected.caret]);
+      c.cycle(expected, [expected.redoAt, expected.redoAt]);
       assert.deepEqual(s.reports, []);
     } finally { page.close(); }
   });
 }
+
+test("Writer: one typing group of typing and two forward Deletes undoes to the end of the whole change, as standalone does", () => {
+  let writer: ReturnType<typeof bufferedWriter> | null = null;
+  const page = withUndo(undo => { writer = bufferedWriter("abcd", true, undefined, undefined, { undo }); return { h: writer.h, session: writer.a.session, close: writer.close }; });
+  const w = writer as ReturnType<typeof bufferedWriter> | null; assert.ok(w);
+  try {
+    const c = checks(page);
+    assert.equal(w.native(1, 1, "Z"), true);
+    assert.equal(w.native(2, 3, "", undefined, "deleteContentForward"), true);
+    assert.equal(w.native(2, 3, "", undefined, "deleteContentForward"), true);
+    assert.equal(page.owner().sizes().undo, 1);
+    c.cycle({ edited: "aZd", undone: "abcd", undoAt: 3, redoAt: 2 }, [2, 2]);
+    assert.deepEqual(w.reports, []);
+  } finally { page.close(); }
+});

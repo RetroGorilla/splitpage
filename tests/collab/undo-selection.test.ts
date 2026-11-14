@@ -2,7 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../adapters/collab/stage1-executor-support.ts";
 import { adapterReplica, sharedHarness } from "../application/session/shared-session-support.ts";
-import { createSharedBufferedText } from "../../src/adapters/collab/buffer.ts";
+import { createSharedBufferedText, sharedBufferedTarget } from "../../src/adapters/collab/buffer.ts";
+import { replicas, operation } from "../adapters/collab/executor-support.ts";
+import { registerSharedJoinHandlers } from "../../src/adapters/collab/join-executor.ts";
+import { registerSharedTextOperationHandlers } from "../../src/adapters/collab/text-executor.ts";
+import { executeSharedOperations } from "../../src/adapters/collab/execute.ts";
+import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
+import { beatPos } from "../../src/core/flow/flow.ts";
 import { resolveSharedBufferedSelection } from "../../src/adapters/collab/buffer-selection.ts";
 import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { resolveSharedAnchor } from "../../src/adapters/collab/anchors.ts";
@@ -20,25 +26,32 @@ type Caret = readonly [number, number];
 interface Literal {
   readonly edited: string;
   readonly undone: string;
-  readonly restored: number;
-  readonly caret: number;
+  readonly undoAt: number;
+  readonly redoAt: number;
 }
 
 const ORDERS: readonly Order[] = ["D1", "rev", "dup", "D3"];
 const PEER_AT: Record<Peer, number | null> = { none: null, inside: 2, before: 0, after: 4 };
 
 const DELETE: Record<Peer, Literal> = {
-  none: { edited: "ad", undone: "abcd", restored: 3, caret: 1 },
-  inside: { edited: "aXd", undone: "abXcd", restored: 4, caret: 1 },
-  before: { edited: "Xad", undone: "Xabcd", restored: 4, caret: 2 },
-  after: { edited: "adX", undone: "abcdX", restored: 3, caret: 1 }
+  none: { edited: "ad", undone: "abcd", undoAt: 3, redoAt: 1 },
+  inside: { edited: "aXd", undone: "abXcd", undoAt: 4, redoAt: 2 },
+  before: { edited: "Xad", undone: "Xabcd", undoAt: 4, redoAt: 2 },
+  after: { edited: "adX", undone: "abcdX", undoAt: 3, redoAt: 1 }
 };
 
 const REPLACE: Record<Peer, Literal> = {
-  none: { edited: "aZd", undone: "abcd", restored: 3, caret: 2 },
-  inside: { edited: "aZXd", undone: "abXcd", restored: 4, caret: 2 },
-  before: { edited: "XaZd", undone: "Xabcd", restored: 4, caret: 3 },
-  after: { edited: "aZdX", undone: "abcdX", restored: 3, caret: 2 }
+  none: { edited: "aZd", undone: "abcd", undoAt: 3, redoAt: 2 },
+  inside: { edited: "aZXd", undone: "abXcd", undoAt: 4, redoAt: 3 },
+  before: { edited: "XaZd", undone: "Xabcd", undoAt: 4, redoAt: 3 },
+  after: { edited: "aZdX", undone: "abcdX", undoAt: 3, redoAt: 2 }
+};
+
+const REPLACE_SAME_END: Record<Peer, Literal> = {
+  none: { edited: "aZcd", undone: "abcd", undoAt: 2, redoAt: 2 },
+  inside: { edited: "aZcXd", undone: "abXcd", undoAt: 4, redoAt: 4 },
+  before: { edited: "XaZcd", undone: "Xabcd", undoAt: 3, redoAt: 3 },
+  after: { edited: "aZcdX", undone: "abcdX", undoAt: 2, redoAt: 2 }
 };
 
 function world() {
@@ -80,7 +93,7 @@ function world() {
 
 function run(name: string, insert: string, literals: Record<Peer, Literal>): void {
   for (const peer of Object.keys(PEER_AT) as Peer[]) for (const order of ORDERS) test(`undo selection, ${name}, peer ${peer}: ${order}`, () => {
-    const w = world(), literal = literals[peer], restored: Caret = [literal.restored, literal.restored];
+    const w = world(), literal = literals[peer], restored: Caret = [literal.undoAt, literal.undoAt];
     try {
       const own = w.peerCaret();
       w.edit(insert, PEER_AT[peer], order);
@@ -88,7 +101,7 @@ function run(name: string, insert: string, literals: Record<Peer, Literal>): voi
       assert.equal(w.peerCaret(), literal.edited.indexOf("d"));
       assert.deepEqual([w.step(w.actions.undo()), w.all()], [restored, [literal.undone, literal.undone, literal.undone]]);
       assert.equal(w.peerCaret(), literal.undone.indexOf("d"));
-      assert.deepEqual([w.step(w.actions.redo()), w.all()], [[literal.caret, literal.caret], [literal.edited, literal.edited, literal.edited]]);
+      assert.deepEqual([w.step(w.actions.redo()), w.all()], [[literal.redoAt, literal.redoAt], [literal.edited, literal.edited, literal.edited]]);
       assert.deepEqual([w.step(w.actions.undo()), w.all()], [restored, [literal.undone, literal.undone, literal.undone]]);
       assert.deepEqual([own, w.peerCaret(), w.owner.sizes()], [3, literal.undone.indexOf("d"), { undo: 0, redo: 1, dropped: 0 }]);
     } finally { w.close(); }
@@ -97,6 +110,24 @@ function run(name: string, insert: string, literals: Record<Peer, Literal>): voi
 
 run("delete a selection", "", DELETE);
 run("replace a selection", "Z", REPLACE);
+run("replace a selection keeping its last character", "Zc", REPLACE_SAME_END);
+
+test("undo selection, one typing group of typing and two forward Deletes puts the caret at the end of the whole change", () => {
+  const w = world();
+  try {
+    for (const [from, to, insert, after] of [[1, 1, "Z", "aZbcd"], [2, 3, "", "aZcd"], [2, 3, "", "aZd"]] as const) {
+      const base = readSharedPaintedText(w.h.a, w.h.target("R1")); assert.ok(base);
+      const open = w.port.open("R1", base); assert.ok(open);
+      open.replace(from, to, insert);
+      assert.equal(open.commit([{ text: after, marks: {} }]).kind, "applied");
+    }
+    w.h.queue.flush("D1"); w.h.join();
+    assert.deepEqual([w.all(), w.owner.sizes()], [["aZd", "aZd", "aZd"], { undo: 1, redo: 0, dropped: 0 }]);
+    assert.deepEqual([w.step(w.actions.undo()), w.all()], [[3, 3], ["abcd", "abcd", "abcd"]]);
+    assert.deepEqual([w.step(w.actions.redo()), w.all()], [[2, 2], ["aZd", "aZd", "aZd"]]);
+    assert.deepEqual([w.step(w.actions.undo()), w.all()], [[3, 3], ["abcd", "abcd", "abcd"]]);
+  } finally { w.close(); }
+});
 
 for (const order of ORDERS) test(`undo selection, typing at a caret: undo leaves the caret before the typing, redo after it: ${order}`, () => {
   const w = world();
@@ -127,4 +158,35 @@ test("undo selection, rule 90: a used-up step moves no caret, and the step befor
     assert.deepEqual(w.actions.undo(), { ok: true, effective: false, label: "typing", selection: null, reason: "used-up" });
     assert.deepEqual([w.step(w.actions.undo()), w.all(), w.owner.sizes()], [[3, 3], ["abcd", "abcd", "abcd"], { undo: 0, redo: 1, dropped: 0 }]);
   } finally { w.close(); }
+});
+
+test("undo selection, a deletion across a join puts the caret at the end of the change in the joined row", () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }] });
+  for (const handle of [set.a, set.b]) { registerSharedJoinHandlers(handle); registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle); }
+  let reversals = 0;
+  const owner = sharedUndoOwner(set.a, () => ({ id: "undo" + ++reversals, by: "Alice" }), () => 0, error => { throw error; });
+  const harness = sharedHarness(adapterReplica(set.a, owner));
+  try {
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "join", id: "join", by: "Alice", from: "R2", into: "R1", glue: " " })]), { ok: true });
+    set.queue.flush("D1");
+    const port = createSharedBufferedText(set.a, harness.session, { target: id => sharedBufferedTarget(set.a, id), author: () => ({ id: "buffer", by: "Alice" }),
+      readers: bufferReaders, stamps: bufferStamps("Alice") });
+    const painted = readSharedPaintedText(set.a, sharedBufferedTarget(set.a, "R1")); assert.ok(painted);
+    assert.equal(painted.text, "abcd ef");
+    const open = port.open("R1", painted); assert.ok(open);
+    open.replace(2, 6, "");
+    assert.equal(open.commit([{ text: "abf", marks: {} }]).kind, "applied");
+    const actions = sharedUndoActions(harness.session, owner);
+    const rows = (handle: SharedDocumentHandle) => projectSharedDocumentWithRecovery(handle).document.rows.map(row => row.audioText);
+    const step = (outcome: SharedUndoOutcome): unknown => {
+      set.queue.flush("D1");
+      assert.ok(outcome.ok && outcome.effective && outcome.selection, JSON.stringify(outcome));
+      if (!outcome.ok || !outcome.effective || !outcome.selection) return null;
+      return [resolveSharedBufferedSelection(set.a, [outcome.selection.anchor, outcome.selection.focus]), rows(set.a), rows(set.b)];
+    };
+    const at = (offset: number) => ({ anchor: beatPos("R1", offset), head: beatPos("R1", offset) });
+    assert.deepEqual(step(actions.undo()), [at(6), ["abcd ef"], ["abcd ef"]]);
+    assert.deepEqual(step(actions.redo()), [at(2), ["abf"], ["abf"]]);
+    assert.deepEqual(step(actions.undo()), [at(6), ["abcd ef"], ["abcd ef"]]);
+  } finally { harness.session.dispose(); set.close(); }
 });

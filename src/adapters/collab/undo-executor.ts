@@ -16,6 +16,8 @@ import { scalarTarget } from "./scalar-executor.ts";
 import { sharedStampOperation } from "./stamp.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit, sharedAnchorCharacterEnd } from "./anchors.ts";
+import { readSharedPaintedText } from "./paint-base.ts";
+import type { PaintedText } from "../../application/editing/ports.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
@@ -363,6 +365,7 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
     if (error instanceof SharedUndoRefusal) return { ok: false, reason: error.message };
     throw error;
   }
+  const shown = record.caretText ? readSharedPaintedText(handle, record.caretText) : null;
   if (operations.length) {
     const result = executeSharedOperations(handle, operations, { origin: "local-undo" });
     if (!result.ok) return { ok: false, reason: result.reason };
@@ -375,17 +378,25 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   };
   const parts = planned.map(plan => plan.inverse(after));
   const inverse = parts.map(part => part.part);
-  // why: as standalone caretAfterStep, the caret lands after the last character the step brought back
-  return { ok: true, effective: parts.some(part => part.effective), selection: record.caretAfterRestored ? restoredCaret(inverse) ?? record.selection : record.selection,
-    inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretAfterRestored ? { caretAfterRestored: true } : {} } };
+  const caret = record.caretText ? stepCaret(shown, readSharedPaintedText(handle, record.caretText)) : null;
+  return { ok: true, effective: parts.some(part => part.effective), selection: caret ?? record.selection,
+    inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };
 }
 
-function restoredCaret(parts: readonly SharedUndoPart[]): SharedUndoSelection | null {
-  const restored = parts.filter(part => part.kind === "text" && part.inserted.length > 0);
-  const only = restored.length === 1 ? restored[0] : undefined;
-  const last = only?.kind === "text" ? only.inserted.at(-1) : undefined;
-  const end = last ? sharedAnchorCharacterEnd(last) : null;
-  return end ? { anchor: end, focus: end } : null;
+// why: as standalone caretAfterStep, the caret goes to the end of the visible change: before the row's unchanged suffix
+function stepCaret(before: PaintedText | null, after: PaintedText | null): SharedUndoSelection | null {
+  if (!before || !after || before.text === after.text) return null;
+  const a = before.text, b = after.text;
+  let same = 0;
+  while (same < a.length && same < b.length && a[a.length - 1 - same] === b[b.length - 1 - same]) same++;
+  let offset = b.length - same;
+  if (offset > 0 && offset < b.length) {
+    const high = b.charCodeAt(offset - 1), low = b.charCodeAt(offset);
+    if (high >= 0xD800 && high <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF) offset--;
+  }
+  const previous = offset > 0 ? after.identity(offset - 1) : null;
+  const caret = (previous ? sharedAnchorCharacterEnd(previous) : null) ?? after.identity(offset) ?? (offset === b.length ? after.endGap ?? null : null);
+  return caret ? { anchor: caret, focus: caret } : null;
 }
 
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
@@ -539,5 +550,5 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     }
   }
   return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing,
-    ...description.caretAfterRestored ? { caretAfterRestored: true } : {} } : null };
+    ...description.caretText ? { caretText: description.caretText } : {} } : null };
 }

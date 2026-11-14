@@ -47,7 +47,7 @@ function typingDescription(handle: SharedDocumentHandle, target: SharedTextAddre
     ? createSharedAnchor(handle, target, first.from, "after")
     : preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null;
   const selection = anchor ? { anchor, focus: anchor } : null, typing = commit.splices.map(splice => splice.insert).join("");
-  return cell ? { label: SHARED_TYPING_LABEL, selection, typing, caretAfterRestored: true } : { label: SHARED_TYPING_LABEL, selection, typing };
+  return cell ? { label: SHARED_TYPING_LABEL, selection, typing, caretText: target } : { label: SHARED_TYPING_LABEL, selection, typing };
 }
 
 export function createSharedBufferedText(
