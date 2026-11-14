@@ -173,30 +173,74 @@ counters of D19 and D20 (Q1).
 
 ### Order of entering
 
-`enterSharedSession()` in a new module `src/bootstrap/wiring/shared-session.ts`:
+`enterSharedSession()` in a new module `src/bootstrap/wiring/shared-session.ts`.
+The bridge adopts a shared owner only before it is hydrated (assumed rule of
+#1551: `adoptShared` refuses an owner that already holds a document, so the
+app's listeners hear the adopt change of hydration), so hydration comes after the
+replacement, in the same task:
 
 1. Refuse, with a named reason and no change, while: startup has not settled
    (Q3); a composition is in progress on the Writer or Split surface; a draft
    restore is pending (Q5); a transition is between capture and landing.
 2. Settle the standalone side: commit focused typing through the existing
-   standalone path and flush the standalone undo group. Captured file writes
-   are not awaited or cancelled (D4).
-3. Read the current document once (`currentDocument()`), create the handle,
-   register every handler family (D22), hydrate (`hydrateSharedDocument`) with
-   the `docId` of Q4.
-4. Build the replica, the shared undo owner (D32) and the shared session with
-   `createSessionCapabilities("shared", common)`, the shared entry (D1) and the
-   old owner's counters as `after` (D37).
-5. Replace the current owner through the generalised replacement boundary (D3):
-   the old standalone owner is disposed, the standalone undo owner is reset
-   (`adopt(null)` clears its history, `src/application/editing/undo/undo.ts:133`;
-   it hears nothing while shared, since the shared session's undo port has only
-   `record`), the destination is detached and pending autosave cancelled (D4),
-   the numbering subscription moves to the new owner (D36), and
-   `announceReplaced` runs.
-6. Stop the Writer and start it again with `bufferedText` and `paintedText`;
+   standalone path and flush the standalone undo group, including the undo
+   owner's pending note. A `noteEdit()` without a selection queues a microtask
+   flush (`src/application/editing/undo/undo.ts:162`) that throws as an
+   unhandled rejection if `adoptShared` runs in the same task, so entering
+   continues only after that flush has run. Captured file writes are not awaited
+   or cancelled (D4).
+3. Read the current document once (`currentDocument()`) and keep a mutable copy:
+   after `adoptShared` it answers `null` until hydration, and the copy is what
+   a failed hydration goes back to.
+4. Create the handle and register every handler family (D22), with nothing
+   hydrated. Build the replica (at revision 0) and the shared undo owner (D32).
+5. Replace the current owner with `adoptShared(build, capability)` (D3), the
+   capability being `createSessionCapabilities("shared", common)`. `build`
+   creates the shared session from the ports the bridge hands it, passing
+   `ports.entry` (D1), `ports.capability` and `ports.after`, the old owner's
+   counters (D37). The bridge disposes the standalone owner, moves numbering and
+   the app's listeners to the new owner (D36) and runs `announceReplaced`.
+6. Detach the destination and cancel pending autosave (D4), reset the standalone
+   undo owner (`adopt(null)` clears its history,
+   `src/application/editing/undo/undo.ts:133`; it hears nothing while shared,
+   since the shared session's undo port has only `record`), and clear the merge
+   base (`holdMergeBase(null)`).
+7. Stop the Writer and start it again with `bufferedText` and `paintedText`;
    turn off the old Split handlers (D16, D17) and mount `mountSharedSplitBuffer`.
-7. Paint the whole document (the replacement's `adopt` change).
+8. Hydrate (`hydrateSharedDocument`) with the `docId` of Q4, synchronously, in
+   the same task as step 5. Its adopt change paints the whole document and opens
+   the new epoch (D37). Nothing is painted empty in between, since no frame runs
+   inside the task, and nothing is saved: the shared owner's effects hold no
+   standalone save.
+
+### Duties of C4 found in the review of #1551
+
+- **Hydration fails.** If step 8 throws, leave back to the copy kept in step 3
+  through the leaving order. Today the stale DOM would stay and every command
+  would be rejected with `no document`.
+- **Leaving passes a clone.** Leaving step 3 hands `adoptReplacement` a copy of
+  the projection, never the frozen projection itself: `adoptReplacement` runs it
+  through `migrateRows` after the shared owner is already disposed, and
+  `migrateRows` throws `TypeError` on a frozen object.
+- **Undo goes to the shared owner.** The app's undo owner
+  (`src/application/editing/undo/undo.ts:219`: `flush`, `held`,
+  `heldDocument`) throws while shared before the bridge's rejected outcome is
+  reachable, so Ctrl+Z would fail with nothing shown. While shared the undo and
+  redo actions are routed to the shared undo owner (D32 (e)); the bridge's
+  `held` keeps refusing (assumed rule of #1551: no silent no-op).
+- **A draft restore across the switch.** A literal for a draft restore whose
+  `awaitUndoPoint` was captured before entering and lands after it:
+  `src/application/session/apply-merge.ts:133` calls `current()`, which throws
+  while shared, so `keptForNextLaunch()` never runs.
+
+Found in the same review, for other cuts:
+
+- **C8.** `src/application/identity/document-identity.ts:92` ignores the
+  rejected outcome of its stamp after a `BroadcastChannel` message from another
+  tab with the same `docId`, then marks the document not written out and shows
+  "It now has its own version history", which is false while shared.
+- **C5c.** `src/features/tags/production-tags.ts:142` skips registry healing
+  when its stamp is refused and then runs `plan.commit()` anyway.
 
 ### Order of leaving
 
@@ -206,8 +250,8 @@ counters of D19 and D20 (Q1).
    (`buffer-composition`) or a recovery write was refused and its hold kept.
 2. Unmount the Split cell buffer and restore the old handlers; stop the Writer
    and start it again without the shared ports.
-3. Take the projection, run it through `migrateRows` (the standalone entry),
-   and replace the owner with a standalone one with standalone capabilities and
+3. Take a copy of the projection, never the frozen projection itself, run it
+   through `migrateRows` (the standalone entry), and replace the owner with a standalone one with standalone capabilities and
    the shared owner's counters (D37). The shared undo owner is dropped (D34);
    the b-roll reconciler is resynced with the whole document (D36).
 4. Dispose the replica and destroy the handle.
@@ -238,7 +282,7 @@ must be merged or answered first.
 | C1 Handlers and author | One adapter function that registers every handler family on a handle (D22, the registration half of D23); the author port (D24) in `src/bootstrap/wiring/ports/`, answering null in a standalone session | Package 10's remaining structure undo handlers if they add a family | A literal table of registered operation kinds against the `SharedOperation` kind union; a seeded list of each kind runs on a handle built by this function; mutant: one family left out |
 | C2 Undo seam | D32: `SharedPlan` gains the description; the replica's `execute` runs `executeSharedCommand` and hands the record to `SharedUndo.perform`; `undo: false` honoured; `breakGroup` triggers; undo and redo admitted through `beforeCommand`, then `reverseSharedUndoRecord`; a shared undo port for the undo actions; the decision of Q10 | C1; package 10 (the owner and executor; the last structure cuts only widen `supports`); Q10 | Session tests with the real owner: type, remote change, undo, redo (decided rows of [stage-2-shared-undo.md](stage-2-shared-undo.md)); undo with typing open commits it first; recovery write records nothing; mutants: record dropped, record taken twice, undo skipping admission. No typing-path change in standalone |
 | C3 Entry and bridge | D1, D2, D31: the shared entry. D3, D6, D36, D37: `session-owner.ts` holding either owner, the replacement boundary generalised, standalone-only members and the undo route refusing by name, per-owner subscriptions and counters. D7 checked. A `sharedSession()` reader that answers whether the current owner is shared | Package 12 (#1532 merged); the `dirty` part of Q6 | `shared-session-replicas.test.ts` minted-shot limit changes visibly; one bridge test per refusing member including the undo route; `standalone-typed-callers`, `standalone-held-callers` and `writable-read-callers` counts unchanged or reduced; `export-ab` identical |
-| C4 Switch module | `src/bootstrap/wiring/shared-session.ts` with enter and leave in the order of section 4, without the bindings (step 6 and leaving step 2 are ports filled by C6 and C7); the in-page peer with D38; D8 as Q6 decides; `mountSharedSessionFeature` in `main.ts` registering nothing yet; `MOUNT_ORDER` updated | C1, C2, C3; package 13 (merged); Q3, Q4, Q5, the `dirty` part of Q6 | The order test; refusals of step 1 each as a literal; D4 and D5 against `save/session-replacement.test.ts`; D15a to D15c; rule 26 literal: a decline at the bound, then release, and the declined update arrives; mutant: detach after replacement |
+| C4 Switch module | `src/bootstrap/wiring/shared-session.ts` with enter and leave in the order of section 4 and the C4 duties listed there, without the bindings (step 7 and leaving step 2 are ports filled by C6 and C7); the in-page peer with D38; D8 as Q6 decides; `mountSharedSessionFeature` in `main.ts` registering nothing yet; `MOUNT_ORDER` updated | C1, C2, C3; package 13 (merged); Q3, Q4, Q5, the `dirty` part of Q6 | The order test; refusals of step 1 each as a literal; D4 and D5 against `save/session-replacement.test.ts`; D15a to D15c; rule 26 literal: a decline at the bound, then release, and the declined update arrives; mutant: detach after replacement |
 | C5a Flow commands | `flowCommand` copies `FlowEdit.ops` into `Plan.shared` when its ports carry an operations request; the Writer command ports pass the request only when the author port answers (C1, so never in standalone). The beat stamp step comes through a port built in the wiring from `sharedBeatStamp`, because `src/application` may not import `src/adapters` | C1, C3; Q11 | The flow differential suites unchanged; one literal per flow command on a shared session; the rule 31 tests whose expected refusal changes, changed visibly; standalone `perf-ab` typing, new scene, delete and undo rows, because `flowCommand` is on the typing path |
 | C5b Structure and values | Shared lists for the "serve" rows: split, join, add and delete beat, remove beats, remove scene, status, beat length, target length, words per minute | C1, C3; package 10 for their undo (refused where not built) | One literal per builder on a shared session and through the undo owner; standalone tests of each builder unchanged |
 | C5c Records and comments | Shared lists for the b-roll and production record builders, and for comment delete and unwrap; comment features pass the author (D26) | C1, C3; package 8 | One literal per builder; rule 54 cases through the real command; stamp rule 49 through the real command |
