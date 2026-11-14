@@ -56,6 +56,7 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
   const a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
   const { effects: bufferEffects, reports, missing, recovered } = fakeWriterBufferEffects();
   const { effects, notices } = fakeFlowCommandEffects(), guard = createPaintGuard();
+  const unexpected: string[] = [];
   const documentView = () => a.session.read(doc => doc);
   const author = sharedAuthorPort({ handle: () => h.a, name: () => "Alice" });
   const shared = sharedBufferPorts(h.a, a.session, { ...bufferEffects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => { const request = author.next(); assert.ok(request); return request; } });
@@ -66,10 +67,10 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
     heldSelection: createEditorSelection({ epoch: a.session.epoch, order: () => [], keys: () => null }),
     decode: fromHtml, storedHtml: html => html, run: a.session.run, shown: guard.whileShown, editingBlocked: () => guard.painting(),
     text: { cells: fromHtml, ...bufferStamps("Alice") },
-    wholeFieldText: { commit: () => { throw new Error("Shared visual reached standalone whole-field synchronization"); } },
-    visualInput: () => { throw new Error("Shared visual reached standalone record creators"); },
-    visualLeave: () => { throw new Error("Shared visual reached standalone leave creators"); },
-    visualKeydown: () => { throw new Error("Shared visual reached standalone key handlers"); }
+    wholeFieldText: { commit: () => { unexpected.push("whole-field"); return { kind: "rejected", reason: "unexpected-whole-field" }; } },
+    visualInput: () => { unexpected.push("visual-input"); },
+    visualLeave: () => { unexpected.push("visual-leave"); },
+    visualKeydown: () => { unexpected.push("visual-keydown"); return false; }
   });
   writer.repaint();
   const stop = a.session.subscribe(() => { if (!guard.shown()) writer.repaint(); });
@@ -94,6 +95,7 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
     return true;
   }
   function agrees(value: unknown) {
+    assert.deepEqual(unexpected, []);
     h.queue.flush(order);
     const late = createMonitoredSharedDocument(); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
     const c = sharedHarness(adapterReplica(late));
@@ -128,10 +130,10 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
     const otherShared = sharedBufferPorts(h.b, b.session, { ...bufferEffects, readers: bufferReaders, stamps: bufferStamps("Bob"), author: () => { const next = otherAuthor.next(); assert.ok(next); return next; } });
     const doc = () => { const view = b.session.read(doc => doc); assert.ok(view); return view; };
     const at = { anchor: beatPos("R1", 0), head: beatPos("R1", 0) };
-    const forbidden = () => { throw new Error("Shared visual reached a standalone callback"); };
+    const forbidden = () => { unexpected.push("other-standalone"); };
     const box = createFlowVisualBox({ root: otherRoot, buffer: writerVisualBuffer(otherShared, { document: doc, lifetime: b.session, decode: fromHtml, storedHtml: html => html, shown: otherGuard.whileShown }),
       doc, selection: () => at, prepare: range => range, place: () => {}, current: () => true, blocked: () => otherGuard.painting(),
-      plainVisual: () => "", thumbnails: () => "", save: forbidden, input: forbidden, leave: forbidden, keydown: forbidden,
+      plainVisual: () => "", thumbnails: () => "", save: () => { forbidden(); return null; }, input: forbidden, leave: forbidden, keydown: () => { forbidden(); return false; },
       notice: forbidden, undo: forbidden, paste: forbidden });
     const stopOther = b.session.subscribe(() => { if (!otherGuard.shown()) box.refresh(); });
     box.open(at);
@@ -141,7 +143,10 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "") {
     return { key: (from: number, to: number, data: string) => input(target, from, to, data, "insertText", undefined, false) };
   }
   return { h, a, b, writer, root, cell, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, otherVisual, reports, missing, recovered, notices, guard,
-    close: () => { splitClose?.(); stop(); writer.dispose(); a.session.dispose(); b.session.dispose(); h.close(); root.parentElement?.remove(); document.querySelector(".writer-bar")?.remove(); } };
+    close: () => {
+      try { splitClose?.(); stop(); writer.dispose(); assert.deepEqual(unexpected, []); }
+      finally { a.session.dispose(); b.session.dispose(); h.close(); root.parentElement?.remove(); document.querySelector(".writer-bar")?.remove(); }
+    } };
 }
 
 for (const literal of [
