@@ -154,17 +154,22 @@ function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress)
   const scope = target.collection === "tags" ? "tag" : target.collection === "shots" ? "shot" : null;
   // why: a status is set by events beside the fields, so the status the record shows is read with them.
   if (scope) fields.status = readSharedStatus(handle, { scope, record: target.record as SharedContentRef } as SharedStatusEvent["target"]);
-  // why: props are read with their rank and written without it; a record is kept in the form a command writes.
-  if (Array.isArray(fields.props)) fields.props = fields.props.map(prop => {
-    const read = (prop as { readonly fields: SharedJsonFields }).fields;
-    return Object.fromEntries(Object.entries(read).filter(([field]) => field !== "rank" && field !== "extra"));
-  });
+  // why: props and links are read with their rank and written without it; a record is kept in the form a command writes.
+  for (const nested of ["props", "links"] as const) {
+    const entries = fields[nested];
+    if (Array.isArray(entries)) fields[nested] = entries.map(entry => {
+      const read = (entry as { readonly fields: SharedJsonFields }).fields;
+      return Object.fromEntries(Object.entries(read).filter(([field]) => field !== "rank" && field !== "extra"));
+    });
+  }
   return fields;
 }
 
 function recordNow(handle: SharedDocumentHandle, part: { readonly kind: string; readonly target: SharedRecordAddress }): SharedJsonFields | null {
-  // why: gallery slots and visuals are parts of a beat, so their undo comes with the structure commands.
-  if (!SHARED_UNDO_RECORDS.includes(part.target.collection)) throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
+  // why: a visual and a picture's creation or removal are parts of a beat; their undo comes with the structure commands.
+  if (!SHARED_UNDO_RECORDS.includes(part.target.collection) && !(part.target.collection === "gallery" && part.kind === "record-field")) {
+    throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
+  }
   return recordFields(handle, part.target);
 }
 
