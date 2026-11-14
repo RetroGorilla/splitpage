@@ -60,7 +60,7 @@ function storeTree(value: unknown): unknown {
   return (value instanceof Y.Text ? sharedJson(value.toDelta()) : value instanceof Y.Array ? sharedJson(value.toArray()) : sharedJson(value)) ?? null;
 }
 
-// why: the stored document is walked through its own maps, the planned one through the three questions; both give one tree.
+// why: the stored document is walked through its own maps, the planned one through the view; both give one tree.
 function canonical(view: SharedSplitReadView, path: readonly string[], skip: (key: string, value: unknown) => boolean = () => false): unknown {
   const whole = view.tree?.(path);
   if (whole !== undefined) return whole && typeof whole === "object" && !Array.isArray(whole)
@@ -97,8 +97,8 @@ interface SharedSplitWatchedPart {
 const inSegment = (segment: string | undefined, of: (beat: string) => string | null, candidates: ReadonlySet<string>) =>
   segment === undefined ? [] : [...candidates].filter(beat => of(beat) === segment);
 
-// why: one table says what an undone split watches, as the new beat is now, read by every reader and by the planned state
-// of an operation list; each part is read for all marked beats at once, so a text or a collection is walked once.
+// why: one table says what an undone split watches, as the new beat is now, for every reader and the planned state of a
+// list; each part is read for all marked beats at once, so a text or a collection is walked once.
 export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Object.freeze([
   { name: "record", observe: (view, beats) => new Map([...beats].map(beat => [beat, canonical(view, ["beats", beat], stamped)])),
     staged: ([root, key, field], _segment, candidates) => root === "beats" && key !== undefined && !(field !== undefined && stamped(field)) && candidates.has(key) ? [key] : [] },
@@ -112,7 +112,7 @@ export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Obj
     return found;
   },
   staged: ([root, key, field], segment, candidates) => root === "segments" ? inSegment(key, segment, candidates) : root === "beats" && field === "segment" ? [...candidates] : [] },
-  // why: a boundary read as text joins the block before it, so the undo holds only while that block is still the source beat.
+  // why: a boundary read as text joins the block before it, so the undo holds only while that is the source beat.
   { name: "predecessor", observe: (view, beats, visit) => {
     const found = new Map<string, unknown>(), marked = readSharedSplitMarks({ keys: () => view.keys(["meta"]) });
     for (const segment of new Set([...beats].flatMap(beat => { const of = segmentOf(view, beat); return of === null ? [] : [of]; }))) {
@@ -178,7 +178,7 @@ export function readSharedSplitObservationPart(view: SharedSplitReadView, beats:
   return found.observe(view, beats, visit);
 }
 
-// why: the hold is judged on the new beat as it is now (assumed rule 103): a change taken back leaves it as the undo saw it.
+// why: the hold is judged on the new beat as it is now (rule 103): a change taken back leaves it as the undo saw it.
 export function composeSharedSplitObservation(parts: readonly SharedSplitObservations[], beat: string): string {
   return JSON.stringify(parts.map(part => part.get(beat) ?? null));
 }

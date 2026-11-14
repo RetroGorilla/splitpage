@@ -794,14 +794,17 @@ the end of every generated history).
 | Picture undo and redo | `undo-executor.ts` | shown pictures for the undo, the stored picture for the recorder and the redo's retirement |
 | Split and restore guards | `undo-removal.ts` | shown pictures, without the retirement key |
 | Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
+| Undone split watch | `split-retirement.ts` | the stored record, hidden or not, through its read view of the store |
 | Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |
 | Hydration | `hydrate.ts` | writes only |
 | Incremental projection | `incremental-project.ts` | observes changes only |
 | Text targets and scalar fields | `text-target.ts`, `scalar-executor.ts` | other collections only |
 
-The one deliberate exception is identity occupancy: a hidden record is still
+The deliberate exceptions read the stored record whether hidden or not. Identity occupancy: a hidden record is still
 stored, so nothing is created over its key, a removal's undo does not recreate
-it, and a field write addresses it. `tests/adapters/collab/gallery-reads.test.ts`
+it, and a field write addresses it. The undone split watch: a picture added to
+the hidden new beat and then undone stays stored with its retirement, which counts
+as a change to the new beat, so the split stays (declared). `tests/adapters/collab/gallery-reads.test.ts`
 scans the adapter folder for direct reads of the stores and fails on a module not
 in this table.
 

@@ -34,7 +34,7 @@ function storedBoundary(handle: SharedDocumentHandle, beat: string): boolean {
   });
 }
 
-// why: the undo needs the new beat's boundary where the split left it, after the source beat, as the readers' hold does.
+// why: the undo needs the new beat's boundary where the split left it, after the source, as the readers' hold does.
 function shape(handle: SharedDocumentHandle, beat: string): string {
   const view = sharedSplitStoreView(collabState(handle).roots), beats = new Set([beat]);
   return JSON.stringify([readSharedBeatShape(handle, beat), ...(["boundaries", "predecessor"] as const).map(part => readSharedSplitObservationPart(view, beats, part).get(beat) ?? null)]);
