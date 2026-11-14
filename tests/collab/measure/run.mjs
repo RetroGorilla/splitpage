@@ -6,23 +6,23 @@ import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { URL } from "node:url";
 import * as Y from "yjs";
-import { enterSharedDocument } from "../../../../src/core/migrate.ts";
-import { readOperation } from "../../../../src/core/collab/read-operation.ts";
-import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.ts";
-import { createSharedDocument, applySharedUpdate, encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../../src/adapters/collab/document.ts";
-import { CollabDocumentState, collabState, transactCollabState } from "../../../../src/adapters/collab/state.ts";
-import { projectSharedDocument } from "../../../../src/adapters/collab/project.ts";
-import { registerSharedTextOperationHandlers } from "../../../../src/adapters/collab/text-executor.ts";
-import { registerSharedUndoOperationHandlers } from "../../../../src/adapters/collab/undo-handlers.ts";
-import { registerSharedSplitHandlers } from "../../../../src/adapters/collab/split-executor.ts";
-import { registerSharedJoinHandlers } from "../../../../src/adapters/collab/join-executor.ts";
-import { registerSharedRemovalHandlers } from "../../../../src/adapters/collab/removal-executor.ts";
-import { executeSharedCommand, reverseSharedUndoRecord } from "../../../../src/adapters/collab/undo-executor.ts";
-import { executeSharedOperations } from "../../../../src/adapters/collab/execute.ts";
-import { readSharedTextHistory } from "../../../../src/adapters/collab/text-history.ts";
-import { createSharedAnchor } from "../../../../src/adapters/collab/anchors.ts";
-import { inlineStateImages } from "../../../../src/adapters/storage/02c-blobs.ts";
-import { isMain } from "../../../../tools/main-module.mjs";
+import { enterSharedDocument } from "../../../src/core/migrate.ts";
+import { readOperation } from "../../../src/core/collab/read-operation.ts";
+import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { createSharedDocument, applySharedUpdate, encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../src/adapters/collab/document.ts";
+import { CollabDocumentState, collabState, transactCollabState } from "../../../src/adapters/collab/state.ts";
+import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
+import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
+import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
+import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
+import { executeSharedCommand, reverseSharedUndoRecord } from "../../../src/adapters/collab/undo-executor.ts";
+import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
+import { readSharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { inlineStateImages } from "../../../src/adapters/storage/02c-blobs.ts";
+import { isMain } from "../../../tools/main-module.mjs";
 
 const MIB = 1024 ** 2;
 const CAP = 2 * MIB;
@@ -47,7 +47,7 @@ export function scaleFixture(base, copies) {
 }
 
 export function fixtures() {
-  const { fixtures: recorded } = JSON.parse(readFileSync(new URL("../../../../tests/collab/fixtures/projection-reference.json", import.meta.url), "utf8"));
+  const { fixtures: recorded } = JSON.parse(readFileSync(new URL("../fixtures/projection-reference.json", import.meta.url), "utf8"));
   const short = recorded.find(value => value.name === "src/seed-state.json");
   const long = recorded.find(value => value.name === "src/starters/long-demo.json");
   assert.equal(short.appSaved.bytes, 1734); assert.equal(long.appSaved.bytes, 38432);
@@ -285,8 +285,11 @@ export function report(result) {
     const status = (value, limit) => value > limit ? "EXCEEDS" : "within alone";
     lines.push(`| ${row.name} / ${row.phase} | ${added.toFixed(1)} | ${status(p50, added)} | ${status(p50, 8)} | ${status(p95, row.name === "large" ? 40 : 25)} | ${row.runs.some(run => run.current.single.max > 50) ? "yes" : "no"} |`);
   }
-  lines.push("", "| Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB |", "| --- | --- | --- | --- | --- | --- | --- | --- |");
-  for (const row of result.admission) for (const count of [100, 1000]) lines.push(`| ${row.name} / ${row.phase} / ${count} | ${stats(row, r => r.current[count].total)} | ${stats(row, r => r.direct[count].total)} | ${stats(row, r => r.decode[count].total)} | ${stats(row, r => r.batch[count].total)} | ${stats(row, r => r.current[count].total / r.direct[count].total)}x | ${stats(row, r => r.heap[count].peak)} | ${stats(row, r => r.heap[count].retained)} |`);
+  lines.push("", "| Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+  for (const row of result.admission) for (const count of [100, 1000]) {
+    const heaps = row.runs.filter(run => run.heap);
+    lines.push(`| ${row.name} / ${row.phase} / ${count} | ${stats(row, r => r.current[count].total)} | ${stats(row, r => r.direct[count].total)} | ${stats(row, r => r.decode[count].total)} | ${stats(row, r => r.batch[count].total)} | ${stats(row, r => r.current[count].total / r.direct[count].total)}x | ${summary(heaps.map(r => r.heap[count].peak))} | ${summary(heaps.map(r => r.heap[count].retained))} | ${heaps.length} |`);
+  }
   lines.push("", "| Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |", "| --- | --- | --- | --- | --- |");
   for (const row of result.admission) lines.push(`| ${row.name} / ${row.phase} | ${stats(row, r => r.footprint.plain, 3)} | ${stats(row, r => r.footprint.shared, 3)} | ${stats(row, r => r.footprint.extra, 3)} | ${stats(row, r => r.footprint.ratio)}x |`);
   return lines.join("\n") + "\n";
@@ -357,14 +360,17 @@ export function run(rounds = 5, saved = null, persist = () => {}) {
     }
     publish();
     for (let round = row.runs.length; round < rounds; round++) {
-      const measured = { heap: {}, footprint: footprint(source, state) };
+      const measured = { footprint: footprint(source, state) };
       const modes = ["current", "direct", "decode", "batch"];
       for (const mode of [...modes.slice(round % 4), ...modes.slice(0, round % 4)]) {
         measured[mode] = {};
         if (mode !== "batch") measured[mode].single = timed(state, generated.updates.slice(0, 500), mode, true);
         for (const count of [100, 1000]) measured[mode][count] = timed(state, generated.updates.slice(0, count), mode, false, count === 1000 ? expected : null);
       }
-      for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, generated.updates.slice(0, count));
+      if (!row.runs.some(run => run.heap)) {
+        measured.heap = {};
+        for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, generated.updates.slice(0, count));
+      }
       row.runs.push(measured);
       publish();
       process.stderr.write(`${source.name} ${phase}: round ${round + 1}/${rounds}\n`);

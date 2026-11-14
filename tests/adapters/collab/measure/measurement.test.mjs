@@ -1,11 +1,12 @@
+import { createMonitoredSharedDocument as createSharedDocument } from "../helpers.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import * as Y from "yjs";
-import { apply, fixtures, quantile, restoreCheckpoint, saveCheckpoint, scaleFixture, summary, writer } from "./run.mjs";
+import { apply, fixtures, quantile, restoreCheckpoint, saveCheckpoint, scaleFixture, summary, writer } from "../../../collab/measure/run.mjs";
 import { enterSharedDocument } from "../../../../src/core/migrate.ts";
-import { createSharedDocument, encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../../src/adapters/collab/document.ts";
+import { encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../../src/adapters/collab/state.ts";
 import { registerSharedTextOperationHandlers } from "../../../../src/adapters/collab/text-executor.ts";
