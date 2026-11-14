@@ -1,19 +1,133 @@
 {
-  "tests": ["tests/adapters/collab/operation-families.test.ts", "tests/bootstrap/shared-author.test.ts"],
-  "mutants": [{
-    "label": "one family left out of the composition",
-    "file": "src/adapters/collab/operation-families.ts",
-    "find": "  registerSharedJoinHandlers(handle);\n",
-    "replace": ""
-  }, {
-    "label": "author ids without the replica's client number",
-    "file": "src/bootstrap/wiring/ports/shared-author.ts",
-    "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
-    "replace": "\"w_\" + String(++serial)"
-  }, {
-    "label": "author port answers in a standalone session",
-    "file": "src/bootstrap/wiring/ports/shared-author.ts",
-    "find": "by: source.name() } : null;",
-    "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
-  }]
+  "tests": [
+    "tests/adapters/collab/operation-families.test.ts",
+    "tests/bootstrap/shared-author.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "one family left out of the composition",
+      "file": "src/adapters/collab/operation-families.ts",
+      "find": "  registerSharedJoinHandlers(handle);\n",
+      "replace": ""
+    },
+    {
+      "label": "author ids without the replica's client number",
+      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
+      "replace": "\"w_\" + String(++serial)"
+    },
+    {
+      "label": "author port answers in a standalone session",
+      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "find": "by: source.name() } : null;",
+      "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
+    },
+    {
+      "label": "flow command drops the planner operation list",
+      "replace": "...[], ...[...stamped]",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ],
+      "file": "src/application/commands/flow.ts",
+      "find": "...result.ops, ...[...stamped]"
+    },
+    {
+      "label": "flow command never stamps inserted beats",
+      "replace": ".concat([])",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ],
+      "file": "src/application/commands/flow.ts",
+      "find": ".concat(plan.changes.rowsInserted)"
+    },
+    {
+      "label": "Writer ignores its shared command builder",
+      "replace": "const commit = commitStandalone;",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ],
+      "file": "src/features/writer/flow-writer.ts",
+      "find": "const commit = commands ? commitShared : commitStandalone;"
+    },
+    {
+      "label": "Writer author refusal becomes a request",
+      "replace": "const request = source.author.next() ?? { id: \"forbidden\", by: \"Forbidden\" };",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ],
+      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "find": "const request = source.author.next();"
+    },
+    {
+      "label": "Writer planner never receives the author request",
+      "replace": "operations = undefined;",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ],
+      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "find": "operations = request ?? undefined;"
+    },
+    {
+      "label": "flow stamp uses a different command identity",
+      "replace": "sharedBeatStamp(beat, { ...by, id: \"wrong\" }, stamps)",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ],
+      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "find": "sharedBeatStamp(beat, by, stamps)"
+    },
+    {
+      "label": "flow drops identical-text replacement intent",
+      "file": "src/application/commands/flow.ts",
+      "find": "if (!plan && !result.ops.length) return null;",
+      "replace": "if (!plan) return null;",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ]
+    },
+    {
+      "label": "flow omits beat stamps",
+      "file": "src/application/commands/flow.ts",
+      "find": "...result.ops, ...[...stamped].map",
+      "replace": "...result.ops, ...[].map",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts",
+        "tests/features/writer/flow-command-ports.test.ts"
+      ]
+    },
+    {
+      "label": "flow leaves the caret on a temporary beat identity",
+      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "find": "rowId: beats.get(pos.rowId) ?? pos.rowId",
+      "replace": "rowId: pos.rowId",
+      "tests": [
+        "tests/features/writer/flow-command-ports.test.ts"
+      ]
+    },
+    {
+      "label": "flow leaves the caret on a temporary heading identity",
+      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "find": "sceneId: headings.get(pos.sceneId) ?? pos.sceneId",
+      "replace": "sceneId: pos.sceneId",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts"
+      ]
+    },
+    {
+      "label": "flow silently drops clipboard registry changes",
+      "file": "src/application/commands/flow.ts",
+      "find": "if (clipboard && ([\"comments\", \"people\", \"productionTags\", \"brollShots\"] as const).some",
+      "replace": "if (false && ([\"comments\", \"people\", \"productionTags\", \"brollShots\"] as const).some",
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts"
+      ]
+    }
+  ]
 }
