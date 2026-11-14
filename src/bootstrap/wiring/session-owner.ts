@@ -4,7 +4,9 @@ import type { AbsorbedKind, Command, CommandOutcome, CommonDocumentSession, Docu
 import type { ChangeSet } from "../../application/session/change-set.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
 import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, ReportPort, StampPorts, TimerPort, UndoPort } from "../../application/session/ports.ts";
+import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { enterSharedDocument } from "../../core/migrate.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { syncCommentAnchors } from "../../core/text/anchors.ts";
 import { systemClock } from "../../adapters/identity/ids.ts";
@@ -32,10 +34,20 @@ export interface SessionBridgePorts {
   readonly timers: TimerPort;
 }
 
+export interface SharedOwnerPorts {
+  readonly entry: DocumentEntry;
+  readonly capability: CapabilityPort;
+  readonly after: SessionCounters;
+}
+
+type Owner =
+  | { readonly kind: "standalone"; readonly session: DocumentSession }
+  | { readonly kind: "shared"; readonly session: SharedDocumentSession; readonly entered: WeakMap<object, ValidatedDocument> };
+
 interface Started {
   readonly numbering: DocumentNumberingReader;
   readonly ports: SessionBridgePorts;
-  current: DocumentSession;
+  current: Owner;
   capability: CapabilityPort;
   ended: boolean;
   mergeBase: ValidatedDocument | null;
@@ -140,7 +152,7 @@ export function onStamped(listener: (changes: ChangeSet) => void): () => void {
 export function onSessionChange(listener: SessionListener): () => void {
   const entry: Hearing = { listener: listener, on: true };
   changeListeners.push(entry);
-  if (started) started.current.subscribe(hearing(entry));
+  if (started) started.current.session.subscribe(hearing(entry));
   return function () {
     entry.on = false;
     const at = changeListeners.indexOf(entry);
@@ -149,33 +161,51 @@ export function onSessionChange(listener: SessionListener): () => void {
 }
 
 function swept<T>(outcome: T): T {
-  if (documentGuardOn()) unwrapped(heldDocument());
+  if (documentGuardOn()) unwrapped(ownerDocument());
   return outcome;
 }
 
+function standaloneOnly(member: string): string {
+  return "standalone only while the session is shared: " + member;
+}
+
+function owner(): CommonDocumentSession {
+  return running().current.session;
+}
+
+function standalone(member: string) {
+  const now = running().current;
+  if (now.kind === "shared") throw new Error(standaloneOnly(member));
+  return now.session;
+}
+
+function refusedWhileShared(member: string): CommandOutcome | null {
+  return running().current.kind === "shared" ? { kind: "rejected", reason: standaloneOnly(member) } : null;
+}
+
 const session: DocumentSession = {
-  epoch: function () { return running().current.epoch(); },
-  generation: function () { return running().current.generation(); },
-  read: function <T>(select: (doc: DocumentView | null) => T): T { return running().current.read(select); },
-  held: function () { return running().current.held(); },
-  adopt: function (raw: unknown) { return running().current.adopt(unwrapped(raw)); },
-  absorbDisk: function (raw: unknown) { return running().current.absorbDisk(unwrapped(raw)); },
-  absorbRecovery: function (raw: unknown) { return running().current.absorbRecovery(unwrapped(raw)); },
-  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return running().current.absorbMerged(kind, unwrapped(merged)); },
-  absorbReload: function (content: ReloadedContent) { return running().current.absorbReload(unwrapped(content)); },
-  settle: function (kind: AbsorbedKind) { running().current.settle(kind); },
-  run: function (command: Command) { return swept(running().current.run(command)); },
-  replay: function (task: Replay) { return swept(running().current.replay(task)); },
-  amend: function (task: Replay) { return swept(running().current.amend(task)); },
-  stamp: function (task: Stamp) { return swept(running().current.stamp(task)); },
-  noteEdit: function (changes?: ChangeSet) { running().current.noteEdit(changes); swept(null); },
-  refresh: function (job: string) { running().current.refresh(job); },
-  cancelRefresh: function (jobs: readonly string[]) { running().current.cancelRefresh(jobs); },
-  subscribe: function (listener: SessionListener) { return running().current.subscribe(listener); },
+  epoch: function () { return owner().epoch(); },
+  generation: function () { return owner().generation(); },
+  read: function <T>(select: (doc: DocumentView | null) => T): T { return owner().read(select); },
+  held: function () { return standalone("held").held(); },
+  adopt: function (raw: unknown) { return standalone("adopt").adopt(unwrapped(raw)); },
+  absorbDisk: function (raw: unknown) { return standalone("absorbDisk").absorbDisk(unwrapped(raw)); },
+  absorbRecovery: function (raw: unknown) { return standalone("absorbRecovery").absorbRecovery(unwrapped(raw)); },
+  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return standalone("absorbMerged").absorbMerged(kind, unwrapped(merged)); },
+  absorbReload: function (content: ReloadedContent) { return standalone("absorbReload").absorbReload(unwrapped(content)); },
+  settle: function (kind: AbsorbedKind) { standalone("settle").settle(kind); },
+  run: function (command: Command) { return swept(owner().run(command)); },
+  replay: function (task: Replay) { return refusedWhileShared("replay") ?? swept(standalone("replay").replay(task)); },
+  amend: function (task: Replay) { return refusedWhileShared("amend") ?? swept(standalone("amend").amend(task)); },
+  stamp: function (task: Stamp) { return refusedWhileShared("stamp") ?? swept(standalone("stamp").stamp(task)); },
+  noteEdit: function (changes?: ChangeSet) { standalone("noteEdit").noteEdit(changes); swept(null); },
+  refresh: function (job: string) { owner().refresh(job); },
+  cancelRefresh: function (jobs: readonly string[]) { owner().cancelRefresh(jobs); },
+  subscribe: function (listener: SessionListener) { return owner().subscribe(listener); },
   dispose: function () {
     const now = running();
     now.ended = true;
-    now.current.dispose();
+    now.current.session.dispose();
   }
 };
 
@@ -185,12 +215,12 @@ export function startSessionBridge(ports: SessionBridgePorts): () => void {
   if (started) throw new Error("The document session is already started; stop it first");
   const numbering = createNumberingReader();
   const capability = captureSessionCapabilities(ports.capability);
-  const mine: Started = { ports: ports, numbering, capability, current: createSession(ports, { epoch: 0, generation: 0 }, numbering, capability), ended: false, mergeBase: null };
+  const mine: Started = { ports: ports, numbering, capability, current: { kind: "standalone", session: createSession(ports, { epoch: 0, generation: 0 }, numbering, capability) }, ended: false, mergeBase: null };
   const releases: (() => void)[] = [];
   const release = (): void => {
     if (started === mine) started = null;
     try {
-      mine.current.dispose();
+      mine.current.session.dispose();
     } finally {
       while (releases.length) releases.pop()?.();
     }
@@ -199,10 +229,10 @@ export function startSessionBridge(ports: SessionBridgePorts): () => void {
   try {
     releases.push(ports.undo.route(function (task) {
       if (started !== mine) return STALE;
-      return swept(mine.current.replay(task));
+      return refusedWhileShared("replay") ?? swept(standalone("replay").replay(task));
     }, sessionStamps, function (task) {
       if (started !== mine) return STALE;
-      return swept(mine.current.amend(task));
+      return refusedWhileShared("amend") ?? swept(standalone("amend").amend(task));
     }));
   } catch (error) {
     release();
@@ -223,21 +253,70 @@ export function sessionStarted(): boolean {
 export function adoptReplacement(doc: ValidatedDocument, capability?: CapabilityPort): void {
   const now = running();
   if (now.ended) return;
-  const old = now.current;
+  const old = now.current.session;
+  if (now.current.kind === "shared" && !capability) throw new Error("Leaving a shared session takes the standalone capabilities");
   const nextCapability = capability ? captureSessionCapabilities(capability) : now.capability;
-  now.current = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() }, now.numbering, nextCapability);
+  const next = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() }, now.numbering, nextCapability);
+  now.current = { kind: "standalone", session: next };
   now.capability = nextCapability;
   old.dispose();
-  now.current.adopt(unwrapped(doc));
+  next.adopt(unwrapped(doc));
   announceReplaced();
 }
 
+export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSession, capability: CapabilityPort): void {
+  const now = running();
+  if (now.ended) throw new Error("The document session has ended");
+  if (now.current.kind === "shared") throw new Error("The document session is shared already");
+  const old = now.current.session;
+  const nextCapability = captureSessionCapabilities(capability);
+  const entered = new WeakMap<object, ValidatedDocument>();
+  const made = build({
+    entry: function (raw) {
+      const doc = enterSharedDocument(raw);
+      entered.set(doc, doc);
+      return doc;
+    },
+    capability: nextCapability,
+    after: { epoch: old.epoch(), generation: old.generation() }
+  });
+  if (made.read(doc => doc !== null)) {
+    made.dispose();
+    throw new Error("A shared owner is adopted before it is hydrated, so the app hears its first document");
+  }
+  made.subscribe(change => { now.numbering.changed(change.changes); });
+  changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
+  now.current = { kind: "shared", session: made, entered: entered };
+  now.capability = nextCapability;
+  old.dispose();
+  announceReplaced();
+}
+
+export function sharedSession(): boolean {
+  return started !== null && started.current.kind === "shared";
+}
+
+// why: The shared session hands its projection to readers typed as a view; keeping the entry's own result gives
+// the app's readers that same object, and only the core entry may make a validated document.
+function ownerDocument(): ValidatedDocument | null {
+  if (!started) return null;
+  const now = started.current;
+  if (now.kind === "standalone") return now.session.held();
+  return now.session.read(function (view) {
+    if (view === null) return null;
+    const doc = now.entered.get(view);
+    if (!doc) throw new Error("The shared projection did not come through the bridge's entry");
+    return doc;
+  });
+}
+
 export function heldDocument(): ValidatedDocument | null {
-  return started ? started.current.held() : null;
+  if (started && started.current.kind === "shared") throw new Error(standaloneOnly("held"));
+  return ownerDocument();
 }
 
 export function currentDocument(): ValidatedDocument | null {
-  const doc = heldDocument();
+  const doc = ownerDocument();
   return doc === null ? null : documentView(doc);
 }
 
@@ -322,7 +401,7 @@ export function requestRefresh(job: string): void {
 }
 
 export function cancelRefresh(jobs: readonly string[]): void {
-  if (started && !started.ended) started.current.cancelRefresh(jobs);
+  if (started && !started.ended) started.current.session.cancelRefresh(jobs);
 }
 
 export function liveSession(): CommonDocumentSession {

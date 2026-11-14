@@ -110,7 +110,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   let running: Running | null = null;
   let entered = false;
 
-  // why: The entry rewrites what it is given, so the change set is compared between held documents; the replica's
+  // why: The change set compares held documents, since the entry port decides what is held; the replica's
   // report names rows by the projection's own ids and covers one publication, so a missed one makes it whole.
   function projectionStep(previous: ValidatedDocument | null): ProjectionStep {
     const next = ports.entry(ports.replica.project());

@@ -149,7 +149,7 @@ test("local command: each kind of operation is one execute, one edit and the pre
   } finally { w.close(); }
 });
 
-test("split: one transaction names the shortened cell and the inserted beat on both replicas; the test entry port preserves the beat's writer-scoped id", () => {
+test("split: one transaction names the shortened cell and the inserted beat on both replicas; the shared entry holds the rows as projected, the beat's writer-scoped id kept and no default filled in", () => {
   const w = world();
   try {
     registerSplits(w.a.handle);
@@ -166,7 +166,7 @@ test("split: one transaction names the shortened cell and the inserted beat on b
     untouched(w.b);
     const rows = [
       { id: "R1", status: "todo", visualText: "", audioText: "ab", imageRef: null, updatedAt: "", updatedBy: null },
-      { id: "structure_1_0065006e007400650072_beat_0", status: "todo", visualText: "", audioText: "Z", imageRef: null, updatedAt: "", updatedBy: null },
+      { id: "structure_1_0065006e007400650072_beat_0", status: "todo", visualText: "", audioText: "Z", imageRef: null },
       { id: "R2", status: "todo", visualText: "", audioText: "cd", imageRef: null, updatedAt: "", updatedBy: null }
     ];
     assert.deepEqual(w.a.h.session.read(doc => doc?.rows), rows);
@@ -281,12 +281,12 @@ test("regression: an update one owner's subscriber applies before a second owner
   } finally { a.h.session.dispose(); b.h.session.dispose(); later.h.session.dispose(); run.close(); }
 });
 
-test("declared limit, the test entry mints a record from received text: a remote B-roll line leaves the shared shot collection empty, yet the held document gains a shot and the change names brollShots", () => {
+test("D1: the shared entry mints no record from received text: a remote B-roll line leaves the shared shot collection and the held document without a shot, and the change names only the cell", () => {
   const run = recordReplicas(2, { title: "Title", rows: [{ id: "R1", audioText: "ab", visualText: "Steam", status: "todo" }] });
   const a = seat(run.a), b = seat(run.b);
   try {
     const target = { owner: ref("R1"), segment: ref("R1"), field: "visualText" as const };
-    const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "visualText" }], docFields: ["brollShots"] };
+    const changes = { ...NOTHING, cells: [{ rowId: "R1", field: "visualText" }] };
     const outcome = a.h.session.run(sharedCommand("visual", [operation({ kind: "text-insert", id: "v1", by: "A", target,
       at: { left: null, right: flowBaseReference("R1", "visualText", 0), affinity: "before" }, content: [{ value: "B-roll: ", marks: [] }] })]));
     assert.deepEqual(outcome, { kind: "applied", generation: 1, changes });
@@ -296,10 +296,7 @@ test("declared limit, the test entry mints a record from received text: a remote
     for (const made of [a, b]) {
       assert.deepEqual(projectSharedDocument(made.handle).brollShots, []);
       assert.equal(made.h.session.read(doc => doc?.rows[0]?.visualText), "B-roll: Steam");
-      const shots = made.h.session.read(doc => doc ? JSON.parse(JSON.stringify(doc.brollShots)) as Record<string, unknown>[] : []);
-      assert.equal(shots.length, 1);
-      assert.match(String(shots[0]?.["id"]), /^bs-load-[0-9a-f]+-1$/);
-      assert.deepEqual({ ...shots[0], id: "" }, { id: "", name: "Steam", desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "ab", location: "", props: [], origin: "script" });
+      assert.deepEqual(made.h.session.read(doc => doc ? JSON.parse(JSON.stringify(doc.brollShots)) as unknown : null), []);
     }
     assert.deepEqual([a.updates(), b.updates()], [1, 1]);
   } finally { a.h.session.dispose(); b.h.session.dispose(); run.close(); }
