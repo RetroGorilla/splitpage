@@ -6,15 +6,13 @@ import type { SessionChange } from "../../../src/application/session/change-set.
 import type { Command, SessionCounters } from "../../../src/application/session/document-session.ts";
 import type { Capability } from "../../../src/application/session/ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
-import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
-import { migrateRows } from "../../../src/core/migrate.ts";
+import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
 import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
 import { compareSharedProjections } from "../../../src/core/collab/projection/changes.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeClock } from "../session-fakes.ts";
 import type { FakeClock } from "../session-fakes.ts";
 
@@ -45,18 +43,6 @@ export function registerSplits(handle: SharedDocumentHandle): void {
   registerSharedSplitHandlers(handle, { cells: createFlowLoadRuntime().cells });
 }
 
-export function enterProjection(raw: unknown): ValidatedDocument {
-  const held = migrateRows(structuredClone(raw), fakeMigration().ports);
-  const projected = raw !== null && typeof raw === "object" ? (raw as { readonly sections?: unknown }).sections : undefined;
-  const names = new Map(Array.isArray(projected) ? projected.map((scene: { readonly id?: unknown; readonly name?: unknown } | null) => [scene?.id, scene?.name]) : []);
-  // why: a shared entry keeps each scene name as stored, edge spaces included; migrateRows trims names read from files
-  if (Array.isArray(held.sections)) for (const scene of held.sections as { id: string; name: string }[]) {
-    const name = names.get(scene.id);
-    if (typeof name === "string") scene.name = name;
-  }
-  return held;
-}
-
 export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = {}): SharedHarness {
   const log: string[] = [], published: SessionChange[] = [], refreshes: string[][] = [], reported: unknown[] = [];
   const undo: SharedHarness["undo"] = [], executed: SharedHarness["executed"] = [];
@@ -72,7 +58,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
       execute: (operations, options) => { log.push("execute"); executed.push({ operations, base: options.base }); return replica.execute(operations, options); },
       observe: replica.observe
     },
-    entry: enterProjection,
+    entry: enterSharedDocument,
     undo: { record: (changes, selection) => { log.push("undo.record"); undo.push({ changes, selection }); hooks.record?.(); } },
     effects: {
       dirty: change => { log.push("dirty:" + change.generation); hooks.effect?.("dirty"); },
