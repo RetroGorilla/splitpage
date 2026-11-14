@@ -1,0 +1,9 @@
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const modes = { "--options": "options", "--bytes": "bytes", "--prepare-options": "prepare-options" };
+const mode = modes[process.argv[2]];
+const entry = fileURLToPath(new URL(`../tests/collab/measure/${mode ?? "run"}.mjs`, import.meta.url));
+const result = spawnSync(process.execPath, ["--expose-gc", entry, ...process.argv.slice(mode ? 3 : 2)], { stdio: "inherit" });
+if (result.error) throw result.error;
+process.exitCode = result.status ?? 1;
