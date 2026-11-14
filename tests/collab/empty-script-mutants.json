@@ -1,0 +1,392 @@
+{
+  "mutants": [
+    {
+      "label": "empty target drops the session refusal notice marker",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "...(result.notified ? { notified: result.notified } : {})",
+      "replace": "",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "first input wiring drops the session refusal notice marker",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "{ ...result, ok: false }",
+      "replace": "{ ok: false, reason: result.reason }",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "empty target refusals miss the shared notice",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "report: sharedCommandReport(surface.notices, surface.report)",
+      "replace": "report: surface.report",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "refused input fallback retains unadmitted DOM text",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release && !begin(event)) { input.value = \"\"; paint(); return; }",
+      "replace": "if (!release && !begin(event)) return;",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "first input trims the textarea value",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "const text = input.value, result = ports.create(text);",
+      "replace": "const text = input.value.trim(), result = ports.create(text);",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "first command trims initial narration",
+      "file": "src/application/commands/empty-script.ts",
+      "find": "audioText: toHtml([{ text, marks: {} }])",
+      "replace": "audioText: toHtml([{ text: text.trim(), marks: {} }])",
+      "tests": ["tests/application/commands/empty-script.test.ts"]
+    },
+    {
+      "label": "cancelled key leaves a retained draft pending",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!composing && pending && input.value === beforeInput)",
+      "replace": "if (!composing && pending && !input.value)",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "cancelled key releases a retained draft's hold",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!input.value) end();",
+      "replace": "end();",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "cancelled key compares its draft with an empty baseline",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "beforeInput = input.value;",
+      "replace": "beforeInput = \"\";",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "unadmitted DOM input becomes a later draft",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release) { input.value = \"\"; paint(); }",
+      "replace": "",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "rejected native input clears an already-held draft",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release) { input.value = \"\"; paint(); }",
+      "replace": "input.value = \"\"; paint();",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "empty input creates a beat",
+      "file": "src/application/commands/empty-script.ts",
+      "find": "if (!text) return null;",
+      "replace": "if (false) return null;",
+      "tests": [
+        "tests/application/commands/empty-script.test.ts"
+      ]
+    },
+    {
+      "label": "first input loses its initial text",
+      "file": "src/application/commands/empty-script.ts",
+      "find": "audioText: toHtml([{ text, marks: {} }])",
+      "replace": "audioText: \"\"",
+      "tests": [
+        "tests/application/commands/empty-script.test.ts"
+      ]
+    },
+    {
+      "label": "first input omits its creation stamp",
+      "file": "src/application/commands/empty-script.ts",
+      "find": "updatedAt: ports.clock.nowIso(), updatedBy: ports.editor.name()",
+      "replace": "updatedAt: \"\", updatedBy: null",
+      "tests": [
+        "tests/application/commands/empty-script.test.ts"
+      ]
+    },
+    {
+      "label": "empty target remains visible beside live beats",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "area.hidden = !current() || !empty() && !pending && !composing && !input.value;",
+      "replace": "area.hidden = false;",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts",
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "empty target remains enabled while read-only",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "input.disabled = !current() || !ports.edits.allowed();",
+      "replace": "input.disabled = false;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "empty target admits a stale or occupied beforeinput",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!current() || !ports.edits.allowed() || !empty() && !pending && !input.value)",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "composition opens its own buffer twice",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release) {\n      const held = ports.hold();",
+      "replace": "if (true) {\n      const held = ports.hold();",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target ignores a refused ingress hold",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!held.ok)",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "first input blocks its own command admission",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (committing) return true;",
+      "replace": "if (committing) return false;",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target unmounts an unfinished composition",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (composing) { notify(\"buffer-composition\"); return false; }",
+      "replace": "if (false) return false;",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target retries a draft in another epoch",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!current() && (input.value || pending))",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "empty target unmounts pending native input",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (pending) { notify(\"buffer-pending\"); return false; }",
+      "replace": "if (false) return false;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "empty target submits an empty draft",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!input.value) { end(); paint(); return true; }",
+      "replace": "if (false) return true;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts",
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target clears a refused first draft",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!result.ok) { ports.report({ kind: \"rejected\", reason: result.reason, ...(result.notified ? { notified: result.notified } : {}) }); return false; }",
+      "replace": "if (false) return false;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts",
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target loses focus after an unavailable paint",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!ports.place(result.rowId, text.length) && empty()) input.focus();",
+      "replace": "ports.place(result.rowId, text.length);",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "empty target takes its hold after native mutation",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "const before = (event: Event): void => { begin(event); };",
+      "replace": "const before = (_event: Event): void => {};",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target accepts late input into another document",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!current() || !ports.edits.allowed() || !release && !empty())",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "input without beforeinput loses its first text",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release && !begin(event)) { input.value = \"\"; paint(); return; }",
+      "replace": "if (!release) return;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "composition input tries to commit before it ends",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!composing && !(event as InputEvent).isComposing) finish();",
+      "replace": "finish();",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "unrelated compositionend publishes pending text",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!composing) return;",
+      "replace": "if (false) return;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "cancelled composition publishes its abandoned text",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!(event as CompositionEvent).data) input.value = beforeComposition;",
+      "replace": "if (false) input.value = beforeComposition;",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "composition keyup releases remote ingress",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!composing && pending && input.value === beforeInput)",
+      "replace": "if (pending && input.value === beforeInput)",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "cancelled native key keeps remote ingress held",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!input.value) end();",
+      "replace": "",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts",
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "blur tries to settle a live composition",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!composing) finish();",
+      "replace": "finish();",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "second empty-target disposal refuses",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (disposed) return true;",
+      "replace": "if (disposed) return false;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts"
+      ]
+    },
+    {
+      "label": "empty-target disposal discards unfinished input",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!finish()) return false;",
+      "replace": "if (false) return false;",
+      "tests": [
+        "tests/features/empty-script/guards.test.ts",
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "empty target takes another surface's hold",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "if (collabState(shared.handle).ingress.holds.has(\"buffer\"))",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "first input proceeds without an author",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "const author = shared.author.next(); if (!author) return { ok: false, reason: \"empty-script-no-author\" };",
+      "replace": "const author = shared.author.next() ?? { id: \"absent\", by: \"absent\" };",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "first input skips malformed placement refusal",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "if (raw !== undefined && !first)",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "first input skips unresolved identity refusal",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "if (!id || !rowId)",
+      "replace": "if (false)",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "failed first command is swallowed",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "if (result.kind === \"failed\") throw result.error;",
+      "replace": "",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "committed creation is retried after an effect fails",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": " || result.kind === \"committed\"",
+      "replace": "",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "first beat reclaims the emptied scene's heading",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "gap: { left: null, right: first, affinity: \"before\" }",
+      "replace": "gap: { left: null, right: null, affinity: \"after\" }",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    },
+    {
+      "label": "first caret uses the operation id instead of the resolved beat",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "? { ok: true, rowId }",
+      "replace": "? { ok: true, rowId: author.id }",
+      "tests": [
+        "tests/features/empty-script/shared.test.ts"
+      ]
+    }
+  ]
+}
