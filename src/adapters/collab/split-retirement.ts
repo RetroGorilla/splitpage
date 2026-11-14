@@ -4,17 +4,17 @@ import { sharedJson } from "./snapshot.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
-import { readSharedAttachmentOwner } from "./attachment-retention.ts";
 import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";
 
 const PREFIX = "splitRetired:";
 
 export type SharedSplitRetirementRoots = Pick<CollabRoots, "meta" | "segments" | "beats" | "visuals" | "gallery" | "statusEvents" | "retiredStatus" | "retiredJoins">;
-export type SharedSplitObservationPart = "record" | "boundaries" | "joins" | "attachments" | "status";
-export type SharedSplitObservations = ReadonlyMap<string, readonly string[]>;
-export interface SharedSplitStagedView {
+export type SharedSplitObservationPart = "record" | "boundaries" | "predecessor" | "joins" | "attachments" | "status";
+export type SharedSplitObservations = ReadonlyMap<string, unknown>;
+export interface SharedSplitReadView {
   readonly get: (path: readonly string[]) => unknown;
   readonly keys: (path: readonly string[]) => readonly string[];
+  readonly kind: (path: readonly string[]) => "map" | "text" | "array" | "value" | "missing";
 }
 type Visit = (count: number) => void;
 
@@ -22,140 +22,159 @@ export function sharedSplitRetiredField(beat: string): string { return PREFIX + 
 
 export function readSharedSplitRetiredBeat(field: string): string | null { return field.startsWith(PREFIX) && field.length > PREFIX.length ? field.slice(PREFIX.length) : null; }
 
-export function readSharedSplitMarks(meta: Y.Map<unknown>): ReadonlySet<string> {
+export function readSharedSplitMarks(meta: { readonly keys: () => Iterable<string> }): ReadonlySet<string> {
   return new Set([...meta.keys()].flatMap(key => { const beat = readSharedSplitRetiredBeat(key); return beat ? [beat] : []; }));
 }
 
-function sorted<T>(entries: Iterable<readonly [string, T]>): (readonly [string, T])[] {
-  return [...entries].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-}
-
-function identity(item: Y.Item): string { return "@" + item.id.client + ":" + item.id.clock + (item.deleted ? "-" : ""); }
-
-// why: a deleted entry keeps its identity in its map, and every insertion into a text leaves a record in its marks,
-// so a change that was taken back still shows, and what a retire saw never comes back once it changed.
-function observed(value: unknown, path: string, into: string[]): void {
-  if (value instanceof Y.Map) {
-    for (const [key, item] of sorted<Y.Item>(value._map.entries())) {
-      if (path === "beat" && (key === "stamp" || key.startsWith("stamp:"))) continue;
-      into.push(path + "/" + key + identity(item));
-      if (!item.deleted) observed(value.get(key), path + "/" + key, into);
+// why: the stored document is read through the same three questions as the planned state of a list, so readers and
+// preparation run one observation; only public reads of the library are used.
+export function sharedSplitStoreView(roots: SharedSplitRetirementRoots): SharedSplitReadView {
+  const missing = Symbol("missing");
+  const at = (path: readonly string[]): unknown => {
+    let value: unknown = roots[path[0] as keyof SharedSplitRetirementRoots];
+    if (value === undefined) return missing;
+    for (const key of path.slice(1)) {
+      if (!(value instanceof Y.Map) || !value.has(key)) return missing;
+      value = value.get(key);
     }
-  } else if (value instanceof Y.Text) into.push(path + "=" + JSON.stringify(value.toDelta()));
-  else if (value instanceof Y.AbstractType) into.push(path + "=" + JSON.stringify(value.toJSON()));
+    return value;
+  };
+  return {
+    get: path => {
+      const value = at(path);
+      return value === missing || value instanceof Y.Map ? undefined : value instanceof Y.Text ? sharedPreparedValue(value.toDelta())
+        : value instanceof Y.Array ? sharedPreparedValue(value.toArray()) : sharedPreparedValue(value);
+    },
+    keys: path => { const value = at(path); return value instanceof Y.Map ? [...value.keys()] : []; },
+    kind: path => {
+      const value = at(path);
+      return value === missing ? "missing" : value instanceof Y.Map ? "map" : value instanceof Y.Text ? "text" : value instanceof Y.Array ? "array" : "value";
+    }
+  };
 }
 
-function segmentOf(roots: SharedSplitRetirementRoots, beat: string): string | null {
-  const record = roots.beats.get(beat), segment = record instanceof Y.Map ? record.get("segment") : null;
+function canonical(view: SharedSplitReadView, path: readonly string[], skip: (key: string, value: unknown) => boolean = () => false): unknown {
+  if (view.kind(path) !== "map") return sharedJson(view.get(path)) ?? null;
+  return Object.fromEntries([...view.keys(path)].sort().flatMap(key => {
+    const value = canonical(view, [...path, key]);
+    return skip(key, value) ? [] : [[key, value]];
+  }));
+}
+
+function segmentOf(view: SharedSplitReadView, beat: string): string | null {
+  const segment = view.get(["beats", beat, "segment"]);
   return typeof segment === "string" ? segment : null;
 }
 
-function joinInto(view: SharedSplitStagedView, from: string, join: string): string[] {
-  const found = readSharedJoinEntry(view.get(["beats", from, "joins", join]))?.into;
-  return found ? [found] : [];
+function inserts(view: SharedSplitReadView, segment: string): readonly unknown[] {
+  const delta = view.get(["segments", segment, "text"]);
+  return Array.isArray(delta) ? delta.map(part => part && typeof part === "object" ? (part as { readonly insert?: unknown }).insert : null) : [];
+}
+
+function stamped(key: string): boolean { return key === "stamp" || key.startsWith("stamp:"); }
+
+function born(_key: string, value: unknown): boolean {
+  return !!value && typeof value === "object" && (value as { readonly type?: unknown }).type === "birth";
 }
 
 interface SharedSplitWatchedPart {
   readonly name: SharedSplitObservationPart;
-  readonly observe: (roots: SharedSplitRetirementRoots, beats: ReadonlySet<string>, into: (beat: string) => string[], visit: Visit) => void;
-  readonly staged: (view: SharedSplitStagedView, path: readonly string[]) => readonly string[];
+  readonly observe: (view: SharedSplitReadView, beats: ReadonlySet<string>, visit: Visit) => SharedSplitObservations;
+  readonly staged: (path: readonly string[], segment: (beat: string) => string | null, candidates: ReadonlySet<string>) => readonly string[];
 }
 
-// why: one table says what an undone split watches, read by every reader and by the planned state of an operation list,
-// so the two cannot disagree; the parts are read for all marked beats at once, each text or collection walked once.
+const inSegment = (segment: string | undefined, of: (beat: string) => string | null, candidates: ReadonlySet<string>) =>
+  segment === undefined ? [] : [...candidates].filter(beat => of(beat) === segment);
+
+// why: one table says what an undone split watches, as the new beat is now, read by every reader and by the planned state
+// of an operation list; each part is read for all marked beats at once, so a text or a collection is walked once.
 export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Object.freeze([
-  { name: "record", observe: (roots, beats, into) => { for (const beat of beats) observed(roots.beats.get(beat), "beat", into(beat)); },
-    staged: (_view, [root, key, field]) => root === "beats" && key !== undefined && !(field !== undefined && (field === "stamp" || field.startsWith("stamp:"))) ? [key] : [] },
-  { name: "boundaries", observe: (roots, beats, into, visit) => {
-    const segments = new Set([...beats].flatMap(beat => { const segment = segmentOf(roots, beat); return segment === null ? [] : [segment]; }));
-    for (const segment of segments) {
-      const stored = roots.segments.get(segment), text: unknown = stored instanceof Y.Map ? stored.get("text") : null;
-      if (text instanceof Y.Text) for (let item = text._start; item; item = item.right) {
-        visit(1);
-        const boundary = !item.deleted && item.content instanceof Y.ContentEmbed ? readSharedBoundaryEmbed(item.content.embed) : null;
-        if (boundary?.kind === "b" && beats.has(boundary.id) && segmentOf(roots, boundary.id) === segment) into(boundary.id).push("boundary" + identity(item));
-      }
-    }
-  },
-  // why: only an operation on a beat itself writes its boundary, and a hidden beat never resolves, so no list stages one.
-  staged: () => [] },
-  { name: "joins", observe: (roots, beats, into, visit) => {
-    for (const [from, record] of sorted(roots.beats.entries())) {
-      const joins: unknown = record instanceof Y.Map ? record.get("joins") : null;
-      if (!(joins instanceof Y.Map)) continue;
-      for (const [key, item] of sorted<Y.Item>(joins._map.entries())) {
-        visit(1);
-        const entry = item.deleted ? null : readSharedJoinEntry(joins.get(key));
-        if (!entry || !beats.has(entry.into)) continue;
-        const retired = roots.retiredJoins.get(key) === true || roots.retiredJoins.get(sharedJoinRetirementGroup(from, entry)) === true;
-        into(entry.into).push("join:" + from + "/" + key + identity(item) + (retired ? "-" : ""));
-      }
-    }
-  },
-  staged: (view, [root, key, field, entry]) => {
-    if (key === undefined) return [];
-    if (root === "beats") {
-      const joins = field === undefined || field === "joins" && entry === undefined ? view.keys(["beats", key, "joins"]) : field === "joins" && entry !== undefined ? [entry] : [];
-      return joins.flatMap(join => joinInto(view, key, join));
-    }
-    if (root !== "retiredJoins") return [];
-    const group = ((): unknown => { try { return JSON.parse(key); } catch { return null; } })();
-    if (Array.isArray(group) && group[0] === "join-retirement" && typeof group[2] === "string") return [group[2]];
-    return view.keys(["beats"]).flatMap(from => view.keys(["beats", from, "joins"]).includes(key) ? joinInto(view, from, key) : []);
-  } },
-  { name: "attachments", observe: (roots, beats, into, visit) => {
-    for (const collection of ["visuals", "gallery"] as const) for (const [key, latest] of sorted<Y.Item>(roots[collection]._map.entries())) {
-      for (let item: Y.Item | null = latest; item; item = item.left) {
-        visit(1);
-        const live = item.deleted ? null : roots[collection].get(key), beat = live instanceof Y.Map ? live.get("beat") : readSharedAttachmentOwner(item);
-        if (typeof beat !== "string" || !beats.has(beat)) continue;
-        if (live instanceof Y.Map) observed(live, collection + ":" + key, into(beat)); else into(beat).push(collection + ":" + key + identity(item));
-      }
-    }
-  },
-  staged: (view, [root, key]) => {
-    if ((root !== "visuals" && root !== "gallery") || key === undefined) return [];
-    const beat = view.get([root, key, "beat"]);
-    return typeof beat === "string" ? [beat] : [];
-  } },
-  { name: "status", observe: (roots, beats, into, visit) => {
-    for (const [key, raw] of sorted(roots.statusEvents.entries())) {
+  { name: "record", observe: (view, beats) => new Map([...beats].map(beat => [beat, canonical(view, ["beats", beat], stamped)])),
+    staged: ([root, key, field], _segment, candidates) => root === "beats" && key !== undefined && !(field !== undefined && stamped(field)) && candidates.has(key) ? [key] : [] },
+  { name: "boundaries", observe: (view, beats, visit) => {
+    const found = new Map<string, number>([...beats].map(beat => [beat, 0]));
+    for (const segment of new Set([...beats].flatMap(beat => { const of = segmentOf(view, beat); return of === null ? [] : [of]; }))) for (const insert of inserts(view, segment)) {
       visit(1);
-      const event = readSharedStatusEvent(sharedPreparedValue(raw));
-      if (event?.target.scope === "beat" && beats.has(event.target.record)) into(event.target.record).push("status:" + key + (roots.retiredStatus.has(key) ? "-" : ""));
+      const boundary = readSharedBoundaryEmbed(insert);
+      if (boundary?.kind === "b" && beats.has(boundary.id) && segmentOf(view, boundary.id) === segment) found.set(boundary.id, (found.get(boundary.id) ?? 0) + 1);
     }
+    return found;
   },
-  staged: (view, [root, key]) => {
-    if ((root !== "statusEvents" && root !== "retiredStatus") || key === undefined) return [];
-    const event = readSharedStatusEvent(view.get(["statusEvents", key]));
-    return event?.target.scope === "beat" ? [event.target.record] : [];
-  } }
+  staged: ([root, key, field], segment, candidates) => root === "segments" ? inSegment(key, segment, candidates) : root === "beats" && field === "segment" ? [...candidates] : [] },
+  // why: a boundary read as text joins the block before it, so the undo holds only while that block is still the source beat.
+  { name: "predecessor", observe: (view, beats, visit) => {
+    const found = new Map<string, unknown>(), marked = readSharedSplitMarks({ keys: () => view.keys(["meta"]) });
+    for (const segment of new Set([...beats].flatMap(beat => { const of = segmentOf(view, beat); return of === null ? [] : [of]; }))) {
+      let last: unknown = readSharedBoundaryEmbed(view.get(["segments", segment, "head"])) ?? null;
+      for (const insert of inserts(view, segment)) {
+        visit(1);
+        const boundary = readSharedBoundaryEmbed(insert);
+        if (!boundary) continue;
+        if (boundary.kind === "b" && beats.has(boundary.id) && !found.has(boundary.id) && segmentOf(view, boundary.id) === segment) found.set(boundary.id, last);
+        if (!(boundary.kind === "b" && marked.has(boundary.id))) last = boundary;
+      }
+    }
+    return new Map([...beats].map(beat => [beat, found.get(beat) ?? null]));
+  },
+  staged: ([root, key, field], segment, candidates) => root === "segments" ? inSegment(key, segment, candidates)
+    : root === "meta" && key !== undefined && readSharedSplitRetiredBeat(key) !== null || root === "beats" && field === "segment" ? [...candidates] : [] },
+  { name: "joins", observe: (view, beats, visit) => {
+    const found = new Map<string, unknown[]>([...beats].map(beat => [beat, []]));
+    for (const from of [...view.keys(["beats"])].sort()) for (const key of [...view.keys(["beats", from, "joins"])].sort()) {
+      visit(1);
+      const entry = readSharedJoinEntry(view.get(["beats", from, "joins", key]));
+      if (!entry || !beats.has(entry.into) || view.get(["retiredJoins", key]) === true || view.get(["retiredJoins", sharedJoinRetirementGroup(from, entry)]) === true) continue;
+      found.get(entry.into)?.push([from, key, entry]);
+    }
+    return found;
+  },
+  staged: ([root, , field], _segment, candidates) => root === "beats" && (field === undefined || field === "joins") || root === "retiredJoins" ? [...candidates] : [] },
+  { name: "attachments", observe: (view, beats, visit) => {
+    const found = new Map<string, unknown[]>([...beats].map(beat => [beat, []]));
+    for (const collection of ["visuals", "gallery"] as const) for (const key of [...view.keys([collection])].sort()) {
+      visit(1);
+      const beat = view.get([collection, key, "beat"]);
+      if (typeof beat !== "string" || !beats.has(beat)) continue;
+      // why: every insertion leaves a birth record, so only records that show a mark count; typing taken back leaves none.
+      found.get(beat)?.push([collection, key, canonical(view, [collection, key], field => field === "markRecords"), canonical(view, [collection, key, "markRecords"], born)]);
+    }
+    return found;
+  },
+  staged: ([root], _segment, candidates) => root === "visuals" || root === "gallery" ? [...candidates] : [] },
+  { name: "status", observe: (view, beats, visit) => {
+    const events = new Map<string, { readonly beat: string; readonly parents: readonly string[] }>();
+    for (const key of view.keys(["statusEvents"])) {
+      visit(1);
+      const event = readSharedStatusEvent(view.get(["statusEvents", key]));
+      if (event?.target.scope === "beat" && beats.has(event.target.record)) events.set(key, { beat: event.target.record, parents: event.parents });
+    }
+    const retired = (key: string) => view.kind(["retiredStatus", key]) !== "missing";
+    const superseded = (key: string, seen = new Set<string>()): boolean => !seen.has(key) && [...events].some(([child, event]) =>
+      event.parents.includes(key) && (!retired(child) || superseded(child, new Set([...seen, key]))));
+    const found = new Map<string, string[]>([...beats].map(beat => [beat, []]));
+    for (const [key, event] of [...events].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) if (!retired(key) && !superseded(key)) found.get(event.beat)?.push(key);
+    return found;
+  },
+  staged: ([root], _segment, candidates) => root === "statusEvents" || root === "retiredStatus" ? [...candidates] : [] }
 ]);
 
 export const SHARED_SPLIT_OBSERVATION_PARTS: readonly SharedSplitObservationPart[] = Object.freeze(SHARED_SPLIT_WATCHED_PARTS.map(part => part.name));
 
-function watched(part: SharedSplitObservationPart): SharedSplitWatchedPart {
+export function readSharedSplitObservationPart(view: SharedSplitReadView, beats: ReadonlySet<string>, part: SharedSplitObservationPart,
+  visit: Visit = () => undefined): SharedSplitObservations {
   const found = SHARED_SPLIT_WATCHED_PARTS.find(entry => entry.name === part);
   if (!found) throw new Error("Unknown watched part: " + part);
-  return found;
+  return found.observe(view, beats, visit);
 }
 
-export function readSharedSplitObservationPart(roots: SharedSplitRetirementRoots, beats: ReadonlySet<string>, part: SharedSplitObservationPart,
-  visit: Visit = () => undefined): SharedSplitObservations {
-  const found = new Map<string, string[]>([...beats].map(beat => [beat, []]));
-  watched(part).observe(roots, beats, beat => { let entries = found.get(beat); if (!entries) { entries = []; found.set(beat, entries); } return entries; }, visit);
-  return found;
-}
-
-// why: every write gets a new identity, so the list of what a retire saw of the new beat tells, on every copy, whether
-// someone changed it without having seen the retire; stamps are left out, since undo never takes one back (rule 35).
+// why: the hold is judged on the new beat as it is now (assumed rule 103): a change taken back leaves it as the undo saw it.
 export function composeSharedSplitObservation(parts: readonly SharedSplitObservations[], beat: string): string {
-  return JSON.stringify(parts.map(part => part.get(beat) ?? []));
+  return JSON.stringify(parts.map(part => part.get(beat) ?? null));
 }
 
-export function readSharedSplitObservation(roots: SharedSplitRetirementRoots, beat: string): string {
+export function readSharedSplitObservation(view: SharedSplitReadView, beat: string): string {
   const beats = new Set([beat]);
-  return composeSharedSplitObservation(SHARED_SPLIT_OBSERVATION_PARTS.map(part => readSharedSplitObservationPart(roots, beats, part)), beat);
+  return composeSharedSplitObservation(SHARED_SPLIT_OBSERVATION_PARTS.map(part => readSharedSplitObservationPart(view, beats, part)), beat);
 }
 
 export function sharedSplitMarkMatches(raw: unknown, observation: string): boolean {
@@ -163,21 +182,20 @@ export function sharedSplitMarkMatches(raw: unknown, observation: string): boole
   return mark !== null && typeof mark === "object" && !Array.isArray(mark) && (mark as { readonly observed?: unknown }).observed === observation;
 }
 
+export function readSharedSplitHolds(view: SharedSplitReadView, beats: ReadonlySet<string>, parts: readonly SharedSplitObservations[]): ReadonlySet<string> {
+  return new Set([...beats].filter(beat => view.kind(["beats", beat]) === "map"
+    && sharedSplitMarkMatches(view.get(["meta", sharedSplitRetiredField(beat)]), composeSharedSplitObservation(parts, beat))));
+}
+
 export function readSharedSplitRetirements(roots: SharedSplitRetirementRoots, marked: ReadonlySet<string>): ReadonlySet<string> {
-  const beats = new Set([...marked].filter(beat => roots.beats.get(beat) instanceof Y.Map));
-  const parts = SHARED_SPLIT_OBSERVATION_PARTS.map(part => readSharedSplitObservationPart(roots, beats, part));
-  return new Set([...beats].filter(beat => sharedSplitMarkMatches(roots.meta.get(sharedSplitRetiredField(beat)), composeSharedSplitObservation(parts, beat))));
+  const view = sharedSplitStoreView(roots);
+  return readSharedSplitHolds(view, marked, SHARED_SPLIT_OBSERVATION_PARTS.map(part => readSharedSplitObservationPart(view, marked, part)));
 }
 
 export function sharedSplitRetireHolds(roots: SharedSplitRetirementRoots, beat: string): boolean {
   return readSharedSplitRetirements(roots, new Set([beat])).has(beat);
 }
 
-export function markSharedSplitRetired(roots: SharedSplitRetirementRoots, beat: string): void {
-  roots.meta.set(sharedSplitRetiredField(beat), { observed: readSharedSplitObservation(roots, beat) });
-}
-
-export function readSharedSplitWriteBeats(view: SharedSplitStagedView, path: readonly string[], candidates: ReadonlySet<string>): readonly string[] {
-  if (!candidates.size) return [];
-  return [...new Set(SHARED_SPLIT_WATCHED_PARTS.flatMap(part => part.staged(view, path)))].filter(beat => candidates.has(beat));
+export function readSharedSplitStaged(path: readonly string[], segment: (beat: string) => string | null, candidates: ReadonlySet<string>): ReadonlyMap<SharedSplitObservationPart, readonly string[]> {
+  return new Map(SHARED_SPLIT_WATCHED_PARTS.map(part => [part.name, part.staged(path, segment, candidates)]));
 }

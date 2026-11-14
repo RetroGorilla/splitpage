@@ -7,8 +7,7 @@ import type { SharedPreparationText } from "./prepare-text.ts";
 import type { SharedStatusEvent } from "../../core/collab/operations.ts";
 import { sharedStatusEventKeys } from "./status-index.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
-import { bindSharedStructurePlan, planSharedSplitWrite, readSharedSplitCandidates, resolveSharedStructureOwner } from "./structure-plan.ts";
-import { readSharedSplitWriteBeats } from "./split-retirement.ts";
+import { bindSharedStructurePlan, planSharedSplitStaged, resolveSharedStructureOwner } from "./structure-plan.ts";
 
 export type SharedPreparedWrite = {
   readonly path: readonly string[];
@@ -123,15 +122,13 @@ export function createSharedPreparation(handle: SharedDocumentHandle, base: numb
   return { view, include: (writes: readonly SharedPreparedWrite[]): void => {
     ensureOpen();
     for (const write of writes) if (write.kind === "set" && write.value === undefined) throw new Error("Prepared set writes cannot contain undefined");
-    const candidates = readSharedSplitCandidates(view, observeSharedStructureIndex(handle));
     for (const write of writes) {
-      const changes = write.kind !== "delete" || view.has(write.path), before = changes ? readSharedSplitWriteBeats(view, write.path, candidates) : [];
       for (const [key, previous] of overlay) {
         if (previous.path.length > write.path.length && write.path.every((part, index) => previous.path[index] === part)) overlay.delete(key);
       }
       overlay.set(JSON.stringify(write.path), { path: [...write.path], kind: write.kind, value: sharedPreparedValue(write.value) });
-      if (candidates.size && changes) planSharedSplitWrite(view, candidates, [...before, ...readSharedSplitWriteBeats(view, write.path, candidates)]);
     }
+    planSharedSplitStaged(view, observeSharedStructureIndex(handle), writes);
   }, close: (): void => { open = false; scratch.clear(); texts.clear(); overlay.clear(); } };
 }
 

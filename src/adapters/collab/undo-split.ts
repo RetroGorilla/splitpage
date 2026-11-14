@@ -9,7 +9,7 @@ import { sharedStructureIdentity, sharedStructureReference } from "./structure-i
 import { planSharedSplitRetirement, readSharedSplitRetired, readSharedStructureStream } from "./structure-plan.ts";
 import { readProjectionFields } from "./projection-reader.ts";
 import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
-import { markSharedSplitRetired, readSharedSplitObservationPart, sharedSplitRetiredField, sharedSplitRetireHolds } from "./split-retirement.ts";
+import { readSharedSplitObservation, readSharedSplitObservationPart, sharedSplitRetiredField, sharedSplitRetireHolds, sharedSplitStoreView } from "./split-retirement.ts";
 import { readSharedBeatShape, readSharedLiveStructure } from "./undo-removal.ts";
 import { collabState } from "./state.ts";
 
@@ -34,9 +34,10 @@ function storedBoundary(handle: SharedDocumentHandle, beat: string): boolean {
   });
 }
 
-// why: a heading made from the new beat's first line writes its boundary again, which is a change like any other.
+// why: the undo needs the new beat's boundary where the split left it, after the source beat, as the readers' hold does.
 function shape(handle: SharedDocumentHandle, beat: string): string {
-  return JSON.stringify([readSharedBeatShape(handle, beat), readSharedSplitObservationPart(collabState(handle).roots, new Set([beat]), "boundaries").get(beat) ?? []]);
+  const view = sharedSplitStoreView(collabState(handle).roots), beats = new Set([beat]);
+  return JSON.stringify([readSharedBeatShape(handle, beat), ...(["boundaries", "predecessor"] as const).map(part => readSharedSplitObservationPart(view, beats, part).get(beat) ?? null)]);
 }
 
 function stable(operation: { readonly id: string; readonly by: string; readonly beat: string }): boolean {
@@ -51,7 +52,8 @@ export function prepareSharedSplitRetire(operation: SharedSplitRetire, view: Sha
     return readSharedSplitRetired(view, operation.beat) ? { ok: true, writes: [], apply: () => undefined } : { ok: false, reason: "missing-target" };
   }
   planSharedSplitRetirement(view, operation.beat, true);
-  return { ok: true, writes: [], apply: handle => markSharedSplitRetired(collabState(handle).roots, operation.beat) };
+  const writes: SharedPreparedWrite[] = [{ kind: "set", path: ["meta", sharedSplitRetiredField(operation.beat)], value: { observed: readSharedSplitObservation(view, operation.beat) } }];
+  return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }
 
 export function prepareSharedSplitRestore(operation: SharedSplitRestore, view: SharedPreparationView): SharedPreparationResult {

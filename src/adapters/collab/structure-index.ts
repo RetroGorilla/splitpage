@@ -34,6 +34,7 @@ export interface SharedStructureIndex {
   readonly coveredBy: (id: string) => readonly string[];
   readonly attachments: () => SharedAttachmentOwnership;
   readonly retired: () => readonly string[];
+  readonly marked: () => readonly string[];
   readonly boundaryVersion: (segment: string) => number;
   readonly joins: () => SharedJoinIndex;
   readonly endpoint: (position: SharedJoinEndpointPosition) => number | null;
@@ -55,7 +56,12 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const bindingSegments = new Map<string, readonly string[]>(), segmentBindings = new Map<string, Set<string>>();
   const updateBinding = (field: string) => {
     const retired = readSharedSplitRetiredBeat(field);
-    if (retired !== null) { if (state.roots.meta.has(field)) marked.add(retired); else marked.delete(retired); coverage.clear(); updateRecord(retired); return; }
+    if (retired !== null) {
+      if (state.roots.meta.has(field)) marked.add(retired); else marked.delete(retired);
+      coverage.clear(); const held = readSharedSplitRetirements(state.roots, marked);
+      for (const key of new Set([...marked, retired])) updateRecord(key, held.has(key));
+      return;
+    }
     const prefix = sharedJoinEndpointField(""); if (!field.startsWith(prefix)) return;
     const join = field.slice(prefix.length);
     for (const segment of bindingSegments.get(join) ?? []) { const entries = segmentBindings.get(segment); entries?.delete(join); if (!entries?.size) segmentBindings.delete(segment); }
@@ -199,6 +205,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       attachmentsReady = true;
     } return attachmentIndex; },
     boundaryVersion: (segment: string) => boundaryVersions.get(segment) ?? 0,
+    marked: () => Object.freeze([...marked].sort()),
     retired: () => Object.freeze([...marked].filter(key => records.get(key)?.retired).sort()),
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),
     candidates: (name: string, heading: boolean) => Object.freeze([...(heading ? headingNames.get(name) : names.get(cleanId(name))) ?? []]),
