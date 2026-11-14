@@ -254,7 +254,7 @@ for (const refused of [
   } finally { a.session.dispose(); runtime.close(); h.close(); }
 });
 
-test("one whole paste is one command and undo step; creation undo remains refused by name", () => {
+test("one whole paste is one command and undo step, undone and redone as one", () => {
   const h = replicas(2, { rows: [{ id: "R1", audioText: "A" }, { id: "R2", audioText: "B" }] });
   const runtime = clipboardRuntime(); let executions = 0;
   const undo = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
@@ -272,7 +272,9 @@ test("one whole paste is one command and undo step; creation undo remains refuse
     const prepared = ports.commands.prepare("paste", doc => pasteSharedFlowClipboard(doc, at, data, ports.flow, runtime.rich.inertBody, runtime.load) ?? null, stamps, at);
     assert.equal(a.session.run(prepared.command).kind, "applied");
     assert.equal(executions, 1); assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
-    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:segment-create" });
+    const pasted = a.session.read(doc => doc), step = { ok: true, effective: true, label: "paste", selection: null };
+    assert.deepEqual(undo.undo(), step); assert.deepEqual(a.session.read(doc => doc), expectedDocument([expectedRow("R1", "A"), expectedRow("R2", "B")]));
+    assert.deepEqual(undo.redo(), step); assert.deepEqual(a.session.read(doc => doc), pasted);
   } finally { a.session.dispose(); runtime.close(); h.close(); }
 });
 

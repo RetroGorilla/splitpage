@@ -33,14 +33,14 @@ import { sharedJoinRetirementGroup } from "./join-record.ts";
 import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, planSharedJoinGlueUndo, readSharedJoinBeforeRetire, readSharedJoinNeighbours, readSharedJoinOf,
   readSharedJoinPlace, readSharedJoinSeparator, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
-import { planSharedSplitUndo, recordSharedSplit } from "./undo-split.ts";
+import { planSharedCreateUndo, planSharedSplitUndo, recordSharedCreate, recordSharedSplit } from "./undo-split.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
 import { isSharedGalleryShown, readSharedRetirementObservation, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
 import * as Y from "yjs";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "beat-create", "record-retired"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -294,6 +294,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       const plan = planSharedSplitUndo(handle, part, author, raw => { operations.push(operationOf(raw)); });
       return { inverse: () => ({ effective: plan.effective, part: plan.inverse() }) };
     }
+    case "beat-create": {
+      const plan = planSharedCreateUndo(handle, part, author, raw => { operations.push(operationOf(raw)); });
+      return { inverse: () => ({ effective: plan.effective, part: plan.inverse() }) };
+    }
     case "join-glue": {
       const effective = planSharedJoinGlueUndo(handle, part, glue => { operations.push(operationOf({ kind: "join-glue", ...author(), joins: [part.join], glue })); });
       return { inverse: () => ({ effective, part: { ...part, prior: part.written, written: part.prior } }) };
@@ -498,6 +502,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "split" || operation.kind === "split-before") {
       parts.push(recordSharedSplit(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
+    } else if (operation.kind === "segment-create") {
+      parts.push(recordSharedCreate(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join-retire") {
       for (const part of unjoins.get(operation) ?? []) if (part && !unjoined.has(part.join)) { unjoined.add(part.join); parts.push(part); }
     } else if (operation.kind === "join-glue") {
@@ -513,7 +519,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (operation.kind === "discard") {
       parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
-      && operation.kind !== "split-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore") {
+      && operation.kind !== "split-retire" && operation.kind !== "create-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }

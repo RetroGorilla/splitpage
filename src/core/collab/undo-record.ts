@@ -91,6 +91,12 @@ export type SharedUndoPart =
     readonly content: string;
   }
   | {
+    readonly kind: "beat-create";
+    readonly beat: SharedContentRef;
+    readonly retired: boolean;
+    readonly content: string;
+  }
+  | {
     readonly kind: "join-glue";
     readonly join: SharedContentRef;
     readonly from: SharedContentRef;

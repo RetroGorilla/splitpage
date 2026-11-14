@@ -4,8 +4,8 @@ import type { SharedStructureIndex } from "./structure-index.ts";
 import { readProjectionHead } from "./projection-reader.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
 import { readPlannedStructureIndex } from "./structure-order-index.ts";
-import { SHARED_SPLIT_OBSERVATION_PARTS, composeSharedSplitObservation, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, readSharedSplitStaged } from "./split-retirement.ts";
-import type { SharedSplitObservationPart, SharedSplitReadView } from "./split-retirement.ts";
+import { SHARED_SPLIT_OBSERVATION_PARTS, composeSharedSplitObservation, readSharedSplitDrops, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, readSharedSplitStaged } from "./split-retirement.ts";
+import type { SharedSplitMarkMode, SharedSplitObservationPart, SharedSplitReadView } from "./split-retirement.ts";
 
 interface StructurePlanScratch { readonly scratch: <T>(key: string, create: () => T) => T }
 
@@ -13,15 +13,17 @@ function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
     records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>(),
     headings: new Map<string, boolean>(), created: new Map<string, string>(), finalized: new Map<string, string>(), converted: new Map<string, string>(),
-    retired: new Map<string, boolean>(), marked: null as Set<string> | null, parts: new Map<SharedSplitObservationPart, Map<string, unknown>>(), staged: new Set<string>() }));
+    retired: new Map<string, boolean>(), dropped: new Map<string, boolean>(), marked: null as Set<string> | null, parts: new Map<SharedSplitObservationPart, Map<string, unknown>>(), staged: new Set<string>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
 export function sharedStructurePlanIndex(view: StructurePlanScratch): SharedStructureIndex {
   const index = context(view).index; if (!index) throw new Error("Structural index is not bound to preparation"); return index;
 }
-export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment, retired: false }); }
-export function planSharedSplitRetirement(view: StructurePlanScratch, beat: string, retired: boolean): void { context(view).retired.set(beat, retired); }
+export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment, retired: false, dropped: false }); }
+export function planSharedSplitRetirement(view: StructurePlanScratch, beat: string, retired: boolean, dropped = false): void {
+  context(view).retired.set(beat, retired); context(view).dropped.set(beat, retired && dropped);
+}
 // why: after each operation of a list the planned state asks the readers' own question again, on the planned document,
 // for every marked beat whose watched parts that operation wrote, so a list is prepared as every copy will read it.
 export function planSharedSplitStaged(view: StructurePlanScratch & SharedSplitReadView, index: SharedStructureIndex, writes: readonly { readonly path: readonly string[]; readonly kind: string }[]): void {
@@ -38,7 +40,8 @@ export function planSharedSplitStaged(view: StructurePlanScratch & SharedSplitRe
   }
   if (!touched.size) return;
   const held = readSharedSplitHolds(view, touched, plannedParts(view, index, touched));
-  for (const beat of touched) state.retired.set(beat, held.has(beat));
+  const drops = readSharedSplitDrops(view, touched);
+  for (const beat of touched) { state.retired.set(beat, held.has(beat)); state.dropped.set(beat, held.has(beat) && drops.has(beat)); }
 }
 
 // why: a part no write of the list touched is as the readers read it, so it comes from the index; a touched one is read
@@ -55,8 +58,8 @@ function plannedParts(view: StructurePlanScratch & SharedSplitReadView, index: S
   });
 }
 
-export function readSharedPlannedSplitObservation(view: StructurePlanScratch & SharedSplitReadView, index: SharedStructureIndex, beat: string): string {
-  return composeSharedSplitObservation(plannedParts(view, index, new Set([beat])), beat);
+export function readSharedPlannedSplitObservation(view: StructurePlanScratch & SharedSplitReadView, index: SharedStructureIndex, beat: string, mode: SharedSplitMarkMode = "join"): string {
+  return composeSharedSplitObservation(plannedParts(view, index, new Set([beat])), beat, mode);
 }
 
 export function readSharedSplitRetired(view: StructurePlanScratch, beat: string): boolean {
@@ -105,7 +108,8 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
   }
   const records = new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), keys = new Set<string>(actual ? [actual.segment] : []);
   const planned = (record: ReturnType<SharedStructureIndex["records"]>[number]) => {
-    const retired = state.retired.get(record.id); return retired === undefined || retired === record.retired ? record : { ...record, retired };
+    const retired = state.retired.get(record.id), dropped = state.dropped.get(record.id);
+    return retired === undefined || retired === record.retired && dropped === record.dropped ? record : { ...record, retired, dropped: dropped ?? false };
   };
   for (const name of names) {
     for (const record of index.records(name)) records.set(record.id, planned(record));

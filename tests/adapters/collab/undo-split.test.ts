@@ -16,6 +16,7 @@ import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts
 import type { SharedPreparedWrite } from "../../../src/adapters/collab/prepare.ts";
 import { readSharedSplitRetired } from "../../../src/adapters/collab/structure-plan.ts";
 import { SHARED_SPLIT_OBSERVATION_PARTS, sharedSplitRetireHolds } from "../../../src/adapters/collab/split-retirement.ts";
+import type { SharedSplitObservationPart } from "../../../src/adapters/collab/split-retirement.ts";
 import type { CollabRoots } from "../../../src/adapters/collab/roots.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
@@ -366,7 +367,7 @@ const atomAt = (roots: CollabRoots, beat: string): number => {
   }
   throw new Error("no boundary");
 };
-const withAtom = (roots: CollabRoots, at: number, atom: Record<string, unknown>) => {
+const withAtom = (roots: CollabRoots, at: number, atom: unknown) => {
   const delta = segmentText(roots).toDelta() as { insert: unknown }[], out: { insert: unknown }[] = []; let offset = 0;
   for (const part of delta) {
     if (typeof part.insert === "string" && offset < at && at < offset + part.insert.length) {
@@ -387,6 +388,9 @@ const WATCHED: Readonly<Record<string, readonly [Step, Step]>> = {
   predecessor: [{ store: (roots, beat) => segmentText(roots).insertEmbed(atomAt(roots, beat), { h: "Hx" }),
     staged: (roots, beat) => [{ kind: "text", path: ["segments", "b:R1", "text"], value: withAtom(roots, atomAt(roots, beat), { h: "Hx" }) }] },
   { store: (roots, beat) => segmentText(roots).delete(atomAt(roots, beat) - 1, 1), staged: roots => [{ kind: "text", path: ["segments", "b:R1", "text"], value: segmentText(roots).toDelta() }] }],
+  content: [{ store: (roots, beat) => segmentText(roots).insert(atomAt(roots, beat) + 1, "Z"),
+    staged: (roots, beat) => [{ kind: "text", path: ["segments", "b:R1", "text"], value: withAtom(roots, atomAt(roots, beat) + 1, "Z") }] },
+  { store: (roots, beat) => segmentText(roots).delete(atomAt(roots, beat) + 1, 1), staged: roots => [{ kind: "text", path: ["segments", "b:R1", "text"], value: segmentText(roots).toDelta() }] }],
   joins: [{ store: (roots, beat) => ((roots.beats.get("R2") as Y.Map<unknown>).get("joins") as Y.Map<unknown>).set("jX", { into: beat, glue: " ", generation: 0 }),
     staged: (_roots, beat) => [{ kind: "set", path: ["beats", "R2", "joins", "jX"], value: { into: beat, glue: " ", generation: 0 } }] },
   { store: roots => roots.retiredJoins.set("jX", true), staged: () => [{ kind: "set", path: ["retiredJoins", "jX"], value: true }] }],
@@ -397,22 +401,38 @@ const WATCHED: Readonly<Record<string, readonly [Step, Step]>> = {
     { store: roots => roots.retiredStatus.set("seed", true), staged: () => [{ kind: "set", path: ["retiredStatus", "seed"], value: true }] }]
 };
 
-test("every part an undone split watches gives the readers and the planned state of a list the same answer, after a change and after it is taken back", () => {
+// why: a split's undo leaves its new beat's own text unwatched and a creation's undo the block before it, so a change
+// to that one part keeps the undo on both paths.
+function walk(make: (run: Run) => { readonly beat: string; readonly expected: string[][] }, unwatched: SharedSplitObservationPart) {
   assert.deepEqual(Object.keys(WATCHED).sort(), [...SHARED_SPLIT_OBSERVATION_PARTS].sort());
   for (const part of SHARED_SPLIT_OBSERVATION_PARTS) scenario("D1", run => {
-    const record = run.command(split()), beat = run.beat(record), roots = collabState(run.set.a).roots, [change, back] = WATCHED[part] ?? [];
+    const { beat, expected } = make(run), roots = collabState(run.set.a).roots, [change, back] = WATCHED[part] ?? [], watched = part !== unwatched;
     assert.ok(change && back);
-    run.reverse(record, true); run.check("undone", whole);
+    run.check("undone", expected);
     const takeBack = back.staged(roots, beat), prep = createSharedPreparation(run.set.a);
     try {
       assert.equal(prep.view.resolveOwner("R1", "audioText")?.owner, "R1"); assert.equal(readSharedSplitRetired(prep.view, beat), true);
-      prep.include(change.staged(roots, beat)); assert.equal(readSharedSplitRetired(prep.view, beat), false, part + " staged change");
-      collabState(run.set.a).doc.transact(() => change.store(roots, beat)); assert.equal(sharedSplitRetireHolds(roots, beat), false, part + " stored change");
+      prep.include(change.staged(roots, beat)); assert.equal(readSharedSplitRetired(prep.view, beat), !watched, part + " staged change");
+      collabState(run.set.a).doc.transact(() => change.store(roots, beat)); assert.equal(sharedSplitRetireHolds(roots, beat), !watched, part + " stored change");
       prep.include(takeBack); assert.equal(readSharedSplitRetired(prep.view, beat), true, part + " staged take-back");
       collabState(run.set.a).doc.transact(() => back.store(roots, beat)); assert.equal(sharedSplitRetireHolds(roots, beat), true, part + " stored take-back");
     } finally { prep.close(); }
   });
-});
+}
+
+test("every part an undone split watches gives the readers and the planned state of a list the same answer, after a change and after it is taken back", () => walk(run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true); return { beat, expected: whole };
+}, "content"));
+
+test("every part an undone creation watches gives the readers and the planned state of a list the same answer, after a change and after it is taken back", () => walk(run => {
+  run.command(split());
+  const execution = executeSharedCommand(run.set.a, [operation({ kind: "segment-create", id: "make", by: "Writer", segment: "Rn", beat: "Rn", at: { left: "R1", right: null, affinity: "after" },
+    fields: { status: "todo", visualText: "", audioText: "N" } })], { label: "create", selection: null, typing: null }, { base: readSharedRevision(run.set.a) });
+  assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); run.flush();
+  const part = execution.record.parts[0]; assert.ok(part?.kind === "beat-create");
+  run.reverse(execution.record, true); return { beat: part.beat, expected: split2 };
+}, "predecessor"));
 
 const heading = (beat: string) => [{ kind: "heading-create", id: "head", by: "Other", segment: "Hn", heading: "Hn", firstBeat: beat, at: { left: null, right: beat, affinity: "before" } },
   { kind: "text-insert", id: "name", by: "Other", target: { owner: "Hn", segment: "Hn", field: "heading" }, at: { left: null, right: flowBaseReference("Hn", "heading", 0), affinity: "before" },

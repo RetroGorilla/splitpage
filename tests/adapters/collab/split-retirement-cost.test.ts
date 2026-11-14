@@ -41,3 +41,26 @@ for (const marks of [1, 100]) test(`typing beside ${marks} undone split(s) of on
     assert.deepEqual(visits, { typed: 0, fresh: { 1: 11, 100: 308 }[marks] });
   } finally { projector.dispose(); set.close(); }
 });
+
+for (const [where, beat] of [["another segment", "R2"], ["the same segment", "R1"]] as const) test(`typing in ${where} beside an undone creation inside a segment reads its text only when typed in that segment`, () => {
+  const set = replicas(2, { rows: [{ id: "R1", audioText: "abcd" }, { id: "R2", audioText: "ef" }] });
+  registerSharedOperationFamilies(set.a, { cells: runtime.cells });
+  const command = (value: Record<string, unknown>) => {
+    const execution = executeSharedCommand(set.a, [operation(value)], { label: "step", selection: null, typing: null }, { base: readSharedRevision(set.a) });
+    assert.ok(execution.record); return execution.record;
+  };
+  command({ kind: "split", id: "cut", by: "Writer", target, at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" }, observed: [], boundary: "Rs", beat: "Rs", fields: {} });
+  const created = command({ kind: "segment-create", id: "make", by: "Writer", segment: "Rn", beat: "Rn", at: { left: "R1", right: null, affinity: "after" }, fields: { status: "todo", visualText: "", audioText: "N" } });
+  const done = reverseSharedUndoRecord(set.a, created, { by: "Writer", nextId: () => "undo" }); assert.ok(done.ok); assert.equal(done.effective, true);
+  let counting = false, typed = 0;
+  const { projector } = captureIncrementalReplica(set.a, (kind, _key, units) => { if (counting && kind === "split-observation") typed += units ?? 0; });
+  try {
+    assert.deepEqual(projector.read().document.rows.map(row => row.audioText), ["ab", "cd", "ef"]);
+    counting = true;
+    assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "text-insert", id: "typed", by: "Writer", target: { owner: beat, segment: beat, field: "audioText" },
+      at: { left: flowBaseReference(beat, "audioText", 0), right: null, affinity: "after" }, content: [{ value: "z", marks: [] }] })], { base: readSharedRevision(set.a) }), { ok: true });
+    assert.deepEqual(projector.read().document.rows.map(row => row.audioText), beat === "R1" ? ["azb", "cd", "ef"] : ["ab", "cd", "ezf"]);
+    assertIncremental(set.a, projector);
+    assert.equal(typed, beat === "R1" ? 5 : 0);
+  } finally { projector.dispose(); set.close(); }
+});

@@ -16,7 +16,7 @@ import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts
 import { readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
 import type { CollabRoots } from "./roots.ts";
-import { readSharedSplitMarks, readSharedSplitRetirements } from "./split-retirement.ts";
+import { readSharedSplitDrops, readSharedSplitMarks, readSharedSplitRetirements, sharedSplitStoreView } from "./split-retirement.ts";
 import type { SharedSplitRetirementRoots } from "./split-retirement.ts";
 
 function bag(value: unknown): Record<string, unknown> {
@@ -74,7 +74,8 @@ export function readProjectionInlineValue(raw: unknown): SharedInlineValue | nul
 }
 
 export function readProjectionBlocks(roots: Pick<CollabRoots, "order" | "segments"> & SharedSplitRetirementRoots, readUnits?: (container: Y.Map<unknown>) => readonly SharedProjectionUnit[]) {
-  const { order, segments, beats } = roots, streams: SharedProjectionStream[] = [], retired = readSharedSplitRetirements(roots, readSharedSplitMarks(roots.meta));
+  const { order, segments, beats } = roots, streams: SharedProjectionStream[] = [], marks = readSharedSplitMarks(roots.meta), retired = readSharedSplitRetirements(roots, marks),
+    drops = readSharedSplitDrops(sharedSplitStoreView(roots), marks);
   const ordered = new Set(order.toArray());
   for (const key of new Set([...ordered, ...[...segments.keys()].sort()])) {
     if (typeof key !== "string" || !isStableSharedIdentity(key)) continue;
@@ -83,7 +84,7 @@ export function readProjectionBlocks(roots: Pick<CollabRoots, "order" | "segment
   }
   const records = [...beats.keys()].sort().map(id => {
     const fields = readProjectionFields(beats.get(id), "beat");
-    return { id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired: retired.has(id) };
+    return { id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired: retired.has(id), dropped: retired.has(id) && drops.has(id) };
   });
   return projectSharedBlocks(streams, records);
 }

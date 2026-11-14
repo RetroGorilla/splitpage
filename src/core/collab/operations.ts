@@ -85,6 +85,10 @@ export interface SharedSplitRetire extends SharedOperationAuthor {
   readonly kind: "split-retire";
   readonly beat: SharedContentRef;
 }
+export interface SharedCreateRetire extends SharedOperationAuthor {
+  readonly kind: "create-retire";
+  readonly beat: SharedContentRef;
+}
 export interface SharedSplitRestore extends SharedOperationAuthor {
   readonly kind: "split-restore";
   readonly beat: SharedContentRef;
@@ -209,7 +213,7 @@ export interface SharedDiscardRetire extends SharedOperationAuthor {
   readonly discard: string;
 }
 export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedBeatSplitBefore
-  | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSplitRetire | SharedSplitRestore | SharedSoftRemove | SharedRestore | SharedSegmentMove
+  | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSplitRetire | SharedCreateRetire | SharedSplitRestore | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
   | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
   | SharedRecoveryDiscard | SharedDiscardRetire | SharedGalleryRetire;
