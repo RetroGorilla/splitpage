@@ -37,5 +37,7 @@ export const operationExamples = [
     id: "undo-delete-A", by: "Alice", target, units: [{ unit: "s2", left: "s1", value: "b", marks: ["bold-A"] }] } },
   { fixture: "T21 undo of a format", operation: { kind: "mark-retract", id: "undo-bold-A", by: "Alice", target, occurrences: ["bold-A"] } },
   { fixture: "T21 scalar undo of a status", operation: { kind: "status-retire", id: "undo-status-A", by: "Alice",
-    target: { scope: "beat", record: "R1" }, event: "c", value: "ready" } }
+    target: { scope: "beat", record: "R1" }, event: "c", value: "ready" } },
+  { fixture: "rule 52 recovery panel", operation: { kind: "discard", id: "discard-A", by: "Alice",
+    entry: { kind: "removed-beat", key: "R1" }, removals: ["rA"] } }
 ] as const;
