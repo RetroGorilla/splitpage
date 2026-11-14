@@ -656,3 +656,7 @@ File menu Recent routes before shared admission | src/features/file-menu/file-me
 File menu Recent omits its pending opening | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
 New tab Recent routes before shared admission | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
 New tab Recent omits its pending opening | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+direct file source tracks before its admission | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
+project parsing starts after admission refuses a resumed read | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
+parsed project adoption resets panels after admission refuses | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
+parsed import stamps rows after admission refuses | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json

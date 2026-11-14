@@ -68,6 +68,40 @@ function deferred<T>() {
 const LATE_ROW = { id: "r-late", visualText: "", audioText: "late", imageRef: null };
 const RELOAD_REFUSED = ["Reloading a local file is not available in a shared session.", "warn"];
 
+for (const parsed of [false, true]) test("C8 direct file source refuses before starting " + (parsed ? "parsed adoption" : "parsing or opening metadata"), async () => {
+  const h = harness(); let tracked = 0;
+  const stop = h.owner.startLocalFiles({ ...h.ports, entry: { before: () => ({ refused: "buffer-composition" }) },
+    opening: { track: work => { tracked++; return work(); } } });
+  try {
+    const state = migrateRows({ title: "Parsed", rows: [] }, fakeMigration().ports);
+    assert.equal(await h.owner.projectFileSource().open({ kind: "file", file: h.file,
+      ...(parsed ? { parsed: { state, kind: "splitpage" } } : {}) }), false);
+    assert.deepEqual([tracked, h.log, h.notices.shown], [0, [], []]);
+  } finally { stop(); }
+});
+
+test("C8 a manual resume refused after reading never starts parsing", async () => {
+  const h = harness(); let blocked = false;
+  const stop = h.owner.startLocalFiles({ ...h.ports, entry: { before: () => blocked ? { refused: "buffer-composition" } : null },
+    files: { ...h.ports.files, read: async handle => { const file = await h.ports.files.read(handle); blocked = true; return file; } } });
+  try { await h.owner.resumeFromHandle(null); assert.deepEqual(h.log, ["read"]); assert.deepEqual(h.notices.shown, []); }
+  finally { stop(); }
+});
+
+for (const imported of [false, true]) test("C8 admission refused after " + (imported ? "import" : "project") + " parsing writes no adoption side effects", async () => {
+  const h = harness(); let blocked = false;
+  const stop = h.owner.startLocalFiles({ ...h.ports, entry: { before: () => blocked ? { refused: "buffer-composition" } : null },
+    imports: { ...h.ports.imports, parseProjectFileState: async file => {
+      const parsed = await h.ports.imports.parseProjectFileState(file); if (!imported) blocked = true; return imported ? null : parsed;
+    }, normalizeImportedRows: () => [{ id: "imported", visualText: "", audioText: "Words", imageRef: null }] },
+    files: { ...h.ports.files, text: async () => { blocked = true; return "Words"; } } });
+  try {
+    await h.owner.projectFileSource().open({ kind: "file", file: imported ? { ...h.file, name: "Import.txt" } : h.file });
+    assert.deepEqual(h.log, imported ? ["parse", "beginBusy", "endBusy"] : ["parse"]); assert.deepEqual(h.notices.shown, []);
+    assert.equal(h.location.home().kind, "none");
+  } finally { stop(); }
+});
+
 test("rule 74: automatic resume while shared reads no stored handle and shows no startup prompt", async () => {
   const h = harness(), stop = h.owner.startLocalFiles({ ...h.ports, lastFile: { ...h.ports.lastFile, permitted: () => false } });
   try { await h.owner.tryResumeLastProject(); assert.deepEqual(h.log, []); assert.deepEqual(h.notices.shown, []); }

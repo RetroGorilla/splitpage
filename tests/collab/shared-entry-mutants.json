@@ -318,6 +318,42 @@
       "tests": [
         "tests/features/newtab/mount.test.ts"
       ]
+    },
+    {
+      "label": "direct file source tracks before its admission",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "open: function (opening: LocalFileOpening) {\n      if (!active || ports.entry.before()) return false;",
+      "replace": "open: function (opening: LocalFileOpening) {\n      if (!active) return false;",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "project parsing starts after admission refuses a resumed read",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "  if (!active || ports.entry.before()) return false;\n  opts = opts || {};",
+      "replace": "  if (!active) return false;\n  opts = opts || {};",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "parsed project adoption resets panels after admission refuses",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "  if (!active) return false;\n  if (ports.entry.before()) return false;",
+      "replace": "  if (!active) return false;",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "parsed import stamps rows after admission refuses",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "  if (!permitted()) return;\n  if (ports.entry.before()) return;",
+      "replace": "  if (!permitted()) return;",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
     }
   ]
 }
