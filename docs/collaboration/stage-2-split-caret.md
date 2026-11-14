@@ -22,8 +22,10 @@ Selections show anchor then head, so the last row preserves its direction.
 | Insert `X` before the text | 2, 5 | 3, 6 |
 | Insert `X` before the text | 5, 2 | 6, 3 |
 
-In an already joined row, inserting `X` before `abcdef` also moved offset 3 to
-4 in both columns. These unambiguous examples hid the defect: in `aaaaaa`,
+Repeating the table in an already joined row gave the same offsets in both
+columns, including both selection directions and the deletion and formatting
+cases. The joined narration suffix was ` uvwx`; the visual suffix followed a
+line break. These unambiguous examples hid the defect: in `aaaaaa`,
 inserting another `a` before the text left offset 2 at 2. It should move to 3,
 after the same shared character. The renderer's text comparison cannot tell
 equal letters apart. The new literal tests repeat the table in joined rows
@@ -44,8 +46,8 @@ The Split binding uses the selection snapshot that the rows renderer already
 captures before replacing DOM. It resolves both endpoints against the old and
 new painted bases, then restores them after the renderer's ordinary selection
 restoration. It retains the direction. The existing painted character anchors
-already retain their identity through a split. Other cells are read only when a followed unit has
-left the opening cell. Disposal invalidates queued restoration, and moving
+already retain their identity through a split. Other cells are read only when
+a followed unit is absent from the opening cell. Disposal invalidates queued restoration, and moving
 focus outside Split prevents it from taking focus back.
 
 Joined narration already has a composite painted base. Joined visuals use a
