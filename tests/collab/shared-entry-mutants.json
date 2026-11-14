@@ -1,0 +1,14 @@
+{
+  "tests": ["tests/application/local-files.test.ts", "tests/bootstrap/shared-entry-refusals.test.ts"],
+  "mutants": [
+    {"label":"a rejected duplicate identity stamp still announces its new history","file":"src/application/identity/document-identity.ts","find":"  if (stamped.kind === \"rejected\") return false;","replace":"  void stamped;"},
+    {"label":"automatic resume reads the stored handle while shared","file":"src/application/transitions/local-files.ts","find":"async function tryResumeLastProject() {\n  if (!active || !ports.lastFile.permitted()) return;","replace":"async function tryResumeLastProject() {\n  if (!active) return;"},
+    {"label":"automatic resume asks permission after becoming shared","file":"src/application/transitions/local-files.ts","find":"if (!active || !ports.lastFile.permitted() || !handle) return;","replace":"if (!active || !handle) return;"},
+    {"label":"automatic resume reads a file after permission became shared","file":"src/application/transitions/local-files.ts","find":"    if (!active || !ports.lastFile.permitted()) return;","replace":"    if (!active) return;"},
+    {"label":"automatic resume parses after its file read became shared","file":"src/application/transitions/local-files.ts","find":"    if (!active || !permitted()) return;\n    await openProjectFile","replace":"    if (!active) return;\n    await openProjectFile"},
+    {"label":"automatic resume omits its check from project and import parsing","file":"src/application/transitions/local-files.ts","find":"{ skipSnapshot: !unsavedChanges(), resumed: true }, permitted);","replace":"{ skipSnapshot: !unsavedChanges(), resumed: true });"},
+    {"label":"merge snapshot restore asks history before refusing shared mode","file":"src/application/session/session-merge.ts","find":"  opts = opts || {};\n  if (historyRefused()) return \"refused\";","replace":"  opts = opts || {};"},
+    {"label":"draft recovery tries its restore while shared","file":"src/application/recovery/drafts.ts","find":"outcome = draftsRefused() ? \"kept\" : await runDraftRestore(t);","replace":"outcome = await runDraftRestore(t);"},
+    {"label":"prompter launch omits projected narration","file":"src/features/prompter/prompter.ts","find":"  const doc = ports.document.current() as PrompterDoc;","replace":"  const current = ports.document.current() as PrompterDoc;\n  const doc = { ...current, rows: current.rows.map(row => ({ ...row, audioText: \"\" })) };"}
+  ]
+}

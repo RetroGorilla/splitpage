@@ -101,27 +101,28 @@ function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | nu
 }
 
 async function tryResumeLastProject() {
+  if (!active || !ports.lastFile.permitted()) return;
   const handle = await loadLastFileHandle();
-  if (!active || !handle) return;
+  if (!active || !ports.lastFile.permitted() || !handle) return;
   let perm;
   try {
     perm = await ports.files.permission(handle, { mode: "readwrite" });
-    if (!active) return;
+    if (!active || !ports.lastFile.permitted()) return;
   } catch (e) {
     return;
   }
   if (perm === "granted") {
-    await resumeFromHandle(handle);
+    await resumeFromHandle(handle, ports.lastFile.permitted);
   } else if (perm === "prompt") {
     showResumeBanner(handle);
   }
 }
 
-async function resumeFromHandle(handle: LocalFileReference | null | undefined) {
+async function resumeFromHandle(handle: LocalFileReference | null | undefined, permitted: () => boolean = unconditional) {
   try {
     const file = await ports.files.read(handle);
-    if (!active) return;
-    await openProjectFile(file, handle, { skipSnapshot: !unsavedChanges(), resumed: true });
+    if (!active || !permitted()) return;
+    await openProjectFile(file, handle, { skipSnapshot: !unsavedChanges(), resumed: true }, permitted);
   } catch (e) {
   }
 }

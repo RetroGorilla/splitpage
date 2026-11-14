@@ -89,7 +89,8 @@ function reassignDocId(toId: unknown, opts?: { fromId?: unknown; otherTitle?: un
   toId = normalizeDocId(toId);
   const fromId = normalizeDocId(opts.fromId);
   if (!toId || !fromId || toId === fromId || !currentDocument() || (currentDocument() as IdentityDocument).docId !== fromId) return false;
-  stampDocument(documentIdStamp(fromId, toId as string));
+  const stamped = stampDocument(documentIdStamp(fromId, toId as string));
+  if (stamped.kind === "rejected") return false;
   documentLocation().markWrittenOut(false);
   copyDocHistorySafe(fromId, toId);
   syncDocIdentity();

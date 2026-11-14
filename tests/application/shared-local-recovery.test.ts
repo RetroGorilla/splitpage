@@ -107,7 +107,7 @@ test("shared reload refuses the project and import routes before conflict, desti
     capability: SHARED, document: { current: unused("current") }, session: { noteAbsorbedDirty: unused("dirty"), noteReload: unused("reload") },
     transitions: { open: unused("open") }, history: { keep: unused("snapshot") }, saving: { confirmSavedNow: unused("confirm") }, saves: { unsaved: unused("unsaved") },
     conflicts: { close: unused("close") }, location: { amendHome: unused("amend home"), setHome: unused("set home"), fileHome: unused("file home"), importHome: unused("import home") },
-    lastFile: { load: unused("last file"), remember: unused("remember") }, syncIdentity: unused("identity"), stamps: { stampRow: unused("stamp") },
+    lastFile: { permitted: () => true, load: unused("last file"), remember: unused("remember") }, syncIdentity: unused("identity"), stamps: { stampRow: unused("stamp") },
     notices: { ...notices.notices, busy: { begin: unused("busy"), end: unused("end busy") } }, resetProductionPanel: unused("reset"), panels: { close: unused("panel") }, undo: { flush: unused("flush") },
     imports: { parseProjectFileState: unused("parse"), docxToRows: unused("docx"), csvToRows: unused("csv"), detectTwoColumnFormat: unused("detect"), parseImportRows: unused("rows"), normalizeImportedRows: unused("normalize") },
     text: { sanitizeHtml: unused("sanitize") }, resumeNeeded: unused("resume"), desktop: { running: unused("desktop"), openFileDialog: unused("dialog"), routeOpen: unused("route") },

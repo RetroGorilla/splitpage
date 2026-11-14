@@ -31,7 +31,7 @@ function harness() {
     saves: { unsaved: () => state.dirty },
     conflicts: { close: () => { log.push("closeConflict"); } },
     location,
-    lastFile: { load: async () => { log.push("loadLast"); return file; }, remember: async () => { log.push("remember"); } },
+    lastFile: { permitted: () => true, load: async () => { log.push("loadLast"); return file; }, remember: async () => { log.push("remember"); } },
     syncIdentity: () => { log.push("identity"); },
     stamps: { stampRow: () => { log.push("stamp"); } },
     notices: { ...notices.notices, busy: { begin: () => { log.push("beginBusy"); return 1; }, end: () => { log.push("endBusy"); } } },
@@ -65,6 +65,36 @@ function deferred<T>() {
 
 const LATE_ROW = { id: "r-late", visualText: "", audioText: "late", imageRef: null };
 const RELOAD_REFUSED = ["Reloading a local file is not available in a shared session.", "warn"];
+
+test("rule 74: automatic resume while shared reads no stored handle and shows no startup prompt", async () => {
+  const h = harness(), stop = h.owner.startLocalFiles({ ...h.ports, lastFile: { ...h.ports.lastFile, permitted: () => false } });
+  try { await h.owner.tryResumeLastProject(); assert.deepEqual(h.log, []); assert.deepEqual(h.notices.shown, []); }
+  finally { stop(); }
+});
+
+for (const stage of ["load", "permission", "read", "project", "import"] as const) {
+  test(`rule 74: automatic resume becoming shared during ${stage} never adopts or changes history`, async () => {
+    const h = harness(); let permitted = true;
+    const ports: LocalFilesOwnerPorts = { ...h.ports,
+      lastFile: { ...h.ports.lastFile, permitted: () => permitted, load: async () => { const handle = await h.ports.lastFile.load(); if (stage === "load") permitted = false; return handle; } },
+      files: { ...h.ports.files,
+        permission: async (handle, options) => { const result = await h.ports.files.permission(handle, options); if (stage === "permission") permitted = false; return result; },
+        read: async handle => { const result = await h.ports.files.read(handle); if (stage === "read") permitted = false; return stage === "import" ? { ...h.file, name: "script.txt" } : result; },
+        text: async () => { permitted = false; return "Imported"; }
+      },
+      imports: { ...h.ports.imports, parseProjectFileState: async file => { const result = await h.ports.imports.parseProjectFileState(file); if (stage === "project") permitted = false; return stage === "import" ? null : result; } }
+    };
+    const stop = h.owner.startLocalFiles(ports);
+    try {
+      await h.owner.tryResumeLastProject();
+      const expected = ["loadLast", ...(stage === "load" ? [] : ["permission"]), ...(["read", "project", "import"].includes(stage) ? ["read"] : []),
+        ...(["project", "import"].includes(stage) ? ["parse"] : []), ...(stage === "import" ? ["beginBusy", "endBusy"] : [])];
+      assert.deepEqual(h.log, expected);
+      assert.deepEqual(h.notices.shown, []);
+    } finally { stop(); }
+  });
+}
+
 const RELOAD_STAGES = {
   "read": {
     refused: ["closeConflict", "read"],
