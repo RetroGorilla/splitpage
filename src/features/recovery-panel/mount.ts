@@ -59,6 +59,6 @@ export function createRecoveryPanel(ports: RecoveryPanelPorts): RecoveryPanelCon
     changed();
   };
   enter();
-  return { enter, leave, open: () => { if (!disposed && ports.session.current()) { opened = true; enter(); } },
+  return { enter, leave, open: () => { if (mode && ports.session.current()) { opened = true; enter(); } },
     dispose: () => { disposed = true; leave(); } };
 }

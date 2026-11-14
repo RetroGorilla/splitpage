@@ -71,6 +71,8 @@ test("C9 binding lifetime has zero standalone listeners, open-only subscription 
       panel.open(); assert.deepEqual(counts(), [2, 1, 1]);
       if (!rollback) f.state.shared = false;
       panel.leave(); actions.leave(); assert.deepEqual(counts(), [0, 0, 0]);
+      const beforeStaleOpen = f.state.currentReads;
+      panel.open(); assert.deepEqual(counts(), [0, 0, 0]); assert.equal(f.state.currentReads, beforeStaleOpen);
       f.state.shared = false;
       const beforeReplacement = [f.state.currentReads, f.state.reads, f.state.docReads];
       f.changed(); f.publish();
