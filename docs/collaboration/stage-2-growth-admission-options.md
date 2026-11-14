@@ -2,9 +2,9 @@
 
 ## Decision page
 
-The present costs come from two different choices: storing a rich birth record for every insertion, and copying the entire shared state before accepting every remote update. A first character adds **320 bytes**, of which **310 bytes are the birth record**. The two anchor fields take 145 bytes. Deleting that character leaves 328 bytes behind. These are exact small-state differences, rather than averages from the larger workload.
+The present costs come from two different choices: storing a rich birth record for every insertion, and copying the entire shared state before accepting every remote update. A first character adds **320 bytes**, of which **310 bytes are the birth record**. After the edit workload, one new local key stores **5,223 to 5,224 bytes** because its birth names 100 observed mark additions. The stored cost of a key grows with the number of mark additions recorded in its cell, so it is not a fixed per-character rate. The two anchor fields take 145 bytes. Deleting the first character leaves 328 bytes behind. These are exact small-state differences, rather than averages from the larger workload.
 
-After this workload, one new **local** key adds **5223–5224 bytes**: its birth names 100 observed mark additions. The earlier 325-byte rate comes from a fresh peer's causal stream and does not bound typing by an edited local writer.
+The **1,833–1,834-byte** edited local-key result uses native record references alone; a local key with tuple births and native references together was not measured. This is not the only measured storage remedy: binary anchors, tuple births and insertion runs were also measured, on the fresh stream below. A cap on observations or a shared reference to one observed set was considered in this review, but neither was prototyped. A cap would need to preserve observations still needed by concurrent formatting and undo. A shared set could avoid repeating its members per key, but its identity, delivery ordering and retention policy need correctness work before any savings can be claimed.
 
 The [previous record](stage-2-growth-admission.md) measured 7.9–9.1 MB after editing, against the 2 MiB ceiling. Its admission p50 was 3.5 ms fresh short/long, 27.5 ms fresh large, and 196–237 ms edited. Those timings are quoted from #1566, on another machine and an earlier source snapshot. The alternatives below are a new experiment; their comparison with #1566 is directional, not a paired speed ratio.
 
@@ -19,9 +19,9 @@ The [previous record](stage-2-growth-admission.md) measured 7.9–9.1 MB after e
 | Standing shadow | p50 0.03–0.06 ms; worst individual 56.44 ms. Extra copy 0.06–30.60 MiB; refused-update rebuild p50 1.98–162.64 ms. | Medium: `document.ts`, `state.ts`, ingress/buffer lifecycle and tests. Keeps native preflight; adds memory and refusal rebuilds. Held-update ordering still needs design. |
 | One trial per queued burst | 100 / 1,000 drains: 3.13–172.11 / 23.34–190.21 ms. | Medium: document/ingress drain and buffer tests. Rejects a whole burst; retains a full copy for isolated updates. Long synchronous drains can still block typing. |
 
-I would first use binary anchors and compact record fields, keeping the information used for concurrent formatting and undo. I would use a standing shadow for admission, retaining isolated integration before live mutation. Both require implementation and adversarial tests before adoption. Grouping insertion runs is attractive only if the owner accepts delayed publication or a more involved rewrite of how runs are recorded. A coordinated document epoch is my preferred way to bound long histories, provided the owner accepts its offline-edit and undo policy. The measured compact encodings still exceed the storage ceiling.
+I would first use binary anchors and compact record fields, keeping the information used for concurrent formatting and undo. I would use a standing shadow for admission, retaining isolated integration before live mutation. Both require implementation and correctness tests under concurrent edits before adoption. Grouping insertion runs is attractive only if the owner accepts delayed publication or a more involved rewrite of how runs are recorded. A coordinated document epoch is my preferred way to bound long histories, provided the owner accepts its offline-edit and undo policy. The measured compact encodings still exceed the storage ceiling.
 
-The shadow trades CPU for a second copy in memory, and a refused update still requires a full rebuild. Its 56.44 ms outlier fails the 50 ms limit on fresh long; this is not an all-pass result. Burst trials help an existing queue but leave isolated updates with the present copying cost. Decode-only and the additional reference check are fast controls, not safe replacements. **End-to-end input latency remains unmeasured.**
+The shadow trades CPU for a second copy in memory, and a refused update still requires a full rebuild. Its longest observed remote admission is 56.44 ms; this is not a local-input measurement. Burst trials help an existing queue but leave isolated updates with the present copying cost. Decode-only and the additional reference check are fast controls, not safe replacements. **Every Stage 0 local-input result is not measured.**
 
 ## Scope and reproduction
 
@@ -274,41 +274,21 @@ All timing passes compare final encoded bytes with a direct application control,
 
 Heap is sampled in separate untimed passes, five per method/state/burst size. Second-copy retained heap is after two forced collections immediately after shadow creation, relative to the same live receiver. Peak/retained burst deltas exclude that standing copy. Peak is sampled between updates (or after the whole burst for batch), so it can miss an intra-update or intra-trial peak. Retained is after two collections. External buffers and resident memory are excluded. Small negative values are collection noise. The standing copy is additional to the live adapter's footprint, application state, projection and undo stack. These Node figures cannot certify the Stage 0 browser heap limit.
 
-## Stage 0 screen and limits
+## Stage 0 local-input results
 
-| Case | Method | Individual admission | 100 drain task | 1,000 drain task |
-| --- | --- | --- | --- | --- |
-| short/fresh | shadow | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| short/fresh | batch | Full copy for isolated update; singleton not rerun | All ≤50 ms | All ≤50 ms |
-| short/fresh | decode | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| short/fresh | references | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| short/edited | shadow | Within admission-only screen | All ≤50 ms | At least one >50 ms |
-| short/edited | batch | Full copy for isolated update; singleton not rerun | At least one >50 ms | At least one >50 ms |
-| short/edited | decode | Within admission-only screen | All ≤50 ms | At least one >50 ms |
-| short/edited | references | Within admission-only screen | At least one >50 ms | At least one >50 ms |
-| long/fresh | shadow | EXCEEDS | All ≤50 ms | At least one >50 ms |
-| long/fresh | batch | Full copy for isolated update; singleton not rerun | All ≤50 ms | At least one >50 ms |
-| long/fresh | decode | Within admission-only screen | All ≤50 ms | At least one >50 ms |
-| long/fresh | references | Within admission-only screen | All ≤50 ms | At least one >50 ms |
-| long/edited | shadow | Within admission-only screen | All ≤50 ms | At least one >50 ms |
-| long/edited | batch | Full copy for isolated update; singleton not rerun | At least one >50 ms | At least one >50 ms |
-| long/edited | decode | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| long/edited | references | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| large/fresh | shadow | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| large/fresh | batch | Full copy for isolated update; singleton not rerun | All ≤50 ms | All ≤50 ms |
-| large/fresh | decode | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| large/fresh | references | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| large/edited | shadow | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| large/edited | batch | Full copy for isolated update; singleton not rerun | At least one >50 ms | At least one >50 ms |
-| large/edited | decode | Within admission-only screen | All ≤50 ms | All ≤50 ms |
-| large/edited | references | Within admission-only screen | All ≤50 ms | All ≤50 ms |
+| Case | Local-input p50 | Local-input p95 | Typing long tasks |
+| --- | --- | --- | --- |
+| short/fresh | not measured | not measured | not measured |
+| short/edited | not measured | not measured | not measured |
+| long/fresh | not measured | not measured | not measured |
+| long/edited | not measured | not measured | not measured |
+| large/fresh | not measured | not measured | not measured |
+| large/edited | not measured | not measured | not measured |
 
-This table screens the valid causal stream only. Edited-state shadow rebuilds after refusal can themselves exceed 50 ms if performed synchronously. They need a separate failure/scheduling policy; passing the valid-update row does not cover hostile or repeatedly refused input.
+Every Stage 0 local-input result is **not measured**, for every alternative. These back-to-back admissions of another copy's updates do not measure a local writer typing with a remote edit once per second. They cannot establish added local-input latency, local-input p50/p95 or typing long tasks, and no local-input pass/fail verdict follows from them.
 
-Shadow individual admissions pass this necessary screen on five of six cases; fresh long fails because of the observed 56.44 ms maximum. Both copy-free controls pass the individual timing screen on all six, but fail the tested whole-update isolation requirement. Every alternative has at least one synchronous drain exceeding 50 ms. Burst trials retain the isolated-update full-copy shape and do not resolve that input case. None of these results certify the complete Stage 0 input gate.
-
-This screen uses the Stage 0 added-p50 allowance of 3 ms on short/long and 2.7 ms on large, p95 caps of 25/40 ms, and the worst observed individual admission against 50 ms. Meeting those numbers for admission alone would still leave the running app's input, projection, notifications and paint to measure. A synchronous drain exceeding 50 ms cannot be certified for the typing path even when its individual admissions are cheap. Scheduling drains in slices or off the main thread is additional work, unmeasured here.
+The measured 56.44 ms remote admission, synchronous drain totals and refusal-rebuild costs remain in the timing tables as adapter-level observations. They identify expensive operations to investigate in the composed application; they are not browser input or long-task measurements. Both copy-free controls still fail the independently tested whole-update isolation requirement. Scheduling drains in slices or off the main thread is additional work, unmeasured here.
 
 No browser, two-client composed app, end-to-end input latency, network/provider, server validation, 2 MiB join fixture, reconnect, persistence, receipts or complete-format migration was measured. No full verification suite was run, as required for this shared computer. No current-admission timing or heap pass was repeated; all such numbers are explicitly quoted from #1566. Singleton burst-trial percentiles were not rerun: that policy still makes one full-state trial for an isolated update.
 
-Validation: all ten focused measurement tests pass, along with full lint, all five type-check configurations, dependency and comment gates, and the code map. Existing desktop and collaboration-prototype dependencies were installed from their lockfiles for type checking, with installation scripts disabled. No tracked product file, package manifest, lockfile or baseline changed. All preparation and measurement processes exited before handoff.
+Validation: all eleven focused measurement tests pass, along with full lint, all five type-check configurations, dependency and comment gates. The code map passed in the original options round. Existing desktop and collaboration-prototype dependencies were installed from their lockfiles for type checking, with installation scripts disabled. No tracked product file, package manifest, lockfile or baseline changed. All preparation and measurement processes exited before handoff.

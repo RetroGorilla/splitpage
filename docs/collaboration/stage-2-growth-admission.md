@@ -1,16 +1,27 @@
 # Stage 2 stored growth and update admission
 
-Fresh storage meets the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. All six admission rows exceed the added-p50 allowance against the Stage 0 reference. Admission alone exceeds the absolute 8 ms p50 and 25/40 ms p95 limits on every edited state and on large/fresh; those rows also contain admissions over 50 ms. Short/fresh and long/fresh fit the absolute limits in isolation, which does not certify end-to-end input latency. All six timing cases have five repetitions. The whole-application after-load heap limits cannot be certified by this Node adapter measurement.
+Fresh storage meets the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. All six remote-admission timing cases have five repetitions. Every Stage 0 local-input result is **not measured**: back-to-back admission of another copy's updates does not measure a local writer typing with a remote edit once per second, and cannot establish the added local-input latency or its p50, p95 or typing long tasks. The whole-application after-load heap limits also cannot be certified by this Node adapter measurement.
 
 Measurements began on 2026-11-13 and continued on 2026-11-14 at the adapter level in Node, with no browser, application wiring, transport or server. The tables remain measurements of the named source snapshot, rather than a remeasurement after the final integration merge. The source commit measured is `d49fd51fbf5d7819143d4e263ecc33e2f8226bd2`; its `src/adapters/collab` tree is `138889c20c2952880862f3e9ab0a1b1bcee81cb7`. Machine description: ARM64, Node v24.22.1. Other work was running throughout. These conditions differ from the Stage 0 browser baseline; its numbers are budget references, not a same-machine latency comparison.
 
 ## Reproduction and scope
 
-After installing Node 24.22.1 and running `npm ci`, run:
+After installing Node 24.22.1 and running `npm ci`, the following command measures the product source at the current checkout's **HEAD**, which it records in the output. Running it on this branch does not remeasure `d49fd51…`:
 
 ```sh
 node tools/measure-shared-admission.mjs shared-admission-results.json
 ```
+
+To repeat the experiment against the product snapshot described by the tables, use a separate clean checkout with this PR's commits available, then run:
+
+```sh
+git switch --detach d49fd51fbf5d7819143d4e263ecc33e2f8226bd2
+git restore --source=74081c5d05bca94ffdf418665f1ac52c3d11ba04 -- tools/measure-shared-admission.mjs tests/collab/measure/run.mjs
+npm ci
+node tools/measure-shared-admission.mjs shared-admission-snapshot-results.json
+```
+
+The historical product commit predates the committed measurement harness, so checking it out alone is insufficient. Restoring only those two harness files supplies the same measurement protocol and the corrected report labels while leaving the historical product source, dependencies and fixtures at that commit. Use Node 24.22.1 and, on this shared computer, check available memory in a separate command before installation or a measurement run and wait for at least 3,000 MiB. A new run produces new timing observations; hardware and competing work prevent a promise of identical wall-clock numbers. Original-round data availability is stated below.
 
 The command internally runs all five rounds and prints Markdown tables. With a JSON filename, it writes completed preparation and rounds incrementally, plus a `.checkpoint.json` sidecar, and resumes that checkpoint on the same command. The checkpoint rejects changed measured source, measurement code, dependencies, fixtures, Node version or CPU architecture. Choose a new JSON filename after changing these inputs. Omitting the filename prints the tables alone. Checkpoints are local run data and are not committed. It refuses uncommitted changes to measured source, dependencies or fixtures. The thin launcher spawns a foreground Node process with `--expose-gc` and waits for it. The implementation and prototypes are in `tests/collab/measure/run.mjs`, beside the collaboration integration tests, where existing rules permit the sync library and raw document construction. The focused adapter test uses the required formatting-monitor factory. CI exposed that every file under `tests/adapters/collab/`, including a manual script, must use that monitor; the manual measurement was moved so instrumentation does not change its adapter timings. No rule or baseline exception is added. That filename is not selected as a test by the normal runner. Focused checks: `node --test tests/adapters/collab/measure/measurement.test.mjs`.
 
@@ -31,6 +42,12 @@ For admission, a separate sender starts from the fresh checkpoint, runs 1,000 re
 The direct control applies the same updates through the same adapter transaction and live observers to a scratch receiver, bypassing admission. The decode-only prototype retains `decodeUpdate` and the positive struct-length check, then uses that direct path. The one-trial prototype makes one `CollabDocumentState`, copies the checkpoint into it, decodes/checks/applies the entire burst there, destroys it, then applies each update to the live scratch receiver. Each 1,000-update timing asserts its final encoded state against the direct control after stopping the timer. The overhead fractions are paired round estimates: `1 - direct/current` includes trial and validation; `1 - decode/current` more closely isolates trial creation, full-state encode/copy, trial application and destruction. They are differences between controls, not profiler attribution.
 
 Heap sampling is a separate untimed pass for each burst size, so sampling does not inflate the timing tables. Timing and after-load-footprint statistics have five repetitions; heap-only replays run once per case. The retained short/fresh data already has five heap passes from the initial protocol; the table states each count. Peak is the largest `heapUsed` sampled after an admission minus the pre-burst heap after two forced collections; it may miss an intra-admission peak. Retained is the after-burst delta after two collections. External buffers and resident process memory are not included in `heapUsed`. After-load footprint compares the incremental retained size of a cloned plain fixture and an adapter receiver, excluding imported code and fixture data already present in the process. It includes the receiver's normal observers and caches, but no projection, DOM, app owners or in-memory undo stack. A negative small plain delta reflects collection noise, not negative object size; those ratios are unreliable when the plain delta is near zero. It cannot certify Stage 0's whole-application heap limit. After-edit footprint uses the original plain fixture as its control because the workload restores the script content.
+
+## Original-round data availability
+
+The original per-round JSON was not committed and is unavailable from the offline source environment. It is not present in this checkout or its local caches. The [sanitized summary JSON](stage-2-growth-admission-summary.json) preserves the published rounded table values and explicitly sets `perRoundObservations` to `null`; it is not original per-round evidence. Individual rounds cannot be recovered from a median and minimum–maximum range. Retaining the original observations remains unresolved until the actual file is supplied. New measurements on another computer would not replace those observations.
+
+The separate [options record's per-round JSON](stage-2-growth-admission-options-results.json) contains its own measurements, not the missing observations behind these tables.
 
 ## Results
 
@@ -71,16 +88,16 @@ Values are medians [min–max] of per-round statistics, not pooled updates.
 | large / fresh | 27.50 [23.94–35.66] | 43.49 [29.54–70.77] | 67.78 [43.74–125.77] | 0.02 [0.02–0.03] | 0.03 [0.03–0.04] / 0.06 [0.05–0.07] | 99.90 [99.87–99.92] / 99.87 [99.86–99.90] |
 | large / edited | 236.97 [201.84–356.51] | 448.12 [223.56–826.76] | 554.49 [280.56–1386.76] | 0.02 [0.02–0.03] | 0.03 [0.02–0.03] / 0.04 [0.04–0.08] | 99.98 [99.96–99.99] / 99.97 [99.97–99.99] |
 
-Input budget screen only; passing admission alone does not establish end-to-end input latency.
+Stage 0 local-input results: not measured. Back-to-back remote admissions do not measure local typing or its added latency.
 
-| Script / state | Available added p50 ms (Stage 0 reference) | Added p50 budget | Admission p50 alone vs 8 ms | Admission p95 alone vs 25/40 ms | Any admission above 50 ms |
-| --- | --- | --- | --- | --- | --- |
-| short / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
-| short / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
-| long / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
-| long / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
-| large / fresh | 2.7 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
-| large / edited | 2.7 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
+| Script / state | Local-input p50 | Local-input p95 | Typing long tasks |
+| --- | --- | --- | --- |
+| short / fresh | not measured | not measured | not measured |
+| short / edited | not measured | not measured | not measured |
+| long / fresh | not measured | not measured | not measured |
+| long / edited | not measured | not measured | not measured |
+| large / fresh | not measured | not measured | not measured |
+| large / edited | not measured | not measured | not measured |
 
 | Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
