@@ -19,6 +19,7 @@ import type { SharedDocumentProjectionResult } from "../../../src/adapters/colla
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 
 test("seeded incremental projection agrees at every authored and delivered revision with no declared limits", t => {
   const declaredLimits: readonly string[] = [], violations: string[] = [], kinds = new Set<string>(), choices = new Set<string>();
@@ -42,7 +43,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
     for (const [index, handle] of handles.entries()) { const projector = projectors[index]; assert.ok(projector); assertIncremental(handle, projector); }
     const stops = projectors.map((projector, index) => projector.observe(() => checkpoint(index)));
     try {
-      for (const handle of handles) { registerBenchmarkHandlers(handle); registerSharedUndoOperationHandlers(handle); }
+      for (const handle of handles) { registerBenchmarkHandlers(handle); registerSharedUndoOperationHandlers(handle); registerSharedRemovalHandlers(handle); }
       for (const [writer, handle] of handles.entries()) {
         const roots = collabState(handle).roots, prefix = `s${seed}w${writer}`, by = "Writer";
         const submit = (command: { kind: string } & Record<string, unknown>): void => {
