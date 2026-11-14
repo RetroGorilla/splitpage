@@ -1,4 +1,4 @@
-import type { BufferedTextCommit, PaintedText } from "../../application/editing/ports.ts";
+import type { BufferedTextCommit } from "../../application/editing/ports.ts";
 import type { BufferedCommit } from "../../core/collab/buffer.ts";
 import type { SharedCommandDescription } from "../../core/collab/undo-record.ts";
 import type { CommonDocumentSession, CommandOutcome } from "../../application/session/document-session.ts";
@@ -19,7 +19,7 @@ import { readSharedRevision } from "./document.ts";
 import { holdSharedBuffer, sharedBufferDeliveryBusy } from "./ingress.ts";
 import { readSharedPaintedText } from "./paint-base.ts";
 import { resolveSharedBufferedSelection } from "./buffer-selection.ts";
-import { sharedAnchorCharacterEnd } from "./anchors.ts";
+import { createSharedAnchor, sharedAnchorCharacterEnd } from "./anchors.ts";
 import { collabState } from "./state.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { resolveIndexedRestorableBeat } from "./structure-plan.ts";
@@ -39,9 +39,10 @@ export function sharedBufferedTarget(handle: SharedDocumentHandle, key: string):
 
 export const SHARED_TYPING_LABEL = "typing";
 
-function typingDescription(painted: PaintedText, commit: BufferedCommit): SharedCommandDescription {
-  const first = commit.splices[0], preceding = first && first.from > 0 ? painted.identity(first.from - 1) : null;
-  const anchor = !first ? null : preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null;
+function typingDescription(handle: SharedDocumentHandle, target: SharedTextAddress, commit: BufferedCommit): SharedCommandDescription {
+  const first = commit.splices[0];
+  // why: undo follows concurrent text in the original gap rather than staying attached to its preceding character
+  const anchor = first ? createSharedAnchor(handle, target, first.from, "after") : null;
   return { label: SHARED_TYPING_LABEL, selection: anchor ? { anchor, focus: anchor } : null, typing: commit.splices.map(splice => splice.insert).join("") };
 }
 
@@ -87,7 +88,7 @@ export function createSharedBufferedText(
                 changes: bufferedFieldChanges(rowId),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
                 shared: { operations: [...operations, ...tags, ...stamp], base: commit.base,
-                  description: label ? { ...typingDescription(painted, commit), label, typing: null } : typingDescription(painted, commit) }
+                  description: label ? { ...typingDescription(handle, target, commit), label, typing: null } : typingDescription(handle, target, commit) }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }

@@ -109,6 +109,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
           }
         },
         create: (root, selectionMoved, undoStep) => {
+          const openedDocument = documentReader.current() as unknown as FlowDoc;
           // why: rule 78: opening the Writer in a shared session writes no paragraphs
           if (!shared) {
             undoOwner().flush();
@@ -169,7 +170,8 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             lifetime: documentLifetime,
             heldSelection: writerEditing.selection(),
             root,
-            doc: () => documentReader.current() as unknown as FlowDoc,
+            // why: disposal can finish the old surface between the owner swap and shared hydration
+            doc: () => documentReader.current() as unknown as FlowDoc ?? openedDocument,
             flow: commands ? commands.flow : flowPorts,
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,

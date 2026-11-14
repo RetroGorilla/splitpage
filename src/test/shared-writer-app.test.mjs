@@ -22,6 +22,7 @@ const { readSharedPaintedText } = await import("../adapters/collab/paint-base.ts
 const { sharedBufferedTarget } = await import("../adapters/collab/buffer.ts");
 const { readOperation } = await import("../core/collab/read-operation.ts");
 const { beatPos, caretAt } = await import("../core/flow/flow.ts");
+const { cellSelection } = await import("../features/common/cell-selection.ts");
 
 after(closeApp);
 
@@ -52,6 +53,10 @@ function beat(rowId) {
 
 function typeAtEnd(rowId, character) {
   const element = beat(rowId), root = document.getElementById("writer-doc");
+  return typeIn(element, root, character);
+}
+
+function typeIn(element, root, character) {
   root.focus();
   const node = element.lastChild;
   const range = document.createRange();
@@ -72,9 +77,15 @@ function typeAtEnd(rowId, character) {
 }
 
 function remoteAtStart(other, rowId, text) {
+  remoteAt(other, rowId, text, 0);
+}
+
+function remoteAt(other, rowId, text, offset) {
   const target = sharedBufferedTarget(other, rowId), painted = readSharedPaintedText(other, target);
   assert.ok(painted);
-  const operation = readOperation({ kind: "text-insert", id: "bob" + text, by: "Bob", target, at: { left: null, right: painted.identity(0), affinity: "before" },
+  const operation = readOperation({ kind: "text-insert", id: "bob" + text, by: "Bob", target,
+    at: { left: offset === painted.text.length ? painted.endGap : null, right: painted.identity(offset),
+      affinity: offset === painted.text.length ? "after" : "before" },
     content: [{ value: text, marks: [] }] });
   assert.ok(operation);
   assert.deepEqual(executeSharedOperations(other, [operation]), { ok: true });
@@ -85,7 +96,7 @@ const audio = () => currentDocument()?.rows[0]?.audioText;
 test("in the real app, a shared Writer types through the buffers, shows another writer's text, and Ctrl+Z takes back only its own typing", async () => {
   adoptReplacement(migrateRows({ title: "Shared Writer", rows: [{ id: "r1", audioText: "Hello", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts();
   assert.ok(parts);
   const other = createSharedDocument();
@@ -108,4 +119,93 @@ test("in the real app, a shared Writer types through the buffers, shows another 
     assert.deepEqual(leaveSharedSession(ports), { ok: true });
     assert.deepEqual([sharedSession(), audio(), errors, reports], [false, "YHello", [], []]);
   } finally { destroySharedDocument(other); }
+});
+
+test("shared Writer undo puts the caret after remote text inserted in the same gap", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "ab", visualText: "", status: "todo" }] }));
+  undoOwner().flush();
+  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  const parts = sharedSessionParts(), other = createSharedDocument();
+  try {
+    registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });
+    assert.equal(applySharedUpdate(other, encodeSharedState(parts.handle)).ok, true);
+    writerControls().openWriter();
+    assert.equal(typeAtEnd("r1", "x"), true);
+    remoteAt(other, "r1", "Y", 2);
+    assert.equal(applySharedUpdate(parts.handle, encodeSharedState(other)).ok, true);
+    beat("r1").dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
+    assert.equal(audio(), "abY");
+    assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 3)));
+  } finally {
+    destroySharedDocument(other);
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+  }
+});
+
+test("shared Writer visual typing undo reopens the visual box and restores its caret", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "Hello", visualText: "ab", status: "todo" }] }));
+  undoOwner().flush();
+  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  try {
+    writerControls().openWriter();
+    writerControls().writerFlowControl().openVisual("r1");
+    const cell = document.querySelector(".wr-flow-visual-text");
+    assert.equal(typeIn(cell, cell, "x"), true);
+    assert.equal(cell.textContent, "abx");
+    cell.dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
+    const box = document.querySelector(".wr-flow-visual-box");
+    assert.equal(currentDocument().rows[0].visualText, "ab");
+    assert.equal(box.hidden, false);
+    assert.equal(document.activeElement, cell);
+    assert.deepEqual(cellSelection(cell), { from: 2, to: 2 });
+  } finally { assert.deepEqual(leaveSharedSession(ports), { ok: true }); }
+});
+
+test("an already open Writer enters shared mode, keeps its caret, types, receives remote text, undoes and leaves", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows({ title: "Open Writer", rows: [{ id: "r1", audioText: "Hello", visualText: "", status: "todo" }] }));
+  undoOwner().flush();
+  writerControls().openWriter();
+  writerControls().writerFlowControl().place(caretAt(beatPos("r1", 3)));
+  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.equal(document.getElementById("writer").hidden, false);
+  assert.equal(beat("r1").textContent, "Hello");
+  assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 3)));
+  const parts = sharedSessionParts(), other = createSharedDocument();
+  try {
+    registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });
+    assert.equal(applySharedUpdate(other, encodeSharedState(parts.handle)).ok, true);
+    assert.equal(typeAtEnd("r1", "x"), true);
+    remoteAtStart(other, "r1", "Y");
+    assert.equal(applySharedUpdate(parts.handle, encodeSharedState(other)).ok, true);
+    assert.deepEqual([audio(), beat("r1").textContent], ["YHellox", "YHellox"]);
+    beat("r1").dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual([audio(), beat("r1").textContent], ["YHello", "YHello"]);
+    assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 6)));
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+    assert.equal(document.getElementById("writer").hidden, false);
+    assert.deepEqual([sharedSession(), audio(), errors, reports], [false, "YHello", [], []]);
+  } finally { destroySharedDocument(other); }
+});
+
+test("failed entry before hydration restores the open standalone Writer and permits another entry", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "Hello", visualText: "", status: "todo" }] }));
+  undoOwner().flush();
+  writerControls().openWriter();
+  writerControls().writerFlowControl().place(caretAt(beatPos("r1", 3)));
+  const fault = new Error("binding entry failed"), faults = [];
+  const failedPorts = { ...ports, report: error => { faults.push(error); }, bindings: { ...ports.bindings,
+    enter: parts => { ports.bindings.enter(parts); throw fault; } } };
+  assert.deepEqual(await enterSharedSession(failedPorts), { ok: false, reason: "enter-failed" });
+  assert.deepEqual(faults, [fault]);
+  assert.equal(sharedSession(), false);
+  assert.equal(document.getElementById("writer").hidden, false);
+  assert.equal(beat("r1").textContent, "Hello");
+  assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 3)));
+  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(leaveSharedSession(ports), { ok: true });
+  assert.deepEqual([errors, reports], [[], []]);
 });

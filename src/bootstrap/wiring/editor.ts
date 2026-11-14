@@ -131,6 +131,7 @@ import { viewFlags } from "./preferences-owner.ts";
 import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
 import { sharedSessionParts } from "./shared-session.ts";
 import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
+import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
 import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
 import { connectWriter } from "./writer.ts";
@@ -140,11 +141,17 @@ import { sceneView } from "./editor-owners.ts";
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
 let placeWriterRange: (range: FlowRange) => void = () => {};
+let placeWriterVisual: (range: FlowRange) => void = () => {};
 
 function placeSharedSelection(selection: SharedUndoSelection): void {
   const parts = sharedSessionParts();
-  const range = parts ? resolveSharedBufferedSelection(parts.handle, [selection.anchor, selection.focus]) : undefined;
-  if (range) placeWriterRange(range);
+  const target = sharedAnchorTarget(selection.focus);
+  const visual = target?.field === "visualText" ? { key: target.owner, target } : undefined;
+  const range = parts ? resolveSharedBufferedSelection(parts.handle, [selection.anchor, selection.focus], visual) : undefined;
+  if (range) {
+    if (visual) placeWriterVisual(range);
+    else placeWriterRange(range);
+  }
 }
 let scheduleWriterStats: () => void = inactiveWriter;
 
@@ -335,6 +342,10 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
     const step = control?.writerUndoStep;
     undoRoutePorts.writerStep = step ? dir => !sharedUndoRoute() && step(dir) : skipWriterUndo;
     placeWriterRange = range => { control?.writerFlowControl()?.place(range); };
+    placeWriterVisual = range => {
+      if (range.head.kind !== "beat" || range.anchor.kind !== "beat") return;
+      control?.writerFlowControl()?.openVisual(range.head.rowId, { from: range.anchor.offset, to: range.head.offset });
+    };
     writerReplayed = control?.writerReplayed ?? noWriterReplay;
     control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
