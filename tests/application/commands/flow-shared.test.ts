@@ -36,6 +36,7 @@ interface SharedFlowLiteral {
   readonly run: (doc: FlowDoc, ports: FlowPorts) => FlowOutcome;
   readonly operations: readonly unknown[] | null;
   readonly text: readonly string[];
+  readonly visuals?: readonly string[];
   readonly refused?: string;
   readonly stampRow?: number;
   readonly noStamp?: boolean;
@@ -54,7 +55,7 @@ function literalDocument(literal: SharedFlowLiteral): Record<string, unknown> {
   return {
     schema: 2, title: "", docId: "d00000000000000000000000000000000",
     rows: literal.text.map((audioText, index) => ({
-      id: ids[index], status: "todo", visualText: "", audioText, imageRef: null,
+      id: ids[index], status: "todo", visualText: literal.visuals?.[index] ?? "", audioText, imageRef: null,
       updatedAt: stamped.includes(index) ? "2026-11-13T12:00:00.000Z" : "", updatedBy: stamped.includes(index) ? "Alice" : null,
       ...(literal.paragraphs?.includes(index) ? { paragraphStart: true } : {})
     })),
@@ -109,8 +110,9 @@ const cases: readonly SharedFlowLiteral[] = [
     { kind: "join", id: "w1_1_o_0", by: "Alice", from: "R2", into: "R1", glue: " " }, stamp
   ], text: ["abc def"], ids: ["R1"] },
   { name: "visual-selection", run: (doc, ports) => setVisualForRange(doc, at, "Z", ports), operations: [
-    { kind: "record-create", id: "w1_1:0", by: "Alice", target: { collection: "visuals", record: "R1:visual" }, fields: { beat: "R1", html: "Z" } }, stamp
-  ], text: ["abc", "def"], refused: "invalid-record-field" },
+    { kind: "text-insert", id: "w1_1:0", by: "Alice", target: { owner: "R1", segment: "R1", field: "visualText" }, at: { left: null, right: '["flow-base","R1","visualText",0,0]', affinity: "before" },
+      content: [{ value: "Z", marks: [] }] }, stamp
+  ], text: ["abc", "def"], visuals: ["Z", ""] },
   { name: "make-heading", source: { rows: [{ id: "R1", audioText: "# X<br>abc" }, { id: "R2", audioText: "def" }] },
     run: (doc, ports) => flow.finalizeHeading(doc, "R1", null, flow.caretAt(flow.beatPos("R1", 3)), ports), operations: [
       { kind: "heading-finalize", id: "w1_1_o_0", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" }, heading: "new",
