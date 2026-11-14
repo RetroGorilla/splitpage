@@ -437,6 +437,37 @@ The undo rows have one key, so p95 equals p50. The other cases (short and long s
 
 No case is slower than its spread. For every row, the head p50 sits inside the range that the base and head runs cover together, and every head p50 is well inside its limit (the closest is long new scene, 34.4 ms against 65). Typing p50 is flat at both fixtures; long typing p95 rose from 13.9 to 16.9 ms (+21.6%), with base p95 runs of 13 to 17 ms and head runs of 13.6 to 17.4 ms. Long undo, a watch item from the previous batch, fell 12.3% (35.7 to 31.3 ms) and short undo is unchanged. The other moves above 20% are long writer open tag spaces (+60.5%, base runs 3.1 to 9.3 ms, head 5.2 to 9.3 ms), short split open tag spaces (+29.4%, 8.5 to 11 ms) and the short exports, all under 1.5 ms. `Range.getClientRects` calls per run are the same in base and head.
 
+## Shared beat creation undo, alternate implementation
+
+Recorded 2026-11-14 with Node 24.22.1, base `66fdec0c` and source head `65d46353`.
+A preliminary three-round comparison used the short and long fixtures, alternating
+base then head. These medians are observations, not the Stage 0 performance gate.
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 |
+| --- | --- | --- | --- | --- |
+| short typing | 2.7 | 3.1 | 14.7 | 14.1 |
+| short new scene | 23 | 19.3 | 31.7 | 32.8 |
+| short undo the delete | 11.5 | 12 | 11.5 | 12 |
+| long typing | 3 | 3.4 | 16.2 | 14.2 |
+| long new scene | 31.6 | 31.7 | 35.7 | 35.5 |
+| long undo the delete | 30.8 | 34.6 | 30.8 | 34.6 |
+
+The preliminary long Writer open-tag-spaces p50 rose from 4.8 to 8.4 ms, beyond
+its three-run base range of 4.3 to 5.9 ms. A five-round attempt then stopped on
+a CDP port collision. The replacement set completed five rounds while holding
+the performance and smoke locks and using dedicated ports, but is not a valid
+gate: recorded CPU load was 39% before and 48% after head round four, and 50%
+before base round five. The first two pairs lack saved condition notes because
+the temporary capture helper used the wrong argument form. No samples from
+these sets are silently dropped or claimed as a passing Stage 0 result.
+
+At the coordinator's request, this implementation becomes the independent
+cross-check and fallback; further authoring and final performance validation
+belong to the primary lane. The temporary capture helper is not part of the
+change. The new shared inverse is covered by command, replica, incremental
+projection and mutant tests; this standalone timing comparison does not measure
+the shared inverse itself.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
