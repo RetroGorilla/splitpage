@@ -326,15 +326,17 @@ for (const field of ["audioText", "visualText"]) test(`C7 lifecycle ${field}: su
   assert.equal(sharedCellSpaceForm(cell), null);
 });
 
-test("C7 rule 73: a structure caller without its shared port still refuses visibly once", async () => {
+test("C7 Ctrl+Enter in a shared Split adds a beat through the shared command with its minted id and one shared undo step", async () => {
   const f = await enter();
   try {
     const cell = cellOf("audioText"); select(cell, 3);
     const event = new window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true });
     assert.equal(cell.dispatchEvent(event), false);
     cell.dispatchEvent(new window.KeyboardEvent("keyup", { key: "Enter", ctrlKey: true, bubbles: true }));
-    agree(f, [["r1", "abcdef", "abcdef"], ["r2", "Other", "Wide"]], [refusedWarning]);
-    assert.deepEqual(points(cellOf("audioText")), [3, 3]);
-    assert.deepEqual(f.parts.undo.sizes(), { undo: 0, redo: 0, dropped: 0 });
+    const minted = currentDocument().rows[1]?.id ?? "";
+    assert.match(minted, /^structure_\d+_[0-9a-f]+_beat_0$/);
+    agree(f, [["r1", "abcdef", "abcdef"], [minted, "", ""], ["r2", "Other", "Wide"]]);
+    assert.deepEqual(points(cellOf("audioText", minted)), [0, 0]);
+    assert.deepEqual(f.parts.undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
   } finally { f.close(); }
 });

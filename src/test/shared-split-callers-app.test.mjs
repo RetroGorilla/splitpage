@@ -7,6 +7,7 @@ import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
+import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { addRow, armDelete, splitRowFieldCore } from "../bootstrap/wiring/rows.ts";
 import { cycleRowStatus, setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
@@ -35,7 +36,9 @@ localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, 
 await bootApp();
 after(closeApp);
 
-const reports = [], errors = [];
+const reports = [], errors = [], noticeCalls = [], actualShow = notices.show;
+notices.show = (...args) => { noticeCalls.push(args); return actualShow(...args); };
+after(() => { notices.show = actualShow; });
 const toastHost = () => { const host = document.getElementById("toast-host"); assert.ok(host); return host; };
 const warnings = () => [...toastHost().querySelectorAll(".toast.warn")].map(el => el.firstChild.textContent);
 const clearWarnings = () => { toastHost().replaceChildren(); };
@@ -283,12 +286,14 @@ for (const order of ORDERS) test(`C7 rule 73: pasting copied beats has no shared
     Object.defineProperty(copy, "clipboardData", { value: { setData: (type, value) => { data.set(type, value); }, getData: type => data.get(type) ?? "" } });
     document.body.dispatchEvent(copy);
     assert.equal(copy.defaultPrevented, true);
-    clearWarnings();
-    const before = encodeSharedState(f.parts.handle), sizes = f.parts.undo.sizes();
+    clearWarnings(); noticeCalls.length = 0;
+    const before = encodeSharedState(f.parts.handle), sizes = f.parts.undo.sizes(), standalone = undoOwner().sizes();
     assert.doesNotThrow(() => { assert.equal(pasteBeatsAt({ getData: type => data.get(type) ?? "" }, cellOf("audioText", "r3")), true); });
+    assert.deepEqual(noticeCalls, [[REFUSED, "warn"]]);
     assert.deepEqual(warnings(), [REFUSED]);
     assert.deepEqual(encodeSharedState(f.parts.handle), before);
     assert.deepEqual(f.parts.undo.sizes(), sizes);
+    assert.deepEqual(undoOwner().sizes(), standalone);
     clearWarnings();
     exchange(f, order);
     agree(f, base());
