@@ -56,7 +56,7 @@ export type SharedUndoPart =
     readonly value: string;
   }
   | {
-    readonly kind: "record-create" | "record-delete";
+    readonly kind: "record-create" | "record-delete" | "record-retired";
     readonly target: SharedRecordAddress;
     readonly fields: SharedJsonFields;
   }

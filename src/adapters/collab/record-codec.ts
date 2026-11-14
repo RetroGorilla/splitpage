@@ -9,6 +9,7 @@ import { sharedJson } from "./snapshot.ts";
 import type { SharedPreparationView } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { isSharedResolutionKey, readSharedResolution, sharedResolutionAccepted } from "./stamp.ts";
+import { SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 
 interface RecordFieldSource {
   readonly keys: () => readonly string[];
@@ -58,9 +59,13 @@ function extra(value: unknown): boolean {
 
 function identity(value: unknown): value is string { return typeof value === "string" && isStableSharedIdentity(value); }
 
+function storedOnly(kind: SharedRecordCollection, field: string): boolean {
+  return kind === "visuals" && ["text", "html", "markRecords"].includes(field) || kind === "gallery" && field === SHARED_GALLERY_RETIREMENT_FIELD;
+}
+
 export function sharedRecordFieldAccepted(kind: SharedRecordCollection, field: string, value: unknown): boolean {
   if (sharedJson(value) === undefined) return false;
-  if (!isStableSharedIdentity(field) || kind === "visuals" && ["text", "html", "markRecords"].includes(field)) return false;
+  if (!isStableSharedIdentity(field) || storedOnly(kind, field)) return false;
   if (field === "id") return identity(value) && value.length > 0;
   if (!(sharedRecordFields[kind] as readonly string[]).includes(field)) return !(kind === "comments" && ["body", "quotedText", "resolved", "resolvedAt", "resolvedBy", "replies"].includes(field)
     || kind === "replies" && field === "body");
@@ -144,12 +149,13 @@ function nested(field: "links" | "props", raw: RecordFieldSource | null): unknow
     .map(entry => ({ key: entry.key, fields: entry.fields }));
 }
 
-function readRecordFields(kind: SharedRecordCollection, key: string, raw: RecordFieldSource | null): Record<string, unknown> | null {
+function readRecordFields(kind: SharedRecordCollection, key: string, raw: RecordFieldSource | null, stored?: (fields: readonly string[]) => void): Record<string, unknown> | null {
   if (!raw || !key || !isStableSharedIdentity(key)) return null;
   const output: [string, unknown][] = [], known: readonly string[] = sharedRecordFields[kind], keys = raw.keys();
   if (keys.some(field => !isStableSharedIdentity(field))) return null;
+  stored?.(keys);
   const register = kind === "comments" && keys.some(isSharedResolutionKey);
-  for (const field of [...known, ...keys.filter(field => !known.includes(field) && !(kind === "visuals" && ["text", "html", "markRecords"].includes(field))
+  for (const field of [...known, ...keys.filter(field => !known.includes(field) && !storedOnly(kind, field)
     && !(register && isSharedResolutionKey(field))).sort()]) {
     if (register && field === "resolution" && !keys.includes(field)) {
       const shown = readSharedResolution({ keys: raw.keys, get: key => jsonField(raw, key) });
@@ -171,6 +177,12 @@ function readRecordFields(kind: SharedRecordCollection, key: string, raw: Record
 
 export function readStoredSharedRecord(kind: SharedRecordCollection, key: string, raw: unknown): Record<string, unknown> | null {
   return readRecordFields(kind, key, nativeSource(raw));
+}
+// why: whether a picture carries an undo's retirement is read from the keys the record reading lists anyway.
+export function readStoredSharedGalleryRecord(key: string, raw: unknown): { readonly fields: Record<string, unknown>; readonly retired: boolean } | null {
+  let retired = false;
+  const fields = readRecordFields("gallery", key, nativeSource(raw), keys => { retired = keys.includes(SHARED_GALLERY_RETIREMENT_FIELD); });
+  return fields ? { fields, retired } : null;
 }
 export function readPreparedSharedRecord(kind: SharedRecordCollection, key: string, view: Pick<SharedPreparationView, "get" | "kind" | "keys">): Record<string, unknown> | null {
   return readRecordFields(kind, key, preparedSource(view, [kind, key]));

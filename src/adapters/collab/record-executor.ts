@@ -3,6 +3,7 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import type { SharedOperationHandlers } from "./operation-handlers.ts";
 import { isSharedRecordNestedField, readPreparedSharedRecord, readSharedNestedInput, sharedRecordFieldAccepted } from "./record-codec.ts";
+import { SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
 import { sharedJson } from "./snapshot.ts";
@@ -107,7 +108,8 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
   const field = operation.field;
   if (collection === "visuals" && ["text", "html", "markRecords"].includes(field)) return { ok: false, reason: "text-executor-required" };
   const immutable = collection === "comments" ? ["author", "createdAt", "anchorId", "quote", "kind", "imageValue", "conflictField", "emptyValue", "titleValue"]
-    : collection === "replies" ? ["author", "createdAt", "commentId"] : collection === "shots" ? ["origin", "status"] : collection === "tags" ? ["status"] : [];
+    : collection === "replies" ? ["author", "createdAt", "commentId"] : collection === "shots" ? ["origin", "status"] : collection === "tags" ? ["status"]
+    : collection === "gallery" ? [SHARED_GALLERY_RETIREMENT_FIELD] : [];
   if (field === "id" || immutable.includes(field)) return { ok: false, reason: "immutable-record-field" };
   if ((collection === "comments" || collection === "replies") && field === "text" && value.author !== operation.by) return { ok: false, reason: "foreign-author" };
   const writes: SharedPreparedWrite[] = [];

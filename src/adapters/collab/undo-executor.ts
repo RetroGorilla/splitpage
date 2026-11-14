@@ -35,9 +35,12 @@ import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, plan
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedSplitUndo, recordSharedSplit } from "./undo-split.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
+import { isSharedGalleryRetired } from "./gallery-retirement.ts";
+import { readSharedRemovalState } from "./removal-state.ts";
+import * as Y from "yjs";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -155,18 +158,28 @@ function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress)
   const scope = target.collection === "tags" ? "tag" : target.collection === "shots" ? "shot" : null;
   // why: a status is set by events beside the fields, so the status the record shows is read with them.
   if (scope) fields.status = readSharedStatus(handle, { scope, record: target.record as SharedContentRef } as SharedStatusEvent["target"]);
-  // why: props are read with their rank and written without it; a record is kept in the form a command writes.
-  if (Array.isArray(fields.props)) fields.props = fields.props.map(prop => {
-    const read = (prop as { readonly fields: SharedJsonFields }).fields;
-    return Object.fromEntries(Object.entries(read).filter(([field]) => field !== "rank" && field !== "extra"));
-  });
+  // why: props and links are read with their rank and written without it; a record is kept in the form a command writes.
+  for (const nested of ["props", "links"] as const) {
+    const entries = fields[nested];
+    if (Array.isArray(entries)) fields[nested] = entries.map(entry => {
+      const read = (entry as { readonly fields: SharedJsonFields }).fields;
+      return Object.fromEntries(Object.entries(read).filter(([field]) => field !== "rank" && field !== "extra"));
+    });
+  }
   return fields;
 }
 
 function recordNow(handle: SharedDocumentHandle, part: { readonly kind: string; readonly target: SharedRecordAddress }): SharedJsonFields | null {
-  // why: gallery slots and visuals are parts of a beat, so their undo comes with the structure commands.
-  if (!SHARED_UNDO_RECORDS.includes(part.target.collection)) throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
+  // why: a visual and a picture's field change are parts of a beat; their undo comes with the structure commands.
+  if (!SHARED_UNDO_RECORDS.includes(part.target.collection) && !(part.target.collection === "gallery" && part.kind !== "record-field")) {
+    throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
+  }
   return recordFields(handle, part.target);
+}
+
+function beatRemoved(handle: SharedDocumentHandle, beat: SharedJsonValue | undefined): boolean {
+  const stored = typeof beat === "string" ? collabState(handle).roots.beats.get(beat) : null, flags: unknown = stored instanceof Y.Map ? stored.get("removals") : null;
+  return flags instanceof Y.Map && readSharedRemovalState([...flags.entries()]).removed;
 }
 
 function recordField(fields: SharedJsonFields, field: string): SharedFieldValue {
@@ -246,13 +259,22 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: () => ({ effective: command !== null, part: { kind: "status", target: part.target, event: command ? eventKey(handle, command.id) : part.event, value: part.value } }) };
     }
     case "record-create": {
-      const now = recordNow(handle, part), effective = now !== null && same(now, part.fields);
+      const now = recordNow(handle, part), gallery = part.target.collection === "gallery";
+      // why: a picture is taken back only while its beat stands; a removed beat holds it in recovery.
+      const effective = now !== null && same(now, part.fields) && !(gallery && beatRemoved(handle, now.beat));
       // why: undoing a creation removes the record only while it still holds what the creation wrote.
-      if (effective) operations.push(operationOf({ kind: "record-delete", ...author(), target: part.target }));
-      return { inverse: () => ({ effective, part: { ...part, kind: "record-delete" } }) };
+      if (effective) operations.push(operationOf({ kind: gallery ? "gallery-retire" : "record-delete", ...author(), ...gallery ? { record: part.target.record } : { target: part.target } }));
+      return { inverse: () => ({ effective, part: { ...part, kind: gallery ? "record-retired" : "record-delete" } }) };
+    }
+    case "record-retired": {
+      const { roots } = collabState(handle), effective = isSharedGalleryRetired(roots, part.target.record, roots.gallery.get(part.target.record));
+      if (effective) operations.push(operationOf({ kind: "gallery-restore", ...author(), record: part.target.record }));
+      return { inverse: () => ({ effective, part: { ...part, kind: "record-create", fields: effective ? recordFields(handle, part.target) ?? part.fields : part.fields } }) };
     }
     case "record-delete": {
-      const effective = recordNow(handle, part) === null, wrote = part.fields.author;
+      // why: a picture an undo retired is still stored, so its key is taken although no reader shows it.
+      const stored = part.target.collection === "gallery" ? collabState(handle).roots.gallery.has(part.target.record) : false;
+      const effective = recordNow(handle, part) === null && !stored, wrote = part.fields.author;
       // why: a comment or reply keeps its author, so it is put back in that person's name.
       const by = (part.target.collection === "comments" || part.target.collection === "replies") && typeof wrote === "string" ? wrote : writer.by;
       if (effective) operations.push(operationOf({ kind: "record-create", id: writer.nextId(), by, target: part.target, fields: part.fields }));
@@ -475,7 +497,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (operation.kind === "discard") {
       parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
-      && operation.kind !== "split-retire" && operation.kind !== "split-restore") {
+      && operation.kind !== "split-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }
