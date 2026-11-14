@@ -19,6 +19,11 @@ declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const panel = owned<RecoveryPanelControl>();
 const session: RecoveryPanelPorts["session"] = { current: sharedRecoverySession, onChange: onDocumentReplaced };
+const mountForTest = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ? () =>
+  panel.replace(() => createRecoveryPanel(recoveryPanelPorts({ host: document.body, session, document: documentReader, text, notices,
+    parts: sharedSessionParts, run: runCommand }))) : null;
+const actionsForTest = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ? (registry: Pick<ActionRegistry, "register">) =>
+  startRecoveryPanelActions({ registry, current: panel.owner, session }) : null;
 
 export interface RecoveryPanelWiringPorts extends Pick<RecoveryPanelPorts, "host" | "session" | "document" | "text" | "notices"> {
   readonly parts: () => Pick<SharedSessionParts, "handle" | "author"> | null;
@@ -40,13 +45,10 @@ export function recoveryPanelPorts(source: RecoveryPanelWiringPorts): RecoveryPa
 }
 
 export function mountRecoveryPanelFeature(): RecoveryPanelControl {
-  if (typeof SPLITPAGE_TEST_HOOKS !== "undefined" && !SPLITPAGE_TEST_HOOKS) return { open: () => {}, dispose: () => {} };
-  return panel.replace(() => createRecoveryPanel(recoveryPanelPorts({ host: document.body, session, document: documentReader, text, notices,
-    parts: sharedSessionParts, run: runCommand })));
+  return mountForTest?.() ?? { open: () => {}, dispose: () => {} };
 }
 
 export const stopRecoveryPanelFeature = panel.stop;
 export function registerRecoveryPanelActions(registry: Pick<ActionRegistry, "register">): () => void {
-  if (typeof SPLITPAGE_TEST_HOOKS !== "undefined" && !SPLITPAGE_TEST_HOOKS) return () => {};
-  return startRecoveryPanelActions({ registry, current: panel.owner, session });
+  return actionsForTest?.(registry) ?? (() => {});
 }
