@@ -6,7 +6,7 @@ import type { SharedContentRef } from "../../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
 import { readSharedStatusHeads } from "../../../adapters/collab/status.ts";
-import { readSharedJoinedFields } from "../../../adapters/collab/undo-join.ts";
+import { readSharedJoinedFields, readSharedJoinedParts } from "../../../adapters/collab/undo-join.ts";
 
 export function sharedValuePorts(source: { readonly handle: () => SharedDocumentHandle | null; readonly author: SharedValuePorts["author"]; readonly stamps: StampPorts }): () => SharedValuePorts | null {
   return () => source.handle() ? {
@@ -27,6 +27,9 @@ export function sharedStructurePorts(source: Parameters<typeof sharedValuePorts>
   const values = sharedValuePorts(source);
   return () => {
     const ports = values();
-    return ports && { author: ports.author, beatStamp: ports.beatStamp, cells: html => source.cells(html ?? "") };
+    return ports && { author: ports.author, beatStamp: ports.beatStamp, cells: html => source.cells(html ?? ""), joinedParts: beat => {
+      const handle = source.handle();
+      return handle ? readSharedJoinedParts(handle, beat) : [];
+    } };
   };
 }

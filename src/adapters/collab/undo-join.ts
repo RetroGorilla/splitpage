@@ -98,6 +98,15 @@ export function readSharedJoinedFields(handle: SharedDocumentHandle, beat: strin
   } finally { prep.close(); }
 }
 
+export function readSharedJoinedParts(handle: SharedDocumentHandle, beat: string): { readonly beat: string; readonly length: number }[] {
+  const prep = createSharedPreparation(handle);
+  try {
+    bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
+    const geometry = readSharedJoinedTextGeometry(prep.view, beat);
+    return geometry && !geometry.removed ? geometry.parts.map(part => ({ beat: part.owner, length: part.to - part.from })) : [];
+  } finally { prep.close(); }
+}
+
 function findSharedJoin(handle: SharedDocumentHandle, join: string): { readonly from: string; readonly entry: StoredJoin } | null {
   for (const from of collabState(handle).roots.beats.keys()) {
     const entry = storedJoins(handle, from).find(item => item.id === join);
