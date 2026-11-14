@@ -728,3 +728,199 @@ test("a file draft whose session becomes shared while the file is read opens not
     drafts.dispose();
   }
 });
+
+type DetachStatus = { seq: number; writes: number; failures: number; onDisk: boolean; pending: boolean; lastCode: string | null };
+
+function statusOf(drafts: DraftsMount): () => DetachStatus {
+  return drafts.testing["status"] as () => DetachStatus;
+}
+
+function runEvenCleared(timers: Timer[]) {
+  for (const t of timers.slice()) { t.live = false; t.run(); }
+}
+
+test("detaching the source cancels a pending capture and a pending retry, and nothing is written, discarded or scheduled while detached", async () => {
+  const h = harness({ writes: [{ ok: false, code: "ENOSPC" }] });
+  const drafts = mount(h.ports);
+  try {
+    await drafts.flush();
+    assert.equal(h.written.length, 1);
+    assert.equal(h.timers.filter((t) => t.live).length, 1, "the refused write armed a retry");
+    drafts.noteChange();
+    assert.equal(drafts.detachSource(), true);
+    assert.equal(h.timers.some((t) => t.live), false, "the retry and every quiet timer are cancelled");
+    const armed = h.timers.length;
+    runEvenCleared(h.timers);
+    await settle();
+    drafts.noteChange();
+    h.state.editSeq = 2;
+    assert.deepEqual(await drafts.flush(), { ok: true });
+    assert.deepEqual(await drafts.flush({ keep: true }), { ok: true });
+    h.state.unsaved = false;
+    assert.deepEqual(await drafts.flush(), { ok: true });
+    assert.equal(h.timers.length, armed, "nothing is scheduled while detached");
+    assert.equal(h.written.length, 1);
+    assert.deepEqual(h.discarded, []);
+    assert.equal(statusOf(drafts)().pending, false);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("after resuming, the next write carries the next sequence number, not a new first one", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  try {
+    await drafts.flush();
+    assert.equal(drafts.detachSource(), true);
+    h.state.editSeq = 2;
+    await drafts.flush();
+    assert.equal(drafts.resumeWriting(), true);
+    h.state.editSeq = 3;
+    await drafts.flush();
+    assert.equal(h.written.length, 2);
+    const [before, after] = h.written;
+    assert.equal(Number(after?.["seq"]), Number(before?.["seq"]) + 1);
+    assert.equal(after?.["editSeq"], 3);
+    assert.equal(statusOf(drafts)().seq, Number(after?.["seq"]));
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("while detached the source draft is neither discarded nor rewritten under another origin, also when a discard was chosen just before", async () => {
+  const h = harness();
+  let home: ReturnType<DraftsPorts["place"]["fileHome"]> = { kind: "file", format: "splitpage", handle: { _desktopId: "f1" } } as ReturnType<DraftsPorts["place"]["fileHome"]>;
+  const drafts = mount({ ...h.ports, place: { ...h.ports.place, fileHome: () => home } });
+  try {
+    await drafts.flush();
+    assert.equal(h.written[0]?.["originKind"], "file");
+    h.state.unsaved = false;
+    drafts.noteChange();
+    const idle = h.timers.find((t) => t.live && t.ms === 1500);
+    assert.ok(idle);
+    idle.live = false;
+    idle.run();
+    assert.equal(statusOf(drafts)().onDisk, false, "the capture chose to discard the clean document's draft");
+    assert.equal(drafts.detachSource(), true);
+    await settle();
+    assert.deepEqual(h.discarded, [], "a discard chosen before the detach is not sent");
+    assert.equal(statusOf(drafts)().onDisk, true);
+    home = null;
+    h.state.unsaved = true;
+    h.state.editSeq = 2;
+    drafts.noteChange();
+    await drafts.flush();
+    await drafts.flush({ keep: true });
+    h.state.unsaved = false;
+    await drafts.flush();
+    assert.equal(h.written.length, 1);
+    assert.deepEqual(h.discarded, []);
+    assert.equal(statusOf(drafts)().onDisk, true);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("detach and resume are idempotent, a resume without a detach changes nothing, and disposal while detached ends the owner", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  assert.equal(drafts.resumeWriting(), false);
+  drafts.noteChange();
+  assert.equal(drafts.resumeWriting(), false);
+  assert.deepEqual(h.timers.filter((t) => t.live).map((t) => t.ms).sort((a, b) => a - b), [1500, 5000], "a stray resume keeps the armed capture");
+  assert.equal(statusOf(drafts)().pending, true);
+  assert.equal(drafts.detachSource(), true);
+  assert.equal(drafts.detachSource(), false);
+  assert.equal(drafts.resumeWriting(), true);
+  assert.equal(drafts.resumeWriting(), false);
+  assert.equal(statusOf(drafts)().pending, false, "resuming drops the source's pending change");
+  assert.equal(h.timers.some((t) => t.live), false, "resuming arms nothing");
+  drafts.noteChange();
+  assert.equal(h.timers.filter((t) => t.live).length, 2, "after one resume a change is scheduled again");
+  assert.equal(drafts.detachSource(), true);
+  drafts.dispose();
+  assert.equal(drafts.resumeWriting(), false);
+  assert.equal(drafts.detachSource(), false);
+  assert.equal(h.timers.some((t) => t.live), false);
+  await settle();
+  assert.deepEqual(h.written, []);
+  assert.deepEqual(h.discarded, []);
+});
+
+test("a capture still waiting for its pictures at the detach sends nothing", async () => {
+  const h = harness();
+  const pending = deferred<string[]>();
+  h.state.base = { rows: [{ id: "r", imageRef: { sha256: "a".repeat(64) } }] };
+  const drafts = mount({ ...h.ports, pictures: { persist: () => pending.promise, inline: (json) => json } });
+  try {
+    const flush = drafts.flush();
+    await settle();
+    assert.equal(drafts.detachSource(), true);
+    pending.resolve([]);
+    await flush;
+    await settle();
+    assert.deepEqual(h.written, []);
+    assert.equal(statusOf(drafts)().seq, 1);
+    assert.equal(h.timers.some((t) => t.live), false);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+for (const resumeFirst of [false, true]) {
+  for (const outcome of ["landed", "obsolete", "need-base", "refused", "rejected"] as const) {
+    test("a write in flight at the detach whose answer is " + outcome + (resumeFirst ? " after the resume" : " while detached") +
+      " changes no owner state and schedules nothing", async () => {
+      const h = harness();
+      const pending = deferred<Awaited<ReturnType<typeof h.desktop.write>>>();
+      const write = h.desktop.write;
+      h.desktop.write = (payload) => { h.written.push(payload as Record<string, unknown>); return pending.promise; };
+      const drafts = mount(h.ports);
+      try {
+        const flush = drafts.flush();
+        await settle();
+        assert.equal(h.written.length, 1);
+        const before = statusOf(drafts)();
+        assert.equal(drafts.detachSource(), true);
+        h.desktop.write = write;
+        let after: DetachStatus | null = null;
+        if (resumeFirst) {
+          assert.equal(drafts.resumeWriting(), true);
+          h.state.editSeq = 2;
+          const next = drafts.flush();
+          await settle();
+          assert.equal(h.written.length, 2, "the resumed writer does not wait for the source's write");
+          await next;
+          assert.equal(Number(h.written[1]?.["seq"]), Number(h.written[0]?.["seq"]) + 1);
+          after = statusOf(drafts)();
+          assert.equal(after.onDisk, true);
+        }
+        if (outcome === "rejected") pending.reject(new Error("write failed"));
+        else {
+          const reply = outcome === "need-base" ? { ok: false, code: "NEED_BASE" }
+            : outcome === "refused" ? { ok: false, code: "ENOSPC" }
+            : { ok: true, seq: 1, bytes: 1, obsolete: outcome === "obsolete" };
+          pending.resolve(reply as Awaited<ReturnType<typeof h.desktop.write>>);
+        }
+        await flush;
+        await settle();
+        assert.equal(h.written.length, resumeFirst ? 2 : 1, "a NEED_BASE answer is not resent");
+        assert.deepEqual(statusOf(drafts)(), resumeFirst ? after : { ...before, pending: false });
+        assert.equal(h.timers.some((t) => t.live), false);
+        assert.deepEqual(h.toasts, []);
+        assert.deepEqual(h.log, []);
+        if (!resumeFirst) {
+          assert.equal(drafts.resumeWriting(), true);
+          h.state.editSeq = 2;
+          await drafts.flush();
+          assert.equal(h.written.length, 2);
+          assert.equal(Number(h.written[1]?.["seq"]), Number(h.written[0]?.["seq"]) + 1);
+          assert.equal(statusOf(drafts)().onDisk, true);
+        }
+      } finally {
+        drafts.dispose();
+      }
+    });
+  }
+}

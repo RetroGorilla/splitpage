@@ -107,6 +107,9 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   let draftSentEditSeq: number | null = null;
   let draftSentBase: unknown = {};
   let draftSentSignature = "";
+  let detached = false;
+  let detachEpoch = 0;
+  let discardWaiting = false;
   const draftStats: { writes: number; failures: number; discards: number; obsolete: number; lastCode: string | null } =
     { writes: 0, failures: 0, discards: 0, obsolete: 0, lastCode: null };
 
@@ -123,11 +126,12 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   }
 
   function draftWriterLive(): boolean {
-    if (draftStopped || !runningOnDesktop() || draftsRefused()) return false;
+    if (draftStopped || detached || !runningOnDesktop() || draftsRefused()) return false;
     return desktopDrafts().writable();
   }
 
   function noteDraftChange(): void {
+    if (detached) return;
     if (draftStopped && draftRetryOnChange) {
       draftStopped = false;
       draftRetryOnChange = false;
@@ -153,17 +157,22 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       schedule().dropPending();
       if (!draftOnDisk || !draftBackendCanDiscard()) return Promise.resolve(null);
       const discardSeq = ++draftSeq;
+      const discardEpoch = detachEpoch;
       draftOnDisk = false;
+      discardWaiting = true;
       draftStats.discards++;
       return Promise.resolve().then(function () {
+        if (discardEpoch !== detachEpoch) return null;
+        discardWaiting = false;
         return draftBackendDiscard(discardSeq);
       }).then(function (r) {
+        if (discardEpoch !== detachEpoch) return r || null;
         if (r && r.ok === false) {
           draftStats.lastCode = r.code || "error";
           draftOnDisk = true;
         }
         return r || null;
-      }, function () { draftOnDisk = true; return null; });
+      }, function () { if (discardEpoch === detachEpoch) draftOnDisk = true; return null; });
     }
 
     const origin = draftOriginOf();
@@ -211,6 +220,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     });
 
     const draftRefs = draftRefsFor(doc, baseAtCapture, sendBase);
+    const epoch = detachEpoch;
 
     schedule().dropPending();
     const sent = draftRefs.length
@@ -222,12 +232,13 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
             if (baseTextCache !== null) baseTextCache = inlineStateJson(baseTextCache, failed);
             if (payload.baseJson) payload.baseJson = baseTextCache;
           }
-          return sendDraftPayload(payload, baseTextFor, false);
+          return sendDraftPayload(payload, baseTextFor, false, epoch);
         })
-      : sendDraftPayload(payload, baseTextFor, false);
-    draftInFlight = sent.then(function (r) {
-      draftInFlight = null;
+      : sendDraftPayload(payload, baseTextFor, false, epoch);
+    const inFlight: Promise<DraftFlush | null | undefined> = sent.then(function (r) {
+      if (draftInFlight === inFlight) draftInFlight = null;
       if (!ports) return null;
+      if (epoch !== detachEpoch) return r;
       if (r && r.ok) {
         draftStats.writes++;
         draftStats.lastCode = null;
@@ -252,26 +263,28 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       schedule().resume();
       return r;
     }, function (err) {
-      draftInFlight = null;
+      if (draftInFlight === inFlight) draftInFlight = null;
       if (!ports) return null;
+      if (epoch !== detachEpoch) return null;
       reportError(err);
       noteDraftWriteRefused("offline");
       return { ok: false, code: "offline" };
     });
-    return draftInFlight;
+    draftInFlight = inFlight;
+    return inFlight;
   }
 
-  function sendDraftPayload(payload: DraftPayload, baseTextFor: () => string, retriedWithBase: boolean): Promise<Awaited<ReturnType<typeof draftBackendWrite>> | null> {
+  function sendDraftPayload(payload: DraftPayload, baseTextFor: () => string, retriedWithBase: boolean, epoch: number): Promise<Awaited<ReturnType<typeof draftBackendWrite>> | null> {
     return Promise.resolve().then(function () {
-      if (!ports) return null;
+      if (!ports || epoch !== detachEpoch) return null;
       return draftBackendWrite(payload);
     }).then(function (r) {
       if (!ports) return null;
-      if (r && r.ok === false && r.code === "NEED_BASE" && !retriedWithBase) {
+      if (r && r.ok === false && r.code === "NEED_BASE" && !retriedWithBase && epoch === detachEpoch) {
         const again: DraftPayload = Object.assign({}, payload);
         again.seq = ++draftSeq;
         again.baseJson = baseTextFor();
-        return sendDraftPayload(again, baseTextFor, true);
+        return sendDraftPayload(again, baseTextFor, true, epoch);
       }
       return r;
     });
@@ -331,6 +344,27 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       reportError(err);
       return { ok: false, code: "EIO" };
     });
+  }
+
+  function detachSource(): boolean {
+    if (!ports || detached) return false;
+    detached = true;
+    detachEpoch++;
+    schedule().cancel();
+    schedule().cancelRetry();
+    schedule().dropPending();
+    draftInFlight = null;
+    if (discardWaiting) {
+      discardWaiting = false;
+      draftOnDisk = true;
+    }
+    return true;
+  }
+
+  function resumeWriting(): boolean {
+    if (!ports || !detached) return false;
+    detached = false;
+    return true;
   }
 
   function draftMigrate(json: unknown): ValidatedDocument | null {
@@ -496,6 +530,8 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     noteChange: noteDraftChange,
     taker: draftTaker,
     applyTaken: applyTakenDraft,
+    detachSource: detachSource,
+    resumeWriting: resumeWriting,
     testing: {
       flushNow: function () { return flushDraftNow(); },
       status: function () {

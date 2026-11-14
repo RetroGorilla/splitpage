@@ -120,6 +120,11 @@ const draftPorts: LegacyDraftPorts = {
   noteChange: () => { drafts.owner()?.noteChange(); }
 };
 
+export const draftSource: Pick<DraftsMount, "detachSource" | "resumeWriting"> = {
+  detachSource: () => drafts.owner()?.detachSource() ?? false,
+  resumeWriting: () => drafts.owner()?.resumeWriting() ?? false
+};
+
 export function draftTaker(): ReturnType<DraftsMount["taker"]> {
   const mounted = drafts.owner();
   return mounted ? mounted.taker() : null;
