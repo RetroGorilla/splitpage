@@ -44,6 +44,18 @@ test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one
   assert.deepEqual(flowOperationCoverage.filter(row => row[1] === "known-unused").map(row => row[0]), ["startBeat", "moveBeats", "replaceAll"]);
 });
 
+test("the six structure command builders await their C7 ports with their implemented lists and named visual refusal", () => {
+  const names = ["addBeatCommand", "deleteBeatCommand", "splitBeatCommand", "joinBeatsCommand", "removeBeatsCommand", "removeSceneCommand"];
+  assert.deepEqual(builderOperationCoverage.filter(row => names.includes(row[0])).map(row => [row[0], row.shared, row[2]]), [
+    ["addBeatCommand", "serve pending composition", "segment-create"],
+    ["deleteBeatCommand", "serve pending composition", "remove,scalar"],
+    ["splitBeatCommand", "serve pending composition", "text-delete,split,scalar | visual-split-in-shared-session"],
+    ["joinBeatsCommand", "serve pending composition", "join,scalar"],
+    ["removeBeatsCommand", "serve pending composition", "remove,scalar"],
+    ["removeSceneCommand", "serve pending composition", "heading-remove,scalar"]
+  ]);
+});
+
 test("the new core modules define only types and functions when loaded", () => {
   const directory = new URL("../../../src/core/collab/", import.meta.url);
   for (const entry of readdirSync(directory, { recursive: true, withFileTypes: true })) {

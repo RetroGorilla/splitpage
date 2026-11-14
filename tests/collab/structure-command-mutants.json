@@ -1,0 +1,83 @@
+{
+  "tests": ["tests/application/commands/structure-shared.test.ts"],
+  "mutants": [
+    {
+      "label": "a split drops its new beat stamp",
+      "file": "src/application/commands/split-join.ts",
+      "find": "trace.split(row.id, cut.from, { id: createdId, ...sharedCreatedBeat(ports) });",
+      "replace": "trace.split(row.id, cut.from, { id: createdId, visualText: \"\", imageRef: null, status: \"todo\" });"
+    },
+    {
+      "label": "a join drops its retained beat stamp",
+      "file": "src/application/commands/split-join.ts",
+      "find": "sharedStructureList(trace, shared, by, [prevId])",
+      "replace": "sharedStructureList(trace, shared, by, [])"
+    },
+    {
+      "label": "an added beat drops its creation stamp",
+      "file": "src/application/commands/rows.ts",
+      "find": "rows.splice(at, 0, { id: createdId, audioText: \"\", ...sharedCreatedBeat(ports) });",
+      "replace": "rows.splice(at, 0, { id: createdId, audioText: \"\", visualText: \"\", imageRef: null, status: \"todo\" });"
+    },
+    {
+      "label": "a deleted beat has no shared removal",
+      "file": "src/application/commands/rows.ts",
+      "find": "...sharedRemoval(doc, [rowId], flags, shared),",
+      "replace": "...{},"
+    },
+    {
+      "label": "a beat selection has no shared removal",
+      "file": "src/application/commands/beats.ts",
+      "find": "...sharedRemoval(doc, gone, flags, shared),",
+      "replace": "...{},"
+    },
+    {
+      "label": "a removed scene has no shared heading removal",
+      "file": "src/application/commands/scenes.ts",
+      "find": "...sharedHeadingRemoval(doc, scene, flagged, shared),",
+      "replace": "...{},"
+    },
+    {
+      "label": "a joined row removal skips its second part",
+      "file": "src/application/commands/shared-structure.ts",
+      "find": "joined.map(part =>",
+      "replace": "joined.slice(0, 1).map(part =>"
+    },
+    {
+      "label": "a structure list turns undo off",
+      "file": "src/application/commands/shared-structure.ts",
+      "find": "return { operations: [...trace.ops,",
+      "replace": "return { undo: false, operations: [...trace.ops,"
+    },
+    {
+      "label": "a visual split is served without its named refusal",
+      "file": "src/application/commands/split-join.ts",
+      "find": "if (by && field !== \"audioText\")",
+      "replace": "if (by && field !== \"audioText\" && field !== \"visualText\")"
+    },
+    {
+      "label": "a null author still refuses standalone visual splits",
+      "file": "src/application/commands/split-join.ts",
+      "find": "if (by && field !== \"audioText\")",
+      "replace": "if (shared && field !== \"audioText\")"
+    },
+    {
+      "label": "a joined selection split undo loses its separator",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "for (const item of deletedGlues.values()) {",
+      "replace": "for (const item of [...deletedGlues.values()].slice(0, 0)) {"
+    },
+    {
+      "label": "a joined selection deletion records only its shown text owner",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "for (const target of scopes.get(operation)?.pieces ?? [operation.target]) {",
+      "replace": "for (const target of [operation.target]) {"
+    },
+    {
+      "label": "structure ports read joined parts without a handle",
+      "file": "src/bootstrap/wiring/ports/shared-values.ts",
+      "find": "return ports && { author: ports.author,",
+      "replace": "return { ...ports, author: source.author,"
+    }
+  ]
+}

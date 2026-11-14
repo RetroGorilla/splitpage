@@ -7,13 +7,14 @@ import { removeSceneCommand } from "../../../src/application/commands/scenes.ts"
 import type { SharedStructurePorts } from "../../../src/application/commands/shared-structure.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
-import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { sharedStructurePorts } from "../../../src/bootstrap/wiring/ports/shared-values.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { executeSharedCommand, reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
+import { executeSharedCommand } from "../../../src/adapters/collab/undo-executor.ts";
+import { readSharedJoinOf } from "../../../src/adapters/collab/undo-join.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
@@ -21,6 +22,7 @@ import type { ValidatedDocument } from "../../../src/core/document/validated.ts"
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
+import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { toPlainText } from "../../../src/core/text/projections.ts";
 import { replicas, operation } from "../../adapters/collab/executor-support.ts";
@@ -28,6 +30,7 @@ import { sharedHarness, adapterReplica } from "../session/shared-session-support
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { bufferStamps } from "../../collab/buffer-readers.ts";
+import { harness } from "../session-fakes.ts";
 
 type Fields = Record<string, unknown>;
 type Stamp = readonly [string, string | null];
@@ -39,7 +42,7 @@ const ANN: Stamp = [at(0), "Ann"], ALICE: Stamp = [at(5), "Alice"], BOB: Stamp =
 const SOURCE = { title: "Title", rows: [{ id: "R1", audioText: "abc", updatedAt: at(0), updatedBy: "Ann" }, { id: "R2", audioText: "cd", status: "ready", paragraphStart: true },
   { id: "R3", audioText: "ef" }, { id: "R4", audioText: "gh" }, { id: "R5", audioText: "ij" }], sections: [{ id: "S1", name: "Scene", firstSceneId: "R4" }] };
 const runtime = createFlowLoadRuntime();
-const cells = (html: string) => runtime.cells(html);
+const cells = (html: string | null | undefined) => runtime.cells(html ?? "");
 
 const SPLIT_A = "structure_1_00770031005f0031005f006f005f0031_beat_0", SPLIT_B = "structure_2_00770032005f0031005f006f005f0031_beat_0";
 const ADD_A = "structure_1_00770031005f0031005f006f005f0030_beat_0", ADD_B = "structure_2_00770032005f0031005f006f005f0030_beat_0";
@@ -69,8 +72,10 @@ function setup() {
   return set;
 }
 function stampsOf(name: "Alice" | "Bob", second: number): StampPorts { return bufferStamps(name, () => at(second)); }
+const authors = new WeakMap<SharedDocumentHandle, ReturnType<typeof sharedAuthorPort>>();
 function ports(handle: SharedDocumentHandle, stamps: StampPorts): SharedStructurePorts {
-  const author = sharedAuthorPort({ handle: () => handle, name: () => stamps.editor.name() });
+  let author = authors.get(handle);
+  if (!author) { author = sharedAuthorPort({ handle: () => handle, name: () => stamps.editor.name() }); authors.set(handle, author); }
   const shared = sharedStructurePorts({ handle: () => handle, author: () => author.next(), stamps, cells })();
   assert.ok(shared);
   return shared;
@@ -152,7 +157,7 @@ const cases: readonly StructureLiteral[] = [
     same: { document: documentWith([beat("R1", { audio: "a", stamp: BOB }), beat(SPLIT_A, { audio: "", stamp: ALICE }), beat(SPLIT_B, { audio: "c", stamp: BOB }),
       ...startRows().slice(1)]), recovery: [] },
     typed: { document: documentWith([beat("R1", { audio: "Xa", stamp: ALICE }), beat(SPLIT_A, { audio: "c", stamp: ALICE }), ...startRows().slice(1)]), recovery: [] },
-    gone: { document: documentWith([beat(SPLIT_A, { audio: "c", stamp: ALICE }), ...startRows().slice(1)]), recovery: [removed(beat("R1", { audio: "a", stamp: ALICE }))] },
+    gone: { document: documentWith(startRows().slice(1)), recovery: [removed(beat("R1", { audio: "a", stamp: ALICE })), removed(beat(SPLIT_A, { audio: "c", stamp: ALICE }))] },
     undone: { document: documentWith([beat("R1", { stamp: ALICE }), ...startRows().slice(1)]), recovery: [] } },
   { name: "join the next beat into a beat", make: (stamps, shared) => joinBeatsCommand("R2", join(stamps), shared),
     operations: (who, by, second) => [{ kind: "join", from: "R3", into: "R2", glue: " ", id: who + "_o_0", by }, stamp(who, "R2", by, second)],
@@ -219,15 +224,52 @@ const run = (handle: SharedDocumentHandle, literal: { readonly make: Make }, who
   return literal.make(stamps, ports(handle, stamps));
 };
 
-for (const literal of cases) test(`shared structure command literal: ${literal.name}`, () => {
+const splitRaces: readonly Expectation[] = [
+  { document: documentWith([beat("R1", { audio: "a", stamp: BOB }), beat(ADD_B, { stamp: BOB }), beat(SPLIT_A, { audio: "c", stamp: ALICE }), ...startRows().slice(1)]), recovery: [] },
+  { document: documentWith([beat("R1"), beat("R2", { audio: "cd e", stamp: ALICE }), beat(ADD_B, { audio: "f", stamp: BOB }), beat("R4"), beat("R5")]), recovery: [] },
+  { document: documentWith([beat("R1", { audio: "a", stamp: BOB }), beat(ADD_B, { audio: "bc", stamp: BOB }), beat(ADD_A, { stamp: ALICE }), ...startRows().slice(1)]), recovery: [] },
+  { document: documentWith([...startRows().slice(0, 4), beat("R5", { audio: "i", stamp: BOB }), beat(ADD_B, { audio: "j", stamp: BOB }), beat(ADD_A, { stamp: ALICE })]), recovery: [] },
+  { document: documentWith([beat("R1"), beat("R3", { flag: true }), beat("R4"), beat("R5")]), recovery: [removed(beat("R2", { audio: "c", stamp: BOB })), removed(beat(ADD_B, { audio: "d", stamp: BOB }))] },
+  { document: documentWith([beat("R1"), beat("R2"), beat("R3"), beat("R5")], "R5"), recovery: [removed(beat("R4", { audio: "g", stamp: BOB })), removed(beat(ADD_B, { audio: "h", stamp: BOB }))] },
+  { document: documentWith([beat("R1"), beat("R4"), beat("R5")]), recovery: [removed(beat("R2", { audio: "c", stamp: BOB })), removed(beat(ADD_B, { audio: "d", stamp: BOB })), removed(beat("R3"))] },
+  { document: documentWith([beat("R1"), beat("R2"), beat("R3"), beat("R4", { audio: "g", stamp: BOB, flag: true }), beat(ADD_B, { audio: "h", stamp: BOB }), beat("R5")], null), recovery: [HEADING] }
+];
+const joinRaces: readonly Expectation[] = [
+  { document: documentWith([beat("R1", { audio: "a", status: "ready", stamp: BOB }), beat(SPLIT_A, { audio: "c cd", stamp: ALICE }), ...startRows().slice(2)]), recovery: [] },
+  { document: documentWith([beat("R1"), beat("R2", { audio: "cd ef", stamp: BOB }), beat("R4"), beat("R5")]), recovery: [] },
+  { document: documentWith([beat("R1", { audio: "abc cd", status: "ready", stamp: BOB }), beat(ADD_A, { stamp: ALICE }), ...startRows().slice(2)]), recovery: [] },
+  { document: documentWith([...startRows().slice(0, 3), beat("R4", { audio: "gh ij", stamp: BOB }), beat(ADD_A, { stamp: ALICE })]), recovery: [] },
+  { document: documentWith([beat("R1"), beat("R4"), beat("R5")]), recovery: [removed(beat("R2", { audio: "cd ef", stamp: BOB }), ["R2", "R3"])] },
+  { document: documentWith([beat("R1"), beat("R2"), beat("R3")], null), recovery: [removed(beat("R4", { audio: "gh ij", stamp: BOB }), ["R4", "R5"]),
+    { kind: "scene-with-no-beats", heading: { id: "S1", name: "Scene" }, beforeRowId: null }] },
+  { document: documentWith([beat("R1"), beat("R4"), beat("R5")]), recovery: [removed(beat("R2", { audio: "cd ef", stamp: BOB }), ["R2", "R3"])] },
+  { document: documentWith([beat("R1"), beat("R2"), beat("R3"), beat("R4", { audio: "gh ij", stamp: BOB, flag: true })], null), recovery: [HEADING] }
+];
+for (const [index, literal] of cases.entries()) for (const order of ORDERS) for (const kind of ["split", "join"] as const) {
+  test(`shared structure command races a ${kind} of its beat: ${literal.name}, ${order}`, () => {
+    const h = setup(), a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
+    try {
+      assert.equal(a.session.run(run(h.a, literal, "Alice", 5)).kind, "applied");
+      const into = literal.subject === "R3" ? "R2" : literal.subject === "R5" ? "R4" : literal.subject;
+      const make: Make = (stamps, shared) => kind === "split"
+        ? splitBeatCommand(literal.subject, "audioText", textCut(1, 1), "N2", { ...stamps, cells }, shared)
+        : joinBeatsCommand(into, join(stamps), shared);
+      assert.equal(b.session.run(run(h.b, { make }, "Bob", 6)).kind, "applied");
+      flush(h.queue, order);
+      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), (kind === "split" ? splitRaces : joinRaces)[index]);
+    } finally { a.session.dispose(); b.session.dispose(); h.close(); }
+  });
+}
+
+for (const literal of cases) for (const order of ORDERS) test(`shared structure command literal: ${literal.name}, ${order}`, () => {
   const h = setup(), a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
   try {
     const before = project(h.a).document;
     assert.deepEqual(before, documentWith(startRows()));
     assert.equal(a.session.run(run(h.a, literal, "Alice", 5)).kind, "applied");
     assert.deepEqual(a.executed.map(entry => entry.operations), [literal.operations("w1_1", "Alice", 5)]);
-    flush(h.queue, "D1");
-    assert.deepEqual(agreeing(literal.name, [h.a, h.b]), literal.after);
+    flush(h.queue, order);
+    assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.after);
     assert.deepEqual(a.session.read(doc => doc), literal.after.document);
     assert.deepEqual(b.session.read(doc => doc), literal.after.document);
     assert.deepEqual(standalone(before, literal.make(stampsOf("Alice", 5)), literal.created), literal.after.document);
@@ -264,15 +306,81 @@ for (const literal of cases) for (const order of ORDERS) {
   });
 }
 
-function owned(handle: SharedDocumentHandle, label: string, operations: readonly SharedOperation[]) {
+for (const literal of cases) for (const order of ORDERS) test(`shared structure session records one undo entry: ${literal.name}, ${order}`, () => {
+  const h = setup(), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  try {
+    assert.equal(a.session.run(run(h.a, literal, "Alice", 5)).kind, "applied");
+    assert.deepEqual(owner.sizes(), { undo: 1, redo: 0, dropped: 0 });
+    flush(h.queue, order);
+    const before = encodeSharedState(h.a), revision = readSharedRevision(h.a);
+    if (typeof literal.undone === "string") {
+      assert.deepEqual(owner.undo(), { ok: false, reason: literal.undone, skipped: true });
+      assert.deepEqual(encodeSharedState(h.a), before);
+      assert.equal(readSharedRevision(h.a), revision);
+      assert.deepEqual(owner.sizes(), { undo: 0, redo: 0, dropped: 0 });
+    } else {
+      assert.deepEqual(owner.undo(), { ok: true, effective: true, label: literal.make(stampsOf("Alice", 5)).name, selection: null });
+      flush(h.queue, order);
+      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.undone);
+      assert.deepEqual(owner.sizes(), { undo: 0, redo: 1, dropped: 0 });
+      assert.deepEqual(owner.redo(), { ok: true, effective: true, label: literal.make(stampsOf("Alice", 5)).name, selection: null });
+      flush(h.queue, order);
+    }
+    assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.after);
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const order of ORDERS) test(`unsupported add undo is skipped and the next undo reaches the preceding command: ${order}`, () => {
+  const h = setup(), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  try {
+    assert.equal(a.session.run(run(h.a, cases[4] as StructureLiteral, "Alice", 5)).kind, "applied");
+    assert.equal(a.session.run(run(h.a, cases[2] as StructureLiteral, "Alice", 5)).kind, "applied");
+    assert.deepEqual(owner.sizes(), { undo: 2, redo: 0, dropped: 0 });
+    flush(h.queue, order);
+    const before = encodeSharedState(h.a);
+    assert.deepEqual(owner.undo(), { ok: false, reason: "undo-unsupported:segment-create", skipped: true });
+    assert.deepEqual(encodeSharedState(h.a), before);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "delete-scene", selection: null });
+    flush(h.queue, order);
+    const added = "structure_1_00770031005f0032005f006f005f0030_beat_0";
+    assert.deepEqual(agreeing("skip add", [h.a, h.b], order), { document: documentWith([beat("R1"), beat("R2"), beat(added, { stamp: ALICE }), ...startRows().slice(2)]), recovery: [] });
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const literal of cases.filter(item => typeof item.undone !== "string")) for (const order of ORDERS) {
+  test(`shared structure undo used up by the other copy writes nothing: ${literal.name}, ${order}`, () => {
+    let record: SharedUndoRecord | null = null;
+    const h = setup(), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, { perform: run => owner.perform(() => { record = run(); return record; }) }));
+    try {
+      assert.equal(a.session.run(run(h.a, literal, "Alice", 5)).kind, "applied");
+      flush(h.queue, order);
+      assert.ok(record);
+      const other = sharedUndoOwner(h.b, () => ({ id: "other_undo", by: "Bob" }), () => 0, error => { throw error; });
+      other.perform(() => record);
+      assert.deepEqual(other.undo(), { ok: true, effective: true, label: literal.make(stampsOf("Alice", 5)).name, selection: null });
+      flush(h.queue, order);
+      const before = encodeSharedState(h.a), revision = readSharedRevision(h.a);
+      assert.deepEqual(owner.undo(), { ok: true, effective: false, label: literal.make(stampsOf("Alice", 5)).name, selection: null, reason: "used-up" });
+      assert.deepEqual(encodeSharedState(h.a), before);
+      assert.equal(readSharedRevision(h.a), revision);
+      assert.deepEqual(owner.sizes(), { undo: 0, redo: 0, dropped: 0 });
+      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.undone);
+    } finally { a.session.dispose(); h.close(); }
+  });
+}
+
+function undoOwner(handle: SharedDocumentHandle) {
   let count = 0;
-  const owner = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
-    reverse: record => reverseSharedUndoRecord(handle, record, { by: "Alice", nextId: () => "u" + ++count }) });
+  return sharedUndoOwner(handle, () => ({ id: "undo_" + ++count, by: "Alice" }), () => 0, error => { throw error; });
+}
+function owned(handle: SharedDocumentHandle, label: string, operations: readonly SharedOperation[]) {
+  const owner = undoOwner(handle);
   owner.perform(() => {
     const done = executeSharedCommand(handle, operations, { label, selection: null, typing: null }, { base: readSharedRevision(handle) });
     assert.deepEqual(done.result, { ok: true });
     return done.record;
   });
+  assert.deepEqual(owner.sizes(), { undo: 1, redo: 0, dropped: 0 });
   return owner;
 }
 function planned(handle: SharedDocumentHandle, a: ReturnType<typeof sharedHarness>, make: Make): readonly SharedOperation[] {
@@ -308,7 +416,7 @@ const collapsedSplit: Make = (stamps, shared) => splitBeatCommand("R1", "audioTe
 for (const literal of [{ name: "split a beat's narration at a point", make: collapsedSplit,
   after: { document: documentWith([beat("R1", { audio: "a", stamp: ALICE }), beat("structure_1_00770031005f0031005f006f005f0030_beat_0", { audio: "bc", stamp: ALICE }),
     ...startRows().slice(1)]), recovery: [] } }, ...cases.filter(literal => !literal.name.startsWith("split"))]) {
-  test(`shared structure command as one list equals separate lists: ${literal.name}`, () => {
+  for (const order of ORDERS) test(`shared structure command as one list equals separate lists: ${literal.name}, ${order}`, () => {
     const together = setup(), apart = setup(), a = sharedHarness(adapterReplica(together.a));
     try {
       const operations = planned(together.a, a, literal.make);
@@ -316,6 +424,9 @@ for (const literal of [{ name: "split a beat's narration at a point", make: coll
       for (const value of operations) assert.deepEqual(executeSharedOperations(apart.a, [value], { base: readSharedRevision(apart.a) }), { ok: true });
       assert.deepEqual(project(together.a), literal.after);
       assert.deepEqual(project(apart.a), literal.after);
+      flush(together.queue, order); flush(apart.queue, order);
+      assert.deepEqual(agreeing(literal.name, [together.a, together.b], order), literal.after);
+      assert.deepEqual(agreeing(literal.name, [apart.a, apart.b], order), literal.after);
     } finally { a.session.dispose(); together.close(); apart.close(); }
   });
 }
@@ -378,7 +489,7 @@ for (const literal of joinedCases) for (const order of ORDERS) test(`shared stru
     assert.deepEqual(standalone(before, literal.make(stampsOf("Alice", 5)), literal.created), literal.after.document);
   } finally { a.session.dispose(); h.close(); }
 });
-for (const literal of joinedCases.filter(item => item.name.startsWith("delete") || item.name.startsWith("remove a joined"))) for (const order of ORDERS) {
+for (const literal of joinedCases) for (const order of ORDERS) {
   test(`shared structure command on a joined beat through the undo owner: ${literal.name}, ${order}`, () => {
     const h = joinedSetup(), a = sharedHarness(adapterReplica(h.a));
     try {
@@ -386,7 +497,9 @@ for (const literal of joinedCases.filter(item => item.name.startsWith("delete") 
       flush(h.queue, order);
       assert.deepEqual(owner.undo(), { ok: true, effective: true, label: literal.name, selection: null });
       flush(h.queue, order);
-      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), { document: documentWith([JOINED_R1, beat("R3"), JOINED_R4]), recovery: [] });
+      const stamped = literal.name.startsWith("split") || literal.name.startsWith("join");
+      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), { document: documentWith([
+        stamped ? { ...JOINED_R1, updatedAt: ALICE[0], updatedBy: ALICE[1] } : JOINED_R1, beat("R3"), JOINED_R4]), recovery: [] });
       assert.deepEqual(owner.redo(), { ok: true, effective: true, label: literal.name, selection: null });
       flush(h.queue, order);
       assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.after);
@@ -413,6 +526,11 @@ test("a visual split in a shared session is refused by name with nothing sent; s
   try {
     const make: Make = (stamps, shared) => splitBeatCommand("R1", "visualText", textCut(0, 0), "N1", { ...stamps, cells }, shared);
     assert.deepEqual(a.session.read(doc => doc ? run(h.a, { make }, "Alice", 5).plan(doc, capabilities()) : null), { refused: "visual-split-in-shared-session" });
+    const before = encodeSharedState(h.a), revision = readSharedRevision(h.a);
+    assert.deepEqual(a.session.run(run(h.a, { make }, "Alice", 5)), { kind: "rejected", reason: "visual-split-in-shared-session" });
+    assert.deepEqual(encodeSharedState(h.a), before);
+    assert.equal(readSharedRevision(h.a), revision);
+    assert.deepEqual([a.executed, a.undo, a.published], [[], [], []]);
     const live: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(documentWith(startRows())) };
     const plan = make(stampsOf("Alice", 5)).plan(live, capabilities());
     assert.ok(plan && !("refused" in plan) && plan.shared === undefined);
@@ -438,4 +556,62 @@ test("structure commands with no author, or no shared ports, plan as before and 
     assert.ok(plan && !("refused" in plan) && plan.shared === undefined, literal.name);
   }
   assert.ok(sharedStructurePorts({ handle: () => null, author: () => ({ id: "w9_1", by: "Alice" }), stamps, cells })() === null, "structure ports in a standalone session");
+});
+
+for (const literal of cases) for (const order of ORDERS) test(`shared structure command after an unjoin: ${literal.name}, ${order}`, () => {
+  const h = joinedSetup();
+  try {
+    const joins = [readSharedJoinOf(h.a, "R2", "joinedA"), readSharedJoinOf(h.a, "R5", "joinedB")];
+    assert.ok(joins[0] && joins[1]);
+    send(h.a, { kind: "join-retire", id: "unjoined", by: "Bob", joins: joins.map(join => join?.join) });
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("unjoined", [h.a, h.b], order), { document: documentWith(startRows()), recovery: [] });
+    const owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+    try {
+      const before = project(h.a).document;
+      assert.equal(a.session.run(run(h.a, literal, "Alice", 5)).kind, "applied");
+      flush(h.queue, order);
+      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.after);
+      assert.deepEqual(standalone(before, literal.make(stampsOf("Alice", 5)), literal.created), literal.after.document);
+      if (typeof literal.undone === "string") {
+        assert.deepEqual(owner.undo(), { ok: false, reason: literal.undone, skipped: true });
+      } else {
+        assert.deepEqual(owner.undo(), { ok: true, effective: true, label: literal.make(stampsOf("Alice", 5)).name, selection: null });
+        flush(h.queue, order);
+        assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.undone);
+        assert.deepEqual(owner.redo(), { ok: true, effective: true, label: literal.make(stampsOf("Alice", 5)).name, selection: null });
+      }
+      flush(h.queue, order);
+      assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.after);
+    } finally { a.session.dispose(); }
+  } finally { h.close(); }
+});
+
+const visualSplit: Make = (stamps, shared) => splitBeatCommand("R1", "visualText", textCut(1, 2), "N1", { ...stamps, cells }, shared);
+for (const literal of [...cases, { name: "visual split", make: visualSplit }]) test(`standalone structure plan, effects and undo stay identical without a handle or author: ${literal.name}`, () => {
+  const stamps = stampsOf("Alice", 5), unexpected = () => { throw new Error("standalone read shared state"); };
+  const nobody: SharedStructurePorts = { author: () => null, beatStamp: unexpected, joinedParts: unexpected, cells: unexpected };
+  const absent = sharedStructurePorts({ handle: () => null, author: unexpected, stamps, cells: unexpected })();
+  const before: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...documentWith([{ ...beat("R1"), visualText: "abc" }, ...startRows().slice(1)]) };
+  const baseline = literal.make(stamps).plan(before, capabilities());
+  assert.ok(baseline && !("refused" in baseline));
+  const observe = (command: Command) => {
+    const h = harness();
+    try {
+      h.session.adopt(structuredClone(before));
+      h.log.length = 0; h.published.length = 0;
+      const outcome = h.session.run(command);
+      return { outcome, document: h.session.read(doc => doc), log: h.log.slice(), published: h.published.slice(), reported: h.reported.slice() };
+    } finally { h.session.dispose(); }
+  };
+  const expected = observe(literal.make(stamps));
+  assert.equal(expected.outcome.kind, "applied");
+  assert.equal(expected.log.filter(entry => entry === "undo.record").length, 1);
+  for (const shared of [undefined, absent ?? undefined, nobody]) {
+    const command = literal.make(stamps, shared), plan = command.plan(before, capabilities());
+    assert.ok(plan && !("refused" in plan));
+    const { apply: _apply, ...details } = plan, { apply: _baselineApply, ...expectedDetails } = baseline;
+    assert.deepEqual(details, expectedDetails);
+    assert.deepEqual(observe(command), expected);
+  }
 });

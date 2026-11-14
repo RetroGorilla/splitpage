@@ -69,8 +69,7 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
   });
 }
 
-function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined): Pick<Plan, "shared"> {
-  const by = shared?.author();
+function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined, by: ReturnType<SharedStructurePorts["author"]>): Pick<Plan, "shared"> {
   if (!shared || !by) return {};
   const trace = sharedStructureTrace(doc, shared, by), cell = shared.cells(row.audioText), cut = clampRange(cell, at.from, at.to);
   trace.delete(row.id, cell, cut.from, cut.to);
@@ -86,10 +85,11 @@ export function splitBeatCommand(rowId: string, field: string, at: SplitAt, crea
       if (SPLIT_FIELDS.indexOf(field) === -1) return null;
       const row = doc.rows.find(function (r) { return r.id === rowId; });
       if (!row) return null;
-      if (shared && field !== "audioText") return { refused: "visual-split-in-shared-session" };
+      const by = shared?.author() ?? null;
+      if (by && field !== "audioText") return { refused: "visual-split-in-shared-session" };
       const halves = halvesOf(at, textOf(row[field]), ports);
       return {
-        ...sharedSplit(doc, row, at, createdId, ports, shared),
+        ...sharedSplit(doc, row, at, createdId, ports, shared, by),
         changes: splitChanges(rowId, field, createdId),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });
