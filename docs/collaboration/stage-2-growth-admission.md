@@ -1,6 +1,6 @@
 # Stage 2 stored growth and update admission
 
-Draft: fresh storage holds the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. Admission alone exceeds the 8 ms p50 limit on short/edited and the p95 limits on short/edited. The table also screens the added-input allowance against the Stage 0 reference. Repetition counts below identify interim figures; the timing requirement is not yet complete. The whole-application heap limit cannot be certified by this Node adapter measurement.
+Draft: fresh storage holds the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. Admission alone exceeds the 8 ms p50 limit on short/edited, long/edited, large/fresh and the p95 limits on short/edited, long/edited, large/fresh. The table also screens the added-input allowance against the Stage 0 reference. Repetition counts below identify interim figures; the timing requirement is not yet complete. The whole-application heap limit cannot be certified by this Node adapter measurement.
 
 Measurements began on 2026-11-13 and continued on 2026-11-14 at the adapter level in Node, with no browser, application wiring, transport or server. The source commit measured is `d49fd51fbf5d7819143d4e263ecc33e2f8226bd2`; its `src/adapters/collab` tree is `138889c20c2952880862f3e9ab0a1b1bcee81cb7`. Machine description: ARM64, Node v24.22.1. Other work was running throughout. These conditions differ from the Stage 0 browser baseline; its numbers are budget references, not a same-machine latency comparison.
 
@@ -41,8 +41,8 @@ Rows with fewer than five repetitions are interim and do not yet meet the timing
 | short / fresh | 5 / 5 |
 | short / edited | 5 / 5 |
 | long / fresh | 5 / 5 |
-| long / edited | unmeasured |
-| large / fresh | unmeasured |
+| long / edited | 5 / 5 |
+| large / fresh | 5 / 5 |
 | large / edited | unmeasured |
 
 Values are medians [min–max] of per-round statistics, not pooled updates.
@@ -58,12 +58,16 @@ Values are medians [min–max] of per-round statistics, not pooled updates.
 | short / fresh | 324052 |
 | short / edited | 324052 |
 | long / fresh | 325052 |
+| long / edited | 325052 |
+| large / fresh | 325052 |
 
 | Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |
 | --- | --- | --- | --- | --- | --- | --- |
 | short / fresh | 3.51 [3.18–4.07] | 14.43 [5.72–19.55] | 30.78 [8.48–37.03] | 0.03 [0.02–0.03] | 0.04 [0.03–0.04] / 0.06 [0.06–0.08] | 99.11 [98.50–99.42] / 98.81 [98.07–99.19] |
 | short / edited | 202.67 [193.24–254.00] | 317.41 [214.29–563.55] | 507.09 [249.42–902.76] | 0.02 [0.02–0.03] | 0.02 [0.02–0.04] / 0.04 [0.03–0.06] | 99.98 [99.96–99.98] / 99.97 [99.96–99.98] |
 | long / fresh | 3.48 [3.35–3.58] | 5.77 [5.54–5.96] | 9.59 [8.72–12.14] | 0.02 [0.02–0.02] | 0.02 [0.02–0.02] / 0.04 [0.04–0.04] | 99.42 [99.40–99.49] / 99.28 [99.22–99.32] |
+| long / edited | 196.35 [186.32–286.38] | 374.57 [206.23–753.50] | 479.29 [268.77–1110.75] | 0.02 [0.02–0.03] | 0.03 [0.02–0.04] / 0.08 [0.04–0.14] | 99.97 [99.97–99.98] / 99.97 [99.94–99.97] |
+| large / fresh | 27.50 [23.94–35.66] | 43.49 [29.54–70.77] | 67.78 [43.74–125.77] | 0.02 [0.02–0.03] | 0.03 [0.03–0.04] / 0.06 [0.05–0.07] | 99.90 [99.87–99.92] / 99.87 [99.86–99.90] |
 
 Input budget screen only; passing admission alone does not establish end-to-end input latency.
 
@@ -72,6 +76,8 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | short / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
 | short / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
 | long / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
+| long / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
+| large / fresh | 2.7 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
 
 | Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -81,12 +87,18 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | short / edited / 1000 | 245457.95 [195951.60–296163.71] | 32.32 [29.50–66.89] | 37.96 [34.31–60.17] | 285.79 [261.18–304.73] | 6236.48 [4427.47–7991.79]x | 265.18 [265.18–265.18] | 29.41 [29.41–29.41] | 1 |
 | long / fresh / 100 | 232.14 [225.16–236.23] | 2.53 [2.24–2.67] | 3.58 [3.30–3.69] | 9.92 [9.86–11.49] | 91.63 [85.54–100.72]x | 74.43 [74.43–74.43] | 0.10 [0.10–0.10] | 1 |
 | long / fresh / 1000 | 5448.59 [5407.65–5611.96] | 18.68 [16.65–19.76] | 22.62 [22.20–25.14] | 39.84 [39.18–40.35] | 291.63 [280.82–324.75]x | 157.86 [157.86–157.86] | 1.12 [1.12–1.12] | 1 |
+| long / edited / 100 | 18700.55 [18121.32–22211.73] | 21.55 [17.31–29.20] | 21.55 [18.18–33.01] | 342.94 [242.31–470.03] | 893.20 [679.83–1048.84]x | 231.86 [231.86–231.86] | 26.49 [26.49–26.49] | 1 |
+| long / edited / 1000 | 257416.30 [191295.40–317489.93] | 45.36 [33.34–59.89] | 46.50 [37.93–77.73] | 390.68 [267.36–621.34] | 5736.91 [4298.19–6527.10]x | 232.10 [232.10–232.10] | 1.07 [1.07–1.07] | 1 |
+| large / fresh / 100 | 2711.06 [2120.20–4965.40] | 3.80 [3.34–7.24] | 4.49 [3.53–5.77] | 45.41 [38.52–68.38] | 634.41 [428.46–1242.34]x | 162.85 [162.85–162.85] | 0.11 [0.11–0.11] | 1 |
+| large / fresh / 1000 | 29268.00 [25909.47–49411.22] | 24.74 [20.21–29.74] | 32.43 [28.42–61.83] | 93.60 [74.49–167.53] | 1282.02 [1118.54–1996.88]x | 343.71 [343.71–343.71] | 1.10 [1.10–1.10] | 1 |
 
 | Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |
 | --- | --- | --- | --- | --- |
 | short / fresh | 0.004 [-0.880–0.004] | 0.133 [0.119–0.152] | 0.129 [0.115–1.022] | 30.44 [-0.16–35.76]x |
 | short / edited | 0.004 [-0.348–0.004] | 27.301 [27.288–27.328] | 27.300 [27.295–27.676] | 6447.12 [-128.37–6895.59]x |
 | long / fresh | 0.042 [-0.097–0.042] | 0.846 [0.826–0.873] | 0.814 [0.795–0.923] | 20.29 [-8.52–20.93]x |
+| long / edited | 0.042 [-0.132–0.042] | 25.484 [25.475–25.494] | 25.442 [25.433–25.627] | 610.98 [-192.67–615.03]x |
+| large / fresh | 0.347 [0.016–0.347] | 6.886 [6.854–6.931] | 6.564 [6.507–6.883] | 19.98 [19.75–437.68]x |
 
 Full lint and type checking, dependency and comment gates, and all four focused tests pass after installing the existing desktop and prototype dependencies. No dependency rule or baseline changed. The full verification command was not run.
 
@@ -94,6 +106,6 @@ Full lint and type checking, dependency and comment gates, and all four focused 
 
 On short/edited (5 of 5 timing rounds), the one-trial prototype admits 1,000 updates in 285.79 [261.18–304.73] ms, versus 245457.95 [195951.60–296163.71] ms for current admission. Decode-only p50 is 0.02 [0.02–0.04] ms. These are measured costs, not validated replacement policies. A one-update batch still copies the whole document: the burst prototype amortizes that copy only when multiple updates are already queued.
 
-The direct path is a cost control, not a proposed admission policy: it removes decoding checks and isolation from mutations made before an application error. Decode-only validation avoids the full-document trial but gives up checking integration against the current document before mutation; successful decoding and positive struct lengths do not prove safe integration or a valid application schema. One trial per burst retains all-before-live integration preflight for that fixed list of updates and rejects the whole list if any member fails. It gives up per-update acceptance/refusal and does not implement the live ingress gate's reentrant holds, capacity or callback behavior. Valid-state equivalence and the malformed-batch tool test do not establish safety against arbitrary updates. The owner must choose a policy before any source change.
+The direct path is a cost control, not a proposed admission policy: it removes the explicit decode/struct-length precheck and trial isolation from mutations made before an application error. Decode-only validation avoids the full-document trial but gives up checking integration against the current document before mutation; successful decoding and positive struct lengths do not prove safe integration or a valid application schema. One trial per burst retains all-before-live integration preflight for that fixed list of updates and rejects the whole list if any member fails. It gives up per-update acceptance/refusal and does not implement the live ingress gate's reentrant holds, capacity or callback behavior. Valid-state equivalence and the malformed-batch tool test do not establish safety against arbitrary updates. The owner must choose a policy before any source change.
 
 Decode-only timing does not establish that a complete validator without copying exists. Browser paint, end-to-end typing, real buffer admission/drain, concurrent writers, app undo grouping, server limits, persistence, reconnect, receipts and a 2 MiB input fixture were not run. No standalone performance A/B or full verification suite was run: this change contains only measurement tooling and this record, and the task leaves the full gate to CI.
