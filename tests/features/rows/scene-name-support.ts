@@ -19,6 +19,8 @@ import { edgeInput } from "../edge-input.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { sharedSceneCreation } from "../../../src/bootstrap/wiring/ports/shared-scenes.ts";
+import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 
 export type RenamePage = ReturnType<typeof sharedRename>;
 
@@ -31,12 +33,17 @@ function headerNode(name: string): HTMLElement {
   return header;
 }
 
-export function sharedRename(name = "Scene", options: { readonly author?: (serial: number) => string; readonly undo?: (h: Stage1ExecutorHarness) => SharedUndo } = {}) {
+export function sharedRename(name = "Scene", options: {
+  readonly author?: (serial: number) => string;
+  readonly creation?: boolean;
+  readonly undo?: (h: Stage1ExecutorHarness) => SharedUndo;
+} = {}) {
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }, { id: "R2", text: "next" }], { sections: [{ id: "H1", name, firstSceneId: "R1" }] });
   let reversals = 0;
   if (!options.undo) registerSharedUndoOperationHandlers(h.a);
   const owner = options.undo?.(h) ?? sharedUndoOwner(h.a, () => ({ id: "undo" + ++reversals, by: "Alice" }), () => 0, error => { throw error; });
   const a = sharedHarness(adapterReplica(h.a, owner)), { effects, reports, recovered } = fakeWriterBufferEffects();
+  registerSharedHeadingHandlers(h.a);
   let serial = 0, depth = 0, repaints = 0;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => { const next = ++serial; return { id: options.author?.(next) ?? "native:" + next, by: "Alice" }; } });
@@ -59,6 +66,7 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
     edits: { allowed: () => true, run: command => { commands.push(command.name); return { kind: "noop" }; } },
     scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
     ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
+    ...options.creation === false ? {} : { sharedScenes: sharedSceneCreation(h.a, a.session, () => ({ id: "create_scene", by: "Alice" })) },
     sharedNames: {
       history: sharedUndoActions(a.session, owner),
       field: surface => createBufferedField(shared.bufferedText, surface),
