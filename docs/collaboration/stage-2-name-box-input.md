@@ -117,7 +117,10 @@ its selection. Cancelling that composition stores nothing and releases the hold.
 Assumed rule 99 retains ordinary heading-create concurrency: when two people
 name the same automatic scene, both names survive. The higher writer's heading
 owns the beat; the lower writer's name becomes `scene-with-no-beats` in recovery.
-The same rule applies to two add-sections above the same beat. Repaint closes
+The same rule applies to two add-sections above the same beat only while neither
+copy has seen the other's creation. Once a heading starts at that beat locally,
+the unbound form closes on repaint or at its first input; it writes nothing and
+does not switch to renaming the observed heading. Repaint closes
 the losing form through the existing detached-heading lifecycle. A key already
 in progress stays with its own heading in recovery. Before repaint, another key
 on that stale form is prevented and reported as `buffer-unavailable`; the
@@ -139,6 +142,14 @@ The author uses the existing clean operation-id source. The command runs once
 through the shared session. C2 must pass its `add-section` description with
 `typing: null` to the same `executeSharedCommand`/`SharedUndo.perform` path as
 other commands; no after-the-fact recording or second undo stack is used here.
+
+Composition must settle any beat buffer before the naming form gets keys:
+`holdSharedBuffer` throws if another buffer hold is already open, and setup's
+`beforeinput` does not catch it. The `shown` function must be the same guard as
+`wiring/buffered-input.ts`, deferring the sections paint until creation has bound
+the form. Teardown must account for a first composition: as for the bound
+binding, a refused dispose retains the hold and admission listener, and a later
+`compositionend` can still create the heading on disposed controls.
 
 ## Rule 85 dependency
 

@@ -1,6 +1,21 @@
 {
   "tests": ["tests/features/rows/scene-create.test.ts"],
   "mutants": [{
+    "label": "a late first key creates over an already observed heading",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (current && sceneBeforeBeat(current, beatId)) { cancelName(false, false); return; }",
+    "replace": "if (false) { cancelName(false, false); return; }"
+  }, {
+    "label": "a repaint keeps an unbound name form below an observed heading",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "if (ports.sharedNames && sceneBeforeBeat(state, naming.beatId)) return false;",
+    "replace": ""
+  }, {
+    "label": "setup paint callbacks survive binding and resurrect a closed form",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "pending?.dispose(); pending = null;",
+    "replace": "pending = null;"
+  }, {
     "label": "the first native name edit never holds incoming changes",
     "file": "src/features/rows/scene-controls.ts",
     "find": "const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };",

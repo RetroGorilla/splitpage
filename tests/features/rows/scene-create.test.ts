@@ -42,6 +42,28 @@ for (const kind of ["automatic", "add"] as const) {
       a.edge.enter();
       assert.equal(a.doc.querySelector(".section-rename"), null);
       assert.equal(a.doc.activeElement?.className, "section-name");
+      a.paint();
+      assert.equal(a.doc.querySelector(".section-rename") !== null, false, "a closed name form stays closed after repaint");
+    } finally { pages.close(); }
+  });
+}
+
+for (const kind of ["automatic", "add"] as const) for (const painted of [false, true]) {
+  test(`an observed heading closes a late ${kind} form without creation or implicit rename, repaint ${painted}`, async () => {
+    const pages = sceneCreationPages(), { a, b, h } = pages, beat = kind === "automatic" ? "R1" : "R2";
+    try {
+      const first = a.open(kind, beat), second = b.open(kind, beat);
+      b.edge.type("B"); h.queue.flush("dup");
+      if (painted) { a.paint(); await Promise.resolve(); }
+      else a.edge.type("A");
+      assert.deepEqual([first.isConnected, first.value, a.a.executed, a.reports, a.standalone], [false, painted ? "" : "A", [], [], []]);
+      b.paint();
+      assert.deepEqual([second.isConnected, second.value, second.selectionStart, second.selectionEnd, b.reports], [true, "B", 1, 1, []]);
+      assert.equal(b.edge.type("x"), true);
+      pages.copies("dup", { document: createdDocument([{ id: HB, name: "Bx", firstSceneId: beat }]), recovery: [] });
+      a.paint(); await Promise.resolve();
+      assert.equal(a.doc.querySelector(".section-rename"), null);
+      assert.deepEqual([b.input().isConnected, b.input().value, b.input().selectionStart, b.input().selectionEnd, b.reports], [true, "Bx", 2, 2, []]);
     } finally { pages.close(); }
   });
 }

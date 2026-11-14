@@ -64,6 +64,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (naming.sceneId !== null) return sceneGroups(state).some(group => group.scene.id === naming?.sceneId)
       && !!header(naming.sceneId)?.contains(naming.line);
     if (!state.rows.some(row => row.id === naming?.beatId)) return false;
+    if (ports.sharedNames && sceneBeforeBeat(state, naming.beatId)) return false;
     const automatic = naming.line.closest(".section-header");
     return automatic ? automatic === header("") && state.rows[0]?.id === naming.beatId
       : naming.line.nextElementSibling?.getAttribute("data-id") === naming.beatId;
@@ -196,6 +197,8 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       } };
       const create = (): void => {
         if (bound || composing || naming?.line !== made) return;
+        const current = ports.document.current();
+        if (current && sceneBeforeBeat(current, beatId)) { cancelName(false, false); return; }
         const verdict = unsettledHeading(input.value);
         if (verdict?.hold) return;
         if (verdict) { shared.report({ kind: "rejected", reason: verdict.reason }); return; }
