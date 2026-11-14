@@ -2,10 +2,11 @@ import type { SharedContentRef, SharedJsonFields, SharedJsonValue, SharedOperati
 
 export type SharedRegistryCollection = "people" | "tags" | "shots";
 type Entry = Readonly<Record<string, unknown>>;
+type Listed = readonly (Entry | null | undefined)[];
 export interface SharedRegistryLists {
-  readonly people: readonly Entry[];
-  readonly tags: readonly Entry[];
-  readonly shots: readonly Entry[];
+  readonly people: Listed;
+  readonly tags: Listed;
+  readonly shots: Listed;
 }
 export interface SharedRegistryEdit {
   readonly before: SharedRegistryLists;
@@ -30,10 +31,10 @@ function extra(collection: SharedRegistryCollection, entry: Entry): string {
   return JSON.stringify(Object.fromEntries(Object.keys(entry).filter(key => !known.includes(key) && entry[key] !== undefined).sort().map(key => [key, entry[key]])));
 }
 
-function keyed(list: readonly Entry[]): Map<string, Entry> | null {
+function keyed(list: Listed): Map<string, Entry> | null {
   const out = new Map<string, Entry>();
   for (const entry of list) {
-    if (typeof entry.id !== "string" || !entry.id || out.has(entry.id)) return null;
+    if (!entry || typeof entry.id !== "string" || !entry.id || out.has(entry.id)) return null;
     out.set(entry.id, entry);
   }
   return out;
@@ -56,11 +57,10 @@ export function sharedRegistryOperations(edit: SharedRegistryEdit): SharedRegist
   for (const collection of collections()) {
     const before = keyed(edit.before[collection]), after = keyed(edit.after[collection]);
     if (!before || !after) return { refused: "records-without-id" };
-    const kept = edit.after[collection].map(entry => String(entry.id)).filter(id => before.has(id));
-    const order = edit.before[collection].map(entry => String(entry.id)).filter(id => after.has(id));
+    const kept = [...after.keys()].filter(id => before.has(id)), order = [...before.keys()].filter(id => after.has(id));
     if (json(kept) !== json(order)) return { refused: "records-reordered" };
     let rank = highest(edit.ranks(collection));
-    for (const entry of edit.after[collection]) {
+    for (const entry of after.values()) {
       const key = String(entry.id) as SharedContentRef, target = { collection, record: key }, was = before.get(key);
       if (!was) {
         rank = rankAfter(rank);
@@ -82,8 +82,7 @@ export function sharedRegistryOperations(edit: SharedRegistryEdit): SharedRegist
           parents: edit.heads(scope, key) as SharedContentRef[] } as SharedStatusEvent);
       }
     }
-    for (const entry of edit.before[collection]) {
-      const key = String(entry.id) as SharedContentRef;
+    for (const key of before.keys() as Iterable<SharedContentRef>) {
       if (!after.has(key)) operations.push({ kind: "record-delete", id: next(), by: author.by, target: { collection, record: key } });
     }
   }

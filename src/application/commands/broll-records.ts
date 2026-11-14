@@ -7,7 +7,7 @@ import type { Command, CommandRefusal, Plan } from "../session/document-session.
 import { planByTrial } from "./document-edit.ts";
 import { chosenOwner } from "./production-records.ts";
 import type { OwnerChoice } from "./production-records.ts";
-import { sharedRecordEdit, sharedRecordTrial } from "./shared-records.ts";
+import { sharedRecordEdit, sharedRecordTrial, withSharedRecords } from "./shared-records.ts";
 import type { SharedRecordPorts } from "./shared-records.ts";
 
 export type ShotFields = Readonly<Record<string, unknown>>;
@@ -38,10 +38,7 @@ export function addShotCommand(shot: DocumentShot, shared?: SharedRecordPorts): 
         changes: shotsChange(),
         apply: function (live) { addBrollRecord(live, copied(shot)); }
       };
-      const share = sharedRecordTrial(doc, shared);
-      if (!share) return plan;
-      const out = sharedRecordEdit(doc, share, function (live) { addBrollRecord(live, copied(shot)); return true; });
-      return "refused" in out ? out : { ...plan, shared: out };
+      return withSharedRecords(plan, sharedRecordEdit(doc, shared, function (live) { addBrollRecord(live, copied(shot)); return true; }));
     }
   };
 }
@@ -87,10 +84,7 @@ export function deleteShotCommand(shotId: string, shared?: SharedRecordPorts): C
         changes: shotsChange(),
         apply: function (live) { removeBrollRecord(live, shotId); }
       };
-      const share = sharedRecordTrial(doc, shared);
-      if (!share) return plan;
-      const out = sharedRecordEdit(doc, share, function (live) { return removeBrollRecord(live, shotId); });
-      return "refused" in out ? out : { ...plan, shared: out };
+      return withSharedRecords(plan, sharedRecordEdit(doc, shared, function (live) { return removeBrollRecord(live, shotId); }));
     }
   };
 }

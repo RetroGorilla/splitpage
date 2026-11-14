@@ -27,8 +27,8 @@ function scratch(doc: DocumentView, changes: ChangeSet): DocumentShape {
 }
 
 export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit): Plan | null;
-export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit, share: ((trial: DocumentShape) => SharedPlan | CommandRefusal) | undefined): Plan | CommandRefusal | null;
-export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit, share?: (trial: DocumentShape) => SharedPlan | CommandRefusal): Plan | CommandRefusal | null {
+export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit, share: ((trial: DocumentShape) => SharedPlan | CommandRefusal | null) | undefined): Plan | CommandRefusal | null;
+export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit, share?: (trial: DocumentShape) => SharedPlan | CommandRefusal | null): Plan | CommandRefusal | null {
   const trial = scratch(doc, changes);
   if (!edit(trial)) return null;
   const plan: Plan = {
@@ -37,9 +37,8 @@ export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet,
       if (!edit(live)) throw new Error(name + " found nothing to change in the live document");
     }
   };
-  if (!share) return plan;
-  const shared = share(trial);
-  return "refused" in shared ? shared : { ...plan, shared };
+  const shared = share ? share(trial) : null;
+  return !shared ? plan : "refused" in shared ? shared : { ...plan, shared };
 }
 
 export function rewriteChanges(rewrites: readonly CellRewrite[], stamped: boolean, runsMoved = false): ChangeSet {

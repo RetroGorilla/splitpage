@@ -18,7 +18,7 @@ import type { Command, CommandRefusal, DocumentView, Plan } from "../session/doc
 import type { StampPorts } from "../session/ports.ts";
 import { applyRewrites, planByTrial, realRewrites, rewriteChanges, withFields } from "./document-edit.ts";
 import type { RewritePlanner } from "./document-edit.ts";
-import { sharedRecordEdit, sharedRecordTrial } from "./shared-records.ts";
+import { sharedRecordEdit, sharedRecordTrial, withSharedRecords } from "./shared-records.ts";
 import type { SharedRecordPorts } from "./shared-records.ts";
 
 export interface TagRef {
@@ -114,13 +114,15 @@ export function deleteTagsCommand(tags: readonly DeletedTag[], planner: RewriteP
     plan: function (doc): Plan | CommandRefusal | null {
       const rewrites = realRewrites(doc, planner(doc));
       const share = sharedRecordTrial(doc, shared);
-      // why: a whole-cell rewrite has no range form yet (Stage 2 table, Tagging text); it waits for C5d.
-      if (share && rewrites.length) return { refused: "tag-text-rewrite" };
       return planByTrial("delete-tags", doc, withFields(rewriteChanges(rewrites, true), ["productionTags"], true), function (live) {
         let changed = applyRewrites(live, rewrites, stamps);
         tags.forEach(function (t) { if (removeRegistryTag(live, t.cat, t.name)) changed = true; });
         return changed;
-      }, share);
+      }, share && function (trial) {
+        const out = share(trial);
+        // why: a whole-cell rewrite has no range form yet (Stage 2 table, Tagging text); it waits for C5d.
+        return out && rewrites.length ? { refused: "tag-text-rewrite" } : out;
+      });
     }
   };
 }
@@ -141,10 +143,7 @@ export function gearQuickAddCommand(planner: (doc: DocumentView) => QuickAddPlan
         changes: registryChange(),
         apply: function (live) { quickAdd(live, plan); }
       };
-      const share = sharedRecordTrial(doc, shared);
-      if (!share) return out;
-      const records = sharedRecordEdit(doc, share, function (live) { quickAdd(live, plan); return true; });
-      return "refused" in records ? records : { ...out, shared: records };
+      return withSharedRecords(out, sharedRecordEdit(doc, shared, function (live) { quickAdd(live, plan); return true; }));
     }
   };
 }
@@ -193,10 +192,7 @@ export function deletePersonCommand(personId: string, shared?: SharedRecordPorts
         changes: peopleChange(),
         apply: function (live) { removePerson(live, personId); }
       };
-      const share = sharedRecordTrial(doc, shared);
-      if (!share) return plan;
-      const out = sharedRecordEdit(doc, share, function (live) { removePerson(live, personId); return true; });
-      return "refused" in out ? out : { ...plan, shared: out };
+      return withSharedRecords(plan, sharedRecordEdit(doc, shared, function (live) { removePerson(live, personId); return true; }));
     }
   };
 }

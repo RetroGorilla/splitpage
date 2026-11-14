@@ -1,0 +1,94 @@
+{
+  "tests": ["tests/application/commands/records-shared.test.ts", "tests/features/tags/production-tags-mount.test.ts"],
+  "mutants": [{
+    "label": "a reordered registry is stated as sets and creates",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (json(kept) !== json(order)) return { refused: \"records-reordered\" };",
+    "replace": ""
+  }, {
+    "label": "a record without an id or with a repeated id is diffed by a made-up key",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (!entry || typeof entry.id !== \"string\" || !entry.id || out.has(entry.id)) return null;",
+    "replace": "if (!entry) return null;"
+  }, {
+    "label": "a new record takes the highest stored rank instead of the next one",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "String(Number(rank) + 1).padStart(10, \"0\")",
+    "replace": "String(Number(rank)).padStart(10, \"0\")"
+  }, {
+    "label": "new records rank after the lowest stored rank",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (top === null || rank > top) top = rank;",
+    "replace": "if (top === null || rank < top) top = rank;"
+  }, {
+    "label": "a created tag or shot loses its status",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "for (const field of [\"status\", ...storedFields(collection)])",
+    "replace": "for (const field of [...storedFields(collection)])"
+  }, {
+    "label": "a created person loses their name",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (collection === \"people\" && entry.name !== undefined) fields.name = entry.name;",
+    "replace": ""
+  }, {
+    "label": "a changed field the table does not store is never written",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (extra(collection, was) !== extra(collection, entry)) operations.push(",
+    "replace": "if (false) operations.push("
+  }, {
+    "label": "a dropped stored field is written as a value instead of cleared",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "operations.push(entry[field] === undefined ? {",
+    "replace": "operations.push(false ? {"
+  }, {
+    "label": "a status change names no parents",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "parents: edit.heads(scope, key) as SharedContentRef[]",
+    "replace": "parents: [] as SharedContentRef[]"
+  }, {
+    "label": "a tag status change is stated on the shot scope",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "const scope = collection === \"tags\" ? \"tag\" as const : \"shot\" as const;",
+    "replace": "const scope = collection === \"shots\" ? \"tag\" as const : \"shot\" as const;"
+  }, {
+    "label": "a record the edit removed is kept",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (!after.has(key)) operations.push({ kind: \"record-delete\"",
+    "replace": "if (false) operations.push({ kind: \"record-delete\""
+  }, {
+    "label": "a direct record builder plans shared operations without an author",
+    "file": "src/application/commands/shared-records.ts",
+    "find": "if (!shared || !author) return null;",
+    "replace": "if (!shared) return null;"
+  }, {
+    "label": "a trial-planned record builder drops its shared operations",
+    "file": "src/application/commands/document-edit.ts",
+    "find": "const shared = share ? share(trial) : null;",
+    "replace": "const shared = null;"
+  }, {
+    "label": "a shot added on a shared copy has no shared form",
+    "file": "src/application/commands/broll-records.ts",
+    "find": "return withSharedRecords(plan, sharedRecordEdit(doc, shared, function (live) { addBrollRecord(live, copied(shot)); return true; }));",
+    "replace": "return plan;"
+  }, {
+    "label": "a tag deletion that rewrites labelled text is sent as a registry delete",
+    "file": "src/application/commands/production-records.ts",
+    "find": "return out && rewrites.length ? { refused: \"tag-text-rewrite\" } : out;",
+    "replace": "return out;"
+  }, {
+    "label": "the record ports read no stored ranks",
+    "file": "src/bootstrap/wiring/ports/shared-records.ts",
+    "find": "return handle ? readSharedRecords(handle, collection).flatMap(record => typeof record.fields.rank === \"string\" ? [record.fields.rank] : []) : [];",
+    "replace": "return [];"
+  }, {
+    "label": "the record ports read no status heads",
+    "file": "src/bootstrap/wiring/ports/shared-records.ts",
+    "find": "return handle ? readSharedStatusHeads(handle, { scope, record: record as SharedContentRef }) : [];",
+    "replace": "return [];"
+  }, {
+    "label": "a refused registry heal still commits its cue snapshot",
+    "file": "src/features/tags/production-tags.ts",
+    "find": "if (!outcome || outcome.kind === \"applied\") plan.commit();",
+    "replace": "plan.commit();"
+  }]
+}
