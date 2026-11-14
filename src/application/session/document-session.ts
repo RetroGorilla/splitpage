@@ -1,4 +1,5 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
+import type { SharedCommandDescription } from "../../core/collab/undo-record.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { FlowSelectionPair } from "../../core/flow/flow.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
@@ -20,6 +21,7 @@ export interface SharedPlan {
   readonly operations: readonly SharedOperation[];
   readonly base?: number;
   readonly undo?: false;
+  readonly description?: SharedCommandDescription;
 }
 
 export interface Plan {

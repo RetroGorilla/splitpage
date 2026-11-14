@@ -136,6 +136,7 @@ test("Split rename typing settles each keystroke as heading text operations, wit
     assert.equal(page.edge.backspace(), true);
     assert.deepEqual([page.stored(), input.value, caret(page), page.reports, page.commands], ["SneX", "SneX", [1, 1], [], []]);
     assert.deepEqual(written(page), [[inserted("X")], [{ kind: "text-delete", target: TARGET, observed: 2 }]]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "X", true], ["typing", "", true]]);
     assert.deepEqual([holds(page), page.shownDepth(), page.repaints()], [[], 0, 0]);
     copies(page, ["SneX"]);
   } finally { page.close(); }
