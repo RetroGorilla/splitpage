@@ -1,7 +1,6 @@
 import * as Y from "yjs";
 import type { CollabRoots } from "./roots.ts";
 import { sharedJson } from "./snapshot.ts";
-import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
 import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";

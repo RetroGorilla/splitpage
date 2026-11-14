@@ -15,7 +15,7 @@ import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import type { SharedPreparedWrite } from "../../../src/adapters/collab/prepare.ts";
 import { readSharedSplitRetired } from "../../../src/adapters/collab/structure-plan.ts";
-import { SHARED_SPLIT_OBSERVATION_PARTS, SHARED_SPLIT_WATCHED_PARTS, sharedSplitRetireHolds } from "../../../src/adapters/collab/split-retirement.ts";
+import { SHARED_SPLIT_OBSERVATION_PARTS, sharedSplitRetireHolds } from "../../../src/adapters/collab/split-retirement.ts";
 import type { CollabRoots } from "../../../src/adapters/collab/roots.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
@@ -433,7 +433,7 @@ for (const order of ORDERS) test(`a heading another writer adds above the new be
 }));
 
 for (const order of ORDERS) test(`a beat another writer splits off the source beat, between it and the new beat, while the undo is in flight keeps the split: ${order}`, () => scenario(order, run => {
-  const record = run.command(split()), beat = run.beat(record);
+  const record = run.command(split());
   run.reverse(record, true, false);
   run.send({ kind: "split", id: "mid", by: "Other", target, at: { left: flowBaseReference("R1", "audioText", 0), right: null, affinity: "after" }, observed: [], boundary: "Rm", beat: "Rm", fields: {} });
   run.flush(); run.check("kept", [["R1", "a"], ["Rs", "b"], ["Rs", "cd"], ["R2", "ef"]]);
