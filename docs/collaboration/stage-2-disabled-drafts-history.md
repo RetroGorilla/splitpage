@@ -38,10 +38,12 @@ cannot replace the shared session.
   counting on a recovery copy. A shared instance needs its own tab source, which
   package 14 adds.
 - The detached draft writer (`DraftsMount.detachSource`) answers the same way. It
-  detaches only a settled writer: no pending change, no write or discard in flight,
-  no retry scheduled and not stopped. Otherwise it refuses with that reason and
-  changes nothing. While detached nothing is scheduled or written; resuming arms
-  nothing and continues the draft sequence.
+  detaches only a settled writer: no flush, write or discard outstanding (each is
+  counted from its request until its answer has been handled), no pending change
+  or armed capture, no retry scheduled and not stopped. Otherwise it refuses with
+  that reason and changes nothing. While detached nothing is scheduled or written;
+  resuming arms nothing and continues the draft sequence. A flush whose capture
+  finds the writer not live answers that nothing was kept.
 - A history copy for a standalone save that lands after the session became shared
   follows the current session, so it is not made; the snapshots stay under the old
   id. Package 14 decides captured-save effects together with the session owner.
