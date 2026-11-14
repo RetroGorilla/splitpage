@@ -6,6 +6,11 @@ import { moveBeatCommand, swapBeatsCommand } from "../../../src/application/comm
 import { addSceneCommand, moveSceneCommand, renameSceneCommand } from "../../../src/application/commands/scenes.ts";
 import { pasteBeatsCommand } from "../../../src/application/commands/beats.ts";
 import { galleryCommand } from "../../../src/application/commands/gallery.ts";
+import type { GalleryEdit } from "../../../src/application/commands/gallery.ts";
+import { addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGallerySlot } from "../../../src/core/document/gallery.ts";
+import { sharedGalleryPorts } from "../../../src/bootstrap/wiring/ports/shared-gallery.ts";
+import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { importRowsCommand } from "../../../src/application/commands/import-rows.ts";
 import { restoreConflictCommand } from "../../../src/application/commands/comments.ts";
 import { fileTitleCommand, titleCommand } from "../../../src/application/commands/title.ts";
@@ -23,7 +28,7 @@ import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import { builderOperationCoverage } from "../../core/collab/coverage-fixture.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import { replicas } from "../../adapters/collab/executor-support.ts";
+import { replicas, operation } from "../../adapters/collab/executor-support.ts";
 import { adapterReplica, sharedHarness } from "../session/shared-session-support.ts";
 import { fakeNotices } from "../../features/fakes.ts";
 
@@ -44,7 +49,6 @@ const factories: Record<string, (doc: DocumentView) => Command> = {
   pasteBeatsCommand: () => pasteBeatsCommand({ plan: () => ({ inserted: ["R3"], replaced: null, title: false, saveNow: true }), apply: () => { assert.fail("paste wrote"); } }),
   titleCommand: () => titleCommand("Changed"),
   fileTitleCommand: doc => fileTitleCommand({ before: { title: doc.title, titleOrigin: doc.titleOrigin, titleVersion: doc.titleVersion }, title: "Changed", titleOrigin: "file", titleVersion: undefined }),
-  galleryCommand: () => galleryCommand("R1", row => { row.imageRef = { sha256: "a".repeat(64), mime: "image/png", width: 1, height: 1 }; return true; }, stamps),
   tagCellsCommand: () => tagCellsCommand("tag", rewrites, { cat: "prop", name: "Cup" }, stamps),
   retagCommand: () => retagCommand({ cat: "prop", name: "Cup" }, "Mug", rewrites, stamps),
   rewriteCellsCommand: () => rewriteCellsCommand("rewrite", rewrites, stamps, { needs: "edit", stamped: true }),
@@ -82,6 +86,43 @@ for (const [builder] of refused) {
     } finally { h.session.dispose(); set.close(); }
   });
 }
+
+const picture = (key: string) => ({ sha256: key.padStart(64, "0"), mime: "image/png", width: 1, height: 1 });
+const galleryCases: readonly { readonly reason: string | null; readonly beat: string; readonly edit: () => GalleryEdit; readonly joined?: true }[] = [
+  { reason: null, beat: "R2", edit: () => row => addGalleryPicture(row, picture("4"), "New") !== -1 },
+  { reason: "gallery-local-file", beat: "R2", edit: () => row => addGalleryVideo(row, { name: "clip.mp4", size: 3, location: { kind: "bundled", name: "clip.mp4" } }) !== -1 },
+  { reason: "gallery-embedded-image", beat: "R2", edit: () => row => { row.visualImage = "data:image/png;base64,iVBORw0KGgo="; return true; } },
+  { reason: "gallery-joined-beat", beat: "R1", joined: true, edit: () => row => removeGallerySlot(row, 0) },
+  { reason: "gallery-overflow", beat: "R2", edit: () => row => { row.moreImages = Array.from({ length: 62 }, (_, index) => ({ imageRef: picture(index.toString(16)) })); return true; } },
+  { reason: "gallery-order-unavailable", beat: "R1", edit: () => row => moveGallerySlot(row, 2, 0) },
+  { reason: "gallery-slot-unknown", beat: "R2", edit: () => { let calls = 0; return row => { if (++calls === 1) row.imageRef = picture("4"); return true; }; } }
+];
+
+for (const literal of galleryCases) test(`rule 73: served gallery ${literal.reason ?? "picture creation"} uses the real shared command`, () => {
+  const set = replicas(2, { rows: [
+    { id: "R1", audioText: "ab", imageRef: picture("1"), moreImages: [{ imageRef: picture("2") }, { imageRef: picture("3") }] },
+    { id: "R2", audioText: "cd", imageRef: null }, { id: "R3", audioText: "ef", imageRef: picture("5") }
+  ] });
+  registerSharedOperationFamilies(set.a, { cells: runtime.cells });
+  if (literal.joined) assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "join", id: "join", by: "Editor", from: "R3", into: "R1", glue: " " })]), { ok: true });
+  const notices = fakeNotices(), h = sharedHarness(adapterReplica(set.a), { refused: sharedCommandRefusalNotice(notices.notices) });
+  const author = sharedAuthorPort({ handle: () => set.a, name: stamps.editor.name });
+  try {
+    const before = encodeSharedState(set.a);
+    const ports = sharedGalleryPorts({ handle: () => set.a, author: author.next, stamps });
+    const outcome = h.session.run(galleryCommand(literal.beat, literal.edit(), stamps, ports));
+    if (literal.reason === null) {
+      assert.equal(outcome.kind, "applied");
+      assert.equal(notices.shown.length, 0);
+      assert.deepEqual(h.session.read(doc => doc?.rows.find(row => row.id === "R2")?.imageRef), picture("4"));
+    } else {
+      assert.deepEqual(outcome, { kind: "rejected", reason: literal.reason, notified: true });
+      assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual([h.undo, h.executed, h.published], [[], [], []]);
+    }
+  } finally { h.session.dispose(); set.close(); }
+});
 
 for (const reason of ["flow-clipboard-records-unavailable", "move-in-shared-session", "unhandled-kind", "flow-operations-empty", "flow-operations-unavailable"]) {
   test(`rule 73: named refusal ${reason} maps to the warning sentence once`, () => {

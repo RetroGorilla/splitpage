@@ -16,7 +16,7 @@ export const builderOperationCoverage = [
   classified("serve", ["addReplyCommand", "field-record", "record-create,record-set"]),
   classified("serve", ["setCommentAssigneeCommand", "field-record", "record-set"]),
   classified("serve", ["toggleResolveCommand", "field-record", "record-set"]),
-  classified("refuse", ["galleryCommand", "field-record", "record-create,record-set,record-delete"]),
+  classified("serve", ["galleryCommand", "field-record", "record-create,record-set,record-delete"]),
   classified("serve pending composition", ["registerTagCommand", "field-record", "record-create"]),
   classified("serve pending composition", ["addPersonCommand", "field-record", "record-create"]),
   classified("serve pending composition", ["deletePersonCommand", "field-record", "record-delete,record-set"]),

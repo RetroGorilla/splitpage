@@ -1,10 +1,20 @@
 import type { DocumentRow } from "../../core/document/validated.ts";
+import type { SharedContentRef, SharedOperation } from "../../core/collab/operations.ts";
+import { sharedGalleryOperations, sharedGalleryProbe } from "../../core/collab/gallery-operations.ts";
+import type { SharedPictureRecord } from "../../core/collab/gallery-operations.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DeepReadonly } from "../session/document-session.ts";
+import type { Command, DeepReadonly, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 
 export type GalleryEdit = (row: DocumentRow) => unknown;
+
+export interface SharedGalleryPorts {
+  readonly author: () => { readonly id: string; readonly by: string } | null;
+  readonly pictures: (beat: string) => readonly SharedPictureRecord[];
+  readonly joined: (beat: string) => readonly SharedPictureRecord[];
+  readonly beatStamp: (beat: SharedContentRef, author: { readonly id: string; readonly by: string }) => SharedOperation;
+}
 
 const STAMPS: readonly string[] = Object.freeze(["updatedAt", "updatedBy"]);
 
@@ -29,7 +39,23 @@ function galleryChanges(rowId: string, fields: readonly string[]): ChangeSet {
   });
 }
 
-export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPorts): Command {
+function galleryPlan(rowId: string, draft: DocumentRow, fields: readonly string[], stamps: StampPorts): Plan {
+  return {
+    changes: galleryChanges(rowId, fields),
+    apply: function (live) {
+      const target = live.rows.find(function (r) { return r.id === rowId; });
+      if (!target) throw new Error("scene " + rowId + " left the document before its gallery changed");
+      fields.forEach(function (field) {
+        if (draft[field] === undefined) Reflect.deleteProperty(target, field);
+        else target[field] = copyOf(draft[field]);
+      });
+      target.updatedAt = stamps.clock.nowIso();
+      target.updatedBy = stamps.editor.name();
+    }
+  };
+}
+
+export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPorts, shared?: SharedGalleryPorts): Command {
   return {
     name: "gallery-edit",
     needs: "edit",
@@ -40,19 +66,14 @@ export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPo
       if (!edit(draft)) return null;
       const fields = changedFields(row, draft);
       if (!fields.length) return null;
-      return {
-        changes: galleryChanges(rowId, fields),
-        apply: function (live) {
-          const target = live.rows.find(function (r) { return r.id === rowId; });
-          if (!target) throw new Error("scene " + rowId + " left the document before its gallery changed");
-          fields.forEach(function (field) {
-            if (draft[field] === undefined) Reflect.deleteProperty(target, field);
-            else target[field] = copyOf(draft[field]);
-          });
-          target.updatedAt = stamps.clock.nowIso();
-          target.updatedBy = stamps.editor.name();
-        }
-      };
+      const plan = galleryPlan(rowId, draft, fields, stamps);
+      const author = shared ? shared.author() : null;
+      if (!shared || !author) return plan;
+      const probed = sharedGalleryProbe(row) as DocumentRow;
+      edit(probed);
+      const result = sharedGalleryOperations({ beat: rowId, before: row, after: draft, probed, records: shared.pictures(rowId), joined: shared.joined(rowId), author });
+      if ("refused" in result) return { refused: result.refused };
+      return { ...plan, shared: { operations: [...result.operations, shared.beatStamp(rowId as SharedContentRef, { id: author.id + "_stamp_0", by: author.by })] } };
     }
   };
 }
