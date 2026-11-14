@@ -233,7 +233,21 @@ replacement, in the same task:
   `src/application/session/apply-merge.ts:133` calls `current()`, which throws
   while shared, so `keptForNextLaunch()` never runs.
 
-Found in the same review, for other cuts:
+Found in the review of #1557 (C5a):
+
+- **C4, leaving.** While the author's handle is live, a Writer still on the shared
+  ports goes wrong on the standalone session: that session ignores `plan.shared`
+  and applies the standalone plan while the caret and undo selection hold
+  committed ids that do not exist, and the identical-replacement path throws
+  "Shared intent requires a shared session". Leaving restarts the bindings and
+  clears the handle no later than the owner swap.
+  `tests/bootstrap/shared-switch.test.ts` pins it (the author answers `null` and
+  the bindings have left when the standalone entry runs).
+- **C6.** The `writer` passed to `writerFlowCommands` is the adapter's writer,
+  `String(collabState(handle).doc.clientID)` (`src/adapters/collab/prepare.ts:56`),
+  taken from the same handle as the author port so the two cannot differ.
+
+Found in the review of #1551, for other cuts:
 
 - **C8.** `src/application/identity/document-identity.ts:92` ignores the
   rejected outcome of its stamp after a `BroadcastChannel` message from another
