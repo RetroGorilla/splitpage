@@ -22,6 +22,14 @@ function reading(handle: SharedDocumentHandle) {
     blocks: readProjectionBlocks(handle, record => readProjectionUnits(handle, record.get("text"), record.get("markRecords"))) };
 }
 
+function assertionFailure(error: unknown): unknown {
+  if (error instanceof assert.AssertionError) return error;
+  if (error instanceof AggregateError) for (const cause of error.errors) {
+    const failure = assertionFailure(cause); if (failure instanceof assert.AssertionError) return failure;
+  }
+  return error;
+}
+
 for (const order of ["D1", "rev"] as const) test(`creation retirement generated readers equal encoded readers in every transaction phase: ${order}`, t => {
   const h = replicas(2, { rows: [{ id: "R1", audioText: "abc", visualText: "look" }, { id: "R2", audioText: "d" }] });
   const handles = [h.a, h.b, h.c], removals: (() => void)[] = []; let checking = false, step = "setup", serial = 0, comparisons = 0;
@@ -111,5 +119,6 @@ for (const order of ["D1", "rev"] as const) test(`creation retirement generated 
       run("encoded-race-" + cycle, () => { assert.equal(applySharedUpdate(h.c, encodeSharedState(h.a)).ok, true); });
     }
     assert.ok(comparisons >= 300); t.diagnostic(JSON.stringify({ cycles: 3, steps, comparisons }));
-  } finally { t.mock.restoreAll(); removals.forEach(remove => remove()); h.close(); }
+  } catch (error) { throw assertionFailure(error); }
+  finally { t.mock.restoreAll(); removals.forEach(remove => remove()); h.close(); }
 });

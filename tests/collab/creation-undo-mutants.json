@@ -28,16 +28,16 @@
       "replace": "if (false) return previous.value;"
     },
     {
-      "label": "creation retirement reuses a result during writes",
+      "label": "creation retirement skips synchronization during writes",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "if (!sharedCreationReadsSettled(handle)) return read();",
-      "replace": "if (collabState(handle).reads.settled && collabState(handle).transactionDepth > 0) return read();"
+      "find": "const synchronize = () => {",
+      "replace": "const synchronize = () => {\n      if (!state.reads.settled) return true;"
     },
     {
-      "label": "creation retirement consults cached comparisons before observers finish",
+      "label": "creation retirement skips synchronization in early callbacks",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "return state.reads.settled && state.transactionDepth === 0;",
-      "replace": "return state.reads.settled;"
+      "find": "const synchronize = () => {",
+      "replace": "const synchronize = () => {\n      if (state.reads.settled && state.transactions.size > 0) return true;"
     },
     {
       "label": "creation ownership ignores retargeted children",
@@ -216,14 +216,14 @@
     {
       "label": "creation repeatedly checks invalidated markers",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "const previous = cache(handle).entries.get(beat); return previous && !previous.dirty ? previous.value : undefined;",
-      "replace": "const previous = cache(handle).entries.get(beat); return previous && previous.value && !previous.dirty ? previous.value : undefined;"
+      "find": "const previous = held.entries.get(beat); return previous && !previous.dirty ? previous.value : undefined;",
+      "replace": "const previous = held.entries.get(beat); return previous && previous.value && !previous.dirty ? previous.value : undefined;"
     },
     {
       "label": "creation ignores changes inside its watched text range",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "if (subs && moved(range, transaction, subs, entry.value)) entry.dirty = true;",
-      "replace": "if (subs) moved(range, transaction, subs, entry.value);"
+      "find": "if (moved(range, transaction, subs, entry.value)) entry.dirty = true;",
+      "replace": "moved(range, transaction, subs, entry.value);"
     },
     {
       "label": "creation forgets separator register ownership",

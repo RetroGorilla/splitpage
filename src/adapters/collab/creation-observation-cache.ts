@@ -10,7 +10,7 @@ interface Joined { readonly root: Y.Map<unknown>; readonly keys: ReadonlySet<str
 interface Range { readonly text: Y.Text; from: number; to: number }
 interface Dependencies { readonly maps: Dependency[]; readonly ranges: Range[]; readonly members: Membership[]; readonly joins: Joined[] }
 interface Observation extends Dependencies { dirty: boolean; readonly value: boolean }
-interface Cache { readonly entries: Map<string, Observation>; readonly candidates: Set<string> }
+interface Cache { readonly entries: Map<string, Observation>; readonly candidates: Set<string>; readonly synchronize: () => boolean }
 interface NativeNode { readonly _item: Y.Item | null }
 let collecting: Dependencies | null = null;
 
@@ -73,7 +73,8 @@ function cache(handle: SharedDocumentHandle): Cache {
   const state = collabState(handle);
   return state.reads.keep(state.roots.creationRetired, "creation-observations", () => {
     const entries = new Map<string, Observation>(), candidates = new Set(state.roots.creationRetired.keys());
-    const changed = (transaction: Y.Transaction) => guardSharedCallback(state, () => {
+    const baselines = new WeakMap<Y.Transaction, Map<Range, { from: number; to: number }>>();
+    const applyChanges = (transaction: Y.Transaction) => {
       const changes = transaction.changed as unknown as ReadonlyMap<object, Set<string | null>>;
       for (const beat of changes.get(state.roots.creationRetired) ?? []) if (beat !== null) {
         if (state.roots.creationRetired.has(beat)) { candidates.add(beat); const entry = entries.get(beat); if (entry) entry.dirty = true; }
@@ -83,7 +84,12 @@ function cache(handle: SharedDocumentHandle): Cache {
         if (!state.roots.creationRetired.has(beat)) { entries.delete(beat); candidates.delete(beat); continue; }
         for (const range of entry.ranges) {
           const subs = changes.get(range.text);
-          if (subs && moved(range, transaction, subs, entry.value)) entry.dirty = true;
+          if (subs) {
+            let ranges = baselines.get(transaction); if (!ranges) { ranges = new Map(); baselines.set(transaction, ranges); }
+            let before = ranges.get(range); if (!before) { before = { from: range.from, to: range.to }; ranges.set(range, before); }
+            range.from = before.from; range.to = before.to;
+            if (moved(range, transaction, subs, entry.value)) entry.dirty = true;
+          }
         }
         if (entry.members.some(dependency => membershipChanged(dependency, changes)) || entry.joins.some(dependency => joinsChanged(dependency, changes))) entry.dirty = true;
         for (const dependency of entry.maps) {
@@ -100,25 +106,41 @@ function cache(handle: SharedDocumentHandle): Cache {
         }
         if (entry.dirty) candidates.add(beat);
       }
-    });
+    };
+    let syncing = false;
+    const pending = new Set<Y.Transaction>();
+    const synchronize = () => {
+      if (syncing) return false;
+      syncing = true;
+      try {
+        for (const transaction of state.transactions) pending.add(transaction);
+        while (pending.size) {
+          const transaction = pending.values().next().value; if (!transaction) break;
+          pending.delete(transaction); applyChanges(transaction);
+        }
+        return true;
+      } finally { syncing = false; }
+    };
+    const changed = (transaction: Y.Transaction) => guardSharedCallback(state, () => { pending.add(transaction); synchronize(); });
     state.doc.on("beforeObserverCalls", changed);
     state.doc.once("destroy", () => guardSharedCallback(state, () => { state.doc.off("beforeObserverCalls", changed); }));
-    return { entries, candidates };
+    return { entries, candidates, synchronize };
   });
 }
 
 export function sharedCreationReadsSettled(handle: SharedDocumentHandle): boolean {
-  const state = collabState(handle); return state.reads.settled && state.transactionDepth === 0;
+  const state = collabState(handle); return state.reads.settled && state.transactions.size === 0;
 }
 export function peekSharedCreationObservation(handle: SharedDocumentHandle, beat: string): boolean | undefined {
-  if (!sharedCreationReadsSettled(handle)) return undefined;
-  const previous = cache(handle).entries.get(beat); return previous && !previous.dirty ? previous.value : undefined;
+  const held = cache(handle); if (!held.synchronize()) return undefined;
+  const previous = held.entries.get(beat); return previous && !previous.dirty ? previous.value : undefined;
 }
 export function cachedSharedCreationObservation(handle: SharedDocumentHandle, beat: string, read: () => boolean): boolean {
-  // why: the native transaction remains open through its observers; only then have all dependencies been invalidated.
-  if (!sharedCreationReadsSettled(handle)) return read();
-  const { entries, candidates } = cache(handle), previous = entries.get(beat);
+  const held = cache(handle); if (!held.synchronize()) return read();
+  const { entries, candidates } = held, previous = entries.get(beat);
   if (previous && !previous.dirty) return previous.value;
+  // why: current transaction changes are pulled before reuse; partial comparisons never replace a settled snapshot.
+  if (!sharedCreationReadsSettled(handle)) return read();
   const before = collecting, dependencies: Dependencies = { maps: [], ranges: [], members: [], joins: [] }; collecting = dependencies;
   try {
     const value = read(); entries.set(beat, { ...dependencies, dirty: false, value });
@@ -127,6 +149,6 @@ export function cachedSharedCreationObservation(handle: SharedDocumentHandle, be
 }
 
 export function readSharedCreationCandidates(handle: SharedDocumentHandle): ReadonlySet<string> {
-  const state = collabState(handle);
-  return sharedCreationReadsSettled(handle) ? cache(handle).candidates : new Set(state.roots.creationRetired.keys());
+  const held = cache(handle);
+  return held.synchronize() ? held.candidates : new Set(collabState(handle).roots.creationRetired.keys());
 }

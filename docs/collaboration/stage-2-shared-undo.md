@@ -741,11 +741,11 @@ there is no observer-populated presence set or revision-stamped empty result.
 Point reads first check the native marker key. Bulk projection checks the
 native store once before traversing comparison candidates.
 
-A per-marker result is reusable only after the native transaction's field
-observers finish. Inside writes, before observers and in field observers,
-comparisons read current source records and current ownership/join data.
-Early reads do not populate a settled result. The transaction-depth barrier
-is independent of the order in which those readers and observers registered.
+Before reusing a per-marker result, a synchronous pull applies the active
+native transactions' current changed identities to its dependencies. This
+also runs inside writes, before observers and in field observers, regardless
+of observer registration order. Dirty early reads compare current records
+and ownership/join data without storing a partial transaction's result.
 
 Dependencies name the marked record, owned child identities and ownership
 queries, joined component, exact status/join keys, and text ranges. Changing
@@ -759,23 +759,23 @@ plain/formatted insertion, effective/settled-invalidated markers, the six
 placements below, and zero/100 unrelated beats. R1 is edited; R1/R2 each start
 as three narration characters split after the first. A retired creation has
 one narration and one visual character. Each cell is **first-key checks/builds
-? following-key checks/builds**. Every row is tested separately with **0 and
+then following-key checks/builds**. Every row is tested separately with **0 and
 100 unrelated beats**, with identical results.
 
 | Marker state | Placement | Narration plain | Narration formatted | Visual plain | Visual formatted |
 | --- | --- | --- | --- | --- | --- |
-| Effective | None | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Effective | One in edited R1 segment | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 |
-| Effective | One in other R2 segment | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Effective | Two in R1 | 2/2 ? 0/0 | 2/2 ? 0/0 | 2/2 ? 0/0 | 2/2 ? 0/0 |
-| Effective | Two in R2 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Effective | One in each | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 |
-| Settled invalidation | None | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Settled invalidation | One in R1 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Settled invalidation | One in R2 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Settled invalidation | Two in R1 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Settled invalidation | Two in R2 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
-| Settled invalidation | One in each | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Effective | None | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Effective | One in edited R1 segment | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 |
+| Effective | One in other R2 segment | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Effective | Two in R1 | 2/2 then 0/0 | 2/2 then 0/0 | 2/2 then 0/0 | 2/2 then 0/0 |
+| Effective | Two in R2 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Effective | One in each | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 |
+| Settled invalidation | None | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Settled invalidation | One in R1 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Settled invalidation | One in R2 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Settled invalidation | Two in R1 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Settled invalidation | Two in R2 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Settled invalidation | One in each | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
 
 Cold checks are only for markers in the segment needed to resolve the edit.
 Warm unrelated typing makes no comparison or observation build. These counts

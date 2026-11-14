@@ -9,7 +9,7 @@ function indexOf(handle: SharedDocumentHandle, collection: CreationOwnedCollecti
   const state = collabState(handle), { roots, reads } = state, root = roots[collection], consumer = "creation-owner:" + field;
   const belongs = (key: string): string | null => { const record = root.get(key), value: unknown = record instanceof Y.Map ? record.get(field) : null; return typeof value === "string" ? value : null; };
   // why: writes in the same undo are already visible in the store; its indexes refresh only after the transaction.
-  if (!reads.settled || state.transactionDepth > 0) return null;
+  if (!reads.settled || state.transactions.size > 0) return null;
   const index = reads.keep<CreationRecordOwners>(root, consumer, () => {
     const made: CreationRecordOwners = { groups: new Map(), owners: new Map(), pending: new Set(root.keys()) };
     const changed: Parameters<typeof root.observeDeep>[0] = events => guardSharedCallback(state, () => {
