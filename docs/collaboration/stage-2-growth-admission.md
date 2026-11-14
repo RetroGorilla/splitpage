@@ -1,8 +1,8 @@
 # Stage 2 stored growth and update admission
 
-Draft: fresh storage holds the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. Admission alone exceeds the 8 ms p50 limit on short/edited, long/edited, large/fresh and the p95 limits on short/edited, long/edited, large/fresh. The table also screens the added-input allowance against the Stage 0 reference. Repetition counts below identify interim figures; the timing requirement is not yet complete. The whole-application heap limit cannot be certified by this Node adapter measurement.
+Fresh storage meets the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. All six admission rows exceed the added-p50 allowance against the Stage 0 reference. Admission alone exceeds the absolute 8 ms p50 and 25/40 ms p95 limits on every edited state and on large/fresh; those rows also contain admissions over 50 ms. Short/fresh and long/fresh fit the absolute limits in isolation, which does not certify end-to-end input latency. All six timing cases have five repetitions. The whole-application after-load heap limits cannot be certified by this Node adapter measurement.
 
-Measurements began on 2026-11-13 and continued on 2026-11-14 at the adapter level in Node, with no browser, application wiring, transport or server. The source commit measured is `d49fd51fbf5d7819143d4e263ecc33e2f8226bd2`; its `src/adapters/collab` tree is `138889c20c2952880862f3e9ab0a1b1bcee81cb7`. Machine description: ARM64, Node v24.22.1. Other work was running throughout. These conditions differ from the Stage 0 browser baseline; its numbers are budget references, not a same-machine latency comparison.
+Measurements began on 2026-11-13 and continued on 2026-11-14 at the adapter level in Node, with no browser, application wiring, transport or server. The tables remain measurements of the named source snapshot, rather than a remeasurement after the final integration merge. The source commit measured is `d49fd51fbf5d7819143d4e263ecc33e2f8226bd2`; its `src/adapters/collab` tree is `138889c20c2952880862f3e9ab0a1b1bcee81cb7`. Machine description: ARM64, Node v24.22.1. Other work was running throughout. These conditions differ from the Stage 0 browser baseline; its numbers are budget references, not a same-machine latency comparison.
 
 ## Reproduction and scope
 
@@ -12,7 +12,7 @@ After installing Node 24.22.1 and running `npm ci`, run:
 node tools/measure-shared-admission.mjs shared-admission-results.json
 ```
 
-The command internally runs all five rounds and prints Markdown tables. With a JSON filename, it writes completed preparation and rounds incrementally, plus a `.checkpoint.json` sidecar, and resumes that checkpoint on the same command. The checkpoint rejects changed source, dependencies, fixtures, Node version or CPU architecture. Omitting the filename prints the tables alone. Checkpoints are local run data and are not committed. It refuses uncommitted changes to measured source, dependencies or fixtures. The thin launcher spawns a foreground Node process with `--expose-gc` and waits for it. The implementation and prototypes are in `tests/collab/measure/run.mjs`, beside the collaboration integration tests, where existing rules permit the sync library and raw document construction. The focused adapter test uses the required formatting-monitor factory. CI exposed that every file under `tests/adapters/collab/`, including a manual script, must use that monitor; the manual measurement was moved so instrumentation does not change its adapter timings. No rule or baseline exception is added. That filename is not selected as a test by the normal runner. Focused checks: `node --test tests/adapters/collab/measure/measurement.test.mjs`.
+The command internally runs all five rounds and prints Markdown tables. With a JSON filename, it writes completed preparation and rounds incrementally, plus a `.checkpoint.json` sidecar, and resumes that checkpoint on the same command. The checkpoint rejects changed measured source, measurement code, dependencies, fixtures, Node version or CPU architecture. Choose a new JSON filename after changing these inputs. Omitting the filename prints the tables alone. Checkpoints are local run data and are not committed. It refuses uncommitted changes to measured source, dependencies or fixtures. The thin launcher spawns a foreground Node process with `--expose-gc` and waits for it. The implementation and prototypes are in `tests/collab/measure/run.mjs`, beside the collaboration integration tests, where existing rules permit the sync library and raw document construction. The focused adapter test uses the required formatting-monitor factory. CI exposed that every file under `tests/adapters/collab/`, including a manual script, must use that monitor; the manual measurement was moved so instrumentation does not change its adapter timings. No rule or baseline exception is added. That filename is not selected as a test by the normal runner. Focused checks: `node --test tests/adapters/collab/measure/measurement.test.mjs`.
 
 The limits are those of [Stage 0 audit 7, section 7](stage-0/7-performance-baseline.md#7-provisional-limits-where-no-standalone-baseline-can-exist): fresh state at most 3x the plain `.splitpage` bytes; edited state at most 10x the plain size at that point and never above 2 MiB; input p50 at most standalone + 3 ms and never above 8 ms; p95 at most 25 ms on short/long and 40 ms on large; no typing task above 50 ms; after-load heap at most standalone + 10 MiB on long and 2x standalone on large. The coordinator's stated numbers agree. The record also specifies the after-edit denominator and the 50 ms task limit.
 
@@ -20,7 +20,7 @@ The short and long inputs are the saved, migrated seed and long demo in `tests/c
 
 `hydrateSharedDocument` imports the migrated fixture into a real adapter document; `projectSharedDocument` and `enterSharedDocument` then perform shared entry. The core entry function checks the projection shape and returns it; it does not itself create or encode a shared state. Stored bytes below are the real `encodeSharedState` result, with default Yjs garbage collection, deterministic 32-bit client ids and operation ids `m1`, `m2`, and so on. Identifier lengths are therefore fixed by the script, not sampled from app users. The edited plain denominator is the projected document serialized with the file codec's image inlining and indented JSON; the fixtures have no image payloads. No plain-object mutation stands in for a shared command.
 
-Stage 0 defines workload counts, not a replay file, transaction grain or exact scheduling. This tool fixes the schedule: 100 blocks of 100 distinct single-character insertion operations followed by an observed deletion of those 100 characters, its undo and redo (10,000 inserted characters and 10,000 explicit character deletions); 50 split commands with undo, 50 joins with undo, and 100 beat removals with undo (200 structural commands); then 100 bold-range commands with undo. The same schedule runs on all three fixtures. Commands whose inverse is used run through `executeSharedCommand`; reversals use `reverseSharedUndoRecord` and must report effective success. Text operations use that command's real `executeSharedOperations` write path. Text is inserted at the advancing end of the first beat's audio cell. The structural and formatting edits are undone, and corrected text is deleted, before the edited checkpoint. The script also probes 100 undo/redo pairs on one typed character, independently of the checkpoint. Every requested family has a merged shared form and is exercised; none is silently substituted or omitted.
+Stage 0 defines workload counts, not a replay file, transaction grain or exact scheduling. This tool fixes the schedule: 100 blocks of 100 distinct single-character insertion operations followed by an observed deletion of those 100 characters, its undo and redo (10,000 inserted characters and 10,000 explicit character deletions); 50 split commands with undo, 50 joins with undo, and 100 beat removals with undo (200 structural commands); then 100 bold-range commands with undo. The same schedule runs on all three fixtures. Commands whose inverse is used run through `executeSharedCommand`; reversals use `reverseSharedUndoRecord` and must report effective success. Text operations use that command's real `executeSharedOperations` write path. Text is inserted at the advancing end of the first beat's audio cell. The structural and formatting edits are undone, and corrected text is deleted, before the edited checkpoint. The entire projection is asserted equal to its entry value; the captured checkpoints also passed this comparison independently. The script also probes 100 undo/redo pairs on one typed character, independently of the checkpoint. Every requested family has a merged shared form and is exercised; none is silently substituted or omitted.
 
 Preparation submits each block's 100 distinct insertion operations in one executor call. It does not combine them into one 100-character insertion: that would lose 99 birth records. The tool test pins three operations retaining three birth records and the same projection as three separate transactions; their encoded state is 12 bytes larger because the batched operations retain different Yjs origin links. The complete 10,000-key, one-transaction-per-key variant was not completed: preparation becomes very slow as retained records accumulate in one cell. Thus the edited checkpoint is a stated transaction-grain realization of Stage 0's counts, not a claim that transaction grouping is storage-neutral. The separate admission and typing-only growth probes use individual keystroke transactions.
 
@@ -34,7 +34,7 @@ Heap sampling is a separate untimed pass for each burst size, so sampling does n
 
 ## Results
 
-Rows with fewer than five repetitions are interim and do not yet meet the timing repeat-count requirement.
+All timing cases contain five completed repetitions.
 
 | Script / state | Completed timing rounds |
 | --- | --- |
@@ -43,7 +43,7 @@ Rows with fewer than five repetitions are interim and do not yet meet the timing
 | long / fresh | 5 / 5 |
 | long / edited | 5 / 5 |
 | large / fresh | 5 / 5 |
-| large / edited | unmeasured |
+| large / edited | 5 / 5 |
 
 Values are medians [min–max] of per-round statistics, not pooled updates.
 
@@ -60,6 +60,7 @@ Values are medians [min–max] of per-round statistics, not pooled updates.
 | long / fresh | 325052 |
 | long / edited | 325052 |
 | large / fresh | 325052 |
+| large / edited | 325052 |
 
 | Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -68,6 +69,7 @@ Values are medians [min–max] of per-round statistics, not pooled updates.
 | long / fresh | 3.48 [3.35–3.58] | 5.77 [5.54–5.96] | 9.59 [8.72–12.14] | 0.02 [0.02–0.02] | 0.02 [0.02–0.02] / 0.04 [0.04–0.04] | 99.42 [99.40–99.49] / 99.28 [99.22–99.32] |
 | long / edited | 196.35 [186.32–286.38] | 374.57 [206.23–753.50] | 479.29 [268.77–1110.75] | 0.02 [0.02–0.03] | 0.03 [0.02–0.04] / 0.08 [0.04–0.14] | 99.97 [99.97–99.98] / 99.97 [99.94–99.97] |
 | large / fresh | 27.50 [23.94–35.66] | 43.49 [29.54–70.77] | 67.78 [43.74–125.77] | 0.02 [0.02–0.03] | 0.03 [0.03–0.04] / 0.06 [0.05–0.07] | 99.90 [99.87–99.92] / 99.87 [99.86–99.90] |
+| large / edited | 236.97 [201.84–356.51] | 448.12 [223.56–826.76] | 554.49 [280.56–1386.76] | 0.02 [0.02–0.03] | 0.03 [0.02–0.03] / 0.04 [0.04–0.08] | 99.98 [99.96–99.99] / 99.97 [99.97–99.99] |
 
 Input budget screen only; passing admission alone does not establish end-to-end input latency.
 
@@ -78,6 +80,7 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | long / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
 | long / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
 | large / fresh | 2.7 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
+| large / edited | 2.7 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
 
 | Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -91,6 +94,8 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | long / edited / 1000 | 257416.30 [191295.40–317489.93] | 45.36 [33.34–59.89] | 46.50 [37.93–77.73] | 390.68 [267.36–621.34] | 5736.91 [4298.19–6527.10]x | 232.10 [232.10–232.10] | 1.07 [1.07–1.07] | 1 |
 | large / fresh / 100 | 2711.06 [2120.20–4965.40] | 3.80 [3.34–7.24] | 4.49 [3.53–5.77] | 45.41 [38.52–68.38] | 634.41 [428.46–1242.34]x | 162.85 [162.85–162.85] | 0.11 [0.11–0.11] | 1 |
 | large / fresh / 1000 | 29268.00 [25909.47–49411.22] | 24.74 [20.21–29.74] | 32.43 [28.42–61.83] | 93.60 [74.49–167.53] | 1282.02 [1118.54–1996.88]x | 343.71 [343.71–343.71] | 1.10 [1.10–1.10] | 1 |
+| large / edited / 100 | 34317.17 [20685.57–47899.55] | 17.96 [17.21–29.75] | 20.26 [18.42–26.99] | 287.73 [270.15–343.45] | 1609.85 [970.34–1986.08]x | 249.99 [249.99–249.99] | 0.10 [0.10–0.10] | 1 |
+| large / edited / 1000 | 299506.23 [250210.80–322451.16] | 36.01 [33.70–62.49] | 43.38 [39.71–51.61] | 317.68 [291.40–392.71] | 7424.41 [4793.15–9020.50]x | 287.30 [287.30–287.30] | 1.07 [1.07–1.07] | 1 |
 
 | Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |
 | --- | --- | --- | --- | --- |
@@ -99,6 +104,7 @@ Input budget screen only; passing admission alone does not establish end-to-end 
 | long / fresh | 0.042 [-0.097–0.042] | 0.846 [0.826–0.873] | 0.814 [0.795–0.923] | 20.29 [-8.52–20.93]x |
 | long / edited | 0.042 [-0.132–0.042] | 25.484 [25.475–25.494] | 25.442 [25.433–25.627] | 610.98 [-192.67–615.03]x |
 | large / fresh | 0.347 [0.016–0.347] | 6.886 [6.854–6.931] | 6.564 [6.507–6.883] | 19.98 [19.75–437.68]x |
+| large / edited | 0.347 [0.176–0.347] | 31.582 [31.552–31.592] | 31.235 [31.205–31.406] | 91.02 [90.93–179.90]x |
 
 Full lint and type checking, dependency and comment gates, and all four focused tests pass after installing the existing desktop and prototype dependencies. No dependency rule or baseline changed. The full verification command was not run.
 

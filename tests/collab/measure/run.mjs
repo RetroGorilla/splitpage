@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
@@ -154,11 +155,11 @@ function growth(fixture) {
   const handle = open();
   try {
     hydrateSharedDocument(handle, enterSharedDocument(copy(fixture.document)));
+    const entered = enterSharedDocument(projectSharedDocument(handle));
     const fresh = encodeSharedState(handle);
-    enterSharedDocument(projectSharedDocument(handle));
     const textGrowth = workload(handle, fixture.document), edited = encodeSharedState(handle);
     const projected = enterSharedDocument(projectSharedDocument(handle));
-    assert.equal(projected.rows.length, fixture.document.rows.length);
+    assert.deepEqual(projected, entered);
     const probe = open(edited);
     let per100Pairs;
     try {
@@ -313,7 +314,8 @@ export function saveCheckpoint(checkpoint) {
 }
 
 export function sourceFingerprint() {
-  return execFileSync("git", ["rev-parse", "HEAD:src", "HEAD:shared", "HEAD:package.json", "HEAD:package-lock.json",
+  const runner = createHash("sha256").update(readFileSync(new URL("./run.mjs", import.meta.url))).digest("hex");
+  return runner + "\n" + execFileSync("git", ["rev-parse", "HEAD:src", "HEAD:shared", "HEAD:package.json", "HEAD:package-lock.json",
     "HEAD:tests/collab/fixtures/projection-reference.json"], { encoding: "utf8" }).trim();
 }
 
