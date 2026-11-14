@@ -1,0 +1,7 @@
+{
+  "tests": ["src/features/find/ports.test.ts"],
+  "mutants": [
+    {"label":"Find bulk tagging reaches standalone undo while shared","file":"src/features/find/find.ts","find":"export function runBulkTag() {\n  if (findingInPresent()) return;\n  if ((ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;","replace":"export function runBulkTag() {\n  if (findingInPresent()) return;","tests":["src/features/find/ports.test.ts"]},
+    {"label":"Split replace-all adds a fallback notice after a shared refusal","file":"src/features/find/find.ts","find":"  if (writerFind) { replaceWriterMatches(true); return; }\n  if ((ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;","replace":"  if (writerFind) { replaceWriterMatches(true); return; }","tests":["src/features/find/ports.test.ts"]}
+  ]
+}
