@@ -14,7 +14,11 @@ import { registerSharedOperationFamilies } from "../../../src/adapters/collab/op
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { executeSharedCommand } from "../../../src/adapters/collab/undo-executor.ts";
-import { readSharedJoinOf } from "../../../src/adapters/collab/undo-join.ts";
+import { readSharedJoinOf, readSharedJoinedParts, readSharedJoinedFields } from "../../../src/adapters/collab/undo-join.ts";
+import { readSharedJoinedTextGeometry } from "../../../src/adapters/collab/joined-text-geometry.ts";
+import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
+import { bindSharedStructurePlan } from "../../../src/adapters/collab/structure-plan.ts";
+import { observeSharedStructureIndex } from "../../../src/adapters/collab/structure-index.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
@@ -66,8 +70,8 @@ const removed = (row: Fields, members: readonly string[] = [String(row.id)]) => 
 const HEADING = { removedHeading: { id: "S1", name: "Scene" } };
 const startRows = () => ["R1", "R2", "R3", "R4", "R5"].map(id => beat(id));
 
-function setup() {
-  const set = replicas(2, SOURCE);
+function setup(source: Fields = SOURCE) {
+  const set = replicas(2, source);
   for (const handle of [set.a, set.b, set.c]) registerSharedOperationFamilies(handle, { cells: runtime.cells });
   return set;
 }
@@ -588,6 +592,103 @@ for (const literal of cases) for (const order of ORDERS) test(`shared structure 
     } finally { a.session.dispose(); }
   } finally { h.close(); }
 });
+
+const AFTER_UNDO_CREATED = "structure_1_00770031005f0032005f006f005f0030_beat_0";
+const restoredR1 = () => beat("R1", { stamp: ALICE });
+const shortR2 = () => beat("R2", { audio: "d", status: "todo", flag: false });
+const afterSplitUndo: readonly { readonly name: string; readonly make: Make; readonly scene?: true; readonly after: Expectation }[] = [
+  { name: "delete", make: (_stamps, shared) => deleteBeatCommand("R1", shared),
+    after: { document: documentWith([shortR2()], null), recovery: [removed(restoredR1())] } },
+  { name: "remove beats", make: (_stamps, shared) => removeBeatsCommand(["R1"], shared),
+    after: { document: documentWith([shortR2()], null), recovery: [removed(restoredR1())] } },
+  { name: "split again", make: (stamps, shared) => splitBeatCommand("R1", "audioText", textCut(1, 1), "N1", { ...stamps, cells }, shared),
+    after: { document: documentWith([beat("R1", { audio: "a", stamp: ALICE }), beat(AFTER_UNDO_CREATED, { audio: "bc", stamp: ALICE }), shortR2()], null), recovery: [] } },
+  { name: "join with the next beat", make: (stamps, shared) => joinBeatsCommand("R1", join(stamps), shared),
+    after: { document: documentWith([beat("R1", { audio: "abc d", stamp: ALICE })], null), recovery: [] } },
+  { name: "add after the beat", make: (stamps, shared) => addBeatCommand("R1", "N1", stamps, shared),
+    after: { document: documentWith([restoredR1(), beat(AFTER_UNDO_CREATED, { stamp: ALICE }), shortR2()], null), recovery: [] } },
+  { name: "remove scene", scene: true, make: (_stamps, shared) => removeSceneCommand("S1", shared),
+    after: { document: documentWith([beat("R1", { stamp: ALICE, flag: true }), shortR2()], null), recovery: [HEADING] } }
+];
+for (const literal of afterSplitUndo) for (const order of ORDERS) test(`a structure command after split undo: ${literal.name}, ${order}`, () => {
+  const h = setup(documentWith([beat("R1"), shortR2()], literal.scene ? "R1" : null)), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  try {
+    assert.equal(a.session.run(run(h.a, { make: collapsedSplit }, "Alice", 5)).kind, "applied");
+    flush(h.queue, order);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "split-scene", selection: null });
+    flush(h.queue, order);
+    const before = documentWith([restoredR1(), shortR2()], literal.scene ? "R1" : null);
+    assert.deepEqual(agreeing("split undone", [h.a, h.b], order), { document: before, recovery: [] });
+    assert.equal(a.session.run(run(h.a, literal, "Alice", 5)).kind, "applied");
+    flush(h.queue, order);
+    assert.deepEqual(agreeing(literal.name, [h.a, h.b], order), literal.after);
+    assert.deepEqual(standalone(before, literal.make(stampsOf("Alice", 5)), literal.name === "split again" || literal.name === "add after the beat" ? AFTER_UNDO_CREATED : undefined), literal.after.document);
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const order of ORDERS) test(`delete after split undo and redo retains the split-off beat: ${order}`, () => {
+  const h = setup(documentWith([beat("R1"), shortR2()], null)), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  try {
+    assert.equal(a.session.run(run(h.a, { make: collapsedSplit }, "Alice", 5)).kind, "applied");
+    flush(h.queue, order);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "split-scene", selection: null });
+    flush(h.queue, order);
+    assert.deepEqual(owner.redo(), { ok: true, effective: true, label: "split-scene", selection: null });
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("split redone", [h.a, h.b], order), { document: documentWith([
+      beat("R1", { audio: "a", stamp: ALICE }), beat(ADD_A, { audio: "bc", stamp: ALICE }), shortR2()], null), recovery: [] });
+    assert.equal(a.session.run(run(h.a, { make: (_stamps, shared) => deleteBeatCommand("R1", shared) }, "Alice", 5)).kind, "applied");
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("delete after redo", [h.a, h.b], order), { document: documentWith([
+      beat(ADD_A, { audio: "bc", stamp: ALICE }), shortR2()], null), recovery: [removed(beat("R1", { audio: "a", stamp: ALICE }))] });
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const order of ORDERS) test(`joined geometry separates text length from repeated retired boundaries: ${order}`, () => {
+  const h = setup(documentWith([beat("R1"), shortR2()], null)), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  try {
+    for (let round = 0; round < 2; round++) {
+      assert.equal(a.session.run(run(h.a, { make: collapsedSplit }, "Alice", 5)).kind, "applied");
+      flush(h.queue, order);
+      assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "split-scene", selection: null });
+      flush(h.queue, order);
+      const prep = createSharedPreparation(h.a);
+      try {
+        bindSharedStructurePlan(prep.view, observeSharedStructureIndex(h.a));
+        const geometry = readSharedJoinedTextGeometry(prep.view, "R1");
+        assert.deepEqual(geometry?.parts.map(part => ({ owner: part.owner, from: part.from, to: part.to, length: part.length })),
+          [{ owner: "R1", from: 0, to: 4 + round, length: 3 }]);
+      } finally { prep.close(); }
+      assert.deepEqual(readSharedJoinedParts(h.a, "R1"), [{ beat: "R1", length: 3 }]);
+      assert.deepEqual(readSharedJoinedFields(h.a, "R1"), ["R1"]);
+      assert.deepEqual(agreeing("repeated undo", [h.a, h.b], order), { document: documentWith([restoredR1(), shortR2()], null), recovery: [] });
+    }
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const make of [(_stamps: StampPorts, shared?: SharedStructurePorts) => deleteBeatCommand("R1", shared),
+  (_stamps: StampPorts, shared?: SharedStructurePorts) => removeBeatsCommand(["R1"], shared)]) for (const order of ORDERS) {
+  test(`remove a joined row after split undo: ${make(stampsOf("Alice", 5)).name}, ${order}`, () => {
+    const h = setup(documentWith([beat("R1"), shortR2()], null)), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+    try {
+      assert.equal(a.session.run(run(h.a, { make: collapsedSplit }, "Alice", 5)).kind, "applied");
+      flush(h.queue, order);
+      assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "split-scene", selection: null });
+      flush(h.queue, order);
+      assert.equal(a.session.run(run(h.a, { make: (stamps, shared) => joinBeatsCommand("R1", join(stamps), shared) }, "Alice", 5)).kind, "applied");
+      flush(h.queue, order);
+      assert.deepEqual(readSharedJoinedParts(h.a, "R1"), [{ beat: "R1", length: 3 }, { beat: "R2", length: 1 }]);
+      assert.deepEqual(readSharedJoinedFields(h.a, "R1"), ["R1", "R2"]);
+      const before = documentWith([beat("R1", { audio: "abc d", stamp: ALICE })], null);
+      assert.deepEqual(agreeing("joined after undo", [h.a, h.b], order), { document: before, recovery: [] });
+      assert.equal(a.session.run(run(h.a, { make }, "Alice", 5)).kind, "applied");
+      flush(h.queue, order);
+      const document = documentWith([], null);
+      assert.deepEqual(agreeing("remove joined after undo", [h.a, h.b], order), { document, recovery: [removed(beat("R1", { audio: "abc d", stamp: ALICE }), ["R1", "R2"])] });
+      assert.deepEqual(standalone(before, make(stampsOf("Alice", 5))), document);
+    } finally { a.session.dispose(); h.close(); }
+  });
+}
 
 const visualSplit: Make = (stamps, shared) => splitBeatCommand("R1", "visualText", textCut(1, 2), "N1", { ...stamps, cells }, shared);
 for (const literal of [...cases, { name: "visual split", make: visualSplit }]) test(`standalone structure plan, effects and undo stay identical without a handle or author: ${literal.name}`, () => {

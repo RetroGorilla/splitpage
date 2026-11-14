@@ -103,7 +103,7 @@ export function readSharedJoinedParts(handle: SharedDocumentHandle, beat: string
   try {
     bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
     const geometry = readSharedJoinedTextGeometry(prep.view, beat);
-    return geometry && !geometry.removed ? geometry.parts.map(part => ({ beat: part.owner, length: part.to - part.from })) : [];
+    return geometry && !geometry.removed ? geometry.parts.map(part => ({ beat: part.owner, length: part.length })) : [];
   } finally { prep.close(); }
 }
 

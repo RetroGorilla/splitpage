@@ -2,6 +2,12 @@
   "tests": ["tests/application/commands/structure-shared.test.ts"],
   "mutants": [
     {
+      "label": "joined geometry counts retired boundaries as text",
+      "file": "src/adapters/collab/joined-text-geometry.ts",
+      "find": "from: block.from, to: block.to, length, glue: member.glue",
+      "replace": "from: block.from, to: block.to, length: block.to - block.from, glue: member.glue"
+    },
+    {
       "label": "a split drops its new beat stamp",
       "file": "src/application/commands/split-join.ts",
       "find": "trace.split(row.id, cut.from, { id: createdId, ...sharedCreatedBeat(ports) });",
