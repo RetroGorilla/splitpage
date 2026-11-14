@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as Y from "yjs";
+import type * as Y from "yjs";
 import { replicas, agree, operation } from "./executor-support.ts";
 import { createRecord, deleteRecord, setRecord } from "./record-support.ts";
 import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
