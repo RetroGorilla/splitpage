@@ -288,6 +288,30 @@ Found in the review of #1559 (C2):
 - **C6.** The Writer consumes the selection anchors an undo or redo returns
   (`SharedUndoOutcome.selection`) to put the caret back.
 
+Found in the review of #1567 (C4):
+
+- **The switch's order.** Entering and leaving are each one sequence with one way
+  back (`src/bootstrap/wiring/shared-session.ts`).
+  - Entering routes undo before the shared owner can be seen, resets the
+    standalone undo owner before the bindings, hydrates, and detaches last: the
+    detach port is the one step with no way back. Any failure after the first
+    change lands the kept copy as standalone, with the merge base restored, the
+    bindings left, the route cleared and the handle destroyed.
+  - Leaving restarts the bindings first, copies the projection after that
+    restart, migrates it, silences the author, swaps the owner, and only then
+    clears the route and destroys the handle. A failure before the landing puts
+    the shared bindings back and leaves a shared session that can be left again.
+- **The cut that supplies the real ports (the hook).** Detaching cancels pending
+  draft and autosave timers, a late save completion cannot land in the shared
+  session, and the source draft survives entering and leaving untouched (rule 76).
+  It owes a literal through the real wiring: real draft owner, write the unsaved
+  source draft, arm `noteChange`, enter, edit, leave, fire the pending timer, and
+  the source draft is unchanged. The same mount supplies the real refusal,
+  settlement, detachment and binding ports, and verifies autosave cancellation,
+  draft preservation and late save completion through them.
+- **C6.** It replaces the Writer's standalone history readers while shared, and
+  consumes the shared undo selection anchors.
+
 ### Order of leaving
 
 `leaveSharedSession()`:

@@ -12,133 +12,171 @@
       "file": "src/application/commands/flow-paste.ts",
       "find": "existing?.id ?? personIdentity(person.name)",
       "replace": "existing?.id ?? id(\"person\", index)",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "drawn picture marks keep noncanonical keys",
       "file": "src/application/commands/flow-paste.ts",
       "find": "slot.annotation.marks.map(markFields)",
       "replace": "slot.annotation.marks",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "heading-only paste loses its temporary marker",
       "file": "src/application/commands/flow-paste.ts",
       "find": "markers.has(op.beat) ?",
       "replace": "false ?",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "heading-only paste removes a nonexistent marker gallery",
       "file": "src/application/commands/flow-paste.ts",
       "find": "op.gallery.filter(ref => !markerGalleries.has(ref)).map(named)",
       "replace": "op.gallery.map(named)",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste bypasses record family field validation",
       "file": "src/application/commands/flow-paste.ts",
       "find": "if (!Object.entries(fields).every(([field, value]) => ports.recordField(collection, field, value)))",
       "replace": "if (false)",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste keeps positional references to existing text",
       "file": "src/application/commands/flow-paste.ts",
       "find": "if (!reference.startsWith('[\"flow-base\",')) return [reference];",
       "replace": "if (true) return [reference];",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste accepts foreign reply authors",
       "file": "src/application/commands/flow-paste.ts",
       "find": "        if (reply.author !== author.by) throw new FlowPasteRefusal(\"paste-replies-foreign-author\");\n",
       "replace": "",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole clipboard move is copied in a shared session",
       "file": "src/features/clipboard/flow-clip.ts",
       "find": "  if (clip && isMove(clip, doc)) return { refused: \"move-in-shared-session\" };\n",
       "replace": "",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "changed flow plan with empty operations is admitted",
       "file": "src/application/commands/flow.ts",
       "find": "      if (plan && !result.ops.length) return { refused: \"flow-operations-empty\" };\n",
       "replace": "",
-      "tests": ["tests/application/commands/flow-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste skips shared record preparation",
       "file": "src/bootstrap/wiring/ports/writer-flow.ts",
       "find": "request && original && \"rows\" in original && original.clipboard ? sharedFlowPaste",
       "replace": "false && original && \"rows\" in original && original.clipboard ? sharedFlowPaste",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste drops carried records",
       "file": "src/application/commands/flow-paste.ts",
       "find": "ops: [...records, ...operations, ...pictures]",
       "replace": "ops: [...operations, ...pictures]",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste drops gallery records",
       "file": "src/application/commands/flow-paste.ts",
       "find": "ops: [...records, ...operations, ...pictures]",
       "replace": "ops: [...records, ...operations]",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste leaves temporary beat ids",
       "file": "src/application/commands/flow-paste.ts",
       "find": "beats.get(value) ?? headings.get(value)",
       "replace": "headings.get(value)",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste loses initial formatted text",
       "file": "src/application/commands/flow-paste.ts",
       "find": "audioText: html(original.audioText), visualText: html(original.visualText)",
       "replace": "audioText: \"\", visualText: html(original.visualText)",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste loses initial visual text",
       "file": "src/application/commands/flow-paste.ts",
       "find": "visualText: html(original.visualText)",
       "replace": "visualText: \"\"",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste loses shot owner reference",
       "file": "src/application/commands/flow-paste.ts",
       "find": "...shot, owner: owner(shot.owner), props:",
       "replace": "...shot, owner: \"\", props:",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste accepts foreign comment authors",
       "file": "src/application/commands/flow-paste.ts",
       "find": "      if (comment.author !== author.by) throw new FlowPasteRefusal(\"paste-comments-foreign-author\");\n",
       "replace": "",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste accepts old embedded images",
       "file": "src/features/clipboard/flow-clip.ts",
       "find": "if (Array.isArray(rows) && rows.some",
       "replace": "if (false && rows.some",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "whole paste retains empty heading creation",
       "file": "src/application/commands/flow-paste.ts",
       "find": "        const scene = edited.sections?.find",
       "replace": "        operations.push(op); continue; const scene = edited.sections?.find",
-      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+      "tests": [
+        "tests/application/commands/flow-paste-shared.test.ts"
+      ]
     },
     {
       "label": "one family left out of the composition",
@@ -310,8 +348,56 @@
     {
       "label": "leaving clears the author only after the owner swap",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  ports.bindings.leave();\n  now.end();\n  try {\n    adoptReplacement(ports.migrate(raw), ports.standalone);\n  } finally {\n",
-      "replace": "  ports.bindings.leave();\n  try {\n    adoptReplacement(ports.migrate(raw), ports.standalone);\n  } finally {\n    now.end();\n"
+      "find": "  now.live(false);\n  try {\n    adoptReplacement(landed, ports.standalone);\n",
+      "replace": "  try {\n    adoptReplacement(landed, ports.standalone);\n    now.live(false);\n"
+    },
+    {
+      "label": "entry unwinding leaves the bridge shared",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (sharedSession()) attempt(errors, () => { adoptReplacement(ports.migrate(entering.kept), ports.standalone); });\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding keeps the undo route",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  entering.stopRoute?.();\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding leaves the shared bindings on",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (entering.bound) attempt(errors, () => { ports.bindings.leave(); });\n",
+      "replace": ""
+    },
+    {
+      "label": "entry unwinding forgets the merge base",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  attempt(errors, () => { holdMergeBase(entering.base); });\n",
+      "replace": ""
+    },
+    {
+      "label": "failed leaving leaves the bindings off",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  attempt(errors, () => { ports.bindings.enter(now.parts); });\n",
+      "replace": ""
+    },
+    {
+      "label": "leaving lands a copy taken before the bindings restarted",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    const current = currentDocument();\n    landed = ports.migrate",
+      "replace": "    const current = null;\n    landed = ports.migrate"
+    },
+    {
+      "label": "the undo route arrives only after the shared owner is seen",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    entering.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    adoptShared(owner => {\n      made.session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      return made.session;\n    }, createSessionCapabilities(\"shared\", ports.common));\n",
+      "replace": "    adoptShared(owner => {\n      made.session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      return made.session;\n    }, createSessionCapabilities(\"shared\", ports.common));\n    entering.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
+    },
+    {
+      "label": "the standalone undo reset runs after the bindings",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    undoOwner().adopt(null);\n    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n",
+      "replace": "    holdMergeBase(null);\n    entering.bound = true;\n    ports.bindings.enter(parts);\n    undoOwner().adopt(null);\n"
     }
   ]
 }
