@@ -1,13 +1,14 @@
 import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { NoticeKind, NoticePort } from "../../application/effects/ports.ts";
 import type { CapabilityPort } from "../../application/session/ports.ts";
+import type { DocumentEntryAdmission, DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export type ResumeHandle = Partial<Pick<LocalFileHandle, "name" | "requestPermission">>;
 
 export interface SaveRecoveryPorts {
-  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
-  readonly opening: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
+  readonly entry: DocumentEntryAdmission;
+  readonly opening: Pick<DocumentOpeningActivity, "track">;
   readonly hideResumeBanner: () => void;
   readonly resumeFromHandle: (handle: ResumeHandle) => Promise<void>;
   readonly showToast: (message: string, kind: NoticeKind) => void;

@@ -7,6 +7,7 @@ import type { SaveState } from "../../application/save/save-state.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { DocumentEntryAdmission, DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 
 export type DesktopOpening = {
   readonly kind: "file";
@@ -24,8 +25,8 @@ export interface DesktopMount extends DesktopHandOff {
 }
 
 export interface DesktopPorts {
-  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
-  readonly opening: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
+  readonly entry: DocumentEntryAdmission;
+  readonly opening: Pick<DocumentOpeningActivity, "track">;
   readonly running: () => boolean;
   readonly shell: () => DesktopShell | null;
   readonly canOpenPrompterInBrowser: () => boolean;

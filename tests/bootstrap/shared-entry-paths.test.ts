@@ -17,7 +17,7 @@ import { createLocalFilesOwner } from "../../src/application/transitions/local-f
 import { startNewScript, openLongDemo } from "../../src/bootstrap/wiring/file-menu-controls.ts";
 import { applyTakenDraft } from "../../src/bootstrap/wiring/drafts.ts";
 import { useDesktopForTest, restoreDesktop } from "../../src/adapters/desktop/desktop-port.ts";
-import { makeFakeDesktopBackend } from "../../src/adapters/desktop/fake-desktop.ts";
+import type { DesktopFileEntry } from "../../src/adapters/desktop/desktop-port.ts";
 import { startDesktopView } from "../../src/features/desktop/desktop.ts";
 import type { DesktopPorts } from "../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile } from "../../src/application/desktop/shell.ts";
@@ -85,8 +85,8 @@ async function enterAfterLanding(s: ReturnType<typeof switcher>, title: string) 
 }
 
 function heldFile(name: string) {
-  const read = deferred<string>(), ready = deferred<void>();
-  const file = Object.assign(new File([], name, { lastModified: 1 }), { text: () => { ready.resolve(); return read.promise; } });
+  const read = deferred<string>(), ready = deferred<undefined>();
+  const file = Object.assign(new File([], name, { lastModified: 1 }), { text: () => { ready.resolve(undefined); return read.promise; } });
   return { file, read, ready };
 }
 
@@ -114,9 +114,9 @@ test("C8 a failed opening and a cancelled picker release their captured opening 
   await atRead(input.ready.promise, opening); assert.equal(documentOpenings.openingPending(), true);
   input.read.reject(new Error("read failed")); assert.equal(await opening, false);
   assert.equal(documentOpenings.openingPending(), false); assert.equal(currentDocument() === before, true);
-  const picked = deferred<never>(), ready = deferred<void>(), owner = createLocalFilesOwner();
+  const picked = deferred<never>(), ready = deferred<undefined>(), owner = createLocalFilesOwner();
   const base = localFilesOwnerPorts(localFileMenuControls), stop = owner.startLocalFiles({ ...base,
-    files: { ...base.files, openPicker: () => { ready.resolve(); return picked.promise; } } });
+    files: { ...base.files, openPicker: () => { ready.resolve(undefined); return picked.promise; } } });
   try {
     const choosing = owner.openLocalFile(); await atRead(ready.promise, choosing); assert.equal(documentOpenings.openingPending(), true);
     picked.reject(Object.assign(new Error("cancelled"), { name: "AbortError" })); await choosing;
@@ -125,9 +125,9 @@ test("C8 a failed opening and a cancelled picker release their captured opening 
 });
 
 for (const lostEpoch of [false, true]) test("C8 a real asynchronous draft resume " + (lostEpoch ? "retires its lost epoch and keeps the replacement" : "blocks shared entry until its standalone landing"), async () => {
-  reset(); const s = switcher(), backend = makeFakeDesktopBackend();
-  const read = deferred<Awaited<ReturnType<typeof backend.readFile>>>(), ready = deferred<void>();
-  useDesktopForTest({ readFile: () => { ready.resolve(); return read.promise; }, setDocumentState: () => {} });
+  reset(); const s = switcher();
+  const read = deferred<DesktopFileEntry>(), ready = deferred<undefined>();
+  useDesktopForTest({ readFile: () => { ready.resolve(undefined); return read.promise; }, setDocumentState: () => {} });
   const target = migrateRows(structuredClone(TARGET)), json = JSON.stringify(target), bytes = new TextEncoder().encode(json);
   const opening = applyTakenDraft({ header: { origin: { kind: "file" }, docIdWrittenOut: true }, file: { id: "draft-file", name: "Draft.splitpage" }, stateJson: json, baseJson: json });
   try {
@@ -146,7 +146,7 @@ for (const lostEpoch of [false, true]) test("C8 a real asynchronous draft resume
 });
 
 test("C8 desktop open-with keeps entry pending from file read through standalone landing", async () => {
-  reset(); const s = switcher(), read = deferred<File>(), ready = deferred<void>();
+  reset(); const s = switcher(), read = deferred<File>(), ready = deferred<undefined>();
   let completion: Promise<unknown> | null = null, settled = 0;
   let incoming: ((entry: DesktopOpenedFile) => void) | null = null;
   const ports: DesktopPorts = { entry: documentEntry, opening: { track: work => {
@@ -154,7 +154,7 @@ test("C8 desktop open-with keeps entry pending from file read through standalone
   } }, running: () => true,
     shell: () => ({ onOpenFile: callback => { incoming = callback; }, onRestoreNotice: () => {}, onReassignDocId: () => {}, onMenuCommand: () => {},
       openPrompterInBrowser: async () => ({ ok: false, code: "OPEN_FAILED" }), openPrompterInChromium: async () => ({ ok: false, code: "OPEN_FAILED" }) }),
-    canOpenPrompterInBrowser: () => false, makeHandle: () => ({ getFile: () => { ready.resolve(); return read.promise; } }), wireBlobs: () => {},
+    canOpenPrompterInBrowser: () => false, makeHandle: () => ({ getFile: () => { ready.resolve(undefined); return read.promise; } }), wireBlobs: () => {},
     document: { current: currentDocument }, place: { fileHome: () => null }, notices: { show: () => { assert.fail("unexpected desktop notice"); } },
     documents: { open: openDocument }, saves: { unsaved: unsavedChanges, save: async () => {} }, startup: { ready: () => null },
     flushDraft: () => {}, reassignDocId: () => false, documentState: { notify: () => {}, settled: () => { settled++; }, awaitHanded: () => {} }, menuCommands: { run: () => false } };
@@ -193,13 +193,13 @@ for (const kind of ["direct open", "direct new", "New", "demo", "dropped file", 
 });
 
 for (const resumed of [false, true]) test("C8 " + (resumed ? "manual resume" : "plain Open") + " leaves before local access and blocks shared entry until landing", async () => {
-  const page = await share(), input = heldFile("Chosen.splitpage"), ready = deferred<void>();
+  const page = await share(), input = heldFile("Chosen.splitpage"), ready = deferred<undefined>();
   let reads = 0;
   const handle = { getFile: async () => input.file, queryPermission: async () => "granted", requestPermission: async () => "granted" },
     owner = createLocalFilesOwner(), base = localFilesOwnerPorts(localFileMenuControls);
   const stop = owner.startLocalFiles({ ...base, files: { ...base.files,
     openPicker: async () => { assert.equal(sharedSession(), false); return [handle]; },
-    read: async () => { assert.equal(sharedSession(), false); reads++; ready.resolve(); return input.file; } } });
+    read: async () => { assert.equal(sharedSession(), false); reads++; ready.resolve(undefined); return input.file; } } });
   const opening = resumed ? owner.resumeFromHandle(handle) : owner.openLocalFile();
   try {
     await atRead(ready.promise, opening); await atRead(input.ready.promise, opening);
@@ -211,9 +211,9 @@ for (const resumed of [false, true]) test("C8 " + (resumed ? "manual resume" : "
 });
 
 test("C8 external prompter opens leave first and hold admission through fetching the script", async () => {
-  const page = await share(), ready = deferred<void>(), response = deferred<Response>(), previous = globalThis.fetch;
+  const page = await share(), ready = deferred<undefined>(), response = deferred<Response>(), previous = globalThis.fetch;
   const hooks = window as unknown as { __prompterTest: { launchFromScript: (token: string) => Promise<boolean> } };
-  globalThis.fetch = async () => { assert.equal(sharedSession(), false); ready.resolve(); return response.promise; };
+  globalThis.fetch = async () => { assert.equal(sharedSession(), false); ready.resolve(undefined); return response.promise; };
   const opening = hooks.__prompterTest.launchFromScript("1".repeat(64));
   const reply = () => new Response(JSON.stringify({ name: "Reading.splitpage", text: JSON.stringify(TARGET) }), { status: 200 });
   try {

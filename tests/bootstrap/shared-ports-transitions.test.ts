@@ -71,16 +71,16 @@ test("C8 opening metadata is owned by the started lifetime and preserves sync re
       else { next.reject(new Error(outcome)); await assert.rejects(result, new RegExp(outcome)); }
       assert.equal(documentOpenings.openingPending(), false);
     }
-    const old = deferred<void>(); documentOpenings.track(() => old.promise);
+    const old = deferred<undefined>(); documentOpenings.track(() => old.promise);
     assert.equal(documentOpenings.openingPending(), true);
     documentTransitions().startNew({ from: { document: script("Replacement") }, reason: "epoch loss" });
     assert.equal(documentOpenings.openingPending(), false);
-    const current = deferred<void>(); documentOpenings.track(() => current.promise);
-    old.resolve(); await old.promise; assert.equal(documentOpenings.openingPending(), true);
+    const current = deferred<undefined>(); documentOpenings.track(() => current.promise);
+    old.resolve(undefined); await old.promise; assert.equal(documentOpenings.openingPending(), true);
     stop(); assert.equal(documentOpenings.openingPending(), false);
-    stop = begin(); const newest = deferred<void>(); documentOpenings.track(() => newest.promise);
-    current.resolve(); await current.promise; assert.equal(documentOpenings.openingPending(), true);
-    newest.resolve(); await newest.promise; assert.equal(documentOpenings.openingPending(), false);
+    stop = begin(); const newest = deferred<undefined>(); documentOpenings.track(() => newest.promise);
+    current.resolve(undefined); await current.promise; assert.equal(documentOpenings.openingPending(), true);
+    newest.resolve(undefined); await newest.promise; assert.equal(documentOpenings.openingPending(), false);
   } finally { stop(); }
   assert.equal(documentOpenings.openingPending(), false);
 });

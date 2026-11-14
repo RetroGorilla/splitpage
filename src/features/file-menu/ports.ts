@@ -9,7 +9,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { CapabilityPort } from "../../application/session/ports.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { TextServices } from "../../application/text/services.ts";
-import type { DocumentDestination, HistoryPort } from "../../application/transitions/ports.ts";
+import type { DocumentDestination, DocumentEntryAdmission, DocumentOpeningActivity, HistoryPort } from "../../application/transitions/ports.ts";
 import type { DocumentOpening } from "../../application/transitions/sources.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import type { IdSource } from "../../core/document/ports.ts";
@@ -115,8 +115,8 @@ export interface FileMenuDropdownMount extends FileMenuControls {
 }
 
 export interface FileMenuDropdownPorts {
-  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
-  readonly openingActivity: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
+  readonly entry: DocumentEntryAdmission;
+  readonly openingActivity: Pick<DocumentOpeningActivity, "track">;
   readonly document: Pick<DocumentReader, "current">;
   readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;

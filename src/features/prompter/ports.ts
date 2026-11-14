@@ -12,6 +12,7 @@ import type { PrompterState } from "../../application/prompter-state.ts";
 import type { PrompterDesktop, PrompterVoice } from "../../application/prompter-services.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { ButtonActions } from "../../application/actions.ts";
+import type { DocumentEntryAdmission, DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 
 export interface PrompterPorts {
   readonly disposeRuntime: () => void;
@@ -60,8 +61,8 @@ interface PrompterOpening {
 }
 
 export interface PrompterFeaturePorts {
-  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
-  readonly openingActivity: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
+  readonly entry: DocumentEntryAdmission;
+  readonly openingActivity: Pick<DocumentOpeningActivity, "track">;
   readonly document: Pick<DocumentReader, "current" | "numbering">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf"> & {
     readonly productionReaders: Pick<TextServices["productionReaders"], "wordCount">;

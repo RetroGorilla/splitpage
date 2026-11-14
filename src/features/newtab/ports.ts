@@ -13,7 +13,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { DocumentOpening } from "../../application/transitions/sources.ts";
-import type { DocumentDestination } from "../../application/transitions/ports.ts";
+import type { DocumentDestination, DocumentEntryAdmission, DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { IdSource } from "../../core/document/ports.ts";
@@ -32,8 +32,8 @@ interface StarterChoice {
 }
 
 export interface NewTabPorts {
-  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
-  readonly openingActivity: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
+  readonly entry: DocumentEntryAdmission;
+  readonly openingActivity: Pick<DocumentOpeningActivity, "track">;
   readonly screen: () => ScreenState;
   readonly document: Pick<DocumentReader, "current">;
   readonly place: Pick<DocumentPlace, "home">;

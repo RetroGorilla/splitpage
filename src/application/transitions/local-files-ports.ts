@@ -10,7 +10,7 @@ import type { CapabilityPort } from "../session/ports.ts";
 import type { SessionMergeOwner } from "../session/session-merge-ports.ts";
 import type { SidePanels } from "../side-panels.ts";
 import type { TextServices } from "../text/services.ts";
-import type { DocumentDestination, DocumentOpeningActivity, HistoryPort } from "./ports.ts";
+import type { DocumentDestination, DocumentEntryAdmission, DocumentOpeningActivity, HistoryPort } from "./ports.ts";
 import type { DocumentSource } from "./sources.ts";
 import type { Transitions } from "./transitions.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
@@ -37,7 +37,7 @@ export interface LocalFileImports {
 
 export interface LocalFilesOwnerPorts {
   readonly opening: Pick<DocumentOpeningActivity, "track">;
-  readonly entry: import("./ports.ts").DocumentEntryAdmission;
+  readonly entry: DocumentEntryAdmission;
   readonly capability: Pick<CapabilityPort, "reload">;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: {
