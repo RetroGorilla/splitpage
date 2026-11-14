@@ -28,6 +28,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "collab/projection/text.ts": await import("../../src/core/collab/projection/text.ts"),
   "collab/projection/units.ts": await import("../../src/core/collab/projection/units.ts"),
   "collab/read-operation.ts": await import("../../src/core/collab/read-operation.ts"),
+  "collab/record-operations.ts": await import("../../src/core/collab/record-operations.ts"),
   "collab/recovery.ts": await import("../../src/core/collab/recovery.ts"),
   "collab/refusals.ts": await import("../../src/core/collab/refusals.ts"),
   "collab/structure-key.ts": await import("../../src/core/collab/structure-key.ts"),

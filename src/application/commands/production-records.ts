@@ -14,10 +14,12 @@ import {
 import type { QuickAddPlan } from "../../core/production/tags.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, CommandRefusal, DocumentView, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 import { applyRewrites, planByTrial, realRewrites, rewriteChanges, withFields } from "./document-edit.ts";
 import type { RewritePlanner } from "./document-edit.ts";
+import { sharedRecordEdit, sharedRecordTrial, withSharedRecords } from "./shared-records.ts";
+import type { SharedRecordPorts } from "./shared-records.ts";
 
 export interface TagRef {
   readonly cat: string;
@@ -67,23 +69,24 @@ export function tagCellsCommand(name: string, planner: RewritePlanner, tag: TagR
   };
 }
 
-export function registerTagCommand(tag: TagRef): Command {
+export function registerTagCommand(tag: TagRef, shared?: SharedRecordPorts): Command {
   return {
     name: "register-tag",
     needs: "edit",
-    plan: function (doc): Plan | null {
-      return planByTrial("register-tag", doc, registryChange(), function (live) { return !!addRegistryTag(live, tag.cat, tag.name); });
+    plan: function (doc): Plan | CommandRefusal | null {
+      return planByTrial("register-tag", doc, registryChange(), function (live) { return !!addRegistryTag(live, tag.cat, tag.name); }, sharedRecordTrial(doc, shared));
     }
   };
 }
 
-export function addPersonCommand(name: string, ids: IdSource): Command {
+export function addPersonCommand(name: string, ids: IdSource, shared?: SharedRecordPorts): Command {
   return {
     name: "add-person",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       if (personNamed(doc, name)) return null;
-      return planByTrial("add-person", doc, changeSet({ docFields: ["people"], saveNow: true }), function (live) { return !!addPerson(live, name, ids); });
+      return planByTrial("add-person", doc, changeSet({ docFields: ["people"], saveNow: true }), function (live) { return !!addPerson(live, name, ids); },
+        sharedRecordTrial(doc, shared));
     }
   };
 }
@@ -104,35 +107,43 @@ export function retagCommand(tag: TagRef, newName: string | null, planner: Rewri
   };
 }
 
-export function deleteTagsCommand(tags: readonly DeletedTag[], planner: RewritePlanner, stamps: StampPorts): Command {
+export function deleteTagsCommand(tags: readonly DeletedTag[], planner: RewritePlanner, stamps: StampPorts, shared?: SharedRecordPorts): Command {
   return {
     name: "delete-tags",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       const rewrites = realRewrites(doc, planner(doc));
+      const share = sharedRecordTrial(doc, shared);
       return planByTrial("delete-tags", doc, withFields(rewriteChanges(rewrites, true), ["productionTags"], true), function (live) {
         let changed = applyRewrites(live, rewrites, stamps);
         tags.forEach(function (t) { if (removeRegistryTag(live, t.cat, t.name)) changed = true; });
         return changed;
+      }, share && function (trial) {
+        const out = share(trial);
+        // why: a whole-cell rewrite has no range form yet (Stage 2 table, Tagging text); it waits for C5d.
+        return out && rewrites.length ? { refused: "tag-text-rewrite" } : out;
       });
     }
   };
 }
 
-export function gearQuickAddCommand(planner: (doc: DocumentView) => QuickAddPlan): Command {
+function quickAdd(live: DocumentShape, plan: QuickAddPlan): void {
+  plan.remove.forEach(function (name) { removeRegistryTag(live, "gear", name); });
+  plan.register.forEach(function (rec) { live.productionTags.push(Object.assign({}, rec)); });
+}
+
+export function gearQuickAddCommand(planner: (doc: DocumentView) => QuickAddPlan, shared?: SharedRecordPorts): Command {
   return {
     name: "quick-add-gear",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       const plan = planner(doc);
       if (!plan.added && !plan.removed) return null;
-      return {
+      const out: Plan = {
         changes: registryChange(),
-        apply: function (live) {
-          plan.remove.forEach(function (name) { removeRegistryTag(live, "gear", name); });
-          plan.register.forEach(function (rec) { live.productionTags.push(Object.assign({}, rec)); });
-        }
+        apply: function (live) { quickAdd(live, plan); }
       };
+      return withSharedRecords(out, sharedRecordEdit(doc, shared, function (live) { quickAdd(live, plan); return true; }));
     }
   };
 }
@@ -144,11 +155,11 @@ function tagEntry(live: DocumentShape, tag: TagRef): { entry: NonNullable<Docume
   return rec ? { entry: rec, added: true } : null;
 }
 
-export function updateTagsCommand(tags: readonly TagRef[], change: TagChange, ids: IdSource): Command {
+export function updateTagsCommand(tags: readonly TagRef[], change: TagChange, ids: IdSource, shared?: SharedRecordPorts): Command {
   return {
     name: "update-tags",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       return planByTrial("update-tags", doc, changeSet({ docFields: TAGGED_FIELDS, saveNow: true }), function (live) {
         let changed = false;
         const owner = change.owner === undefined ? undefined : chosenOwner(live, change.owner, ids);
@@ -166,21 +177,22 @@ export function updateTagsCommand(tags: readonly TagRef[], change: TagChange, id
           if (change.notes !== undefined && entry.notes !== change.notes) { entry.notes = change.notes; changed = true; }
         });
         return changed;
-      });
+      }, sharedRecordTrial(doc, shared));
     }
   };
 }
 
-export function deletePersonCommand(personId: string): Command {
+export function deletePersonCommand(personId: string, shared?: SharedRecordPorts): Command {
   return {
     name: "delete-person",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       if (!personById(doc, personId)) return null;
-      return {
+      const plan: Plan = {
         changes: peopleChange(),
         apply: function (live) { removePerson(live, personId); }
       };
+      return withSharedRecords(plan, sharedRecordEdit(doc, shared, function (live) { removePerson(live, personId); return true; }));
     }
   };
 }
