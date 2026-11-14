@@ -15,6 +15,7 @@ import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { HistoryPort } from "../../application/transitions/ports.ts";
 import type { Clock, IdSource } from "../../core/document/ports.ts";
+import type { SharedCommentPorts } from "../../application/commands/comments.ts";
 
 export interface CommentStatePorts {
   readonly sort: CommentSorting;
@@ -36,4 +37,5 @@ export interface CommentStatePorts {
   readonly shots: Pick<ShotHiding, "reveal">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
   readonly clearDraftUndo: (box: HTMLElement) => void;
+  readonly shared: () => SharedCommentPorts | null;
 }

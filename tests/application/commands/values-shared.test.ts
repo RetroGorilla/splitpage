@@ -226,7 +226,8 @@ for (const literal of cases) for (const order of ORDERS) {
 test("value commands with no author, or no shared ports, plan as before and ask no author when nothing changes", () => {
   let asked = 0;
   const counting: SharedValuePorts = { author: () => { asked++; return { id: "w9_1", by: "Alice" }; },
-    beatStamp: () => { throw new Error("no stamp expected"); }, statusHeads: () => { throw new Error("no heads expected"); } };
+    beatStamp: () => { throw new Error("no stamp expected"); }, statusHeads: () => { throw new Error("no heads expected"); },
+    statusParts: () => { throw new Error("no parts expected"); } };
   const live: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(documentWith({})) };
   const stamps = stampsOf("Alice", 5);
   for (const command of [beatStatusCommand("R9", stamps, counting), setBeatFilmedCommand("R1", false, stamps, counting), beatLengthCommand("R1", 5, stamps, counting),
@@ -240,6 +241,153 @@ test("value commands with no author, or no shared ports, plan as before and ask 
     assert.ok(plan && !("refused" in plan) && plan.shared === undefined, literal.name);
   }
   assert.ok(sharedValuePorts({ handle: () => null, author: () => ({ id: "w9_1", by: "Alice" }), stamps })() === null, "value ports in a standalone session");
+});
+
+function alice(handle: SharedDocumentHandle, make: (stamps: StampPorts, shared?: SharedValuePorts) => Command): Command {
+  const stamps = stampsOf("Alice", 5);
+  return make(stamps, ports(handle, stamps));
+}
+function joinedSetup(second: string) {
+  const set = replicas(2, { title: "Title", rows: [{ id: "R1", audioText: "ab", status: "todo", lengthSeconds: 5, updatedAt: at(0), updatedBy: "Ann" },
+    { id: "R2", audioText: "cd", status: second, lengthSeconds: 9 }] });
+  for (const handle of [set.a, set.b, set.c]) registerSharedOperationFamilies(handle, { cells: createFlowLoadRuntime().cells });
+  const joins = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart, reverse: record => reverseSharedUndoRecord(set.a, record, { by: "Bob", nextId: () => "unjoined" }) });
+  joins.perform(() => {
+    const done = executeSharedCommand(set.a, [operation({ kind: "join", id: "joined", by: "Bob", from: "R2", into: "R1", glue: " " })],
+      { label: "join", selection: null, typing: null }, { base: readSharedRevision(set.a) });
+    assert.deepEqual(done.result, { ok: true });
+    return done.record;
+  });
+  flush(set.queue, "D1");
+  return { set, unjoin: () => { assert.deepEqual(joins.undo(), { ok: true, effective: true, label: "join", selection: null }); flush(set.queue, "D1"); } };
+}
+function partRow(id: "R1" | "R2", status: string, audio: string, stamp: readonly [string, string | null], length: number): Fields {
+  return { id, status, visualText: "", audioText: audio, imageRef: null, updatedAt: stamp[0], updatedBy: stamp[1], lengthSeconds: length };
+}
+function partsDocument(rows: readonly Fields[]): Fields {
+  return { schema: 2, title: "Title", docId: DOC, rows, comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 };
+}
+const ANN = [at(0), "Ann"] as const, NOBODY = ["", null] as const;
+const joinedDocument = (status: string, stamp: readonly [string, string | null] = ANN, length = 5) => partsDocument([partRow("R1", status, "ab cd", stamp, length)]);
+const status2 = (value: string) => [status("w1_1", "Alice", value), { ...status("w1_1", "Alice", value), id: "w1_1:status:1", target: { scope: "beat", record: "R2" } }];
+
+interface JoinedLiteral {
+  readonly name: string; readonly second: string; readonly make: (stamps: StampPorts, shared?: SharedValuePorts) => Command;
+  readonly operations: readonly unknown[]; readonly before: Fields; readonly after: Fields;
+}
+const joinedCases: readonly JoinedLiteral[] = [
+  { name: "cycle the status of a joined beat that shows its second part's shot", second: "shot", make: (stamps, shared) => beatStatusCommand("R1", stamps, shared),
+    operations: [...status2("todo"), stamp("w1_1", "Alice", 5)], before: joinedDocument("shot"), after: joinedDocument("todo", ALICE) },
+  { name: "mark filmed a joined beat that shows its second part's ready", second: "ready", make: (stamps, shared) => setBeatFilmedCommand("R1", true, stamps, shared),
+    operations: [...status2("shot"), stamp("w1_1", "Alice", 5)], before: joinedDocument("ready"), after: joinedDocument("shot", ALICE) },
+  { name: "mark not filmed a joined beat that shows its second part's shot", second: "shot", make: (stamps, shared) => setBeatFilmedCommand("R1", false, stamps, shared),
+    operations: [...status2("todo"), stamp("w1_1", "Alice", 5)], before: joinedDocument("shot"), after: joinedDocument("todo", ALICE) },
+  { name: "set the length of a joined beat, which shows its first part's length", second: "shot", make: (stamps, shared) => beatLengthCommand("R1", 7, stamps, shared),
+    operations: [scalar("w1_1", "Alice", beat, "lengthSeconds", 7), stamp("w1_1", "Alice", 5)], before: joinedDocument("shot"), after: joinedDocument("shot", ALICE, 7) }
+];
+
+for (const literal of joinedCases) for (const order of ORDERS) {
+  test(`shared value command on a joined beat ends where standalone does: ${literal.name}, ${order}`, () => {
+    const { set } = joinedSetup(literal.second), a = sharedHarness(adapterReplica(set.a));
+    try {
+      const before = project(set.a).document;
+      assert.deepEqual(before, literal.before);
+      assert.equal(a.session.run(alice(set.a, literal.make)).kind, "applied");
+      assert.deepEqual(a.executed.map(entry => entry.operations), [literal.operations]);
+      flush(set.queue, order);
+      assert.deepEqual(agreeing(literal.name, [set.a, set.b], order), { document: literal.after, recovery: [] });
+      assert.deepEqual(standalone(before, literal.make(stampsOf("Alice", 5))), literal.after);
+    } finally { a.session.dispose(); set.close(); }
+  });
+  test(`shared value command on a joined beat through the undo owner: undo shows the joined beat as before, redo as after: ${literal.name}, ${order}`, () => {
+    const { set } = joinedSetup(literal.second), a = sharedHarness(adapterReplica(set.a));
+    try {
+      const plan = a.session.read(doc => doc ? alice(set.a, literal.make).plan(doc, capabilities()) : null);
+      assert.ok(plan && !("refused" in plan) && plan.shared);
+      const operations = plan.shared.operations as readonly SharedOperation[];
+      let count = 0;
+      const owner = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
+        reverse: record => reverseSharedUndoRecord(set.a, record, { by: "Alice", nextId: () => "u" + ++count }) });
+      owner.perform(() => {
+        const done = executeSharedCommand(set.a, operations, { label: literal.name, selection: null, typing: null }, { base: readSharedRevision(set.a) });
+        assert.deepEqual(done.result, { ok: true });
+        return done.record;
+      });
+      flush(set.queue, order);
+      assert.deepEqual(owner.undo(), { ok: true, effective: true, label: literal.name, selection: null });
+      flush(set.queue, order);
+      assert.deepEqual(agreeing(literal.name, [set.a, set.b], order), { document: { ...literal.before, rows: [{ ...(literal.before.rows as Fields[])[0], updatedAt: ALICE[0], updatedBy: ALICE[1] }] }, recovery: [] });
+      assert.deepEqual(owner.redo(), { ok: true, effective: true, label: literal.name, selection: null });
+      flush(set.queue, order);
+      assert.deepEqual(agreeing(literal.name, [set.a, set.b], order), { document: literal.after, recovery: [] });
+    } finally { a.session.dispose(); set.close(); }
+  });
+}
+
+for (const order of ORDERS) test(`a status written to a joined beat stays on both parts after the join is undone: ${order}`, () => {
+  const { set, unjoin } = joinedSetup("shot"), a = sharedHarness(adapterReplica(set.a));
+  try {
+    assert.equal(a.session.run(alice(set.a, (joinedCases[0] as JoinedLiteral).make)).kind, "applied");
+    flush(set.queue, order);
+    unjoin();
+    assert.deepEqual(agreeing("unjoined", [set.a, set.b], order),
+      { document: partsDocument([partRow("R1", "todo", "ab", ALICE, 5), partRow("R2", "todo", "cd", NOBODY, 9)]), recovery: [] });
+  } finally { a.session.dispose(); set.close(); }
+});
+
+interface UnjoinedLiteral { readonly name: string; readonly second: string; readonly make: (stamps: StampPorts, shared?: SharedValuePorts) => Command; readonly r1: string }
+const unjoinedCases: readonly UnjoinedLiteral[] = [
+  { name: "cycle the first part's status", second: "shot", make: (stamps, shared) => beatStatusCommand("R1", stamps, shared), r1: "ready" },
+  { name: "mark the first part filmed", second: "ready", make: (stamps, shared) => setBeatFilmedCommand("R1", true, stamps, shared), r1: "shot" }
+];
+for (const literal of unjoinedCases) for (const order of ORDERS) {
+  test(`after the join is undone a status command writes the first part only: ${literal.name}, ${order}`, () => {
+    const { set, unjoin } = joinedSetup(literal.second), a = sharedHarness(adapterReplica(set.a));
+    try {
+      unjoin();
+      const before = project(set.a).document, untouched = partRow("R2", literal.second, "cd", NOBODY, 9);
+      assert.deepEqual(before, partsDocument([partRow("R1", "todo", "ab", ANN, 5), untouched]));
+      assert.equal(a.session.run(alice(set.a, literal.make)).kind, "applied");
+      assert.deepEqual(a.executed.map(entry => entry.operations), [[status("w1_1", "Alice", literal.r1), stamp("w1_1", "Alice", 5)]]);
+      flush(set.queue, order);
+      const expected = partsDocument([partRow("R1", literal.r1, "ab", ALICE, 5), untouched]);
+      assert.deepEqual(agreeing(literal.name, [set.a, set.b], order), { document: expected, recovery: [] });
+      assert.deepEqual(standalone(before, literal.make(stampsOf("Alice", 5))), expected);
+    } finally { a.session.dispose(); set.close(); }
+  });
+  test(`after the join is undone a status command undoes and redoes through the owner: ${literal.name}, ${order}`, () => {
+    const { set, unjoin } = joinedSetup(literal.second), a = sharedHarness(adapterReplica(set.a));
+    try {
+      unjoin();
+      const plan = a.session.read(doc => doc ? alice(set.a, literal.make).plan(doc, capabilities()) : null);
+      assert.ok(plan && !("refused" in plan) && plan.shared);
+      const operations = plan.shared.operations as readonly SharedOperation[];
+      let count = 0;
+      const owner = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
+        reverse: record => reverseSharedUndoRecord(set.a, record, { by: "Alice", nextId: () => "u" + ++count }) });
+      owner.perform(() => {
+        const done = executeSharedCommand(set.a, operations, { label: literal.name, selection: null, typing: null }, { base: readSharedRevision(set.a) });
+        assert.deepEqual(done.result, { ok: true });
+        return done.record;
+      });
+      flush(set.queue, order);
+      const untouched = partRow("R2", literal.second, "cd", NOBODY, 9);
+      assert.deepEqual(owner.undo(), { ok: true, effective: true, label: literal.name, selection: null });
+      flush(set.queue, order);
+      assert.deepEqual(agreeing(literal.name, [set.a, set.b], order), { document: partsDocument([partRow("R1", "todo", "ab", ALICE, 5), untouched]), recovery: [] });
+      assert.deepEqual(owner.redo(), { ok: true, effective: true, label: literal.name, selection: null });
+      flush(set.queue, order);
+      assert.deepEqual(agreeing(literal.name, [set.a, set.b], order), { document: partsDocument([partRow("R1", literal.r1, "ab", ALICE, 5), untouched]), recovery: [] });
+    } finally { a.session.dispose(); set.close(); }
+  });
+}
+
+test("after the join is undone, marking a first part that is not filmed as not filmed plans nothing", () => {
+  const { set, unjoin } = joinedSetup("shot"), a = sharedHarness(adapterReplica(set.a));
+  try {
+    unjoin();
+    assert.ok(a.session.read(doc => doc ? setBeatFilmedCommand("R1", false, stampsOf("Alice", 5), ports(set.a, stampsOf("Alice", 5))).plan(doc, capabilities()) : "missing") === null);
+  } finally { a.session.dispose(); set.close(); }
 });
 
 test("a status change after another copy's status names that copy's status as its parent", () => {

@@ -25,7 +25,7 @@ function statusChanges(rowId: string): ChangeSet {
 
 function statusList(rowId: string, status: RowStatusId, shared: SharedValuePorts | undefined) {
   const by = shared?.author();
-  return shared && by ? { shared: { operations: [sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)] } } : {};
+  return shared && by ? { shared: { operations: [...sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)] } } : {};
 }
 
 export function beatStatus(rowId: string): (doc: DocumentView | null) => unknown {
