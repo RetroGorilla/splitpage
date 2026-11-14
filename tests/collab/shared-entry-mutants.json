@@ -142,7 +142,7 @@
     {
       "label": "document entry bypasses the shared leave",
       "file": "src/bootstrap/wiring/ports/document-entry.ts",
-      "find": "const result = leaveRunningSharedSession();",
+      "find": "const result = held ? { ok: false, reason: held } as const : leaveRunningSharedSession();",
       "replace": "const result = { ok: true };",
       "tests": [
         "tests/bootstrap/shared-entry-paths.test.ts"
@@ -353,6 +353,98 @@
       "replace": "  if (!permitted()) return;",
       "tests": [
         "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "admit when the owner is standalone during enter",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "if (!held && !sharedSession()) return null;",
+      "replace": "if (!sharedSession()) return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-enter.test.ts"
+      ]
+    },
+    {
+      "label": "admit when the owner is standalone during leave",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "if (!held && !sharedSession()) return null;",
+      "replace": "if (!sharedSession()) return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-leave-new.test.ts",
+        "tests/bootstrap/shared-entry-switch-leave-open.test.ts"
+      ]
+    },
+    {
+      "label": "entry-only scope blocks settlement commands",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "if (current.scope === \"all\") return { kind: \"rejected\", reason: current.reason };",
+      "replace": "return { kind: \"rejected\", reason: current.reason };",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "entry-only scope hides the enclosing command refusal",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "current = current.outer",
+      "replace": "current = null",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "entry admission forgets the active command hold",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "return commandHold ? commandHold.reason : null;",
+      "replace": "return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-enter.test.ts"
+      ]
+    },
+    {
+      "label": "enter leaves settlement outside its entry scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  const release = holdSessionCommands(SHARED_SWITCHING, \"entries\");\n  try { return await enterAvailableSession(ports); } finally { release(); }",
+      "replace": "  return enterAvailableSession(ports);",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-enter.test.ts"
+      ]
+    },
+    {
+      "label": "leave leaves binding settlement outside its entry scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  const release = holdSessionCommands(SHARED_SWITCHING, \"entries\");\n  try { return leaveAvailableSession(ports); } finally { release(); }",
+      "replace": "  return leaveAvailableSession(ports);",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-leave-new.test.ts",
+        "tests/bootstrap/shared-entry-switch-leave-open.test.ts"
+      ]
+    },
+    {
+      "label": "enter admits a nested switch into its scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const held = sessionEntryRefusal();\n  if (held) return { ok: false, reason: held };",
+      "replace": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const held = sessionEntryRefusal();\n  void held;",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "leave admits a nested switch into its scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const held = sessionEntryRefusal();\n  if (held) return { ok: false, reason: held };",
+      "replace": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const held = sessionEntryRefusal();\n  void held;",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "automatic resume ignores the switch hold while standalone",
+      "file": "src/bootstrap/wiring/ports/local-files.ts",
+      "find": "permitted: () => !sessionEntryRefusal() && !sharedSession()",
+      "replace": "permitted: () => !sharedSession()",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-auto.test.ts"
       ]
     }
   ]

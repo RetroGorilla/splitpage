@@ -13,7 +13,7 @@ import { createSharedSession } from "../../application/session/shared-session.ts
 import type { DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sharedSession } from "./session-owner.ts";
+import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
 import type { OwnerSwap } from "./session-owner.ts";
 import { routeSharedUndo, undoOwner } from "./undo.ts";
 import { sharedAuthorPort } from "./ports/shared-author.ts";
@@ -107,6 +107,13 @@ function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): Share
 }
 
 export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {
+  const held = sessionEntryRefusal();
+  if (held) return { ok: false, reason: held };
+  const release = holdSessionCommands(SHARED_SWITCHING, "entries");
+  try { return await enterAvailableSession(ports); } finally { release(); }
+}
+
+async function enterAvailableSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {
   const faults = new Faults();
   const first = refusedNow(ports, faults);
   if (first) return failed(ports, faults, first);
@@ -202,6 +209,13 @@ export function leaveRunningSharedSession(): SharedSwitchOutcome {
 }
 
 export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
+  const held = sessionEntryRefusal();
+  if (held) return { ok: false, reason: held };
+  const release = holdSessionCommands(SHARED_SWITCHING, "entries");
+  try { return leaveAvailableSession(ports); } finally { release(); }
+}
+
+function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
   ports = now.ports;

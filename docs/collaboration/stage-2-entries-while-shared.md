@@ -7,7 +7,7 @@
   The BroadcastChannel case is tested through the real session and identity
   wiring, beside unchanged standalone reassignment.
 - Automatic last-file resume is not permitted while shared (rule 74). Its named
-  `lastFile.permitted` port reads the current owner. The check runs before stored
+  `lastFile.permitted` port reads the current owner and active hold. The check runs before stored
   handle lookup and after handle lookup, permission and file reading. The same
   check reaches `openProjectFile` and `loadFileIntoEditor`, including a switch
   while project or import parsing waits (D12). This automatic startup work shows
@@ -41,6 +41,15 @@ it by name. `documentTransitions().open` and `startNew` also use it, so a direct
 caller cannot adopt over a shared owner. Standalone transition behavior keeps its
 existing reentrancy; the shared leave-and-entry boundary holds commands.
 
+Entry admission reads the existing command-hold state before the owner mode.
+An entry-only scope covers the whole enter or leave, including settlement,
+microtasks, standalone replacement notifications and rollback. It uses the same
+hold stack as command and undo protection, without a separate in-flight flag.
+Entry-only scopes preserve command settlement and enclosing command refusals.
+An external entry during that scope refuses as `session-switching`. A leave-first
+entry resumes after the switch scope has released; its admitted transition calls
+the original assignment directly, while public re-entry during the switch remains guarded.
+
 Pending openings belong to the existing transition `Started` lifetime. Each
 tracked operation has an epoch token, retired on completion, failure, cancellation
 or document replacement. Old completion cannot clear a later operation's token
@@ -60,8 +69,12 @@ ports, so file-entry callers need no hook-owned accessor or binding defaults.
 
 ## Standalone and interface text
 
-No standalone typing, undo or save path gains work. Opening paths gain admission
-and transient opening metadata, without changing their decisions or results.
+No standalone typing, undo or save path gains work. With no hold, command admission
+keeps its existing single null check. Entry admission consults the shared hold
+state and performs one cheap mode read; a direct transition reads the mode twice.
+A file opening also adds token/Set bookkeeping and promise-completion handlers.
+Entries are rare and off the typing, undo and save paths; their standalone
+decisions and results stay unchanged.
 The only text used by the new admission is the existing notice:
 "This is not available in a shared session yet."
 

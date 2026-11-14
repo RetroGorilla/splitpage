@@ -14,7 +14,7 @@ import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.ts";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import { capabilities } from "./capabilities.ts";
-import { noteAbsorbedDirty, noteReload, sharedSession } from "../session-owner.ts";
+import { noteAbsorbedDirty, noteReload, sessionEntryRefusal, sharedSession } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
 import { warnImagesLeftOut } from "../effects-owner.ts";
@@ -55,7 +55,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
     saves,
     conflicts: fileConflicts,
     location: { amendHome, setHome, fileHome, importHome },
-    lastFile: { permitted: () => !sharedSession(), load: loadLastFileHandle, remember: rememberLastFileHandle },
+    lastFile: { permitted: () => !sessionEntryRefusal() && !sharedSession(), load: loadLastFileHandle, remember: rememberLastFileHandle },
     syncIdentity: () => { documentIdentity.syncDocIdentity(); },
     stamps: { stampRow },
     notices,

@@ -668,3 +668,13 @@ project parsing starts after admission refuses a resumed read | src/application/
 parsed project adoption resets panels after admission refuses | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
 parsed import stamps rows after admission refuses | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
 C9 shared-lifetime mode listeners and open-only session subscription (nine defects) | src/features/recovery-panel/actions.ts, src/features/recovery-panel/mount.ts | tests/features/recovery-panel/guards.test.ts: binding lifetime counts through Close, leave and rollback | tests/collab/recovery-panel-mutants.json
+admit when the owner is standalone during enter | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
+admit when the owner is standalone during leave | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-switch-leave-new.test.ts, tests/bootstrap/shared-entry-switch-leave-open.test.ts | tests/collab/shared-entry-mutants.json
+entry-only scope blocks settlement commands | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+entry-only scope hides the enclosing command refusal | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+entry admission forgets the active command hold | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
+enter leaves settlement outside its entry scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
+leave leaves binding settlement outside its entry scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-entry-switch-leave-new.test.ts, tests/bootstrap/shared-entry-switch-leave-open.test.ts | tests/collab/shared-entry-mutants.json
+enter admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+leave admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+automatic resume ignores the switch hold while standalone | src/bootstrap/wiring/ports/local-files.ts | tests/bootstrap/shared-entry-switch-auto.test.ts | tests/collab/shared-entry-mutants.json

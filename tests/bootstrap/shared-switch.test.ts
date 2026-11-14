@@ -10,7 +10,7 @@ import { migrateRows } from "../../src/core/migrate.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
 import { observeSharedTransactions } from "../../src/adapters/collab/document.ts";
 import {
-  currentCapabilities, currentDocument, holdMergeBase, liveSession, mergeBase, onDocumentReplaced, onRefresh, runCommand, sharedSession, standaloneSession, startSessionBridge
+  currentCapabilities, currentDocument, holdMergeBase, holdSessionCommands, liveSession, mergeBase, onDocumentReplaced, onRefresh, runCommand, sessionEntryRefusal, sharedSession, standaloneSession, startSessionBridge
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, stepSharedUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
@@ -134,6 +134,38 @@ function sharedGone(parts: SharedSessionParts): void {
   assert.deepEqual([handle.destroyed, handle.ingress.declineListeners.size, observers.size, parts.author.next(), parts.session.run(lengthCommand()).kind],
     [true, 0, 0, null, "rejected"]);
 }
+
+test("C8 entry-only holds admit settlement commands and retain an enclosing command refusal", () => {
+  const s = start();
+  try {
+    const entry = holdSessionCommands(SHARED_SWITCHING, "entries");
+    try {
+      assert.equal(sessionEntryRefusal(), SHARED_SWITCHING);
+      assert.equal(runCommand(titleCommand("Settled title")).kind, "applied");
+    } finally { entry(); }
+    const outer = holdSessionCommands("outer-command"), inner = holdSessionCommands(SHARED_SWITCHING, "entries");
+    try {
+      assert.deepEqual(runCommand(titleCommand("Refused title")), { kind: "rejected", reason: "outer-command" });
+      assert.equal(sessionEntryRefusal(), SHARED_SWITCHING);
+      inner(); assert.equal(sessionEntryRefusal(), "outer-command");
+    } finally { inner(); outer(); }
+    assert.equal(sessionEntryRefusal(), null);
+  } finally { s.stop(); }
+});
+
+test("C8 a nested switch refuses through the same entry hold and cannot replace its scope", async () => {
+  const s = start(); let nested: Promise<unknown> | null = null, entered = false;
+  s.onSettle(() => { if (!entered) { entered = true; nested = enterSharedSession(s.ports); } });
+  try {
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.ok(nested); assert.deepEqual(await nested, { ok: false, reason: SHARED_SWITCHING });
+    const outcomes: unknown[] = []; let leaving = false;
+    s.onLeave(() => { if (!leaving) { leaving = true; outcomes.push(leaveSharedSession(s.ports)); } });
+    assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
+    assert.deepEqual(outcomes, [{ ok: false, reason: SHARED_SWITCHING }]);
+    assert.equal(sessionEntryRefusal(), null);
+  } finally { s.stop(); }
+});
 
 test("C8 no-argument leave equals the entry-owned explicit leave step for step", async () => {
   const results: unknown[] = [];
