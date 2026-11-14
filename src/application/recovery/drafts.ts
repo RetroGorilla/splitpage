@@ -570,9 +570,16 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     const take = desktopDrafts().taker();
     if (!(take && draftResume().restorePending())) return null;
     return function () {
+      if (detached) return Promise.resolve(null);
       const entry: { settled: boolean; value: unknown } = { settled: false, value: null };
       openTakes.push(entry);
-      const started = take();
+      let started: ReturnType<typeof take>;
+      try {
+        started = take();
+      } catch (e) {
+        openTakes.splice(openTakes.indexOf(entry), 1);
+        throw e;
+      }
       // why: the caller gets the store's own promise; the entry stays open until the applyTaken that consumes it
       started.then(function (value) { entry.settled = true; entry.value = value; }, function () { entry.settled = true; });
       return started;
@@ -580,6 +587,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   }
 
   async function applyTakenDraft(taken: unknown): Promise<string> {
+    if (detached) return DRAFTS_DETACHED;
     outstanding.restore++;
     claimTake(taken);
     try {
