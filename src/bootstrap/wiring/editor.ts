@@ -509,9 +509,14 @@ function notAttachableText(names: readonly string[]): string {
   return what + " Splitpage doesn't attach programs, scripts, shortcuts or files without an extension.";
 }
 
-export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
+export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
-    return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports: rowsEditorPorts });
+    const ports = sharedSplit ? { ...rowsEditorPorts, input: (event: Event) => {
+      const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+      if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
+      else onRootInput(event);
+    } } : rowsEditorPorts;
+    return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports });
   });
 }
 
@@ -574,12 +579,12 @@ function scriptCellOf(target: EventTarget | null): CompositionCell | null {
   return cellEl && isScriptCell(cellEl) ? { rowId: cellEl.getAttribute("data-id") as string, field: cellEl.getAttribute("data-field") as string } : null;
 }
 
-export function mountCompositionFeature(): ReturnType<typeof mountComposition> {
+export function mountCompositionFeature(sharedSplit = false): ReturnType<typeof mountComposition> {
   return composition.replace(function () {
     return mountComposition({
       roots: editorRoots(),
       ports: {
-        cellOf: scriptCellOf,
+        cellOf: sharedSplit ? target => target instanceof Element && target.closest("#rows") ? null : scriptCellOf(target) : scriptCellOf,
         epoch: function () { return liveSession().epoch(); },
         mark: function (cell) { return undoOwner().compositionMark(cell.rowId, cell.field); },
         dropEmptySince: (mark, cancelled) => undoOwner().dropEmptySince(mark, cancelled)
@@ -677,10 +682,14 @@ export const onRootFocusOut = editorBlur(editorFocusPorts);
 
 const editorFocus = owned<{ readonly dispose: () => void }>();
 
-export function mountFocusFeature(): { readonly dispose: () => void } {
+export function mountFocusFeature(sharedSplit = false): { readonly dispose: () => void } {
   return editorFocus.replace(function () {
     const roots = editorRoots();
-    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports: editorFocusPorts }) };
+    const ports = sharedSplit ? { ...editorFocusPorts,
+      isScriptCell: (cell: Element) => !cell.closest("#rows") && isScriptCell(cell),
+      blurredCell: (cell: Element) => { if (!cell.closest("#rows")) editorFocusPorts.blurredCell(cell); }
+    } : editorFocusPorts;
+    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports }) };
   });
 }
 

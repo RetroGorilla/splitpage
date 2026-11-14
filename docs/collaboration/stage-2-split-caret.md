@@ -134,9 +134,9 @@ cost tests remain unchanged. Writer visual buffers use their existing mapping
 and do not receive these ports.
 
 The booted space-form literals enter and leave through the real switch and
-binding. Their test fixture detaches the legacy input, focus and composition
-handlers and standalone undo tracking while shared: those callers are C7's
-pending composition work. With two and fifty rows, a key updates only the typed
+`sharedSplitBindings`, C7's production adapter. The adapter selects the shared
+input, focus and composition ports and suspends standalone render tracking;
+the fixture no longer detaches those paths itself. With two and fifty rows, a key updates only the typed
 cell's stored form. The standalone repaint spy also enters and leaves, checks
 that every marker and span is gone, and again expects zero shared paint work.
 

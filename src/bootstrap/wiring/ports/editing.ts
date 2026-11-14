@@ -16,6 +16,12 @@ export const renderEditing = { cells: cellEditing, selection: editorSelection, p
 export const renderDraft = { appendMedia: appendDraftMedia, model: draftModel, edit: editDraft, isDraft: isDraftBox, isScript: isScriptCell };
 export const renderUndo = { track: (): void => { undoOwner().track(); } };
 
+export function suspendStandaloneRenderTracking(): () => void {
+  const previous = renderUndo.track, suspended = (): void => {};
+  renderUndo.track = suspended;
+  return () => { if (renderUndo.track === suspended) renderUndo.track = previous; };
+}
+
 export const edits: DocumentEdits = {
   run: runCommand,
   edit: runDocumentEdit,

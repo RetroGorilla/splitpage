@@ -1,0 +1,130 @@
+{
+  "tests": ["src/test/shared-split-app.test.mjs"],
+  "mutants": [
+    {
+      "label": "C7 enters without mounting the Split binding",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "buffer = mountSharedSplitBuffer(shared);",
+      "replace": "void shared;"
+    },
+    {
+      "label": "C7 remounts the same parts after refused disposal",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "if (entered === parts && buffer) return;",
+      "replace": ""
+    },
+    {
+      "label": "C7 ignores a refused finish on leave",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "return !buffer || buffer.binding.finish() ? null : refusal ?? \"buffer-pending\";",
+      "replace": "buffer?.binding.finish(); return null;"
+    },
+    {
+      "label": "C7 ignores a refused binding disposal",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "if (buffer && !buffer.dispose()) throw new Error(refusal ?? \"buffer-pending\");",
+      "replace": "buffer?.dispose();"
+    },
+    {
+      "label": "C7 leaving keeps the Split binding mounted",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "if (buffer && !buffer.dispose()) throw new Error(refusal ?? \"buffer-pending\");",
+      "replace": "void buffer;"
+    },
+    {
+      "label": "C7 shared paint calls standalone undo tracking",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "resumeTracking ??= suspendStandaloneRenderTracking();",
+      "replace": ""
+    },
+    {
+      "label": "C7 leave never resumes standalone render tracking",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "[release, () => mountCompositionFeature()",
+      "replace": "[null, () => mountCompositionFeature()"
+    },
+    {
+      "label": "C7 leave keeps standalone focus in shared mode",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "() => mountFocusFeature()",
+      "replace": "() => mountFocusFeature(true)"
+    },
+    {
+      "label": "C7 leave keeps standalone composition in shared mode",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "() => mountCompositionFeature()",
+      "replace": "() => mountCompositionFeature(true)"
+    },
+    {
+      "label": "C7 leave keeps standalone rows input in shared mode",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "() => mountRowsEditingFeature()",
+      "replace": "() => mountRowsEditingFeature(true)"
+    },
+    {
+      "label": "C7 shared input uses standalone whole-field synchronization",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "const ports = sharedSplit ? { ...rowsEditorPorts, input:",
+      "replace": "const ports = false ? { ...rowsEditorPorts, input:"
+    },
+    {
+      "label": "C7 shared blur uses standalone whole-field synchronization",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "blurredCell: (cell: Element) => { if (!cell.closest(\"#rows\")) editorFocusPorts.blurredCell(cell); }",
+      "replace": "blurredCell: editorFocusPorts.blurredCell"
+    },
+    {
+      "label": "C7 shared composition reaches standalone undo",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "cellOf: sharedSplit ? target => target instanceof Element && target.closest(\"#rows\") ? null : scriptCellOf(target) : scriptCellOf,",
+      "replace": "cellOf: scriptCellOf,"
+    },
+    {
+      "label": "C7 typeAtMarks is left on for shared Split cells",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "isScriptCell: (cell: Element) => !cell.closest(\"#rows\") && isScriptCell(cell),",
+      "replace": "isScriptCell,"
+    },
+    {
+      "label": "C7 buffer refusals bypass the visible report port",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "notify(outcome);",
+      "replace": "effects.report(outcome);"
+    },
+    {
+      "label": "C7 prevented copy or cut reaches standalone clipboard handlers",
+      "file": "src/features/clipboard/routes.ts",
+      "find": "function copyOrCut(e: ClipboardEvent, cut: boolean): void {\n    if (!open || e.defaultPrevented) return;",
+      "replace": "function copyOrCut(e: ClipboardEvent, cut: boolean): void {\n    if (!open) return;",
+      "tests": ["tests/features/clipboard/routes.test.ts"]
+    },
+    {
+      "label": "C7 prevented paste reaches standalone clipboard handlers",
+      "file": "src/features/clipboard/routes.ts",
+      "find": "function paste(e: ClipboardEvent): void {\n    if (!open || e.defaultPrevented) return;",
+      "replace": "function paste(e: ClipboardEvent): void {\n    if (!open) return;",
+      "tests": ["tests/features/clipboard/routes.test.ts"]
+    },
+    {
+      "label": "C7 prevented drop reaches standalone row handlers",
+      "file": "src/features/rows/editor.ts",
+      "find": "function onDrop(ev: Event): void {\n    if (!open || ev.defaultPrevented) return;",
+      "replace": "function onDrop(ev: Event): void {\n    if (!open) return;",
+      "tests": ["tests/features/rows/editor.test.ts"]
+    },
+    {
+      "label": "C7 prevented input reaches standalone row handlers",
+      "file": "src/features/rows/editor.ts",
+      "find": "if (open && !e.defaultPrevented) ports.input(e);",
+      "replace": "if (open) ports.input(e);",
+      "tests": ["tests/features/rows/editor.test.ts"]
+    },
+    {
+      "label": "C7 prevented keydown reaches standalone row handlers",
+      "file": "src/features/rows/editor.ts",
+      "find": "if (open && !e.defaultPrevented) ports.keydown(e as KeyboardEvent);",
+      "replace": "if (open) ports.keydown(e as KeyboardEvent);",
+      "tests": ["tests/features/rows/editor.test.ts"]
+    }
+  ]
+}
