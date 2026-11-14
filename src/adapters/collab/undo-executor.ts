@@ -443,7 +443,10 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (!is) continue;
       described.add(key);
       const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
-      const deleted = was ? undoUnits(was.units.filter(unit => !is.live(unit.unit))) : [];
+      // why: a character the command moved into another beat of the same text was not deleted by it, so its undo never
+      // brings that character back, even after someone else deleted it, as a heading made from that line does.
+      const gone = was ? was.units.filter(unit => !is.live(unit.unit)) : [], kept = gone.length ? readSharedVisibleUnits(handle, operation.target) : null;
+      const deleted = undoUnits(gone.filter(unit => !kept?.has(unit.unit.client + ":" + unit.unit.clock)));
       if (inserted.length || deleted.length) parts.push({ kind: "text", target: operation.target, inserted, deleted });
     } else if (operation.kind === "mark") {
       const scope = scopes.get(operation);
