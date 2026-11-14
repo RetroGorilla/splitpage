@@ -17,6 +17,13 @@ test("field assembly retains zero length, null stamp attribution, unknown values
     { z: null, a: false, id: "R", status: "todo", lengthSeconds: 0, updatedAt: "", updatedBy: null });
 });
 test("props is opaque JSON on people and tags, and decoded nested membership only on shots", () => {
-  for (const kind of ["people", "tags"] as const) assert.deepEqual(projectSharedRegistryFields(kind, { id: "P", props: [1, { kept: true }] }), { id: "P", props: [1, { kept: true }] });
-  assert.deepEqual(projectSharedRegistryFields("shots", { id: "S", props: [{ key: "P", fields: { id: "P", name: "Cup", rank: "0" } }] }), { id: "S", props: [{ id: "P", name: "Cup" }] });
+  assert.deepEqual(projectSharedRegistryFields("people", { id: "P", props: [1, { kept: true }] }), { id: "P", props: [1, { kept: true }] });
+  assert.deepEqual(projectSharedRegistryFields("tags", { id: "P", props: [1, { kept: true }] }), { id: "P", owner: "", props: [1, { kept: true }] });
+  assert.deepEqual(projectSharedRegistryFields("shots", { id: "S", props: [{ key: "P", fields: { id: "P", name: "Cup", rank: "0" } }] }), { id: "S", owner: "", props: [{ id: "P", name: "Cup" }] });
+});
+
+test("a tag or shot with no stored owner projects as owner \"\", as a migrated document has; a stored owner is kept and people get none", () => {
+  assert.deepEqual(projectSharedRegistryFields("tags", { id: "T", owner: "p1" }), { id: "T", owner: "p1" });
+  assert.deepEqual(projectSharedRegistryFields("shots", { id: "S", owner: "p1" }), { id: "S", owner: "p1" });
+  assert.deepEqual(projectSharedRegistryFields("people", { id: "P", name: "Ann" }), { id: "P", name: "Ann" });
 });

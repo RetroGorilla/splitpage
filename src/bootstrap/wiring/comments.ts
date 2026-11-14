@@ -155,7 +155,8 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       personColors: portPersonColors,
       shots: shotHiding,
       pictures: portPictures,
-      clearDraftUndo: resetDraftHistory
+      clearDraftUndo: resetDraftHistory,
+      shared: () => null
     };
     return mountCommentState(ports);
   });

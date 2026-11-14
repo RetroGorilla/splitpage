@@ -111,7 +111,7 @@ test("seeded list, split undo: a split's retirement and restoration run on a han
     const part = done.record?.parts[0]; assert.ok(part?.kind === "beat-split");
     send({ kind: "split-retire", id: "out", by: "Alice", beat: part.beat });
     const rows = projectSharedDocumentWithRecovery(a).document.rows.map(row => row.audioText);
-    send({ kind: "split-restore", id: "back", by: "Alice", target: { owner: part.source, segment: part.segment, field: "audioText" }, beat: part.beat, unit: part.boundary, before: null });
+    send({ kind: "split-restore", id: "back", by: "Alice", beat: part.beat });
     assert.deepEqual([ran, rows, projectSharedDocumentWithRecovery(a).document.rows.map(row => row.audioText)], [["split-retire", "split-restore"], ["abcd"], ["ab", "cd"]]);
   } finally { set.close(); }
 });

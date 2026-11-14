@@ -166,7 +166,7 @@ export function readSplitRetire(raw: unknown) {
   return readKind(raw, "split-retire", { beat: ref });
 }
 export function readSplitRestore(raw: unknown) {
-  return readKind(raw, "split-restore", { target: address, beat: ref, unit: ref, before: nullableRef });
+  return readKind(raw, "split-restore", { beat: ref });
 }
 export function readSoftRemove(raw: unknown) {
   return readKind(raw, "remove", { removalKind: oneOf("beat", "range", "header", "became-heading"), targets: list(ref),

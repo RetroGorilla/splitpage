@@ -147,7 +147,7 @@ test("through the owner: a used-up undo of a removal adds no redo and reaches no
   undo.perform(() => { const record = run.command(run.set.a, removeOp("gone"), "remove"); removal = run.removal(record); return record; }); run.flush();
   run.send(run.set.b, { kind: "restore", id: "back", by: "Other", removals: [removal] }); run.flush();
   const before = [encodeSharedState(run.set.a), encodeSharedStateVector(run.set.a), readSharedRevision(run.set.a)];
-  assert.deepEqual(undo.undo(), { ok: true, effective: false, label: "remove", selection: null });
+  assert.deepEqual(undo.undo(), { ok: true, effective: false, label: "remove", selection: null, reason: "used-up" });
   assert.deepEqual([encodeSharedState(run.set.a), encodeSharedStateVector(run.set.a), readSharedRevision(run.set.a)], before);
   assert.deepEqual(undo.sizes(), { undo: 0, redo: 0, dropped: 0 });
   assert.deepEqual(["remove", "restore", "split", "heading-remove", "structure"].map(supportsSharedUndoPart), [true, true, false, false, false]);

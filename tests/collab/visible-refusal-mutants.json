@@ -1,0 +1,16 @@
+{
+  "tests": ["tests/application/commands/shared-refusals.test.ts"],
+  "mutants": [
+    {"label":"Writer repeats a refusal the session already displayed","file":"src/features/writer/flow-writer.ts","find":"outcome.kind === \"rejected\" && !outcome.notified","replace":"outcome.kind === \"rejected\"","tests":["tests/features/writer/flow-command-ports.test.ts"]},
+    {"label":"a missing shared form becomes a silent no-op","file":"src/application/session/shared-session.ts","find":"if (!plan.shared) return { kind: \"rejected\", reason: NOT_SHARED };","replace":"if (!plan.shared) return { kind: \"noop\" };"},
+    {"label":"the session drops its refusal notice","file":"src/application/session/shared-session.ts","find":"ports.refused?.(reason);","replace":"void reason;"},
+    {"label":"move beat does not ask moves","file":"src/application/commands/rows.ts","find":"const can = capability.moves();\n      if (!can.allowed) return { refused: can.reason };\n      const from","replace":"const can = capability.edit();\n      if (!can.allowed) return { refused: can.reason };\n      const from"},
+    {"label":"swap beats does not ask moves","file":"src/application/commands/rows.ts","find":"const can = capability.moves();\n      if (!can.allowed) return { refused: can.reason };\n      const at","replace":"const can = capability.edit();\n      if (!can.allowed) return { refused: can.reason };\n      const at"},
+    {"label":"move scene does not ask moves","file":"src/application/commands/scenes.ts","find":"const can = capability.moves();","replace":"const can = capability.edit();"},
+    {"label":"a named refusal leaks its internal name into the toast","file":"src/bootstrap/wiring/ports/shared-command-notices.ts","find":"reason : \"This is not available in a shared session yet.\"","replace":"reason : reason"},
+    {"label":"Production bulk tagging reaches standalone undo while shared","file":"src/features/tags/panels.ts","find":"  if ((ports as TagPanelPorts).sharedCommands.refuseUnsupported()) return;\n","replace":"","tests":["tests/features/tags/panel-mount.test.ts"]},
+    {"label":"the tag composer reports success after a shared refusal","file":"src/features/tags/production-tags.ts","find":"  if ((sharedCommands as NonNullable<typeof sharedCommands>).refuseUnsupported()) return;\n","replace":"","tests":["tests/features/tags/production-tags-mount.test.ts"]},
+    {"label":"a direct buffer refusal bypasses the shared notice","file":"src/bootstrap/wiring/ports/shared-command-notices.ts","find":"if (outcome.kind !== \"rejected\") { report(outcome); return; }","replace":"if (true) { report(outcome); return; }","tests":["tests/bootstrap/shared-command-notices.test.ts"]},
+    {"label":"a buffer repeats a refusal the session already displayed","file":"src/bootstrap/wiring/ports/shared-command-notices.ts","find":"if (!outcome.notified) refuse(outcome.reason);","replace":"refuse(outcome.reason);","tests":["tests/bootstrap/shared-command-notices.test.ts"]}
+  ]
+}

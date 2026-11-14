@@ -1,7 +1,7 @@
 import type { DocumentShape } from "../../core/document/validated.ts";
 import { changeSet, combined } from "../session/change-set.ts";
 import type { CellChange, ChangeSet } from "../session/change-set.ts";
-import type { Command, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, CommandRefusal, DocumentView, Plan, SharedPlan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 
@@ -26,14 +26,19 @@ function scratch(doc: DocumentView, changes: ChangeSet): DocumentShape {
   return copy as DocumentShape;
 }
 
-export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit): Plan | null {
-  if (!edit(scratch(doc, changes))) return null;
-  return {
+export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit): Plan | null;
+export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit, share: ((trial: DocumentShape) => SharedPlan | CommandRefusal | null) | undefined): Plan | CommandRefusal | null;
+export function planByTrial(name: string, doc: DocumentView, changes: ChangeSet, edit: LiveEdit, share?: (trial: DocumentShape) => SharedPlan | CommandRefusal | null): Plan | CommandRefusal | null {
+  const trial = scratch(doc, changes);
+  if (!edit(trial)) return null;
+  const plan: Plan = {
     changes: changes,
     apply: function (live) {
       if (!edit(live)) throw new Error(name + " found nothing to change in the live document");
     }
   };
+  const shared = share ? share(trial) : null;
+  return !shared ? plan : "refused" in shared ? shared : { ...plan, shared };
 }
 
 export function rewriteChanges(rewrites: readonly CellRewrite[], stamped: boolean, runsMoved = false): ChangeSet {

@@ -3,7 +3,7 @@ import { clickProductionOutline, changeProductionOutline, revealProductionItem }
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startTagPanels, IS_TOUCH, openProductionPanel, saveTagRename, setTagNotes } from "../../../src/features/tags/panels.ts";
+import { startTagPanels, IS_TOUCH, openProductionPanel, saveTagRename, setTagNotes, tagAllMentions } from "../../../src/features/tags/panels.ts";
 import type { TagPanelPorts } from "../../../src/features/tags/ports.ts";
 import { createProductionSelection } from "../../../src/application/editing/production-selection.ts";
 import { createDeleteConfirm } from "../../../src/application/editing/delete-confirm.ts";
@@ -11,7 +11,7 @@ import { createProductionIndex } from "../../../src/application/production/produ
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeScreen, fakeSharedCommands } from "../fakes.ts";
 import { tagPanelActions } from "../../../src/features/tags/actions.ts";
 import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
 import { tagKey } from "../../../src/core/document/tags.ts";
@@ -21,6 +21,10 @@ import { tagStatusLampHtml } from "../../../src/features/common/tag-status.ts";
 import * as commands from "../../../src/application/tag-panel-commands.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
+import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { replicas } from "../../adapters/collab/executor-support.ts";
+import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -49,6 +53,7 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   const selection = createProductionSelection(timers);
   const prep = createProductionPrepState();
   const ports: TagPanelPorts = {
+    sharedCommands: fakeSharedCommands(),
     preferences: { panelGrouping: () => null },
     changes: { onChange: () => () => {} },
     focus: { lastRow: () => null },
@@ -86,6 +91,24 @@ function fixture(cat = "prop", migration = fakeMigration()) {
   };
   return { ports, calls, edits, doc, document, pending, deletion, selection };
 }
+
+test("rule 88: bulk tagging from Production refuses once before scanning, editing or standalone undo", () => {
+  const set = replicas();
+  const shared = sharedHarness(adapterReplica(set.a));
+  const h = fixture();
+  const notices = fakeNotices();
+  const owner = startTagPanels({ ...h.ports, notices: notices.notices,
+    sharedCommands: sharedCommandGuard(() => shared.session.read(doc => doc !== null), notices.notices),
+    bulkTag: () => { assert.fail("bulk tag scanned"); }
+  });
+  try {
+    const before = encodeSharedState(set.a);
+    tagAllMentions(tagKey("prop", "Hat"));
+    assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+    assert.deepEqual(encodeSharedState(set.a), before);
+    assert.deepEqual([h.calls, h.edits.ran, shared.undo], [[], [], []]);
+  } finally { owner.dispose(); shared.session.dispose(); set.close(); }
+});
 
 function prepFixture(focus: string | null = null) {
   const migration = fakeMigration();

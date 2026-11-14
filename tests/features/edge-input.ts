@@ -116,6 +116,7 @@ export function edgeInput(current: () => HTMLInputElement) {
       field.form?.requestSubmit();
       return true;
     }),
+    escape: () => chord("Escape", {}, () => false),
     cut: () => chord("x", { ctrlKey: true }, field => {
       const [from, to] = span(field);
       if (!clipboard(field, "cut") || from === to) return false;

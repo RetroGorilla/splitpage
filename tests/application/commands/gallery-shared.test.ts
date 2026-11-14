@@ -399,6 +399,19 @@ for (const order of ORDERS) test(`shared gallery commands removing different slo
   } finally { a.session.dispose(); b.session.dispose(); h.close(); }
 });
 
+for (const order of ORDERS) test(`rule 108: moving one of two identical bare videos in front of the other is no change, so a thumbnail added at once keeps its place: ${order}`, () => {
+  const h = setup(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    twoVideos(h, order);
+    assert.deepEqual(a.session.run(galleryCommand("R2", r => moveGallerySlot(r, 1, 0), alice, ports(h.a, "Alice", alice))).kind, "noop");
+    assert.deepEqual(a.executed, []);
+    send(h.b, set(0, "v2", "picture", { imageRef: ref("c"), name: "Thumb" }));
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("identical videos", [h.a, h.b], order), { document: documentWith({ R2: { audioText: "cd", imageRef: null,
+      imageLinks: [{ href: V3, poster: true }], moreImages: [{ imageRef: ref("c"), name: "Thumb", links: [{ href: V3, poster: true }] }] } }), recovery: [] });
+  } finally { a.session.dispose(); h.close(); }
+});
+
 for (const order of ORDERS) test(`shared gallery command refuses a beat joined with one that holds the same picture: ${order}`, () => {
   const h = setup(), a = sharedHarness(adapterReplica(h.a));
   try {

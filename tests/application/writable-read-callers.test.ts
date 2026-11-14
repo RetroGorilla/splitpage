@@ -51,7 +51,7 @@ const BRIDGE_FUNCTION = {
   "bootstrap/wiring/ports/document.ts": 2,
   "bootstrap/wiring/recovery-owners.ts": 2,
   "bootstrap/wiring/session-owner.ts": 3,
-  "bootstrap/wiring/shared-session.ts": 3
+  "bootstrap/wiring/shared-session.ts": 4
 };
 
 const VIEW_PORT_USERS = {

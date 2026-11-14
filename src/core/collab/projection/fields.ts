@@ -13,8 +13,10 @@ function plain(fields: Readonly<Record<string, unknown>>, excluded: readonly str
   return out;
 }
 export function projectSharedRegistryFields(kind: "people" | "tags" | "shots", fields: Readonly<Record<string, unknown>>): Record<string, unknown> {
-  if (kind !== "shots") return plain(fields);
-  const out = plain(fields, ["props"]);
+  if (kind === "people") return plain(fields);
+  const out = plain(fields, kind === "shots" ? ["props"] : []);
+  if (!Object.hasOwn(out, "owner")) out.owner = "";
+  if (kind === "tags") return out;
   if (typeof out.id === "string") out.id = cleanId(out.id);
   if (Object.hasOwn(fields, "props")) out.props = list(fields.props).map(prop => plain(bag(prop.fields)));
   return out;

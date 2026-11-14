@@ -11,7 +11,7 @@ import { operationExamples } from "./operation-examples.ts";
 import { beatPos, caretAt, moveBeats, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
 import type { FlowPorts } from "../../../src/core/flow/flow.ts";
 
-test("Stage 0: exported command builders cannot escape the literal 51-builder operation decision table", () => {
+test("exported command builders and the bulk-row writer cannot escape the classified operation decision table", () => {
   const directory = new URL("../../../src/application/commands/", import.meta.url);
   const files = readdirSync(directory).filter(file => file.endsWith(".ts")).map(file => fileURLToPath(new URL(file, directory)));
   const program = ts.createProgram(files, { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext, allowJs: true, types: [] });
@@ -29,12 +29,13 @@ test("Stage 0: exported command builders cannot escape the literal 51-builder op
         const wrapped = result.getProperty("command");
         return result.getProperty("plan") || wrapped && checker.getTypeOfSymbolAtLocation(wrapped, source).getProperty("plan");
       });
-      if (builds) builders.push(exported.name);
+      if (builds || exported.name === "createBulkTagRows") builders.push(exported.name);
     }
   }
-  assert.equal(builders.length, 51);
+  assert.equal(builders.length, 52);
   assert.deepEqual(builders.sort(), builderOperationCoverage.map(row => row[0]).sort());
-  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 10, 15]);
+  for (const row of builderOperationCoverage) assert.ok(["serve", "serve pending composition", "refuse", "could not classify"].includes(row.shared), row[0]);
+  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 11, 15]);
 });
 
 test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one lost-intent classes", () => {
@@ -67,9 +68,9 @@ test("coverage decisions name only defined operations, the two refusals or the p
     ["titleCommand", "renameSceneCommand", "cellTextCommand"]);
 });
 
-test("the 25 text/structure builders and 24 flow rows record their audited branches", () => {
+test("the 26 text/structure builders and 24 flow rows record their audited branches", () => {
   const builders = builderOperationCoverage.filter(row => row[1] === "text-mark" || row[1] === "structure");
-  assert.equal(builders.length, 25);
+  assert.equal(builders.length, 26);
   for (const row of builders) {
     assert.equal(row.length, 4, row[0]);
     if (row.length === 4) assert.ok(row[3].length > 0 && row[3].every(branch => branch[0].length > 0), row[0]);
@@ -94,7 +95,7 @@ test("each audited row declares exactly the union of its literal branch requirem
     assert.deepEqual(declared.sort(), [...required].sort(), row[0]);
     rows++;
   }
-  assert.equal(rows, 49);
+  assert.equal(rows, 50);
   assert.equal(flowOperationCoverage.find(row => row[0] === "typeWithMarks")?.[2], "text-insert");
   assert.equal(flowOperationCoverage.find(row => row[0] === "replaceAll")?.[2], "text-insert,text-delete,heading-remove,scalar");
   context.diagnostic(`${rows} rows equal the union of ${branches} literal branch requirements`);

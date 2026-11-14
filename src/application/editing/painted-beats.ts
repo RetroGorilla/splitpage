@@ -7,6 +7,7 @@ export interface PaintedBeats {
   readonly text: (rowId: string) => string | undefined;
   readonly field: (rowId: string, text: string) => void;
   readonly stored: (rowId: string) => string | null;
+  readonly current: (rowId: string) => PaintedText | null;
   readonly clear: () => void;
 }
 
@@ -39,6 +40,7 @@ export function createPaintedBeats(source: PaintedTextSource): PaintedBeats {
     base: rowId => bases.get(rowId) ?? null,
     text: rowId => texts.get(rowId), field,
     stored: rowId => readField(rowId)?.text ?? null,
+    current: readField,
     clear: () => { bases = new Map(); texts = new Map(); }
   };
 }

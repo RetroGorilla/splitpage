@@ -40,6 +40,7 @@ import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../../app
 import { personNamed, registryEntryById as registryEntryByIdIn } from "../../core/production/records.ts";
 
 let currentDocument: ProductionTagPorts["document"]["current"] | null;
+let sharedCommands: ProductionTagPorts["sharedCommands"] | null;
 let readSession: ProductionTagPorts["document"]["read"] | null;
 let requestRefresh: ProductionTagPorts["refresh"]["request"] | null;
 let runDocumentEdit: ProductionTagPorts["edits"]["edit"] | null;
@@ -139,8 +140,8 @@ export function healTagRegistry() {
   const plan = tagRecordsPlan((currentDocument as NonNullable<typeof currentDocument>)());
   if (!plan) return 0;
   let count = 0;
-  if (plan.apply) (stampDocument as NonNullable<typeof stampDocument>)(registryHealingStamp(plan, function (n) { count = n; }));
-  plan.commit();
+  const outcome = plan.apply ? (stampDocument as NonNullable<typeof stampDocument>)(registryHealingStamp(plan, function (n) { count = n; })) : null;
+  if (!outcome || outcome.kind === "applied") plan.commit();
   return count;
 }
 
@@ -604,6 +605,7 @@ function selectedTagCategory() {
 
 export function applyTag() {
   if (!pendingTag) return;
+  if ((sharedCommands as NonNullable<typeof sharedCommands>).refuseUnsupported()) return;
   const cat = (selectedTagCategory() as string);
   const name = cappedText((document.getElementById("tag-name") as HTMLInputElement).value, 80);
   if (isBlankTagName(name)) { (showToast as NonNullable<typeof showToast>)("Give the label a name first.", "warn"); return; }
@@ -646,6 +648,7 @@ export function applyTag() {
 }
 
 export function startProductionTags(ports: ProductionTagPorts) {
+  sharedCommands = ports.sharedCommands;
   let cancelRefresh: ProductionTagPorts["refresh"]["cancel"] | null = ports.refresh.cancel;
   currentDocument = ports.document.current;
   readSession = ports.document.read;
@@ -727,6 +730,7 @@ export function startProductionTags(ports: ProductionTagPorts) {
         if (window.CSS && window.CSS.highlights) window.CSS.highlights.delete(UNTAGGED_HL);
         if (withdrawHook) withdrawHook();
         currentDocument = readSession = requestRefresh = runDocumentEdit = sessionStamps = stampDocument = null;
+        sharedCommands = null;
         cellOf = inertBody = sanitizeHtml = productionReaders = null;
         productionIndex = cellEditing = focusMemory = breakUndoCoalescing = viewFlags = showToast = randomIds = null;
         tagsInField = TAG_SHORTCUT_CHARS = cancelRefresh = null;
