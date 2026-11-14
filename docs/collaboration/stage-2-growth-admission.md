@@ -1,6 +1,6 @@
 # Stage 2 stored growth and update admission
 
-Draft: fresh storage meets both limits on all three fixtures. Edited storage, admission latency and heap conclusions remain unmeasured in this record. No admission number is inferred from preparation time.
+Draft: fresh storage meets the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. Short/fresh admission p50 is 3.51 ms, exceeding the 3 ms added-input allowance; its 14.43 ms p95 fits the 25 ms limit in isolation. Other admission rows and the whole-application heap limit remain unmeasured. No admission number is inferred from preparation time.
 
 Measured on 2026-11-13 at the adapter level in Node, with no browser, application wiring, transport or server. The source commit measured is `d49fd51fbf5d7819143d4e263ecc33e2f8226bd2`; its `src/adapters/collab` tree is `138889c20c2952880862f3e9ab0a1b1bcee81cb7`. Machine description: ARM64, Node v24.22.1. Other work was running throughout. These conditions differ from the Stage 0 browser baseline; its numbers are budget references, not a same-machine latency comparison.
 
@@ -34,26 +34,52 @@ Heap sampling is a separate pass, so sampling does not inflate the timing tables
 
 ## Results
 
-| Script | Plain bytes | Fresh shared bytes | Fresh / plain | Fresh / 2 MiB | 3x limit | 2 MiB limit | Edited bytes / 10x limit | Growth per 1,000 typed / 100 undo-redo pairs |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| short | 1,734 | 4,189 | 2.42x | 0.20% | holds | holds | unmeasured | unmeasured |
-| long | 38,432 | 73,161 | 1.90x | 3.49% | holds | holds | unmeasured | unmeasured |
-| large | 334,208 | 690,502 | 2.07x | 32.93% | holds | holds | unmeasured | unmeasured |
+Values are medians [min–max] of per-round statistics, not pooled updates.
 
-| Script / start state | Admission p50 / p95 / max | Burst 100 / 1,000 | Trial share | Burst heap | Prototype costs |
+| Script | Fresh plain bytes | Fresh bytes / plain / cap % | Edited bytes / fresh plain / cap % | Edited plain bytes / edited multiple | Bytes per 1,000 corrected characters | Bytes per 100 undo/redo pairs |
+| --- | --- | --- | --- | --- | --- | --- |
+| short | 1734 | 4189 / 2.42x / 0.20% | 9131462 / 5266.13x / 435.42% | 1734 / 5266.13x | 725627.8 | 524274 |
+| long | 38432 | 73161 / 1.90x / 3.49% | 7894446 / 205.41x / 376.44% | 38432 / 205.41x | 733618.7 | 524374 |
+| large | 334208 | 690502 / 2.07x / 32.93% | 8550333 / 25.58x / 407.71% | 334208 / 25.58x | 737353.3 | 524374 |
+
+| Script / state | Bytes added by 1,000 typed characters without deletion |
+| --- | --- |
+| short / fresh | 324052 |
+
+| Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |
+| --- | --- | --- | --- | --- | --- | --- |
+| short / fresh | 3.51 [3.18–4.07] | 14.43 [5.72–19.55] | 30.78 [8.48–37.03] | 0.03 [0.02–0.03] | 0.04 [0.03–0.04] / 0.06 [0.06–0.08] | 99.11 [98.50–99.42] / 98.81 [98.07–99.19] |
+
+Input budget screen only; passing admission alone does not establish end-to-end input latency.
+
+| Script / state | Available added p50 ms (Stage 0 reference) | Added p50 budget | Admission p50 alone vs 8 ms | Admission p95 alone vs 25/40 ms | Any admission above 50 ms |
 | --- | --- | --- | --- | --- | --- |
-| short / fresh | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |
-| short / edited | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |
-| long / fresh | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |
-| long / edited | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |
-| large / fresh | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |
-| large / edited | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |
+| short / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
 
-The long-running command completed all three edited workloads and the separate undo/redo probes. It also completed five short/fresh timing rounds, but their numerical results had not been emitted when this draft was published. The process was paused to publish and validate the draft. Remaining rows will be added from completed, uninterrupted timing sets; the paused timing span will not be reported as workload cost.
+| Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| short / fresh / 100 | 172.44 [108.42–215.38] | 4.36 [4.09–4.55] | 5.20 [5.13–13.86] | 7.51 [6.42–9.74] | 40.00 [23.82–52.67]x | 44.93 [44.84–45.43] | 0.16 [0.04–0.21] |
+| short / fresh / 1000 | 9491.26 [5823.66–10494.96] | 32.16 [27.73–36.23] | 42.37 [36.54–63.80] | 95.96 [53.79–108.68] | 290.38 [209.99–326.38]x | 65.77 [65.26–161.01] | 1.11 [1.04–1.13] |
+
+| Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |
+| --- | --- | --- | --- | --- |
+| short / fresh | 0.004 [-0.880–0.004] | 0.133 [0.119–0.152] | 0.129 [0.115–1.022] | 30.44 [-0.16–35.76]x |
+
+| Remaining case | Admission / burst / heap / prototype figures | Typing-only growth |
+| --- | --- | --- |
+| short / edited | unmeasured | unmeasured |
+| long / fresh | unmeasured | unmeasured |
+| long / edited | unmeasured | unmeasured |
+| large / fresh | unmeasured | unmeasured |
+| large / edited | unmeasured | unmeasured |
+
+All three edited workloads and the separate undo/redo probes completed. The short/fresh row contains five completed timing rounds. Completed values were recovered while the process was in untimed sender preparation; the pause was outside all measured intervals. Remaining cases continue on this draft.
 
 Draft validation: dependency and comment gates pass, the three focused tests pass, and lint passes on the three new scripts. Full lint and type checking were run but are blocked by missing Electron and prototype-service dependency declarations in this checkout; core and web type checking pass. No source or gate is changed to bypass those failures. The full verification command was not run.
 
 ## Admission alternatives and safety
+
+On short/fresh, the one-trial prototype admits 1,000 updates in 95.96 [53.79–108.68] ms, versus 9491.26 [5823.66–10494.96] ms for current admission. Decode-only p50 is 0.04 [0.03–0.04] ms. These are measured costs, not validated replacement policies.
 
 The direct path is a cost control, not a proposed admission policy: it removes decoding checks and isolation from mutations made before an application error. Decode-only validation avoids the full-document trial but gives up checking integration against the current document before mutation; successful decoding and positive struct lengths do not prove safe integration or a valid application schema. One trial per burst retains all-before-live integration preflight for that fixed list of updates and rejects the whole list if any member fails. It gives up per-update acceptance/refusal and does not implement the live ingress gate's reentrant holds, capacity or callback behavior. Valid-state equivalence and the malformed-batch tool test do not establish safety against arbitrary updates. The owner must choose a policy before any source change.
 
