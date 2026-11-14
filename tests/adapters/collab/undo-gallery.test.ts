@@ -299,6 +299,15 @@ for (const order of ORDERS) test(`an old redo cannot take back another writer's 
   run.usedUp(redo, "redo used up", withP1);
 }));
 
+for (const order of ORDERS) test(`a redo is bound to the retirement its undo wrote: after a later retirement from another device, it is used up: ${order}`, () => scenario(order, run => {
+  const added = run.command(run.set.a, add("G1", "P1", "a")); run.flush();
+  const redo = run.reverse(added, true); run.flush();
+  const renamed = run.command(run.set.b, setRecord("gallery", "G1", "picture", picture("Renamed", "a"), "Bob", "change")); run.flush();
+  run.reverse(renamed, true, run.set.b); run.flush(); run.check("shown with the name the add wrote", withP1);
+  run.reverse(added, true, run.set.c); run.flush(); run.check("retired again from another device", plain);
+  run.usedUp(redo, "redo used up, the other retirement stays", plain);
+}));
+
 for (const order of ORDERS) test(`a split undone after a picture was added to its new beat and undone is still effective: ${order}`, () => scenario(order, run => {
   const split = run.command(run.set.a, { kind: "split", id: "split", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
     at: { left: null, right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, observed: [flowBaseReference("R1", "audioText", 0, 2)], boundary: "R3", beat: "R3", fields: {} });
@@ -330,6 +339,58 @@ function violated(handle: SharedDocumentHandle, reading: Reading, renamed: Reado
     found.push("a removal lists a picture that is not stored");
   }
   return found;
+}
+
+function copyOf(bytes: Uint8Array, client: number): SharedDocumentHandle {
+  const copy = createMonitoredSharedDocument();
+  collabState(copy).doc.clientID = client;
+  assert.ok(applySharedUpdate(copy, bytes).ok);
+  registerSharedRemovalHandlers(copy); registerSharedSplitHandlers(copy, runtime); registerSharedTextOperationHandlers(copy);
+  registerSharedRecordHandlers(copy); registerSharedUndoOperationHandlers(copy); registerSharedJoinHandlers(copy);
+  return copy;
+}
+
+function listAgainstApart(bytes: Uint8Array): readonly unknown[] {
+  const copies = [copyOf(bytes, 11), copyOf(bytes, 11)];
+  try {
+    const first = copies[0]; assert.ok(first);
+    const shown = new Set(readSharedRecords(first, "gallery").map(record => record.key));
+    const values: unknown[] = [...collabState(first).roots.gallery.keys()].filter(key => !key.includes(":slot:")).sort()
+      .map((key, index) => ({ kind: shown.has(key) ? "gallery-retire" : "gallery-restore", record: key, id: "toggle" + index, by: "Dana" }));
+    if (projectSharedDocumentWithRecovery(first).document.rows.some(row => row.id === "R1")) values.push(removeBeat("final", "Dana"));
+    return copies.map((copy, index) => {
+      if (index === 0) assert.deepEqual(executeSharedOperations(copy, values.map(operation), { base: readSharedRevision(copy) }), { ok: true });
+      else for (const value of values) assert.deepEqual(executeSharedOperations(copy, [operation(value)], { base: readSharedRevision(copy) }), { ok: true });
+      const removals = [...collabState(copy).roots.removalRecords.entries()].map(([key, raw]) => readSharedRemovalCommand(key, raw)).filter(record => record?.kind === "remove" && record.by === "Dana");
+      return { reading: read(copy), listed: removals.map(record => record?.kind === "remove" ? record.gallery : null) };
+    });
+  } finally { copies.forEach(destroySharedDocument); }
+}
+
+function olderUndoEffective(bytes: Uint8Array): readonly boolean[] {
+  return (["split", "restore"] as const).map(kind => {
+    const copy = copyOf(bytes, 12), writer = { by: "Dana", nextId: (() => { let next = 0; return () => "older" + ++next; })() };
+    const command = (value: unknown) => {
+      const execution = executeSharedCommand(copy, [operation(value)], { label: kind, selection: null, typing: null }, { base: readSharedRevision(copy) });
+      assert.deepEqual(execution.result, { ok: true }); assert.ok(execution.record); return execution.record;
+    };
+    try {
+      let older: SharedUndoRecord, beat = "R2";
+      if (kind === "split") {
+        older = command({ kind: "split", id: "older-split", by: "Dana", target: { owner: "R2", segment: "R2", field: "audioText" },
+          at: { left: null, right: flowBaseReference("R2", "audioText", 1), affinity: "before" }, observed: [flowBaseReference("R2", "audioText", 0, 2)], boundary: "R9", beat: "R9", fields: {} });
+        const part = older.parts.find(entry => entry.kind === "beat-split"); assert.ok(part?.kind === "beat-split"); beat = part.beat;
+      } else {
+        const before = new Set(collabState(copy).roots.removalRecords.keys());
+        command({ kind: "remove", id: "older-remove", by: "Dana", removalKind: "beat", targets: ["R2"], observed: [flowBaseReference("R2", "audioText", 0, 2)], boundaries: ["R2"], components: [], gallery: [], at: 0 });
+        older = command({ kind: "restore", id: "older-restore", by: "Dana", removals: [...collabState(copy).roots.removalRecords.keys()].filter(key => !before.has(key)) });
+      }
+      const added = command(createRecord("gallery", "GZ", { beat, rank: "9999999999", picture: picture("PZ", "f") }, "Dana", "older-add"));
+      const undone = reverseSharedUndoRecord(copy, added, writer); assert.ok(undone.ok && undone.effective);
+      const result = reverseSharedUndoRecord(copy, older, writer);
+      return result.ok && result.effective;
+    } finally { destroySharedDocument(copy); }
+  });
 }
 
 test("seeded adds, undos, redos, renames, beat removals and restores by three writers, delivered one message at a time, agree on every copy and a late joiner", t => {
@@ -375,6 +436,9 @@ test("seeded adds, undos, redos, renames, beat removals and restores by three wr
         const handle = handles[index]; assert.ok(handle);
         for (const found of violated(handle, reading, renamed)) violations.add(found);
       });
+      const bytes = encodeSharedState(run.set.a), [together, apart] = listAgainstApart(bytes);
+      assert.deepEqual(together, apart, "one list against separate lists, seed=" + seed + " " + order);
+      assert.deepEqual(olderUndoEffective(bytes), [true, true], "older split and restore undo, seed=" + seed + " " + order);
     } finally { destroySharedDocument(late); run.close(); }
   }
   assert.deepEqual([...violations].sort(), DECLARED_LIMITS);
