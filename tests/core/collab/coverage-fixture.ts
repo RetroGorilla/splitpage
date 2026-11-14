@@ -299,13 +299,13 @@ export const flowOperationCoverage = [
     ["empty heading protects its first surviving paragraph", ["scalar"]],
     ["reverse match order / missing visual/no matches/refusal", []]
   ]],
-  ["setVisualForRange", "known", "split,split-before,text-insert,scalar,record-create,record-set | whole-field today, needs package 9", [
+  ["setVisualForRange", "known", "split,split-before,text-insert,text-delete,scalar", [
     ["suffix/interior isolation", ["split"]],
     ["prefix isolation retains the original beat on the suffix", ["split-before"]],
     ["isolation changes retained paragraph flags", ["scalar"]],
     ["independently clamped slices can duplicate a surrogate pair at an interior endpoint", ["text-insert"]],
-    ["new visual component", ["record-create"]],
-    ["whole visual HTML on collapsed, whole-beat or isolated selection", ["record-set", "whole-field today, needs package 9"]],
+    ["text into the beat's empty visual", ["text-insert"]],
+    ["whole visual text replaced on collapsed, whole-beat or isolated selection", ["text-insert", "text-delete"]],
     ["cross-beat/non-beat guards", []]
   ]],
   ["sentenceParagraphs", "known", "scalar", [
