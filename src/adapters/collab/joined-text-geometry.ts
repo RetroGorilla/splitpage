@@ -10,10 +10,12 @@ import { sharedPlannedJoins, sharedPlannedJoinEnds } from "./join-plan.ts";
 import { readPlannedStructureIndex } from "./structure-order-index.ts";
 
 export interface SharedJoinedTextFragment { readonly owner: string; readonly segment: string; readonly from: number; readonly to: number; readonly glue: "" | " "; readonly group: string | null; readonly glueSet?: true }
-export interface SharedJoinedTextGeometry { readonly root: string; readonly removed: boolean; readonly cyclic: boolean; readonly parts: readonly SharedJoinedTextFragment[] }
+export interface SharedJoinedTextGeometry {
+  readonly root: string; readonly removed: boolean; readonly cyclic: boolean; readonly parts: readonly SharedJoinedTextFragment[]; readonly fields: readonly string[];
+}
 function value(view: SharedStructureReadView, path: readonly string[]) { return view.kind(path) === "value" ? view.get(path) : undefined; }
 
-function joinedTextGeometry(view: SharedStructureReadView, owner: string): { readonly geometry: SharedJoinedTextGeometry; readonly fields: readonly string[] } | null {
+export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owner: string): SharedJoinedTextGeometry | null {
   const index = sharedStructurePlanIndex(view), joins = index.joins(), planned = sharedPlannedJoins(view);
   const names = [owner], visited = new Set<string>(), segments = new Set<string>();
   const blocks: ReturnType<typeof interpretSharedStructure> = [];
@@ -60,19 +62,15 @@ function joinedTextGeometry(view: SharedStructureReadView, owner: string): { rea
   });
   const selected = projectSharedJoinedLayout(ordered as (typeof ordered[number] & { id: string })[], structures).find(group => group.members.some(member => member.id === owner));
   if (!selected) return null;
-  return { fields: selected.fields, geometry: { root: selected.root, removed: selected.removed, cyclic: selected.cyclic, parts: selected.members.flatMap(member => {
+  return { root: selected.root, removed: selected.removed, cyclic: selected.cyclic, fields: selected.fields, parts: selected.members.flatMap(member => {
     const block = byId.get(member.id); if (!block) return [];
     return [{ owner: member.id, segment: block.segment, from: block.from, to: block.to, glue: member.glue, group: member.join ? groups.get(member.join) ?? null : null, ...(member.glueSet ? { glueSet: true as const } : {}) }];
-  }) } };
-}
-
-export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owner: string): SharedJoinedTextGeometry | null {
-  return joinedTextGeometry(view, owner)?.geometry ?? null;
+  }) };
 }
 
 export function readSharedJoinedVisualOwners(view: SharedStructureReadView, owner: string): readonly string[] | null {
-  const read = joinedTextGeometry(view, owner);
-  return read && !read.geometry.removed ? read.fields : null;
+  const read = readSharedJoinedTextGeometry(view, owner);
+  return read && !read.removed ? read.fields : null;
 }
 
 export function sharedJoinedTextBaseline(view: SharedStructureReadView, target: SharedTextAddress): SharedJoinedTextGeometry | null {
