@@ -60,6 +60,7 @@ test("heading typing settles through the buffer as text operations on the headin
       [{ kind: "text-delete", target: { owner: "H1", segment: "H1", field: "heading" }, observed: 2 }]
     ]);
     assert.deepEqual(page.a.executed.map(command => command.base), [1, 2]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "X", true], ["typing", "", true]]);
     assert.deepEqual(page.outcomes.map(outcome => outcome.kind === "applied" ? [outcome.changes.cells, outcome.changes.docFields, outcome.changes.derive] : outcome.kind),
       [[[], ["sections"], ["production", "broll"]], [[], ["sections"], ["production", "broll"]]]);
     assert.deepEqual([page.surface.paintedBase("heading:H1")?.text, page.surface.paintedBase("heading:H1")?.revision], ["SneX", 3]);

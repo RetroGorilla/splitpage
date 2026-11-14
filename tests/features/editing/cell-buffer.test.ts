@@ -44,6 +44,7 @@ test("a commit keeps the focused cell element and refreshes the cell's painted b
     assert.deepEqual([page.painted.base("R1")?.text, page.painted.base("R1")?.revision], ["abZ", 2]);
     assert.equal(page.key("R1", 3, 3, "insertText", "Y"), true);
     assert.deepEqual([page.text(), page.cell("R1"), page.caret(), page.reports], ["abZY", cell, { from: 4, to: 4 }, []]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "Z", true], ["typing", "Y", true]]);
   } finally { page.close(); }
 });
 

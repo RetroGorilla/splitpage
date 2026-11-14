@@ -40,6 +40,7 @@ test("9e: typing in a visual cell commits to the beat's visual through the buffe
     assert.deepEqual([visual(page), page.text(), page.reports, page.missing], ["ZY", "ab", [], []]);
     assert.deepEqual(operations(page), [["text-insert", "scalar"], ["text-insert", "scalar"]]);
     const insert = page.a.executed[0]?.operations[0];
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "Z", true], ["typing", "Y", true]]);
     assert.deepEqual(insert?.kind === "text-insert" ? insert.target : null, { owner: "R1", segment: "R1", field: "visualText" });
     assert.deepEqual([page.painted.base(VISUAL_KEY)?.text, page.caret("R1", "visualText")], ["ZY", { from: 2, to: 2 }]);
   } finally { page.close(); }
