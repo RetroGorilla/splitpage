@@ -78,26 +78,50 @@
     {
       "label": "Ctrl+Enter and the add bar return the list-local id instead of the minted one",
       "file": "src/features/rows/beats.ts",
-      "find": "  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared), afterId || null);",
+      "find": "  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));",
       "replace": "  if (shared) return runSharedCommand(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared)) ? createdId : null;"
     },
     {
       "label": "the split returns the list-local id instead of the minted one",
       "file": "src/features/rows/beats.ts",
-      "find": "(ports as BeatPortUse).edits.text, shared), id);",
-      "replace": "(ports as BeatPortUse).edits.text, shared), id) && createdId;"
+      "find": "(ports as BeatPortUse).edits.text, shared));",
+      "replace": "(ports as BeatPortUse).edits.text, shared)) && createdId;"
     },
     {
-      "label": "the minted id is read from the row the beat was created after",
+      "label": "created id taken from document position: Ctrl+Enter and the add bar read the row after the one they added after, or the last row",
       "file": "src/features/rows/beats.ts",
-      "find": "rowIndexOf(doc, afterId) + 1]",
-      "replace": "rowIndexOf(doc, afterId)]"
+      "find": "  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));",
+      "replace": "  if (shared) { const doc = sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared)) && (ports as BeatPortUse).document.current(); return doc ? doc.rows[afterId ? rowIndexOf(doc, afterId) + 1 : doc.rows.length - 1]?.id ?? null : null; }"
     },
     {
-      "label": "an appended beat's minted id is read from the first row",
+      "label": "created id taken from document position: the split reads the row after the one it split",
       "file": "src/features/rows/beats.ts",
-      "find": "afterId === null ? doc.rows.length - 1 :",
-      "replace": "afterId === null ? 0 :"
+      "find": "    return minted ? { id: minted, field: field } : null;",
+      "replace": "    const doc = minted && (ports as BeatPortUse).document.current();\n    return doc ? { id: doc.rows[rowIndexOf(doc, id) + 1]?.id ?? null, field: field } : null;"
+    },
+    {
+      "label": "the add command reports its list-local id instead of the id the executor mints",
+      "file": "src/application/commands/rows.ts",
+      "find": "  mint(sharedMintedBeat(trace, shared, createdId));",
+      "replace": "  mint(createdId);"
+    },
+    {
+      "label": "the split command reports its list-local id instead of the id the executor mints",
+      "file": "src/application/commands/split-join.ts",
+      "find": "  mint(sharedMintedBeat(trace, shared, createdId));",
+      "replace": "  mint(createdId);"
+    },
+    {
+      "label": "the created beat id is derived for the operation's segment instead of its beat",
+      "file": "src/bootstrap/wiring/ports/shared-values.ts",
+      "find": "operation, \"beat\");",
+      "replace": "operation, \"segment\");"
+    },
+    {
+      "label": "author operation id repeats across commands",
+      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "find": "String(++serial)",
+      "replace": "String(serial + 1)"
     },
     {
       "label": "rule 133: a refused visual split shows no notice",

@@ -7,6 +7,7 @@ import { armDeleteButton, disarmDeleteButton } from "./delete-button.ts";
 import type { BeatPorts, Beats } from "./ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { Command, DocumentView } from "../../application/session/document-session.ts";
+import type { CreatedBeatCommand } from "../../application/commands/shared-structure.ts";
 
 interface BeatDragScroll {
  dir: number;
@@ -45,18 +46,14 @@ function runSharedCommand(command: Command) {
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
-// why: the executor mints the stored id of a beat created in a shared session, so the caller reads it from the
-// row that follows the one it created after, or the last row when it appended
-function sharedCreated(command: Command, afterId: string | null) {
-  if (!runSharedCommand(command)) return null;
-  const doc = (ports as BeatPortUse).document.current();
-  if (!doc) return null;
-  return doc.rows[afterId === null ? doc.rows.length - 1 : rowIndexOf(doc, afterId) + 1]?.id ?? null;
+// why: the executor mints the stored id of a beat created in a shared session; the command reports it
+function sharedCreated(command: CreatedBeatCommand) {
+  return runSharedCommand(command) ? command.created() : null;
 }
 
 function addRow(afterId: string | null | undefined) {
   const createdId = (ports as BeatPortUse).ids.id("r"), shared = (ports as BeatPortUse).shared.ports();
-  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared), afterId || null);
+  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));
   if (!runRowCommand(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps))) return null;
   return createdId;
 }
@@ -86,7 +83,7 @@ function splitField(cellEl: Element) {
   (ports as BeatPortUse).undo.breakCoalescing();
   const createdId = (ports as BeatPortUse).ids.id("r"), shared = (ports as BeatPortUse).shared.ports();
   if (shared) {
-    const minted = sharedCreated((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text, shared), id);
+    const minted = sharedCreated((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text, shared));
     return minted ? { id: minted, field: field } : null;
   }
   const outcome = (ports as BeatPortUse).edits.run((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text));

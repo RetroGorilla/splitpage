@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
-import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
-import { addRow, armDelete, splitRowFieldCore } from "../bootstrap/wiring/rows.ts";
+import { addRow, addRowAndFocus, armDelete, splitRowFieldCore } from "../bootstrap/wiring/rows.ts";
 import { cycleRowStatus, setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
 import { promptForTarget, promptForWpm } from "../bootstrap/wiring/title-chrome.ts";
 import { sharedStructureCommands, sharedValueCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
@@ -94,6 +94,44 @@ function remoteInsert(handle, rowId, field, offset, text) {
     at: { left: offset === painted.text.length ? painted.endGap : null, right: painted.identity(offset), affinity: offset === painted.text.length ? "after" : "before" },
     content: [{ value: text, marks: [] }] });
   assert.ok(op); assert.deepEqual(executeSharedOperations(handle, [op]), { ok: true });
+}
+function remoteCreate(handle, left, right, affinity) {
+  const name = "bob_" + ++remoteSerial;
+  const op = readOperation({ kind: "segment-create", id: name, by: "Bob", segment: name + "_segment", beat: name + "_beat",
+    at: { left, right, affinity },
+    fields: { audioText: "", visualText: "", imageRef: null, status: "todo", stamp: { at: "2026-11-14T00:00:00.000Z", by: "Bob" } } });
+  assert.ok(op); assert.deepEqual(executeSharedOperations(handle, [op]), { ok: true });
+}
+function remoteSplit(handle, rowId, offset) {
+  const name = "bob_" + ++remoteSerial, target = sharedBufferedTarget(handle, bufferedFieldKey(rowId, "audioText")), painted = readSharedPaintedText(handle, target);
+  assert.ok(painted);
+  const op = readOperation({ kind: "split", id: name, by: "Bob", target, at: { left: null, right: painted.identity(offset), affinity: "before" },
+    observed: Array.from({ length: painted.text.length }, (_, index) => painted.identity(index)), boundary: name + "_boundary", beat: name + "_beat",
+    fields: { visualText: "", imageRef: null, status: "todo", stamp: { at: "2026-11-14T00:00:00.000Z", by: "Bob" } } });
+  assert.ok(op); assert.deepEqual(executeSharedOperations(handle, [op]), { ok: true });
+}
+function deliverInsideNextPublication(f) {
+  let armed = true;
+  const stop = onSessionChange(() => {
+    if (!armed) return;
+    armed = false;
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+  });
+  return () => { stop(); assert.equal(armed, false, "the peer update was delivered inside the local command"); };
+}
+function type(cell, character) {
+  const key = type => cell.dispatchEvent(new window.KeyboardEvent(type, { key: character, bubbles: true, cancelable: true }));
+  if (!key("keydown")) return false;
+  key("keypress");
+  const range = document.getSelection().getRangeAt(0).cloneRange();
+  const before = new window.InputEvent("beforeinput", { inputType: "insertText", data: character, bubbles: true, cancelable: true });
+  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+  if (!cell.dispatchEvent(before)) { key("keyup"); return false; }
+  range.deleteContents();
+  const text = document.createTextNode(character); range.insertNode(text);
+  document.getSelection().setBaseAndExtent(text, character.length, text, character.length);
+  cell.dispatchEvent(new window.InputEvent("input", { inputType: "insertText", data: character, bubbles: true }));
+  key("keyup"); return true;
 }
 function exchange(f, order) {
   const toPeer = () => { assert.equal(applySharedUpdate(f.peer, encodeSharedState(f.parts.handle)).ok, true); };
@@ -260,6 +298,84 @@ test("C7 callers: a refusal the session already announced is not announced again
     assert.deepEqual(warnings(), [REFUSED]);
     clearWarnings();
   }
+});
+
+const concurrent = [
+  { name: "Ctrl+Enter", peerClient: 1, remote: peer => { remoteCreate(peer, "r1", "r2", "before"); }, act: () => {
+    select(cellOf("audioText"), 3);
+    assert.equal(press(cellOf("audioText"), "Enter", { ctrlKey: true }), true);
+  }, rows: (local, peer) => [row("r1", "abcdef", "Wide"), row(peer, ""), row(local, "x"), row("r2", "Other"), row("r3", "Third")] },
+  { name: "Alt+Enter in the narration", peerClient: 1, remote: peer => { remoteSplit(peer, "r1", 3); }, act: () => {
+    select(cellOf("audioText"), 3);
+    assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);
+  }, rows: (local, peer) => [row("r1", "abc", "Wide"), row(peer, ""), row(local, "xdef"), row("r2", "Other"), row("r3", "Third")] },
+  { name: "the add bar", peerClient: 0xfffffffe, remote: peer => { remoteCreate(peer, "r3", null, "after"); }, act: () => { addRowAndFocus(null, "audioText"); },
+    rows: (local, peer) => [row("r1", "abcdef", "Wide"), row("r2", "Other"), row("r3", "Third"), row(local, "x"), row(peer, "")] }
+];
+
+for (const literal of concurrent) for (const order of ORDERS) test(`C7 created id: ${literal.name} focuses the beat it created while a peer's beat in the same gap arrives inside the command, ${order}`, async () => {
+  const f = await enter();
+  try {
+    collabState(f.peer).doc.clientID = literal.peerClient;
+    literal.remote(f.peer);
+    const delivered = deliverInsideNextPublication(f);
+    literal.act();
+    delivered();
+    const created = currentDocument().rows.map(r => r.id).filter(id => !["r1", "r2", "r3"].includes(id));
+    const local = created.find(id => f.beat.test(id)), peer = created.find(id => !f.beat.test(id));
+    assert.ok(local && peer, created.join(","));
+    assert.deepEqual(caret(), [local, "audioText", 0]);
+    assert.equal(document.activeElement, cellOf("audioText", local));
+    assert.equal(type(cellOf("audioText", local), "x"), true);
+    exchange(f, order);
+    agree(f, base(literal.rows(local, peer)));
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
+});
+
+const splitR1 = () => {
+  select(cellOf("audioText"), 3);
+  assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);
+};
+const successive = [
+  { name: "two status clicks", first: () => { cycleRowStatus("r1"); }, second: () => { cycleRowStatus("r1"); }, undoes: 2,
+    once: () => base(START(row("r1", "abcdef", "ZWide", "ready"))), twice: () => base(START(row("r1", "abcdef", "ZWide", "shot"))) },
+  { name: "the add bar twice", first: () => { addRow(null); }, second: () => { addRow(null); }, undoes: 0,
+    once: ([a]) => base([...START(), row(a, "")]), twice: ([a, b]) => base([...START(), row(a, ""), row(b, "")]) },
+  { name: "the add bar then Alt+Enter", first: () => { addRow(null); }, second: splitR1, undoes: 1,
+    once: ([a]) => base([...START(), row(a, "")]),
+    twice: ([a, b]) => base([row("r1", "abc", "ZWide"), row(b, "def"), row("r2", "Other"), row("r3", "Third"), row(a, "")]) },
+  { name: "a status click then Alt+Enter", first: () => { cycleRowStatus("r1"); }, second: splitR1, undoes: 2,
+    once: () => base(START(row("r1", "abcdef", "ZWide", "ready"))),
+    twice: ([b]) => base([row("r1", "abc", "ZWide", "ready"), row(b, "def"), row("r2", "Other"), row("r3", "Third")]) }
+];
+
+for (const literal of successive) for (const order of ORDERS) test(`C7 successive commands: ${literal.name} send two shared commands with two undo steps, ${order}`, async () => {
+  const f = await enter();
+  try {
+    const sizes = f.parts.undo.sizes();
+    const fresh = known => currentDocument().rows.map(r => r.id).filter(id => !["r1", "r2", "r3", ...known].includes(id));
+    remoteInsert(f.peer, "r1", "visualText", 0, "Z");
+    literal.first(); exchange(f, order);
+    const first = fresh([]);
+    agree(f, literal.once(first));
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + 1 });
+    literal.second(); exchange(f, order);
+    const both = [...first, ...fresh(first)];
+    for (const id of both) assert.match(id, f.beat);
+    agree(f, literal.twice(both));
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + 2 });
+    assert.deepEqual(warnings(), []);
+    if (literal.undoes < 1) return;
+    undoOnce(f, order);
+    agree(f, literal.once(first));
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + 1, redo: sizes.redo + 1 });
+    if (literal.undoes < 2) return;
+    undoOnce(f, order);
+    agree(f, base());
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, redo: sizes.redo + 2 });
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
 });
 
 test("C7 callers: the read-time button's own Ctrl+Z steps the shared owner", async () => {

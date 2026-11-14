@@ -8,8 +8,8 @@ import { toPlainText } from "../../core/text/projections.ts";
 import type { TextServices } from "../text/services.ts";
 import { scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
 import { applyParagraphFlags, paragraphCells, paragraphFlagsAfterOrder } from "./paragraphs.ts";
-import { sharedCreatedBeat, sharedRemoval, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
-import type { SharedStructurePorts } from "./shared-structure.ts";
+import { sharedCreatedBeat, sharedMintedBeat, sharedRemoval, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
+import type { CreatedBeatCommand, SharedStructurePorts } from "./shared-structure.ts";
 
 function indexOf(rows: DocumentView["rows"], rowId: string): number {
   return rows.findIndex(function (r) { return r.id === rowId; });
@@ -25,23 +25,28 @@ function reorderedChange(scenes = false, cells: ChangeSet["cells"] = []): Change
   return changeSet({ rowsMoved: true, cells, docFields: scenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true });
 }
 
-function sharedAddition(doc: DocumentView, afterId: string | null, createdId: string, ports: StampPorts, shared: SharedStructurePorts | undefined): Pick<Plan, "shared"> {
+function sharedAddition(doc: DocumentView, afterId: string | null, createdId: string, ports: StampPorts, shared: SharedStructurePorts | undefined, mint: (id: string | null) => void): Pick<Plan, "shared"> {
   const by = shared?.author();
   if (!shared || !by) return {};
   const trace = sharedStructureTrace(doc, shared, by), at = afterId === null ? doc.rows.length : indexOf(doc.rows, afterId) + 1, rows = doc.rows.slice();
   rows.splice(at, 0, { id: createdId, audioText: "", ...sharedCreatedBeat(ports) });
   trace.create(rows[at] as DocumentView["rows"][number], rows, at, doc["sections"]);
+  mint(sharedMintedBeat(trace, shared, createdId));
   return { shared: sharedStructureList(trace, shared, by, []) };
 }
 
-export function addBeatCommand(afterId: string | null, createdId: string, ports: StampPorts, shared?: SharedStructurePorts): Command {
+export function addBeatCommand(afterId: string | null, createdId: string, ports: StampPorts, shared?: SharedStructurePorts): CreatedBeatCommand {
+  let created: string | null = null;
   return {
     name: "add-scene",
     needs: "edit",
+    created: () => created,
     plan: function (doc): Plan | null {
+      created = null;
       if (afterId !== null && indexOf(doc.rows, afterId) === -1) return null;
+      created = createdId;
       return {
-        ...sharedAddition(doc, afterId, createdId, ports, shared),
+        ...sharedAddition(doc, afterId, createdId, ports, shared, id => { created = id; }),
         changes: changeSet({ rowsInserted: [createdId] }),
         apply: function (live) {
           const created: DocumentRow = {

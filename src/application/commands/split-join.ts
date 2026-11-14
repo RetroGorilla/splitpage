@@ -10,8 +10,8 @@ import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan, CommandRefusal } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 import type { FlowPorts } from "../../core/flow/flow.ts";
-import { sharedCreatedBeat, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
-import type { SharedStructurePorts } from "./shared-structure.ts";
+import { sharedCreatedBeat, sharedMintedBeat, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
+import type { CreatedBeatCommand, SharedStructurePorts } from "./shared-structure.ts";
 
 export interface JoinPorts extends CellTextPorts {
   readonly plainText: (html: string | null | undefined) => string;
@@ -69,27 +69,32 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
   });
 }
 
-function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined, by: ReturnType<SharedStructurePorts["author"]>): Pick<Plan, "shared"> {
+function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined, by: ReturnType<SharedStructurePorts["author"]>, mint: (id: string | null) => void): Pick<Plan, "shared"> {
   if (!shared || !by) return {};
   const trace = sharedStructureTrace(doc, shared, by), cell = shared.cells(row.audioText), cut = clampRange(cell, at.from, at.to);
   trace.delete(row.id, cell, cut.from, cut.to);
   trace.split(row.id, cut.from, { id: createdId, ...sharedCreatedBeat(ports) });
+  mint(sharedMintedBeat(trace, shared, createdId));
   return { shared: sharedStructureList(trace, shared, by, [row.id]) };
 }
 
-export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts, shared?: SharedStructurePorts): Command {
+export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts, shared?: SharedStructurePorts): CreatedBeatCommand {
+  let created: string | null = null;
   return {
     name: "split-scene",
     needs: "edit",
+    created: () => created,
     plan: function (doc): Plan | CommandRefusal | null {
+      created = null;
       if (SPLIT_FIELDS.indexOf(field) === -1) return null;
       const row = doc.rows.find(function (r) { return r.id === rowId; });
       if (!row) return null;
       const by = shared?.author() ?? null;
       if (by && field !== "audioText") return { refused: "visual-split-in-shared-session" };
       const halves = halvesOf(at, textOf(row[field]), ports);
+      created = createdId;
       return {
-        ...sharedSplit(doc, row, at, createdId, ports, shared, by),
+        ...sharedSplit(doc, row, at, createdId, ports, shared, by, id => { created = id; }),
         changes: splitChanges(rowId, field, createdId),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });
