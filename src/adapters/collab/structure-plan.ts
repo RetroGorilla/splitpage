@@ -4,7 +4,7 @@ import type { SharedStructureIndex } from "./structure-index.ts";
 import { readProjectionHead } from "./projection-reader.ts";
 import { cleanId } from "../../core/document/text-policy.ts";
 import { readPlannedStructureIndex } from "./structure-order-index.ts";
-import { SHARED_SPLIT_OBSERVATION_PARTS, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, readSharedSplitStaged } from "./split-retirement.ts";
+import { SHARED_SPLIT_OBSERVATION_PARTS, composeSharedSplitObservation, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, readSharedSplitStaged } from "./split-retirement.ts";
 import type { SharedSplitObservationPart, SharedSplitReadView } from "./split-retirement.ts";
 
 interface StructurePlanScratch { readonly scratch: <T>(key: string, create: () => T) => T }
@@ -13,7 +13,7 @@ function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
     records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>(),
     headings: new Map<string, boolean>(), created: new Map<string, string>(), finalized: new Map<string, string>(), converted: new Map<string, string>(),
-    retired: new Map<string, boolean>(), marked: null as Set<string> | null, parts: new Map<SharedSplitObservationPart, Map<string, unknown>>() }));
+    retired: new Map<string, boolean>(), marked: null as Set<string> | null, parts: new Map<SharedSplitObservationPart, Map<string, unknown>>(), staged: new Set<string>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
@@ -34,17 +34,29 @@ export function planSharedSplitStaged(view: StructurePlanScratch & SharedSplitRe
   const segment = (beat: string) => { const value = view.get(["beats", beat, "segment"]); return typeof value === "string" ? value : null; };
   const touched = new Set<string>();
   for (const write of writes) for (const [part, beats] of readSharedSplitStaged(write.path, segment, marked)) for (const beat of beats) {
-    state.parts.get(part)?.delete(beat); touched.add(beat);
+    state.parts.get(part)?.delete(beat); state.staged.add(part + "\u0000" + beat); touched.add(beat);
   }
   if (!touched.size) return;
-  const parts = SHARED_SPLIT_OBSERVATION_PARTS.map(part => {
+  const held = readSharedSplitHolds(view, touched, plannedParts(view, index, touched));
+  for (const beat of touched) state.retired.set(beat, held.has(beat));
+}
+
+// why: a part no write of the list touched is as the readers read it, so it comes from the index; a touched one is read
+// from the planned document, so a list reads only what it changed.
+function plannedParts(view: StructurePlanScratch & SharedSplitReadView, index: SharedStructureIndex, beats: ReadonlySet<string>) {
+  const state = context(view), stored = index.splitParts();
+  return SHARED_SPLIT_OBSERVATION_PARTS.map(part => {
     let known = state.parts.get(part); if (!known) { known = new Map(); state.parts.set(part, known); }
-    const missing = new Set([...touched].filter(beat => !known.has(beat)));
-    if (missing.size) for (const [beat, value] of readSharedSplitObservationPart(view, missing, part)) known.set(beat, value);
+    const missing = new Set([...beats].filter(beat => !known.has(beat)));
+    const fresh = new Set([...missing].filter(beat => state.staged.has(part + "\u0000" + beat) || !stored.get(part)?.has(beat)));
+    for (const beat of missing) if (!fresh.has(beat)) known.set(beat, stored.get(part)?.get(beat));
+    if (fresh.size) for (const [beat, value] of readSharedSplitObservationPart(view, fresh, part)) known.set(beat, value);
     return known;
   });
-  const held = readSharedSplitHolds(view, touched, parts);
-  for (const beat of touched) state.retired.set(beat, held.has(beat));
+}
+
+export function readSharedPlannedSplitObservation(view: StructurePlanScratch & SharedSplitReadView, index: SharedStructureIndex, beat: string): string {
+  return composeSharedSplitObservation(plannedParts(view, index, new Set([beat])), beat);
 }
 
 export function readSharedSplitRetired(view: StructurePlanScratch, beat: string): boolean {

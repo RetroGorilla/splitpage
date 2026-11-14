@@ -15,6 +15,7 @@ export interface SharedSplitReadView {
   readonly get: (path: readonly string[]) => unknown;
   readonly keys: (path: readonly string[]) => readonly string[];
   readonly kind: (path: readonly string[]) => "map" | "text" | "array" | "value" | "missing";
+  readonly tree?: (path: readonly string[]) => unknown;
 }
 type Visit = (count: number) => void;
 
@@ -42,18 +43,28 @@ export function sharedSplitStoreView(roots: SharedSplitRetirementRoots): SharedS
   return {
     get: path => {
       const value = at(path);
-      return value === missing || value instanceof Y.Map ? undefined : value instanceof Y.Text ? sharedPreparedValue(value.toDelta())
-        : value instanceof Y.Array ? sharedPreparedValue(value.toArray()) : sharedPreparedValue(value);
+      return value === missing || value instanceof Y.Map ? undefined : value instanceof Y.Text ? sharedJson(value.toDelta())
+        : value instanceof Y.Array ? sharedJson(value.toArray()) : sharedJson(value);
     },
     keys: path => { const value = at(path); return value instanceof Y.Map ? [...value.keys()] : []; },
     kind: path => {
       const value = at(path);
       return value === missing ? "missing" : value instanceof Y.Map ? "map" : value instanceof Y.Text ? "text" : value instanceof Y.Array ? "array" : "value";
-    }
+    },
+    tree: path => { const value = at(path); return value === missing ? null : storeTree(value); }
   };
 }
 
+function storeTree(value: unknown): unknown {
+  if (value instanceof Y.Map) return Object.fromEntries([...value.keys()].sort().map(key => [key, storeTree(value.get(key))]));
+  return (value instanceof Y.Text ? sharedJson(value.toDelta()) : value instanceof Y.Array ? sharedJson(value.toArray()) : sharedJson(value)) ?? null;
+}
+
+// why: the stored document is walked through its own maps, the planned one through the three questions; both give one tree.
 function canonical(view: SharedSplitReadView, path: readonly string[], skip: (key: string, value: unknown) => boolean = () => false): unknown {
+  const whole = view.tree?.(path);
+  if (whole !== undefined) return whole && typeof whole === "object" && !Array.isArray(whole)
+    ? Object.fromEntries(Object.entries(whole).filter(([key, value]) => !skip(key, value))) : whole;
   if (view.kind(path) !== "map") return sharedJson(view.get(path)) ?? null;
   return Object.fromEntries([...view.keys(path)].sort().flatMap(key => {
     const value = canonical(view, [...path, key]);

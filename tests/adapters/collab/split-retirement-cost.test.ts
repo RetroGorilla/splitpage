@@ -38,6 +38,6 @@ for (const marks of [1, 100]) test(`typing beside ${marks} undone split(s) of on
     assert.deepEqual(projector.read().document.rows.map(row => row.audioText), ["abcdz", "ef"]);
     assertIncremental(set.a, projector);
     createSharedIncrementalProjector(set.a, (kind, _key, units) => { if (kind === "split-observation") visits.fresh += units ?? 0; }).dispose();
-    assert.deepEqual(visits, { typed: 0, fresh: { 1: 9, 100: 207 }[marks] });
+    assert.deepEqual(visits, { typed: 0, fresh: { 1: 11, 100: 308 }[marks] });
   } finally { projector.dispose(); set.close(); }
 });

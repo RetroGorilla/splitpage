@@ -17,7 +17,8 @@ import { readSharedActiveRemovalSources } from "./removal-record.ts";
 import type { SharedJoinIndex } from "./join-index.ts";
 import { sharedJoinEndpointOffset, readSharedJoinEndpoint, sharedJoinEndpointField } from "./join-endpoint.ts";
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
-import { readSharedSplitRetiredBeat, readSharedSplitRetirements } from "./split-retirement.ts";
+import { SHARED_SPLIT_OBSERVATION_PARTS, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, sharedSplitStoreView } from "./split-retirement.ts";
+import type { SharedSplitObservationPart, SharedSplitObservations } from "./split-retirement.ts";
 
 export interface SharedAttachmentOwnership {
   readonly keys: (collection: "visuals" | "gallery", beat: string) => readonly string[];
@@ -35,6 +36,7 @@ export interface SharedStructureIndex {
   readonly attachments: () => SharedAttachmentOwnership;
   readonly retired: () => readonly string[];
   readonly marked: () => readonly string[];
+  readonly splitParts: () => ReadonlyMap<SharedSplitObservationPart, SharedSplitObservations>;
   readonly boundaryVersion: (segment: string) => number;
   readonly joins: () => SharedJoinIndex;
   readonly endpoint: (position: SharedJoinEndpointPosition) => number | null;
@@ -54,12 +56,22 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const boundaryVersions = new Map<string, number>(), bump = (key: string) => { boundaryVersions.set(key, (boundaryVersions.get(key) ?? 0) + 1); };
   let joinIndex: ReturnType<typeof createSharedJoinIndex> | null = null;
   const bindingSegments = new Map<string, readonly string[]>(), segmentBindings = new Map<string, Set<string>>();
+  let building = true;
+  const splitParts = new Map<SharedSplitObservationPart, SharedSplitObservations>();
+  // why: each watched part is read again only when something it reads changed, for all marks at once.
+  const reobserve = (names: readonly SharedSplitObservationPart[], released: readonly string[] = []) => {
+    const view = sharedSplitStoreView(state.roots);
+    for (const name of SHARED_SPLIT_OBSERVATION_PARTS) if (names.includes(name) || !splitParts.has(name)) splitParts.set(name, readSharedSplitObservationPart(view, marked, name));
+    const held = readSharedSplitHolds(view, marked, SHARED_SPLIT_OBSERVATION_PARTS.map(name => splitParts.get(name) ?? new Map()));
+    coverage.clear();
+    for (const key of new Set([...marked, ...released])) updateRecord(key, held.has(key));
+  };
   const updateBinding = (field: string) => {
     const retired = readSharedSplitRetiredBeat(field);
     if (retired !== null) {
+      const adding = state.roots.meta.has(field) && !marked.has(retired);
       if (state.roots.meta.has(field)) marked.add(retired); else marked.delete(retired);
-      coverage.clear(); const held = readSharedSplitRetirements(state.roots, marked);
-      for (const key of new Set([...marked, retired])) updateRecord(key, held.has(key));
+      if (!building) reobserve(adding ? SHARED_SPLIT_OBSERVATION_PARTS : ["predecessor"], [retired]);
       return;
     }
     const prefix = sharedJoinEndpointField(""); if (!field.startsWith(prefix)) return;
@@ -114,7 +126,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     segments.set(key, value); membership(key, value, true); bump(key);
     return text instanceof Y.Text && previous?.text !== text ? text : null;
   };
-  const updateRecord = (key: string, retired = marked.has(key) && readSharedSplitRetirements(state.roots, new Set([key])).has(key)) => {
+  const updateRecord = (key: string, retired = records.get(key)?.retired ?? false) => {
     records.delete(key); removed.delete(key); member(recordNames, cleanId(key), key, false);
     const beat = state.roots.beats.get(key); if (beat === undefined && !state.roots.beats.has(key)) return;
     const fields = readProjectionFields(beat, "beat"), flags: unknown = beat instanceof Y.Map ? beat.get("removals") : null;
@@ -130,14 +142,14 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     if (readProjectionFields(entries, "heading")) headings.add(key);
     if (readSharedHeadingRemovalState(entries.keys(), field => entries.get(field)).removed) removedHeadings.add(key);
   };
-  // why: whether an undone split holds depends on its boundary, joins into it, visuals, gallery and status too.
-  const rereading = new Set<Y.Map<unknown>>([state.roots.visuals, state.roots.gallery, state.roots.statusEvents, state.roots.retiredStatus, state.roots.retiredJoins]);
   const observe = (root: Y.Map<unknown>, update: (key: string) => unknown, fields: readonly string[], textChanges = false) => {
     const listener: Parameters<typeof root.observeDeep>[0] = (events, transaction) => guardSharedCallback(state, () => {
       if (root === state.roots.beats || root === state.roots.segments) coverage.clear();
       if (root === state.roots.beats) joinIndex?.changed(events);
       const changed = new Set<string>(), texts = new Map<Y.Text, string>(), rescanned = new Set<Y.Text>();
-      let reread = rereading.has(root) || root === state.roots.beats && events.some(event => !event.path.length || event.path[1] === "joins");
+      const reread = new Set<SharedSplitObservationPart>(root === state.roots.visuals || root === state.roots.gallery ? ["attachments"]
+        : root === state.roots.statusEvents || root === state.roots.retiredStatus ? ["status"] : root === state.roots.retiredJoins ? ["joins"] : []);
+      if (root === state.roots.beats && events.some(event => !event.path.length || event.path[1] === "joins")) reread.add("joins");
       for (const event of events) {
         if (!event.path.length && event instanceof Y.YMapEvent) for (const key of event.keysChanged) { if (typeof key === "string") changed.add(key); }
         else if (root === state.roots.beats && marked.has(String(event.path[0]))) changed.add(String(event.path[0]));
@@ -148,18 +160,19 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
         else if (root === state.roots.headings && event.path.length === 1 && event instanceof Y.YMapEvent) changed.add(String(event.path[0]));
       }
       for (const key of changed) { const text = update(key); if (text instanceof Y.Text) rescanned.add(text); }
-      if (root === state.roots.segments && changed.size) reread = true;
+      if (root === state.roots.beats && [...changed].some(key => marked.has(key))) for (const name of ["record", "boundaries", "predecessor"] as const) reread.add(name);
+      if (root === state.roots.segments && changed.size) { reread.add("boundaries"); reread.add("predecessor"); }
       if (texts.size) for (const change of embeds.read(transaction)) {
         const key = texts.get(change.text), value = key === undefined ? undefined : segments.get(key);
         if (key === undefined || rescanned.has(change.text) || value?.text !== change.text) continue;
         const boundary = readSharedBoundaryEmbed(change.value); if (!boundary) continue;
-        reread = true; membership(key, value, false);
+        reread.add("boundaries"); reread.add("predecessor"); membership(key, value, false);
         const identity = change.identity, id = identity.client + ":" + identity.clock;
         if (change.delta === 1) value.boundaries.set(id, { identity, boundary }); else value.boundaries.delete(id);
         bump(key);
         membership(key, value, true);
       }
-      if (reread && marked.size) { coverage.clear(); const held = readSharedSplitRetirements(state.roots, marked); for (const key of [...marked]) updateRecord(key, held.has(key)); }
+      if (reread.size && marked.size) reobserve([...reread]);
     });
     root.observeDeep(listener); return () => root.unobserveDeep(listener);
   };
@@ -167,6 +180,9 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   for (const key of state.roots.beats.keys()) updateRecord(key);
   for (const key of state.roots.headings.keys()) updateHeading(key);
   for (const key of state.roots.meta.keys()) updateBinding(key);
+  building = false;
+  // why: every mark is read once after all are known, not once per mark, so building an index reads each mark once.
+  if (marked.size) reobserve(SHARED_SPLIT_OBSERVATION_PARTS);
   const stops = [observe(state.roots.segments, updateSegment, ["head", "text"], true), observe(state.roots.beats, updateRecord, ["id", "segment", "removals"]),
     observe(state.roots.headings, updateHeading, ["id"]), observe(state.roots.visuals, key => { if (attachmentsReady) updateVisual(key); }, ["beat"]),
     observe(state.roots.gallery, key => { if (attachmentsReady) updateGallery(key); }, ["beat"]), observe(state.roots.meta, updateBinding, []),
@@ -206,6 +222,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
     } return attachmentIndex; },
     boundaryVersion: (segment: string) => boundaryVersions.get(segment) ?? 0,
     marked: () => Object.freeze([...marked].sort()),
+    splitParts: () => splitParts,
     retired: () => Object.freeze([...marked].filter(key => records.get(key)?.retired).sort()),
     records: (name: string) => Object.freeze([...(recordNames.get(cleanId(name)) ?? [])].flatMap(key => { const record = records.get(key); return record ? [record] : []; })),
     candidates: (name: string, heading: boolean) => Object.freeze([...(heading ? headingNames.get(name) : names.get(cleanId(name))) ?? []]),

@@ -6,10 +6,10 @@ import type { SharedPreparationResult, SharedPreparationView, SharedPreparedWrit
 import { applySharedMapWrites, createSharedPreparation } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
-import { planSharedSplitRetirement, readSharedSplitRetired, readSharedStructureStream } from "./structure-plan.ts";
+import { planSharedSplitRetirement, readSharedPlannedSplitObservation, readSharedSplitRetired, readSharedStructureStream, sharedStructurePlanIndex } from "./structure-plan.ts";
 import { readProjectionFields } from "./projection-reader.ts";
 import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
-import { readSharedSplitObservation, readSharedSplitObservationPart, sharedSplitRetiredField, sharedSplitRetireHolds, sharedSplitStoreView } from "./split-retirement.ts";
+import { readSharedSplitObservationPart, sharedSplitRetiredField, sharedSplitRetireHolds, sharedSplitStoreView } from "./split-retirement.ts";
 import { readSharedBeatShape, readSharedLiveStructure } from "./undo-removal.ts";
 import { collabState } from "./state.ts";
 
@@ -52,7 +52,7 @@ export function prepareSharedSplitRetire(operation: SharedSplitRetire, view: Sha
     return readSharedSplitRetired(view, operation.beat) ? { ok: true, writes: [], apply: () => undefined } : { ok: false, reason: "missing-target" };
   }
   planSharedSplitRetirement(view, operation.beat, true);
-  const writes: SharedPreparedWrite[] = [{ kind: "set", path: ["meta", sharedSplitRetiredField(operation.beat)], value: { observed: readSharedSplitObservation(view, operation.beat) } }];
+  const writes: SharedPreparedWrite[] = [{ kind: "set", path: ["meta", sharedSplitRetiredField(operation.beat)], value: { observed: readSharedPlannedSplitObservation(view, sharedStructurePlanIndex(view), operation.beat) } }];
   return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }
 

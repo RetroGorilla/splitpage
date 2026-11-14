@@ -419,120 +419,102 @@ for `split-before`) into the segment text and a record for the new beat. A
 command with a `split` or `split-before` records a `beat-split` part: the new
 beat (its writer-namespaced key), the source beat, and a comparison of the new
 beat without its characters: its record without its stamp, status and events,
-visual and gallery records, its row's pieces and the identity of its boundary
-atom. The stamp is left out because undo never takes a stamp back (rule 35):
-typing in the new beat and undoing that typing leaves a stamp that must not
-use the split's undo up. The comparison of a restored beat (below) leaves it
-out for the same reason. A visual is compared by its fields and the characters
-it shows with their marks, not by its mark records, so typing undone in the
-new beat's visual leaves no difference; text someone typed there and left uses
-the undo up. A heading made from the new beat's first line writes its boundary
-again after the heading name, so the boundary's identity changes and the undo
-is used up.
+visual and gallery records, its row's pieces, how many boundary atoms it has
+and the boundary just before its own. The stamp is left out because undo never
+takes a stamp back (rule 35): typing in the new beat and undoing that typing
+leaves a stamp that must not use the split's undo up. The comparison of a
+restored beat (below) leaves it out for the same reason. A visual is compared
+by its fields and the characters it shows with their marks, not by its mark
+records, so typing undone in the new beat's visual leaves no difference; text
+someone typed there and left uses the undo up. A heading made from the new
+beat's first line, or a heading or a beat put between the source beat and the
+new beat, changes the boundary just before the new beat's own, so the undo is
+used up.
 
 Two operations serve only undo, as `text-restore` does. Neither touches the
 segment text:
 
 - `split-retire` writes a mark under `meta` (`splitRetired:<beat>`) that holds
-  what the undo saw of the new beat. Every write gets a new identity, so the
-  mark lists identities, not values: the entries of the new beat's record
-  (without stamps, rule 35), its boundary atoms, the joins into it from other
-  beats, its visual and gallery records with their text, and its status
-  events. They are read when the mark is written, on the copy that writes it.
+  what the undo saw of the new beat, read from the planned state of its
+  operation list. It is the value every reader computes after that list.
 - `split-restore` deletes the mark. It is refused (`existing-boundary`) while
   the new beat has a row.
 - Both are read like any other operation, so a hand-made one from another copy
   is refused only when its beat or segment cannot be found.
 
-While the mark holds, which means what it lists still equals the new beat as
-stored, the block interpreter reads the new beat's boundary as text of the
-beat before it: the new beat's characters join the source beat and its record,
-visual and status stay stored without a row, and nothing shows in recovery.
-Every reader of beat records gives the interpreter the same answer (the full
-and incremental projections, the structure index and the preparation's
-planned state), so every copy agrees in every delivery order.
+While the mark holds, which means it still equals what the readers see of the
+new beat now, the block interpreter reads the new beat's boundary as text of
+the beat before it: the new beat's characters join the source beat and its
+record, visual and status stay stored without a row, and nothing shows in
+recovery.
 
-The match is monotonic: the watch compares what has ever been there, not only
-what is live, so a change taken back still counts, and a mark that stopped
-matching never matches again. Per watched part:
+The hold is judged on the new beat as it is now (assumed rule 103): a change
+taken back leaves the beat as the undo saw it, so the split is undone again.
+One table, `SHARED_SPLIT_WATCHED_PARTS`, defines each watched part once, and
+every reader uses it: the full and incremental projections, the structure
+index and the planned state of an operation list. The planned state asks the
+same question of the planned document after each operation of a list, for
+the marked beats whose parts that operation wrote, so a list is prepared as
+every copy will read it after each of its operations. The parts:
 
-| Part | What "ever there" reads |
+| Part | Read as it is now |
 | --- | --- |
-| record entries | every key of the beat's record with the identity of its last write; a deleted key keeps its entry and identity in the map |
-| boundary atoms | the identities of the beat's live boundary atoms; deleting one is final, and only an operation on the beat itself writes one, deleting the old one in the same step |
-| joins into the beat | every join entry into the beat on other beats, with its retirement; join entries are only ever retired, never deleted |
-| visual and gallery records | every version of every record of the beat, live or deleted, and inside a live one every entry and the text it shows; each insertion into a text leaves an entry in its mark records |
-| status events | every status event of the beat, with its retirement; both are only ever added |
+| record | the new beat's record, without stamps (rule 35) |
+| boundaries | how many boundary atoms of the new beat its segment holds |
+| predecessor | the boundary just before the new beat's own, passing over other undone splits' boundaries; a boundary read as text joins the block before it, so the undo holds only while that block is still the source beat |
+| joins | the joins into the new beat from other beats that are not retired |
+| attachments | the new beat's visual and gallery records, without the birth records an insertion leaves in their mark records |
+| status | the new beat's standing status events |
 
-Garbage collection removes the content of deleted entries but keeps their keys
-and identities, which is enough for the beat's record, its joins and its
-status. A deleted visual or gallery record would lose the field naming its
-beat, so every shared document keeps, through garbage collection, a deleted
-visual or gallery record and its `beat` entry (`attachment-retention.ts`);
-its other fields and its text are collected as usual. A boundary atom deleted
-and collected cannot be seen; no operation creates and then deletes an extra
-one.
+Every part is read through the library's public calls only: the stored
+document through a small read view over its maps and texts, the planned one
+through the preparation view. The structure index and the watch read a
+boundary atom with the same reader, so an embed that names the beat but is no
+boundary changes neither (literal: a hand-made `{ b, extra }` embed).
 
-One table, `SHARED_SPLIT_WATCHED_PARTS`, defines both what the readers watch
-and which staged writes of an operation list touch it. Within one list, a
-staged write to a watched part ends the retirement for the rest of the list,
-as every copy reads it after that write, and a staged delete of something that
-is not there changes nothing. A test iterates the table: for every part, a
-write it recognises ends the retirement both in the planned state and in the
-readers, and an unrelated write ends neither. Literals, each as one list and as
-separate lists, in both delivery orders with a late joiner:
-- another writer, without seeing the undo, sets a field and clears it, adds a
-  picture and deletes it, sets a status and retracts it, joins a beat in and
-  unjoins it, or types in the visual and deletes it (separate lists only: a
-  list cannot name text it inserts): the split stays and the redo is used up;
-- on the copy that saw the undo, a picture added to the hidden beat and deleted
-  brings the split back, so text inserted into the new beat afterwards lands in
-  it, and a deletion past the source beat is refused, in one list as in
-  separate lists;
-- retiring a status the hidden beat had brings the split back.
+A test walks the table: for every part, a change and the change taken back,
+both staged in a list and written to the store, give the planned state and the
+readers the same answer at each step. Literals, two copies in three delivery
+orders with a late joiner:
+- another writer, while the undo is in flight, changes the new beat (a field,
+  its status, its visual, a gallery picture, a removal, a join into it): the
+  split stays and the redo is used up;
+- another writer, while the undo is in flight, makes such a change and takes
+  it back (a field set and cleared, a picture added and deleted, a status set
+  and retracted, a beat joined in and unjoined, as one list and as separate
+  lists; text typed into the visual and deleted, as separate lists, since a
+  list cannot name text it inserts): the split is undone on every copy;
+- on the copy that saw the undo, a gallery picture added to the hidden beat and
+  deleted, then text for the new beat: refused in one list as in separate
+  lists, and the document stays undone; with a deletion in the source beat as
+  the third operation instead, both give `abd` / `ef`;
+- another writer adds a scene heading above the new beat: seen before the undo,
+  the undo is used up; while the undo is in flight, the split stays and the
+  heading is named `Q`; another writer's split of the source beat, putting a
+  beat between the source and the new beat while the undo is in flight, keeps
+  the split.
 
-The structure index and the watch recognise a boundary atom with the same
-reader, so an embed that names the beat but is no boundary changes neither
-(literal: a hand-made `{ b, extra }` embed).
+Covered by the predecessor part: a heading or a beat put between the source
+beat and the new beat, including by a paste. Not a change to the new beat: the
+source beat joined into the beat before it, and text pasted at the end of the
+source beat; the new beat's text then still joins the source beat.
 
-Cost. All marks are read in one pass per part: one walk of each segment that
-holds a marked beat, and one scan each of the beats' joins, the visuals and
-gallery, and the status events. The incremental projection keeps each part
-until something it reads changes. The boundary part follows the structure
-index's count of boundary changes per segment, so typing reads no part again.
-Pinned in `split-retirement-cost.test.ts`: typing one character beside 1 or 100
-undone splits of one beat reads 0 observation entries; a fresh projection
-reads 9 with 1 mark and 207 with 100.
+Declared limit: a change to the new beat that is taken back before the undo
+arrives does not keep the split.
+
+Cost. All marks are read in one pass per part. The incremental projection
+keeps each part until something it reads changes; the boundary and predecessor
+parts follow the structure index's count of boundary changes per segment, so
+typing reads no part again. The structure index keeps each part and reads
+again only the part a change touched, and reads every mark once when it is
+built. Pinned in `split-retirement-cost.test.ts`: typing one character beside 1
+or 100 undone splits of one beat reads 0 observation entries; a fresh
+projection reads 11 with 1 mark and 308 with 100.
 
 Declared limit, retention: a redo deletes its mark, but a mark whose redo is
-used up, because a change made without seeing the undo stopped it matching,
-stays in `meta` (100 such marks took about 59,000 characters). A mark that
-stopped matching can never match again, because the match is monotonic, so a
-later cut may delete it. The deleted visual and gallery records kept for the
-watch stay too, one record entry and one `beat` entry each. That cut is the
-retention work in section 6 of the collaboration plan (garbage collection,
-retained recovery content and quotas). Nothing deletes either today.
-
-When another writer changes or removes the new beat without having seen the
-undo (a field, its status, a visual or gallery record, a removal, or a join of
-another beat into it), what the mark lists no longer matches on any copy
-once that change arrives. The undo then does not hold and the split stays,
-with the other writer's change on the new beat: the row shows it, a removed
-new beat is in recovery, and a joined beat sits in the new beat's row. This is
-the end the same change reaches when made after the undo was seen: the undo is
-used up. Typing in the new beat is not such a change: its characters join the
-source beat, and only its stamp moves.
-
-Undo writes only while the source beat is live, the boundary is stored, the
-split stands and the new beat compares unchanged (its record holds its removal
-flags, so a removed new beat does not compare); otherwise it is used up. Redo
-writes while the source beat is live and the mark holds; when the undo no
-longer holds, the redo is used up and the split stays as it is. A used-up
-part's inverse points the other way, so in a record with other parts a later
-redo never takes the split back. Text typed in either beat comes back to its
-side on redo. A split in a joined row is undone the same way and the row comes
-back whole (rule 36). Literals in `undo-split.test.ts`, including each of the
-six changes made while the undo is in flight.
+used up stays in `meta`. A later cut may delete it: the retention work in
+section 6 of the collaboration plan (garbage collection, retained recovery
+content and quotas). Nothing deletes a mark today.
 
 A split also makes the new beat's empty visual (#1545). It stays stored with
 the new beat while the split is undone and comes back with it on redo. Literal
