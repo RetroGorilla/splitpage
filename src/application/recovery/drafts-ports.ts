@@ -16,7 +16,7 @@ import type { CapabilityPort } from "../session/ports.ts";
 
 export const DRAFTS_DETACHED = "DETACHED";
 
-export type DraftDetachRefusal = "disposed" | "detached" | "stopped" | "writing" | "discarding" | "flushing" | "retrying" | "pending" | "no-owner";
+export type DraftDetachRefusal = "disposed" | "detached" | "stopped" | "writing" | "discarding" | "restoring" | "flushing" | "retrying" | "pending" | "no-owner";
 
 export type DraftDetach = { readonly ok: true } | { readonly ok: false; readonly reason: DraftDetachRefusal };
 
