@@ -15,9 +15,9 @@ their outcome `notified`; the buffer report port respects that marker.
 
 Shared entry selects ports that bypass `typeAtMarks` for Split cells (D16), skip
 the old whole-field input/blur synchronization, and keep Split composition away
-from standalone undo. The ordinary UI refresh after input remains. Standalone
-render undo tracking is suspended by changing its callback only at entry, then
-restored at leave; its cold call path gains no shared-mode read. An unused
+from standalone undo. The ordinary UI refresh after input remains. Render undo
+tracking uses the common guard from the merged Writer cut, and the switch owns
+its undo route's lifetime. C7 adds no read to the cold call path. An unused
 adapter constructs no buffer and reads no shared text.
 
 The rows input, keydown and drop handlers and the clipboard copy/cut and paste
@@ -66,8 +66,11 @@ no unmerged Writer code and adds no second caret mapping.
 
 The next C7 part supplies values, gallery and record ports, comment ports,
 title/scene-name bindings, active-Split empty-script handling, and the visual
-commit's B-roll and name-derived people records. Structure callers wait for
-their command cut: pass named `sharedStructurePorts`, resolve minted ids in
+commit's B-roll and name-derived people records. Structure commands are merged;
+their callers belong to that next part: pass named `sharedStructurePorts`, resolve minted ids in
 `addRow`, `addRowAndFocus`, `splitField` and `splitCellField`, and retain equivalent
-buffer and flow joins. Until a caller has its shared form, rule 73's visible
+buffer and flow joins. A visual split is refused as
+`visual-split-in-shared-session`; adding a beat has the skipped undo refusal
+`undo-unsupported:segment-create`. Both notices must appear once when those
+callers are connected. Until a caller has its shared form, rule 73's visible
 refusal remains. No additional product rule is assumed here.

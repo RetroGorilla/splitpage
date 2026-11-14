@@ -33,15 +33,15 @@
     },
     {
       "label": "C7 shared paint calls standalone undo tracking",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "resumeTracking ??= suspendStandaloneRenderTracking();",
-      "replace": ""
+      "file": "src/bootstrap/wiring/ports/editing.ts",
+      "find": "if (!sharedUndoRoute()) undoOwner().track();",
+      "replace": "undoOwner().track();"
     },
     {
       "label": "C7 leave never resumes standalone render tracking",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "[release, () => mountCompositionFeature()",
-      "replace": "[null, () => mountCompositionFeature()"
+      "file": "src/bootstrap/wiring/undo.ts",
+      "find": "if (sharedRoute === route) sharedRoute = null;",
+      "replace": "void route;"
     },
     {
       "label": "C7 leave keeps standalone focus in shared mode",
