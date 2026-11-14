@@ -173,19 +173,19 @@ test("different: a new command clears redo; nothing is parked", () => {
   assert.deepEqual(undo.redo(), { ok: false, empty: true });
 });
 
-test("top item: an entry whose change is already gone is used up, adds no redo and reaches no older entry", () => {
+test("top item, rule 90: an entry whose change is already gone is used up, says so, adds no redo and reaches no older entry", () => {
   const { undo, run, state } = harness();
   run(typed("R1", "a1"));
   run(typed("R2", "a2"));
   state.next = { ok: true, effective: false, inverse: typed("R2"), selection: null };
-  assert.deepEqual(undo.undo(), { ok: true, effective: false, label: "typing", selection: null });
+  assert.deepEqual(undo.undo(), { ok: true, effective: false, label: "typing", selection: null, reason: "used-up" });
   assert.equal(state.reversed.length, 1);
   assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
   assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "typing", selection: null });
   assert.deepEqual(state.reversed[1]?.record, typed("R1", "a1"));
 });
 
-test("a refusal from the executor leaves both stacks as they were", () => {
+test("rule 71: a refusal from the executor that a later state can lift leaves both stacks as they were", () => {
   const { undo, run, state } = harness();
   run(typed("R1", "a1"));
   run(typed("R2", "a2"));
@@ -211,24 +211,26 @@ test("an executor that throws leaves the entry on the stack and the error reache
 const STRUCTURE_COMMANDS: readonly SharedStructureCommand[] = ["segment-create", "split", "split-before", "join", "join-glue", "remove", "restore",
   "segment-move", "heading-create", "heading-finalize", "heading-remove"];
 
-for (const command of STRUCTURE_COMMANDS) test(`not yet: undo of ${command} is refused by name, asks the executor nothing and keeps the stack`, () => {
+for (const command of STRUCTURE_COMMANDS) test(`rule 71: an undo of ${command} the executor cannot reverse is skipped once, asks the executor nothing, and the next undo reaches the step before`, () => {
   const { undo, run, state } = harness();
   run(typed("R1", "a1"));
   run(structure(command));
-  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:" + command });
-  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:" + command });
-  assert.deepEqual(state.reversed, []);
-  assert.deepEqual(undo.sizes(), { undo: 2, redo: 0, dropped: 0 });
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:" + command, skipped: true });
+  assert.equal(state.reversed.length, 0);
+  assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 1, redo: 0, dropped: 0 }, 1]);
+  assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "typing", selection: null });
+  assert.deepEqual(state.reversed.map(item => item.record), [typed("R1", "a1")]);
+  assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 1, dropped: 0 }, 1]);
 });
 
-test("not yet: one unsupported part refuses the whole entry before any part is reversed", () => {
+test("rule 71: one unsupported part skips the whole entry before any part is reversed", () => {
   const { undo, run, state } = harness(["text"]);
   const mixed: SharedUndoRecord = { label: "mixed", selection: null, typing: null, parts: [...typed("R1", "a1").parts,
     { kind: "status", target: { scope: "beat", record: ref("R1") }, event: ref("e1"), value: "ready" }] };
   run(mixed);
-  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:status" });
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:status", skipped: true });
   assert.deepEqual(state.reversed, []);
-  assert.equal(undo.sizes().undo, 1);
+  assert.deepEqual([undo.sizes().undo, undo.skipped()], [0, 1]);
 });
 
 test("recording gap: an undo asked for while a command runs is refused and the earlier entry stays", () => {
@@ -326,6 +328,73 @@ test("decided: a cut and a paste into the same cell are two entries even in the 
 
 test("a remote change has no way in: the owner takes local commands, undo and redo and nothing else", () => {
   const { undo } = harness();
-  assert.deepEqual(Object.keys(undo).sort(), ["breakGroup", "hold", "lifetime", "perform", "redo", "reset", "serial", "sizes", "undo"]);
+  assert.deepEqual(Object.keys(undo).sort(), ["breakGroup", "hold", "lifetime", "perform", "redo", "reset", "serial", "sizes", "skipped", "undo"]);
   assert.equal(Object.isFrozen(undo), true);
+});
+
+const unsupported = (label: string): SharedUndoRecord => ({ label, selection: null, typing: null, parts: [{ kind: "status", target: { scope: "beat", record: ref("R1") }, event: ref("e1"), value: "ready" }] });
+
+test("rule 71: one unsupported entry on top of two supported ones: three undos give the skip, then the two older steps", () => {
+  const { undo, run, state } = harness();
+  run(typed("R1", "a1")); state.now = 5000; run(typed("R2", "a2")); run(unsupported("status"));
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:status", skipped: true });
+  assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "typing", selection: null });
+  assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "typing", selection: null });
+  assert.deepEqual(state.reversed.map(item => item.record), [typed("R2", "a2"), typed("R1", "a1")]);
+  assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 2, dropped: 0 }, 1]);
+});
+
+test("rule 71: the same for redo: an inverse the executor refuses for good is skipped, adds nothing to undo, and the next redo reaches the one after", () => {
+  const { undo, run, state } = harness();
+  run(typed("R1", "a1")); state.now = 5000; run(typed("R2", "a2"));
+  undo.undo(); undo.undo();
+  state.next = { ok: false, reason: "undo-unsupported:split" };
+  assert.deepEqual(undo.redo(), { ok: false, reason: "undo-unsupported:split", skipped: true });
+  assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 1, dropped: 0 }, 1]);
+  assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "typing'", selection: null });
+  assert.deepEqual(state.reversed.at(-1)?.record, { ...typed("R2", "a2"), label: "typing'" });
+  assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
+});
+
+test("rule 71: a dropped undo adds nothing to redo, and redo entries already there stay reachable", () => {
+  const { undo, run, state } = harness();
+  run(typed("R1", "a1")); state.now = 5000; run(unsupported("status")); state.now = 10000; run(typed("R2", "a2"));
+  undo.undo();
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:status", skipped: true });
+  assert.deepEqual(undo.sizes(), { undo: 1, redo: 1, dropped: 0 });
+  assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "typing'", selection: null });
+});
+
+test("rule 71: a step skipped in the middle of typing ends the group, so the next letters are a new entry and the older one stays its own", () => {
+  const { undo, run, state } = harness();
+  run(typed("R1", "a1")); state.now = 100; run(unsupported("status"));
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:status", skipped: true });
+  state.now = 200; run(typed("R1", "a2"));
+  assert.deepEqual(undo.sizes(), { undo: 2, redo: 0, dropped: 0 });
+  undo.undo(); undo.undo();
+  assert.deepEqual(state.reversed.map(item => item.record), [typed("R1", "a2"), typed("R1", "a1")]);
+});
+
+test("rule 71: an executor refusal that can never succeed later is skipped and counted; one that can is kept and not counted", () => {
+  const { undo, run, state } = harness();
+  run(typed("R1", "a1")); state.now = 5000; run(typed("R2", "a2")); state.now = 10000; run(typed("R3", "a3"));
+  state.next = { ok: false, reason: "missing-target" };
+  assert.deepEqual(undo.undo(), { ok: false, reason: "missing-target" });
+  state.next = { ok: false, reason: "invalid-operation" };
+  assert.deepEqual(undo.undo(), { ok: false, reason: "invalid-operation", skipped: true });
+  state.next = { ok: false, reason: "undo-unsupported:split" };
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:split", skipped: true });
+  assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 1, redo: 0, dropped: 0 }, 2]);
+  undo.reset();
+  assert.equal(undo.skipped(), 0);
+});
+
+test("rule 71: not now stays not now: during a command, inside an undo and while held, the entry stays and nothing is counted", () => {
+  const { undo, run } = harness();
+  run(unsupported("status"));
+  const release = undo.hold();
+  assert.deepEqual(undo.undo(), { ok: false, reason: "held" });
+  release();
+  undo.perform(() => { assert.deepEqual(undo.undo(), { ok: false, reason: "command-in-progress" }); return null; });
+  assert.deepEqual([undo.sizes().undo, undo.skipped()], [1, 0]);
 });
