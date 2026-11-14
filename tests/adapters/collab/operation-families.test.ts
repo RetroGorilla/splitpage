@@ -174,5 +174,6 @@ test("the composition's registration is reached only through the switch module; 
   const files = (dir: string): string[] => readdirSync(root + dir, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? files(dir + "/" + entry.name) : /\.ts$/.test(entry.name) ? [dir + "/" + entry.name] : []);
   assert.deepEqual(files("src").filter(path => /registerSharedOperationFamilies|operation-families\.ts|sharedAuthorPort|shared-author\.ts/.test(readFileSync(root + path, "utf8"))).sort(),
-    ["src/adapters/collab/operation-families.ts", "src/bootstrap/wiring/ports/shared-author.ts", "src/bootstrap/wiring/ports/writer-flow.ts", "src/bootstrap/wiring/shared-session.ts"]);
+    ["src/adapters/collab/operation-families.ts", "src/bootstrap/wiring/ports/empty-script.ts",
+      "src/bootstrap/wiring/ports/shared-author.ts", "src/bootstrap/wiring/ports/writer-flow.ts", "src/bootstrap/wiring/shared-session.ts"]);
 });

@@ -30,6 +30,7 @@ import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts"
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { FlowWriterPorts, WriterFeaturePorts } from "../../src/features/writer/ports.ts";
+import type { EmptyScriptPorts } from "../../src/features/empty-script/ports.ts";
 import type { BufferedFieldPorts } from "../../src/application/editing/buffered-field.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
@@ -94,6 +95,24 @@ export function fakePdfPrinter() {
   const pdf = new Uint8Array([37, 80, 68, 70]);
   const pdfPrinter: PdfPrinter = { print: async (html, doc) => { pages.push({ html, doc }); return pdf; } };
   return { pdfPrinter, pages, pdf };
+}
+
+export function fakeEmptyScriptPorts(initial: DocumentView) {
+  const reader = fakeDocument(initial), notices = fakeNotices(), commands = new Set<() => boolean>();
+  const created: string[] = [], placed: { rowId: string; offset: number }[] = [];
+  const state = { epoch: 1, allowed: true, placeable: true, held: 0, holdRefusal: null as string | null, createRefusal: null as string | null };
+  const ports: EmptyScriptPorts = {
+    host: document.body.appendChild(document.createElement("div")), document: reader.document,
+    lifetime: { epoch: () => state.epoch, beforeCommand: listener => { commands.add(listener); return () => { commands.delete(listener); }; } },
+    edits: { allowed: () => state.allowed }, report: outcome => { notices.notices.show(outcome.kind === "rejected" ? outcome.reason : outcome.kind, "warn"); },
+    hold: () => {
+      if (state.holdRefusal) return { ok: false, reason: state.holdRefusal };
+      state.held++; return { ok: true, release: () => { state.held--; } };
+    },
+    create: text => { created.push(text); return state.createRefusal ? { ok: false, reason: state.createRefusal } : { ok: true, rowId: "created" }; },
+    place: (rowId, offset) => { placed.push({ rowId, offset }); return state.placeable; }
+  };
+  return { ports, state, reader, notices, commands, created, placed };
 }
 
 export function fakeWriterBufferEffects() {
