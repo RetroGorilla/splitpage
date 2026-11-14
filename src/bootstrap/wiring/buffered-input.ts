@@ -3,16 +3,16 @@ import type { BufferedFieldPorts } from "../../application/editing/buffered-fiel
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import { onBeforePaint, onPainted, render } from "../../features/rows/render.ts";
-import type { SceneNameBufferPorts } from "../../features/rows/scene-name-buffer.ts";
+import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
 import { paintGuard } from "./editor-owners.ts";
 
-export function sharedSceneNamePorts(shared: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): SceneNameBufferPorts {
+export function sharedBufferedInputPorts(shared: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): BufferedInputPorts {
   return {
     field: surface => createBufferedField(shared.bufferedText, surface),
     painted: createPaintedBeats(shared.paintedText),
     report: shared.bufferedText.report,
     shown: edit => paintGuard().whileShown(edit),
-    repaintRows: render,
+    repaint: render,
     onPainted,
     beforePaint: onBeforePaint
   };

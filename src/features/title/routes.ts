@@ -1,5 +1,9 @@
 import { titleCommand } from "../../application/commands/title.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
+import { TITLE_FIELD_KEY, unsettledTitle } from "../../application/editing/buffered-field-key.ts";
+import { beatPos } from "../../core/flow/flow.ts";
+import { bindBufferedInput } from "../common/buffered-input.ts";
+import type { BufferedInputPorts } from "../common/buffered-input.ts";
 
 interface TitleRoutePorts {
   readonly run: CommonDocumentSession["run"];
@@ -11,6 +15,7 @@ interface TitleRoutesMount {
   readonly main: HTMLInputElement;
   readonly writer: HTMLInputElement;
   readonly ports: TitleRoutePorts;
+  readonly shared?: BufferedInputPorts;
 }
 
 export interface TitleRoutes {
@@ -20,6 +25,20 @@ export interface TitleRoutes {
 export function mountTitleRoutes(mount: TitleRoutesMount): TitleRoutes {
   const ports = mount.ports;
   let open = true;
+
+  if (mount.shared) {
+    const painted = mount.shared.painted, stored = () => painted.stored(TITLE_FIELD_KEY);
+    const bound = bindBufferedInput({
+      inputs: [mount.main, mount.writer], key: TITLE_FIELD_KEY, stored, changed: ports.pageTitle,
+      unsettled: text => unsettledTitle(text, stored() ?? ""),
+      position: offset => beatPos(TITLE_FIELD_KEY, offset), owns: pos => pos.kind === "beat" && pos.rowId === TITLE_FIELD_KEY
+    }, mount.shared);
+    return {
+      dispose(): void {
+        if (open && bound.dispose()) open = false;
+      }
+    };
+  }
 
   function take(input: HTMLInputElement): boolean {
     const current = ports.current();
