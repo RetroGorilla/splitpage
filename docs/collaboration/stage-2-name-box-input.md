@@ -49,7 +49,8 @@ space available is the limit minus the unselected prefix and suffix. It writes
 the longest prefix that fits, excluding a trailing half-pair, keeps the suffix,
 and places the caret after that prefix. Truncation is silent, like native
 maxlength. If no pasted text fits, a collapsed selection writes nothing; a
-nonempty selection is still deleted. Concurrent writers can still produce an
+nonempty selection becomes a deletion, subject to the existing heading hold
+and length verdicts. Concurrent writers can still produce an
 over-limit stored name under the pre-existing rules.
 
 The operations retain the buffer's insertion-before-deletion order at the
@@ -61,9 +62,10 @@ history remain refused in this cut. No standalone listener is changed.
 
 The seeded input histories exercise three native writers with replacement,
 cut and insertion, rotating writers and normal, reversed and duplicated update
-delivery, plus a fresh encoded-state joiner. Their literal result is `aXfY`
-from `abcdef`, replacing `bc` with `X`, cutting `de` and appending `Y` without
-delivery between actions. Their declared-limits table is empty.
+delivery, plus a fresh encoded-state joiner. Four literal histories from `abcdef`
+cover separated and overlapping deletions, prefix removal, and insertion inside
+the text or at its end, with results `aXfY`, `bPQefZ`, `XcYd` and `aXefY`.
+Their declared-limits table is empty.
 
 ## Rule 85 dependency
 

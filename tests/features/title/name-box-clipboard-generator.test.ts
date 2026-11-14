@@ -42,8 +42,20 @@ for (const key of [TITLE_FIELD_KEY, "heading:H1"]) {
     let seed = 0x84c017;
     const limits: readonly string[] = [];
     const violations: string[] = [];
+    const cases = [
+      { replace: [1, 3, "X"], cut: [3, 5, "de"], insert: [6, "Y"],
+        local: [["aXdef", 2], ["abcf", 3], ["abcdefY", 7]], final: "aXfY", caret: 4 },
+      { replace: [2, 4, "PQ"], cut: [0, 1, "a"], insert: [6, "Z"],
+        local: [["abPQef", 4], ["bcdef", 0], ["abcdefZ", 7]], final: "bPQefZ", caret: 6 },
+      { replace: [0, 2, "X"], cut: [4, 6, "ef"], insert: [3, "Y"],
+        local: [["Xcdef", 1], ["abcd", 4], ["abcYdef", 4]], final: "XcYd", caret: 3 },
+      { replace: [1, 3, "X"], cut: [2, 4, "cd"], insert: [6, "Y"],
+        local: [["aXdef", 2], ["abef", 2], ["abcdefY", 7]], final: "aXefY", caret: 5 }
+    ] as const;
+    const visited = new Set<number>();
     for (let round = 0; round < 24; round++) {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const choice = (seed >>> 8) % cases.length, scenario = cases[choice]; assert.ok(scenario); visited.add(choice);
       const h = new Stage1ExecutorHarness([{ id: "R1", text: "beat" }], { title: "abcdef", sections: [{ id: "H1", name: "abcdef", firstSceneId: "R1" }] });
       h.join();
       const late = createMonitoredSharedDocument();
@@ -51,26 +63,27 @@ for (const key of [TITLE_FIELD_KEY, "heading:H1"]) {
       const rotation = seed % 3, roles = [peers[rotation], peers[(rotation + 1) % 3], peers[(rotation + 2) % 3]];
       try {
         const replacement = roles[0], cut = roles[1], insertion = roles[2]; assert.ok(replacement && cut && insertion);
-        replacement.input.focus(); replacement.edge.select(1, 3); replacement.edge.paste("X");
-        cut.input.focus(); cut.edge.select(3, 5); cut.edge.cut();
-        insertion.input.focus(); insertion.edge.select(6); insertion.edge.paste("Y");
+        replacement.input.focus(); replacement.edge.select(scenario.replace[0], scenario.replace[1]); replacement.edge.paste(scenario.replace[2]);
+        cut.input.focus(); cut.edge.select(scenario.cut[0], scenario.cut[1]); cut.edge.cut();
+        insertion.input.focus(); insertion.edge.select(scenario.insert[0]); insertion.edge.paste(scenario.insert[1]);
         assert.deepEqual(roles.map(item => [item?.stored(), item?.input.value, item?.input.selectionStart, item?.reports]),
-          [["aXdef", "aXdef", 2, []], ["abcf", "abcf", 3, []], ["abcdefY", "abcdefY", 7, []]]);
-        assert.equal(cut.edge.copied(), "de");
+          scenario.local.map(([text, offset]) => [text, text, offset, []]));
+        assert.equal(cut.edge.copied(), scenario.cut[2]);
         assert.deepEqual(roles.map(item => item?.session.executed.flatMap(command => command.operations.map(operation => operation.kind))),
           [["text-insert", "text-delete"], ["text-delete"], ["text-insert"]]);
         const order = ["D1", "rev", "dup"][round % 3] as "D1" | "rev" | "dup";
         h.queue.flush(order);
         assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
         const outputs = [h.a, h.b, h.c, late].map(handle => readSharedPaintedText(handle, sharedBufferedTarget(handle, key))?.text);
-        if (outputs.some(value => value !== "aXfY")) violations.push("text");
+        if (outputs.some(value => value !== scenario.final)) violations.push("text");
         assertReplicasAgree("seeded name-box clipboard", outputs.map((output, index) => ({ order: index === 3 ? "late-C" : order,
           replica: index === 0 ? "A" : index === 1 ? "B" : "C", output: [output] })));
         for (const item of peers) item.paint();
-        assert.deepEqual(roles.map(item => [item?.input.value, item?.reports]), [["aXfY", []], ["aXfY", []], ["aXfY", []]]);
-        assert.equal(insertion.input.selectionStart, 4);
+        assert.deepEqual(roles.map(item => [item?.input.value, item?.reports]), [[scenario.final, []], [scenario.final, []], [scenario.final, []]]);
+        assert.equal(insertion.input.selectionStart, scenario.caret);
       } finally { for (const item of peers) item.close(); destroySharedDocument(late); h.destroy(); document.body.innerHTML = ""; }
     }
     assert.deepEqual(violations, limits);
+    assert.deepEqual([...visited].sort(), [0, 1, 2, 3]);
   });
 }
