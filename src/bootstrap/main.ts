@@ -46,6 +46,7 @@ import { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 import { mountSettingsFeature, mountAppDataFeature } from "./wiring/settings.ts";
 import { mountNewTabFeature } from "./wiring/newtab.ts";
 import { showStartupFailure } from "./startup/failure-screen.ts";
+import { mountRecoveryPanelFeature } from "./wiring/recovery-panel.ts";
 
 function failStartup(error: unknown): void {
   console.error(error);
@@ -125,4 +126,3 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountRecoveryPanelFeature();
   startAppWhenReady(document, wiring, failStartup);
 }
-import { mountRecoveryPanelFeature } from "./wiring/recovery-panel.ts";
