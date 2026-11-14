@@ -17,7 +17,8 @@ import { fileTitleCommand, titleCommand } from "../../../src/application/command
 import { documentIdStamp, editStamp } from "../../../src/application/commands/save-stamps.ts";
 import { flowCommand, initializeFlowParagraphs, standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
-import { retagCommand, tagCellsCommand } from "../../../src/application/commands/production-records.ts";
+import { deleteTagsCommand, gearQuickAddCommand, retagCommand, tagCellsCommand } from "../../../src/application/commands/production-records.ts";
+import { sharedRecordPorts } from "../../../src/bootstrap/wiring/ports/shared-records.ts";
 import { SHARED_SESSION_DISABLED } from "../../../src/application/session/ports.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
@@ -124,7 +125,7 @@ for (const literal of galleryCases) test(`rule 73: served gallery ${literal.reas
   } finally { h.session.dispose(); set.close(); }
 });
 
-for (const reason of ["flow-clipboard-records-unavailable", "move-in-shared-session", "unhandled-kind", "flow-operations-empty", "flow-operations-unavailable"]) {
+for (const reason of ["flow-clipboard-records-unavailable", "move-in-shared-session", "unhandled-kind", "flow-operations-empty", "flow-operations-unavailable", "visual-selection-unavailable", "buffer-heading-changed"]) {
   test(`rule 73: named refusal ${reason} maps to the warning sentence once`, () => {
     const set = replicas();
     const notices = fakeNotices();
@@ -135,6 +136,25 @@ for (const reason of ["flow-clipboard-records-unavailable", "move-in-shared-sess
       assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
       assert.deepEqual(encodeSharedState(set.a), before);
       assert.deepEqual(h.undo, []);
+    } finally { h.session.dispose(); set.close(); }
+  });
+}
+
+for (const reason of ["tag-text-rewrite", "records-without-id"]) {
+  test(`rule 73: served record builder refusal ${reason} warns once without writes or standalone undo`, () => {
+    const set = replicas(2, { rows: [{ id: "R1", audioText: "abc", visualText: "Cup" }] }), notices = fakeNotices();
+    const h = sharedHarness(adapterReplica(set.a), { refused: sharedCommandRefusalNotice(notices.notices) });
+    const author = sharedAuthorPort({ handle: () => set.a, name: stamps.editor.name });
+    const shared = sharedRecordPorts({ handle: () => set.a, author: author.next });
+    try {
+      const before = encodeSharedState(set.a);
+      const command = reason === "tag-text-rewrite"
+        ? deleteTagsCommand([{ cat: "prop", name: "Cup", unlabel: true }], rewrites, stamps, shared)
+        : gearQuickAddCommand(() => ({ remove: [], register: [{ id: "", cat: "gear", name: "Cup", owner: "", notes: "", status: "needed" }], added: 1, removed: 0 }), shared);
+      assert.deepEqual(h.session.run(command), { kind: "rejected", reason, notified: true });
+      assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual([h.undo, h.executed, h.published], [[], [], []]);
     } finally { h.session.dispose(); set.close(); }
   });
 }

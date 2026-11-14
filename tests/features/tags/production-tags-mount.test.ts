@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer, applyTag } from "../../../src/features/tags/production-tags.ts";
+import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer, applyTag, healTagRegistry } from "../../../src/features/tags/production-tags.ts";
+import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { ProductionTagPorts } from "../../../src/features/tags/ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeSharedCommands } from "../fakes.ts";
 import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
@@ -217,6 +218,21 @@ test("a failed timer cancellation still clears injected ports, closes the compos
   assert.doesNotThrow(() => mounted.refresh(new Set(["untagged"])));
   assert.doesNotThrow(() => mounted.dispose());
 });
+
+for (const [outcome, apply, committed] of [["rejected", true, 0], ["applied", true, 1], ["rejected", false, 1]] as const) {
+  test(`the registry heal commits its cue snapshot only when its stamp lands: ${outcome}, ${apply ? "with" : "without"} work`, () => {
+    const h = fixture();
+    let commits = 0, stamped = 0;
+    const index = h.ports.production();
+    const mounted = startProductionTags({ ...h.ports,
+      production: () => ({ ...index, recordsPlan: () => ({ apply: apply ? () => 1 : null, commit: () => { commits++; } }) }),
+      stamping: { stamp: () => { stamped++; return { kind: outcome, reason: "shared-plan-required" } as unknown as CommandOutcome; } } });
+    try {
+      healTagRegistry();
+      assert.deepEqual({ commits, stamped }, { commits: committed, stamped: apply ? 1 : 0 });
+    } finally { mounted.dispose(); }
+  });
+}
 
 for (const remount of [false, true]) {
   test("a real scheduled scan held across disposal cannot read ports or restore highlights" + (remount ? " after remount" : ""), () => {
