@@ -33,7 +33,7 @@ test("C9 follows mode changes, registers once, releases a vanished session and d
   const f = fakeRecoveryPanelPorts([removed]), panel = createRecoveryPanel(f.ports), registry = createActionRegistry();
   const off = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
   try {
-    f.state.shared = true; f.changed(); f.changed();
+    assert.doesNotThrow(() => { f.state.shared = true; f.changed(); f.changed(); });
     assert.equal(registry.list().length, 1); assert.equal(f.state.subscriptions, 1); assert.equal(f.state.openedReaders, 1);
     assert.equal(f.ports.host.childElementCount, 0);
     assert.equal(registry.invoke("recovery", "command-menu").kind, "ran");
@@ -112,7 +112,7 @@ test("C9 a removed group shows narration, visual, every picture name, comment re
     people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 }));
   f.state.shared = true; const panel = createRecoveryPanel(f.ports);
   try {
-    panel.open(); assert.equal(f.ports.host.querySelector("pre")?.textContent, "Narration\nVisual\nFirst picture\nSecond picture\nAlice: Note\nBob: Answer");
+    assert.doesNotThrow(() => { panel.open(); }); assert.equal(f.ports.host.querySelector("pre")?.textContent, "Narration\nVisual\nFirst picture\nSecond picture\nAlice: Note\nBob: Answer");
     assert.equal(f.ports.host.querySelector("article p")?.textContent, "Removed by Alice\nLast edited by Bob\nSplit by Cara");
   } finally { panel.dispose(); f.ports.host.remove(); }
 });

@@ -121,22 +121,22 @@ function hydrated(made: Bridge): Entered {
 const counters = (): SessionCounters => ({ epoch: liveSession().epoch(), generation: liveSession().generation() });
 
 test("C9: the read-only recovery accessor is null before start, in standalone and after stop, and follows the shared owner", () => {
-  assert.equal(sharedRecoverySession(), null);
+  assert.equal(sharedRecoverySession() === null, true);
   const made = start();
   try {
-    assert.equal(sharedRecoverySession(), null);
+    assert.equal(sharedRecoverySession() === null, true);
     const entered = hydrated(made), reader = sharedRecoverySession();
-    assert.equal(reader, entered.owner()); assert.deepEqual(reader?.recovery(), []);
+    assert.equal(reader === entered.owner(), true); assert.deepEqual(reader?.recovery(), []);
     let heard = 0;
     const off = reader?.subscribe(() => { heard++; });
     entered.replica.write("remote", projection("Changed"));
     assert.equal(heard, 1); off?.();
     entered.replica.write("remote", projection("Changed again")); assert.equal(heard, 1);
     adoptReplacement(migrateRows(projection("Left"), made.migration.ports), capabilities("standalone"));
-    assert.equal(sharedRecoverySession(), null);
-    const next = hydrated(made); assert.equal(sharedRecoverySession(), next.owner()); assert.notEqual(sharedRecoverySession(), reader);
+    assert.equal(sharedRecoverySession() === null, true);
+    const next = hydrated(made); assert.equal(sharedRecoverySession() === next.owner(), true); assert.equal(sharedRecoverySession() !== reader, true);
   } finally { made.stop(); }
-  assert.equal(sharedRecoverySession(), null);
+  assert.equal(sharedRecoverySession() === null, true);
 });
 
 test("D3, D37: entering builds the shared owner with the old owner's counters and the captured shared capabilities, then hydration opens a new epoch the app hears", () => {
