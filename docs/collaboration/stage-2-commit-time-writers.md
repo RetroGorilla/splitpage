@@ -242,8 +242,9 @@ undo puts back is not stamped.
 
 Assumed rule 49 on #1414: a comment's resolution follows the stamp rule. In a
 shared session the comment commands in `application/commands/comments.ts` send
-their own record operations when given a shared author; their callers in
-`features/comments` pass none yet (package 14).
+their own record operations when given a shared author. Their callers in
+`features/comments` pass the ports `CommentStatePorts.shared()` answers, which
+the wiring leaves `null` until the shared session is composed (D26).
 
 - Adding a comment or a reply is one `record-create` each. `createdAt` is written
   once with the record; the record executor refuses any later change to it.

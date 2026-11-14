@@ -13,9 +13,10 @@ export interface SharedUndoPorts {
 }
 
 export type SharedUndoOutcome =
-  | { readonly ok: true; readonly effective: boolean; readonly label: string; readonly selection: SharedUndoSelection | null }
+  | { readonly ok: true; readonly effective: true; readonly label: string; readonly selection: SharedUndoSelection | null }
+  | { readonly ok: true; readonly effective: false; readonly label: string; readonly selection: null; readonly reason: "used-up" }
   | { readonly ok: false; readonly empty: true }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly reason: string; readonly skipped?: true };
 
 export interface SharedUndoSizes {
   readonly undo: number;
@@ -31,6 +32,7 @@ export interface SharedUndo {
   readonly hold: () => () => void;
   readonly reset: () => void;
   readonly sizes: () => SharedUndoSizes;
+  readonly skipped: () => number;
   readonly serial: () => number;
   readonly lifetime: () => number;
 }
@@ -46,6 +48,9 @@ const SHARED_COALESCE_MS = 1000;
 const SHARED_MAX_ENTRIES = 200;
 const NOTHING: SharedUndoOutcome = Object.freeze({ ok: false, empty: true });
 
+// why: rule 71 on #1414: a refusal no later state can lift drops its step; "not now" and other refusals keep it.
+function permanent(reason: string): boolean { return reason.startsWith("undo-unsupported:") || reason === "invalid-operation"; }
+
 export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
   const done: SharedUndoEntry[] = [];
   const undone: SharedUndoEntry[] = [];
@@ -56,6 +61,7 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
   let serial = 0;
   let lifetime = 0;
   let dropped = 0;
+  let skipped = 0;
 
   function push(stack: SharedUndoEntry[], entry: SharedUndoEntry): void {
     stack.push(entry);
@@ -109,9 +115,16 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
     const to = direction === "undo" ? undone : done;
     const entry = from[from.length - 1];
     if (!entry) return NOTHING;
+    const skip = (reason: string): SharedUndoOutcome => {
+      from.pop();
+      grouping = false;
+      serial++;
+      skipped++;
+      return { ok: false, reason, skipped: true };
+    };
     for (const part of entry.record.parts) {
       const name = sharedUndoPartName(part);
-      if (!ports.supports(name)) return { ok: false, reason: "undo-unsupported:" + name };
+      if (!ports.supports(name)) return skip("undo-unsupported:" + name);
     }
     let reversal: SharedUndoReversal;
     reversing = true;
@@ -120,12 +133,13 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
     } finally {
       reversing = false;
     }
-    if (!reversal.ok) return { ok: false, reason: reversal.reason };
+    if (!reversal.ok) return permanent(reversal.reason) ? skip(reversal.reason) : { ok: false, reason: reversal.reason };
     from.pop();
     grouping = false;
     serial++;
-    // why: T21 scalar and T06: an entry whose change is already gone is used up and never reaches an older step.
-    if (!reversal.effective) return { ok: true, effective: false, label: entry.record.label, selection: null };
+    // why: T21 scalar and T06: an entry whose change is already gone is used up and never reaches an older step;
+    // rule 90 on #1414: the outcome says so, so the person is told someone else changed it.
+    if (!reversal.effective) return { ok: true, effective: false, label: entry.record.label, selection: null, reason: "used-up" };
     push(to, { record: reversal.inverse, at: entry.at, group: entry.group, endsInSpace: entry.endsInSpace });
     return { ok: true, effective: true, label: entry.record.label, selection: reversal.selection };
   }
@@ -145,6 +159,7 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
     undone.length = 0;
     grouping = false;
     dropped = 0;
+    skipped = 0;
     serial++;
     lifetime++;
   }
@@ -157,6 +172,7 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
     hold: hold,
     reset: reset,
     sizes: function () { return { undo: done.length, redo: undone.length, dropped: dropped }; },
+    skipped: function () { return skipped; },
     serial: function () { return serial; },
     lifetime: function () { return lifetime; }
   });
