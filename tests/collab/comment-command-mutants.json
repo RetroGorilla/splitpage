@@ -1,0 +1,56 @@
+{
+  "tests": [
+    "tests/application/commands/comments-shared.test.ts",
+    "tests/features/comments/shared-ports.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "shared comment delete leaves the anchor marks",
+      "file": "src/application/commands/comments.ts",
+      "find": "return { ...plan, shared: { operations: [...marks, ...removed] } };",
+      "replace": "return { ...plan, shared: { operations: [...removed] } };"
+    },
+    {
+      "label": "shared comment delete leaves its replies",
+      "file": "src/application/commands/comments.ts",
+      "find": "[...replies.map(function (reply) { return JSON.stringify([commentId, reply.id]); }), null]",
+      "replace": "[null]"
+    },
+    {
+      "label": "refused comment delete marks planned as a standalone delete",
+      "file": "src/application/commands/comments.ts",
+      "find": "if (!Array.isArray(marks)) return marks;",
+      "replace": "if (!Array.isArray(marks)) return plan;"
+    },
+    {
+      "label": "refused comment unwrap planned with no marks",
+      "file": "src/application/commands/comments.ts",
+      "find": "return Array.isArray(marks) ? { ...plan, shared: { operations: marks } } : marks;",
+      "replace": "return { ...plan, shared: { operations: Array.isArray(marks) ? marks : [] } };"
+    },
+    {
+      "label": "comment unwrap that changes the words trusted",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "if (rest(was) !== rest(now) || anchors(now)",
+      "replace": "if (anchors(now)"
+    },
+    {
+      "label": "comment unwrap that adds an anchor trusted",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "anchors(now).some(anchor => !anchors(was).includes(anchor))) return",
+      "replace": "false) return"
+    },
+    {
+      "label": "comment anchor offsets joined across a gap",
+      "file": "src/core/collab/comment-mark-operations.ts",
+      "find": "while (end < offsets.length && offsets[end] === (offsets[i] as number) + end - i) end++;",
+      "replace": "while (end < offsets.length) end++;"
+    },
+    {
+      "label": "comment feature passes no shared ports",
+      "file": "src/features/comments/comments.ts",
+      "find": "return (ports as CommentsRuntimePorts).shared() ?? undefined;",
+      "replace": "return undefined;"
+    }
+  ]
+}

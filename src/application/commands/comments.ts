@@ -1,4 +1,7 @@
-import type { SharedContentRef, SharedJsonFields, SharedJsonValue, SharedRecordCreate, SharedRecordSet } from "../../core/collab/operations.ts";
+import type { SharedContentRef, SharedJsonFields, SharedJsonValue, SharedOperation, SharedRecordCreate, SharedRecordSet } from "../../core/collab/operations.ts";
+import { sharedCommentMarkRemovals } from "../../core/collab/comment-mark-operations.ts";
+import type { SharedCommentUnwrap } from "../../core/collab/comment-mark-operations.ts";
+import type { Run } from "../../core/text/runs.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import type { DocumentComment, DocumentReply, ValidatedDocument } from "../../core/document/validated.ts";
 import { changeSet } from "../session/change-set.ts";
@@ -6,7 +9,7 @@ import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, CommandRefusal, DocumentView, Plan } from "../session/document-session.ts";
 import type { Clock, StampPorts } from "../session/ports.ts";
 import { applyRewrites, realRewrites, rewriteChanges, withFields } from "./document-edit.ts";
-import type { RewritePlanner } from "./document-edit.ts";
+import type { CellRewrite, RewritePlanner } from "./document-edit.ts";
 
 export type ConflictValue =
   | { readonly kind: "title"; readonly title: string }
@@ -37,7 +40,11 @@ function liveComment(live: ValidatedDocument, id: string): DocumentComment {
   return c;
 }
 
-type SharedAuthor = { readonly author: () => { readonly id: string; readonly by: string } };
+export interface SharedCommentPorts {
+  readonly author: () => { readonly id: string; readonly by: string } | null;
+  readonly cells: (html: string | null | undefined) => readonly Run[];
+}
+type SharedAuthor = Pick<SharedCommentPorts, "author">;
 type Bag = Record<string, unknown>;
 
 const COMMENT_RECORD_FIELDS = Object.freeze(["rowId", "field", "anchorId", "createdAt", "updatedAt", "assignee", "kind", "imageValue", "conflictField", "emptyValue", "titleValue"]);
@@ -158,25 +165,48 @@ export function toggleResolveCommand(commentId: string, stamps: StampPorts, shar
   };
 }
 
-export function deleteCommentCommand(commentId: string, unwrap: RewritePlanner): Command {
+function unwrapOperations(doc: DocumentView, rewrites: readonly CellRewrite[], shared: SharedCommentPorts, by: { readonly id: string; readonly by: string }): SharedOperation[] | CommandRefusal {
+  const unwraps: SharedCommentUnwrap[] = [];
+  for (const rewrite of rewrites) {
+    const row = doc.rows.find(function (r) { return r.id === rewrite.rowId; });
+    if (!row || rewrite.field !== "audioText" && rewrite.field !== "visualText") return { refused: "comment-unwrap-rewrite" };
+    unwraps.push({ owner: rewrite.rowId, field: rewrite.field, before: shared.cells(row[rewrite.field] as string | undefined), after: shared.cells(rewrite.html) });
+  }
+  const result = sharedCommentMarkRemovals(unwraps);
+  if ("refused" in result) return result;
+  return result.operations.map(function (operation, index) { return { ...operation, id: (by.id + ":" + index) as SharedContentRef, by: by.by }; });
+}
+
+export function deleteCommentCommand(commentId: string, unwrap: RewritePlanner, shared?: SharedCommentPorts): Command {
   return {
     name: "delete-comment",
     needs: "edit",
-    plan: function (doc): Plan | null {
-      if (commentAt(doc, commentId) === -1) return null;
+    plan: function (doc): Plan | CommandRefusal | null {
+      const seen = doc.comments[commentAt(doc, commentId)];
+      if (!seen) return null;
       const rewrites = realRewrites(doc, unwrap(doc));
-      return {
+      const plan: Plan = {
         changes: withFields(rewriteChanges(rewrites, false, rewrites.length > 0), ["comments"], true),
         apply: function (live) {
           applyRewrites(live, rewrites, null);
           live.comments.splice(commentAt(live, commentId), 1);
         }
       };
+      const by = shared ? shared.author() : null;
+      if (!shared || !by) return plan;
+      const marks = unwrapOperations(doc, rewrites, shared, by);
+      if (!Array.isArray(marks)) return marks;
+      const replies = Array.isArray(seen.replies) ? seen.replies : [];
+      const removed: SharedOperation[] = [...replies.map(function (reply) { return JSON.stringify([commentId, reply.id]); }), null].map(function (reply, index) {
+        return { kind: "record-delete" as const, id: (by.id + ":delete:" + index) as SharedContentRef, by: by.by,
+          target: reply === null ? { collection: "comments" as const, record: commentId as SharedContentRef } : { collection: "replies" as const, record: reply as SharedContentRef } };
+      });
+      return { ...plan, shared: { operations: [...marks, ...removed] } };
     }
   };
 }
 
-export function unwrapCommentAnchorCommand(unwrap: RewritePlanner): Command {
+export function unwrapCommentAnchorCommand(unwrap: RewritePlanner, shared?: SharedCommentPorts): Command {
   return {
     name: "unwrap-comment-anchor",
     needs: "nothing",
@@ -185,10 +215,14 @@ export function unwrapCommentAnchorCommand(unwrap: RewritePlanner): Command {
       if (!can.allowed) return { refused: can.reason };
       const rewrites = realRewrites(doc, unwrap(doc));
       if (!rewrites.length) return null;
-      return {
+      const plan: Plan = {
         changes: rewriteChanges(rewrites, false, true),
         apply: function (live) { applyRewrites(live, rewrites, null); }
       };
+      const by = shared ? shared.author() : null;
+      if (!shared || !by) return plan;
+      const marks = unwrapOperations(doc, rewrites, shared, by);
+      return Array.isArray(marks) ? { ...plan, shared: { operations: marks } } : marks;
     }
   };
 }
