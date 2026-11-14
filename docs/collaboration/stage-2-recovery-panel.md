@@ -21,7 +21,7 @@ Every entry kind has readable, selectable text. Removed groups include narration
 
 Damaged removals without readable provenance have neither button. An unnamed fragment/tag part remains readable without a discard button. These cases keep the model's existing limits; no operation, format, removal or recovery rule changes. Ordinary commands that resolve merged states are outside this panel's restore/discard actions.
 
-Commands resolve both entry kind and key against the owner's current published list. Stale entries, absent sessions/authors, unreadable removal ids, namesakes and unsupported actions refuse without writing. One action sends one existing operation with its own semantic undo description. The feature preserves an already-notified rejection and uses the existing rule 73 warning otherwise.
+Commands resolve both entry kind and key against the owner's current published list. Stale entries, absent sessions/authors, unreadable removal ids, locally live namesakes and unsupported actions refuse without writing. The existing model limit for concurrent restores of different deleted people with the same name is unchanged. One action sends one existing operation with its own semantic undo description. The feature preserves an already-notified rejection and uses the existing rule 73 warning otherwise.
 
 ## Undo and evidence
 
