@@ -1,6 +1,6 @@
 # Stage 2 stored growth and update admission
 
-Draft: fresh storage meets the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. Short/fresh admission p50 is 3.51 ms, exceeding the 3 ms added-input allowance; its 14.43 ms p95 fits the 25 ms limit in isolation. Other admission rows and the whole-application heap limit remain unmeasured. No admission number is inferred from preparation time.
+Draft: fresh storage meets the 3x and 2 MiB limits on all three fixtures. Edited storage fails both the 10x and 2 MiB limits on all three: the largest multiple is short at 5,266.13x plain bytes, and the largest state is 9,131,462 bytes. Short/fresh admission p50 is 3.51 ms, exceeding the 3 ms added-input allowance; its 14.43 ms p95 fits the 25 ms limit in isolation. The first edited-short round gives p50 199.91 ms and p95 229.70 ms, above the 8 ms and 25 ms limits; four further rounds remain. Other admission rows and the whole-application heap limit remain unmeasured. No admission number is inferred from preparation time.
 
 Measured on 2026-11-13 at the adapter level in Node, with no browser, application wiring, transport or server. The source commit measured is `d49fd51fbf5d7819143d4e263ecc33e2f8226bd2`; its `src/adapters/collab` tree is `138889c20c2952880862f3e9ab0a1b1bcee81cb7`. Machine description: ARM64, Node v24.22.1. Other work was running throughout. These conditions differ from the Stage 0 browser baseline; its numbers are budget references, not a same-machine latency comparison.
 
@@ -26,13 +26,15 @@ Preparation submits each block's 100 distinct insertion operations in one execut
 
 The corrected-character rate is the correction phase's net encoded growth divided by ten. Typing-only growth is the exact increase from the next 1,000 individual keystrokes at each checkpoint. The undo/redo rate is the exact increase from 100 pairs on one one-character entry after the workload; it is not a universal rate for every command family.
 
-For admission, a separate sender starts from the fresh checkpoint, runs 1,000 real single-character commands and captures each update. The same causal stream is admitted against fresh and edited receivers: this models a peer that has not received the workload. Every checkpoint must gain exactly 1,000 visible characters under the direct control. Each timed receiver starts from its encoded checkpoint. Each of five rounds measures 500 individual admissions (p50, p95 and maximum), plus synchronous drains of 100 and 1,000 distinct causal updates. No idle delay, browser frame, buffer hold or network is included: queued means an already available list drained in order. Whole-state cloning used to prepare a receiver is outside the timed region. The real per-update trial is inside it. Methods rotate order between rounds. Within-run quantiles use nearest rank. Results are medians of the five per-round statistics with the full min–max spread; no outlier is removed or pooled into another run. The maximum column summarizes per-run maxima, so its range's upper end is the overall observed maximum.
+For admission, a separate sender starts from the fresh checkpoint, runs 1,000 real single-character commands and captures each update. The same causal stream is admitted against fresh and edited receivers: this models a peer that has not received the workload. Every checkpoint must gain exactly 1,000 visible characters under the direct control. Each timed receiver starts from its encoded checkpoint. The 500 single-admission samples are sequential: each receiver retains preceding keys, so a fresh row begins at the fresh checkpoint and grows during that window. Each of five rounds measures 500 individual admissions (p50, p95 and maximum), plus synchronous drains of 100 and 1,000 distinct causal updates. No idle delay, browser frame, buffer hold or network is included: queued means an already available list drained in order. Whole-state cloning used to prepare a receiver is outside the timed region. The real per-update trial is inside it. Methods rotate order between rounds. Within-run quantiles use nearest rank. Results are medians of the five per-round statistics with the full min–max spread; no outlier is removed or pooled into another run. The maximum column summarizes per-run maxima, so its range's upper end is the overall observed maximum.
 
 The direct control applies the same updates through the same adapter transaction and live observers to a scratch receiver, bypassing admission. The decode-only prototype retains `decodeUpdate` and the positive struct-length check, then uses that direct path. The one-trial prototype makes one `CollabDocumentState`, copies the checkpoint into it, decodes/checks/applies the entire burst there, destroys it, then applies each update to the live scratch receiver. Each 1,000-update timing asserts its final encoded state against the direct control after stopping the timer. The overhead fractions are paired round estimates: `1 - direct/current` includes trial and validation; `1 - decode/current` more closely isolates trial creation, full-state encode/copy, trial application and destruction. They are differences between controls, not profiler attribution.
 
-Heap sampling is a separate pass, so sampling does not inflate the timing tables. Peak is the largest `heapUsed` sampled after an admission minus the pre-burst heap after two forced collections; it may miss an intra-admission peak. Retained is the after-burst delta after two collections. External buffers and resident process memory are not included in `heapUsed`. After-load footprint compares the incremental retained size of a cloned plain fixture and an adapter receiver, excluding imported code and fixture data already present in the process. It includes the receiver's normal observers and caches, but no projection, DOM, app owners or in-memory undo stack. It cannot certify Stage 0's whole-application heap limit. After-edit footprint uses the original plain fixture as its control because the workload restores the script content.
+Heap sampling is a separate pass, so sampling does not inflate the timing tables. Peak is the largest `heapUsed` sampled after an admission minus the pre-burst heap after two forced collections; it may miss an intra-admission peak. Retained is the after-burst delta after two collections. External buffers and resident process memory are not included in `heapUsed`. After-load footprint compares the incremental retained size of a cloned plain fixture and an adapter receiver, excluding imported code and fixture data already present in the process. It includes the receiver's normal observers and caches, but no projection, DOM, app owners or in-memory undo stack. A negative small plain delta reflects collection noise, not negative object size; those ratios are unreliable when the plain delta is near zero. It cannot certify Stage 0's whole-application heap limit. After-edit footprint uses the original plain fixture as its control because the workload restores the script content.
 
 ## Results
+
+Short/fresh has five completed rounds. Short/edited currently has **one of five**: its figures are interim and do not yet meet the repeat-count requirement. Other cases remain unmeasured.
 
 Values are medians [min–max] of per-round statistics, not pooled updates.
 
@@ -45,37 +47,41 @@ Values are medians [min–max] of per-round statistics, not pooled updates.
 | Script / state | Bytes added by 1,000 typed characters without deletion |
 | --- | --- |
 | short / fresh | 324052 |
+| short / edited | 324052 |
 
 | Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |
 | --- | --- | --- | --- | --- | --- | --- |
 | short / fresh | 3.51 [3.18–4.07] | 14.43 [5.72–19.55] | 30.78 [8.48–37.03] | 0.03 [0.02–0.03] | 0.04 [0.03–0.04] / 0.06 [0.06–0.08] | 99.11 [98.50–99.42] / 98.81 [98.07–99.19] |
+| short / edited | 199.91 [199.91–199.91] | 229.70 [229.70–229.70] | 249.42 [249.42–249.42] | 0.02 [0.02–0.02] | 0.02 [0.02–0.02] / 0.03 [0.03–0.03] | 99.98 [99.98–99.98] / 99.97 [99.97–99.97] |
 
 Input budget screen only; passing admission alone does not establish end-to-end input latency.
 
 | Script / state | Available added p50 ms (Stage 0 reference) | Added p50 budget | Admission p50 alone vs 8 ms | Admission p95 alone vs 25/40 ms | Any admission above 50 ms |
 | --- | --- | --- | --- | --- | --- |
 | short / fresh | 3.0 | EXCEEDS | within alone | within alone | no |
+| short / edited | 3.0 | EXCEEDS | EXCEEDS | EXCEEDS | yes |
 
 | Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | short / fresh / 100 | 172.44 [108.42–215.38] | 4.36 [4.09–4.55] | 5.20 [5.13–13.86] | 7.51 [6.42–9.74] | 40.00 [23.82–52.67]x | 44.93 [44.84–45.43] | 0.16 [0.04–0.21] |
 | short / fresh / 1000 | 9491.26 [5823.66–10494.96] | 32.16 [27.73–36.23] | 42.37 [36.54–63.80] | 95.96 [53.79–108.68] | 290.38 [209.99–326.38]x | 65.77 [65.26–161.01] | 1.11 [1.04–1.13] |
+| short / edited / 100 | 20521.68 [20521.68–20521.68] | 16.77 [16.77–16.77] | 14.90 [14.90–14.90] | 236.18 [236.18–236.18] | 1223.47 [1223.47–1223.47]x | 266.05 [266.05–266.05] | 0.12 [0.12–0.12] |
+| short / edited / 1000 | 195951.60 [195951.60–195951.60] | 31.84 [31.84–31.84] | 35.33 [35.33–35.33] | 261.18 [261.18–261.18] | 6153.41 [6153.41–6153.41]x | 265.18 [265.18–265.18] | 29.41 [29.41–29.41] |
 
 | Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |
 | --- | --- | --- | --- | --- |
 | short / fresh | 0.004 [-0.880–0.004] | 0.133 [0.119–0.152] | 0.129 [0.115–1.022] | 30.44 [-0.16–35.76]x |
+| short / edited | -0.348 [-0.348–-0.348] | 27.328 [27.328–27.328] | 27.676 [27.676–27.676] | -78.50 [-78.50–-78.50]x |
 
-| Remaining case | Admission / burst / heap / prototype figures | Typing-only growth |
-| --- | --- | --- |
-| short / edited | unmeasured | unmeasured |
-| long / fresh | unmeasured | unmeasured |
-| long / edited | unmeasured | unmeasured |
-| large / fresh | unmeasured | unmeasured |
-| large / edited | unmeasured | unmeasured |
+| Remaining case | Timing status |
+| --- | --- |
+| short / edited | 1 of 5; figures below are interim |
+| long / fresh | unmeasured |
+| long / edited | unmeasured |
+| large / fresh | unmeasured |
+| large / edited | unmeasured |
 
-All three edited workloads and the separate undo/redo probes completed. The short/fresh row contains five completed timing rounds. Completed values were recovered while the process was in untimed sender preparation; the pause was outside all measured intervals. The incomplete edited timing case was discarded when checkpointing was added; completed short/fresh timings were retained. Remaining cases continue on this draft.
-
-Draft validation: full lint and type checking, dependency and comment gates, and all four focused tests pass after installing the existing desktop and prototype dependencies. No source, dependency rule or baseline changed. The full verification command was not run.
+Full lint and type checking, dependency and comment gates, and all four focused tests pass after installing the existing desktop and prototype dependencies. No dependency rule or baseline changed. The full verification command was not run.
 
 ## Admission alternatives and safety
 
