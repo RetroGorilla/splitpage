@@ -170,8 +170,8 @@ function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress)
 }
 
 function recordNow(handle: SharedDocumentHandle, part: { readonly kind: string; readonly target: SharedRecordAddress }): SharedJsonFields | null {
-  // why: a visual and a picture's field change are parts of a beat; their undo comes with the structure commands.
-  if (!SHARED_UNDO_RECORDS.includes(part.target.collection) && !(part.target.collection === "gallery" && part.kind !== "record-field")) {
+  // why: a visual is a part of a beat; its undo comes with the structure commands.
+  if (!SHARED_UNDO_RECORDS.includes(part.target.collection) && part.target.collection !== "gallery") {
     throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
   }
   return recordFields(handle, part.target);

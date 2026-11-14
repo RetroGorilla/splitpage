@@ -277,16 +277,12 @@ test("a field that is cleared is undone to the value it had and redone to nothin
   } finally { run.close(); }
 });
 
-test("a visual and a change to a picture's fields are refused by name and nothing is written", () => {
+test("a visual is refused by name and nothing is written", () => {
   const run = recordReplicas();
   try {
     const visual = command(run.a, createRecord("visuals", "V1", { beat: "R1", rank: "1" }));
-    command(run.a, createRecord("gallery", "G1", { beat: "R1", rank: "1", picture: {}, links: [] }));
-    const named = command(run.a, setRecord("gallery", "G1", "picture", { name: "Desk" }));
-    for (const [record, reason] of [[visual, "undo-unsupported:record-create:visuals"], [named, "undo-unsupported:record-field:gallery"]] as const) {
-      const before = encodeSharedState(run.a);
-      assert.deepEqual(reverseSharedUndoRecord(run.a, record, writer("Alice")), { ok: false, reason });
-      assert.deepEqual(encodeSharedState(run.a), before);
-    }
+    const before = encodeSharedState(run.a);
+    assert.deepEqual(reverseSharedUndoRecord(run.a, visual, writer("Alice")), { ok: false, reason: "undo-unsupported:record-create:visuals" });
+    assert.deepEqual(encodeSharedState(run.a), before);
   } finally { run.close(); }
 });
