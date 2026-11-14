@@ -347,7 +347,7 @@ const ENGINES: readonly Site[] = [
   ["application/production/production-index.ts#createProductionIndex", "ProductionIndexOwner.recordsPlan (provided) 1, planRegistryHealing 1", "tag-from-text", "cue-retitle"],
   ["application/save/session-effects.ts#createSessionEffects", "colorsWithMine 1", "person-colour"],
   ["application/session/document-session.ts#createDocumentSession", "AttributionPort.attribute 1, ReconcilePort.anchors 1, ReconcilePort.records 1", "person-colour", "anchor-repair", ...FROM_TEXT],
-  ["application/session/shared-session.ts#createSharedSession", "Plan.shared 5, ReplicaPort.execute 1", "shared-execute", "recovery-write"],
+  ["application/session/shared-session.ts#createSharedSession", "Plan.shared 4, ReplicaPort.execute 1", "shared-execute", "recovery-write"],
   ["bootstrap/wiring/broll.ts#mountBrollFeature", "anchorBrollInGivenRows 1", "broll-key"],
   ["bootstrap/wiring/clipboard.ts#mountCopyPasteFeature", "recordPastedBroll 1", "record-with-text"],
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],

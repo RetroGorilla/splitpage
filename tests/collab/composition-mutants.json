@@ -1,5 +1,5 @@
 {
-  "tests": ["tests/adapters/collab/operation-families.test.ts", "tests/bootstrap/shared-author.test.ts"],
+  "tests": ["tests/adapters/collab/operation-families.test.ts", "tests/bootstrap/shared-author.test.ts", "tests/collab/undo-seam.test.ts", "tests/features/writer/buffer-undo.test.ts"],
   "mutants": [{
     "label": "one family left out of the composition",
     "file": "src/adapters/collab/operation-families.ts",
@@ -15,5 +15,20 @@
     "file": "src/bootstrap/wiring/ports/shared-author.ts",
     "find": "by: source.name() } : null;",
     "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
+  }, {
+    "label": "the replica drops the command's undo record",
+    "file": "src/adapters/collab/replica.ts",
+    "find": "      return done.result.ok ? done.record : null;",
+    "replace": "      return null;"
+  }, {
+    "label": "the replica hands one record to the undo owner twice",
+    "file": "src/adapters/collab/replica.ts",
+    "find": "    undo.perform(() => {\n      const done = executeSharedCommand(handle, operations, description, { base: options.base });\n      result = done.result;\n      return done.result.ok ? done.record : null;\n    });",
+    "replace": "    let last: ReturnType<typeof executeSharedCommand>[\"record\"] = null;\n    undo.perform(() => {\n      const done = executeSharedCommand(handle, operations, description, { base: options.base });\n      result = done.result;\n      last = done.result.ok ? done.record : null;\n      return last;\n    });\n    undo.perform(() => last);"
+  }, {
+    "label": "undo skips the session's admission",
+    "file": "src/application/editing/undo/shared-undo-actions.ts",
+    "find": "    const refused = session.admit();",
+    "replace": "    const refused = null as ReturnType<typeof session.admit>;"
   }]
 }

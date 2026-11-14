@@ -125,6 +125,12 @@ export interface SharedUndoSelection {
   readonly focus: SharedContentRef;
 }
 
+export interface SharedCommandDescription {
+  readonly label: string;
+  readonly selection: SharedUndoSelection | null;
+  readonly typing: string | null;
+}
+
 export interface SharedUndoRecord {
   readonly label: string;
   readonly parts: readonly SharedUndoPart[];

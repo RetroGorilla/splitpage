@@ -49,6 +49,7 @@ test("shared title: typing settles each keystroke as title text operations on th
     assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, page.commands],
       ["DftX", "DftX", "DftX", [1, 1, "none"], [], []]);
     assert.deepEqual(written(page), [[inserted("X")], [{ kind: "text-delete", observed: 2 }]]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "X", true], ["typing", "", true]]);
     assert.deepEqual(targets(page), [page.target(), page.target()]);
     assert.deepEqual([holds(page), page.shownDepth(), page.pageTitles(), page.repaints()], [[], 0, 2, 0]);
     copies(page, ["DftX", "user"]);
