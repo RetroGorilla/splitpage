@@ -662,8 +662,8 @@
   }, {
     "label": "clipboard and Escape descriptions coalesce into typing",
     "file": "src/adapters/collab/buffer.ts",
-    "find": "label ? { ...typingDescription(painted, commit), label, typing: null } : typingDescription(painted, commit)",
-    "replace": "typingDescription(painted, commit)",
+    "find": "label ? { ...typingDescription(handle, target, painted, commit), label, typing: null } : typingDescription(handle, target, painted, commit)",
+    "replace": "typingDescription(handle, target, painted, commit)",
     "tests": ["tests/features/shared-undo-surfaces.test.ts"]
   }, {
     "label": "Escape overwrites a name changed by another writer",
@@ -707,6 +707,30 @@
     "find": "replay = result.ok && result.selection ? ports.history.selection(key, result.selection) : undefined;",
     "replace": "replay = undefined;",
     "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "plain input redo follows its restored typing instead of the recorded boundary",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "const anchor = !first ? null : target.field === \"audioText\" || target.field === \"visualText\"",
+    "replace": "const anchor = !first ? null : true",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "rich text undo ignores remote typing in the same gap",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "? createSharedAnchor(handle, target, first.from, \"after\")",
+    "replace": "? preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null",
+    "tests": ["src/test/shared-writer-app.test.mjs"]
+  }, {
+    "label": "failed Writer reopen registration leaves its earlier listener registered",
+    "file": "src/bootstrap/wiring/shared-writer.ts",
+    "find": "    } catch (error) {\n      cancel();",
+    "replace": "    } catch (error) {",
+    "tests": ["src/test/shared-writer-app.test.mjs"]
+  }, {
+    "label": "cancelled Writer reopen callback acts in a later session",
+    "file": "src/bootstrap/wiring/shared-writer.ts",
+    "find": "!active || writerControls() !== control || ",
+    "replace": "",
+    "tests": ["src/test/shared-writer-app.test.mjs"]
   }, {
     "label": "undo in a title input leaves the page title stale",
     "file": "src/features/common/buffered-input.ts",

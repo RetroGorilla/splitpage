@@ -23,6 +23,7 @@ const { sharedBufferedTarget } = await import("../adapters/collab/buffer.ts");
 const { readOperation } = await import("../core/collab/read-operation.ts");
 const { beatPos, caretAt } = await import("../core/flow/flow.ts");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
+const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
 
 after(closeApp);
 
@@ -209,3 +210,49 @@ test("failed entry before hydration restores the open standalone Writer and perm
   assert.deepEqual(leaveSharedSession(ports), { ok: true });
   assert.deepEqual([errors, reports], [[], []]);
 });
+
+for (const registration of ["onReplaced", "onChange"]) {
+  test(`failed ${registration} registration releases reopen listeners and cannot restore a stale caret on retry`, async () => {
+    writerControls().closeWriter();
+    adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "Hello", visualText: "", status: "todo" }] }));
+    undoOwner().flush();
+    writerControls().openWriter();
+    writerControls().writerFlowControl().place(caretAt(beatPos("r1", 3)));
+    const original = { onChange: documentReader.onChange, onReplaced: documentReader.onReplaced };
+    const listeners = { onChange: 0, onReplaced: 0 }, faults = [], releases = [], fault = new Error("registration failed");
+    const switched = { ...ports, report: error => { faults.push(error); } };
+    let fail = registration, abandoned = null;
+    for (const name of ["onChange", "onReplaced"]) {
+      documentReader[name] = listener => {
+        if (fail === name) { fail = null; throw fault; }
+        if (name === "onChange" && !abandoned) abandoned = listener;
+        const off = original[name]((...args) => {
+          if (abandoned !== listener) abandoned?.(...args);
+          listener(...args);
+        });
+        listeners[name]++;
+        let active = true;
+        const release = () => { if (active) { active = false; listeners[name]--; off(); } };
+        releases.push(release);
+        return release;
+      };
+    }
+    try {
+      assert.deepEqual(await enterSharedSession(switched), { ok: false, reason: "enter-failed" });
+      assert.deepEqual(faults, [fault]);
+      assert.deepEqual({ ...listeners }, { onChange: 0, onReplaced: 0 });
+      writerControls().writerFlowControl().place(caretAt(beatPos("r1", 1)));
+      assert.deepEqual(await enterSharedSession(switched), { ok: true });
+      assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 1)));
+      abandoned?.();
+      assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 1)));
+      assert.deepEqual({ ...listeners }, { onChange: 0, onReplaced: 0 });
+      assert.deepEqual(leaveSharedSession(switched), { ok: true });
+      assert.deepEqual({ ...listeners }, { onChange: 0, onReplaced: 0 });
+    } finally {
+      if (sharedSession()) leaveSharedSession(switched);
+      releases.forEach(release => { release(); });
+      Object.assign(documentReader, original);
+    }
+  });
+}

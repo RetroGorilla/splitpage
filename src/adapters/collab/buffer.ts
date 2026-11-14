@@ -1,4 +1,4 @@
-import type { BufferedTextCommit } from "../../application/editing/ports.ts";
+import type { BufferedTextCommit, PaintedText } from "../../application/editing/ports.ts";
 import type { BufferedCommit } from "../../core/collab/buffer.ts";
 import type { SharedCommandDescription } from "../../core/collab/undo-record.ts";
 import type { CommonDocumentSession, CommandOutcome } from "../../application/session/document-session.ts";
@@ -39,10 +39,12 @@ export function sharedBufferedTarget(handle: SharedDocumentHandle, key: string):
 
 export const SHARED_TYPING_LABEL = "typing";
 
-function typingDescription(handle: SharedDocumentHandle, target: SharedTextAddress, commit: BufferedCommit): SharedCommandDescription {
-  const first = commit.splices[0];
-  // why: undo follows concurrent text in the original gap rather than staying attached to its preceding character
-  const anchor = first ? createSharedAnchor(handle, target, first.from, "after") : null;
+function typingDescription(handle: SharedDocumentHandle, target: SharedTextAddress, painted: PaintedText, commit: BufferedCommit): SharedCommandDescription {
+  const first = commit.splices[0], preceding = first && first.from > 0 ? painted.identity(first.from - 1) : null;
+  // why: name inputs replay at the recorded pre-typing boundary; rich text follows concurrent text in its gap
+  const anchor = !first ? null : target.field === "audioText" || target.field === "visualText"
+    ? createSharedAnchor(handle, target, first.from, "after")
+    : preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null;
   return { label: SHARED_TYPING_LABEL, selection: anchor ? { anchor, focus: anchor } : null, typing: commit.splices.map(splice => splice.insert).join("") };
 }
 
@@ -88,7 +90,7 @@ export function createSharedBufferedText(
                 changes: bufferedFieldChanges(rowId),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
                 shared: { operations: [...operations, ...tags, ...stamp], base: commit.base,
-                  description: label ? { ...typingDescription(handle, target, commit), label, typing: null } : typingDescription(handle, target, commit) }
+                  description: label ? { ...typingDescription(handle, target, painted, commit), label, typing: null } : typingDescription(handle, target, painted, commit) }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }

@@ -4,7 +4,7 @@ import { readSharedIdentityEmbeds } from "./identity-structs.ts";
 import { collabState, guardSharedCallback } from "./state.ts";
 
 export interface SharedEmbedChangeReader { readonly read: (transaction: Y.Transaction) => ReturnType<typeof readSharedIdentityEmbeds> }
-let readers: WeakMap<SharedDocumentHandle, { reader: SharedEmbedChangeReader; inspect: Set<() => void> }> | null = null;
+let readers: WeakMap<SharedDocumentHandle, { reader: SharedEmbedChangeReader; observers: Set<() => void> }> | null = null;
 
 export function sharedEmbedChangeReader(handle: SharedDocumentHandle, inspect?: () => void): SharedEmbedChangeReader {
   readers ??= new WeakMap(); let held = readers.get(handle);
@@ -16,7 +16,7 @@ export function sharedEmbedChangeReader(handle: SharedDocumentHandle, inspect?: 
       // why: Both indexes consume the same pre-GC observation, so each changed struct needs only one visit.
       const value = readSharedIdentityEmbeds(transaction, inspect); values.set(transaction, value); return value;
     } });
-    held = { reader, inspect: observers }; readers.set(handle, held);
+    held = { reader, observers }; readers.set(handle, held);
   }
-  if (inspect) held.inspect.add(inspect); return held.reader;
+  if (inspect) held.observers.add(inspect); return held.reader;
 }

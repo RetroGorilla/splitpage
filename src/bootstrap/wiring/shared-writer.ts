@@ -29,18 +29,28 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
     stopWriterRuntimeFeature();
     const control = mountWriterRuntimeFeature(shared);
     if (!open) return;
+    const releases: Array<() => void> = [];
+    let active = true;
+    const cancel = (): void => { active = false; releases.splice(0).forEach(release => { release(); }); };
+    cancelReopen = cancel;
     const reopen = (): void => {
-      if (!documentReader.current() || sharedSession() !== !!shared) return;
-      cancelReopen?.();
-      cancelReopen = null;
+      if (!active || writerControls() !== control || !documentReader.current() || sharedSession() !== !!shared) return;
+      cancel();
+      if (cancelReopen === cancel) cancelReopen = null;
       control.openWriter();
       if (selection) control.writerFlowControl()?.place(selection, true);
       pendingSelection = null;
       reopenPending = false;
     };
-    const offChange = documentReader.onChange(reopen), offReplaced = documentReader.onReplaced(reopen);
-    cancelReopen = () => { offChange(); offReplaced(); };
-    reopen();
+    try {
+      releases.push(documentReader.onChange(reopen));
+      releases.push(documentReader.onReplaced(reopen));
+      reopen();
+    } catch (error) {
+      cancel();
+      if (cancelReopen === cancel) cancelReopen = null;
+      throw error;
+    }
   }
   return {
     enter: parts => {
