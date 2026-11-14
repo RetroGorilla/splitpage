@@ -139,7 +139,7 @@ once and pins `undo-unsupported:heading-create`, leaving its one entry intact.
 Composition must give `mountSceneHeaders` both `sharedBufferedInputPorts` and
 `sharedSceneCreation(handle, session, author)` from the shared wiring ports.
 The author uses the existing clean operation-id source. The command runs once
-through the shared session. C2 must pass its `add-section` description with
+through the shared session. C2 passes its default `add-section` description with
 `typing: null` to the same `executeSharedCommand`/`SharedUndo.perform` path as
 other commands; no after-the-fact recording or second undo stack is used here.
 
@@ -151,22 +151,17 @@ the form. Teardown must account for a first composition: as for the bound
 binding, a refused dispose retains the hold and admission listener, and a later
 `compositionend` can still create the heading on disposed controls.
 
-## Rule 85 dependency
+## Rule 85 connection
 
-Undo, redo and Escape wait for composition cut C2. `SharedPlan` currently carries
-operations, base and the recovery undo exclusion; `ReplicaPort.execute` receives
-only operations and base. The session's `undo.record` gets a change set and an
-offset selection, after execution. The Writer heading buffer uses that same
-path today. It does not produce the identity record that `SharedUndo.perform`
-needs, and the missing before-state cannot be reconstructed from the change set.
+C2 now carries `SharedPlan.description` through replica execution and produces
+the identity record around the actual `executeSharedCommand` call. Composition
+uses one `sharedUndoOwner(handle, author, now, report)` with its replica, so each
+record enters the same per-writer `SharedUndo.perform` stack. Creation uses the
+session's default `add-section` description with `typing: null`; buffered typing
+supplies its own description. Recovery's `undo: false` still bypasses recording.
 
-C2 must carry a command description through the plan to replica execution, run
-`executeSharedCommand` around the actual execution, and record its result in one
-per-writer `SharedUndo.perform` stack. The description needs a label, anchored
-selection, and typing text for a keystroke or null for cut, paste and Escape's
-replacement. Recovery's `undo: false` must still bypass recording. C2 also supplies
-the shared replay entry and routes it to that same owner from the Writer, inputs
-and global shortcuts. The next cut can then test the boxes and Writer against
-one stack, without a parallel undo history or a second execution to learn its
-record. Escape additionally needs the stored opening name and a check that no
-other writer changed it while the form was open.
+The rule 85 cut connects the boxes' undo/redo shortcuts and Escape to this owner
+and replay entry. It adds the boxes' cases to the existing shared-surface table.
+No record is reconstructed from the later change set, and no second history or
+second execution is used to learn it. Escape additionally needs the stored
+opening name and a check that no other writer changed it while the form was open.
