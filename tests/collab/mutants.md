@@ -640,7 +640,10 @@ empty target drops the session refusal notice marker | src/features/empty-script
 first input wiring drops the session refusal notice marker | src/bootstrap/wiring/ports/empty-script.ts: flattens the rejected outcome | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 empty target refusals miss the shared notice | src/bootstrap/wiring/ports/empty-script.ts: bypasses sharedCommandReport | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 the hook omits the real command refusal notice | src/bootstrap/wiring/shared-test.ts: omits commandRefused | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
-detaching leaves the source draft timers armed | src/bootstrap/wiring/shared-test.ts: omits draftSource.detachSource | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+entry detaches without flushing the pending standalone draft | src/bootstrap/wiring/shared-test.ts: skips the draft flush before entry | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+entry ignores a failed draft flush | src/bootstrap/wiring/shared-test.ts: enters whatever the draft flush answers | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+a refused entry over an unsaved recovery copy shows no notice | src/bootstrap/wiring/shared-test.ts: omits the draft-not-kept notice | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+leaving keeps the landed copy clean, so the next flush discards the stored draft | src/bootstrap/wiring/shared-test.ts: omits noteSaveChange after a leave | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 leaving does not resume the draft writer | src/bootstrap/wiring/shared-test.ts: omits draftSource.resumeWriting after a leave | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 the hook leaves the recovery panel binding out | src/bootstrap/wiring/shared-test.ts: joins an empty binding instead | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 a throwing second leave skips the first binding | src/bootstrap/wiring/shared-session.ts: joinSharedBindings leaves without finally | tests/bootstrap/shared-switch.test.ts | tests/collab/composition-mutants.json

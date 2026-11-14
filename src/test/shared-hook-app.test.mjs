@@ -223,6 +223,82 @@ test("leaving shared mode keeps desktop draft sequence numbers increasing for th
   }
 });
 
+function draftStore(accept = () => true) {
+  const store = { writes: [], discards: [] };
+  useDesktopForTest({ writeDraft: async payload => {
+    const doc = JSON.parse(payload.stateJson);
+    store.writes.push({ seq: payload.seq, docId: doc.docId, text: doc.rows[0].audioText, shared: sharedSession(), kept: accept() });
+    return store.writes.at(-1).kept ? { ok: true, seq: payload.seq } : { ok: false, code: "ENOSPC" };
+  }, discardDraft: async seq => { store.discards.push(seq); return { ok: true }; }, setDocumentState: () => {}, draftRestoreDone: () => {} });
+  return store;
+}
+
+test("entering with pending standalone typing writes that typing to the draft store before the session starts", async () => {
+  const store = draftStore();
+  try {
+    script();
+    await flushDraftNow();
+    store.writes.length = 0;
+    currentDocument().rows[0].audioText = "Typed before sharing"; noteSessionEdit(); undoOwner().flush();
+    await Promise.resolve();
+    assert.equal(draftsTesting().status().pending, true);
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(store.writes.map(write => [write.text, write.shared, write.kept]), [["Typed before sharing", false, true]]);
+    assert.deepEqual(store.discards, []);
+  } finally {
+    if (sharedSession()) hook.leave();
+    restoreDesktop();
+  }
+});
+
+test("entering while the draft store refuses writes is refused with a visible notice, stays standalone and loses nothing", async () => {
+  let accepting = false;
+  const store = draftStore(() => accepting);
+  try {
+    script();
+    currentDocument().rows[0].audioText = "Typed before sharing"; noteSessionEdit(); undoOwner().flush();
+    const before = currentDocument();
+    const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast.warn")).map(toast => toast.textContent);
+    const shown = toasts().length;
+    assert.deepEqual(await hook.enter(), { ok: false, reason: "draft-not-kept" });
+    assert.equal(sharedSession(), false);
+    assert.equal(currentDocument(), before);
+    assert.equal(currentDocument().rows[0].audioText, "Typed before sharing");
+    assert.ok(toasts().slice(shown).includes("The shared session did not start: your recovery copy could not be saved."));
+    assert.ok(store.writes.length > 0);
+    assert.ok(store.writes.every(write => !write.kept && !write.shared && write.text === "Typed before sharing"));
+    accepting = true;
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual([store.writes.at(-1).text, store.writes.at(-1).shared, store.writes.at(-1).kept], ["Typed before sharing", false, true]);
+    assert.deepEqual(store.discards, []);
+  } finally {
+    if (sharedSession()) hook.leave();
+    restoreDesktop();
+  }
+});
+
+test("after a shared stretch over a stored draft, the next flush writes the landed copy with the next sequence number", async () => {
+  const store = draftStore();
+  try {
+    script();
+    currentDocument().rows[0].audioText = "Stored"; noteSessionEdit(); undoOwner().flush();
+    assert.equal((await flushDraftNow()).ok, true);
+    const stored = store.writes.at(-1);
+    assert.equal(stored.text, "Stored");
+    assert.deepEqual(await hook.enter(), { ok: true });
+    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    assert.equal(hook.read().app.rows[0].audioText, "Shared Stored");
+    assert.deepEqual(hook.leave(), { ok: true });
+    assert.equal((await flushDraftNow()).ok, true);
+    assert.deepEqual(store.discards, []);
+    const landed = store.writes.at(-1);
+    assert.deepEqual([landed.seq, landed.text, landed.docId, landed.shared], [stored.seq + 1, "Shared Stored", currentDocument().docId, false]);
+  } finally {
+    if (sharedSession()) hook.leave();
+    restoreDesktop();
+  }
+});
+
 test("the composed recovery panel binding offers the Recovery action only while shared, restores and discards a peer's removal, and closes on leave", async () => {
   script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "Removed words", visualText: "" }]);
   assert.equal(appActions.has("recovery"), false);

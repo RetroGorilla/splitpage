@@ -14,13 +14,13 @@ const DRAFTS = {
   },
   "application/recovery/drafts-ports.ts#DraftsMount.taker": { "bootstrap/wiring/drafts.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsMount.applyTaken": { "bootstrap/wiring/drafts.ts": 1 },
-  "application/recovery/drafts-ports.ts#DraftsMount.detachRefusal": { "bootstrap/wiring/drafts.ts": 1 },
+  "application/recovery/drafts-ports.ts#DraftsMount.detachRefusal": { "bootstrap/wiring/drafts.ts": 1, "bootstrap/wiring/shared-test.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsMount.detachSource": { "bootstrap/wiring/drafts.ts": 1, "bootstrap/wiring/shared-test.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsMount.resumeWriting": { "bootstrap/wiring/drafts.ts": 1, "bootstrap/wiring/shared-test.ts": 2 },
   "application/recovery/drafts-ports.ts#DraftsPorts.transitions": { "application/recovery/drafts.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsPorts.identity.copyHistory": { "application/recovery/drafts.ts": 1 },
   "bootstrap/wiring/recovery-owners.ts#desktopDrafts": { "bootstrap/wiring/drafts.ts": 1 },
-  "bootstrap/wiring/recovery-owners.ts#flushDraftNow": { "bootstrap/wiring/desktop.ts": 1 },
+  "bootstrap/wiring/recovery-owners.ts#flushDraftNow": { "bootstrap/wiring/desktop.ts": 1, "bootstrap/wiring/shared-test.ts": 1 },
   "bootstrap/wiring/drafts.ts#draftTaker": { "bootstrap/wiring/startup.ts": 1 },
   "bootstrap/wiring/drafts.ts#applyTakenDraft": { "bootstrap/wiring/startup.ts": 1 }
 };
