@@ -68,9 +68,9 @@ test("coverage decisions name only defined operations, the two refusals or the p
     ["titleCommand", "renameSceneCommand", "cellTextCommand"]);
 });
 
-test("the 26 text/structure builders and 24 flow rows record their audited branches", () => {
+test("the 27 text/structure builders and 24 flow rows record their audited branches", () => {
   const builders = builderOperationCoverage.filter(row => row[1] === "text-mark" || row[1] === "structure");
-  assert.equal(builders.length, 26);
+  assert.equal(builders.length, 27);
   for (const row of builders) {
     assert.equal(row.length, 4, row[0]);
     if (row.length === 4) assert.ok(row[3].length > 0 && row[3].every(branch => branch[0].length > 0), row[0]);
@@ -95,7 +95,7 @@ test("each audited row declares exactly the union of its literal branch requirem
     assert.deepEqual(declared.sort(), [...required].sort(), row[0]);
     rows++;
   }
-  assert.equal(rows, 50);
+  assert.equal(rows, 51);
   assert.equal(flowOperationCoverage.find(row => row[0] === "typeWithMarks")?.[2], "text-insert");
   assert.equal(flowOperationCoverage.find(row => row[0] === "replaceAll")?.[2], "text-insert,text-delete,heading-remove,scalar");
   context.diagnostic(`${rows} rows equal the union of ${branches} literal branch requirements`);

@@ -18,12 +18,13 @@ import type { EmptyScriptPorts } from "../../../src/features/empty-script/ports.
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
+import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 
 function mounted(handle: SharedDocumentHandle, session: ReturnType<typeof sharedHarness>["session"], host: HTMLElement, writer: string,
   place: EmptyScriptPorts["place"], author = sharedAuthorPort({ handle: () => handle, name: () => writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara" })) {
   const notices: string[] = [];
   const control = mountSharedEmptyScript({ handle, session, author, writer: () => writer, stamps: bufferStamps(writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara") },
-    { host, edits: { allowed: () => true }, report: outcome => { notices.push(outcome.kind === "rejected" ? outcome.reason : outcome.kind); }, place });
+    { host, edits: { allowed: () => true }, notices: { show: (message, kind) => { assert.equal(kind, "warn"); notices.push(message); } }, report: outcome => { assert.notEqual(outcome.kind, "rejected"); notices.push(outcome.kind); }, place });
   const area = host.previousElementSibling; assert.ok(area instanceof HTMLElement);
   const input = area.querySelector("textarea"); assert.ok(input);
   return { control, input, area, notices };
@@ -115,7 +116,7 @@ test("rule 91: composition holds ingress and refuses unmount until its initial t
     assert.equal(pa.area.isConnected, true); assert.equal(pa.input.value, "漢");
     pa.input.dispatchEvent(new window.CompositionEvent("compositionend", { data: "漢", bubbles: true }));
     agrees(h, "only scene", [emptyScriptRow(firstEmptyScriptBeat, "漢"), emptyScriptRow(secondEmptyScriptBeat, "two", "Bob")], "dup");
-    assert.deepEqual(pa.notices, ["buffer-composition"]);
+    assert.deepEqual(pa.notices, ["This is not available in a shared session yet."]);
     assert.equal(pa.control.dispose(), true);
   } finally { pa.control.dispose(); pb.control.dispose(); a.session.dispose(); b.session.dispose(); h.close(); }
 });
@@ -149,11 +150,30 @@ for (const refusal of ["empty-script-no-author", "empty-script-identity-unavaila
       const before = encodeSharedState(h.a);
       type(page.input, "kept");
       assert.equal(page.input.value, "kept"); assert.equal(page.area.hidden, false);
-      assert.deepEqual(page.notices, [refusal]); assert.deepEqual(a.executed, []);
+      assert.deepEqual(page.notices, ["This is not available in a shared session yet."]); assert.deepEqual(a.executed, []);
       assert.deepEqual(encodeSharedState(h.a), before);
     } finally { page.input.value = ""; page.control.dispose(); a.session.dispose(); h.close(); }
   });
 }
+
+test("rule 91: a session refusal shows once through the shared notice and retains the draft", () => {
+  const h = removedEmptyScript("last beat", "D1"), shown: unknown[] = [], refused: string[] = [];
+  const notice = sharedCommandRefusalNotice({ show: (message, kind) => { shown.push([message, kind]); } });
+  const a = sharedHarness(adapterReplica(h.a), { refused: reason => { refused.push(reason); notice(reason); } });
+  a.deny("viewing-only");
+  document.body.innerHTML = "<div id=host></div>";
+  const host = document.getElementById("host"); assert.ok(host);
+  const page = mounted(h.a, a.session, host, "1", () => true);
+  try {
+    const before = encodeSharedState(h.a);
+    type(page.input, "kept");
+    assert.equal(page.input.value, "kept"); assert.equal(page.area.hidden, false);
+    assert.deepEqual(refused, ["viewing-only"]);
+    assert.deepEqual(shown, [["This is not available in a shared session yet.", "warn"]]);
+    assert.deepEqual(page.notices, []); assert.deepEqual(a.executed, []);
+    assert.deepEqual(encodeSharedState(h.a), before); agrees(h, "last beat", [], "D1");
+  } finally { page.input.value = ""; page.control.dispose(); a.session.dispose(); h.close(); }
+});
 
 test("rule 91: first input cannot take another buffer's ingress hold", () => {
   const h = removedEmptyScript("last beat", "dup"), a = sharedHarness(adapterReplica(h.a)), release = holdSharedBuffer(h.a);
@@ -162,7 +182,7 @@ test("rule 91: first input cannot take another buffer's ingress hold", () => {
   const page = mounted(h.a, a.session, host, "1", () => true);
   try {
     assert.equal(page.input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "insertText", data: "x", bubbles: true, cancelable: true })), false);
-    assert.deepEqual(a.executed, []); assert.deepEqual(page.notices, ["buffer-pending"]);
+    assert.deepEqual(a.executed, []); assert.deepEqual(page.notices, ["This is not available in a shared session yet."]);
     assert.equal(page.control.dispose(), true); assert.deepEqual([...collabState(h.a).ingress.holds], ["buffer"]);
   } finally { release(); page.control.dispose(); a.session.dispose(); h.close(); }
 });
@@ -181,7 +201,7 @@ for (const order of ["D1", "rev"] as const) test("rule 91: refused input fallbac
   try {
     const before = encodeSharedState(h.a);
     assert.equal(nativeInput("rejected"), true); assert.equal(page.input.value, "");
-    assert.deepEqual(page.notices, ["buffer-pending"]); assert.deepEqual(a.executed, []);
+    assert.deepEqual(page.notices, ["This is not available in a shared session yet."]); assert.deepEqual(a.executed, []);
     assert.deepEqual([...collabState(h.a).ingress.holds], ["buffer"]);
     releaseOther(); releaseOther = null;
     assert.equal(page.control.finish(), true); assert.deepEqual(a.executed, []); assert.deepEqual(encodeSharedState(h.a), before);
@@ -189,7 +209,7 @@ for (const order of ["D1", "rev"] as const) test("rule 91: refused input fallbac
     assert.equal(nativeInput("kept"), true); assert.equal(page.input.value, "kept");
     assert.equal(nativeInput("kept again"), true); assert.equal(page.input.value, "kept again");
     assert.deepEqual(a.executed, []); assert.deepEqual([...collabState(h.a).ingress.holds], ["buffer"]);
-    assert.deepEqual(page.notices, ["buffer-pending", "empty-script-no-author", "empty-script-no-author"]);
+    assert.deepEqual(page.notices, ["This is not available in a shared session yet.", "This is not available in a shared session yet.", "This is not available in a shared session yet."]);
     ready = true; assert.equal(page.control.finish(), true);
     agrees(h, "last beat", [emptyScriptRow(firstEmptyScriptBeat, "kept again")], order);
     assert.deepEqual([...collabState(h.a).ingress.holds], []);

@@ -1,6 +1,27 @@
 {
   "mutants": [
     {
+      "label": "empty target drops the session refusal notice marker",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "...(result.notified ? { notified: result.notified } : {})",
+      "replace": "",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "first input wiring drops the session refusal notice marker",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "{ ...result, ok: false }",
+      "replace": "{ ok: false, reason: result.reason }",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
+      "label": "empty target refusals miss the shared notice",
+      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "find": "report: sharedCommandReport(surface.notices, surface.report)",
+      "replace": "report: surface.report",
+      "tests": ["tests/features/empty-script/shared.test.ts"]
+    },
+    {
       "label": "refused input fallback retains unadmitted DOM text",
       "file": "src/features/empty-script/empty-script.ts",
       "find": "if (!release && !begin(event)) { input.value = \"\"; paint(); return; }",
@@ -178,7 +199,7 @@
     {
       "label": "empty target clears a refused first draft",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "if (!result.ok) { notify(result.reason); return false; }",
+      "find": "if (!result.ok) { ports.report({ kind: \"rejected\", reason: result.reason, ...(result.notified ? { notified: result.notified } : {}) }); return false; }",
       "replace": "if (false) return false;",
       "tests": [
         "tests/features/empty-script/guards.test.ts",

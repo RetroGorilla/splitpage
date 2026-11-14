@@ -2,8 +2,9 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
+import type { CommandOutcome } from "../../application/session/document-session.ts";
 
-export type EmptyScriptCreated = { readonly ok: true; readonly rowId: string } | { readonly ok: false; readonly reason: string };
+export type EmptyScriptCreated = { readonly ok: true; readonly rowId: string } | ({ readonly ok: false } & Omit<Extract<CommandOutcome, { kind: "rejected" }>, "kind">);
 export type EmptyScriptHold = { readonly ok: true; readonly release: () => void } | { readonly ok: false; readonly reason: string };
 
 export interface EmptyScriptPorts extends Pick<BufferedFieldPorts, "report"> {

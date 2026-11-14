@@ -10,6 +10,8 @@ import { sharedStructureKey } from "../../../core/collab/structure-key.ts";
 import { collabState } from "../../../adapters/collab/state.ts";
 import { readSharedContentRef } from "../../../core/collab/read-operation.ts";
 import type { SharedAuthorPort } from "./shared-author.ts";
+import type { NoticePort } from "../../../application/effects/ports.ts";
+import { sharedCommandReport } from "./shared-command-notices.ts";
 
 export function mountSharedEmptyScript(shared: {
   readonly handle: SharedDocumentHandle;
@@ -17,9 +19,9 @@ export function mountSharedEmptyScript(shared: {
   readonly author: SharedAuthorPort;
   readonly writer: () => string;
   readonly stamps: StampPorts;
-}, surface: Pick<EmptyScriptPorts, "host" | "edits" | "report" | "place">) {
+}, surface: Pick<EmptyScriptPorts, "host" | "edits" | "report" | "place"> & { readonly notices: Pick<NoticePort, "show"> }) {
   const order = observeSharedStructureOrder(shared.handle);
-  return startEmptyScript({ ...surface, lifetime: shared.session,
+  return startEmptyScript({ ...surface, report: sharedCommandReport(surface.notices, surface.report), lifetime: shared.session,
     document: { current: () => shared.session.read(doc => doc), onChange: shared.session.subscribe },
     hold: () => {
       if (collabState(shared.handle).ingress.holds.has("buffer")) return { ok: false, reason: "buffer-pending" };
@@ -34,7 +36,7 @@ export function mountSharedEmptyScript(shared: {
       const result = shared.session.run(emptyScriptCommand(text, { ...shared.stamps, author: { ...author, id },
         created: rowId, gap: { left: null, right: first, affinity: "before" } }));
       if (result.kind === "failed") throw result.error;
-      return result.kind === "applied" || result.kind === "committed" ? { ok: true, rowId } : { ok: false, reason: result.kind === "rejected" ? result.reason : "empty-script-no-change" };
+      return result.kind === "applied" || result.kind === "committed" ? { ok: true, rowId } : result.kind === "rejected" ? { ...result, ok: false } : { ok: false, reason: "empty-script-no-change" };
     }
   });
 }

@@ -35,7 +35,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
     committing = true;
     try {
       const text = input.value, result = ports.create(text);
-      if (!result.ok) { notify(result.reason); return false; }
+      if (!result.ok) { ports.report({ kind: "rejected", reason: result.reason, ...(result.notified ? { notified: result.notified } : {}) }); return false; }
       input.value = ""; end(); paint();
       if (!ports.place(result.rowId, text.length) && empty()) input.focus();
       return true;
