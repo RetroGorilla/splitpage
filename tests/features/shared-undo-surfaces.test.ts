@@ -253,6 +253,20 @@ for (const remote of [false, true] as const) {
   }
 }
 
+test("rule 85 the Writer title input uses the same owner, restores its recorded caret and refreshes both title inputs", () => {
+  const page = sharedTitle();
+  try {
+    page.writer.focus(); page.writerEdge.select(5); page.writerEdge.type("x"); page.writerEdge.select(0);
+    page.writerEdge.undo(null);
+    assert.deepEqual([page.main.value, page.writer.value, page.writer.selectionStart, page.writer.selectionEnd, page.pageTitles(), page.reports],
+      ["Draft", "Draft", 5, 5, 2, []]);
+    page.writerEdge.redo(null); page.h.queue.flush("dup"); page.h.join();
+    for (const handle of [page.h.a, page.h.b, page.h.c]) assert.equal(field(handle, TITLE_FIELD_KEY), "Draftx");
+    assert.deepEqual([page.main.value, page.writer.value, page.writer.selectionStart, page.writer.selectionEnd, page.pageTitles(), page.reports,
+      page.a.executed.map(list => list.operations.map(op => op.kind))], ["Draftx", "Draftx", 5, 5, 3, [], [["text-insert"]]]);
+  } finally { page.close(); }
+});
+
 for (const change of ["name before repaint", "name during input", "another field", "no edit", "held empty"] as const) {
   test(`rule 85 Escape checks the stored identity without depending on repaint: ${change}`, () => {
     const page = sharedRename();
