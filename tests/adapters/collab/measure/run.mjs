@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { URL } from "node:url";
@@ -217,7 +217,7 @@ export function quantile(values, fraction) {
 
 function collectedHeap() { globalThis.gc(); globalThis.gc(); return process.memoryUsage().heapUsed; }
 
-function timed(state, updates, mode, singles) {
+function timed(state, updates, mode, singles, expected) {
   const handle = open(state);
   try {
     collectedHeap();
@@ -227,6 +227,7 @@ function timed(state, updates, mode, singles) {
     }
     else apply(handle, updates, mode);
     const total = performance.now() - start;
+    if (expected) assert.deepEqual(encodeSharedState(handle), expected);
     return { total, ...singles ? { p50: quantile(samples, 0.5), p95: quantile(samples, 0.95), max: Math.max(...samples) } : {} };
   } finally { destroySharedDocument(handle); }
 }
@@ -291,40 +292,83 @@ export function report(result) {
   return lines.join("\n") + "\n";
 }
 
-export function run(rounds = 5) {
+export function restoreCheckpoint(saved, fingerprint) {
+  assert.equal(saved.fingerprint, fingerprint, "Checkpoint source differs from current source");
+  assert.equal(saved.result.node, process.version, "Checkpoint Node version differs");
+  assert.equal(saved.result.arch, process.arch, "Checkpoint CPU architecture differs");
+  return { ...saved, states: saved.states.map(row => ({ ...row,
+    fresh: Buffer.from(row.fresh, "base64"), edited: Buffer.from(row.edited, "base64") })),
+  streams: Object.fromEntries(Object.entries(saved.streams).map(([key, stream]) => [key, {
+    updates: stream.updates.map(update => Buffer.from(update, "base64")), final: Buffer.from(stream.final, "base64") }])) };
+}
+
+export function saveCheckpoint(checkpoint) {
+  return { ...checkpoint, states: checkpoint.states.map(row => ({ ...row,
+    fresh: Buffer.from(row.fresh).toString("base64"), edited: Buffer.from(row.edited).toString("base64") })),
+  streams: Object.fromEntries(Object.entries(checkpoint.streams).map(([key, stream]) => [key, {
+    updates: stream.updates.map(update => Buffer.from(update).toString("base64")), final: Buffer.from(stream.final).toString("base64") }])) };
+}
+
+export function sourceFingerprint() {
+  return execFileSync("git", ["rev-parse", "HEAD:src", "HEAD:shared", "HEAD:package.json", "HEAD:package-lock.json",
+    "HEAD:tests/collab/fixtures/projection-reference.json"], { encoding: "utf8" }).trim();
+}
+
+export function run(rounds = 5, saved = null, persist = () => {}) {
   assert.equal(process.versions.node, "24.22.1", "Use the repository Node pin");
   assert.equal(typeof globalThis.gc, "function", "Run with --expose-gc");
   assert.ok(Number.isInteger(rounds) && rounds >= 5, "At least five rounds are required");
   const dirty = execFileSync("git", ["status", "--porcelain", "--", "src", "shared", "package.json", "package-lock.json", "tests/collab/fixtures/projection-reference.json"], { encoding: "utf8" });
   assert.equal(dirty.trim(), "", "Commit measured source, dependencies and fixtures before running");
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  const sources = fixtures(), states = sources.map(source => {
+  const fingerprint = sourceFingerprint();
+  const checkpoint = saved ? restoreCheckpoint(saved, fingerprint) : null;
+  const sources = fixtures(), states = checkpoint?.states ?? [];
+  const result = checkpoint?.result ?? { commit, node: process.version,
+    arch: process.arch, rounds, growth: [], admission: [] };
+  assert.equal(result.rounds, rounds);
+  const streams = checkpoint?.streams ?? {};
+  const publish = () => persist(saveCheckpoint({ fingerprint, result, states, streams }));
+  publish();
+  for (const [index, source] of sources.entries()) if (!states[index]) {
     process.stderr.write(`Preparing ${source.name}\n`);
-    return growth(source);
-  });
-  const result = { commit, node: process.version,
-    arch: process.arch, rounds, growth: states.map(row => ({ ...row, fresh: row.fresh.length, edited: row.edited.length })), admission: [] };
+    const row = growth(source);
+    states.push(row);
+    result.growth.push({ ...row, fresh: row.fresh.length, edited: row.edited.length });
+    publish();
+  }
   for (const [index, source] of sources.entries()) for (const phase of ["fresh", "edited"]) {
-    const state = states[index][phase], generated = updatesFor(state, source.document.rows[0].id), row = { name: source.name, phase,
-      per1000Typed: generated.final.length - state.length, runs: [] };
-    for (let round = 0; round < rounds; round++) {
+    let row = result.admission.find(value => value.name === source.name && value.phase === phase);
+    if (row?.runs.length === rounds) continue;
+    const state = states[index][phase], key = source.name + "/fresh";
+    const generated = streams[key] ?? (streams[key] = updatesFor(states[index].fresh, source.document.rows[0].id));
+    const control = open(state);
+    let expected;
+    try {
+      const address = target(source.document.rows[0].id), before = readSharedTextHistory(control, address).units.length;
+      apply(control, generated.updates, "direct");
+      assert.equal(readSharedTextHistory(control, address).units.length, before + 1000);
+      expected = encodeSharedState(control);
+    }
+    finally { destroySharedDocument(control); }
+    if (!row) {
+      row = { name: source.name, phase, senderBase: key.split("/")[1], per1000Typed: expected.length - state.length, runs: [] };
+      result.admission.push(row);
+    }
+    publish();
+    for (let round = row.runs.length; round < rounds; round++) {
       const measured = { heap: {}, footprint: footprint(source, state) };
       const modes = ["current", "direct", "decode", "batch"];
       for (const mode of [...modes.slice(round % 4), ...modes.slice(0, round % 4)]) {
         measured[mode] = {};
         if (mode !== "batch") measured[mode].single = timed(state, generated.updates.slice(0, 500), mode, true);
-        for (const count of [100, 1000]) measured[mode][count] = timed(state, generated.updates.slice(0, count), mode, false);
+        for (const count of [100, 1000]) measured[mode][count] = timed(state, generated.updates.slice(0, count), mode, false, count === 1000 ? expected : null);
       }
       for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, generated.updates.slice(0, count));
       row.runs.push(measured);
+      publish();
       process.stderr.write(`${source.name} ${phase}: round ${round + 1}/${rounds}\n`);
     }
-    for (const mode of ["current", "direct", "decode", "batch"]) {
-      const check = open(state);
-      try { apply(check, generated.updates, mode); assert.deepEqual(encodeSharedState(check), generated.final); }
-      finally { destroySharedDocument(check); }
-    }
-    result.admission.push(row);
   }
   return result;
 }
@@ -332,7 +376,14 @@ export function run(rounds = 5) {
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   assert.ok(args.length <= 1, "Usage: node --expose-gc tools/measure-shared-admission.mjs [results.json]");
-  const result = run();
+  const cache = args[0] ? args[0] + ".checkpoint.json" : null;
+  const saved = cache && existsSync(cache) ? JSON.parse(readFileSync(cache, "utf8")) : null;
+  const result = run(5, saved, checkpoint => {
+    if (cache) {
+      writeFileSync(cache, JSON.stringify(checkpoint));
+      writeFileSync(args[0], JSON.stringify(checkpoint.result, null, 2) + "\n");
+    }
+  });
   if (args[0]) writeFileSync(args[0], JSON.stringify(result, null, 2) + "\n");
   process.stdout.write(report(result));
 }

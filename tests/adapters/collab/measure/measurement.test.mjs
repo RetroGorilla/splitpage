@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import process from "node:process";
+import { Buffer } from "node:buffer";
 import * as Y from "yjs";
-import { apply, fixtures, quantile, scaleFixture, summary, writer } from "./run.mjs";
+import { apply, fixtures, quantile, restoreCheckpoint, saveCheckpoint, scaleFixture, summary, writer } from "./run.mjs";
 import { enterSharedDocument } from "../../../../src/core/migrate.ts";
 import { createSharedDocument, encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.ts";
@@ -16,6 +18,17 @@ test("nearest-rank percentiles and cross-run medians keep tails and outliers", (
   assert.equal(quantile(samples, 0.95), 475);
   assert.equal(summary([5, 1, 100, 3, 2]), "3.00 [1.00–100.00]");
   assert.equal(summary([1, 2, 3, 4]), "2.50 [1.00–4.00]");
+});
+
+test("checkpoint round trips binary updates and refuses a changed source or runtime", () => {
+  const checkpoint = { fingerprint: "source", result: { node: process.version, arch: process.arch, admission: [{ runs: [1] }] },
+    states: [{ fresh: Buffer.from([0, 255]), edited: Buffer.from([128, 1]) }],
+    streams: { "short/fresh": { updates: [Buffer.from([1, 254])], final: Buffer.from([2, 3]) } } };
+  const saved = JSON.parse(JSON.stringify(saveCheckpoint(checkpoint)));
+  assert.deepEqual(restoreCheckpoint(saved, "source"), checkpoint);
+  assert.throws(() => restoreCheckpoint(saved, "other"), /source differs/);
+  assert.throws(() => restoreCheckpoint({ ...saved, result: { ...saved.result, node: "other" } }, "source"), /Node version/);
+  assert.throws(() => restoreCheckpoint({ ...saved, result: { ...saved.result, arch: "other" } }, "source"), /architecture/);
 });
 
 test("Stage 0 fixtures and scale rule preserve references and registry counts", () => {
@@ -71,6 +84,27 @@ test("admission controls apply identical causal updates and a failed batch leave
         Y.applyUpdate(collabState(receiver).doc, initial);
         apply(receiver, updates, mode);
         assert.deepEqual(encodeSharedState(receiver), encodeSharedState(sender), mode);
+      } finally { destroySharedDocument(receiver); }
+    }
+    const edited = createSharedDocument();
+    let editedState, expected;
+    try {
+      Y.applyUpdate(collabState(edited).doc, initial);
+      registerSharedTextOperationHandlers(edited);
+      const local = writer(edited);
+      local.type(address, "y");
+      local.command({ kind: "text-delete", target: address, observed: local.history(address).units.slice(-1).map(unit => unit.identity) });
+      editedState = encodeSharedState(edited);
+      apply(edited, updates, "direct");
+      expected = encodeSharedState(edited);
+      assert.deepEqual(projectSharedDocument(edited), projectSharedDocument(sender));
+    } finally { destroySharedDocument(edited); }
+    for (const mode of ["current", "direct", "decode", "batch"]) {
+      const receiver = createSharedDocument();
+      try {
+        Y.applyUpdate(collabState(receiver).doc, editedState);
+        apply(receiver, updates, mode);
+        assert.deepEqual(encodeSharedState(receiver), expected, "stale peer: " + mode);
       } finally { destroySharedDocument(receiver); }
     }
     const receiver = createSharedDocument();
