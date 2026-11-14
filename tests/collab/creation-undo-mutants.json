@@ -1,11 +1,42 @@
 {
   "tests": [
     "tests/adapters/collab/undo-creation.test.ts",
+    "tests/adapters/collab/creation-undo-cost.test.ts",
     "tests/application/commands/empty-script.test.ts",
     "tests/application/commands/flow-paste-shared.test.ts",
     "tests/features/empty-script/shared.test.ts"
   ],
   "mutants": [
+    {
+      "label": "creation ownership enumerates every child after one retarget",
+      "file": "src/adapters/collab/creation-record-index.ts",
+      "find": "const pending = [...index.pending];",
+      "replace": "const pending = [...root.keys()];"
+    },
+    {
+      "label": "creation retirement reuses an earlier revision",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "previous && previous.revision === state.revision",
+      "replace": "previous"
+    },
+    {
+      "label": "creation retirement recomputes every settled read",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "previous && previous.revision === state.revision",
+      "replace": "false"
+    },
+    {
+      "label": "creation retirement reuses a result during writes",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "if (!state.reads.settled || state.ingress.notifications > 0) return read();",
+      "replace": ""
+    },
+    {
+      "label": "creation retirement reuses a result inside callbacks",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": " || state.ingress.notifications > 0",
+      "replace": ""
+    },
     {
       "label": "creation ownership ignores retargeted children",
       "file": "src/adapters/collab/creation-record-index.ts",

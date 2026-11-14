@@ -12,6 +12,7 @@ import { applySharedUpdate, encodeSharedState, destroySharedDocument, readShared
 import { createMonitoredSharedDocument } from "./helpers.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { createRecord, setRecord } from "./record-support.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
@@ -30,11 +31,11 @@ function start(order: typeof ORDERS[number], source: Record<string, unknown> = S
   const owner = createSharedUndo({ now: () => serial * 2000, supports: supportsSharedUndoPart,
     reverse: record => reverseSharedUndoRecord(h.a, record, { by: "Alice", nextId: () => "undo" + ++serial }) });
   const flush = () => { h.queue.flush(order); handles.forEach((handle, i) => { const current = incremental[i]; assert.ok(current); assertIncremental(handle, current.projector); }); };
-  const check = (expected: ReturnType<typeof projectSharedDocumentWithRecovery>) => {
+  const check = (expected: ReturnType<typeof projectSharedDocumentWithRecovery>, confirm?: (handle: SharedDocumentHandle) => void) => {
     flush(); const late = createMonitoredSharedDocument();
     try {
       assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
-      for (const handle of [...handles, late]) assert.deepEqual(projectSharedDocumentWithRecovery(handle), expected);
+      for (const handle of [...handles, late]) { assert.deepEqual(projectSharedDocumentWithRecovery(handle), expected); confirm?.(handle); }
     } finally { destroySharedDocument(late); }
   };
   const command = (values: readonly unknown[], label = "create") => {
@@ -433,6 +434,28 @@ for (const collection of ["gallery", "comments"] as const) for (const order of O
     assert.deepEqual(h.owner.undo(), seen ? { ok: true, effective: false, label: "create", selection: null, reason: "used-up" } : { ok: true, effective: true, label: "create", selection: null });
     if (seen) assert.deepEqual(encodeSharedState(h.a), encoded);
     h.check(other);
+    if (!seen) assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
+  } finally { h.close(); }
+});
+
+for (const change of ["typing", "value", "comment", "reply"] as const) for (const order of ORDERS) for (const seen of [true, false]) test(`another copy with the creator's display name uses creation undo up: ${change}, seen=${seen}/${order}`, () => {
+  const h = start(order);
+  try {
+    const beat = change === "comment" || change === "reply" ? withRecords(h) : h.create("x", { lengthSeconds: 4 });
+    h.send(change === "typing" ? [{ ...typed(beat), by: "Alice" }] : change === "comment" ? [setRecord("comments", "C1", "text", "Peer work", "Alice")]
+      : change === "reply" ? [setRecord("replies", '["C1","A1"]', "text", "Peer work", "Alice")]
+      : [{ kind: "scalar", id: "away", by: "Alice", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 8 },
+        { kind: "scalar", id: "back", by: "Alice", target: { scope: "beat", record: beat }, field: "lengthSeconds", value: 4 }]);
+    const other = projectSharedDocumentWithRecovery(h.b); if (seen) h.flush();
+    const encoded = encodeSharedState(h.a);
+    assert.deepEqual(h.owner.undo(), seen ? { ok: true, effective: false, label: "create", selection: null, reason: "used-up" } : { ok: true, effective: true, label: "create", selection: null });
+    if (seen) assert.deepEqual(encodeSharedState(h.a), encoded);
+    h.check(other, handle => {
+      if (change === "comment" || change === "reply") {
+        const collection = change === "comment" ? "comments" : "replies", key = change === "comment" ? "C1" : '["C1","A1"]';
+        assert.equal(readSharedRecords(handle, collection).find(record => record.key === key)?.fields.text, "Peer work");
+      }
+    });
     if (!seen) assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
   } finally { h.close(); }
 });

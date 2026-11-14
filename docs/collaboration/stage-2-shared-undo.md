@@ -687,6 +687,26 @@ The ownership index follows changed ownership fields as well as added and
 removed keys, so moving an existing picture or comment onto the beat also
 invalidates retirement, including an unseen concurrent move.
 
+Assumed rules 145 to 149, proposed for the plan review:
+
+145. An unchanged creation is compared with the whole command's result:
+     content, values, owned child records and joins. Current work from another
+     copy uses its undo up, including equal letters with different character
+     identities or an equal value last written by that copy. True no-write
+     operations and edit stamps are ignored. Later own edits undo first.
+146. Ownership means the copy that made a change, not its display name.
+     Two copies displaying the same name still protect each other's work.
+147. A structural change to the created beat by anyone uses its undo up, even after that
+     change was undone. A separately created neighbour is independent work.
+148. An unseen contribution can arrive after a locally effective undo. It
+     invalidates retirement on every copy; its content stays in the script
+     or in the recovery chosen by its own removal. Redo is then used up.
+149. Undo of an unchanged creation adds no recovery entry; redo reveals the
+     same identities, including initial children and joins. First input undo
+     returns the exact emptied script with its previous recovery. A changed
+     creation consumes the whole entry without writing or adding redo; the
+     next press reaches the older entry. A split has its own inverse only.
+
 Assumed for an unseen concurrent change: the local undo can succeed before
 that change arrives. Once delivered, the changed observation invalidates the
 retirement on every copy, keeping that person's content with the beat in the
@@ -709,6 +729,55 @@ routes remain in `anchors.ts`, `text-target.ts` and `mark-store.ts`. The join
 index has one lazy observer in `shared-join-index.ts`, shared by structure and
 the guard. This keeps observation independent of structure interpretation
 and prevents a runtime import cycle. Every importer names the owning module.
+
+#### Typing path costs
+
+An unmarked beat takes an in-memory marker-presence lookup and returns before
+reading a creation observation. With a marked beat, the first read in each
+settled document revision checks its observation; subsequent reads reuse the
+boolean. Open transactions and guarded callbacks bypass that result cache.
+An edit in a different segment still advances the document revision and rechecks marked creations;
+the cache does not claim segment-local invalidation.
+
+The ownership indexes queue only changed collection keys or changed ownership
+fields. A warm gallery retarget refreshes one child record and reads its owner
+once, with no collection enumeration; the next lookup reads no child. The
+literal checks this with zero and 100 unrelated children.
+
+`tests/adapters/collab/creation-undo-cost.test.ts` measures a text insert, its
+stamp and undo recording, and incremental publication. R1 is edited; R1 and
+R2 each begin as three characters split after their first character. Each
+retired creation has one narration character, an empty visual and the default
+gallery slot. The native counts below are for the first key after retirement;
+the source's eligibility result is initially uncached. A second key also pins
+the steady observation count. Both sets are identical with zero and 100
+additional unmarked beats. These are operation counts, not timings.
+
+| Retired creations | First-key observations | Next-key observations | Native text reads | Mark-entry visits | Record accesses | Text units returned |
+| --- | --- | --- | --- | --- | --- | --- |
+| None | 0 | 0 | 7 | 5 | 46 | 35 |
+| One in R1 | 3 | 2 | 16 | 12 | 130 | 89 |
+| One in R2 | 1 | 1 | 10 | 6 | 74 | 47 |
+| Two in R1 | 6 | 4 | 25 | 25 | 214 | 167 |
+| Two in R2 | 2 | 2 | 13 | 9 | 102 | 67 |
+| One in each | 4 | 3 | 19 | 13 | 158 | 101 |
+
+Status-entry and order-entry visits are zero in every row. The no-retirement
+row reads no unrelated text, mark entry or record. A retirement in another
+segment still costs observation reads: one in R2 adds three text reads, one
+mark-entry visit and 28 record accesses to this keystroke. Observations read
+the marked beat's fields and children and the physical narration segment;
+more retained creations in one segment can therefore revisit a larger text.
+The literal also pins 100 unchanged guard queries to one observation read,
+two reads during two writes in an open transaction, and one read in the next
+settled revision. Two guarded callbacks do two fresh reads without replacing
+the settled cache. Larger content and child collections cost more than this
+small fixture; these pins do not claim a constant cost per keystroke.
+Native counts exclude in-memory index lookups, sorting and JSON comparison.
+A contribution that invalidates retirement does not erase its marker: the
+false result is also rechecked after a later revision, and can become true
+again if all the changed content is taken back. Retained marker count, not
+only the number of currently hidden beats, determines this observation work.
 
 ### The provenance marker
 

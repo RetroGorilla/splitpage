@@ -11,7 +11,7 @@ export function observeSharedCreationMarkers(handle: SharedDocumentHandle): Read
   indexes ??= new WeakMap(); const previous = indexes.get(handle); if (previous) return previous;
   const state = collabState(handle); assertSharedDocumentIdle(state);
   const root = state.roots.beats, keys = new Set<string>();
-  // why: marker presence follows changed items, so ordinary typing never rereads unrelated beat records.
+  // why: marker presence follows changed items, so its observer does not reread unrelated beat records while typing.
   const refresh = (key: string) => {
     const item = root._map.get(key), record: unknown = item && !item.deleted ? item.content.getContent()[0] : null;
     if (marked(record)) keys.add(key); else keys.delete(key);

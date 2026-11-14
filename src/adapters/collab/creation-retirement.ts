@@ -97,10 +97,19 @@ export function readSharedCreationContent(handle: SharedDocumentHandle, beat: st
 
 export function isSharedCreationRetired(handle: SharedDocumentHandle, beat: string): boolean {
   if (!observeSharedCreationMarkers(handle).has(beat)) return false;
-  const record = collabState(handle).roots.beats.get(beat), raw: unknown = record instanceof Y.Map ? record.get(SHARED_CREATION_RETIREMENT_FIELD) : null;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const { observed, writer } = raw as Record<string, unknown>;
-  return typeof observed === "string" && typeof writer === "string" && readSharedCreationContent(handle, beat, writer) === observed;
+  const state = collabState(handle);
+  const read = () => {
+    const record = state.roots.beats.get(beat), raw: unknown = record instanceof Y.Map ? record.get(SHARED_CREATION_RETIREMENT_FIELD) : null;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+    const { observed, writer } = raw as Record<string, unknown>;
+    return typeof observed === "string" && typeof writer === "string" && readSharedCreationContent(handle, beat, writer) === observed;
+  };
+  // why: preparation repeats stable reads; writes and callbacks can precede ownership observers settling.
+  if (!state.reads.settled || state.ingress.notifications > 0) return read();
+  const cached = state.reads.keep<Map<string, { readonly revision: number; readonly value: boolean }>>(state.roots.beats, "creation-retirement", () => new Map());
+  const previous = cached.get(beat);
+  if (previous && previous.revision === state.revision) return previous.value;
+  const value = read(); cached.set(beat, { revision: state.revision, value }); return value;
 }
 
 export function isSharedCreationRecordShown(handle: SharedDocumentHandle, collection: SharedRecordCollection, fields: Readonly<Record<string, unknown>>): boolean {
