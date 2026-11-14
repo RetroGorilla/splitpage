@@ -2288,3 +2288,16 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
 }
 
 .number-dot { margin-inline: -0.16em; }
+
+.empty-script { margin: 16px 0; }
+.empty-script-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
