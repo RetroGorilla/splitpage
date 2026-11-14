@@ -36,6 +36,8 @@ Call `mountSharedEmptyScript({ handle, session, author, writer, stamps }, { host
 
 `place(rowId, offset)` must paint the current committed projection, then place the narration caret in that resolved beat in the active view, returning whether it succeeded. Call `finish()` before leaving the view; honor a false result. Likewise honor `dispose()` returning false while native input, composition or a retained draft cannot settle. The running app does not call this factory in this cut.
 
+Structured beat paste while this target is focused stays on the existing flow-command route from #1561; the textarea's first-input fallback is plain text. The integration keeps that clipboard routing alongside the new target.
+
 ## Assumed rules
 
 No new product rule is assumed. Rule 91 permits a place to type and explicitly permits two beats for simultaneous starts. Rule 6 keeps the emptied scene heading in recovery. The existing structure placement and undo contracts decide the implementation and retained undo refusal.
