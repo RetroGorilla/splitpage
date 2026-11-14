@@ -6,7 +6,9 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
 import { readSharedHeadingActiveRemovals, readSharedHeadingRemovalState } from "./removal-state.ts";
-import { readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { readSharedDeletedEntryFields, readSharedDeletedRecordFields, readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { isSharedStatusScope, readStoredRecordDeletion, readStoredRecordObservation, sharedRecordChanges, sharedRecordState } from "./record-deletion.ts";
+import type { SharedRecordDeletion } from "./record-deletion.ts";
 import { isSharedGalleryShown, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
@@ -21,7 +23,7 @@ import { readSharedSplitHolds, readSharedSplitMarks, readSharedSplitObservationP
   sharedSplitStoreView } from "./split-retirement.ts";
 import type { SharedSplitObservationPart } from "./split-retirement.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
-import type { SharedActiveDiscard, SharedDeletedPerson } from "../../core/collab/recovery.ts";
+import type { SharedActiveDiscard, SharedDeletedPerson, SharedDeletedRecordEntry } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
   readonly cache: SharedProjectionCache;
@@ -121,6 +123,28 @@ export class SharedProjectionSource {
   discards(): readonly SharedActiveDiscard[] {
     return this.cache.read(["discards"], [this.version("discards"), this.version("retiredDiscards")],
       () => readSharedActiveDiscards(this.inputRoots.discards, this.inputRoots.retiredDiscards));
+  }
+
+  // why: a removal that nothing raced lists nothing; one that an edit raced lists the record as it is now, once,
+  // and only a change to its collection or to statuses reads the collection again.
+  deletedRecords(): readonly SharedDeletedRecordEntry[] {
+    return (["comments", "replies", "people", "tags", "shots", "gallery"] as const).flatMap(collection => this.cache.read(["deleted-records", collection],
+      [this.version(collection), ...isSharedStatusScope(collection) ? [this.version("statusEvents"), this.version("retiredStatus")] : []],
+      () => this.keys(collection).flatMap(key => this.deletedRecord(collection, key))));
+  }
+
+  private deletedRecord(collection: SharedDeletedRecordEntry["collection"], key: string): readonly SharedDeletedRecordEntry[] {
+    const raw: unknown = this.inputRoots[collection].get(key), deletion = readStoredRecordDeletion(raw);
+    const entry = (path: readonly string[], mark: SharedRecordDeletion, fields: Record<string, unknown> | null, field: "props" | "links" | null, nested: string | null) => {
+      const now = readStoredRecordObservation(this.inputRoots, collection, path), changed = sharedRecordChanges(mark.seen, now);
+      return changed.length && fields ? [{ kind: "deleted-record" as const, collection, record: key, field, entry: nested, fields, by: mark.by, changed, state: sharedRecordState(mark, now) }] : [];
+    };
+    if (deletion) return entry([collection, key], deletion, readSharedDeletedRecordFields(collection, key, raw), null, null);
+    const field = collection === "shots" ? "props" as const : collection === "gallery" ? "links" as const : null, list: unknown = field && raw instanceof Y.Map ? raw.get(field) : null;
+    if (!field || !(list instanceof Y.Map)) return [];
+    const marked = [...list.keys()].sort().flatMap(item => { const mark = readStoredRecordDeletion(list.get(item)); return mark ? [[item, mark] as const] : []; });
+    if (!marked.length || !readStoredSharedRecord(collection, key, raw)) return [];
+    return marked.flatMap(([item, mark]) => entry([collection, key, field, item], mark, readSharedDeletedEntryFields(field, item, list.get(item)), field, item));
   }
 
   deletedPeople(): readonly SharedDeletedPerson[] {

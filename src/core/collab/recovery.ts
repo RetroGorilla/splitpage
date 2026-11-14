@@ -3,7 +3,7 @@ import type { SharedProjectionGalleryOverflow } from "./projection/gallery.ts";
 import type { SharedTagProjectionRejection } from "./projection/tag-extents.ts";
 import type { SharedProjectionUnit } from "./projection/units.ts";
 import type { SharedRemovalBufferSource } from "./removal-state.ts";
-import type { SharedContentRef, SharedRecordCreate, SharedRecoveryDiscard, SharedRecoveryName } from "./operations.ts";
+import type { SharedContentRef, SharedRecordCreate, SharedRecordRevive, SharedRecoveryDiscard, SharedRecoveryName } from "./operations.ts";
 import { normalizeTagName } from "../document/tags.ts";
 import { cappedText } from "../document/text-policy.ts";
 import { PERSON_NAME_MAX } from "../production/records.ts";
@@ -28,7 +28,29 @@ export type SharedRecoveryEntry =
   | { readonly kind: "scene-with-no-beats"; readonly heading: Readonly<Record<string, unknown>>; readonly beforeRowId: string | null }
   | { readonly kind: "removed-heading"; readonly heading: Readonly<Record<string, unknown>>; readonly removal?: SharedRecoveryRemoval }
   | { readonly kind: "deleted-person"; readonly person: string; readonly name: string; readonly by: string;
-    readonly owners: readonly { readonly collection: "tags" | "shots"; readonly record: string }[]; readonly mentions: readonly string[] };
+    readonly owners: readonly { readonly collection: "tags" | "shots"; readonly record: string }[]; readonly mentions: readonly string[] }
+  | SharedDeletedRecordEntry;
+
+export interface SharedDeletedRecordEntry {
+  readonly kind: "deleted-record";
+  readonly collection: "comments" | "replies" | "people" | "tags" | "shots" | "gallery";
+  readonly record: string;
+  readonly field: "props" | "links" | null;
+  readonly entry: string | null;
+  readonly fields: Readonly<Record<string, unknown>>;
+  readonly by: string;
+  readonly changed: readonly string[];
+  readonly state: string;
+}
+
+export function sharedRecoveryRecordRestore(entry: SharedRecoveryEntry, people: readonly Readonly<Record<string, unknown>>[],
+  author: { readonly id: string; readonly by: string }): SharedRecordRevive | null {
+  if (entry.kind !== "deleted-record") return null;
+  // why: assumed rule 54 on #1414: a person comes back only while nobody else has that name.
+  if (entry.collection === "people" && people.some(person => sharedPersonNameKey(person.name) === sharedPersonNameKey(entry.fields.name))) return null;
+  const nested = entry.field !== null && entry.entry !== null ? { field: entry.field, entry: entry.entry as SharedContentRef } : {};
+  return { kind: "record-revive", id: author.id as SharedContentRef, by: author.by, target: { collection: entry.collection, record: entry.record as SharedContentRef }, ...nested };
+}
 
 export interface SharedDeletedPerson { readonly person: string; readonly name: string; readonly by: string }
 
@@ -73,6 +95,7 @@ export function sharedRecoveryEntryName(entry: SharedRecoveryEntry): SharedRecov
     case "comment-without-words": return { kind: entry.kind, key: entry.comment };
     case "reply-without-comment": return { kind: entry.kind, key: entry.reply };
     case "deleted-person": return { kind: entry.kind, key: entry.person };
+    case "deleted-record": return { kind: entry.kind, key: JSON.stringify([entry.collection, entry.record, entry.field, entry.entry, entry.state]) };
   }
 }
 

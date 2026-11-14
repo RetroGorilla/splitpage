@@ -135,6 +135,16 @@ application code issues it yet: there is no recovery panel.
 - Restore today: `sharedRecoveryPersonRestore` builds an ordinary `record-create` of the person with its id and kept name. It returns null (`name-taken`) while the state it is given holds a live person with that name without case. The record executor does not check names.
 - Restore should mean: as built (A8 as settled by assumed rule 54). Owners the deletion cleared are not put back (that is undo of the deletion), no owner is paired from `@Name`, and no colour is written.
 - Undo of restore: the ordinary undo of the create, a `record-delete`, which keeps the name again, so the entry comes back.
+- A person whose deletion an edit raced is listed once, as a `deleted-record` entry, and not as `deleted-person` as well.
+
+### `deleted-record`
+
+- Produced: `deletedRecords` in `adapters/collab/projection-source.ts` (assumed rules 170 to 177 on #1414). A `record-delete` of a comment, reply, person, tag, b-roll shot or picture, and a prop or video link taken out of its list, no longer deletes the map: it writes a removal mark (`deletion`) holding who removed it and a short digest of each field as the removal saw it, and readers treat the record as gone. An edit made without seeing the removal still lands in the kept map. The record is listed only while its fields, or for a tag or shot its standing status events, differ from what the removal saw; a removal nothing raced lists nothing.
+- Carries: `collection`, `record` (its key), `field` and `entry` (`props` or `links` and the entry key for a list entry, otherwise null), `fields` (the record or entry as it reads now, with the edit), `by` (who removed it), `changed` (the fields that differ from what the removal saw, `status` for a status), `state` (the removal and a digest of the record now, so a later edit renames the entry).
+- Copies: derivation.
+- Restore today: `sharedRecoveryRecordRestore` builds a `record-revive`, which deletes the mark, so the record comes back with every raced edit. It returns null for a person while a live person has that name without case (assumed rule 54).
+- Restore should mean: as built. A second restore is refused (`record-not-deleted`).
+- Undo of restore: the ordinary undo of the revive, a `record-delete` (or, for a list entry, the list without it), which writes a new mark that has seen the edit, so nothing is listed.
 
 ## Removal provenance
 
@@ -200,6 +210,7 @@ An entry whose `start` is null (an empty fragment, or a tag part with no first c
 | `scene-with-no-beats` | the heading id; not discardable, it follows its beats | | |
 | `comment-without-words`, `reply-without-comment` | the comment or reply record id | | |
 | `deleted-person` | the person id | restore and a later deletion of the same id (newer name and `by`) | |
+| `deleted-record` | the collection, the record key, the list entry if any, the removal and a digest of the record now | nothing: it is meant to change | an edit arrives that the discard did not see, or the record is removed again; either shows the entry again |
 
 A removed beat or heading removed again after a restore has the same name, so a discard of it records the removal ids it saw, as a restore does, and a fresh removal shows again.
 

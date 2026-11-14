@@ -12,6 +12,7 @@ interface Example {
   readonly kind: string;
   readonly source?: Record<string, unknown>;
   readonly prepare: (handle: SharedDocumentHandle) => void;
+  readonly race?: (handle: SharedDocumentHandle) => void;
   readonly row: { readonly kind: string; readonly label: string; readonly by: string; readonly text: string; readonly actions: readonly string[] };
 }
 
@@ -46,12 +47,16 @@ const EXAMPLES: readonly Example[] = [
   { kind: "deleted-person", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }],
     productionTags: [{ id: "t_1", cat: "prop", name: "Cup", status: "needed", owner: "P1" }] },
     prepare: handle => send(handle, deleteRecord("people", "P1", "Alice")),
-    row: { kind: "deleted-person", label: "Deleted person", by: "Alice", text: "Pat", actions: ["Restore", "Discard"] } }
+    row: { kind: "deleted-person", label: "Deleted person", by: "Alice", text: "Pat", actions: ["Restore", "Discard"] } },
+  { kind: "deleted-record", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }] },
+    prepare: handle => send(handle, deleteRecord("people", "P1", "Alice")),
+    race: handle => send(handle, { kind: "record-set", id: "rename", by: "Bob", target: { collection: "people", record: "P1" }, field: "name", value: "Patty" }),
+    row: { kind: "deleted-record", label: "Deleted person", by: "Deleted by Alice", text: "Patty\nChanged after it was deleted: name", actions: ["Restore", "Discard"] } }
 ];
 
 for (const example of EXAMPLES) for (const order of ["D1", "rev"] as const) test("C9 literal entry, copyable content and discard undo: " + example.kind + "/" + order, () => {
   const set = fixture(example.source);
-  example.prepare(set.a); set.queue.flush(order);
+  example.prepare(set.a); example.race?.(set.b); set.queue.flush(order);
   const one = page(set.a), two = page(set.b);
   try {
     one.open(); two.open();
@@ -85,7 +90,7 @@ for (const example of EXAMPLES) for (const order of ["D1", "rev"] as const) test
 
 for (const example of EXAMPLES.filter(item => item.row.actions.includes("Restore"))) for (const order of ["D1", "rev"] as const) {
   test("C9 restore, undo and redo keep the content at its original place: " + example.kind + "/" + order, () => {
-    const set = fixture(example.source); example.prepare(set.a); set.queue.flush(order);
+    const set = fixture(example.source); example.prepare(set.a); example.race?.(set.b); set.queue.flush(order);
     const one = page(set.a), two = page(set.b);
     try {
       one.open(); two.open(); click(one.host, example.kind, "Restore"); set.queue.flush(order);
@@ -98,11 +103,12 @@ for (const example of EXAMPLES.filter(item => item.row.actions.includes("Restore
       };
       const expected = example.kind === "removed-beat" ? { rows: [["R1", "abcd"], ["R2", "ef"]], people: [], headings: [] }
         : example.kind === "removed-heading" ? { rows: [["R1", "abcd"]], people: [], headings: [["H1", "Scene", "R1"]] }
-          : { rows: [["R1", "abcd"]], people: [["P1", "Pat"]], headings: [] };
+          : { rows: [["R1", "abcd"]], people: [["P1", example.kind === "deleted-record" ? "Patty" : "Pat"]], headings: [] };
       agree("C9 restored content", order, [set.a, set.b], content, expected);
       agree("C9 restored document", order, [set.a, set.b], projectSharedDocumentWithRecovery);
       const undone = one.undo.undo(); assert.equal(undone.ok && undone.effective, true); set.queue.flush(order);
-      for (const mounted of [one, two]) assert.equal(rows(mounted.host).filter(row => row.kind === example.kind).length, 1);
+      // why: undoing the restore removes the record again with a mark that saw the edit, so nothing raced it.
+      for (const mounted of [one, two]) assert.equal(rows(mounted.host).filter(row => row.kind === example.kind).length, example.kind === "deleted-record" ? 0 : 1);
       agree("C9 restore undone", order, [set.a, set.b], projectSharedDocumentWithRecovery);
       const redone = one.undo.redo(); assert.equal(redone.ok && redone.effective, true); set.queue.flush(order);
       agree("C9 restore redone content", order, [set.a, set.b], content, expected);

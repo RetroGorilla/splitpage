@@ -2,7 +2,7 @@ import type { Command } from "../session/document-session.ts";
 import type { SharedDocumentSession } from "../session/shared-session.ts";
 import { WHOLE_DOCUMENT } from "../session/change-set.ts";
 import type { SharedRecoveryName, SharedRestore, SharedOperation } from "../../core/collab/operations.ts";
-import { sharedRecoveryDiscardOperation, sharedRecoveryEntryName, sharedRecoveryPersonRestore } from "../../core/collab/recovery.ts";
+import { sharedRecoveryDiscardOperation, sharedRecoveryEntryName, sharedRecoveryPersonRestore, sharedRecoveryRecordRestore } from "../../core/collab/recovery.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 
 export interface SharedRecoveryCommandPorts {
@@ -22,6 +22,7 @@ export function recoveryCommand(action: "restore" | "discard", name: SharedRecov
     let operation: SharedOperation | null = null;
     if (action === "discard") operation = sharedRecoveryDiscardOperation(entry, author);
     else if (entry.kind === "deleted-person") operation = sharedRecoveryPersonRestore(entry, doc.people, author);
+    else if (entry.kind === "deleted-record") operation = sharedRecoveryRecordRestore(entry, doc.people, author);
     else if (removed) operation = { kind: "restore", ...author, removals: removals.filter(id => id !== null) };
     if (!operation) return { refused: "recovery-" + action + "-unavailable" };
     return { changes: WHOLE_DOCUMENT, apply: () => { throw new Error("recovery-shared-only"); },

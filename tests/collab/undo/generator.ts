@@ -154,7 +154,9 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     const record = entry.record, had = before.records ?? {}, has = after.records ?? {};
     if (!record) return;
     const [from, to] = direction === "undo" ? [record.after, record.before] : [record.before, record.after];
-    if (had[record.key] === from && has[record.key] !== to) violate("a reversal did not bring the record back as it was, fields and author",
+    // why: assumed rule 172: an undone removal brings the record back as the removal kept it, with edits that raced it.
+    const kept = direction === "undo" && from === undefined ? before.kept?.[record.key] : undefined;
+    if (had[record.key] === from && has[record.key] !== to && !(kept !== undefined && has[record.key] === kept)) violate("a reversal did not bring the record back as it was, fields and author",
       `${name} ${direction} ${record.key}: expected ${to ?? "none"}, got ${has[record.key] ?? "none"}`);
     const status = recordValue(had[record.key], "status"), set = setters.get(record.key + "|" + String(status));
     // why: rule 39: a status someone else gave the record since is their change, and an undo leaves it standing.

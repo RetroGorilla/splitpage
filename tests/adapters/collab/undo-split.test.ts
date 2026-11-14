@@ -491,3 +491,9 @@ for (const order of ORDERS) test(`declared limit: a mark that no longer holds st
   run.send(gallery(hidden.beat, "Other"));
   run.flush(); run.check("declared", [["R1", "a"], ["Rs", "bcd"], ["R2", "ef"]]);
 }));
+
+for (const order of ORDERS) test(`a picture another writer adds to the new beat and removes again before the undo leaves the split's undo whole: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.send(gallery(beat, "Other")); run.send({ kind: "record-delete", id: "gone", by: "Other", target: { collection: "gallery", record: "G1" } }); run.flush();
+  run.reverse(record, true); run.check("undone", whole);
+}));

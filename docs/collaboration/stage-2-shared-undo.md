@@ -801,6 +801,7 @@ the end of every generated history).
 | Split and restore guards | `undo-removal.ts` | shown pictures, without the retirement key |
 | Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
 | Undone split watch | `split-retirement.ts` | the stored record, hidden or not, through its read view of the store |
+| Removal marks | `record-deletion.ts` | the stored record, hidden or not, to read its removal mark and what the removal saw; never a shown reading |
 | Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |
 | Hydration | `hydrate.ts` | writes only |
 | Incremental projection | `incremental-project.ts` | observes changes only |

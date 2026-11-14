@@ -1,8 +1,10 @@
-import type { SharedRecordCreate, SharedRecordSet, SharedRecordDelete } from "../../core/collab/operations.ts";
+import type { SharedRecordCollection, SharedRecordCreate, SharedRecordSet, SharedRecordDelete, SharedRecordRevive } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import type { SharedOperationHandlers } from "./operation-handlers.ts";
-import { isSharedRecordNestedField, readPreparedSharedRecord, readSharedNestedInput, sharedRecordFieldAccepted } from "./record-codec.ts";
+import { isSharedRecordNestedField, readPreparedDeletedRecord, readPreparedSharedRecord, readSharedNestedInput, sharedRecordFieldAccepted } from "./record-codec.ts";
+import { isSharedStatusScope, readPreparedRecordDeletion, sharedRecordChanges, sharedRecordObservation, sharedRecordStatusObservation, SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
+import type { SharedRecordDeletion } from "./record-deletion.ts";
 import { noteSharedPlannedPicture, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
@@ -47,26 +49,46 @@ function accepted(view: SharedPreparationView, writes: readonly SharedPreparedWr
   }
   return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }
+type Author = { readonly id: string; readonly by: string };
+
+function observed(view: SharedPreparationView, collection: SharedRecordCollection, path: readonly string[]) {
+  const scope = path.length === 2 ? isSharedStatusScope(collection) : null, record = path[1];
+  return sharedRecordObservation(view, path, scope && record !== undefined ? sharedRecordStatusObservation(view, scope, record) : null, path.length === 2 ? collection : null);
+}
+// why: a removal keeps the record's map and marks it with what it saw, so an edit made without seeing the removal
+// still lands in that map and recovery can show it.
+function deletionMark(view: SharedPreparationView, author: Author, collection: SharedRecordCollection, path: readonly string[]): SharedRecordDeletion {
+  return { id: JSON.stringify([view.writer, author.id]), by: author.by, seen: observed(view, collection, path) };
+}
+function racedFields(view: SharedPreparationView, collection: SharedRecordCollection, path: readonly string[], deletion: SharedRecordDeletion | null): ReadonlySet<string> {
+  return new Set(deletion ? sharedRecordChanges(deletion.seen, observed(view, collection, path)) : []);
+}
 function setValue(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], value: unknown): void {
   if (JSON.stringify(sharedJson(view.get(path))) !== JSON.stringify(sharedJson(value))) writes.push({ path, kind: "set", value });
 }
-function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], field: "links" | "props", value: unknown, visible: readonly { readonly key: string }[] = []): boolean {
+function nestedWrites(view: SharedPreparationView, writes: SharedPreparedWrite[], path: readonly string[], field: "links" | "props", value: unknown, author: Author,
+  visible: readonly { readonly key: string }[] = []): boolean {
   const entries = readSharedNestedInput(field, value);
   if (!entries) return false;
-  const visibleKeys = new Set(visible.map(entry => entry.key));
-  if (entries.some(([key]) => view.has([...path, key]) && !visibleKeys.has(key))) return false;
+  const visibleKeys = new Set(visible.map(entry => entry.key)), removed = (key: string) => readPreparedRecordDeletion(view, [...path, key]);
+  if (entries.some(([key]) => view.has([...path, key]) && !visibleKeys.has(key) && !removed(key))) return false;
   if (view.kind(path) !== "map") writes.push({ path, kind: "map" });
   const retained = new Set(entries.map(([key]) => key));
-  for (const key of visibleKeys) if (!retained.has(key)) writes.push({ path: [...path, key], kind: "delete" });
+  for (const key of visibleKeys) if (!retained.has(key)) writes.push({ path: [...path, key, SHARED_RECORD_DELETION_FIELD], kind: "set", value: deletionMark(view, author, "shots", [...path, key]) });
   entries.forEach(([key, fields], index) => {
-    const entry = [...path, key];
+    const entry = [...path, key], deletion = removed(key);
+    // why: an entry put back after someone edited it without seeing its removal keeps that edit.
+    const raced = new Set(deletion ? sharedRecordChanges(deletion.seen, sharedRecordObservation(view, entry, null)) : []);
     if (view.kind(entry) !== "map") writes.push({ path: entry, kind: "map" });
-    if (field === "props") setValue(view, writes, [...entry, "value"], fields);
+    if (field === "props") { if (!raced.has("value")) setValue(view, writes, [...entry, "value"], fields); }
     else {
-      for (const name of view.keys(entry)) if (name !== "rank" && name !== "extra" && !Object.hasOwn(fields, name)) writes.push({ path: [...entry, name], kind: "delete" });
-      for (const [name, value] of Object.entries(fields)) setValue(view, writes, [...entry, name], value);
+      for (const name of view.keys(entry)) if (name !== "rank" && name !== "extra" && name !== SHARED_RECORD_DELETION_FIELD && !Object.hasOwn(fields, name) && !raced.has(name)) {
+        writes.push({ path: [...entry, name], kind: "delete" });
+      }
+      for (const [name, value] of Object.entries(fields)) if (!raced.has(name)) setValue(view, writes, [...entry, name], value);
       if (!view.has([...entry, "extra"])) writes.push({ path: [...entry, "extra"], kind: "set", value: "{}" });
     }
+    if (deletion) writes.push({ path: [...entry, SHARED_RECORD_DELETION_FIELD], kind: "delete" });
     setValue(view, writes, [...entry, "rank"], String(index).padStart(10, "0"));
   });
   return true;
@@ -76,7 +98,8 @@ function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationVie
   const { collection, record: key } = operation.target, path = [collection, key];
   if (![operation.id, operation.by, key].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
   const created = prepareSharedCreatedAttachment(operation, view); if (created) return created;
-  if (view.has(path)) return { ok: false, reason: "duplicate-record" };
+  const deletion = view.has(path) ? readPreparedRecordDeletion(view, path) : null;
+  if (view.has(path) && !deletion) return { ok: false, reason: "duplicate-record" };
   const fields: Record<string, unknown> = { ...operation.fields };
   if (collection !== "gallery" && collection !== "visuals" && collection !== "replies") {
     if (fields.id !== undefined && fields.id !== key) return { ok: false, reason: "mismatched-record-id" };
@@ -89,16 +112,22 @@ function prepareCreate(operation: SharedRecordCreate, view: SharedPreparationVie
   if (collection === "tags" && !Object.hasOwn(fields, "status")) fields.status = "needed";
   if (collection === "shots") { if (!Object.hasOwn(fields, "status")) fields.status = "unshot"; if (!Object.hasOwn(fields, "props")) fields.props = []; }
   if (collection === "gallery") { if (!Object.hasOwn(fields, "links")) fields.links = []; if (!Object.hasOwn(fields, "picture")) fields.picture = {}; }
-  const writes: SharedPreparedWrite[] = [{ path, kind: "map" }];
+  // why: a record created again over a removed one brings it back, keeping an edit that raced its removal.
+  const raced = racedFields(view, collection, path, deletion), shown = deletion ? readPreparedDeletedRecord(collection, key, view) : null;
+  const writes: SharedPreparedWrite[] = deletion ? [] : [{ path, kind: "map" }];
   for (const [field, value] of Object.entries(fields)) {
+    if (raced.has(field)) continue;
     if (isSharedRecordNestedField(collection, field)) {
-      if (!nestedWrites(view, writes, [...path, field], field, value)) return { ok: false, reason: "invalid-record-field" };
+      const visible = shown?.[field] as readonly { readonly key: string }[] | undefined;
+      if (!nestedWrites(view, writes, [...path, field], field, value, operation, visible)) return { ok: false, reason: "invalid-record-field" };
     } else {
       if (!sharedRecordFieldAccepted(collection, field, value) || collection === "visuals" && field === "text") return { ok: false, reason: "invalid-record-field" };
-      writes.push({ path: [...path, field], kind: "set", value });
+      if (deletion) setValue(view, writes, [...path, field], value); else writes.push({ path: [...path, field], kind: "set", value });
     }
   }
+  if (deletion) writes.push({ path: [...path, SHARED_RECORD_DELETION_FIELD], kind: "delete" });
   if (!readPreparedSharedRecord(collection, key, candidate(view, writes))) return { ok: false, reason: "invalid-record-shape" };
+  if (deletion) return accepted(view, writes);
   return reserveSharedCommandIdentities(view, [key, ...(typeof fields.id === "string" ? [fields.id] : [])]) ? accepted(view, writes) : { ok: false, reason: "existing-identity" };
 }
 
@@ -119,7 +148,7 @@ function prepareSet(operation: SharedRecordSet, view: SharedPreparationView): Sh
     writes.push(...sharedResolutionWrites(view.keys(path), key => view.get([...path, key]), view.writer, operation.value).map(({ key, ...write }) => ({ ...write, path: [...path, key] })));
   } else if (operation.clear) { if (view.keys(path).includes(field)) writes.push({ path: [...path, field], kind: "delete" }); }
   else if (isSharedRecordNestedField(collection, field)) {
-    if (!nestedWrites(view, writes, [...path, field], field, operation.value, value[field] as readonly { readonly key: string }[] | undefined)) return { ok: false, reason: "invalid-record-field" };
+    if (!nestedWrites(view, writes, [...path, field], field, operation.value, operation, value[field] as readonly { readonly key: string }[] | undefined)) return { ok: false, reason: "invalid-record-field" };
   } else {
     if (!sharedRecordFieldAccepted(collection, field, operation.value)) return { ok: false, reason: "invalid-record-field" };
     setValue(view, writes, [...path, field], operation.value);
@@ -134,8 +163,29 @@ function prepareDelete(operation: SharedRecordDelete, view: SharedPreparationVie
   if (!record) return { ok: false, reason: "missing-or-invalid-record" };
   // why: assumed rule 54 on #1414: a deleted person keeps its name, so recovery can list and restore it.
   const kept: SharedPreparedWrite[] = collection === "people" ? [{ path: ["deletedPeople", key], kind: "set", value: { name: record.name, by: operation.by } }] : [];
-  return accepted(view, [{ path: [collection, key], kind: "delete" }, ...kept]);
+  if (collection === "visuals") return accepted(view, [{ path: [collection, key], kind: "delete" }, ...kept]);
+  const result = accepted(view, [{ path: [collection, key, SHARED_RECORD_DELETION_FIELD], kind: "set", value: deletionMark(view, operation, collection, [collection, key]) }, ...kept]);
+  if (collection === "gallery") noteSharedPlannedPicture(view, key, true);
+  return result;
 }
 
-export const recordHandlers: SharedOperationHandlers = Object.freeze({ "record-create": prepareCreate, "record-set": prepareSet, "record-delete": prepareDelete });
+function prepareRevive(operation: SharedRecordRevive, view: SharedPreparationView): SharedPreparationResult {
+  const { collection, record: key } = operation.target, path = [collection, key];
+  if (![operation.id, operation.by, key, ...operation.entry === undefined ? [] : [operation.entry]].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
+  if (collection === "visuals" || (operation.field === undefined) !== (operation.entry === undefined)) return { ok: false, reason: "invalid-revival" };
+  let mark: readonly string[];
+  if (operation.field !== undefined && operation.entry !== undefined) {
+    if (!isSharedRecordNestedField(collection, operation.field)) return { ok: false, reason: "invalid-revival" };
+    if (!readPreparedSharedRecord(collection, key, view)) return { ok: false, reason: "missing-or-invalid-record" };
+    mark = [...path, operation.field, operation.entry];
+  } else {
+    if (!readPreparedDeletedRecord(collection, key, view)) return { ok: false, reason: readPreparedSharedRecord(collection, key, view) ? "record-not-deleted" : "missing-or-invalid-record" };
+    mark = path;
+  }
+  if (!readPreparedRecordDeletion(view, mark)) return { ok: false, reason: "record-not-deleted" };
+  const writes: SharedPreparedWrite[] = [{ path: [...mark, SHARED_RECORD_DELETION_FIELD], kind: "delete" }];
+  return readPreparedSharedRecord(collection, key, candidate(view, writes)) ? accepted(view, writes) : { ok: false, reason: "invalid-record-shape" };
+}
+
+export const recordHandlers: SharedOperationHandlers = Object.freeze({ "record-create": prepareCreate, "record-set": prepareSet, "record-delete": prepareDelete, "record-revive": prepareRevive });
 export function registerSharedRecordHandlers(handle: SharedDocumentHandle): void { registerSharedOperationHandlers(handle, recordHandlers); }

@@ -13,6 +13,7 @@ Every entry kind has readable, selectable text. Removed groups include narration
 | Removed beat | Existing `restore`, naming its removal ids | Existing `discard`, naming the removals it saw |
 | Removed heading | Existing `restore`, naming its removal ids | Existing `discard`, naming the removals it saw |
 | Deleted person | Existing person restore builder; same original id, existing caseless namesake rule | Existing `discard` |
+| Deleted record (a removal an edit raced) | `record-revive`, which brings it back with the edit; for a person, refused while another person has the name | Existing `discard` |
 | Crossing tag, deleted tag | None in the model | Existing `discard` when the first character names it |
 | Gallery overflow | None in the model | Existing `discard` |
 | Unprojectable fragment | None in the model | Existing `discard` when the first character names it |

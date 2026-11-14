@@ -4,6 +4,9 @@ import { tagNameOf } from "../../core/text/runs.ts";
 
 function string(value: unknown): string { return typeof value === "string" ? value : ""; }
 
+const RECORD_LABELS = Object.freeze({ comments: "Deleted comment", replies: "Deleted reply", people: "Deleted person", tags: "Deleted tag",
+  shots: "Deleted b-roll shot", gallery: "Deleted picture" });
+
 export function recoveryPanelContent(entry: SharedRecoveryEntry, ports: Pick<RecoveryPanelPorts, "document" | "text" | "reply">): { label: string; by: string; text: string } {
   const doc = ports.document.current(), plain = (html: unknown) => ports.text.htmlToPlainText(string(html));
   const row = (value: Readonly<Record<string, unknown>>) => [plain(value.audioText), plain(value.visualText), string(value.imageName),
@@ -34,5 +37,11 @@ export function recoveryPanelContent(entry: SharedRecoveryEntry, ports: Pick<Rec
       return { label: "Reply without comment", by: string(reply?.author), text: string(reply?.text) || entry.reply };
     }
     case "deleted-person": return { label: "Deleted person", by: entry.by, text: entry.name };
+    case "deleted-record": {
+      const fields = entry.fields, picture = fields.picture && typeof fields.picture === "object" ? fields.picture as Record<string, unknown> : {};
+      const label = entry.field === "props" ? "Deleted prop" : entry.field === "links" ? "Deleted video link" : RECORD_LABELS[entry.collection];
+      const text = [string(fields.name), plain(fields.text), string(fields.desc), string(fields.notes), string(fields.href), string(picture.name)].filter(Boolean);
+      return { label, by: "Deleted by " + entry.by, text: [...text, "Changed after it was deleted: " + entry.changed.join(", ")].join("\n") };
+    }
   }
 }

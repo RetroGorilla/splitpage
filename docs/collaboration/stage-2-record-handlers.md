@@ -75,12 +75,13 @@ does not cascade to replies. Missing-parent replies remain available for recover
 
 Where Product decisions give no answer, assumed: simultaneous same-id creation
 uses the native atomic parent-map winner; same-field changes use the native
-deterministic winner; parent removal wins over concurrent child-map changes.
+deterministic winner; a removal wins over concurrent changes, which stay
+recoverable ([Removal and a concurrent edit](#removal-and-a-concurrent-edit)).
 In the fixtures the higher client id wins concurrent creation and field writes.
 Metadata changes and explicit removal are unrestricted by author. A later
 recreation reuses its identity and any retained status events. Distinct nested
-additions survive in existing link/prop maps; clearing/removing a parent map wins
-over concurrent child additions. Equal ranks use UTF-16 key order.
+additions survive in existing link/prop maps; removing a record or a list entry
+wins over concurrent child additions, which stay recoverable as below. Equal ranks use UTF-16 key order.
 
 Every interpreted stored identity uses `isStableSharedIdentity`: root keys, ids,
 reply parents, beat/anchor references, authors/assignees/owners, resolution writers,
@@ -88,6 +89,20 @@ and nested link/prop keys, field keys and identity components. Unstable root rec
 nested entries are absent; reconciliation deletes only validated visible entries
 and refuses to overwrite a hidden key. Unstable authoring is
 refused before writes. Opaque unknown JSON is not interpreted as an identity.
+
+## Removal and a concurrent edit
+
+Assumed rules 170 to 179 on #1414. Before them, `record-delete` deleted the record's map, and the sync library drops a write into a deleted map: an edit made by someone who had not seen the removal disappeared on every copy, with no recovery entry, and the remover's undo brought the record back without it.
+
+Now a `record-delete` of a comment, reply, person, tag, b-roll shot or picture keeps the map and writes a removal mark under `deletion` (`src/adapters/collab/record-deletion.ts`). A prop or video link taken out of its list is marked the same way. The mark holds the removal's identity, who removed it, and one short digest per field as the removal saw it; a tag or shot also gets a digest of its standing status events. Every reader treats a marked record as gone, and preparation refuses commands on it as on a missing record. A visual record is still deleted outright.
+
+- An edit made without seeing the removal lands in the kept map. The projection lists the record once, as a `deleted-record` recovery entry, while any field differs from what the removal saw. A removal nothing raced lists nothing. A rank, and a comment's `resolution` and `updatedAt` stamps, are not watched.
+- Restore sends `record-revive`, which deletes the mark: the record comes back with every raced edit. Discard hides the entry until another unseen edit arrives.
+- The remover's undo also sends `record-revive`, so the record comes back with the other person's edit; the redo removes it again with a mark that has seen the edit.
+- The editor's own undo of a field edit, or of a status, is used up while the removal stands; the edit stays in the entry.
+- A `record-create` with a removed record's id brings that record back, keeping each field a raced edit changed.
+
+Stored size: the map stays, so a removal now adds bytes where it used to free them: 162 for a b-roll shot and 126 for a person, pinned in `record-removal-edit.test.ts`. A raced edit adds only its own write. Nothing deletes a mark or its map; clean-up belongs to the retention work in section 6 of the collaboration plan.
 
 ## Same-id creation exposure in the app
 

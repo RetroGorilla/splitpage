@@ -4,6 +4,7 @@ import { sharedJson } from "./snapshot.ts";
 import { readSharedJoinEntry, sharedJoinRetirementGroup } from "./join-record.ts";
 import { readSharedBoundaryEmbed } from "./structure-boundary.ts";
 import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";
+import { readSharedRecordDeletion, SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
 
 const PREFIX = "splitRetired:";
 
@@ -154,7 +155,8 @@ export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Obj
     for (const collection of ["visuals", "gallery"] as const) for (const key of [...view.keys([collection])].sort()) {
       visit(1);
       const beat = view.get([collection, key, "beat"]);
-      if (typeof beat !== "string" || !beats.has(beat)) continue;
+      // why: a removed picture keeps its map behind a mark, but it is no longer the beat's.
+      if (typeof beat !== "string" || !beats.has(beat) || readSharedRecordDeletion(view.get([collection, key, SHARED_RECORD_DELETION_FIELD]))) continue;
       found.get(beat)?.push([collection, key, canonical(view, [collection, key], field => field === "markRecords"), shownMarks(view, [collection, key, "markRecords"])]);
     }
     return found;

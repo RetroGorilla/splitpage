@@ -12,6 +12,7 @@ import { registerSharedUndoOperationHandlers } from "../../../src/adapters/colla
 import { executeSharedCommand, reverseSharedUndoRecord, SHARED_UNDO_RECORDS, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
+import { readSharedDeletedRecordFields } from "../../../src/adapters/collab/record-codec.ts";
 import type { UndoRecordAction } from "./scenario.ts";
 import { readSharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
 import type { SharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
@@ -220,14 +221,22 @@ export class AdapterReplica {
   }
 
   snapshot(): ModelSnapshot {
-    const records: Record<string, string> = {};
-    for (const collection of SHARED_UNDO_RECORDS) for (const item of readSharedRecords(this.handle, collection)) {
-      const fields = { ...item.fields as Record<string, unknown> };
-      if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(item.key) });
-      if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(item.key) });
-      records[collection + "|" + item.key] = JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
+    const records: Record<string, string> = {}, kept: Record<string, string> = {};
+    const reading = (collection: SharedRecordCollection, key: string, found: Readonly<Record<string, unknown>>): string => {
+      const fields = { ...found as Record<string, unknown> };
+      if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(key) });
+      if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(key) });
+      return JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
+    };
+    for (const collection of SHARED_UNDO_RECORDS) {
+      for (const item of readSharedRecords(this.handle, collection)) records[collection + "|" + item.key] = reading(collection, item.key, item.fields);
+      const root = collabState(this.handle).roots[collection];
+      for (const key of [...root.keys()].sort()) {
+        const removed = readSharedDeletedRecordFields(collection, key, root.get(key));
+        if (removed) kept[collection + "|" + key] = reading(collection, key, removed);
+      }
     }
-    return { records, rows: this.world.beats.map(beat => {
+    return { records, kept, rows: this.world.beats.map(beat => {
       const history = this.history(beat), record = scalarTarget(this.handle, { scope: "beat", record: ref(beat) });
       return { id: beat, status: readSharedStatus(this.handle, { scope: "beat", record: ref(beat) }),
         scalars: Object.fromEntries(SCALARS.filter(field => record?.has(field)).map(field => [field, JSON.stringify(record?.get(field))] as const)),

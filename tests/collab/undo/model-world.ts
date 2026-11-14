@@ -24,6 +24,7 @@ export interface ModelSnapshotCharacter { id: string; root: string; value: strin
 export interface ModelSnapshot {
   rows: { id: string; characters: ModelSnapshotCharacter[]; status: string; scalars: Record<string, string> }[];
   records?: Record<string, string>;
+  kept?: Record<string, string>;
 }
 
 function ref(value: string): SharedContentRef { return value as SharedContentRef; }
