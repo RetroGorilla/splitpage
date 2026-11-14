@@ -4,7 +4,7 @@ import { productionSelection as productionSelectionOwner } from "../production-e
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
 import { createWholeFieldTextCommit } from "../../../application/editing/whole-field-text.ts";
-import { undoOwner } from "../undo.ts";
+import { breakUndoGroup, undoOwner } from "../undo.ts";
 import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../editor-owners.ts";
 import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../session-owner.ts";
@@ -27,7 +27,7 @@ export const edits: DocumentEdits = {
 export const wholeFieldText = createWholeFieldTextCommit(edits);
 
 export const undoControl: UndoControl = {
-  breakCoalescing: () => { undoOwner().breakCoalescing(); },
+  breakCoalescing: breakUndoGroup,
   flush: () => { undoOwner().flush(); },
   undo: () => undoOwner().undo(),
   redo: () => undoOwner().redo(),
@@ -66,6 +66,6 @@ export const tagEditing = { cells: cellEditing, focus: focusMemory };
 
 export const writerEditing = { cells: cellEditing, selection: editorSelection, focus: focusMemory, paint: paintGuard };
 export const writerUndo = {
-  breakCoalescing: () => { undoOwner().breakCoalescing(); }, last: () => undoOwner().last(), nextRedo: () => undoOwner().nextRedo(),
+  breakCoalescing: breakUndoGroup, last: () => undoOwner().last(), nextRedo: () => undoOwner().nextRedo(),
   lifetime: () => undoOwner().lifetime(), mark: () => undoOwner().mark(), serial: () => undoOwner().serial()
 };

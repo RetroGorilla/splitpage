@@ -38,6 +38,7 @@ export interface SharedOwnerPorts {
   readonly entry: DocumentEntry;
   readonly capability: CapabilityPort;
   readonly after: SessionCounters;
+  readonly refresh: (jobs: ReadonlySet<string>) => void;
 }
 
 type Owner =
@@ -88,6 +89,13 @@ function hearing(entry: Hearing): SessionListener {
   };
 }
 
+function refreshed(ports: SessionBridgePorts): (jobs: ReadonlySet<string>) => void {
+  return function (jobs) {
+    ports.effects.refresh(jobs);
+    refreshListeners.slice().forEach(function (listener) { listener(jobs); });
+  };
+}
+
 function createSession(ports: SessionBridgePorts, after: SessionCounters, numbering: DocumentNumberingReader, capability: CapabilityPort): DocumentSession {
   const made = createDocumentSession({
     entry: ports.entry,
@@ -96,10 +104,7 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters, number
       dirty: function (change) { ports.effects.dirty(change); },
       draft: function (change) { ports.effects.draft(change); },
       save: function (change) { ports.effects.save(change); },
-      refresh: function (jobs) {
-        ports.effects.refresh(jobs);
-        refreshListeners.slice().forEach(function (listener) { listener(jobs); });
-      }
+      refresh: refreshed(ports)
     },
     capability: capability,
     reconcile: {
@@ -278,7 +283,8 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
       return doc;
     },
     capability: nextCapability,
-    after: { epoch: old.epoch(), generation: old.generation() }
+    after: { epoch: old.epoch(), generation: old.generation() },
+    refresh: refreshed(now.ports)
   });
   if (made.read(doc => doc !== null)) {
     made.dispose();
