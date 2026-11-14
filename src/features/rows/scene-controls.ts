@@ -34,13 +34,13 @@ export interface SceneControlsPorts {
   readonly sharedScenes?: SharedSceneCreation;
 }
 
-export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
+export function mountSceneControls(window: Window, ports: SceneControlsPorts, life: ReturnType<typeof createViewLifetime> = createViewLifetime(window)): {
   readonly hint: (id: string | null, text: string) => void;
   readonly reset: () => void;
   readonly finish: () => boolean;
   readonly dispose: () => void;
 } {
-  const doc = window.document, life = createViewLifetime(window);
+  const doc = window.document;
   let dragging: string | null = null;
   let naming: {
     readonly sceneId: string | null;

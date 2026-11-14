@@ -68,9 +68,16 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   };
   const blur = (): void => { if (!composing) finish(); };
   const listeners: readonly (readonly [string, EventListener])[] = [["beforeinput", before], ["input", typed], ["compositionstart", start], ["compositionend", stop], ["keyup", released], ["blur", blur]];
-  for (const [name, listener] of listeners) input.addEventListener(name, listener);
-  const off = ports.document.onChange(paint), admission = ports.lifetime.beforeCommand(finish);
-  paint();
+  let off = (): void => {}, admission = (): void => {};
+  try {
+    for (const [name, listener] of listeners) input.addEventListener(name, listener);
+    off = ports.document.onChange(paint); admission = ports.lifetime.beforeCommand(finish);
+    paint();
+  } catch (error) {
+    off(); admission();
+    for (const [name, listener] of listeners) input.removeEventListener(name, listener);
+    area.remove(); throw error;
+  }
   return { finish, dispose: () => {
     if (disposed) return true;
     if (!finish()) return false;

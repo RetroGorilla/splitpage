@@ -9,9 +9,9 @@ export interface SceneBoundaryPorts {
   readonly allowed: () => boolean;
 }
 
-export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): { dispose: () => void } {
+export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts,
+  life: ReturnType<typeof createViewLifetime> = createViewLifetime(window)): { dispose: () => void } {
   const doc = window.document;
-  const life = createViewLifetime(window);
   let caret: { node: Node | null; offset: number; end: Node | null; endOffset: number } | null = null;
   function cancel(): void { caret = null; ports.boundary.cancel(); }
   function sameCaret(selection: Selection | null): boolean {

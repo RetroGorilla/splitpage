@@ -18,6 +18,7 @@ import type { SharedCoverageBlock, SharedRecoveryEntry, SharedRecoveryRemovalSou
 import { readSharedActiveRemovalSources, readSharedRemovalBufferSources, readSharedRemovalSources } from "./removal-record.ts";
 import { collabState } from "./state.ts";
 import { compareSharedProjections } from "../../core/collab/projection/changes.ts";
+import { sharedShownSceneName, sharedShownTitle } from "../../core/collab/projection/shown-names.ts";
 import type { SharedProjectionChanges } from "../../core/collab/projection/changes.ts";
 
 export interface SharedDocumentFieldProjection {
@@ -70,7 +71,7 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   const fields = assembleSharedDocumentFields(source), out = { ...fields.document };
   const tags = out.productionTags as Record<string, unknown>[], comments = (out.comments as Record<string, unknown>[]).map(comment => ({ ...comment }));
   out.comments = comments;
-  Object.assign(out, { title: source.title(), docId: out.docId ?? "", schema: out.schema ?? 2, rev: out.rev ?? 0 });
+  Object.assign(out, { title: sharedShownTitle(source.title()), docId: out.docId ?? "", schema: out.schema ?? 2, rev: out.rev ?? 0 });
   const visuals = source.recordGroups("visuals"), gallery = source.records("gallery"), galleryGroups = source.recordGroups("gallery"), anchored = new Set<string>();
   const fragments = source.blocks();
   const blocks = fragments.filter((block): block is typeof block & { id: string } => !block.reason && block.id !== null);
@@ -147,7 +148,7 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     const extra = source.fields("heading", block.id);
     if (!extra) return [];
     const heading = cache.read(["heading", block.id], [extra, block.units], () => ({ kind: "h" as const, id: block.id,
-      name: block.units.map(unit => typeof unit.value === "string" ? unit.value : "").join(""), extra: sharedProjectionExtra(extra) }));
+      name: sharedShownSceneName(block.units.map(unit => typeof unit.value === "string" ? unit.value : "").join("")), extra: sharedProjectionExtra(extra) }));
     if (!source.headingRemoved(block.id)) return [heading];
     const removals = readSharedRemovalSources(source.roots.removalRecords, source.headingRemovals(block.id), collabState(source.handle).reads);
     recovery.push(...cache.read(["removed-heading", block.id], [heading, block.units, ...removals], () => projectSharedSections([heading], new Set()).empty.map(entry => {

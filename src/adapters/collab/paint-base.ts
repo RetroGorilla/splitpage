@@ -2,13 +2,15 @@ import * as Y from "yjs";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import type { SharedContentRef, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { encodeCollabTextAnchor, readSharedAnchor } from "./anchors.ts";
+import { encodeCollabTextAnchor, readSharedAnchor, readSharedAnchorUnit } from "./anchors.ts";
+import { collabState } from "./state.ts";
 import { readSharedRevision } from "./document.ts";
 import { collabProjectedTextTarget } from "./text-target.ts";
 import { collabProjectedVisualTargets } from "./painted-visual-targets.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
+import { sharedShownName } from "../../core/collab/projection/shown-names.ts";
 
 function partReading(part: { readonly text: Y.Text; readonly target: SharedTextAddress; readonly from: number; readonly to: number }) {
   const runs = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!runs) return null;
@@ -32,7 +34,8 @@ function partReading(part: { readonly text: Y.Text; readonly target: SharedTextA
   return { text: runs.text, identity, endGap: encodeCollabTextAnchor(part.text, part.target, part.to, "before") };
 }
 
-function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, selection: boolean): PaintedText | null {
+function wholeText(handle: SharedDocumentHandle, address: SharedTextAddress, selection: boolean):
+  { readonly text: string; readonly stored: (index: number) => SharedContentRef | null; readonly endGap: SharedContentRef } | null {
   const visuals = selection && address.field === "visualText";
   const found = visuals ? collabProjectedVisualTargets(handle, address) : collabProjectedTextTarget(handle, address); if (!found) return null;
   const pieces: { readonly from: number; readonly length: number; readonly identity: (index: number) => SharedContentRef | null }[] = [];
@@ -52,14 +55,35 @@ function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, s
     if (reading.text.length) preceding = part.target.segment;
   }
   if (!endGap) return null;
-  const length = text.length;
-  function identity(index: number): SharedContentRef | null {
-    if (!Number.isInteger(index) || index < 0 || index >= length) return null;
+  const whole = text.length;
+  function stored(index: number): SharedContentRef | null {
+    if (!Number.isInteger(index) || index < 0 || index >= whole) return null;
     let low = 0, high = pieces.length - 1;
     while (low < high) { const middle = (low + high + 1) >> 1; if ((pieces[middle]?.from ?? Infinity) <= index) low = middle; else high = middle - 1; }
     const part = pieces[low]; return part && index < part.from + part.length ? part.identity(index - part.from) : null;
   }
-  return Object.freeze({ revision: readSharedRevision(handle), text, identity, endGap, ...(length ? {} : { emptyGap: endGap }) });
+  return { text, stored, endGap };
+}
+
+function hiddenFrom(field: string, text: string): number | null {
+  const shown = sharedShownName(field, text);
+  return shown !== text && text.startsWith(shown) ? shown.length : null;
+}
+
+function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, selection: boolean): PaintedText | null {
+  const read = wholeText(handle, address, selection); if (!read) return null;
+  const { text, stored, endGap } = read, from = hiddenFrom(address.field, text), cut = from === null ? null : stored(from);
+  if (from === null || !cut) return Object.freeze({ revision: readSharedRevision(handle), text, identity: stored, endGap, ...(text.length ? {} : { emptyGap: endGap }) });
+  // why: past the limit the box shows the projection's cut, and an insertion at its end lands before the hidden text
+  const identity = (index: number): SharedContentRef | null => index < from ? stored(index) : null;
+  return Object.freeze({ revision: readSharedRevision(handle), text: text.slice(0, from), identity, endGap, emptyGap: cut });
+}
+
+export function readSharedOwnHiddenName(handle: SharedDocumentHandle, address: SharedTextAddress): string | null {
+  const read = wholeText(handle, address, false), from = read ? hiddenFrom(address.field, read.text) : null;
+  if (!read || from === null) return null;
+  const me = collabState(handle).doc.clientID, hidden = Array.from({ length: read.text.length - from }, (_, at) => read.stored(from + at));
+  return hidden.some(ref => readSharedAnchorUnit(ref)?.client === me) ? hidden.join("\n") : null;
 }
 
 export function readSharedPaintedText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {

@@ -3,6 +3,7 @@ import { removeSceneCommand } from "../../application/commands/scenes.ts";
 import { sceneGroups, soleBeatSceneMovedBy } from "../../core/document/scenes.ts";
 import { mountSceneBoundary } from "../../features/editing/scene-boundary.ts";
 import { mountSceneControls } from "../../features/rows/scene-controls.ts";
+import { createViewLifetime } from "../../features/common/view-lifetime.ts";
 import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
 import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
 import { documentReader } from "./ports/document.ts";
@@ -17,11 +18,21 @@ import { breakUndoGroup } from "./undo.ts";
 export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): {
   confirmMove: (rowId: string, dir: -1 | 1) => boolean; finish: () => boolean; dispose: () => void;
 } {
+  const life = createViewLifetime(window), made: (() => void)[] = [() => { life.dispose(); }];
+  try { return mountedSceneHeaders(life, made, sharedNames, sharedScenes); } catch (error) {
+    for (const undo of made.reverse()) undo();
+    throw error;
+  }
+}
+
+function mountedSceneHeaders(life: ReturnType<typeof createViewLifetime>, made: (() => void)[], sharedNames?: BufferedInputPorts,
+  sharedScenes?: SharedSceneCreation): ReturnType<typeof mountSceneHeaders> {
   const controls = mountSceneControls(window, {
     document: documentReader, edits, scenes: sceneView(), focus: focusMemory(),
     drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll, structure: sharedStructureCommands,
     ...sharedNames ? { sharedNames } : {}, ...sharedScenes ? { sharedScenes } : {}
-  });
+  }, life);
+  made.push(controls.reset);
   const boundary = createSceneBoundaryRemoval({
     timers: {
       now: () => Date.now(),
@@ -39,16 +50,19 @@ export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes
       edits.run(removeSceneCommand(id));
     }
   });
-  let input: ReturnType<typeof mountSceneBoundary> | null = null;
+  made.push(boundary.dispose);
+  let input: ReturnType<typeof mountSceneBoundary> | null = null, inputLife: ReturnType<typeof createViewLifetime> | null = null;
   function syncInput(): void {
     boundary.cancel();
     const scenes = documentReader.current()?.sections;
     if (Array.isArray(scenes) && scenes.length) {
-      input ??= mountSceneBoundary(window, { document: documentReader, boundary, allowed: edits.allowed });
+      if (!input) { inputLife = createViewLifetime(window); input = mountSceneBoundary(window, { document: documentReader, boundary, allowed: edits.allowed }, inputLife); }
     } else { input?.dispose(); input = null; }
   }
+  made.push(() => { input?.dispose(); inputLife?.dispose(); input = null; });
   syncInput();
   const offChange = documentReader.onChange(syncInput);
+  made.push(offChange);
   const offReplaced = documentReader.onReplaced(() => { syncInput(); controls.reset(); });
   function confirmMove(rowId: string, dir: -1 | 1): boolean {
     const doc = documentReader.current();

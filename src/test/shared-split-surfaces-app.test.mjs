@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
-import { sharedSplitSurfaces } from "../bootstrap/wiring/shared-split-surfaces.ts";
+import { SHARED_SPLIT_SURFACE_FAILED, SHARED_SPLIT_SURFACE_NOTICES, sharedSplitSurfaces } from "../bootstrap/wiring/shared-split-surfaces.ts";
+import { TITLE_FIELD_KEY, headingFieldKey } from "../application/editing/buffered-field-key.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
@@ -37,9 +38,49 @@ after(() => { notices.show = actualShow; });
 const allowed = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
 const effects = { report: value => { reports.push(value); }, missingBase: () => {}, recovered: () => {} };
 let serial = 0, remoteSerial = 0;
+const endings = [], originals = new WeakMap(), hookedParts = new WeakMap(), realSplit = sharedSplitBindings(effects);
+let probe = null;
+const DOM = window.EventTarget.prototype, nativeAdd = DOM.addEventListener, nativeRemove = DOM.removeEventListener;
+const labelOf = (target, type) => (target === document ? "document" : target === window ? "window" : target.id ? "#" + target.id : target.className || target.nodeName) + " " + type;
+DOM.addEventListener = function (type, listener, options) {
+  if (probe?.recording) {
+    probe.labels.push(labelOf(this, type));
+    if (probe.labels.length === probe.inject) { probe.recording = false; throw new Error("injected at " + labelOf(this, type)); }
+    probe.live.push({ target: this, type, listener, label: labelOf(this, type) });
+  }
+  return nativeAdd.call(this, type, listener, options);
+};
+DOM.removeEventListener = function (type, listener, options) {
+  if (probe) probe.live = probe.live.filter(entry => !(entry.target === this && entry.type === type && entry.listener === listener));
+  return nativeRemove.call(this, type, listener, options);
+};
+after(() => { DOM.addEventListener = nativeAdd; DOM.removeEventListener = nativeRemove; });
+function hooked(parts) {
+  if (!probe) return parts;
+  if (hookedParts.has(parts)) return hookedParts.get(parts);
+  let waited = false;
+  const subscribe = listener => {
+    if (!waited) {
+      waited = true;
+      const watched = probe;
+      return parts.session.subscribe(change => { watched.recording = true; try { listener(change); } finally { watched.recording = false; } });
+    }
+    if (!probe?.recording) return parts.session.subscribe(listener);
+    probe.labels.push("session subscribe");
+    if (probe.labels.length === probe.inject) { probe.recording = false; throw new Error("injected at session subscribe"); }
+    const entry = { label: "session subscribe" }, stop = parts.session.subscribe(listener), watched = probe;
+    watched.live.push(entry);
+    return () => { watched.live = watched.live.filter(other => other !== entry); stop(); };
+  };
+  const made = { ...parts, session: { ...parts.session, subscribe } };
+  hookedParts.set(parts, made); originals.set(made, parts);
+  return made;
+}
+const split = { enter: parts => realSplit.enter(originals.get(parts) ?? parts), settle: () => realSplit.settle(), leave: () => realSplit.leave() };
+const surfaces = sharedSplitSurfaces(split, effects, { leave: reason => { endings.push([reason, leaveSharedSession(ports)]); } });
 const ports = {
   refusal: () => null, settle: () => { undoOwner().flush(); }, detach: () => {},
-  bindings: sharedSplitSurfaces(sharedSplitBindings(effects), effects),
+  bindings: { enter: parts => surfaces.enter(hooked(parts)), settle: () => surfaces.settle(), leave: () => surfaces.leave() },
   common: allowed, standalone: createSessionCapabilities("standalone", allowed), migrate: migrateRows,
   docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Alice", structure: { cells: html => fromHtml(html) },
   report: error => { errors.push(error); }, timers: { now: Date.now, start: (run, ms) => setTimeout(run, ms), stop: clearTimeout }, now: Date.now
@@ -50,10 +91,9 @@ const SOURCE = { schema: 5, title: "Shared Split", paragraphsDecided: true,
   sections: [{ id: "H1", name: "Scene", firstSceneId: "r1" }],
   rows: [{ id: "r1", audioText: "abc", visualText: "Wide for ", status: "todo" }, { id: "r2", audioText: "Other", visualText: "Close", status: "todo" }] };
 
-async function enter(source = SOURCE) {
-  reports.length = 0; errors.length = 0; noticeCalls.length = 0;
-  writerControls().closeWriter();
-  adoptReplacement(migrateRows(structuredClone(source)));
+async function enter(source = SOURCE, adopt = true) {
+  reports.length = 0; errors.length = 0; noticeCalls.length = 0; endings.length = 0;
+  if (adopt) { writerControls().closeWriter(); adoptReplacement(migrateRows(structuredClone(source))); }
   assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts(); assert.ok(parts); assert.equal(screenIsStale(), false);
   const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
@@ -61,7 +101,10 @@ async function enter(source = SOURCE) {
   return { parts, peer, close: () => { destroySharedDocument(peer); assert.deepEqual(leaveSharedSession(ports), { ok: true }); } };
 }
 function remoteInsert(handle, rowId, field, offset, text) {
-  const target = sharedBufferedTarget(handle, bufferedFieldKey(rowId, field)), painted = readSharedPaintedText(handle, target);
+  remoteInsertAt(handle, bufferedFieldKey(rowId, field), offset, text);
+}
+function remoteInsertAt(handle, key, offset, text) {
+  const target = sharedBufferedTarget(handle, key), painted = readSharedPaintedText(handle, target);
   assert.ok(painted);
   const op = readOperation({ kind: "text-insert", id: "bob_" + ++remoteSerial, by: "Bob", target,
     at: { left: offset === painted.text.length ? painted.endGap : null, right: painted.identity(offset), affinity: offset === painted.text.length ? "after" : "before" },
@@ -259,7 +302,7 @@ test("C7 surface mount: with no first delivery nothing is half-mounted, and leav
   const calls = [], listeners = [];
   const split = { enter: () => { calls.push("enter"); }, settle: () => { calls.push("settle"); return null; }, leave: () => { calls.push("leave"); } };
   const session = { revision: () => 0, subscribe: listener => { listeners.push(listener); return () => { listeners.splice(listeners.indexOf(listener), 1); }; } };
-  const surfaces = sharedSplitSurfaces(split, effects), parts = { session };
+  const surfaces = sharedSplitSurfaces(split, effects, { leave: () => { calls.push("forced leave"); } }), parts = { session };
   surfaces.enter(parts);
   surfaces.enter(parts);
   assert.deepEqual([calls, listeners.length], [["enter", "enter"], 1]);
@@ -289,7 +332,7 @@ test("C7 surface standalone: the title and scene boxes run their whole-field com
   assert.equal(currentDocument().sections[0].name, "Scenes");
 });
 
-test("C7 people guard: a shared Split visual commit cannot carry a who atom", async () => {
+test("C7 people guard: a shared Split visual commit cannot carry a who atom, and the list's forced pick warns once", async () => {
   const f = await enter();
   try {
     const cell = cellOf("visualText", "r1"); caret(cell, "Wide for ".length);
@@ -303,6 +346,9 @@ test("C7 people guard: a shared Split visual commit cannot carry a who atom", as
     currentWhoList()?.maybeOpen({ inputType: "insertText", data: "@" }, live);
     assert.equal(currentWhoList()?.isOpen(live), true, "the list's own route opens it");
     assert.equal(currentWhoList()?.keydown(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }), live), true);
+    assert.deepEqual(warnings().map(call => call[0]), ["This is not available in a shared session yet."]);
+    assert.equal(currentWhoList()?.isOpen(), false);
+    noticeCalls.length = 0;
     currentWhoList()?.cancel();
     exchange(f, "local-first");
     assert.doesNotMatch(currentDocument().rows[0].visualText, /who-anchor/);
@@ -312,4 +358,105 @@ test("C7 people guard: a shared Split visual commit cannot carry a who atom", as
     assert.deepEqual(f.parts.undo.sizes(), sizes);
     assert.deepEqual(warnings(), []);
   } finally { f.close(); }
+});
+
+test("C7 surface entry: a People list open in a Split cell closes when the shared session starts", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  caret(cellOf("visualText", "r1"), "Wide for ".length);
+  assert.equal(typeCell(cellOf("visualText", "r1"), "@"), true);
+  assert.equal(currentWhoList()?.isOpen(), true, "the standalone People list opens");
+  const f = await enter(SOURCE, false);
+  try {
+    assert.equal(currentWhoList()?.isOpen(), false);
+    assert.equal(document.getElementById("who-list")?.hidden, true);
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
+});
+
+function backspace(input) {
+  const key = type => input.dispatchEvent(new window.KeyboardEvent(type, { key: "Backspace", bubbles: true, cancelable: true }));
+  key("keydown");
+  input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "deleteContentBackward", bubbles: true, cancelable: true }));
+  const at = input.selectionStart ?? input.value.length;
+  input.value = input.value.slice(0, at - 1) + input.value.slice(at);
+  input.setSelectionRange(at - 1, at - 1);
+  input.dispatchEvent(new window.InputEvent("input", { inputType: "deleteContentBackward", bubbles: true }));
+  key("keyup");
+}
+
+const LONG = { ...SOURCE, title: "t".repeat(299), sections: [{ id: "H1", name: "n".repeat(199), firstSceneId: "r1" }] };
+const LIMITED = [
+  { name: "a title", limit: 300, key: TITLE_FIELD_KEY, notice: SHARED_SPLIT_SURFACE_NOTICES.titleCut, read: doc => doc.title,
+    type: () => { assert.equal(typeInput(atEnd(title()), "A"), true); } },
+  { name: "a scene name", limit: 200, key: headingFieldKey("H1"), notice: SHARED_SPLIT_SURFACE_NOTICES.sceneCut, read: doc => doc.sections[0].name,
+    type: () => { const box = atEnd(renameBox()); assert.equal(typeInput(box, "A"), true, "typed"); submit(box); } }
+];
+
+for (const limited of LIMITED) for (const order of ORDERS) test(`C7 surface limit (rule 156): ${limited.name} two people took past its limit leaves with the text every copy showed, ${order}`, async () => {
+  const f = await enter(LONG);
+  const late = createSharedDocument(); registerSharedOperationFamilies(late, { cells: html => fromHtml(html) });
+  try {
+    limited.type();
+    remoteInsertAt(f.peer, limited.key, limited.limit - 1, "B");
+    exchange(f, order);
+    assert.equal(applySharedUpdate(late, encodeSharedState(f.parts.handle)).ok, true);
+    const copies = () => [limited.read(currentDocument()), limited.read(projectSharedDocument(f.peer)), limited.read(projectSharedDocument(late))];
+    let shown = limited.read(currentDocument());
+    assert.equal(Array.from(shown).length, limited.limit);
+    assert.match(shown, /[AB]$/);
+    assert.deepEqual(copies(), [shown, shown, shown], "every copy cuts at the same place the moment the two edits meet");
+    assert.deepEqual(warnings().map(call => call[0]), shown.endsWith("B") ? [limited.notice] : [], "only the copy whose typing was cut is told, once");
+    if (limited.key === TITLE_FIELD_KEY) {
+      assert.equal(title().value, shown, "the box shows the cut");
+      backspace(atEnd(title()));
+      exchange(f, order);
+      assert.equal(applySharedUpdate(late, encodeSharedState(f.parts.handle)).ok, true);
+      const next = limited.read(currentDocument());
+      assert.equal(next, "t".repeat(299) + (shown.endsWith("A") ? "B" : "A"), "deleting the last shown character shows the one the cut hid");
+      assert.deepEqual(copies(), [next, next, next]);
+      assert.equal(title().value, next);
+      shown = next;
+    }
+    assert.deepEqual(errors, []);
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+    assert.deepEqual(copies(), [shown, shown, shown], "leaving changes the text on no copy");
+    if (limited.key === TITLE_FIELD_KEY) assert.equal(title().value, shown);
+  } finally {
+    destroySharedDocument(late); destroySharedDocument(f.peer);
+    if (sharedSession()) leaveSharedSession(ports);
+  }
+});
+
+test("C7 surface mount: a first-delivery mount that fails at any registration unwinds, leaves the session with its reason, and the standalone boxes answer", async () => {
+  probe = { inject: null, labels: [], live: [], recording: false };
+  const clean = await enter(SOURCE);
+  const labels = probe.labels; probe = null;
+  clean.close();
+  for (const step of ["#doc-title beforeinput", "document pointerdown", "empty-script-input input", "session subscribe"]) assert.ok(labels.includes(step), step);
+  for (let at = 1; at <= labels.length; at++) {
+    const where = labels[at - 1] + " (registration " + at + ")";
+    writerControls().closeWriter();
+    adoptReplacement(migrateRows(structuredClone(SOURCE)));
+    reports.length = 0; errors.length = 0; noticeCalls.length = 0; endings.length = 0;
+    probe = { inject: at, labels: [], live: [], recording: false };
+    let outcome;
+    try { outcome = await enterSharedSession(ports); } finally { probe.recording = false; }
+    const left = probe.live.map(entry => entry.label); probe = null;
+    assert.deepEqual(outcome, { ok: true }, where);
+    assert.deepEqual(endings, [[SHARED_SPLIT_SURFACE_FAILED, { ok: true }]], where);
+    assert.equal(sharedSession(), false, where);
+    assert.deepEqual(left, [], where + ": nothing the failed mount registered stays registered");
+    assert.deepEqual(warnings().map(call => call[0]), [SHARED_SPLIT_SURFACE_NOTICES.failed], where);
+    assert.match(String(errors[0]?.message), new RegExp("injected at"), where);
+    assert.equal(document.querySelector(".empty-script"), null, where);
+    assert.equal(typeInput(atEnd(title()), "!"), true, where);
+    assert.equal(currentDocument().title, "Shared Split!", where);
+    const box = atEnd(renameBox());
+    assert.equal(typeInput(box, "s"), true, where); submit(box);
+    assert.equal(currentDocument().sections[0].name, "Scenes", where);
+    const added = addSceneBox("r2");
+    assert.equal(typeInput(added, "N"), true, where); submit(added);
+    assert.deepEqual(currentDocument().sections.map(s => s.name), ["Scenes", "N"], where);
+  }
 });

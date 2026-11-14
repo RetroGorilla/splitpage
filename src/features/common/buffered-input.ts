@@ -222,20 +222,32 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     const selection = doc.getSelection(), at = selection?.rangeCount ? selection.anchorNode : null, input = active();
     if (!input || at && !(input.form ?? input).contains(at)) settleHeld();
   }
-  for (const input of inputs) {
-    for (const type of TYPES) input.addEventListener(type, listener);
-    input.addEventListener("blur", blurred);
-    input.addEventListener("keyup", released);
+  let stopPainted = (): void => {}, stopCheck = (): void => {};
+  function unlisten(): void {
+    stopPainted(); stopCheck();
+    for (const input of inputs) {
+      for (const type of TYPES) input.removeEventListener(type, listener);
+      input.removeEventListener("blur", blurred);
+      input.removeEventListener("keyup", released);
+    }
+    doc.removeEventListener("selectionchange", selectionMoved);
   }
-  doc.addEventListener("selectionchange", selectionMoved);
-  const stopPainted = ports.onPainted(painted);
-  const stopCheck = ports.beforePaint(() => {
-    ports.shown(discardClipboard);
-    binding.canPaint();
-    const input = active();
-    kept = input ? caretNow(input) : null;
-  });
-  reset();
+  try {
+    for (const input of inputs) {
+      for (const type of TYPES) input.addEventListener(type, listener);
+      input.addEventListener("blur", blurred);
+      input.addEventListener("keyup", released);
+    }
+    doc.addEventListener("selectionchange", selectionMoved);
+    stopPainted = ports.onPainted(painted);
+    stopCheck = ports.beforePaint(() => {
+      ports.shown(discardClipboard);
+      binding.canPaint();
+      const input = active();
+      kept = input ? caretNow(input) : null;
+    });
+    reset();
+  } catch (error) { unlisten(); throw error; }
   if (form.opening !== undefined) expected = ports.painted.current(key);
   return {
     held: binding.held,
@@ -255,13 +267,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       if (!open) return true;
       if (!ports.shown(() => { discardClipboard(); return binding.dispose(); })) return false;
       open = false;
-      stopPainted(); stopCheck();
-      for (const input of inputs) {
-        for (const type of TYPES) input.removeEventListener(type, listener);
-        input.removeEventListener("blur", blurred);
-        input.removeEventListener("keyup", released);
-      }
-      doc.removeEventListener("selectionchange", selectionMoved);
+      unlisten();
       ports.painted.clear();
       ports.repaint();
       return true;

@@ -66,6 +66,7 @@ export interface WhoListPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
+  readonly sharedCommands: SharedCommandGuard;
 }
 
 export interface WhoListControl {
