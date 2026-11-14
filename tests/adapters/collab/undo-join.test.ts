@@ -182,15 +182,15 @@ test("through the owner: a used-up undo changes no byte, state vector or revisio
   perform("join", [join("join")]); run.flush();
   run.send(run.set.b, { kind: "remove", id: "gone", by: "Other", removalKind: "beat", targets: ["R2"], boundaries: ["R2"], observed: [], components: [], gallery: [], at: 0 }); run.flush();
   const before = state();
-  assert.deepEqual(undo.undo(), { ok: true, effective: false, label: "join", selection: null });
+  assert.deepEqual(undo.undo(), { ok: true, effective: false, label: "join", selection: null, reason: "used-up" });
   assert.deepEqual(state(), before); assert.deepEqual(undo.sizes(), { undo: 0, redo: 0, dropped: 0 });
 }));
 
-test("through the owner: a join recorded with another structure change is refused by that change, writes nothing and stays on top", () => scenario("D1", run => {
+test("through the owner, rule 71: a join recorded with another structure change is skipped for that change and writes nothing", () => scenario("D1", run => {
   const { undo, perform, state } = owner(run);
   perform("join and separator", [join("join"), operation({ kind: "join-glue", id: "glue", by: "Writer", joins: ["join"], glue: "" })]); run.flush();
   const before = state();
-  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:join-glue" });
-  assert.deepEqual(state(), before); assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
+  assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:join-glue", skipped: true });
+  assert.deepEqual(state(), before); assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 0, dropped: 0 }, 1]);
   assert.deepEqual(["join", "split", "join-retire", "structure"].map(supportsSharedUndoPart), [true, false, false, false]);
 }));
