@@ -680,16 +680,67 @@ check.
 
 | Part | Its undo | Used up when |
 | --- | --- | --- |
-| `record-create` of a picture | `gallery-retire`: hides the record | the picture no longer holds exactly the fields the command wrote, or its beat is removed |
-| `record-retired` | `gallery-restore`: deletes the `retired` key, so the same record with the same content reference shows again | the picture shows: another writer changed it or removed its beat without seeing the undo |
+| `record-create` of a picture | `gallery-retire`: hides the record | the picture is hidden or no longer holds exactly the fields the command wrote, or its beat is removed |
+| `record-retired` | `gallery-restore`: deletes the `retired` key, so the same record with the same content reference shows again | the stored retirement is not the one this undo wrote (its `observed` list is kept in the part), or it no longer holds |
 | `record-delete` of a picture | creates the record with the fields it had | the record is stored, also when it is hidden |
 
-Every reader leaves a hidden picture out: the projection, the recovery list,
-the gallery a removal lists, the attachment index and `readSharedRecords`. The
-projection reads the beat's removals only for a picture whose stored keys
-include `retired`, so a document where no picture was undone reads nothing
-more. A hand-made `record-create` or `record-set` that names `retired` is
-refused (`invalid-record-field`, `immutable-record-field`).
+A command is recorded against the stored picture, hidden or not. A change to a
+hidden picture is a `record-field` part with the stored earlier value, never a
+creation, and its undo is the field undo above: the field goes back and the
+picture stays shown, because the change made the retirement no longer hold and
+the add's undo is used up. A redo is bound to the retirement its undo wrote, so
+a later retirement from another device is not taken back by it.
+
+One read decides which pictures a beat shows, in
+`src/adapters/collab/gallery-retirement.ts`, over stored state and over the
+state an operation list plans. A staged write has no library item yet, so the
+`observed` check cannot run on planned state. Instead each operation notes what
+it does to a picture as it is prepared: `gallery-retire` hides it, because its
+observation is taken as it applies; `gallery-restore` and any field write show
+it, because they delete the retirement or change what it observed. A picture
+with no note reads as stored. A removal later in the same list lists the
+pictures that read shows, so one list and the same operations as separate lists
+write the same removal (`undo-gallery.test.ts`, three list forms, and a check at
+the end of every generated history).
+
+| Consumer | Module | Reads |
+| --- | --- | --- |
+| Projection and recovery list | `projection-source.ts` | shown pictures |
+| `readSharedRecords` | `record-reader.ts` | shown pictures; the recorder's stored reading |
+| Attachment index | `structure-index.ts` | shown pictures |
+| Removal preparation | `removal-executor.ts` | the planned read |
+| Retire and restore preparation | `undo-handlers.ts` | notes the planned state; reads the stored record as it applies |
+| Field writes | `record-executor.ts` | notes the planned state |
+| Picture undo and redo | `undo-executor.ts` | shown pictures for the undo, the stored picture for the recorder and the redo's retirement |
+| Split and restore guards | `undo-removal.ts` | shown pictures, without the retirement key |
+| Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
+| Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |
+| Hydration | `hydrate.ts` | writes only |
+| Incremental projection | `incremental-project.ts` | observes changes only |
+| Text targets and scalar fields | `text-target.ts`, `scalar-executor.ts` | other collections only |
+
+The one deliberate exception is identity occupancy: a hidden record is still
+stored, so nothing is created over its key, a removal's undo does not recreate
+it, and a field write addresses it. `tests/adapters/collab/gallery-reads.test.ts`
+scans the adapter folder for direct reads of the stores and fails on a module not
+in this table.
+
+A hand-made `record-create` or `record-set` that names `retired` is refused
+(`invalid-record-field`, `immutable-record-field`).
+
+What garbage collection can and cannot remove: it replaces only the content of
+a deleted item and keeps its id and length, so the id and deletion flag the
+observation lists for each key survive collection, an encoded reload and a late
+joiner. It replaces the items themselves only under a deleted parent, and the
+observation never walks into a deleted nested map; a deleted picture record
+takes its retirement with it. So collection removes only what the observation
+does not read, never an entry it lists.
+
+Cost: the projection reads the beat's removals only for a picture whose stored
+keys include `retired`, so a document where no picture was undone reads nothing
+more. Measured on the reviewer's probe, 100 retired pictures add 100 observation
+checks to a keystroke that also writes the beat's stamp, none to narration-only
+typing, and none when no picture is retired. The cache is left as it is.
 
 What is kept, and for how long: one `retired` key inside the undone picture's
 record. The redo deletes it; it goes with the record when the record is

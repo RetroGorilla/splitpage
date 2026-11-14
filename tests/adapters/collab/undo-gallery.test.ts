@@ -18,6 +18,7 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeShar
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import { readSharedRemovalCommand } from "../../../src/adapters/collab/removal-record.ts";
+import { sharedGalleryObservation } from "../../../src/adapters/collab/gallery-retirement.ts";
 import { executeSharedCommand, reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
@@ -297,6 +298,23 @@ for (const order of ORDERS) test(`an old redo cannot take back another writer's 
   run.flush(); run.check("shown renamed", state([["R1", "ab", ["Renamed"]], ["R2", "cd", []]], [["G1", "Renamed", "a"]]));
   run.reverse(renamed, true, run.set.b); run.flush(); run.check("the old name, still shown", withP1);
   run.usedUp(redo, "redo used up", withP1);
+}));
+
+test("garbage collection keeps what the observation lists: deleted writes, a cleared field and twenty encoded reloads leave the picture hidden", () => scenario("D1", run => {
+  const added = run.command(run.set.a, add("G1", "P1", "a")); run.flush();
+  run.send(run.set.a, setRecord("gallery", "G1", "links", [{ href: "https://example.com/v" }]), setRecord("gallery", "G1", "links", []), setRecord("gallery", "G1", "custom", "x"));
+  run.send(run.set.a, { kind: "record-set", target: { collection: "gallery", record: "G1" }, field: "custom", clear: true, id: "clear", by: "Alice" });
+  run.flush(); run.reverse(added, true); run.flush(); run.check("hidden despite deleted writes", plain);
+  const observed = sharedGalleryObservation(collabState(run.set.a).roots.gallery.get("G1") as Y.Map<unknown>);
+  let bytes = encodeSharedState(run.set.a);
+  for (let round = 0; round < 20; round++) {
+    const copy = createMonitoredSharedDocument();
+    try {
+      assert.ok(applySharedUpdate(copy, bytes).ok);
+      assert.equal(sharedGalleryObservation(collabState(copy).roots.gallery.get("G1") as Y.Map<unknown>), observed);
+      assert.deepEqual(read(copy), plain); bytes = encodeSharedState(copy);
+    } finally { destroySharedDocument(copy); }
+  }
 }));
 
 for (const order of ORDERS) test(`a redo is bound to the retirement its undo wrote: after a later retirement from another device, it is used up: ${order}`, () => scenario(order, run => {
