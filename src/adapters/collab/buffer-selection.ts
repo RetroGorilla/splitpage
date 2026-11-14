@@ -7,10 +7,13 @@ import { collabProjectedHeadingPoint, collabProjectedNarrationPoint, collabProje
 
 export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],
   field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {
-  if (field?.target.field === "title") return undefined;
   function point(anchor: SharedContentRef | null | undefined) {
     const location = anchor ? resolveSharedAnchor(handle, anchor) : "gone";
     if (location === "gone") return null;
+    if (field?.target.field === "title") {
+      const offset = collabProjectedTextOffset(handle, field.target, location.segment, location.offset);
+      return offset === null ? null : beatPos(field.key, offset);
+    }
     if (field?.target.field === "heading") {
       const heading = collabProjectedHeadingPoint(handle, location.segment, location.offset);
       return heading ? headingPos(heading.owner, heading.offset) : null;
