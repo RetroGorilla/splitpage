@@ -24,6 +24,12 @@ const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts"
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const hook = window.__sharedTest;
 
+async function releaseDesktop() {
+  if (sharedSession()) hook.leave();
+  await flushDraftNow();
+  restoreDesktop();
+}
+
 function script(rows = [{ id: "r1", audioText: "Hello", visualText: "" }]) {
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ title: "Checkpoint", rows }));
@@ -170,7 +176,7 @@ test("real draft and autosave owners cancel pending source work on detach and pr
     globalThis.clearTimeout = realClear;
     for (const timer of timers) clearTimeout(timer.id);
     if (sharedSession()) hook.leave();
-    autoSavePolicy().setEnabled(false); restoreDesktop();
+    autoSavePolicy().setEnabled(false); await releaseDesktop();
   }
 });
 
@@ -218,8 +224,7 @@ test("leaving shared mode keeps desktop draft sequence numbers increasing for th
     assert.equal(result.ok, true, JSON.stringify({ result, sent }));
     assert.ok(sent[1] > sent[0]);
   } finally {
-    if (sharedSession()) hook.leave();
-    restoreDesktop();
+    await releaseDesktop();
   }
 });
 
@@ -246,8 +251,7 @@ test("entering with pending standalone typing writes that typing to the draft st
     assert.deepEqual(store.writes.map(write => [write.text, write.shared, write.kept]), [["Typed before sharing", false, true]]);
     assert.deepEqual(store.discards, []);
   } finally {
-    if (sharedSession()) hook.leave();
-    restoreDesktop();
+    await releaseDesktop();
   }
 });
 
@@ -272,8 +276,7 @@ test("entering while the draft store refuses writes is refused with a visible no
     assert.deepEqual([store.writes.at(-1).text, store.writes.at(-1).shared, store.writes.at(-1).kept], ["Typed before sharing", false, true]);
     assert.deepEqual(store.discards, []);
   } finally {
-    if (sharedSession()) hook.leave();
-    restoreDesktop();
+    await releaseDesktop();
   }
 });
 
@@ -294,8 +297,7 @@ test("after a shared stretch over a stored draft, the next flush writes the land
     const landed = store.writes.at(-1);
     assert.deepEqual([landed.seq, landed.text, landed.docId, landed.shared], [stored.seq + 1, "Shared Stored", currentDocument().docId, false]);
   } finally {
-    if (sharedSession()) hook.leave();
-    restoreDesktop();
+    await releaseDesktop();
   }
 });
 
