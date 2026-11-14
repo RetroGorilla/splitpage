@@ -16,6 +16,9 @@ import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 
 export type RenamePage = ReturnType<typeof sharedRename>;
 
@@ -28,9 +31,12 @@ function headerNode(name: string): HTMLElement {
   return header;
 }
 
-export function sharedRename(name = "Scene", options: { readonly author?: (serial: number) => string; readonly undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform"> } = {}) {
+export function sharedRename(name = "Scene", options: { readonly author?: (serial: number) => string; readonly undo?: (h: Stage1ExecutorHarness) => SharedUndo } = {}) {
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }, { id: "R2", text: "next" }], { sections: [{ id: "H1", name, firstSceneId: "R1" }] });
-  const a = sharedHarness(adapterReplica(h.a, options.undo?.(h))), { effects, reports, recovered } = fakeWriterBufferEffects();
+  let reversals = 0;
+  if (!options.undo) registerSharedUndoOperationHandlers(h.a);
+  const owner = options.undo?.(h) ?? sharedUndoOwner(h.a, () => ({ id: "undo" + ++reversals, by: "Alice" }), () => 0, error => { throw error; });
+  const a = sharedHarness(adapterReplica(h.a, owner)), { effects, reports, recovered } = fakeWriterBufferEffects();
   let serial = 0, depth = 0, repaints = 0;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => { const next = ++serial; return { id: options.author?.(next) ?? "native:" + next, by: "Alice" }; } });
@@ -54,6 +60,7 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
     scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
     ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
     sharedNames: {
+      history: sharedUndoActions(a.session, owner),
       field: surface => createBufferedField(shared.bufferedText, surface),
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
@@ -70,7 +77,7 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
   }
   const edge = edgeInput(input);
   const stored = () => readSharedPaintedText(h.a, sharedBufferedTarget(h.a, "heading:H1"))?.text;
-  return { h, a, controls, reports, recovered, commands, open, input, edge, stored, paint, rows,
+  return { h, a, controls, reports, recovered, commands, open, input, edge, stored, paint, rows, owner,
     repaints: () => repaints, shownDepth: () => depth,
     close: () => { controls.dispose(); a.session.dispose(); h.destroy(); document.body.innerHTML = ""; } };
 }

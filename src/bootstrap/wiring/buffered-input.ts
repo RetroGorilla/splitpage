@@ -5,8 +5,9 @@ import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import { onBeforePaint, onPainted, render } from "../../features/rows/render.ts";
 import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
 import { paintGuard } from "./editor-owners.ts";
+import type { SharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
 
-export function sharedBufferedInputPorts(shared: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): BufferedInputPorts {
+export function sharedBufferedInputPorts(shared: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }, history?: SharedUndoActions): BufferedInputPorts {
   return {
     field: surface => createBufferedField(shared.bufferedText, surface),
     painted: createPaintedBeats(shared.paintedText),
@@ -14,6 +15,7 @@ export function sharedBufferedInputPorts(shared: { readonly paintedText: Painted
     shown: edit => paintGuard().whileShown(edit),
     repaint: render,
     onPainted,
-    beforePaint: onBeforePaint
+    beforePaint: onBeforePaint,
+    ...history ? { history } : {}
   };
 }

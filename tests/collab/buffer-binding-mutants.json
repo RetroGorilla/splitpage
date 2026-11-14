@@ -647,5 +647,59 @@
     "find": "    binding.discardUnchangedInput();\n",
     "replace": "",
     "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "name-box undo shortcuts never reach the shared owner",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (direction && !key.isComposing && key.keyCode !== 229) { history(direction, key); return; }",
+    "replace": "if (false) { history(direction!, key); return; }",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "name-box redo calls shared undo again",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "const result = ports.history[direction]();",
+    "replace": "const result = ports.history.undo();",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "clipboard and Escape descriptions coalesce into typing",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "label ? { ...typingDescription(painted, commit), label, typing: null } : typingDescription(painted, commit)",
+    "replace": "typingDescription(painted, commit)",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape overwrites a name changed by another writer",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (foreign) { ports.report({ kind: \"rejected\", reason: \"buffer-heading-changed\" }); return true; }",
+    "replace": "if (false) { ports.report({ kind: \"rejected\", reason: \"buffer-heading-changed\" }); return true; }",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape closes without writing its opening name",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (!binding.replace(form.opening, \"rename-cancel\")) return false;",
+    "replace": "return true;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "a form forgets the identity written by its own typing",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "expected = written;",
+    "replace": "expected = before;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape compares letters but ignores remote replacement identities",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "a.identity(at) === b.identity(at)",
+    "replace": "true",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "an unrelated remote field leaves Escape using a stale base",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "ports.painted.field(key, typing().value);",
+    "replace": "",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape cannot restore an opening name above the typing stop",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());",
+    "replace": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
   }]
 }

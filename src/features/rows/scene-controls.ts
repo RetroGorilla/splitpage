@@ -139,7 +139,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     input.addEventListener("blur", event => { if (!pointerAway && event.relatedTarget) settle(false); });
     made.addEventListener("keydown", event => {
       if (naming?.line !== made || event.isComposing) return;
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelName(true); }
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
+        if (!bound || bound.revert()) cancelName(true);
+      }
     });
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
     if (heading) heading.append(made); else parent.before(made);
@@ -152,7 +155,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       return state && sceneId !== null ? storedSceneName(state, sceneId) : null;
     };
     const bound = shared && sceneId !== null ? bindBufferedInput({
-      inputs: [input], key: headingFieldKey(sceneId), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200,
+      inputs: [input], key: headingFieldKey(sceneId), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200, opening: value,
       position: offset => headingPos(sceneId, offset), owns: pos => pos.kind === "heading" && pos.sceneId === sceneId
     }, shared) : null;
     naming = { sceneId, beatId, line: made, returnTo, settle, bound };

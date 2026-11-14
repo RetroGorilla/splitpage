@@ -302,19 +302,22 @@ test("Split rename rule 4: Enter on a held empty name only ends the hold: the fo
 
 for (const [label, leave] of [
   ["Enter", (page: RenamePage) => { assert.equal(page.edge.enter(), true); }],
-  ["Escape", (page: RenamePage) => { page.edge.press("Escape"); }],
+  ["Escape", (page: RenamePage) => { page.edge.escape(); }],
   ["moving focus away", () => { document.getElementById("away")?.focus(); }]
 ] as const) {
-  test(`Split rename: ${label} closes the form over what is already shared, runs no rename command and repaints once`, () => {
+  test(label === "Escape" ? "Split rename rule 85: Escape closes the form and restores its opening name as one shared edit"
+    : `Split rename: ${label} closes the form over what is already shared, runs no rename command and repaints once`, () => {
     const page = sharedRename();
     try {
       const input = page.open();
       page.edge.select(5);
       page.edge.type("X");
       leave(page);
-      assert.deepEqual([input.isConnected, page.stored(), page.commands, page.reports, page.repaints()], [false, "SceneX", [], [], 1]);
-      assert.deepEqual([written(page), page.rows.querySelector(".section-name")?.textContent], [[[inserted("X")]], "SceneX"]);
-      copies(page, ["SceneX"]);
+      const escaped = label === "Escape";
+      assert.deepEqual([input.isConnected, page.stored(), page.commands, page.reports, page.repaints()], [false, escaped ? "Scene" : "SceneX", [], [], escaped ? 2 : 1]);
+      assert.deepEqual([written(page), page.rows.querySelector(".section-name")?.textContent],
+        [escaped ? [[inserted("X")], [inserted("Scene"), { kind: "text-delete", target: TARGET, observed: 6 }]] : [[inserted("X")]], escaped ? "Scene" : "SceneX"]);
+      copies(page, [escaped ? "Scene" : "SceneX"]);
     } finally { page.close(); }
   });
 }
@@ -362,15 +365,15 @@ test("Split rename rule 84: paste after typing inserts at the caret without a re
   } finally { page.close(); }
 });
 
-test("Split rename: Ctrl+Z after settled typing is refused and the person is told; nothing is restored", () => {
+test("Split rename rule 85: Ctrl+Z after settled typing uses shared undo and restores the name", () => {
   const page = sharedRename();
   try {
     const input = page.open();
     page.edge.select(5);
     page.edge.type("X");
     assert.equal(page.edge.undo("Scene"), false);
-    assert.deepEqual([page.stored(), input.value, caret(page), page.reports, written(page)], ["SceneX", "SceneX", [6, 6], UNSUPPORTED, [[inserted("X")]]]);
-    copies(page, ["SceneX"]);
+    assert.deepEqual([page.stored(), input.value, caret(page), page.reports, written(page)], ["Scene", "Scene", [5, 5], [], [[inserted("X")]]]);
+    copies(page, ["Scene"]);
   } finally { page.close(); }
 });
 
@@ -460,7 +463,7 @@ test("Split rename rule 8: a typed edge space is stored and shown as typed", () 
     assert.deepEqual([page.stored(), page.input().value, page.reports], [" Scene 2", " Scene 2", []]);
     copies(page, [" Scene 2"]);
     page.edge.press("Escape");
-    assert.equal(page.open().value, " Scene 2");
+    assert.equal(page.open().value, "Scene");
   } finally { page.close(); }
 });
 
