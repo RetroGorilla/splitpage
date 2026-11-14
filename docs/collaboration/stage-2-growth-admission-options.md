@@ -21,13 +21,13 @@ The [previous record](stage-2-growth-admission.md) measured 7.9–9.1 MB after e
 
 I would first use binary anchors and compact record fields, keeping the information used for concurrent formatting and undo. I would use a standing shadow for admission, retaining isolated integration before live mutation. Both require implementation and correctness tests under concurrent edits before adoption. Grouping insertion runs is attractive only if the owner accepts delayed publication or a more involved rewrite of how runs are recorded. A coordinated document epoch is my preferred way to bound long histories, provided the owner accepts its offline-edit and undo policy. The measured compact encodings still exceed the storage ceiling.
 
-The shadow trades CPU for a second copy in memory, and a refused update still requires a full rebuild. Its longest observed remote admission is 56.44 ms; this is not a local-input measurement. Burst trials help an existing queue but leave isolated updates with the present copying cost. Decode-only and the additional reference check are fast controls, not safe replacements. **Every Stage 0 local-input result is not measured.**
+The shadow trades CPU for a second copy in memory, and a refused update still requires a full rebuild. Its fresh-long maximum of 56.44 ms exceeds the 50 ms limit for this adapter-level duration; this is not a local-input measurement. Burst trials help an existing queue but leave isolated updates with the present copying cost. Decode-only and the additional reference check are fast controls, not safe replacements. **Every Stage 0 local-input result is not measured.**
 
 ## Scope and reproduction
 
 This change edits only measurement scripts, their focused tests, and this record. No product source, dependency, baseline, or product assertion changes. The implementation stays under `tests/collab/measure/`; the launcher stays at `tools/measure-shared-admission.mjs`. No new file is placed under `tests/adapters/collab/`, whose formatting-monitor rule still applies to the existing measurement tests.
 
-Node is pinned to 24.22.1. The new measurements were completed on 2026-11-14 on an ARM64 computer shared with other work. Each benchmark or test execution was preceded by a separate available-memory check of at least 3,000 MiB. Only one heavy preparation/timing command ran at a time. Timing results are noisy: each cell reports the median and full minimum–maximum of five rounds, with no discarded outliers. Each round uses 500 sequential individual updates, nearest-rank p50/p95/max, then drains of 100 and 1,000 updates. These are the same fixtures, block-of-100 workload, causal sender stream and transaction paths as the earlier record. Initialization is excluded from admission timing.
+Node is pinned to 24.22.1. The new measurements were completed on 2026-11-14 on a Windows x64 host shared with other work. Node's recorded architecture is `x64`, matching the committed timing JSON; the x64 runtime ran natively, without architecture emulation. This is a different machine from #1566's original environment, which reported ARM64 and Node architecture `arm64`; its host/emulation details were not independently retained. Each benchmark or test execution was preceded by a separate available-memory check of at least 3,000 MiB. Only one heavy preparation/timing command ran at a time. Timing results are noisy: each cell reports the median and full minimum–maximum of five rounds, with no discarded outliers. Each round uses 500 sequential individual updates, nearest-rank p50/p95/max, then drains of 100 and 1,000 updates. These are the same fixtures, block-of-100 workload, causal sender stream and transaction paths as the earlier record. Initialization is excluded from admission timing.
 
 All three fresh and all three edited states were prepared here, once, using product source `9f7e9ab6017557162deafd0f051167bbe416e1f2` (adapter tree `280bf0cb67334b80a04d2cd7aa2f34006356b486`). The entire projected document equals its entry value for each edited checkpoint. The previous record's timing values are quoted only; no binary checkpoint was transferred.
 
@@ -39,14 +39,14 @@ All three fresh and all three edited states were prepared here, once, using prod
 
 The preparation checkpoint contains binary states and is local only. It checks source/dependency/fixture trees, Node and architecture when reused. Results checkpoints also fingerprint the admission implementation and common measurement module. The output data beside this document contain no binary document checkpoint or local environment paths.
 
-PowerShell reproduction, after `npm ci` (repeat the memory check before every command and wait if its value is below 3,000):
+PowerShell reproduction, after `npm ci` (repeat the memory check before every command and wait if its value is below 3,000). Use single backslashes in the single-quoted counter path; PowerShell does not need doubled backslashes here:
 
 ```powershell
-(Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
+(Get-Counter -Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
 node tools/measure-shared-admission.mjs --prepare-options "$env:TEMP/splitpage-options-checkpoint.json"
-(Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
+(Get-Counter -Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
 node tools/measure-shared-admission.mjs --bytes "$env:TEMP/splitpage-options-bytes.json" "$env:TEMP/splitpage-options-checkpoint.json"
-(Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
+(Get-Counter -Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
 node tools/measure-shared-admission.mjs --options "$env:TEMP/splitpage-options-checkpoint.json" "$env:TEMP/splitpage-options-results.json"
 ```
 
