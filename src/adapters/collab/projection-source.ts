@@ -6,7 +6,8 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
 import { readSharedHeadingActiveRemovals, readSharedHeadingRemovalState } from "./removal-state.ts";
-import { readStoredSharedRecord } from "./record-codec.ts";
+import { readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { isSharedGalleryShown, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
 import { sharedStatusTargetVersion } from "./status-index.ts";
@@ -28,6 +29,7 @@ export class SharedProjectionSource {
   private readonly joinFields = new Map<string, readonly string[]>();
   private readonly joinReaders = new Map<string, Set<string>>();
   private readonly joinSegments = new Map<string, readonly string[]>();
+  private readonly retiredGallery = new Set<string>();
   private ownership = "";
   readonly handle: SharedDocumentHandle;
 
@@ -119,10 +121,18 @@ export class SharedProjectionSource {
   records(collection: SharedRecordCollection) {
     const records = this.keys(collection).flatMap(key => {
       const value = this.cache.read(["record", collection, key], [this.keyVersion(collection, key)], () => {
-        const fields = readStoredSharedRecord(collection, key, this.inputRoots[collection].get(key));
-        return fields ? { key, fields } : null;
+        if (collection !== "gallery") {
+          const fields = readStoredSharedRecord(collection, key, this.inputRoots[collection].get(key));
+          return fields ? { key, fields } : null;
+        }
+        const read = readStoredSharedGalleryRecord(key, readSharedStoredPicture(this.inputRoots, key));
+        if (read?.retired) this.retiredGallery.add(key); else this.retiredGallery.delete(key);
+        return read ? { key, fields: read.fields } : null;
       }, "record");
-      return value ? [value] : [];
+      // why: only a picture an undo retired reads its beat's removals, so a document without one reads nothing more.
+      const shown = value && collection === "gallery" && this.retiredGallery.has(key) ? this.cache.read(["record-retired", key], [value, this.keyVersion("beats", String(value.fields.beat))],
+        () => isSharedGalleryShown(this.inputRoots, key, readSharedStoredPicture(this.inputRoots, key)) ? value : null) : value;
+      return shown ? [shown] : [];
     });
     return this.cache.read(["records", collection], records, () => sortSharedRecordReadings(collection, [...records]));
   }
