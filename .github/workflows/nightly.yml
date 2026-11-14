@@ -19,6 +19,9 @@ jobs:
   mutants:
     runs-on: ${{ vars.CI_RUNNER }}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
 
@@ -30,7 +33,41 @@ jobs:
         run: npm ci
 
       - name: The slow collaboration mutants are caught
-        run: node tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor 2>&1 | tee "$RUNNER_TEMP/nightly-mutants.log"
+
+      - name: Report the collaboration mutant failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title="Nightly collaboration mutants failed"
+          body="$RUNNER_TEMP/nightly-mutants-issue.md"
+          log="$RUNNER_TEMP/nightly-mutants.log"
+          {
+            printf 'Run: %s/%s/actions/runs/%s\nDate: %s\n\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%d)"
+            printf '```text\n'
+            if [ -f "$log" ]; then
+              if grep -qE '^(survived:|inconclusive:)' "$log"; then
+                grep -E '^(survived:|inconclusive:)' "$log" | tail -n 50
+              else
+                tail -n 50 "$log"
+              fi
+            else
+              printf 'The job failed before mutant output was captured. See the run for details.\n'
+            fi
+            printf '```\n'
+          } > "$body"
+          issue=$(gh issue list --state open --search "\"$title\" in:title" --limit 100 --json number,title --jq '.[] | select(.title == "Nightly collaboration mutants failed") | .number' | head -n 1)
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body-file "$body"
+          else
+            gh issue create --title "$title" --body-file "$body" --label area:tooling
+          fi
 
   suites:
     runs-on: ${{ vars.CI_RUNNER }}
