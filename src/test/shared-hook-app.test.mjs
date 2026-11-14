@@ -15,8 +15,8 @@ const { undoOwner, sharedUndoRoute, stepSharedUndo } = await import("../bootstra
 const { draftResume, flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
 const { draftsTesting } = await import("../bootstrap/wiring/drafts.ts");
 const { useDesktopForTest, restoreDesktop } = await import("../adapters/desktop/desktop-port.ts");
-const { autoSavePolicy, requestSave, confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
-const { currentHome } = await import("../bootstrap/wiring/location-owner.ts");
+const { autoSavePolicy, requestSave, confirmSavedNow, scheduleAutoSave } = await import("../bootstrap/wiring/save-owners.ts");
+const { currentHome, setHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { createHeldFileHandle } = await import("./_m4-matrix.mjs");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
@@ -137,6 +137,8 @@ test("real draft and autosave owners cancel pending source work on detach and pr
   const timers = [], realSet = globalThis.setTimeout, realClear = globalThis.clearTimeout;
   try {
     script();
+    setHome("file", { format: "splitpage", name: "source.splitpage",
+      handle: { kind: "file", name: "source.splitpage", _desktopId: "checkpoint-source", createWritable: () => { throw new Error("The detached source was written"); } } });
     currentDocument().rows[0].audioText = "Unsaved source"; noteSessionEdit();
     assert.equal((await flushDraftNow()).ok, true);
     assert.equal(writes.length, 1);
@@ -145,7 +147,7 @@ test("real draft and autosave owners cancel pending source work on detach and pr
     globalThis.setTimeout = (run, ms, ...args) => { const id = realSet(run, ms, ...args); timers.push({ run, id, active: true }); return id; };
     globalThis.clearTimeout = id => { const timer = timers.find(timer => timer.id === id); if (timer) timer.active = false; realClear(id); };
     draftsTesting().noteChange();
-    autoSavePolicy().setEnabled(true); autoSavePolicy().schedule("file");
+    autoSavePolicy().setEnabled(true); scheduleAutoSave();
     globalThis.setTimeout = realSet;
     assert.equal(draftsTesting().status().pending, true);
     assert.equal(autoSavePolicy().pending(), true);
