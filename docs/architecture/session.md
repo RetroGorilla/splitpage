@@ -205,7 +205,7 @@ All port types are in `ports.ts`. `SessionPorts` in `document-session.ts` bundle
 
 **`dispose()`.** It stops the scheduler (the armed refresh timer is stopped, pending jobs are dropped and later requests arm nothing), drops every listener and the document. Afterwards `run` is `rejected` with `DISPOSED` (`"disposed"`), `adopt`, `absorbDisk`, `absorbRecovery` and `absorbReload` return `null` without calling a port, `noteEdit`, `settle` and `refresh` do nothing, `subscribe` registers nothing, and `read` gives `null`. A second call does nothing. The app calls it from `adoptReplacement` (4.8): a transition disposes the replaced document's session, which stops its armed refresh (matrix case L1a) and drops its listeners (L1d). `session-owner.ts`'s own `session.dispose()` ends it for good (`adoptReplacement` then does nothing); only tests call it, and `m4-lifecycle.test.mjs` does so last.
 
-`session-owner.ts`'s other exports: `runCommand`, `readSession`, `sessionStamps`, `sessionTextPorts`, `noteSessionEdit`, `noteDiskUpdate`, `noteRecovery`, `noteReload`, `noteAbsorbedDirty`, `requestRefresh`, `liveSession`.
+`session-owner.ts`'s other exports: `runCommand`, `readSession`, `sessionStamps`, `sessionTextPorts`, `noteSessionEdit`, `noteDiskUpdate`, `noteRecovery`, `noteReload`, `noteAbsorbedDirty`, `requestRefresh`, `liveSession`, and for collaboration `adoptShared` and `sharedSession` ([stage-2-shared-session.md, The session bridge](../collaboration/stage-2-shared-session.md#the-session-bridge); not called by the app yet).
 
 ## 6. The undo adapter
 
