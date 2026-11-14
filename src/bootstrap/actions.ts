@@ -30,6 +30,7 @@ import { findActions } from "./wiring/find.ts";
 import { fileMenuExportActions } from "./wiring/file-menu-export.ts";
 import { hideShotActions } from "./wiring/hide-shot.ts";
 import { desktopActions } from "./wiring/desktop.ts";
+import { registerRecoveryPanelActions } from "./wiring/recovery-panel.ts";
 
 let running: (() => void) | null = null;
 
@@ -63,6 +64,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
       return registerAll(registry, [...rundownBeatActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...tagComposerActions()]);
     },
     () => registerAll(registry, rowsActions()),
+    () => registerRecoveryPanelActions(registry),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal, () => { toggleFileMenu(false); })),
     () => mountShortcuts({ target: keyTarget, registry })
   ];

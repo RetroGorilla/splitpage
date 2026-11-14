@@ -18,7 +18,7 @@ const MOUNT_ORDER = [
   "mountFileSavingFeature", "mountLocalFilesFeature", "mountMergeReviewFeature", "mountFileMenuDropdownFeature",
   "mountFileMenuExportFeature", "mountCommandMenuFeature", "mountWriterRuntimeFeature", "mountPrompterRuntimeFeature",
   "mountUpdateFeature", "mountOnboardingFeature", "mountHelpFeature", "mountProjectFiles", "mountDesktopFeature", "mountDraftsFeature",
-  "mountAppDataFeature", "mountNewTabFeature", "mountSettingsFeature", "startAppWhenReady"
+  "mountAppDataFeature", "mountNewTabFeature", "mountSettingsFeature", "mountRecoveryPanelFeature", "startAppWhenReady"
 ];
 
 interface Import {

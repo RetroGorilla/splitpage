@@ -15,6 +15,7 @@ test("bootstrap preserves the complete action registration order when export def
   const registry = createActionRegistry();
   const stop = startActions(registry, new EventTarget());
   try {
+    assert.equal(registry.has("recovery"), false);
     assert.deepEqual(registry.list().map((action) => action.id), [
       "toggle-hide-shot", "toggle-rundown-min", "history", "find",
       "save", "save-as", "open", "export", "command-menu", "close-file-menu",

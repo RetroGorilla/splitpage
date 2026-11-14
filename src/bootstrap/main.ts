@@ -122,5 +122,7 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountAppDataFeature();
   mountNewTabFeature();
   mountSettingsFeature();
+  mountRecoveryPanelFeature();
   startAppWhenReady(document, wiring, failStartup);
 }
+import { mountRecoveryPanelFeature } from "./wiring/recovery-panel.ts";
