@@ -242,6 +242,15 @@ Found in the same review, for other cuts:
 - **C5c.** `src/features/tags/production-tags.ts:142` skips registry healing
   when its stamp is refused and then runs `plan.commit()` anyway.
 
+Found in the review of #1559 (C2):
+
+- **C4.** The same shared undo owner goes to the replica (`createSharedReplica(handle,
+  count, undo)`) and to the undo actions (`sharedUndoActions(session, undo)`); the
+  grouping breaks C2 left at the standalone `breakCoalescing` call sites are routed
+  to it; the owner is reset on entering and on leaving.
+- **C6.** The Writer consumes the selection anchors an undo or redo returns
+  (`SharedUndoOutcome.selection`) to put the caret back.
+
 ### Order of leaving
 
 `leaveSharedSession()`:
