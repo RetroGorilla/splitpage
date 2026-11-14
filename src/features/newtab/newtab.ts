@@ -93,12 +93,14 @@ function starterDocumentState(id: string | null) {
 }
 
 function adoptNewDocument(next: ValidatedDocument, reason: string) {
+  if (ports.entry.before()) return false;
   const leaves = ports.place.home().kind === "file" || ports.place.home().kind === "import";
   ports.resetProductionPanel();
   ports.transitions.startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   ports.saving.confirmSavedNow();
   if (typeof ports.syncIdentity === "function") ports.syncIdentity();
   closeNewTabPage();
+  return true;
 }
 
 function startNewDocument(makeState: () => ValidatedDocument | null, reason: string): Promise<boolean> {
@@ -109,8 +111,7 @@ function startNewDocument(makeState: () => ValidatedDocument | null, reason: str
   }
   const next = makeState();
   if (!next) return Promise.resolve(false);
-  adoptNewDocument(next, reason);
-  return Promise.resolve(true);
+  return Promise.resolve(adoptNewDocument(next, reason));
 }
 
 function startBlankScript() {
@@ -123,6 +124,7 @@ function startStarterScript(id: string | null) {
 }
 
 function openPasteAsNewDocument() {
+  if (ports.entry.before()) return;
   const mounted = activeMount;
   ports.importText({
     intoNewDocument: function (rows, scan) {
@@ -287,9 +289,13 @@ async function refreshRecents() {
   renderRecents(Array.isArray(entries) ? entries as RecentEntry[] : []);
 }
 
-async function openRecent(fileId: string | null) {
+function openRecent(fileId: string | null): Promise<void> {
+  if (!fileId || !recentsSupported() || ports.entry.before()) return Promise.resolve();
+  return ports.openingActivity.track(() => readRecent(fileId));
+}
+
+async function readRecent(fileId: string) {
   const mounted = activeMount;
-  if (!fileId || !recentsSupported()) return;
   let entry;
   try {
     const r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });

@@ -46,6 +46,7 @@ test("a merge offer whose session becomes shared while the file is parsed reads 
   const parsed: ReturnType<MergeReviewPorts["files"]["parse"]> = new Promise(resolve => { finish = resolve; });
   const ports: MergeReviewPorts = {
     capability: { merge: () => allowed ? { allowed: true } : REFUSED },
+    entryCapability: { merge: () => allowed ? { allowed: true } : REFUSED },
     notices: notices.notices, document: { current: () => { calls.push(["current"]); return doc; } }, session: { mergeBase: unused("base") },
     place: { fileHome: unused("home") }, homes: { amendHome: unused("amend home") }, conflicts: { close: unused("close") },
     pictures: { imgHtml: unused("image") }, text: { htmlToPlainText: unused("text") }, entry: { migrate: unused("migrate") },
@@ -74,7 +75,7 @@ for (const action of ["offer", "open", "confirm", "cancel"] as const) {
     const unused = recorder(calls);
     const notices = fakeNotices();
     const ports: MergeReviewPorts = {
-      capability: SHARED, notices: notices.notices, document: { current: unused("current") }, session: { mergeBase: unused("base") },
+      capability: SHARED, entryCapability: SHARED, notices: notices.notices, document: { current: unused("current") }, session: { mergeBase: unused("base") },
       place: { fileHome: unused("home") }, homes: { amendHome: unused("amend home") }, conflicts: { close: unused("close") },
       pictures: { imgHtml: unused("image") }, text: { htmlToPlainText: unused("text") }, entry: { migrate: unused("migrate") },
       files: { parse: unused("parse") }, recovery: { applyStashedWork: unused("apply") }, textMergeContext: unused("context")
@@ -102,6 +103,7 @@ for (const [mode, action] of [["shared", "confirm"], ["shared", "cancel"], ["sta
     let allowed = true;
     const ports: MergeReviewPorts = {
       capability: { merge: () => allowed ? { allowed: true } : REFUSED },
+      entryCapability: { merge: () => allowed ? { allowed: true } : REFUSED },
       notices: notices.notices, document: { current: () => doc }, session: { mergeBase: () => null },
       place: { fileHome: () => null }, homes: { amendHome: (record) => { calls.push(["amend home"]); return record; } },
       conflicts: { close: () => { calls.push(["close"]); } },
@@ -140,7 +142,7 @@ test("the shared merge banner shows no report silently, and its undo says why wi
   const unused = recorder(calls);
   const said: string[] = [];
   const owner = mountMergeBanner({ window: h.window, ports: {
-    capability: SHARED, lastUndo: unused("undo state"), sameDocument: unused("identity"), restore: unused("restore"), warn: message => { said.push(message); },
+    capability: SHARED, entryCapability: SHARED, lastUndo: unused("undo state"), sameDocument: unused("identity"), restore: unused("restore"), warn: message => { said.push(message); },
     openComments: unused("comments"), rowElement: unused("row"), logError: unused("error"), install: () => () => {}
   } });
   t.after(() => { owner.dispose(); timers.dispose(); h.window.close(); });
@@ -165,6 +167,7 @@ test("an undo armed before the session became shared is disarmed and restores no
   let allowed = true;
   const owner = mountMergeBanner({ window: h.window, ports: {
     capability: { merge: () => allowed ? { allowed: true } : REFUSED, history: () => ({ allowed: true }) },
+    entryCapability: { merge: () => allowed ? { allowed: true } : REFUSED, history: () => ({ allowed: true }) },
     lastUndo: () => ({ id: "s1", docId: "d1", source: "stash" }), sameDocument: () => true,
     restore: (...args) => { calls.push(["restore", ...args]); return Promise.resolve("restored"); }, warn: message => { said.push(message); },
     openComments: () => {}, rowElement: () => null, logError: () => {}, install: () => () => {}
@@ -187,6 +190,7 @@ test("an undo merge whose restore the session refuses for history says that reas
   const restores: unknown[][] = [];
   const owner = mountMergeBanner({ window: h.window, ports: {
     capability: { merge: () => ({ allowed: true }), history: () => SHARED.history() },
+    entryCapability: { merge: () => ({ allowed: true }), history: () => SHARED.history() },
     lastUndo: () => ({ id: "s1", docId: "d1", source: "stash" }), sameDocument: () => true,
     restore: (...args) => { restores.push(args); return Promise.resolve("refused"); }, warn: message => { said.push(message); },
     openComments: () => {}, rowElement: () => null, logError: () => {}, install: () => () => {}

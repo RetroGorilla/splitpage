@@ -1,0 +1,667 @@
+{
+  "tests": [
+    "tests/application/local-files.test.ts",
+    "tests/bootstrap/shared-entry-refusals.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "a rejected duplicate identity stamp still announces its new history",
+      "file": "src/application/identity/document-identity.ts",
+      "find": "  if (stamped.kind === \"rejected\") return false;",
+      "replace": "  void stamped;"
+    },
+    {
+      "label": "automatic resume reads the stored handle while shared",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "function tryResumeLastProject(): Promise<void> {\n  if (!active || !ports.lastFile.permitted()) return Promise.resolve();",
+      "replace": "function tryResumeLastProject(): Promise<void> {\n  if (!active) return Promise.resolve();"
+    },
+    {
+      "label": "automatic resume asks permission after becoming shared",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "if (!active || !ports.lastFile.permitted() || !handle) return;",
+      "replace": "if (!active || !handle) return;"
+    },
+    {
+      "label": "automatic resume reads a file after permission became shared",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "    if (!active || !ports.lastFile.permitted()) return;",
+      "replace": "    if (!active) return;"
+    },
+    {
+      "label": "automatic resume parses after its file read became shared",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "    if (!active || !permitted()) return;\n    await openProjectFile",
+      "replace": "    if (!active) return;\n    await openProjectFile"
+    },
+    {
+      "label": "automatic resume omits its check from project and import parsing",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "{ skipSnapshot: !unsavedChanges(), resumed: true }, permitted);",
+      "replace": "{ skipSnapshot: !unsavedChanges(), resumed: true });"
+    },
+    {
+      "label": "merge snapshot restore asks history before refusing shared mode",
+      "file": "src/application/session/session-merge.ts",
+      "find": "  opts = opts || {};\n  if (historyRefused()) return \"refused\";",
+      "replace": "  opts = opts || {};"
+    },
+    {
+      "label": "draft recovery tries its restore while shared",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "outcome = draftEntryRefused() ? \"kept\" : await runDraftRestore(t);",
+      "replace": "outcome = await runDraftRestore(t);"
+    },
+    {
+      "label": "prompter launch omits projected narration",
+      "file": "src/features/prompter/prompter.ts",
+      "find": "  const doc = ports.document.current() as PrompterDoc;",
+      "replace": "  const current = ports.document.current() as PrompterDoc;\n  const doc = { ...current, rows: current.rows.map(row => ({ ...row, audioText: \"\" })) };"
+    },
+    {
+      "label": "entry facade ignores the running session",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "return running ? leaveSharedSession(running.ports) : { ok: false, reason: SHARED_NOT_RUNNING };",
+      "replace": "return { ok: false, reason: SHARED_NOT_RUNNING };",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "foreign leave ports replace the entry-owned bindings",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  ports = now.ports;",
+      "replace": "  void now.ports;",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "shared entry ignores pending openings",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "ports.opening.openingPending() ? \"opening-pending\" : ports.refusal()",
+      "replace": "ports.refusal()",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "opening capture never becomes pending",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "    mine.openings.add(context);",
+      "replace": "    void context;",
+      "tests": [
+        "tests/bootstrap/shared-ports-transitions.test.ts"
+      ]
+    },
+    {
+      "label": "opening completion leaves its token pending",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "const close = () => { mine.openings.delete(context); };",
+      "replace": "const close = () => {};",
+      "tests": [
+        "tests/bootstrap/shared-ports-transitions.test.ts"
+      ]
+    },
+    {
+      "label": "synchronous opening leaves its token pending",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "      else close();",
+      "replace": "      else void result;",
+      "tests": [
+        "tests/bootstrap/shared-ports-transitions.test.ts"
+      ]
+    },
+    {
+      "label": "synchronous opening failure leaves its token pending",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "    } catch (error) { close(); throw error; }",
+      "replace": "    } catch (error) { throw error; }",
+      "tests": [
+        "tests/bootstrap/shared-ports-transitions.test.ts"
+      ]
+    },
+    {
+      "label": "opening tokens survive epoch invalidation",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "for (const context of mine.openings) if (context.epoch !== epoch) mine.openings.delete(context);",
+      "replace": "void epoch;",
+      "tests": [
+        "tests/bootstrap/shared-ports-transitions.test.ts"
+      ]
+    },
+    {
+      "label": "settled old opening clears the next opening",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "const close = () => { mine.openings.delete(context); };",
+      "replace": "const close = () => { if (started) started.openings.clear(); };",
+      "tests": [
+        "tests/bootstrap/shared-ports-transitions.test.ts"
+      ]
+    },
+    {
+      "label": "document entry bypasses the shared leave",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "const result = permission.allowed ? leaveRunningSharedSession() : { ok: false, reason: permission.reason } as const;",
+      "replace": "const result = { ok: true };",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "document entry accepts a refused leave",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "  return { refused: result.reason };",
+      "replace": "  return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "direct transitions bypass shared admission",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "    if (refusal) throw new Error(refusal.refused);",
+      "replace": "    void refusal;",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "open source access precedes shared admission",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "  if (documentEntry.before()) return Promise.resolve(false);",
+      "replace": "  void documentEntry;",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "plain Open ignores entry admission",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "function openLocalFile(): Promise<void> {\n  if (!active || ports.entry.before()) return Promise.resolve();",
+      "replace": "function openLocalFile(): Promise<void> {\n  if (!active) return Promise.resolve();",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "manual resume ignores entry admission",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "if (!active || !permitted() || ports.entry.before()) return Promise.resolve();",
+      "replace": "if (!active || !permitted()) return Promise.resolve();",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "desktop open-with ignores entry refusal",
+      "file": "src/features/desktop/desktop.ts",
+      "find": "      if (mine.entry.before()) { mine.documentState.settled(); return; }",
+      "replace": "      void mine.entry;",
+      "tests": [
+        "tests/features/desktop/mount.test.ts"
+      ]
+    },
+    {
+      "label": "desktop open-with drops its opening token",
+      "file": "src/features/desktop/desktop.ts",
+      "find": "mine.opening.track(() => handle.getFile().then(function (file) {",
+      "replace": "((work) => work())(() => handle.getFile().then(function (file) {",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "New and demo write after refused admission",
+      "file": "src/features/file-menu/file-menu.ts",
+      "find": "  if ((ports as FileMenuDropdownPorts).entry.before()) return null;",
+      "replace": "  void ports;",
+      "tests": [
+        "tests/features/file-menu/dropdown-mount.test.ts"
+      ]
+    },
+    {
+      "label": "new-tab writes after refused admission",
+      "file": "src/features/newtab/newtab.ts",
+      "find": "  if (ports.entry.before()) return false;",
+      "replace": "  void ports.entry;",
+      "tests": [
+        "tests/features/newtab/mount.test.ts"
+      ]
+    },
+    {
+      "label": "new-tab paste opens its dialog after refusal",
+      "file": "src/features/newtab/newtab.ts",
+      "find": "  if (ports.entry.before()) return;",
+      "replace": "  void ports.entry;",
+      "tests": [
+        "tests/features/newtab/mount.test.ts"
+      ]
+    },
+    {
+      "label": "resume banner requests permission after refusal",
+      "file": "src/features/file-menu/mount.ts",
+      "find": "    if (ports.entry.before()) return;",
+      "replace": "    void ports.entry;",
+      "tests": [
+        "tests/features/file-menu/mount.test.ts"
+      ]
+    },
+    {
+      "label": "external prompter fetches after refused leave",
+      "file": "src/features/prompter/prompter.ts",
+      "find": "  if (ports.entry.before()) return Promise.resolve(false);",
+      "replace": "  void ports.entry;",
+      "tests": [
+        "tests/features/prompter/runtime-mount.test.ts"
+      ]
+    },
+    {
+      "label": "external prompter onboarding crosses refused entry",
+      "file": "src/features/prompter/prompter.ts",
+      "find": "  if (launch.token && ports.entry.before()) return;",
+      "replace": "  void launch.token;",
+      "tests": [
+        "tests/features/prompter/runtime-mount.test.ts"
+      ]
+    },
+    {
+      "label": "external prompter fetch has no opening token",
+      "file": "src/features/prompter/prompter.ts",
+      "find": "return ports.openingActivity.track(() => readPrompterScript(token));",
+      "replace": "return readPrompterScript(token);",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "draft resume has no opening token",
+      "file": "src/bootstrap/wiring/drafts.ts",
+      "find": "documentOpenings.track(() => mounted.applyTaken(taken))",
+      "replace": "mounted.applyTaken(taken)",
+      "tests": [
+        "tests/bootstrap/shared-entry-paths.test.ts"
+      ]
+    },
+    {
+      "label": "File menu Recent routes before shared admission",
+      "file": "src/features/file-menu/file-menu.ts",
+      "find": "if (!fileId || !recentsSupported() || (ports as FileMenuDropdownPorts).entry.before()) return Promise.resolve();",
+      "replace": "if (!fileId || !recentsSupported()) return Promise.resolve();",
+      "tests": [
+        "tests/features/file-menu/dropdown-mount.test.ts"
+      ]
+    },
+    {
+      "label": "File menu Recent omits its pending opening",
+      "file": "src/features/file-menu/file-menu.ts",
+      "find": "return (ports as FileMenuDropdownPorts).openingActivity.track(() => readRecentFile(fileId));",
+      "replace": "return readRecentFile(fileId);",
+      "tests": [
+        "tests/features/file-menu/dropdown-mount.test.ts"
+      ]
+    },
+    {
+      "label": "New tab Recent routes before shared admission",
+      "file": "src/features/newtab/newtab.ts",
+      "find": "if (!fileId || !recentsSupported() || ports.entry.before()) return Promise.resolve();",
+      "replace": "if (!fileId || !recentsSupported()) return Promise.resolve();",
+      "tests": [
+        "tests/features/newtab/mount.test.ts"
+      ]
+    },
+    {
+      "label": "New tab Recent omits its pending opening",
+      "file": "src/features/newtab/newtab.ts",
+      "find": "return ports.openingActivity.track(() => readRecent(fileId));",
+      "replace": "return readRecent(fileId);",
+      "tests": [
+        "tests/features/newtab/mount.test.ts"
+      ]
+    },
+    {
+      "label": "direct file source tracks before its admission",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "open: function (opening: LocalFileOpening) {\n      if (!active || ports.entry.before()) return false;",
+      "replace": "open: function (opening: LocalFileOpening) {\n      if (!active) return false;",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "project parsing starts after admission refuses a resumed read",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "  if (!active || ports.entry.before()) return false;\n  opts = opts || {};",
+      "replace": "  if (!active) return false;\n  opts = opts || {};",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "parsed project adoption resets panels after admission refuses",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "  if (!active) return false;\n  if (ports.entry.before()) return false;",
+      "replace": "  if (!active) return false;",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "parsed import stamps rows after admission refuses",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "  if (!permitted()) return;\n  if (ports.entry.before()) return;",
+      "replace": "  if (!permitted()) return;",
+      "tests": [
+        "tests/application/local-files.test.ts"
+      ]
+    },
+    {
+      "label": "admit when the owner is standalone during enter",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "return holdReason ? { allowed: false, reason: holdReason } : read();",
+      "replace": "return holdReason && sharedSession() ? { allowed: false, reason: holdReason } : read();",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-enter.test.ts"
+      ]
+    },
+    {
+      "label": "admit when the owner is standalone during leave",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "return holdReason ? { allowed: false, reason: holdReason } : read();",
+      "replace": "return holdReason && sharedSession() ? { allowed: false, reason: holdReason } : read();",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-leave-new.test.ts",
+        "tests/bootstrap/shared-entry-switch-leave-open.test.ts"
+      ]
+    },
+    {
+      "label": "entry-only scope blocks settlement commands",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "if (current.scope === \"all\") return { kind: \"rejected\", reason: current.reason };",
+      "replace": "return { kind: \"rejected\", reason: current.reason };",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "entry-only scope hides the enclosing command refusal",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "current = current.outer",
+      "replace": "current = null",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "entry admission forgets the active command hold",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "return commandHold ? commandHold.reason : null;",
+      "replace": "return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-enter.test.ts"
+      ]
+    },
+    {
+      "label": "enter leaves settlement outside its entry scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  const release = holdSessionCommands(SHARED_SWITCHING, \"entries\");\n  try { return await enterAvailableSession(ports); } finally { release(); }",
+      "replace": "  return enterAvailableSession(ports);",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-enter.test.ts"
+      ]
+    },
+    {
+      "label": "leave leaves binding settlement outside its entry scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  const release = holdSessionCommands(SHARED_SWITCHING, \"entries\");\n  try { return leaveAvailableSession(ports); } finally { release(); }",
+      "replace": "  return leaveAvailableSession(ports);",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-leave-new.test.ts",
+        "tests/bootstrap/shared-entry-switch-leave-open.test.ts"
+      ]
+    },
+    {
+      "label": "enter admits a nested switch into its scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
+      "replace": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "leave admits a nested switch into its scope",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
+      "replace": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
+    },
+    {
+      "label": "automatic resume ignores the switch hold while standalone",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "lastFileResume: entryRead(() => sharedSession() ? SHARED_RESUME : AVAILABLE)",
+      "replace": "lastFileResume: () => sharedSession() ? SHARED_RESUME : AVAILABLE",
+      "tests": [
+        "tests/bootstrap/shared-entry-switch-auto.test.ts"
+      ]
+    },
+    {
+      "label": "recover bypasses the hold",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "recover: recovery => entered(() => original.recover(recovery), false)",
+      "replace": "recover: original.recover",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "restore bypasses the hold",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "restore: restoration => entered(() => original.restore(restoration), false)",
+      "replace": "restore: original.restore",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "restore reads history before the refusal",
+      "file": "src/application/session/session-merge.ts",
+      "find": "  opts = opts || {};\n  if (historyRefused()) return \"refused\";",
+      "replace": "  opts = opts || {};",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "reload reads the file before the refusal",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "async function reloadFileFromDisk() {\n  if (!reloadPermitted()) return;",
+      "replace": "async function reloadFileFromDisk() {",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "a new owner method is not in the table",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "    copyId: original.copyId",
+      "replace": "    unlisted: original.restore, copyId: original.copyId",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory.test.ts"
+      ]
+    },
+    {
+      "label": "a new capability method is not in the table",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "  ...entryReads,",
+      "replace": "  unlisted: () => AVAILABLE, ...entryReads,",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory.test.ts"
+      ]
+    },
+    {
+      "label": "standalone entry ignores its refused permission",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "if (permission.allowed && !sharedSession()) return null;",
+      "replace": "if (!sharedSession()) return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "landed merge reporting takes entry permission",
+      "file": "src/application/session/document-merge.ts",
+      "find": "if (!ports.capability.merge().allowed) return;",
+      "replace": "if (!ports.entryCapability.merge().allowed) return;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "autosave bookkeeping takes entry permission",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "autosave: () => currentCapabilities().autosave(),",
+      "replace": "autosave: entryRead(() => currentCapabilities().autosave()),",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "draft flush takes entry permission",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "if (draftStopped || !runningOnDesktop() || draftsRefused()) return false;",
+      "replace": "if (draftStopped || !runningOnDesktop() || draftEntryRefused()) return false;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "draft notification drops admitted work under the entry hold",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "function noteDraftChange(): void {",
+      "replace": "function noteDraftChange(): void {\n    if (draftEntryRefused()) return;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "history bookkeeping takes entry permission",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "history: () => currentCapabilities().history(),",
+      "replace": "history: entryRead(() => currentCapabilities().history()),",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "a standalone key reads the entry hold without using it",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "autosave: () => currentCapabilities().autosave(),",
+      "replace": "autosave: () => { sessionEntryRefusal(); return currentCapabilities().autosave(); },",
+      "tests": [
+        "tests/bootstrap/shared-entry-typing-cost.test.ts"
+      ]
+    },
+    {
+      "label": "draft restore receives the mode reader",
+      "file": "src/bootstrap/wiring/drafts.ts",
+      "find": "function draftsPorts(): DraftsPorts {\n  return {\n    capability: portCapabilities,\n    entryCapability: entryCapabilities,",
+      "replace": "function draftsPorts(): DraftsPorts {\n  return {\n    capability: portCapabilities,\n    entryCapability: portCapabilities,",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "new merges receive only the mode reader",
+      "file": "src/bootstrap/wiring.ts",
+      "find": "merge: () => ({ ...sessionMergePorts(), capability: capabilities, entryCapability: entryCapabilities }),",
+      "replace": "merge: () => ({ ...sessionMergePorts(), capability: capabilities, entryCapability: capabilities }),",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "stash intake receives only the mode reader",
+      "file": "src/bootstrap/wiring/recovery-owners.ts",
+      "find": "stashedWork: createStashedWork<ValidatedDocument, MergedStates>({\n      capability: ports.entryCapability,",
+      "replace": "stashedWork: createStashedWork<ValidatedDocument, MergedStates>({\n      capability: ports.capability,",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "stash read bypasses entry admission",
+      "file": "src/application/recovery/conflict-stash.ts",
+      "find": "read: function (): StashedWork | null {\n      if (!ports.entryCapability.stash().allowed) return null;",
+      "replace": "read: function (): StashedWork | null {",
+      "tests": [
+        "tests/application/conflict-stash.test.ts"
+      ]
+    },
+    {
+      "label": "stash accept bypasses entry admission",
+      "file": "src/application/recovery/conflict-stash.ts",
+      "find": "accept: function <T>(stash: T, theirs: unknown): T {\n      if (!ports.entryCapability.stash().allowed) return stash;",
+      "replace": "accept: function <T>(stash: T, theirs: unknown): T {",
+      "tests": [
+        "tests/application/conflict-stash.test.ts"
+      ]
+    },
+    {
+      "label": "an unlisted mode permission caller escapes the census",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "export const capabilities: CapabilityPort = {",
+      "replace": "function unlistedModeCaller() { return capabilities.autosave(); }\nexport const capabilities: CapabilityPort = {",
+      "tests": [
+        "tests/bootstrap/shared-entry-callers.test.ts"
+      ]
+    },
+    {
+      "label": "an unlisted entry permission caller escapes the census",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "export const entryCapabilities: EntryCapabilityPort = {",
+      "replace": "function unlistedEntryCaller() { return entryCapabilities.merge(); }\nexport const entryCapabilities: EntryCapabilityPort = {",
+      "tests": [
+        "tests/bootstrap/shared-entry-callers.test.ts"
+      ]
+    },
+    {
+      "label": "merge wiring accepts a missing entry port",
+      "file": "src/bootstrap/wiring.ts",
+      "find": "  if (!present(ports.entryCapability, \"object\") || !present(ports.entryCapability.merge, \"function\")) throw new WiringError(\"merge\", \"Wiring: the merge dependency returned no entry capability port\");",
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/wiring.test.ts"
+      ]
+    },
+    {
+      "label": "recovery wiring accepts a missing entry port",
+      "file": "src/bootstrap/wiring.ts",
+      "find": "  if (!present(ports.entryCapability, \"object\") || !present(ports.entryCapability.stash, \"function\") || !present(ports.entryCapability.merge, \"function\")) throw new WiringError(\"recovery\", \"Wiring: the recovery dependency returned no entry capability port\");",
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/wiring.test.ts"
+      ]
+    },
+    {
+      "label": "landed merge banner takes entry permission",
+      "file": "src/features/merge/banner.ts",
+      "find": "if (!ports.capability.merge().allowed) return false;",
+      "replace": "if (!ports.entryCapability.merge().allowed) return false;",
+      "tests": [
+        "tests/bootstrap/shared-entry-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "label": "draft entry permission is ignored",
+      "file": "src/application/recovery/drafts.ts",
+      "find": "function draftEntryRefused(): boolean { return !live().entryCapability.drafts().allowed; }",
+      "replace": "function draftEntryRefused(): boolean { return false; }",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    }
+  ]
+}

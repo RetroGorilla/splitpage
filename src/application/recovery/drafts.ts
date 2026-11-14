@@ -40,6 +40,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
 
   function runningOnDesktop(): boolean { return live().running(); }
   function draftsRefused(): boolean { return !live().capability.drafts().allowed; }
+  function draftEntryRefused(): boolean { return !live().entryCapability.drafts().allowed; }
   function currentDocument(): DocumentView | null { return live().document.current(); }
   function mergeBase(): unknown { return live().session.mergeBase(); }
   function noteAbsorbedDirty(reason: Parameters<DraftsPorts["session"]["noteAbsorbedDirty"]>[0]): void { live().session.noteAbsorbedDirty(reason); }
@@ -384,7 +385,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     try { file = await handle.getFile(); } catch (e) { file = null; }
     const parsed = file ? await parseProjectFileState(file) : null;
     if (!stillRestoring(ctx)) return keptForNextLaunch();
-    if (draftsRefused()) return "kept";
+    if (draftEntryRefused()) return "kept";
     if (!file || !parsed || parsed.error) return recoverAsCopy(t, unreadableFileCopy(missingName), mine);
 
     const disk = parsed.state;
@@ -461,7 +462,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   }
 
   function draftTaker(): ReturnType<DraftsMount["taker"]> {
-    if (!runningOnDesktop() || draftsRefused()) return null;
+    if (!runningOnDesktop() || draftEntryRefused()) return null;
     const take = desktopDrafts().taker();
     if (!(take && draftResume().restorePending())) return null;
     return take;
@@ -472,7 +473,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     const resume = draftResume();
     let outcome: string;
     try {
-      outcome = draftsRefused() ? "kept" : await runDraftRestore(t);
+      outcome = draftEntryRefused() ? "kept" : await runDraftRestore(t);
     } catch (e) {
       reportError(e);
       outcome = "failed";

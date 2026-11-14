@@ -577,6 +577,11 @@ rank between two pictures equal to the lower one | src/core/collab/gallery-opera
 gallery list sent without the beat stamp | src/application/commands/gallery.ts: leaves the stamp out of Plan.shared | tests/application/commands/gallery-shared.test.ts: shared gallery command literal: add a picture to a beat without pictures | tests/collab/gallery-command-mutants.json
 gallery command builds a shared list without an author | src/application/commands/gallery.ts: reads pictures while the author port answers null | tests/application/commands/gallery-shared.test.ts: a gallery command without shared ports, or with no author, plans as before and allocates no operation list | tests/collab/gallery-command-mutants.json
 gallery port reads every beat's pictures | src/bootstrap/wiring/ports/shared-gallery.ts: drops the beat filter | tests/application/commands/gallery-shared.test.ts: shared gallery command literal: add a picture to a beat without pictures | tests/collab/gallery-command-mutants.json
+C8 rejected identity stamp announces new history | src/application/identity/document-identity.ts | tests/bootstrap/shared-entry-refusals.test.ts: duplicate claim changes nothing while shared | tests/collab/shared-entry-mutants.json
+C8 automatic resume crosses a shared boundary (five defects) | src/application/transitions/local-files.ts | tests/application/local-files.test.ts: rule 74 entry and async stages | tests/collab/shared-entry-mutants.json
+C8 merge restore reaches history while shared | src/application/session/session-merge.ts | tests/bootstrap/shared-entry-refusals.test.ts: D13 real wiring refuses before history access | tests/collab/shared-entry-mutants.json
+C8 draft recovery runs while shared | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-refusals.test.ts: recovery keeps the restore | tests/collab/shared-entry-mutants.json
+C8 prompter omits projected narration | src/features/prompter/prompter.ts | tests/bootstrap/shared-entry-refusals.test.ts: Present reads the shared document | tests/collab/shared-entry-mutants.json
 recovery bridge hides the running shared reader | src/bootstrap/wiring/session-owner.ts: returns no recovery owner in shared mode | tests/application/session/session-bridge-shared.test.ts | tests/collab/recovery-panel-mutants.json
 C9 command identity, author, removal, dispatch and undo-description guards (11 defects) | src/application/commands/recovery.ts | tests/application/commands/recovery.test.ts and tests/features/recovery-panel/entries.test.ts | tests/collab/recovery-panel-mutants.json
 C9 wiring session, identity and orphan-reply ports (3 defects) | src/bootstrap/wiring/recovery-panel.ts | tests/features/recovery-panel/races.test.ts and entries.test.ts | tests/collab/recovery-panel-mutants.json
@@ -629,4 +634,71 @@ first command trims initial narration | src/application/commands/empty-script.ts
 empty target drops the session refusal notice marker | src/features/empty-script/empty-script.ts: forgets an already-shown session warning | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 first input wiring drops the session refusal notice marker | src/bootstrap/wiring/ports/empty-script.ts: flattens the rejected outcome | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 empty target refusals miss the shared notice | src/bootstrap/wiring/ports/empty-script.ts: bypasses sharedCommandReport | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
+entry facade ignores the running session | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+foreign leave ports replace the entry-owned bindings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+shared entry ignores pending openings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+opening capture never becomes pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+opening completion leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+synchronous opening leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+synchronous opening failure leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+opening tokens survive epoch invalidation | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+settled old opening clears the next opening | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+document entry bypasses the shared leave | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+document entry accepts a refused leave | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+direct transitions bypass shared admission | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+open source access precedes shared admission | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+plain Open ignores entry admission | src/application/transitions/local-files.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+manual resume ignores entry admission | src/application/transitions/local-files.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+desktop open-with ignores entry refusal | src/features/desktop/desktop.ts | tests/features/desktop/mount.test.ts | tests/collab/shared-entry-mutants.json
+desktop open-with drops its opening token | src/features/desktop/desktop.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+New and demo write after refused admission | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
+new-tab writes after refused admission | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+new-tab paste opens its dialog after refusal | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+resume banner requests permission after refusal | src/features/file-menu/mount.ts | tests/features/file-menu/mount.test.ts | tests/collab/shared-entry-mutants.json
+external prompter fetches after refused leave | src/features/prompter/prompter.ts | tests/features/prompter/runtime-mount.test.ts | tests/collab/shared-entry-mutants.json
+external prompter onboarding crosses refused entry | src/features/prompter/prompter.ts | tests/features/prompter/runtime-mount.test.ts | tests/collab/shared-entry-mutants.json
+external prompter fetch has no opening token | src/features/prompter/prompter.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+draft resume has no opening token | src/bootstrap/wiring/drafts.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+File menu Recent routes before shared admission | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
+File menu Recent omits its pending opening | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
+New tab Recent routes before shared admission | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+New tab Recent omits its pending opening | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+direct file source tracks before its admission | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
+project parsing starts after admission refuses a resumed read | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
+parsed project adoption resets panels after admission refuses | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
+parsed import stamps rows after admission refuses | src/application/transitions/local-files.ts | tests/application/local-files.test.ts | tests/collab/shared-entry-mutants.json
 C9 shared-lifetime mode listeners and open-only session subscription (nine defects) | src/features/recovery-panel/actions.ts, src/features/recovery-panel/mount.ts | tests/features/recovery-panel/guards.test.ts: binding lifetime counts through Close, leave and rollback | tests/collab/recovery-panel-mutants.json
+admit when the owner is standalone during enter | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
+admit when the owner is standalone during leave | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-switch-leave-new.test.ts, tests/bootstrap/shared-entry-switch-leave-open.test.ts | tests/collab/shared-entry-mutants.json
+entry-only scope blocks settlement commands | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+entry-only scope hides the enclosing command refusal | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+entry admission forgets the active command hold | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
+enter leaves settlement outside its entry scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
+leave leaves binding settlement outside its entry scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-entry-switch-leave-new.test.ts, tests/bootstrap/shared-entry-switch-leave-open.test.ts | tests/collab/shared-entry-mutants.json
+enter admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+leave admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+automatic resume ignores the switch hold while standalone | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-switch-auto.test.ts | tests/collab/shared-entry-mutants.json
+recover bypasses the hold | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+restore bypasses the hold | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+restore reads history before the refusal | src/application/session/session-merge.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+reload reads the file before the refusal | src/application/transitions/local-files.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+a new owner method is not in the table | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-inventory.test.ts | tests/collab/shared-entry-mutants.json
+a new capability method is not in the table | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-inventory.test.ts | tests/collab/shared-entry-mutants.json
+standalone entry ignores its refused permission | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+landed merge reporting takes entry permission | src/application/session/document-merge.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+autosave bookkeeping takes entry permission | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+draft flush takes entry permission | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+draft notification drops admitted work under the entry hold | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+history bookkeeping takes entry permission | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+a standalone key reads the entry hold without using it | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-typing-cost.test.ts | tests/collab/shared-entry-mutants.json
+draft restore receives the mode reader | src/bootstrap/wiring/drafts.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+new merges receive only the mode reader | src/bootstrap/wiring.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+stash intake receives only the mode reader | src/bootstrap/wiring/recovery-owners.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
+stash read bypasses entry admission | src/application/recovery/conflict-stash.ts | tests/application/conflict-stash.test.ts | tests/collab/shared-entry-mutants.json
+stash accept bypasses entry admission | src/application/recovery/conflict-stash.ts | tests/application/conflict-stash.test.ts | tests/collab/shared-entry-mutants.json
+an unlisted mode permission caller escapes the census | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-callers.test.ts | tests/collab/shared-entry-mutants.json
+an unlisted entry permission caller escapes the census | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-callers.test.ts | tests/collab/shared-entry-mutants.json
+merge wiring accepts a missing entry port | src/bootstrap/wiring.ts | tests/bootstrap/wiring.test.ts | tests/collab/shared-entry-mutants.json
+recovery wiring accepts a missing entry port | src/bootstrap/wiring.ts | tests/bootstrap/wiring.test.ts | tests/collab/shared-entry-mutants.json
+landed merge banner takes entry permission | src/features/merge/banner.ts | tests/bootstrap/shared-entry-bookkeeping.test.ts | tests/collab/shared-entry-mutants.json
+draft entry permission is ignored | src/application/recovery/drafts.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json

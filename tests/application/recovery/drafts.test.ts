@@ -53,6 +53,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
   };
   const ports: DraftsPorts = {
     capability: { drafts: () => MODES[state.mode].drafts() },
+    entryCapability: { drafts: () => MODES[state.mode].drafts() },
     running: () => start.running ?? true,
     clock: { now: () => state.now },
     timers: {

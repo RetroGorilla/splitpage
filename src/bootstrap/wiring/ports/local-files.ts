@@ -13,7 +13,7 @@ import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts"
 import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.ts";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
-import { capabilities } from "./capabilities.ts";
+import { capabilities, entryCapabilities } from "./capabilities.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
@@ -28,7 +28,7 @@ import { notices } from "./effects.ts";
 import { exports as formats, fileDelivery } from "./files.ts";
 import { place } from "./location.ts";
 import { confirmation, saves, fileConflicts } from "./saving.ts";
-import { transitions, history } from "./transitions.ts";
+import { transitions, history, openingActivity } from "./transitions.ts";
 import { panelControl } from "./panels.ts";
 import { brollView, preferenceValues } from "./preferences.ts";
 import { resetProductionPanel } from "./production.ts";
@@ -39,11 +39,14 @@ import { pdfPrinter, printDialog } from "./printing.ts";
 import { exportBrowserPdf } from "../../../features/file-menu/browser-pdf.ts";
 import { exportDesktopPdf } from "../../../features/file-menu/desktop-pdf.ts";
 import { exportScriptWithFiles } from "../gallery.ts";
+import { documentEntry } from "./document-entry.ts";
 
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
   return {
-    capability: capabilities,
+    opening: openingActivity,
+    entry: documentEntry,
+    capability: entryCapabilities,
     document: documentReader,
     session: { noteAbsorbedDirty, noteReload: (content) => { noteReload(content as Parameters<typeof noteReload>[0]); } },
     transitions,
@@ -52,7 +55,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
     saves,
     conflicts: fileConflicts,
     location: { amendHome, setHome, fileHome, importHome },
-    lastFile: { load: loadLastFileHandle, remember: rememberLastFileHandle },
+    lastFile: { permitted: () => entryCapabilities.lastFileResume().allowed, load: loadLastFileHandle, remember: rememberLastFileHandle },
     syncIdentity: () => { documentIdentity.syncDocIdentity(); },
     stamps: { stampRow },
     notices,

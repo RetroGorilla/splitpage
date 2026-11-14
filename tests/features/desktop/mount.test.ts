@@ -50,6 +50,8 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean } = 
   const notices = fakeNotices();
   const flushDraft = (request: { readonly keep: boolean }) => { log.push("flush:" + request.keep); return "flushed"; };
   const ports: DesktopPorts = {
+    entry: { before: () => null },
+    opening: { track: work => work() },
     running: () => state.running,
     shell: () => (state.running ? shell : null),
     canOpenPrompterInBrowser: () => state.running,
@@ -108,6 +110,17 @@ test("an opened file goes through the document sources and settles the handed do
   } finally {
     mounted.dispose();
   }
+});
+
+test("C8 refused desktop open-with settles the handoff before creating a handle or reading", async () => {
+  page(); const h = harness();
+  const mounted = mount({ ...h.ports, entry: { before: () => ({ refused: "buffer-composition" }) },
+    makeHandle: () => { assert.fail("refused open created a handle"); } });
+  try {
+    mounted.initDesktop(); h.log.length = 0;
+    h.handlers.openFile?.({ id: "f1", name: "Refused.splitpage" }); await settled();
+    assert.deepEqual(h.opened, []); assert.deepEqual(h.log, ["settled"]); assert.deepEqual(h.notices.shown, []);
+  } finally { mounted.dispose(); }
 });
 
 test("a reassigned id reports the document only when the reassignment took", () => {

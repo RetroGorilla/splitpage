@@ -253,8 +253,12 @@ async function refreshRecents(focusFirst?: boolean) {
   }
 }
 
-async function openRecentFile(fileId: string | null) {
-  if (!fileId || !recentsSupported()) return;
+function openRecentFile(fileId: string | null): Promise<void> {
+  if (!fileId || !recentsSupported() || (ports as FileMenuDropdownPorts).entry.before()) return Promise.resolve();
+  return (ports as FileMenuDropdownPorts).openingActivity.track(() => readRecentFile(fileId));
+}
+
+async function readRecentFile(fileId: string) {
   const mounted = activeMount;
   let handle;
   let file;
@@ -277,11 +281,13 @@ async function openRecentFile(fileId: string | null) {
 
 function startNewScript() {
   if (!(ports as FileMenuDropdownPorts).document.current()) { (ports as FileMenuDropdownPorts).notices.show("Still loading…", "warn"); return false; }
-  const kept = replaceWithNewDocument((ports as FileMenuDropdownPorts).prepareDocument({
+  const result = replaceWithNewDocument((ports as FileMenuDropdownPorts).prepareDocument({
     title: "Untitled Script",
     rows: [{ id: (ports as FileMenuDropdownPorts).ids.id("r"), visualText: "", imageRef: null, audioText: "" }],
     wordsPerMinute: (ports as FileMenuDropdownPorts).preferences.defaultWpm()
   }), "startNewScript: a new blank document", "Before starting a new script");
+  if (!result) return false;
+  const kept = result.kept;
   const first = document.querySelector<HTMLElement>('#rows .row .audio-cell .cell-editable');
   if (first) first.focus();
   (ports as FileMenuDropdownPorts).notices.show(kept ? "New script — the one before is in Version history." : "New script.", "ok");
@@ -290,14 +296,17 @@ function startNewScript() {
 
 function openLongDemo() {
   if (!(ports as FileMenuDropdownPorts).document.current()) { (ports as FileMenuDropdownPorts).notices.show("Still loading…", "warn"); return false; }
-  const kept = replaceWithNewDocument((ports as FileMenuDropdownPorts).prepareDocument(JSON.parse(JSON.stringify((ports as FileMenuDropdownPorts).longDemo.state))),
+  const result = replaceWithNewDocument((ports as FileMenuDropdownPorts).prepareDocument(JSON.parse(JSON.stringify((ports as FileMenuDropdownPorts).longDemo.state))),
     "openLongDemo: a new copy of the long demo", "Before opening the long demo");
+  if (!result) return false;
+  const kept = result.kept;
   (ports as FileMenuDropdownPorts).notices.show("The long demo — " + (ports as FileMenuDropdownPorts).longDemo.state.rows.length + " beats, not saved anywhere yet." +
     (kept ? " The script before is in Version history." : ""), "ok");
   return true;
 }
 
 function replaceWithNewDocument(next: ValidatedDocument, reason: string, keepLabel: string) {
+  if ((ports as FileMenuDropdownPorts).entry.before()) return null;
   const active = document.activeElement as HTMLElement | null;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
   const kept = ((ports as FileMenuDropdownPorts).document.current() as DocumentView).rows.length ? (ports as FileMenuDropdownPorts).history.keep(keepLabel) : null;
@@ -307,7 +316,7 @@ function replaceWithNewDocument(next: ValidatedDocument, reason: string, keepLab
   (ports as FileMenuDropdownPorts).saving.confirmSavedNow();
   if (typeof (ports as FileMenuDropdownPorts).syncIdentity === "function") (ports as FileMenuDropdownPorts).syncIdentity();
   (ports as FileMenuDropdownPorts).panels.close("newtab-page");
-  return kept;
+  return { kept };
 }
 
 function navigableItems(): HTMLButtonElement[] {

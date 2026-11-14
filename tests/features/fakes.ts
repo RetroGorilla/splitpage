@@ -195,6 +195,7 @@ export function fakePrompterPorts(initial: DocumentView | null = null) {
   const flags = { prompterMirror: false, prompterFlip: false, prompterSceneMode: false };
   const cellOf: TextServices["cellOf"] = (html) => [{ text: String(html ?? ""), marks: {} }];
   const ports: PrompterFeaturePorts = {
+    entry: { before: () => null }, openingActivity: { track: work => work() },
     document: reader.document,
     text: { cellOf, productionReaders: {
       wordCount: (html) => String(html ?? "").trim().split(/\s+/).filter(Boolean).length
