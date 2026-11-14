@@ -197,6 +197,31 @@ test("a captured real file save may finish after entry without adopting its old 
   }
 });
 
+test("leaving shared mode keeps desktop draft sequence numbers increasing for the next standalone edit", async () => {
+  let floor = -Infinity;
+  const sent = [];
+  useDesktopForTest({ writeDraft: async payload => {
+    sent.push(payload.seq);
+    if (payload.seq <= floor) return { ok: false, code: "STALE_SEQ" };
+    floor = payload.seq;
+    return { ok: true, seq: payload.seq };
+  }, discardDraft: async () => ({ ok: true }), setDocumentState: () => {}, draftRestoreDone: () => {} });
+  try {
+    script();
+    currentDocument().rows[0].audioText = "Before sharing"; noteSessionEdit();
+    assert.equal((await flushDraftNow()).ok, true);
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(hook.leave(), { ok: true });
+    currentDocument().rows[0].audioText = "After sharing"; noteSessionEdit();
+    const result = await flushDraftNow();
+    assert.equal(result.ok, true, JSON.stringify({ result, sent }));
+    assert.ok(sent[1] > sent[0]);
+  } finally {
+    if (sharedSession()) hook.leave();
+    restoreDesktop();
+  }
+});
+
 test("the composed undo route warns once for skipped and used-up steps in both directions", () => {
   assert.equal(sharedUndoRoute(), null);
   const skipped = { ok: false, reason: "undo-unsupported:gallery", skipped: true };
