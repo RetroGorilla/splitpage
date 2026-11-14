@@ -1,7 +1,7 @@
 import type { SharedContentRef, SharedJsonFields, SharedJsonValue, SharedOperation } from "./operations.ts";
 import { projectSharedGalleryFields, projectSharedGallerySlots, sharedProjectionExtra } from "./projection/fields.ts";
 import { projectSharedGroupGallery } from "./projection/gallery.ts";
-import { videoLinkKey } from "../document/gallery.ts";
+import { MAX_MORE, videoLinkKey } from "../document/gallery.ts";
 import type { VideoLink } from "../document/gallery.ts";
 
 type Bag = Readonly<Record<string, unknown>>;
@@ -11,7 +11,9 @@ export interface SharedGalleryEdit {
   readonly beat: string;
   readonly before: Bag;
   readonly after: Bag;
+  readonly probed: Bag;
   readonly records: readonly SharedPictureRecord[];
+  readonly joined: readonly SharedPictureRecord[];
   readonly author: { readonly id: string; readonly by: string };
 }
 export type SharedGalleryOperations = { readonly operations: readonly SharedOperation[] } | { readonly refused: string };
@@ -48,6 +50,29 @@ function identity(slot: Bag): string {
 // why: the projection drops a slot with no picture and no link; hydration leaves one in every beat without pictures.
 function placeholder(slot: Bag): boolean { return Object.keys(slot).every(key => key === "imageRef") && !slot.imageRef; }
 function contentReference(value: unknown): boolean { return typeof bag(value).sha256 === "string" && /^[0-9a-f]{64}$/.test(bag(value).sha256 as string); }
+function probeKey(): string { return "sharedGallerySlot"; }
+function marked(links: unknown, slot: number, keep: boolean): unknown {
+  return Array.isArray(links) ? links.map(link => {
+    const rest = Object.fromEntries(Object.entries(bag(link)).filter(([key]) => key !== probeKey()));
+    return keep ? { ...rest, [probeKey()]: slot } : rest;
+  }) : links;
+}
+function withMarks(row: Bag, keep: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...row };
+  if (Array.isArray(row.imageLinks)) out.imageLinks = marked(row.imageLinks, 0, keep);
+  if (Array.isArray(row.moreImages)) out.moreImages = row.moreImages.map((item: unknown, index: number) => {
+    const entry = bag(item);
+    return Array.isArray(entry.links) ? { ...entry, links: marked(entry.links, index + 1, keep) } : item;
+  });
+  return out;
+}
+// why: two slots can show the same content; the edit runs on a copy whose links name their slot to tell them apart.
+export function sharedGalleryProbe(row: Bag): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(withMarks(row, true))) as Record<string, unknown>;
+}
+function sources(slot: Bag): number[] {
+  return linksOf(slot).map(link => link[probeKey()]).filter((value): value is number => typeof value === "number");
+}
 
 export function sharedRankBetween(low: string, high: string | null): string | null {
   let out = "", bound = high;
@@ -113,9 +138,14 @@ export function sharedGalleryOperations(edit: SharedGalleryEdit): SharedGalleryO
   if (edit.after.visualImage || after.some(slot => slot.imageRef !== undefined && !contentReference(slot.imageRef)
     || slot.annotation !== undefined && !contentReference(bag(slot.annotation).imageRef))) return { refused: "gallery-embedded-image" };
   if (after.some(slot => linksOf(slot).some(link => link.location !== undefined))) return { refused: "gallery-local-file" };
-  const shown = edit.records.filter(record => !placeholder(projectSharedGallerySlots([record])[0] ?? {})), before = slotsOf(edit.before);
+  const content = (record: SharedPictureRecord) => !placeholder(projectSharedGallerySlots([record])[0] ?? {});
+  const shown = edit.records.filter(content), before = slotsOf(edit.before);
   const grouped = projectSharedGroupGallery(projectSharedGalleryFields({}, projectSharedGallerySlots(shown)), [{ id: edit.beat }], shown);
-  if (grouped.overflow.length) return { refused: "gallery-overflow" };
+  if (grouped.overflow.length || after.length > MAX_MORE + 1) return { refused: "gallery-overflow" };
+  // why: a joined beat's picture can fold into one this beat shows, which this beat's own records never reveal.
+  if (edit.joined.some(content)) return { refused: "gallery-joined-beat" };
+  const probed = slotsOf(edit.probed);
+  if (galleryOf(withMarks(edit.probed, false)) !== galleryOf(edit.after) || probed.length !== after.length) return { refused: "gallery-slot-unknown" };
   // why: the projection shows a picture held twice once, from its first record; an edit of the gallery drops the others.
   const seen = new Set<string>(), records = shown.filter(record => {
     const sha = bag(bag(record.fields.picture).imageRef).sha256;
@@ -125,9 +155,11 @@ export function sharedGalleryOperations(edit: SharedGalleryEdit): SharedGalleryO
   });
   if (galleryOf(grouped.row) !== galleryOf(edit.before) || before.length !== records.length) return { refused: "gallery-joined-beat" };
   const owner: (number | null)[] = after.map(() => null), used = new Set<number>();
+  const claim = (index: number, found: number | undefined) => { if (found !== undefined && found !== -1) { owner[index] = found; used.add(found); } };
+  probed.forEach((slot, index) => claim(index, sources(slot).find(at => at < before.length && !used.has(at))));
   after.forEach((slot, index) => {
-    const key = identity(slot), found = key ? before.findIndex((old, at) => !used.has(at) && identity(old) === key) : -1;
-    if (found !== -1) { owner[index] = found; used.add(found); }
+    const key = identity(slot);
+    if (owner[index] === null && key.startsWith("i:")) claim(index, before.findIndex((old, at) => !used.has(at) && identity(old) === key));
   });
   after.forEach((_slot, index) => { if (owner[index] === null && index < before.length && !used.has(index)) { owner[index] = index; used.add(index); } });
   const keys = after.map((_slot, index) => { const at = owner[index] ?? null; return at === null ? edit.author.id + "_picture_" + index : (records[at] as SharedPictureRecord).key; });
@@ -156,8 +188,9 @@ export function sharedGalleryOperations(edit: SharedGalleryEdit): SharedGalleryO
   shown.forEach(record => {
     if (!kept.has(record.key)) operations.push({ kind: "record-delete", id: id(), by: author.by, target: { collection: "gallery", record: record.key as SharedContentRef } });
   });
-  // why: a hydrated beat shows its empty imageRef from a gallery record, so removing its last one leaves an empty one.
-  if (!after.length && edit.records.every(record => !kept.has(record.key) && shown.includes(record))) {
+  const cover = owner[0] ?? null, head = after[0], empty = (record: SharedPictureRecord | undefined) => bag(record?.fields.picture).imageRef === null;
+  // why: a hydrated beat shows its empty imageRef from a gallery record, so a cover without a picture keeps or gains one.
+  if ((!head || !head.imageRef && !empty(cover === null ? undefined : records[cover])) && edit.records.every(content)) {
     operations.push({ kind: "record-create", id: id(), by: author.by, target: { collection: "gallery", record: (author.id + "_picture_empty") as SharedContentRef },
       fields: { beat, rank: "0", picture: { imageRef: null }, links: [], extra: "{}" } });
   }

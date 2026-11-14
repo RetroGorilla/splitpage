@@ -6,8 +6,62 @@
     {
       "label": "gallery slots matched only by position",
       "file": "src/core/collab/gallery-operations.ts",
-      "find": "found = key ? before.findIndex((old, at) => !used.has(at) && identity(old) === key) : -1;",
-      "replace": "found = -1 as number;"
+      "find": "claim(index, before.findIndex((old, at) => !used.has(at) && identity(old) === key));",
+      "replace": "claim(index, -1);"
+    },
+    {
+      "label": "gallery slot found by its content, not by the slot the edit changed",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "  probed.forEach((slot, index) => claim(index, sources(slot).find(at => at < before.length && !used.has(at))));\n",
+      "replace": ""
+    },
+    {
+      "label": "gallery probe that disagrees with the edit trusted",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "if (galleryOf(withMarks(edit.probed, false)) !== galleryOf(edit.after) || probed.length !== after.length) return",
+      "replace": "if (false) return"
+    },
+    {
+      "label": "joined beat's folded picture ignored",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "  if (edit.joined.some(content)) return { refused: \"gallery-joined-beat\" };\n",
+      "replace": ""
+    },
+    {
+      "label": "gallery port reads no joined beat",
+      "file": "src/bootstrap/wiring/ports/shared-gallery.ts",
+      "find": "members = handle ? readSharedJoinedBeats(handle, beat) : []",
+      "replace": "members: string[] = []"
+    },
+    {
+      "label": "undone join still counted as joined",
+      "file": "src/adapters/collab/undo-join.ts",
+      "find": "if (!isSharedJoinRetired(handle, join.id, sharedJoinRetirementGroup(from, join))) link(from, join.into);",
+      "replace": "link(from, join.into);"
+    },
+    {
+      "label": "joined beats read one join deep",
+      "file": "src/adapters/collab/undo-join.ts",
+      "find": "if (!seen.has(next)) { seen.add(next); queue.push(next); }",
+      "replace": "if (!seen.has(next)) { seen.add(next); }"
+    },
+    {
+      "label": "full gallery taken past its limit",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": " || after.length > MAX_MORE + 1",
+      "replace": ""
+    },
+    {
+      "label": "cover without a picture loses its empty imageRef",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "!head.imageRef && !empty(cover === null ? undefined : records[cover])",
+      "replace": "false"
+    },
+    {
+      "label": "empty record added under a cover that keeps its own",
+      "file": "src/core/collab/gallery-operations.ts",
+      "find": "!empty(cover === null ? undefined : records[cover])",
+      "replace": "true"
     },
     {
       "label": "gallery slot changed in place made a new record",
@@ -66,14 +120,14 @@
     {
       "label": "gallery past its first 61 entries edited",
       "file": "src/core/collab/gallery-operations.ts",
-      "find": "  if (grouped.overflow.length) return { refused: \"gallery-overflow\" };\n",
-      "replace": ""
+      "find": "grouped.overflow.length || after.length",
+      "replace": "after.length"
     },
     {
       "label": "beat's last gallery record removed without an empty one",
       "file": "src/core/collab/gallery-operations.ts",
-      "find": "if (!after.length && edit.records.every(",
-      "replace": "if (after.length < 0 && edit.records.every("
+      "find": "if ((!head || !head.imageRef",
+      "replace": "if ((head && !head.imageRef"
     },
     {
       "label": "rank between two pictures equal to the lower one",

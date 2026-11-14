@@ -16,7 +16,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
-import { sharedRankBetween } from "../../../src/core/collab/gallery-operations.ts";
+import { sharedGalleryOperations, sharedGalleryProbe, sharedRankBetween } from "../../../src/core/collab/gallery-operations.ts";
 import {
   addGalleryPicture, addGalleryVideo, annotateGallerySlot, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, setVideoThumbnail
 } from "../../../src/core/document/gallery.ts";
@@ -349,7 +349,7 @@ test("a gallery command without shared ports, or with no author, plans as before
   const before: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(project(setup().a).document) };
   const capability = createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
   const asked: string[] = [];
-  const quiet = { author: () => { asked.push("author"); return null; }, pictures: () => { asked.push("pictures"); return []; },
+  const quiet = { author: () => { asked.push("author"); return null; }, pictures: () => { asked.push("pictures"); return []; }, joined: () => { asked.push("joined"); return []; },
     beatStamp: () => { asked.push("stamp"); return operation(stamp("R1")) as SharedOperation; } };
   for (const plan of [galleryCommand("R1", r => removeGallerySlot(r, 0), alice).plan(before, capability),
     galleryCommand("R1", r => removeGallerySlot(r, 0), alice, quiet).plan(before, capability)]) {
@@ -364,4 +364,159 @@ test("ranks between two pictures sort between them", () => {
   assert.deepEqual([sharedRankBetween("", null), sharedRankBetween("0000000001", null), sharedRankBetween("", "0000000000"),
     sharedRankBetween("0000000000", "0000000001"), sharedRankBetween("5", "6"), sharedRankBetween("59", null), sharedRankBetween("1", "10")],
   ["5", "5", null, "00000000005", "55", "7", null]);
+});
+
+const video = (record: string, beat: string, rank: string, href: string) => ({ kind: "record-create", id: "made-" + record, by: "Bob",
+  target: { collection: "gallery", record }, fields: { beat, rank, picture: {}, links: [{ href, poster: true }] } });
+function twoVideos(h: ReturnType<typeof setup>, order: typeof ORDERS[number]) {
+  send(h.b, video("v1", "R2", "1", V3), video("v2", "R2", "2", V3));
+  flush(h.queue, order);
+  assert.deepEqual(project(h.a).document, documentWith({ R2: { audioText: "cd", imageRef: null, imageLinks: [{ href: V3, poster: true }], moreImages: [{ links: [{ href: V3, poster: true }] }] } }));
+}
+
+for (const order of ORDERS) test(`shared gallery command removes the record shown in the slot when two slots show the same video: ${order}`, () => {
+  const h = setup(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    twoVideos(h, order);
+    assert.equal(a.session.run(galleryCommand("R2", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))).kind, "applied");
+    assert.deepEqual(a.executed.map(entry => entry.operations), [[remove(0, "v1"), stamp("R2")]]);
+    send(h.b, set(0, "v2", "picture", { imageRef: ref("c"), name: "Thumb" }));
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("duplicate video", [h.a, h.b], order),
+      { document: documentWith({ R2: { audioText: "cd", imageRef: ref("c"), imageName: "Thumb", imageLinks: [{ href: V3, poster: true }] } }, { R2: "Alice" }), recovery: [] });
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const order of ORDERS) test(`shared gallery commands removing different slots that show the same video remove both: ${order}`, () => {
+  const h = setup(), a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
+  try {
+    twoVideos(h, order);
+    assert.equal(a.session.run(galleryCommand("R2", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))).kind, "applied");
+    assert.equal(b.session.run(galleryCommand("R2", r => removeGallerySlot(r, 1), bob, ports(h.b, "Bob", bob))).kind, "applied");
+    assert.deepEqual(b.executed.map(entry => entry.operations), [[{ ...remove(0, "v2"), id: "w2_1:0", by: "Bob" }, stamp("R2", "w2_1", "Bob", LATER)]]);
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("two removals", [h.a, h.b], order), { document: documentWith({}, { R2: "Bob" }), recovery: [] });
+  } finally { a.session.dispose(); b.session.dispose(); h.close(); }
+});
+
+for (const order of ORDERS) test(`shared gallery command refuses a beat joined with one that holds the same picture: ${order}`, () => {
+  const h = setup(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    send(h.b, { kind: "record-create", id: "same", by: "Bob", target: { collection: "gallery", record: "same" }, fields: { beat: "R2", rank: "1", picture: { imageRef: ref("a"), name: "One" } } },
+      { kind: "join", id: "joined", by: "Bob", from: "R2", into: "R1", glue: " " });
+    flush(h.queue, order);
+    const shown = project(h.a).document.rows.find(found => found.id === "R1");
+    assert.deepEqual([shown?.audioText, shown?.imageRef, shown?.moreImages], ["ab cd", ref("a"), [{ imageRef: ref("b"), name: "Two" }]]);
+    const before = encodeSharedState(h.a);
+    assert.deepEqual(a.session.run(galleryCommand("R1", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))), { kind: "rejected", reason: "gallery-joined-beat" });
+    assert.deepEqual(a.executed, []);
+    assert.deepEqual(encodeSharedState(h.a), before);
+  } finally { a.session.dispose(); h.close(); }
+});
+
+const emptyCover = (index: number) => ({ kind: "record-create", id: "w1_1:" + index, by: "Alice", target: { collection: "gallery", record: "w1_1_picture_empty" },
+  fields: { beat: "R1", rank: "0", picture: { imageRef: null }, links: [], extra: "{}" } });
+const promotions: readonly { readonly name: string; readonly edit: GalleryEdit; readonly operations: readonly unknown[]; readonly after: Fields }[] = [
+  { name: "remove the picture before a video without a thumbnail", edit: r => removeGallerySlot(r, 0),
+    operations: [remove(0, "R1:slot:0"), emptyCover(1), stamp("R1")],
+    after: { audioText: "ab", imageRef: null, imageLinks: [{ href: V3, poster: true }] } },
+  { name: "make a video without a thumbnail the cover", edit: r => moveGallerySlot(r, 1, 0),
+    operations: [set(0, "R1:slot:0", "rank", "5"), emptyCover(1), stamp("R1")],
+    after: { audioText: "ab", imageRef: null, imageLinks: [{ href: V3, poster: true }], moreImages: [{ imageRef: ref("c"), name: "Three" }] } }
+];
+function pictureThenVideo() {
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "ab", imageRef: ref("c"), imageName: "Three", moreImages: [{ links: [{ href: V3, poster: true }] }] }] });
+  for (const handle of [h.a, h.b, h.c]) registerSharedOperationFamilies(handle, { cells: createFlowLoadRuntime().cells });
+  return h;
+}
+function oneBeat(fields: Fields, by: "Alice" | null): Fields {
+  return { ...documentWith({}), rows: [row("R1", fields, by)] };
+}
+for (const literal of promotions) test(`shared gallery command keeps the empty imageRef of a video that becomes the cover: ${literal.name}`, () => {
+  const h = pictureThenVideo(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    const before = project(h.a).document;
+    assert.deepEqual(before, oneBeat({ audioText: "ab", imageRef: ref("c"), imageName: "Three", moreImages: [{ links: [{ href: V3, poster: true }] }] }, null));
+    assert.equal(a.session.run(galleryCommand("R1", literal.edit, alice, ports(h.a, "Alice", alice))).kind, "applied");
+    assert.deepEqual(a.executed.map(entry => entry.operations), [literal.operations]);
+    flush(h.queue, "D1");
+    const expected = oneBeat(literal.after, "Alice");
+    assert.deepEqual(agreeing(literal.name, [h.a, h.b]), { document: expected, recovery: [] });
+    assert.deepEqual(standalone(before, { name: literal.name, beat: "R1", edit: literal.edit, operations: [], after: {}, typed: {}, twice: { fields: {}, by: "Alice" } }), expected);
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const order of ORDERS) test(`a video that becomes the cover keeps a thumbnail added at the same time: ${order}`, () => {
+  const h = pictureThenVideo(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    assert.equal(a.session.run(galleryCommand("R1", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))).kind, "applied");
+    send(h.b, set(0, "R1:slot:1", "picture", { imageRef: ref("d"), name: "Thumb" }));
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("thumbnail", [h.a, h.b], order),
+      { document: oneBeat({ audioText: "ab", imageRef: ref("d"), imageName: "Thumb", imageLinks: [{ href: V3, poster: true }] }, "Alice"), recovery: [] });
+  } finally { a.session.dispose(); h.close(); }
+});
+
+for (const [name, edit] of [["a picture", (r: Fields) => addGalleryPicture(r, ref("c"), "New") !== -1], ["a web video", (r: Fields) => addGalleryVideo(r, { href: V3 }) !== -1]] as const) {
+  test(`shared gallery command refuses to take a full gallery past its first 61 entries: ${name}`, () => {
+    const h = setup(), a = sharedHarness(adapterReplica(h.a));
+    try {
+      send(h.a, ...Array.from({ length: 61 }, (_, index) => ({ kind: "record-create", id: "full:" + index, by: "Bob",
+        target: { collection: "gallery", record: "full_" + String(index).padStart(2, "0") },
+        fields: { beat: "R2", rank: "1" + String(index).padStart(2, "0"), picture: { imageRef: { sha256: (index + 16).toString(16).padStart(2, "0").repeat(32), width: 10, height: 10, mime: "image/png" } } } })));
+      assert.deepEqual(projectSharedDocumentWithRecovery(h.a).recovery, []);
+      const before = encodeSharedState(h.a);
+      assert.deepEqual(a.session.run(galleryCommand("R2", edit as GalleryEdit, alice, ports(h.a, "Alice", alice))), { kind: "rejected", reason: "gallery-overflow" });
+      assert.deepEqual(a.executed, []);
+      assert.deepEqual(encodeSharedState(h.a), before);
+    } finally { a.session.dispose(); h.close(); }
+  });
+}
+
+test("shared gallery command refuses to make the last of three hydrated pictures the cover, a stated limit, and writes nothing", () => {
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "ab", imageRef: ref("a"), imageName: "One", moreImages: [{ imageRef: ref("b") }, { imageRef: ref("c") }] }] });
+  registerSharedOperationFamilies(h.a, { cells: createFlowLoadRuntime().cells });
+  const a = sharedHarness(adapterReplica(h.a));
+  try {
+    const before = encodeSharedState(h.a);
+    assert.deepEqual(a.session.run(galleryCommand("R1", r => moveGallerySlot(r, 2, 0), alice, ports(h.a, "Alice", alice))), { kind: "rejected", reason: "gallery-order-unavailable" });
+    assert.deepEqual(a.executed, []);
+    assert.deepEqual(encodeSharedState(h.a), before);
+  } finally { a.session.dispose(); h.close(); }
+});
+
+test("shared gallery operations refuse a probe whose edit did not match the edit itself", () => {
+  const row = { id: "R2", imageRef: null, imageLinks: [{ href: V3, poster: true }] };
+  const author = { id: "w1_1", by: "Alice" };
+  const records = [{ key: "v1", fields: { beat: "R2", rank: "1", picture: {}, links: [{ key: "u:" + V3, fields: { href: V3, poster: true, rank: "0000000000", extra: "{}" } }] } }];
+  assert.deepEqual(sharedGalleryOperations({ beat: "R2", before: row, after: { ...row, imageLinks: [] }, probed: sharedGalleryProbe(row), records, joined: [], author }), { refused: "gallery-slot-unknown" });
+  assert.deepEqual(sharedGalleryOperations({ beat: "R2", before: row, after: { ...row, imageLinks: [] }, probed: { ...row, imageLinks: [] }, records, joined: [], author }),
+    { operations: [{ kind: "record-delete", id: "w1_1:0", by: "Alice", target: { collection: "gallery", record: "v1" } },
+      { kind: "record-create", id: "w1_1:1", by: "Alice", target: { collection: "gallery", record: "w1_1_picture_empty" }, fields: { beat: "R2", rank: "0", picture: { imageRef: null }, links: [], extra: "{}" } }] });
+});
+test("shared gallery command serves a beat whose join was undone, though the other beat holds the same picture", () => {
+  const h = setup(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    send(h.a, { kind: "record-create", id: "same", by: "Bob", target: { collection: "gallery", record: "same" }, fields: { beat: "R2", rank: "1", picture: { imageRef: ref("a"), name: "One" } } });
+    const joined = executeSharedCommand(h.a, [operation({ kind: "join", id: "joined", by: "Bob", from: "R2", into: "R1", glue: " " }) as SharedOperation],
+      { label: "join", selection: null, typing: null }, { base: readSharedRevision(h.a) });
+    assert.ok(joined.record);
+    assert.equal(reverseSharedUndoRecord(h.a, joined.record, { by: "Bob", nextId: () => "unjoin" }).ok, true);
+    assert.equal(project(h.a).document.rows.find(found => found.id === "R1")?.audioText, "ab");
+    assert.equal(a.session.run(galleryCommand("R1", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))).kind, "applied");
+  } finally { a.session.dispose(); h.close(); }
+});
+
+test("shared gallery command refuses a beat joined through another beat with one that holds the same picture", () => {
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "ab", imageRef: ref("a") }, { id: "R2", audioText: "cd", imageRef: null }, { id: "R3", audioText: "ef", imageRef: ref("a") }] });
+  registerSharedOperationFamilies(h.a, { cells: createFlowLoadRuntime().cells });
+  const a = sharedHarness(adapterReplica(h.a));
+  try {
+    send(h.a, { kind: "join", id: "first", by: "Bob", from: "R3", into: "R2", glue: " " });
+    send(h.a, { kind: "join", id: "second", by: "Bob", from: "R2", into: "R1", glue: " " });
+    const shown = project(h.a).document.rows;
+    assert.deepEqual(shown.map(found => [found.id, found.audioText, found.imageRef, found.moreImages]), [["R1", "ab cd ef", ref("a"), undefined]]);
+    assert.deepEqual(a.session.run(galleryCommand("R1", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))), { kind: "rejected", reason: "gallery-joined-beat" });
+    assert.deepEqual(a.executed, []);
+  } finally { a.session.dispose(); h.close(); }
 });
