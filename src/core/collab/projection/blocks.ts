@@ -14,7 +14,7 @@ export interface SharedProjectionStream {
 }
 export type SharedProjectionFragmentReason = "missing-boundary" | "invalid-prefix" | "missing-beat" | "wrong-shape-beat" | "unowned-beat" | "foreign-segment" | "duplicate-boundary" | "invalid-beat-id";
 
-export function projectSharedBlocks(streams: readonly SharedProjectionStream[], records: readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null }[],
+export function projectSharedBlocks(streams: readonly SharedProjectionStream[], records: readonly { readonly id: string; readonly valid: boolean; readonly segment: string | null; readonly retired?: boolean }[],
   collect?: (parts: readonly (readonly SharedProjectionUnit[])[], build: () => SharedProjectionUnit[]) => SharedProjectionUnit[]) {
   const contains = new Map<string, Set<string>>(), fallback = new Map<string, string>();
   for (const stream of streams) {
@@ -22,7 +22,7 @@ export function projectSharedBlocks(streams: readonly SharedProjectionStream[], 
     if (stream.head?.kind === "b") { names.add(stream.head.id); if (stream.inOrder && !fallback.has(stream.head.id)) fallback.set(stream.head.id, stream.segment); }
     for (const part of stream.parts) if (part.boundary?.kind === "b") names.add(part.boundary.id);
   }
-  const owners = new Map(records.map(record => [record.id, { valid: record.valid,
+  const owners = new Map(records.map(record => [record.id, { valid: record.valid, retired: record.retired === true,
     segment: record.segment && contains.get(record.segment)?.has(record.id) ? record.segment : fallback.get(record.id) ?? null }]));
   const result: { kind: "b" | "h"; id: string | null; segment: string; from: number; to: number; units: SharedProjectionUnit[]; reason: SharedProjectionFragmentReason | null }[] = [];
   const headings = new Set<string>(), beats = new Set<string>();
@@ -35,7 +35,8 @@ export function projectSharedBlocks(streams: readonly SharedProjectionStream[], 
     let current = fresh(stream.head, 0), last = stream.head, adjacent = true;
     for (const part of stream.parts) {
       const next = part.boundary;
-      if (!next) {
+      // why: an undone split keeps its boundary, read as text of the beat before it while the retire holds.
+      if (!next || next.kind === "b" && owners.get(next.id)?.retired) {
         const parts = units.get(current) ?? []; parts.push(part.units); units.set(current, parts);
         current.to = part.to; if (part.to > part.from) adjacent = false; continue;
       }
