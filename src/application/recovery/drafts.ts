@@ -16,7 +16,7 @@ import {
 import { desktopDraftOrigin, draftOriginSignature, draftPayloadFor, draftRefsFor, draftRefusal } from "./draft-origin.ts";
 import type { DraftOrigin, DraftPayload } from "./draft-origin.ts";
 import type { DraftCopy, DraftRestoreOutcome, HeaderedDraft, TakenDraft, TakenOrigin } from "./draft-restore.ts";
-import { DRAFTS_DETACHED } from "./drafts-ports.ts";
+import { DRAFTS_DETACHED, DRAFTS_NOT_KEPT } from "./drafts-ports.ts";
 import type { DraftDetach, DraftDetachRefusal, DraftFile, DraftFlush, DraftOpening, DraftParsedFile, DraftsMount, DraftsPorts } from "./drafts-ports.ts";
 
 interface DraftToast {
@@ -111,6 +111,12 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   let draftStopCode = "";
   let detached = false;
   const outstanding: Record<"write" | "discard" | "restore" | "flush", number> = { write: 0, discard: 0, restore: 0, flush: 0 };
+  const openTakes: { settled: boolean; value: unknown }[] = [];
+
+  function claimTake(taken: unknown): void {
+    const at = openTakes.findIndex(function (entry) { return entry.settled && Object.is(entry.value, taken); });
+    if (at >= 0) openTakes.splice(at, 1);
+  }
 
   function countRestore<T>(started: Promise<T>): Promise<T> {
     outstanding.restore++;
@@ -155,11 +161,21 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     return desktopDraftOrigin(fileHome(), importHome);
   }
 
+  function keepWake(): void {
+    const plan = schedule();
+    if (!plan.pending() || plan.armed() || plan.backingOff() || draftInFlight) return;
+    if (draftStopped || detached || draftResume().restorePending()) return;
+    plan.resume();
+  }
+
   function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | undefined> {
-    schedule().cancel();
     const doc = draftWriterLive() ? currentDocument() : null;
-    if (!doc) return Promise.resolve(null);
-    if (draftResume().restorePending()) { schedule().keepPending(); return Promise.resolve(null); }
+    if (!doc || draftResume().restorePending()) {
+      if (doc) schedule().keepPending();
+      keepWake();
+      return Promise.resolve(null);
+    }
+    schedule().cancel();
     if (draftInFlight) { schedule().keepPending(); return draftInFlight; }
 
     const unsaved = unsavedChanges();
@@ -348,9 +364,8 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   }
 
   function flushDraftNow(opts?: { readonly keep?: boolean } | null): Promise<DraftFlush> {
-    if (detached || (runningOnDesktop() && draftsRefused())) return Promise.resolve({ ok: false, code: DRAFTS_DETACHED });
-    if (!draftWriterLive()) return Promise.resolve({ ok: true });
     const keepClean = !!(opts && opts.keep === true);
+    if (!draftWriterLive()) return Promise.resolve(keptAnswer(keepClean));
     schedule().cancel();
     schedule().cancelRetry();
     outstanding.flush++;
@@ -360,7 +375,9 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     }).then(function (r) {
       try {
         if (!ports) return { ok: false, code: "CANCELLED" };
-        return r || quietAnswer();
+        if (r && r.ok === false) return r;
+        const answer = keptAnswer(keepClean);
+        return answer.ok && r ? r : answer;
       } finally { outstanding.flush--; }
     }, function (err) {
       try {
@@ -371,15 +388,27 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     });
   }
 
-  function quietAnswer(): DraftFlush {
-    if (draftWriterLive()) return { ok: true };
-    return { ok: false, code: draftStopped ? draftStopCode : DRAFTS_DETACHED };
+  function storedIsCurrent(): boolean {
+    const doc = currentDocument();
+    if (!doc || !draftOnDisk || draftSentEditSeq === null) return false;
+    if (saveChanges() !== draftSentEditSeq || draftSentBase !== mergeBase()) return false;
+    return draftOriginSignature(draftOriginOf(), doc, documentLocation().writtenOut()) === draftSentSignature;
+  }
+
+  function keptAnswer(keepClean: boolean): DraftFlush {
+    if (detached || (runningOnDesktop() && draftsRefused())) return { ok: false, code: DRAFTS_DETACHED };
+    if (!runningOnDesktop()) return { ok: true };
+    if (draftStopped) return { ok: false, code: draftStopCode };
+    if (storedIsCurrent()) return { ok: true };
+    if (!unsavedChanges() && !(keepClean && draftOriginOf().kind === "file")) return { ok: true };
+    return { ok: false, code: DRAFTS_NOT_KEPT };
   }
 
   function outstandingWork(): DraftDetachRefusal | null {
     if (outstanding.write) return "writing";
     if (outstanding.discard) return "discarding";
-    if (outstanding.restore) return "restoring";
+    if (outstanding.restore || openTakes.some(function (entry) { return !entry.settled; })) return "restoring";
+    if (openTakes.length) return "taken";
     if (outstanding.flush) return "flushing";
     return null;
   }
@@ -540,11 +569,19 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     if (!runningOnDesktop() || draftsRefused()) return null;
     const take = desktopDrafts().taker();
     if (!(take && draftResume().restorePending())) return null;
-    return function () { return countRestore(take()); };
+    return function () {
+      const entry: { settled: boolean; value: unknown } = { settled: false, value: null };
+      openTakes.push(entry);
+      const started = take();
+      // why: the caller gets the store's own promise; the entry stays open until the applyTaken that consumes it
+      started.then(function (value) { entry.settled = true; entry.value = value; }, function () { entry.settled = true; });
+      return started;
+    };
   }
 
   async function applyTakenDraft(taken: unknown): Promise<string> {
     outstanding.restore++;
+    claimTake(taken);
     try {
       const t = taken as TakenDraft | null | undefined;
       const resume = draftResume();
@@ -562,6 +599,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       }
       notifyDesktopDocumentState();
       noteDraftChange();
+      keepWake();
       return outcome;
     } finally { outstanding.restore--; }
   }
