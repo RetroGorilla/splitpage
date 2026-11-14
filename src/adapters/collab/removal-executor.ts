@@ -31,6 +31,8 @@ import { freezeSharedPreparedValue } from "./prepare-value.ts";
 import { prepareSharedDiscard, prepareSharedDiscardRetire, sharedRemovalDiscardRetires } from "./discard.ts";
 import { collabPreparedOperationTextTarget } from "./text-target.ts";
 import { isStableSharedIdentity } from "./identity.ts";
+import type { CollabRoots } from "./roots.ts";
+import { isSharedPlannedPictureShown, readSharedStoredPicture, sharedPlannedPictures } from "./gallery-retirement.ts";
 
 function flags(view: SharedPreparationView, beat: string) {
   const path = ["beats", beat, "removals"];
@@ -53,13 +55,14 @@ function prepared(id: SharedContentRef, record: SharedStoredRemovalCommand, writ
   } };
 }
 
-function attachments(view: SharedPreparationView, index: SharedAttachmentOwnership, collection: "visuals" | "gallery", beat: string) {
-  return [...new Set([...index.keys(collection, beat), ...sharedPendingAttachmentKeys(view, collection),
+function attachments(view: SharedPreparationView, index: SharedAttachmentOwnership, collection: "visuals" | "gallery", beat: string, roots: CollabRoots) {
+  return [...new Set([...index.keys(collection, beat), ...sharedPendingAttachmentKeys(view, collection), ...collection === "gallery" ? sharedPlannedPictures(view) : [],
     ...sharedCreatedAttachments(view).filter(item => item.collection === collection && item.beat === beat).map(item => item.record)])]
-    .sort().filter(key => readPreparedSharedRecord(collection, key, view)?.beat === beat);
+    .sort().filter(key => readPreparedSharedRecord(collection, key, view)?.beat === beat
+      && (collection !== "gallery" || isSharedPlannedPictureShown(roots, view, key, readSharedStoredPicture(roots, key) ?? undefined)));
 }
 
-function remove(operation: SharedSoftRemove, view: SharedPreparationView, index: SharedAttachmentOwnership, identities: SharedStructureIdentityReservations): SharedPreparationResult {
+function remove(operation: SharedSoftRemove, view: SharedPreparationView, index: SharedAttachmentOwnership, identities: SharedStructureIdentityReservations, roots: CollabRoots): SharedPreparationResult {
   const id = sharedStructureIdentity(view.writer, operation.id, "removal"), targets: SharedRemovalTarget[] = [], writes: SharedPreparedWrite[] = [];
   if (view.has(["removalRecords", id])) throw new SharedStructurePreparationError("existing-identity");
   reserveSharedStructureIdentity(view, id, identities); prepareStructureAlias(view, operation.id, id);
@@ -77,8 +80,8 @@ function remove(operation: SharedSoftRemove, view: SharedPreparationView, index:
     const target = { owner: owner.owner as SharedContentRef, segment: owner.segment as SharedContentRef, field: "audioText" as const }, converted = sharedTextPlanSlot(view, ["segments", owner.segment, "text"]).plan;
     const plan = readSharedConvertedBeat(view, owner.owner) && converted ? { ...converted, target } : sharedTextCommandPlan(view, target);
     plans.push(plan); targets.push({ beat: owner.owner, segment: owner.segment, generation });
-    visuals.push(...attachments(view, index, "visuals", owner.owner).map(record => ({ beat: owner.owner as SharedContentRef, record: record as SharedContentRef })));
-    gallery.push(...attachments(view, index, "gallery", owner.owner));
+    visuals.push(...attachments(view, index, "visuals", owner.owner, roots).map(record => ({ beat: owner.owner as SharedContentRef, record: record as SharedContentRef })));
+    gallery.push(...attachments(view, index, "gallery", owner.owner, roots));
     if (view.has(["beats", owner.owner, "bufferRecovery"])) {
       const metadata = readSharedBufferRecoveryMetadata(view.get(["beats", owner.owner, "bufferRecovery"]));
       if (!metadata) throw new SharedStructurePreparationError("invalid-buffer-recovery-metadata");
@@ -192,7 +195,7 @@ export function registerSharedRemovalHandlers(handle: SharedDocumentHandle): voi
   };
   registerSharedOperationHandlers(handle, { remove: (operation, view) => guard(() => {
     if (!isStableSharedIdentity(operation.by)) throw new SharedStructurePreparationError("unstable-identity");
-    return remove(operation, view, index, identities);
+    return remove(operation, view, index, identities, collabState(handle).roots);
   }), restore: (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return restore(operation, view, identities); }),
   "heading-remove": (operation, view) => guard(() => { bindSharedStructurePlan(view, structure); return removeHeading(operation, view, identities); }),
   discard: prepareSharedDiscard, "discard-retire": prepareSharedDiscardRetire });

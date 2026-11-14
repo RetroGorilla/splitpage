@@ -3,7 +3,7 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { registerSharedOperationHandlers } from "./operation-handlers.ts";
 import type { SharedOperationHandlers } from "./operation-handlers.ts";
 import { isSharedRecordNestedField, readPreparedSharedRecord, readSharedNestedInput, sharedRecordFieldAccepted } from "./record-codec.ts";
-import { SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
+import { noteSharedPlannedPicture, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 import { applySharedMapWrites } from "./prepare.ts";
 import type { SharedPreparedWrite, SharedPreparationView, SharedPreparationResult } from "./prepare.ts";
 import { sharedJson } from "./snapshot.ts";
@@ -43,6 +43,7 @@ function accepted(view: SharedPreparationView, writes: readonly SharedPreparedWr
   for (const write of writes) {
     const [collection, record] = write.path;
     if ((collection === "visuals" || collection === "gallery") && record !== undefined) sharedPendingAttachmentKeys(view, collection).add(record);
+    if (collection === "gallery" && record !== undefined) noteSharedPlannedPicture(view, record, false);
   }
   return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
 }

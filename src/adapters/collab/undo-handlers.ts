@@ -1,4 +1,3 @@
-import * as Y from "yjs";
 import type { SharedContentRef, SharedGalleryRetire, SharedMarkRetract, SharedTextRestore } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedPreparationResult, SharedPreparationView, SharedPreparedWrite } from "./prepare.ts";
@@ -18,7 +17,7 @@ import { readSharedAnchorUnit } from "./anchors.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedStatusRetire } from "./status.ts";
 import { prepareSharedSplitRestore, prepareSharedSplitRetire } from "./undo-split.ts";
-import { SHARED_GALLERY_RETIREMENT_FIELD, sharedGalleryRetirementValue } from "./gallery-retirement.ts";
+import { noteSharedPlannedPicture, readSharedStoredPicture, SHARED_GALLERY_RETIREMENT_FIELD, sharedGalleryRetirementValue } from "./gallery-retirement.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
 import { SHARED_MARK_PROVENANCE_MARKER, readSharedTextRestoreOperation, sharedMarkCopyOperation, sharedMarkRetractOperation, sharedTextRestoreOperation } from "./mark-provenance.ts";
 
@@ -114,14 +113,15 @@ export function prepareSharedGalleryRetire(operation: SharedGalleryRetire, view:
   if (![operation.id, operation.by].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
   const path = ["gallery", operation.record], field = [...path, SHARED_GALLERY_RETIREMENT_FIELD];
   if (view.kind(path) !== "map") return { ok: false, reason: "missing-record" };
+  noteSharedPlannedPicture(view, operation.record, operation.kind === "gallery-retire");
   if (operation.kind === "gallery-restore") {
     const writes: SharedPreparedWrite[] = view.has(field) ? [{ kind: "delete", path: field }] : [];
     return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };
   }
   return { ok: true, writes: [{ kind: "set", path: field, value: { observed: "", seen: [] } }], apply: handle => {
-    const state = collabState(handle), record: unknown = state.roots.gallery.get(operation.record);
+    const state = collabState(handle), record = readSharedStoredPicture(state.roots, operation.record);
     if (!state.execution?.applying) throw new SharedExecutionWriteError();
-    if (!(record instanceof Y.Map)) throw new Error("Prepared gallery record is missing");
+    if (!record) throw new Error("Prepared gallery record is missing");
     // why: what the undo saw is read as it applies, so the observation names the items this copy holds.
     applySharedMapWrites(handle, [{ kind: "set", path: field, value: sharedGalleryRetirementValue(state.roots, record) }]);
   } };

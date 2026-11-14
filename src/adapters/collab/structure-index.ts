@@ -9,7 +9,7 @@ import { freezeSharedPreparedValue, sharedPreparedValue, sharedPreparedTextInser
 import { sharedEmbedChangeReader } from "./embed-changes.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readSharedRemovalState, readSharedHeadingRemovalState } from "./removal-state.ts";
-import { isSharedGalleryRetired, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
+import { isSharedGalleryShown, readSharedStoredPicture, SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
 import { createSharedJoinIndex } from "./join-index.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import { projectSharedCoveredBeats } from "../../core/collab/recovery.ts";
@@ -68,12 +68,12 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
       const previous = owners.get(key); if (previous) { const keys = groups.get(previous); keys?.delete(key); if (!keys?.size) groups.delete(previous); }
       const held = retiredOwners.get(key); if (held !== undefined) member(retiredGallery, held, key, false);
       owners.delete(key); retiredOwners.delete(key);
-      const raw = state.roots[collection].get(key), beat: unknown = raw instanceof Y.Map ? raw.get("beat") : null;
+      const raw = collection === "gallery" ? readSharedStoredPicture(state.roots, key) : state.roots.visuals.get(key), beat: unknown = raw instanceof Y.Map ? raw.get("beat") : null;
       if (!key || !isStableSharedIdentity(key) || typeof beat !== "string" || !beat || !isStableSharedIdentity(beat)) return;
       if (collection === "gallery" && raw instanceof Y.Map && raw.has(SHARED_GALLERY_RETIREMENT_FIELD)) {
         // why: a retired picture is watched through its beat's removals, which can bring it back.
         member(retiredGallery, beat, key, true); retiredOwners.set(key, beat);
-        if (isSharedGalleryRetired(state.roots, key, raw)) return;
+        if (!isSharedGalleryShown(state.roots, key, raw)) return;
       }
       let keys = groups.get(beat); if (!keys) { keys = new Set(); groups.set(beat, keys); }
       keys.add(key); owners.set(key, beat);

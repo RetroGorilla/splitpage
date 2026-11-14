@@ -59,3 +59,42 @@ export function isSharedGalleryRetired(roots: RetirementRoots, key: string, reco
 export function sharedGalleryRetirementValue(roots: RetirementRoots, record: Y.Map<unknown>): SharedGalleryRetirement {
   return { observed: sharedGalleryObservation(record), seen: removalKeys(roots, record.get("beat")) };
 }
+
+export function readSharedRetirementObservation(record: unknown): string | null {
+  return record instanceof Y.Map ? readRetirement(record.get(SHARED_GALLERY_RETIREMENT_FIELD))?.observed ?? null : null;
+}
+
+export function isSharedGalleryShown(roots: RetirementRoots, key: string, record: unknown): boolean {
+  return record instanceof Y.Map && !(record.has(SHARED_GALLERY_RETIREMENT_FIELD) && isSharedGalleryRetired(roots, key, record));
+}
+
+export function readSharedBeatPictures(roots: Pick<CollabRoots, "beats" | "removalRecords" | "gallery">, beat: string): readonly (readonly [string, Y.Map<unknown>])[] {
+  const found: [string, Y.Map<unknown>][] = [];
+  for (const [key, record] of roots.gallery.entries()) {
+    if (record instanceof Y.Map && record.get("beat") === beat && isSharedGalleryShown(roots, key, record)) found.push([key, record]);
+  }
+  return found.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+}
+
+export function readSharedStoredPicture(roots: Pick<CollabRoots, "gallery">, key: string): Y.Map<unknown> | null {
+  const record = roots.gallery.get(key);
+  return record instanceof Y.Map ? record : null;
+}
+
+interface PlannedScratch { readonly scratch: <T>(key: string, create: () => T) => T }
+const planned = (view: PlannedScratch) => view.scratch("gallery-planned-retirement", () => new Map<string, boolean>());
+
+// why: a staged write has no library item yet, so the list notes what each earlier operation did to the picture:
+// a retirement hides it as it applies, and a restore or any field write makes the retirement no longer hold.
+export function noteSharedPlannedPicture(view: PlannedScratch, key: string, retired: boolean): void {
+  planned(view).set(key, retired);
+}
+
+export function sharedPlannedPictures(view: PlannedScratch): readonly string[] {
+  return [...planned(view).keys()];
+}
+
+export function isSharedPlannedPictureShown(roots: RetirementRoots, view: PlannedScratch, key: string, record: unknown): boolean {
+  const noted = planned(view).get(key);
+  return noted === undefined ? record === undefined || isSharedGalleryShown(roots, key, record) : !noted;
+}
