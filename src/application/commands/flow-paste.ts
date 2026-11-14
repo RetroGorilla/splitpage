@@ -21,6 +21,16 @@ type PasteFields = Record<string, unknown>;
 
 class FlowPasteRefusal extends Error {}
 
+function personIdentity(name: unknown): string {
+  return "person_" + normalizeTagName(name).split("").map(unit => unit.charCodeAt(0).toString(16).padStart(4, "0")).join("");
+}
+
+function markFields(value: unknown): PasteFields {
+  // why: Gallery validation compares normalized marks with key-sorted shared JSON, so the payload uses that order.
+  const mark = value as PasteFields;
+  return Object.fromEntries(Object.keys(mark).sort().map(key => [key, mark[key]]));
+}
+
 function jsonFields(record: PasteFields, known: readonly string[], excluded: readonly string[] = []): SharedJsonFields {
   const fields = Object.fromEntries(known.filter(key => record[key] !== undefined).map(key => [key, record[key]]));
   const extra = Object.keys(record).filter(key => !known.includes(key) && !excluded.includes(key) && record[key] !== undefined).sort();
@@ -33,6 +43,10 @@ export function sharedFlowPaste(doc: DocumentView, edited: FlowEdit, ports: Flow
     const clipboard = edited.clipboard, author = ports.author, records: SharedOperation[] = [], pictures: SharedOperation[] = [];
     const beats = new Map<string, SharedContentRef>(), headings = new Map<string, SharedContentRef>(), components = new Map<string, SharedContentRef>();
     const segments = new Map(edited.ops.filter(op => op.kind === "segment-create").map(op => [op.beat, op]));
+    const markers = new Set([...segments.values()].filter(op => op.fields.audioText === "" && !edited.rows.some(row => row.id === op.beat)
+      && edited.ops?.some(other => other.kind === "remove" && other.targets.includes(op.beat))).map(op => op.beat));
+    // why: A heading-only paste removes its empty marker before final rows exist, and that marker has no gallery.
+    const markerGalleries = new Set([...markers].map(beat => beat + ":gallery"));
     for (const op of edited.ops) {
       if (op.kind === "segment-create" || op.kind === "split" || op.kind === "split-before") {
         beats.set(op.beat, ports.identity(op.id, "beat")); components.set(op.beat + ":visual", ports.identity(op.id, "visual"));
@@ -59,7 +73,7 @@ export function sharedFlowPaste(doc: DocumentView, edited: FlowEdit, ports: Flow
     };
     for (const [index, person] of additions("people").entries()) {
       const existing = doc.people.find(other => normalizeTagName(other.name) === normalizeTagName(person.name));
-      const record = existing?.id ?? id("person", index); people.set(String(person.id), record);
+      const record = existing?.id ?? personIdentity(person.name); people.set(String(person.id), record);
       if (!existing) create("people", record, { name: String(person.name), rank: String(doc.people.length + index).padStart(10, "0"), extra: "{}" });
     }
     const owner = (value: unknown): string => typeof value === "string" ? people.get(value) ?? value : "";
@@ -128,12 +142,15 @@ export function sharedFlowPaste(doc: DocumentView, edited: FlowEdit, ports: Flow
       if (op.kind === "text-insert" && op.target.field === "heading" && headings.has(op.target.owner)) continue;
       if (op.kind === "record-create" && (op.target.collection === "visuals" || op.target.collection === "gallery") && segments.has(op.fields.beat as SharedContentRef)) continue;
       if (op.kind === "segment-create") {
-        const original = edited.rows.find(row => row.id === op.beat); if (!original) throw new FlowPasteRefusal("paste-beats-unavailable");
+        const original = edited.rows.find(row => row.id === op.beat) ?? (markers.has(op.beat) ? { ...op.fields, id: op.beat, audioText: "",
+          visualText: typeof op.fields.visualText === "string" ? op.fields.visualText : "" } : null);
+        if (!original) throw new FlowPasteRefusal("paste-beats-unavailable");
         if (original.visualImage) throw new FlowPasteRefusal("paste-gallery-legacy-image");
         for (const [slotIndex, slot] of rowSlots(original).entries()) {
           if (slot.dataUrl || slot.links.some(link => link.location)) throw new FlowPasteRefusal("paste-gallery-local-file");
           create("gallery", id("picture", pictures.length), { beat: named(op.beat), rank: String(slotIndex).padStart(10, "0"),
-            picture: { ...(slot.ref ? { imageRef: slot.ref } : {}), name: slot.name, ...(slot.annotation ? { annotation: slot.annotation } : {}) }, links: slot.links } as unknown as SharedJsonFields, pictures);
+            picture: { ...(slot.ref ? { imageRef: slot.ref } : {}), name: slot.name,
+              ...(slot.annotation ? { annotation: { ...slot.annotation, marks: slot.annotation.marks.map(markFields) } } : {}) }, links: slot.links } as unknown as SharedJsonFields, pictures);
         }
         const fields = Object.fromEntries(Object.entries(op.fields).filter(([field]) => !["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"].includes(field))) as SharedJsonFields;
         operations.push({ ...op, beat: named(op.beat), segment: named(op.segment), at: { ...op.at, left: op.at.left === null ? null : named(op.at.left), right: op.at.right === null ? null : named(op.at.right) },
@@ -153,7 +170,7 @@ export function sharedFlowPaste(doc: DocumentView, edited: FlowEdit, ports: Flow
           retainedBeat: named(op.firstBeat), emptyBeat: null });
       }
       else if (op.kind === "scalar") operations.push({ ...op, target: { ...op.target, record: named(op.target.record) }, ...(!op.clear && op.field === "firstSceneId" && typeof op.value === "string" ? { value: named(op.value) } : {}) });
-      else if (op.kind === "remove") operations.push({ ...op, targets: op.targets.map(named), boundaries: op.boundaries.map(named), components: op.components.map(named), gallery: op.gallery.map(named), observed: op.observed.flatMap(ref => references(ref, "range")) });
+      else if (op.kind === "remove") operations.push({ ...op, targets: op.targets.map(named), boundaries: op.boundaries.map(named), components: op.components.map(named), gallery: op.gallery.filter(ref => !markerGalleries.has(ref)).map(named), observed: op.observed.flatMap(ref => references(ref, "range")) });
       else if (op.kind === "heading-remove") operations.push({ ...op, heading: named(op.heading), observed: op.observed.flatMap(ref => references(ref, "range")), newBeat: op.newBeat === null ? null : named(op.newBeat), nextBeat: op.nextBeat === null ? null : named(op.nextBeat) });
       else operations.push(op);
     }

@@ -18,7 +18,12 @@ Tag sameness remains `registryKey(category, name)`; person sameness remains
 `normalizeTagName(name)`, both from standalone `insertBeats`. Normalization trims,
 folds case and collapses whitespace. Tag ids retain standalone's deterministic
 `mintTagId` rule, so concurrent creation of the same tag has one registry key.
-New people, shots, comments, replies and gallery records receive paste-author ids.
+New people use `person_` followed by the hexadecimal UTF-16 units of their
+normalized name. The review's assumed ruling gives concurrent pastes of one new
+person one entry, as rule 96 does for tags. `sharedPeopleIntroducedByText` on main
+still delegates to `addPerson` with a caller-supplied `IdSource.id("p")`; there is
+no composed shared `@Name` caller or deterministic person-id convention to reuse.
+New shots, comments, replies and gallery records receive paste-author ids.
 Beat and heading ids come from the existing structure identity port. Existing
 text references become observed unit identities before the command executes.
 
@@ -42,8 +47,20 @@ The whole paste is refused, without a document write, for these cases:
 The comment and reply limits come from the existing record-create handler's
 author restriction. The shared clipboard reader does not impersonate an author.
 Non-whole flow pastes with unsupported registry changes retain
-`flow-clipboard-records-unavailable`. Visual selection retains
-`invalid-record-field`; importing rows and bulk tagging remain refused.
+`flow-clipboard-records-unavailable`. Importing rows and bulk tagging remain refused.
+
+The collection replacement check compares existing projected records with the
+migrated clipboard working copy by JSON. If migration changes an existing record,
+the whole paste refuses even when that record is unrelated to the pasted beats.
+For example, a shot whose stored name differs from its B-roll text can produce
+`paste-brollShots-replacement-unavailable`. Other collections use
+`paste-<collection>-replacement-unavailable`. This remains a declared limit.
+
+Pictures with drawn marks retain their normal document values; their operation
+payload sorts the marks' keys into the existing record family's accepted form.
+A heading-only clipboard retains the temporary marker's existing segment-create
+and remove operations, without a gallery claim for that empty marker, before
+creating and finalizing the heading. No operation kind or handler is added.
 
 `flowCommand` also refuses a changed standalone plan with an empty operations list
 as `flow-operations-empty`, before producing stamps. The standalone clipboard

@@ -5,6 +5,34 @@
   ],
   "mutants": [
     {
+      "label": "concurrent pastes mint separate people",
+      "file": "src/application/commands/flow-paste.ts",
+      "find": "existing?.id ?? personIdentity(person.name)",
+      "replace": "existing?.id ?? id(\"person\", index)",
+      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+    },
+    {
+      "label": "drawn picture marks keep noncanonical keys",
+      "file": "src/application/commands/flow-paste.ts",
+      "find": "slot.annotation.marks.map(markFields)",
+      "replace": "slot.annotation.marks",
+      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+    },
+    {
+      "label": "heading-only paste loses its temporary marker",
+      "file": "src/application/commands/flow-paste.ts",
+      "find": "markers.has(op.beat) ?",
+      "replace": "false ?",
+      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+    },
+    {
+      "label": "heading-only paste removes a nonexistent marker gallery",
+      "file": "src/application/commands/flow-paste.ts",
+      "find": "op.gallery.filter(ref => !markerGalleries.has(ref)).map(named)",
+      "replace": "op.gallery.map(named)",
+      "tests": ["tests/application/commands/flow-paste-shared.test.ts"]
+    },
+    {
       "label": "whole paste bypasses record family field validation",
       "file": "src/application/commands/flow-paste.ts",
       "find": "if (!Object.entries(fields).every(([field, value]) => ports.recordField(collection, field, value)))",
