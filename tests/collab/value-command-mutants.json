@@ -1,0 +1,49 @@
+{
+  "tests": [
+    "tests/application/commands/values-shared.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "a beat status list carries no stamp",
+      "file": "src/application/commands/beat-status.ts",
+      "find": "[sharedBeatStatus(shared, by, rowId, status), shared.beatStamp(rowId, by)]",
+      "replace": "[sharedBeatStatus(shared, by, rowId, status)]"
+    },
+    {
+      "label": "a beat length list carries no stamp",
+      "file": "src/application/commands/beat-length.ts",
+      "find": "[sharedScalar(by, \"beat\", rowId, \"lengthSeconds\", after), shared.beatStamp(rowId, by)]",
+      "replace": "[sharedScalar(by, \"beat\", rowId, \"lengthSeconds\", after)]"
+    },
+    {
+      "label": "a status sent without the heads this copy saw",
+      "file": "src/application/commands/shared-values.ts",
+      "find": "parents: ports.statusHeads(beat).map(head => head as SharedContentRef)",
+      "replace": "parents: []"
+    },
+    {
+      "label": "a cleared value sent as a null value",
+      "file": "src/application/commands/shared-values.ts",
+      "find": "return value === null ? { ...base, clear: true } : { ...base, value };",
+      "replace": "return { ...base, value };"
+    },
+    {
+      "label": "words per minute aimed at the title instead of the document",
+      "file": "src/application/commands/document-settings.ts",
+      "find": "sharedScalar(by, \"document\", doc.docId, \"wordsPerMinute\", wpm)",
+      "replace": "sharedScalar(by, \"document\", doc.title, \"wordsPerMinute\", wpm)"
+    },
+    {
+      "label": "target length aimed at a beat",
+      "file": "src/application/commands/document-settings.ts",
+      "find": "sharedScalar(by, \"document\", doc.docId, \"targetSeconds\", after)",
+      "replace": "sharedScalar(by, \"beat\", doc.docId, \"targetSeconds\", after)"
+    },
+    {
+      "label": "value ports answer in a standalone session",
+      "file": "src/bootstrap/wiring/ports/shared-values.ts",
+      "find": "return () => source.handle() ? {",
+      "replace": "return () => source.handle() !== undefined ? {"
+    }
+  ]
+}
