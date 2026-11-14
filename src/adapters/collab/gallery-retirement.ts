@@ -90,10 +90,6 @@ export function noteSharedPlannedPicture(view: PlannedScratch, key: string, reti
   planned(view).set(key, retired);
 }
 
-export function sharedPlannedPictures(view: PlannedScratch): readonly string[] {
-  return [...planned(view).keys()];
-}
-
 export function isSharedPlannedPictureShown(view: PlannedScratch, key: string, stored: () => boolean): boolean {
   const noted = planned(view).get(key);
   return noted === undefined ? stored() : !noted;

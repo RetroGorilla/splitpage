@@ -19,6 +19,7 @@ import { prepareSharedStatusRetire } from "./status.ts";
 import { prepareSharedSplitRestore, prepareSharedSplitRetire } from "./undo-split.ts";
 import { noteSharedPlannedPicture, readSharedStoredPicture, SHARED_GALLERY_RETIREMENT_FIELD, sharedGalleryRetirementValue } from "./gallery-retirement.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
+import { sharedPendingAttachmentKeys } from "./structure-content.ts";
 import { SHARED_MARK_PROVENANCE_MARKER, readSharedTextRestoreOperation, sharedMarkCopyOperation, sharedMarkRetractOperation, sharedTextRestoreOperation } from "./mark-provenance.ts";
 
 function checkAuthor(operation: { readonly id: string; readonly by: string }): void {
@@ -114,6 +115,7 @@ export function prepareSharedGalleryRetire(operation: SharedGalleryRetire, view:
   const path = ["gallery", operation.record], field = [...path, SHARED_GALLERY_RETIREMENT_FIELD];
   if (view.kind(path) !== "map") return { ok: false, reason: "missing-record" };
   noteSharedPlannedPicture(view, operation.record, operation.kind === "gallery-retire");
+  sharedPendingAttachmentKeys(view, "gallery").add(operation.record);
   if (operation.kind === "gallery-restore") {
     const writes: SharedPreparedWrite[] = view.has(field) ? [{ kind: "delete", path: field }] : [];
     return { ok: true, writes, apply: handle => applySharedMapWrites(handle, writes) };

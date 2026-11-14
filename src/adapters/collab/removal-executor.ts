@@ -32,7 +32,7 @@ import { prepareSharedDiscard, prepareSharedDiscardRetire, sharedRemovalDiscardR
 import { collabPreparedOperationTextTarget } from "./text-target.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import type { CollabRoots } from "./roots.ts";
-import { isSharedGalleryShown, isSharedPlannedPictureShown, readSharedStoredPicture, sharedPlannedPictures } from "./gallery-retirement.ts";
+import { isSharedGalleryShown, isSharedPlannedPictureShown, readSharedStoredPicture } from "./gallery-retirement.ts";
 
 function flags(view: SharedPreparationView, beat: string) {
   const path = ["beats", beat, "removals"];
@@ -63,7 +63,7 @@ function attachments(view: SharedPreparationView, index: SharedAttachmentOwnersh
     const record = readSharedStoredPicture(roots, key);
     return !record || isSharedGalleryShown(roots, key, record);
   };
-  return [...new Set([...indexed, ...sharedPendingAttachmentKeys(view, collection), ...collection === "gallery" ? sharedPlannedPictures(view) : [],
+  return [...new Set([...indexed, ...sharedPendingAttachmentKeys(view, collection),
     ...sharedCreatedAttachments(view).filter(item => item.collection === collection && item.beat === beat).map(item => item.record)])]
     .sort().filter(key => readPreparedSharedRecord(collection, key, view)?.beat === beat && (collection !== "gallery" || isSharedPlannedPictureShown(view, key, stored(key))));
 }
