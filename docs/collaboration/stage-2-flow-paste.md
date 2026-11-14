@@ -29,7 +29,8 @@ text references become observed unit identities before the command executes.
 
 Each admitted paste is one shared command and one undo entry. Creation undo still
 refuses `undo-unsupported:segment-create`; this cut does not change undo support.
-Gallery record undo also remains unsupported by the existing adapter.
+The merged gallery undo supports gallery record creation; whole-paste creation
+still reaches the segment-create limit first.
 
 The whole paste is refused, without a document write, for these cases:
 
