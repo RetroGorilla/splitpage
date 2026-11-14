@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as Y from "yjs";
 import { replicas, agree, operation } from "./executor-support.ts";
 import { createRecord, deleteRecord, setRecord } from "./record-support.ts";
 import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
@@ -101,9 +102,9 @@ test("the parts: adding a picture records its creation, its undo is a retirement
     const added = run.command(run.set.a, add("G1", "P1", "a"));
     assert.deepEqual(added.parts, [{ kind: "record-create", target: { collection: "gallery", record: "G1" },
       fields: { beat: "R1", rank: "0000000001", picture: picture("P1", "a"), links: [] } }]);
-    const undone = run.reverse(added, true);
+    const undone = run.reverse(added, true), stored = collabState(run.set.a).roots.gallery.get("G1") as Y.Map<unknown>;
     assert.deepEqual(undone.parts, [{ kind: "record-retired", target: { collection: "gallery", record: "G1" },
-      fields: { beat: "R1", rank: "0000000001", picture: picture("P1", "a"), links: [] } }]);
+      fields: { beat: "R1", rank: "0000000001", picture: picture("P1", "a"), links: [] }, retirement: (stored.get("retired") as { readonly observed: string }).observed }]);
   });
 });
 
@@ -268,6 +269,55 @@ for (const order of ORDERS) test(`a late joiner from a state with the picture un
     run.check("every copy", renamed);
   } finally { destroySharedDocument(late); run.close(); }
 });
+
+const removedWith = (pictures: string[]) => state([["R2", "cd", []]], pictures.length ? [["G1", "P1", "a"]] : [], [["R1", pictures]]);
+const LISTS: readonly { readonly name: string; readonly hidden: boolean; readonly values: readonly unknown[]; readonly listed: readonly string[]; readonly after: Reading }[] = [
+  { name: "a shown picture retired, then its beat removed", hidden: false, listed: [], after: removedWith([]),
+    values: [{ kind: "gallery-retire", record: "G1", id: "retire", by: "Alice" }, removeBeat("gone", "Alice")] },
+  { name: "a hidden picture restored, then its beat removed", hidden: true, listed: ["G1"], after: removedWith(["P1"]),
+    values: [{ kind: "gallery-restore", record: "G1", id: "restore", by: "Alice" }, removeBeat("gone", "Alice")] },
+  { name: "a hidden picture shown by a field change, retired, then its beat removed", hidden: true, listed: [], after: removedWith([]),
+    values: [setRecord("gallery", "G1", "custom", "wake", "Alice", "wake"), { kind: "gallery-retire", record: "G1", id: "retire", by: "Alice" }, removeBeat("gone", "Alice")] }
+];
+
+for (const order of ORDERS) for (const list of LISTS) for (const apart of [false, true]) test(`${list.name}, ${apart ? "as separate lists" : "as one list"}: the removal lists what the readers show: ${order}`, () => scenario(order, run => {
+  const added = run.command(run.set.a, add("G1", "P1", "a")); run.flush();
+  if (list.hidden) { run.reverse(added, true); run.flush(); }
+  if (apart) for (const value of list.values) run.send(run.set.a, value); else run.send(run.set.a, ...list.values);
+  assert.deepEqual(listed(run.set.a, "Alice").filter(key => !key.includes(":slot:")), list.listed);
+  run.flush(); run.check("after", list.after);
+}));
+
+for (const order of ORDERS) test(`an old redo cannot take back another writer's later change: Bob's rename of the hidden picture is a field change, its undo keeps the picture shown, and Alice's redo is used up: ${order}`, () => scenario(order, run => {
+  const added = run.command(run.set.a, add("G1", "P1", "a")); run.flush();
+  const redo = run.reverse(added, true); run.flush(); run.check("hidden", plain);
+  const renamed = run.command(run.set.b, setRecord("gallery", "G1", "picture", picture("Renamed", "a"), "Bob", "change"));
+  assert.deepEqual(renamed.parts, [{ kind: "record-field", target: { collection: "gallery", record: "G1" }, field: "picture",
+    prior: { value: picture("P1", "a") }, written: { value: picture("Renamed", "a") } }]);
+  run.flush(); run.check("shown renamed", state([["R1", "ab", ["Renamed"]], ["R2", "cd", []]], [["G1", "Renamed", "a"]]));
+  run.reverse(renamed, true, run.set.b); run.flush(); run.check("the old name, still shown", withP1);
+  run.usedUp(redo, "redo used up", withP1);
+}));
+
+for (const order of ORDERS) test(`a split undone after a picture was added to its new beat and undone is still effective: ${order}`, () => scenario(order, run => {
+  const split = run.command(run.set.a, { kind: "split", id: "split", by: "Alice", target: { owner: "R1", segment: "R1", field: "audioText" },
+    at: { left: null, right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, observed: [flowBaseReference("R1", "audioText", 0, 2)], boundary: "R3", beat: "R3", fields: {} });
+  run.flush();
+  const beat = "structure_1_00730070006c00690074_beat_0";
+  assert.deepEqual(split.parts.flatMap(part => part.kind === "beat-split" ? [part.beat] : []), [beat]);
+  const added = run.command(run.set.a, createRecord("gallery", "G1", { beat, rank: "1", picture: picture("P1", "a") }, "Alice", "add-G1")); run.flush();
+  run.check("split, picture added", state([["R1", "a", []], [beat, "b", ["P1"]], ["R2", "cd", []]], [["G1", "P1", "a"]]));
+  run.reverse(added, true); run.flush(); run.check("split, picture undone", state([["R1", "a", []], [beat, "b", []], ["R2", "cd", []]], []));
+  run.reverse(split, true); run.flush(); run.check("original script", plain);
+}));
+
+for (const order of ORDERS) test(`a beat restore undone after a picture was added to the beat and undone is still effective: ${order}`, () => scenario(order, run => {
+  run.command(run.set.a, removeBeat("gone", "Alice")); run.flush();
+  const restore = run.command(run.set.a, { kind: "restore", id: "restore", by: "Alice", removals: [...collabState(run.set.a).roots.removalRecords.keys()] }); run.flush();
+  const added = run.command(run.set.a, add("G1", "P1", "a")); run.flush();
+  run.reverse(added, true); run.flush(); run.check("restored, picture undone", plain);
+  run.reverse(restore, true); run.flush(); run.check("removed again", removedWith([]));
+}));
 
 const DECLARED_LIMITS: readonly string[] = [];
 
