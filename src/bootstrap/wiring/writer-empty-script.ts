@@ -17,7 +17,7 @@ export function mountWriterEmptyScript(flow: FlowWriter, host: HTMLElement, shar
       const anchor = createSharedAnchor(handle, sharedBufferedTarget(handle, rowId), offset, "before");
       const range = anchor ? resolveSharedBufferedSelection(handle, [anchor, anchor]) : null;
       if (!range) return false;
-      flow.repaint(); host.focus(); flow.place(range, true); return true;
+      flow.repaint(); flow.place(range, true); return true;
     }
   });
   return { ...flow,

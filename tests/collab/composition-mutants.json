@@ -517,10 +517,10 @@
       "tests": ["tests/features/writer/runtime-mount.test.ts"]
     },
     {
-      "label": "the first shared narration caret is placed without focus",
+      "label": "the first shared narration caret is not placed",
       "file": "src/bootstrap/wiring/writer-empty-script.ts",
-      "find": "flow.repaint(); host.focus(); flow.place(range, true);",
-      "replace": "flow.repaint(); flow.place(range, true);",
+      "find": "flow.repaint(); flow.place(range, true);",
+      "replace": "flow.repaint();",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {

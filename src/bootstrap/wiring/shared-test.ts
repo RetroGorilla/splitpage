@@ -3,13 +3,14 @@ import { mintDocId } from "../../adapters/identity/ids.ts";
 import { startupReady } from "../../application/startup-signal.ts";
 import { migrateRows } from "../document-ports.ts";
 import { fromHtml } from "../richtext.ts";
-import { currentCapabilities, currentDocument, sharedSession } from "./session-owner.ts";
+import { currentCapabilities } from "./session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "./shared-session.ts";
 import type { SharedSwitchPorts } from "./shared-session.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
 import { createSharedTestPeer } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
+import { documentReader } from "./ports/document.ts";
 import { getEditorName } from "./preferences-owner.ts";
 import { undoOwner } from "./undo.ts";
 import { writerControls } from "./writer.ts";
@@ -41,7 +42,7 @@ export function mountSharedSessionFeature(): void {
     return {
       enter: async () => {
         if (switching) return { ok: false, reason: "session-switching" };
-        if (sharedSession()) return { ok: false, reason: "already-shared" };
+        if (sharedSessionParts()) return { ok: false, reason: "already-shared" };
         switching = true;
         try {
           let ready = false;
@@ -91,7 +92,7 @@ export function mountSharedSessionFeature(): void {
         deliver: (order?: "forward" | "reverse" | "duplicate") => peer?.deliver(order),
         release: (order?: "forward" | "reverse" | "duplicate") => peer?.release(order)
       },
-      read: () => ({ app: JSON.parse(JSON.stringify(currentDocument())) as unknown, peer: peer?.read() ?? null }),
+      read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
       counters: () => ({ ...counts, queued: peer?.queued() ?? 0 })
     };
   }, () => {});

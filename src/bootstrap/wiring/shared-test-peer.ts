@@ -21,7 +21,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   const session = createSharedSession({ replica, entry: enterSharedDocument, undo: { record: () => {} },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
     capability: createSessionCapabilities("shared", ports.common), report: ports.report, timers: ports.timers, refused: ports.commandRefused });
-  let live = true, held = false;
+  let live = true, paused = false;
   const author = sharedAuthorPort({ handle: () => live ? handle : null, name: () => "Peer" });
   const text = sharedBufferPorts(handle, session, { author: () => {
     const next = author.next(); if (!next) throw new Error("The peer has left"); return next;
@@ -31,7 +31,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   const enqueue = (side: "app" | "peer", update: Uint8Array): void => {
     if (!live) return;
     pending.push({ side, update: Uint8Array.from(update) });
-    if (!held) queueMicrotask(() => { if (live && !held) deliver(); });
+    if (!paused) queueMicrotask(() => { if (live && !paused) deliver(); });
   };
   const receive = (side: "app" | "peer", update: Uint8Array): void => {
     const result = applySharedUpdate(side === "app" ? app.handle : handle, update);
@@ -69,8 +69,8 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
       finally { if (edit.isOpen()) edit.cancel(); }
     },
     deliver,
-    hold: () => { held = true; },
-    release: (order: "forward" | "reverse" | "duplicate" = "forward") => { held = false; return deliver(order); },
+    hold: () => { paused = true; },
+    release: (order: "forward" | "reverse" | "duplicate" = "forward") => { paused = false; return deliver(order); },
     read: () => session.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null),
     queued: () => pending.length,
     dispose: () => {
