@@ -5,7 +5,7 @@ import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
 import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
 
-type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined; cleanLinks?: boolean | undefined };
+type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined; cleanLinks?: boolean | undefined; keepSpaceForm?: boolean | undefined };
 export interface ClipboardMediaInput {
   attach?: Attachment[] | undefined;
   skipImages?: boolean | undefined;
@@ -43,6 +43,7 @@ import {
   takenBrollIds
 } from "../../application/commands/clipboard.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
+import { readSharedCellSpaceForm } from "../common/cell-dom.ts";
 
 export { attachToGallery };
 
@@ -64,7 +65,7 @@ export function clipboardOfCell(cell: CellInput, opts?: ClipboardOptions) {
   if (opts.nonce) html = "<span " + CUT_ATTR + '="' + String(opts.nonce).replace(/[^A-Za-z0-9]/g, "") + '">' + html + "</span>";
   let text = "";
   flattenDirections(c).forEach(function (r) { text += r.text; });
-  return { html: html, text: text.replace(/\u00a0/g, " ") };
+  return { html: html, text: opts.keepSpaceForm ? text : text.replace(/\u00a0/g, " ") };
 }
 
 export function cutNonceIn(html: unknown) {
@@ -246,30 +247,31 @@ function anchoredInText(id: string, target: PasteTarget) {
 }
 
 function liveCellHtml(cellEl: Element) {
-  let html = cellEl.innerHTML;
+  const shared = readSharedCellSpaceForm(cellEl);
+  let html = shared?.html ?? cellEl.innerHTML;
   if (html.indexOf("\u200B") !== -1) html = html.replace(/\u200B/g, "");
-  return (ports as CellClipboardPorts).text.storedHtmlFromDom(html);
+  return { html: (ports as CellClipboardPorts).text.storedHtmlFromDom(html), keepSpaceForm: shared !== null };
 }
 
 function outsideSelection(cellEl: Element) {
-  const cell = (ports as CellClipboardPorts).text.fromHtml(liveCellHtml(cellEl));
+  const cell = (ports as CellClipboardPorts).text.fromHtml(liveCellHtml(cellEl).html);
   const sel = (ports as CellClipboardPorts).selection(cellEl);
   if (!sel) return cell;
   const len = cellLength(cell);
   return sliceCell(cell, 0, Math.min(sel.from, len)).concat(sliceCell(cell, Math.min(sel.to, len), len));
 }
 
-export function copyFromCell(e: ClipboardEvent, cellEl: Element, cut: boolean) {
+export function copyFromCell(e: Pick<ClipboardEvent, "clipboardData" | "preventDefault">, cellEl: Element, cut: boolean) {
   const cd = e.clipboardData;
   const field = cellEl.getAttribute("data-field");
   if (!cd || !holdsDocument() || !isTextField(field) || (ports as CellClipboardPorts).document.read(function (doc) { return rowIndexOf(doc, cellEl.getAttribute("data-id")); }) === -1) return false;
-  const html = liveCellHtml(cellEl);
+  const shown = liveCellHtml(cellEl), html = shown.html;
   if (/<img|video-embed-card/.test(html)) return false;
   const sel = (ports as CellClipboardPorts).selection(cellEl);
   if (!sel || sel.from === sel.to) return false;
   const moving = cut;
   const nonce = moving ? (ports as CellClipboardPorts).nonce() : null;
-  const out = clipboardOfCell(sliceCell((ports as CellClipboardPorts).text.fromHtml(html), sel.from, sel.to), { keepComments: moving, nonce: nonce });
+  const out = clipboardOfCell(sliceCell((ports as CellClipboardPorts).text.fromHtml(html), sel.from, sel.to), { keepComments: moving, nonce: nonce, keepSpaceForm: shown.keepSpaceForm });
   cd.setData("text/html", out.html);
   cd.setData("text/plain", out.text);
   e.preventDefault();

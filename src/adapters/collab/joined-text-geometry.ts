@@ -68,6 +68,11 @@ export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owne
   }) };
 }
 
+export function readSharedJoinedVisualOwners(view: SharedStructureReadView, owner: string): readonly string[] | null {
+  const read = readSharedJoinedTextGeometry(view, owner);
+  return read && !read.removed ? read.fields : null;
+}
+
 export function sharedJoinedTextBaseline(view: SharedStructureReadView, target: SharedTextAddress): SharedJoinedTextGeometry | null {
   const cache = view.scratch("joined-text-baselines", () => new Map<string, SharedJoinedTextGeometry | null>());
   if (!cache.has(target.owner)) {

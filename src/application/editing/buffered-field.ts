@@ -183,7 +183,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     const selection: readonly [number, number] | undefined = range && one(range) === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
     const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());
     if (unsettled) {
-      active = null; target = null;
+      active = null; target = null; label = undefined;
       surface.reset(held.rowId);
       try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
       surface.repaint(held.rowId);

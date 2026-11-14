@@ -290,8 +290,10 @@ Nothing in the running app calls it yet (package 14); a test pins that.
   and other input that is not text is refused after settling
   (`buffer-unsupported-input`) (R5). Enter, row commands, paste into a cell and
   formatting from the toolbar settle typing through command admission and then
-  run their existing command (R5). The caret after someone else's change while
-  nobody is typing is put back by the renderer, by offset (R7).
+  run their existing command (R5). Under rule 89, the caret and both selection
+  ends after someone else's change follow the same shared characters as the
+  name boxes. [The Split caret record](stage-2-split-caret.md) gives the observed
+  old behavior, joined-row reading and shared-only trailing-space paint.
 
 The rule 29 recovery write is the binding's own: when the document refuses a
 commit at its painted base, settlement writes the whole cell as shown to
