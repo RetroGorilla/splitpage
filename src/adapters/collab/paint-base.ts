@@ -4,7 +4,8 @@ import type { SharedContentRef, SharedTextAddress } from "../../core/collab/oper
 import type { SharedDocumentHandle } from "./types.ts";
 import { encodeCollabTextAnchor, readSharedAnchor } from "./anchors.ts";
 import { readSharedRevision } from "./document.ts";
-import { collabProjectedTextTarget, collabProjectedVisualTargets } from "./text-target.ts";
+import { collabProjectedTextTarget } from "./text-target.ts";
+import { collabProjectedVisualTargets } from "./painted-visual-targets.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";

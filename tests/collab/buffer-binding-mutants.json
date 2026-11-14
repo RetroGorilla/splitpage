@@ -769,19 +769,19 @@
     "tests": ["tests/features/editing/split-caret.test.ts"]
   }, {
     "label": "joined visual caret components use the opposite owner order",
-    "file": "src/adapters/collab/text-target.ts",
+    "file": "src/adapters/collab/painted-visual-targets.ts",
     "find": "const parts = owners.flatMap(owner =>",
     "replace": "const parts = [...owners].reverse().flatMap(owner =>",
     "tests": ["tests/features/editing/split-caret.test.ts"]
   }, {
     "label": "caret visual rank order differs before and after wire normalization",
-    "file": "src/adapters/collab/text-target.ts",
+    "file": "src/adapters/collab/painted-visual-targets.ts",
     "find": "String(fields.rank).replace(/\\p{Cs}/gu, \"\\ufffd\")",
     "replace": "String(fields.rank)",
     "tests": ["tests/adapters/collab/painted-selection.test.ts"]
   }, {
     "label": "caret visual records bypass their existing validator",
-    "file": "src/adapters/collab/text-target.ts",
+    "file": "src/adapters/collab/painted-visual-targets.ts",
     "find": "const fields = readStoredSharedRecord(\"visuals\", key, root.get(key));",
     "replace": "const fields = (root.get(key) as { toJSON: () => Record<string, unknown> }).toJSON();",
     "tests": ["tests/adapters/collab/painted-selection.test.ts"]
