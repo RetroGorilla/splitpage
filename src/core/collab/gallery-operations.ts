@@ -45,7 +45,7 @@ function identity(slot: Bag): string {
   const poster = linksOf(slot).find(link => link.poster === true);
   return poster ? "v:" + videoLinkKey(poster as VideoLink) : "";
 }
-// why: the projection drops a slot that holds no picture and no link, as hydration leaves one in every beat without pictures.
+// why: the projection drops a slot with no picture and no link; hydration leaves one in every beat without pictures.
 function placeholder(slot: Bag): boolean { return Object.keys(slot).every(key => key === "imageRef") && !slot.imageRef; }
 function contentReference(value: unknown): boolean { return typeof bag(value).sha256 === "string" && /^[0-9a-f]{64}$/.test(bag(value).sha256 as string); }
 
@@ -102,7 +102,7 @@ function storedLinks(record: SharedPictureRecord): Bag[] {
 function extraOf(slot: Bag): Bag {
   return Object.fromEntries(Object.keys(slot).filter(key => !pictureFields().includes(key) && key !== "links").sort().map(key => [key, slot[key]]));
 }
-// why: the first picture's missing image shows as the row's empty imageRef either way; later ones show the key as stored.
+// why: a first picture without an image shows as the row's empty imageRef either way; later ones show the stored key.
 function shownPicture(value: Bag): string {
   const { imageRef, ...rest } = value;
   return canonical(imageRef === null || imageRef === undefined ? rest : value);
@@ -116,7 +116,7 @@ export function sharedGalleryOperations(edit: SharedGalleryEdit): SharedGalleryO
   const shown = edit.records.filter(record => !placeholder(projectSharedGallerySlots([record])[0] ?? {})), before = slotsOf(edit.before);
   const grouped = projectSharedGroupGallery(projectSharedGalleryFields({}, projectSharedGallerySlots(shown)), [{ id: edit.beat }], shown);
   if (grouped.overflow.length) return { refused: "gallery-overflow" };
-  // why: the projection shows a picture held twice once, from its first record, so the others go when the gallery is edited.
+  // why: the projection shows a picture held twice once, from its first record; an edit of the gallery drops the others.
   const seen = new Set<string>(), records = shown.filter(record => {
     const sha = bag(bag(record.fields.picture).imageRef).sha256;
     if (typeof sha !== "string") return true;
