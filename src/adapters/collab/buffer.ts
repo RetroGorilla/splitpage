@@ -69,7 +69,7 @@ export function createSharedBufferedText(
           if (!open) throw new Error("Buffered edit is closed");
           buffer.replace(from, to, insert);
         },
-        commit: (runs, selection) => {
+        commit: (runs, selection, label) => {
           stranded = false;
           if (!open) return { kind: "rejected", reason: "buffer-closed" };
           if (sharedBufferDeliveryBusy(handle)) return { kind: "rejected", reason: "buffer-delivery" };
@@ -86,7 +86,8 @@ export function createSharedBufferedText(
               return {
                 changes: bufferedFieldChanges(rowId),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
-                shared: { operations: [...operations, ...tags, ...stamp], base: commit.base, description: typingDescription(painted, commit) }
+                shared: { operations: [...operations, ...tags, ...stamp], base: commit.base,
+                  description: label ? { ...typingDescription(painted, commit), label, typing: null } : typingDescription(painted, commit) }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }
@@ -105,7 +106,7 @@ export function createSharedBufferedText(
                 : { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
             }
             const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "audioText" ? undefined : { key: rowId, target }) : undefined;
-            return restored ? { ...outcome, selection: restored } : outcome;
+            return { ...outcome, ...restored ? { selection: restored } : {}, ...local ? { written: local } : {} };
           }
           return outcome;
         },

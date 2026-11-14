@@ -266,7 +266,7 @@
   }, {
     "label": "an unsettled edit is committed anyway",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
+    "find": "const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());",
     "replace": "const unsettled = null;",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   }, {
@@ -464,8 +464,8 @@
   }, {
     "label": "closing a Split rename does not repaint the rows",
     "file": "src/features/common/buffered-input.ts",
-    "find": "      ports.repaint();\n",
-    "replace": "",
+    "find": "      ports.painted.clear();\n      ports.repaint();",
+    "replace": "      ports.painted.clear();",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a key that inserted nothing leaves a held Split rename held",
@@ -645,6 +645,72 @@
     "label": "a cancelled clipboard input leaves its pending target and ingress hold",
     "file": "src/features/common/buffered-input.ts",
     "find": "    binding.discardUnchangedInput();\n",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "name-box undo shortcuts never reach the shared owner",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (direction && !key.isComposing && key.keyCode !== 229) { history(direction, key); return; }",
+    "replace": "if (false) { history(direction!, key); return; }",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "name-box redo calls shared undo again",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "const result = ports.history[direction]();",
+    "replace": "const result = ports.history.undo();",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "clipboard and Escape descriptions coalesce into typing",
+    "file": "src/adapters/collab/buffer.ts",
+    "find": "label ? { ...typingDescription(painted, commit), label, typing: null } : typingDescription(painted, commit)",
+    "replace": "typingDescription(painted, commit)",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape overwrites a name changed by another writer",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (foreign) { ports.report({ kind: \"rejected\", reason: \"buffer-heading-changed\" }); return true; }",
+    "replace": "if (false) { ports.report({ kind: \"rejected\", reason: \"buffer-heading-changed\" }); return true; }",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape closes without writing its opening name",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (!binding.replace(form.opening, \"rename-cancel\")) return false;",
+    "replace": "return true;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "a form forgets the identity written by its own typing",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "expected = written;",
+    "replace": "expected = before;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape compares letters but ignores remote replacement identities",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "a.identity(at) === b.identity(at)",
+    "replace": "true",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "an unrelated remote field leaves Escape using a stale base",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "ports.painted.field(key, typing().value);",
+    "replace": "",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "Escape cannot restore an opening name above the typing stop",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());",
+    "replace": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "name-box undo keeps a moved caret instead of restoring its recorded anchor",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "replay = result.ok && result.selection ? ports.history.selection(key, result.selection) : undefined;",
+    "replace": "replay = undefined;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+  }, {
+    "label": "undo in a title input leaves the page title stale",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "if (result.ok && result.effective) form.changed?.();",
     "replace": "",
     "tests": ["tests/features/title/title-buffer.test.ts"]
   }]
