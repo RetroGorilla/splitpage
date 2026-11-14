@@ -37,11 +37,11 @@ function fixture(unrelated: number) {
 const placements = [[], ["R1"], ["R2"], ["R1", "R1"], ["R2", "R2"], ["R1", "R2"]] as const;
 const costs = {
   none: { native: [7, 5, 46, 0, 0], unrelated: [0, 0, 0, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 35, observations: 0 },
-  R1: { native: [10, 8, 74, 0, 0], unrelated: [1, 0, 28, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 61, observations: 1 },
-  R2: { native: [10, 6, 74, 0, 0], unrelated: [3, 1, 28, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 47, observations: 1 },
-  "R1,R1": { native: [13, 13, 102, 0, 0], unrelated: [2, 0, 56, 0, 0], rules: [2, 18, 2, 12, 6, 0], textUnits: 95, observations: 2 },
-  "R2,R2": { native: [13, 9, 102, 0, 0], unrelated: [6, 4, 56, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 67, observations: 2 },
-  "R1,R2": { native: [13, 9, 102, 0, 0], unrelated: [4, 1, 56, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 73, observations: 2 }
+  R1: { native: [10, 8, 71, 0, 0], unrelated: [1, 0, 25, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 61, observations: 1 },
+  R2: { native: [7, 5, 46, 0, 0], unrelated: [0, 0, 0, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 35, observations: 0 },
+  "R1,R1": { native: [13, 13, 96, 0, 0], unrelated: [2, 0, 50, 0, 0], rules: [2, 18, 2, 12, 6, 0], textUnits: 95, observations: 2 },
+  "R2,R2": { native: [7, 5, 46, 0, 0], unrelated: [0, 0, 0, 0, 0], rules: [2, 10, 2, 4, 2, 0], textUnits: 35, observations: 0 },
+  "R1,R2": { native: [10, 8, 71, 0, 0], unrelated: [1, 0, 25, 0, 0], rules: [2, 14, 2, 8, 4, 0], textUnits: 61, observations: 1 }
 };
 for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation retirement typing cost: ${hosts.join(",") || "none"}, unrelated=${unrelated}`, t => {
   const h = fixture(unrelated), records: SharedUndoRecord[] = [], previous = new Map<string, string>(); let serial = 0;
@@ -79,7 +79,7 @@ for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation
       });
       const getMap = Y.Map.prototype.get; let observations = 0;
       const maps = t.mock.method(Y.Map.prototype, "get", function (this: Y.Map<unknown>, key: string): unknown {
-        if (key === SHARED_CREATION_RETIREMENT_FIELD) observations++;
+        if ((this.doc?.share.get(SHARED_CREATION_RETIREMENT_FIELD) as unknown) === this) observations++;
         const value: unknown = getMap.call(this, key); return value;
       });
       sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
@@ -89,7 +89,8 @@ for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation
         operation({ kind: "scalar", id: "stamp", by: "Alice", target: { scope: "beat", record: "R1" }, field: "stamp", value: { by: "Alice", at: "2026-11-14T00:00:00Z" } })
       ], { label: "typing", selection: null, typing: "z" }, { base: readSharedRevision(h.a) })), docs);
       const firstCost = { ...sharedCreationObservationCost };
-      assert.deepEqual(firstCost, { checks: hosts.length, builds: hosts.length });
+      const cold = hosts.filter(host => host === "R1").length;
+      assert.deepEqual(firstCost, { checks: cold, builds: cold });
       t.diagnostic(JSON.stringify({ cost: firstCost, hosts, unrelated, measured: measured.totals, unrelatedReads: measured.unrelated, textUnits, observations }));
       mock.mock.restore();
       maps.mock.restore();
@@ -104,7 +105,7 @@ for (const unrelated of [0, 100]) for (const hosts of placements) test(`creation
       t.diagnostic(JSON.stringify({ hosts, unrelated, native: measured.totals, unrelatedReads: measured.unrelated, rules: measured.result.counts, textUnits, observations }));
       let nextObservations = 0;
       const nextMaps = t.mock.method(Y.Map.prototype, "get", function (this: Y.Map<unknown>, key: string): unknown {
-        if (key === SHARED_CREATION_RETIREMENT_FIELD) nextObservations++;
+        if ((this.doc?.share.get(SHARED_CREATION_RETIREMENT_FIELD) as unknown) === this) nextObservations++;
         const value: unknown = getMap.call(this, key); return value;
       });
       sharedCreationObservationCost.checks = 0; sharedCreationObservationCost.builds = 0;
@@ -165,8 +166,8 @@ test("creation retirement follows changed dependencies and sees writes inside a 
     let serial = 0;
     assert.equal(reverseSharedUndoRecord(h.a, result.record, { by: "Alice", nextId: () => "undo-" + ++serial }).ok, true);
     const record = collabState(h.a).roots.beats.get(part.beat); assert.ok(record instanceof Y.Map);
-    const get = record.get.bind(record); let reads = 0;
-    t.mock.method(record, "get", (key: string): unknown => { if (key === SHARED_CREATION_RETIREMENT_FIELD) reads++; return get(key); });
+    const markers = collabState(h.a).roots.creationRetired, get = markers.get.bind(markers); let reads = 0;
+    t.mock.method(markers, "get", (key: string): unknown => { if (key === part.beat) reads++; return get(key); });
     for (let index = 0; index < 100; index++) assert.equal(isSharedCreationRetired(h.a, part.beat), true);
     assert.equal(reads, 1);
     transactSharedDocument(h.a, "local-command", () => {
@@ -184,7 +185,7 @@ test("creation retirement follows changed dependencies and sees writes inside a 
     assert.equal(isSharedCreationRetired(h.a, part.beat), true); assert.equal(reads, 4);
     transactSharedDocument(h.a, "local-command", () => { record.set("lengthSeconds", 9); });
     for (let index = 0; index < 100; index++) assert.equal(isSharedCreationRetired(h.a, part.beat), false);
-    assert.equal(reads, 5); assert.equal(record.has(SHARED_CREATION_RETIREMENT_FIELD), true);
+    assert.equal(reads, 5); assert.equal(markers.has(part.beat), true);
     h.send([operation({ kind: "scalar", id: "unrelated", by: "Alice", target: { scope: "beat", record: "R2" }, field: "stamp", value: { by: "Alice", at: "2026-11-14T00:00:02Z" } })]);
     assert.equal(isSharedCreationRetired(h.a, part.beat), false); assert.equal(reads, 5);
     transactSharedDocument(h.a, "local-command", () => { record.delete("lengthSeconds"); });

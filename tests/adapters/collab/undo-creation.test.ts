@@ -587,6 +587,6 @@ for (const length of [1, 1000]) test(`creation retirement encoded storage growth
   try {
     h.create("x".repeat(length)); const before = encodeSharedState(h.a).length;
     assert.equal(h.owner.undo().ok, true); const growth = encodeSharedState(h.a).length - before;
-    t.diagnostic(JSON.stringify({ length, growth })); assert.equal(growth, length === 1 ? 638 : 17673);
+    t.diagnostic(JSON.stringify({ length, growth })); assert.equal(growth, length === 1 ? 668 : 17703);
   } finally { h.close(); }
 });

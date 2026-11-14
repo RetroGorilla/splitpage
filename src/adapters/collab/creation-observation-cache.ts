@@ -2,18 +2,25 @@ import * as Y from "yjs";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, guardSharedCallback } from "./state.ts";
 import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
+import { readSharedJoinEntry } from "./join-record.ts";
 
-interface Dependency { readonly map: Y.Map<unknown>; readonly key?: string; readonly ignore?: (key: string) => boolean; readonly births?: Y.Text; readonly children?: string | true }
+interface Dependency { readonly map: Y.Map<unknown>; readonly key?: string; readonly ignore?: (key: string) => boolean; readonly births?: Y.Text }
+interface Membership { readonly root: Y.Map<unknown>; readonly keys: ReadonlySet<string>; readonly belongs: (raw: unknown) => boolean; readonly field?: string }
+interface Joined { readonly root: Y.Map<unknown>; readonly keys: ReadonlySet<string> }
 interface Range { readonly text: Y.Text; from: number; to: number }
-interface Observation { readonly maps: Dependency[]; readonly ranges: Range[]; dirty: boolean; readonly value: boolean }
-interface Cache { readonly entries: Map<string, Observation>; readonly hidden: Set<string>; revision: number }
+interface Dependencies { readonly maps: Dependency[]; readonly ranges: Range[]; readonly members: Membership[]; readonly joins: Joined[] }
+interface Observation extends Dependencies { dirty: boolean; readonly value: boolean }
+interface Cache { readonly entries: Map<string, Observation>; readonly candidates: Set<string> }
 interface NativeNode { readonly _item: Y.Item | null }
-let collecting: { maps: Dependency[]; ranges: Range[] } | null = null;
+let collecting: Dependencies | null = null;
 
 export function watchSharedCreationMap(map: Y.Map<unknown>, key?: string, ignore?: (key: string) => boolean): void {
   collecting?.maps.push({ map, ...(key === undefined ? {} : { key }), ...(ignore ? { ignore } : {}) });
 }
-export function watchSharedCreationChildren(map: Y.Map<unknown>, field: string | true = true): void { collecting?.maps.push({ map, children: field }); }
+export function watchSharedCreationMembers(root: Y.Map<unknown>, keys: readonly string[], belongs: (raw: unknown) => boolean, field?: string): void {
+  collecting?.members.push({ root, keys: new Set(keys), belongs, ...(field === undefined ? {} : { field }) });
+}
+export function watchSharedCreationJoins(root: Y.Map<unknown>, keys: ReadonlySet<string>): void { collecting?.joins.push({ root, keys }); }
 export function watchSharedCreationText(text: Y.Text, from: number, to: number, store: unknown): void {
   collecting?.ranges.push({ text, from, to });
   if (store instanceof Y.Map) collecting?.maps.push({ map: store, births: text });
@@ -25,7 +32,6 @@ function moved(range: Range, transaction: Y.Transaction, subs: Set<string | null
     if (part.retain) { if (part.attributes && offset < range.to && offset + part.retain > range.from) dirty = true; offset += part.retain; }
     if (part.insert !== undefined) {
       const length = typeof part.insert === "string" ? part.insert.length : 1;
-      // why: ordinary added characters cannot repair a mismatch; deletions, formatting and restorations can.
       if (positive && offset >= range.from && offset <= range.to || typeof part.insert !== "string") dirty = true;
       if (offset < range.from) shiftFrom += length;
       if (offset <= range.to) shiftTo += length;
@@ -39,79 +45,88 @@ function moved(range: Range, transaction: Y.Transaction, subs: Set<string | null
   range.from += shiftFrom; range.to += shiftTo; return dirty;
 }
 
-function childChanged(dependency: Dependency, type: object, fields: ReadonlySet<string | null>): boolean {
+function peek(root: Y.Map<unknown>, key: string): unknown {
+  const item = root._map.get(key); return item && !item.deleted ? item.content.getContent()[0] : null;
+}
+function child(root: Y.Map<unknown>, type: object) {
   let node = type as NativeNode, field: string | null = null;
-  while (node._item && node._item.parent !== dependency.map) { field = node._item.parentSub; node = node._item.parent as NativeNode; }
-  return node._item?.parent === dependency.map && (dependency.children === true
-    || typeof dependency.children === "string" && (node === type ? fields.has(dependency.children) : field === dependency.children));
+  while (node._item && node._item.parent !== root) { field = node._item.parentSub; node = node._item.parent as NativeNode; }
+  return node._item?.parent === root && typeof node._item.parentSub === "string" ? { key: node._item.parentSub, field } : null;
+}
+function membershipChanged(dependency: Membership, changes: ReadonlyMap<object, Set<string | null>>): boolean {
+  for (const key of changes.get(dependency.root) ?? []) if (key !== null && (dependency.keys.has(key) || dependency.belongs(peek(dependency.root, key)))) return true;
+  for (const [type, fields] of changes) {
+    const at = child(dependency.root, type);
+    if (at && (dependency.field === undefined || at.field === dependency.field || at.field === null && fields.has(dependency.field))
+      && (dependency.keys.has(at.key) || dependency.belongs(peek(dependency.root, at.key)))) return true;
+  }
+  return false;
+}
+function joinsChanged(dependency: Joined, changes: ReadonlyMap<object, Set<string | null>>): boolean {
+  return membershipChanged({ ...dependency, field: "joins", belongs: raw => {
+    const joins: unknown = raw instanceof Y.Map ? peek(raw, "joins") : null;
+    return joins instanceof Y.Map && [...joins.keys()].some(key => { const entry = readSharedJoinEntry(peek(joins, key)); return entry !== null && dependency.keys.has(entry.into); });
+  } }, changes);
 }
 
 function cache(handle: SharedDocumentHandle): Cache {
   const state = collabState(handle);
-  return state.reads.keep(state.roots.beats, "creation-observations", () => {
-    const value: Cache = { entries: new Map(), hidden: new Set(), revision: state.revision };
+  return state.reads.keep(state.roots.creationRetired, "creation-observations", () => {
+    const entries = new Map<string, Observation>(), candidates = new Set(state.roots.creationRetired.keys());
     const changed = (transaction: Y.Transaction) => guardSharedCallback(state, () => {
       const changes = transaction.changed as unknown as ReadonlyMap<object, Set<string | null>>;
-      let deleted: Set<unknown> | null = null;
-      const deletedText = (text: Y.Text) => {
-        if (!deleted) {
-          deleted = new Set();
-          Y.iterateDeletedStructs(transaction, transaction.deleteSet, item => {
-            if (item instanceof Y.Item && item.countable) deleted?.add(item.parent);
-          });
-        }
-        return deleted.has(text);
-      };
-      for (const entry of value.entries.values()) {
+      for (const beat of changes.get(state.roots.creationRetired) ?? []) if (beat !== null) {
+        if (state.roots.creationRetired.has(beat)) { candidates.add(beat); const entry = entries.get(beat); if (entry) entry.dirty = true; }
+        else { candidates.delete(beat); entries.delete(beat); }
+      }
+      for (const [beat, entry] of entries) {
+        if (!state.roots.creationRetired.has(beat)) { entries.delete(beat); candidates.delete(beat); continue; }
         for (const range of entry.ranges) {
           const subs = changes.get(range.text);
-          if (subs && (entry.value ? moved(range, transaction, subs, entry.value) : deletedText(range.text))) entry.dirty = true;
+          if (subs && moved(range, transaction, subs, entry.value)) entry.dirty = true;
         }
+        if (entry.members.some(dependency => membershipChanged(dependency, changes)) || entry.joins.some(dependency => joinsChanged(dependency, changes))) entry.dirty = true;
         for (const dependency of entry.maps) {
-          if (dependency.children && [...changes].some(([type, fields]) => childChanged(dependency, type, fields))) entry.dirty = true;
           const changedKeys = changes.get(dependency.map); if (!changedKeys) continue;
           const keys = [...changedKeys].filter(key => key === null || !dependency.ignore?.(key));
           if (dependency.key !== undefined) { if (keys.includes(dependency.key)) entry.dirty = true; }
           else if (keys.length && (!dependency.births || !changes.has(dependency.births) || keys.some(key => {
-            const item = key === null ? null : dependency.map._map.get(key);
-            const record: unknown = item && !item.deleted ? item.content.getContent()[0] : null;
+            const record: unknown = key === null ? null : peek(dependency.map, key);
             if (!record || typeof record !== "object" || !("type" in record) || !("operation" in record) || typeof record.operation !== "string") return true;
             // why: marks born on new characters cannot alter older characters; restore births still invalidate.
             return readSharedTextRestoreOperation(record.operation) !== null
               || record.type !== "birth" && !(record.type === "add" && "born" in record && record.born !== null);
           }))) entry.dirty = true;
         }
+        if (entry.dirty) candidates.add(beat);
       }
-      value.revision = state.revision;
     });
     state.doc.on("beforeObserverCalls", changed);
     state.doc.once("destroy", () => guardSharedCallback(state, () => { state.doc.off("beforeObserverCalls", changed); }));
-    return value;
+    return { entries, candidates };
   });
 }
 
+export function sharedCreationReadsSettled(handle: SharedDocumentHandle): boolean {
+  const state = collabState(handle); return state.reads.settled && state.transactionDepth === 0;
+}
+export function peekSharedCreationObservation(handle: SharedDocumentHandle, beat: string): boolean | undefined {
+  if (!sharedCreationReadsSettled(handle)) return undefined;
+  const previous = cache(handle).entries.get(beat); return previous && !previous.dirty ? previous.value : undefined;
+}
 export function cachedSharedCreationObservation(handle: SharedDocumentHandle, beat: string, read: () => boolean): boolean {
-  const state = collabState(handle), held = cache(handle), previous = held.entries.get(beat);
-  // why: open writes and callbacks before dependency invalidation must read the current contents.
-  if (!state.reads.settled || held.revision !== state.revision) return read();
+  // why: the native transaction remains open through its observers; only then have all dependencies been invalidated.
+  if (!sharedCreationReadsSettled(handle)) return read();
+  const { entries, candidates } = cache(handle), previous = entries.get(beat);
   if (previous && !previous.dirty) return previous.value;
-  const before = collecting, dependencies = { maps: [] as Dependency[], ranges: [] as Range[] };
-  collecting = dependencies;
+  const before = collecting, dependencies: Dependencies = { maps: [], ranges: [], members: [], joins: [] }; collecting = dependencies;
   try {
-    const value = read(); held.entries.set(beat, { ...dependencies, dirty: false, value });
-    if (value) held.hidden.add(beat); else held.hidden.delete(beat);
-    return value;
+    const value = read(); entries.set(beat, { ...dependencies, dirty: false, value });
+    if (value) candidates.add(beat); else candidates.delete(beat); return value;
   } finally { collecting = before; }
 }
 
-export function sharedCreationObservationDirty(handle: SharedDocumentHandle, beat: string): boolean {
-  const state = collabState(handle), held = cache(handle), entry = held.entries.get(beat);
-  return !state.reads.settled || held.revision !== state.revision || !entry || entry.dirty;
-}
-
-export function sharedCreationObservationHidden(handle: SharedDocumentHandle): Set<string> { return cache(handle).hidden; }
-
-export function pruneSharedCreationObservations(handle: SharedDocumentHandle, markers: ReadonlySet<string>): void {
-  const held = cache(handle);
-  for (const beat of held.entries.keys()) if (!markers.has(beat)) { held.entries.delete(beat); held.hidden.delete(beat); }
+export function readSharedCreationCandidates(handle: SharedDocumentHandle): ReadonlySet<string> {
+  const state = collabState(handle);
+  return sharedCreationReadsSettled(handle) ? cache(handle).candidates : new Set(state.roots.creationRetired.keys());
 }

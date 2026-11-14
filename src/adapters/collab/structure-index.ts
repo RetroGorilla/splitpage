@@ -20,7 +20,7 @@ import { sharedJoinEndpointOffset, readSharedJoinEndpoint, sharedJoinEndpointFie
 import type { SharedJoinEndpointPosition } from "./join-endpoint.ts";
 import { SHARED_SPLIT_OBSERVATION_PARTS, readSharedSplitHolds, readSharedSplitObservationPart, readSharedSplitRetiredBeat, sharedSplitStoreView } from "./split-retirement.ts";
 import type { SharedSplitObservationPart, SharedSplitObservations } from "./split-retirement.ts";
-import { readSharedCreationRetirements } from "./creation-retirement.ts";
+import { readSharedCreationHidden } from "./creation-retirement.ts";
 
 export interface SharedAttachmentOwnership {
   readonly keys: (collection: "visuals" | "gallery", beat: string) => readonly string[];
@@ -222,7 +222,7 @@ export function observeSharedStructureIndex(handle: SharedDocumentHandle): Share
   const coveredBy = (id: string): readonly string[] => removed.size === 0 || removed.has(id) ? []
     : [...new Set([...names.get(cleanId(id)) ?? []].flatMap(key => coveredIn(key).get(id) ?? []))].sort();
   const attachmentIndex: SharedAttachmentOwnership = Object.freeze({ keys: (collection: "visuals" | "gallery", beat: string) => Object.freeze([...(attachments[collection].get(beat) ?? [])].sort()) });
-  const hidden = (id: string) => readSharedCreationRetirements(handle).has(id);
+  const hidden = (id: string) => readSharedCreationHidden(handle, id);
   const index: SharedStructureIndex = Object.freeze({ order, heading: (id: string) => headings.has(id), headingRemoved: (id: string) => removedHeadings.has(id),
     hidden, removed: (id: string) => removed.has(id) || hidden(id), coveredBy,
     joins: () => observeSharedJoinIndex(handle),

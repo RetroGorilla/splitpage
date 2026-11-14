@@ -4,7 +4,9 @@
     "tests/adapters/collab/creation-undo-cost.test.ts",
     "tests/application/commands/empty-script.test.ts",
     "tests/application/commands/flow-paste-shared.test.ts",
-    "tests/features/empty-script/shared.test.ts"
+    "tests/features/empty-script/shared.test.ts",
+    "tests/adapters/collab/creation-retirement-phases.test.ts",
+    "tests/adapters/collab/creation-retirement-cost-matrix.test.ts"
   ],
   "mutants": [
     {
@@ -16,26 +18,26 @@
     {
       "label": "creation retirement ignores dependency changes",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "previous && !previous.dirty",
-      "replace": "previous"
+      "find": "if (previous && !previous.dirty) return previous.value;",
+      "replace": "if (previous) return previous.value;"
     },
     {
       "label": "creation retirement recomputes every settled read",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "previous && !previous.dirty",
-      "replace": "false"
+      "find": "if (previous && !previous.dirty) return previous.value;",
+      "replace": "if (false) return previous.value;"
     },
     {
       "label": "creation retirement reuses a result during writes",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "if (!state.reads.settled || held.revision !== state.revision) return read();",
-      "replace": "if (held.revision !== state.revision) return read();"
+      "find": "if (!sharedCreationReadsSettled(handle)) return read();",
+      "replace": "if (collabState(handle).reads.settled && collabState(handle).transactionDepth > 0) return read();"
     },
     {
-      "label": "creation retirement reuses a result before its dependency observer",
+      "label": "creation retirement consults cached comparisons before observers finish",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "if (!state.reads.settled || held.revision !== state.revision) return read();",
-      "replace": "if (!state.reads.settled) return read();"
+      "find": "return state.reads.settled && state.transactionDepth === 0;",
+      "replace": "return state.reads.settled;"
     },
     {
       "label": "creation ownership ignores retargeted children",
@@ -64,7 +66,7 @@
     {
       "label": "creation forgets a split that was undone",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "const splits = sharedCreationRecordKeys(handle, \"beats\", \"splitSource\", beat);",
+      "find": "const splits = owned(\"beats\", \"splitSource\", beat);",
       "replace": "const splits: readonly string[] = [];"
     },
     {
@@ -104,10 +106,10 @@
       "replace": "const retired = true;"
     },
     {
-      "label": "creation undo creates no shared marker",
+      "label": "creation undo marks the wrong beat",
       "file": "src/adapters/collab/undo-creation.ts",
-      "find": "field = [...path, SHARED_CREATION_RETIREMENT_FIELD]",
-      "replace": "field = [...path, \"creationIgnored\"]"
+      "find": "field = [SHARED_CREATION_RETIREMENT_FIELD, operation.beat]",
+      "replace": "field = [SHARED_CREATION_RETIREMENT_FIELD, \"creationIgnored\"]"
     },
     {
       "label": "creation does not watch narration",
@@ -208,20 +210,20 @@
     {
       "label": "creation checks every beat instead of only markers",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "for (const beat of markers) if (sharedCreationObservationDirty(handle, beat))",
-      "replace": "for (const beat of state.roots.beats.keys()) if (sharedCreationObservationDirty(handle, beat))"
+      "find": "for (const beat of readSharedCreationCandidates(handle)) if (readSharedCreationHidden(handle, beat))",
+      "replace": "for (const beat of collabState(handle).roots.beats.keys()) if (isSharedCreationRetired(handle, beat))"
     },
     {
       "label": "creation repeatedly checks invalidated markers",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "|| !entry || entry.dirty;",
-      "replace": "|| !entry || entry.dirty || !entry.value;"
+      "find": "const previous = cache(handle).entries.get(beat); return previous && !previous.dirty ? previous.value : undefined;",
+      "replace": "const previous = cache(handle).entries.get(beat); return previous && previous.value && !previous.dirty ? previous.value : undefined;"
     },
     {
       "label": "creation ignores changes inside its watched text range",
       "file": "src/adapters/collab/creation-observation-cache.ts",
-      "find": "if (subs && (entry.value ? moved(range, transaction, subs, entry.value) : deletedText(range.text))) entry.dirty = true;",
-      "replace": "if (subs && !entry.value && deletedText(range.text)) entry.dirty = true;"
+      "find": "if (subs && moved(range, transaction, subs, entry.value)) entry.dirty = true;",
+      "replace": "if (subs) moved(range, transaction, subs, entry.value);"
     },
     {
       "label": "creation forgets separator register ownership",
@@ -234,6 +236,24 @@
       "file": "src/adapters/collab/creation-observation-cache.ts",
       "find": "record.type !== \"birth\" && !(record.type === \"add\" && \"born\" in record && record.born !== null)",
       "replace": "record.type !== \"birth\""
+    },
+    {
+      "label": "retirement presence ignores native markers during a transaction",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "export function readSharedCreationHidden(handle: SharedDocumentHandle, beat: string): boolean {\n  if (!readSharedCreationMarkers(handle).has(beat)) return false;",
+      "replace": "export function readSharedCreationHidden(handle: SharedDocumentHandle, beat: string): boolean {\n  if (!sharedCreationReadsSettled(handle) || !readSharedCreationMarkers(handle).has(beat)) return false;"
+    },
+    {
+      "label": "retirement visuals watch every descendant instead of their owner",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field);",
+      "replace": "watchSharedCreationMembers(roots[collection], keys, raw => collection === \"visuals\" || raw instanceof Y.Map && raw.get(field) === owner, collection === \"visuals\" ? undefined : field);"
+    },
+    {
+      "label": "invalidated retirement stays in the comparison worklist",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "if (value) candidates.add(beat); else candidates.delete(beat); return value;",
+      "replace": "if (value) candidates.add(beat); return value;"
     }
   ]
 }

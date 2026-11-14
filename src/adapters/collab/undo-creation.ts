@@ -41,7 +41,7 @@ export function sharedCreationUndoParts(operations: readonly SharedOperation[], 
 
 export function prepareSharedSegmentRetire(operation: SharedSegmentRetire, view: SharedPreparationView): SharedPreparationResult {
   if (![operation.id, operation.by, operation.beat, operation.creator].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
-  const path = ["beats", operation.beat], field = [...path, SHARED_CREATION_RETIREMENT_FIELD];
+  const path = ["beats", operation.beat], field = [SHARED_CREATION_RETIREMENT_FIELD, operation.beat];
   if (view.kind(path) !== "map") return { ok: false, reason: "missing-target" };
   const retired = operation.kind === "segment-retire";
   planSharedCreationRetirement(view, operation.beat, retired);

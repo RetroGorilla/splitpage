@@ -677,7 +677,7 @@ that key press. The following press reaches the older step. A command with
 an unsupported heading part still follows rule 71 for that part.
 
 Undo emits `segment-retire`, retaining the beat, its segment, visual and
-identities. Its `creationRetired` marker carries what the undo saw; all
+identities. Its native `creationRetired` map entry carries what the undo saw; all
 structure and projection readers hide the beat only while that observation
 still matches. It is absent from both script and recovery. Redo emits
 `segment-restore`, clearing the marker and revealing the same beat. The
@@ -735,56 +735,67 @@ and prevents a runtime import cycle. Every importer names the owning module.
 
 #### Typing path costs
 
-Projection reads the hidden-creation set before traversing beat records. With
-no retirement markers it performs zero retirement checks and builds zero
-observations, independent of script size. Only marked beat IDs enter the
-retirement checker. A settled set is reused throughout the revision.
+Creation retirement markers live in the native keyed map `creationRetired`.
+Its current size and membership answer presence at the moment of the read;
+there is no observer-populated presence set or revision-stamped empty result.
+Point reads first check the native marker key. Bulk projection checks the
+native store once before traversing comparison candidates.
 
-`creation-observation-cache.ts` tracks the native map keys, child ownership
-and physical text ranges read by an observation. A dependency change marks
-that result dirty; typing before a watched range shifts its offsets without
-rebuilding it. Birth records outside the range do not invalidate it. Open
-writes and callbacks that run before the dependency observer read fresh data.
-Stable callbacks can reuse the result. False results are cached too: an
-invalidated retirement causes no further checks or builds for unrelated
-keystrokes or plain or formatted typing plus stamps in the invalidated beat. Deletions,
-restorations, formatting and value changes can recheck it, including taking back extra text;
-this preserves agreement with an encoded joiner rather than making local
-invalidation sticky. The dependency bookkeeping and retained marker remain.
+A per-marker result is reusable only after the native transaction's field
+observers finish. Inside writes, before observers and in field observers,
+comparisons read current source records and current ownership/join data.
+Early reads do not populate a settled result. The transaction-depth barrier
+is independent of the order in which those readers and observers registered.
 
-The ownership index refreshes one child and reads one ownership field after
-a warm retarget, then zero on the next lookup, with zero or 100 other children.
+Dependencies name the marked record, owned child identities and ownership
+queries, joined component, exact status/join keys, and text ranges. Changing
+another visual's text does not dirty the marker. A settled false comparison
+leaves the comparison worklist; a marker replacement or a change to its own
+observed data makes it eligible for comparison again. Source membership is
+still read from the native map, including during redo and encoded arrival.
 
-`tests/adapters/collab/creation-undo-cost.test.ts` pins a text insert, stamp,
-undo recording and incremental publication. R1 is edited; R1 and R2 each
-start as three characters split after their first character. Each creation
-has one narration character, an empty visual and a default gallery slot.
-First-key counts include initially uncached eligibility results.
-Every number is identical with zero and 100 additional unmarked beats.
+`creation-retirement-cost-matrix.test.ts` pins **96 cases**: both text fields,
+plain/formatted insertion, effective/settled-invalidated markers, the six
+placements below, and zero/100 unrelated beats. R1 is edited; R1/R2 each start
+as three narration characters split after the first. A retired creation has
+one narration and one visual character. Each cell is **first-key checks/builds
+? following-key checks/builds**. Every row is tested separately with **0 and
+100 unrelated beats**, with identical results.
 
-| Retired creations | First checks / builds | Next checks / builds | After invalidation checks / builds | Native text reads | Mark-entry visits | Record accesses | Text units returned |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| None | 0 / 0 | 0 / 0 | 0 / 0 | 7 | 5 | 46 | 35 |
-| One in R1 | 1 / 1 | 0 / 0 | 0 / 0 | 10 | 8 | 74 | 61 |
-| One in R2 | 1 / 1 | 0 / 0 | 0 / 0 | 10 | 6 | 74 | 47 |
-| Two in R1 | 2 / 2 | 0 / 0 | 0 / 0 | 13 | 13 | 102 | 95 |
-| Two in R2 | 2 / 2 | 0 / 0 | 0 / 0 | 13 | 9 | 102 | 67 |
-| One in each | 2 / 2 | 0 / 0 | 0 / 0 | 13 | 9 | 102 | 73 |
+| Marker state | Placement | Narration plain | Narration formatted | Visual plain | Visual formatted |
+| --- | --- | --- | --- | --- | --- |
+| Effective | None | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Effective | One in edited R1 segment | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 |
+| Effective | One in other R2 segment | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Effective | Two in R1 | 2/2 ? 0/0 | 2/2 ? 0/0 | 2/2 ? 0/0 | 2/2 ? 0/0 |
+| Effective | Two in R2 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Effective | One in each | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 | 1/1 ? 0/0 |
+| Settled invalidation | None | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Settled invalidation | One in R1 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Settled invalidation | One in R2 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Settled invalidation | Two in R1 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Settled invalidation | Two in R2 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
+| Settled invalidation | One in each | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 | 0/0 ? 0/0 |
 
-Native totals describe the first key, including the baseline command work.
-Status/order-entry visits are zero. No-marker unrelated text/mark/record
-reads are zero. Separate controls exercise open writes, an early guarded
-callback, invalidation and reactivation. Native counts exclude in-memory
-indexes, sorting and JSON comparison. Observation builds still read the
-physical segment and child data, so larger observed content costs more.
-These are operation counts, not timings or a constant-cost claim.
+Cold checks are only for markers in the segment needed to resolve the edit.
+Warm unrelated typing makes no comparison or observation build. These counts
+exclude dependency bookkeeping and normal text/projection work. Native-read
+pins remain in `creation-undo-cost.test.ts`; there is no timing claim.
+
+`creation-retirement-phases.test.ts` generates **63 operations per delivery
+order**, in normal and reversed delivery. After every operation and through
+writes, beforeTransaction, beforeObserverCalls, field observers,
+afterTransaction and afterAllTransactions, guarded hidden/projection reads
+must equal a fresh encoded copy. The sequence covers creation, both text
+fields, formatting, values, joins, splits, undo/redo, concurrent delivery and
+encoded arrival. It was red at the first creation undo on 4fe13006.
 
 #### Retained storage limit
 
 The inverse retains the beat and children and persists the full canonical
-observation. The encoded-state growth literal pins **638 bytes for one
-character** and **17,673 bytes for 1,000 characters** in its fixture (including
-three bytes added by the joined-text observation list). Growth is per undo
+observation. The encoded-state growth literal pins **668 bytes for one
+character** and **17,703 bytes for 1,000 characters** in its fixture (including
+the fixed 30-byte increase from moving the marker to its native keyed store). Growth is per undo
 and scales with observed text and children; it is not a fixed-size record.
 A fixed-size digest would introduce collision semantics into the equality
 check, so this cut keeps the exact comparison. There is no persisted cleanup

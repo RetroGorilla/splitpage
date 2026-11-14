@@ -12,11 +12,12 @@ import { observeSharedJoinIndex } from "./shared-join-index.ts";
 import { sharedCreationRecordKeys, sharedCreationRecordOwner } from "./creation-record-index.ts";
 import { sharedStatusEventKeys } from "./status-index.ts";
 import type { SharedContentRef, SharedRecordCollection } from "../../core/collab/operations.ts";
-import { observeSharedCreationMarkers, SHARED_CREATION_RETIREMENT_FIELD } from "./creation-marker.ts";
+import { readSharedCreationMarkers, SHARED_CREATION_RETIREMENT_FIELD } from "./creation-marker.ts";
 import { sharedJoinGlueRegisterField, sharedJoinFormatRegisterField, projectSharedJoinGlue } from "../../core/collab/projection/join-glue.ts";
+import { createSharedJoinIndex } from "./join-index.ts";
 import { FORMAT_MARKS } from "../../core/text/runs.ts";
-import { cachedSharedCreationObservation, sharedCreationObservationDirty, pruneSharedCreationObservations, sharedCreationObservationHidden,
-  watchSharedCreationMap, watchSharedCreationText, watchSharedCreationChildren } from "./creation-observation-cache.ts";
+import { cachedSharedCreationObservation, peekSharedCreationObservation, sharedCreationReadsSettled, readSharedCreationCandidates,
+  watchSharedCreationMap, watchSharedCreationText, watchSharedCreationMembers, watchSharedCreationJoins } from "./creation-observation-cache.ts";
 
 export const sharedCreationObservationCost = { checks: 0, builds: 0 };
 
@@ -62,6 +63,7 @@ function text(handle: SharedDocumentHandle, record: Y.Map<unknown>, writer: stri
 }
 
 function narration(handle: SharedDocumentHandle, beat: string, record: Y.Map<unknown>, writer: string): unknown {
+  watchSharedCreationMap(record, "segment");
   const roots = collabState(handle).roots, segment: unknown = record.get("segment") ?? "b:" + beat, stored = typeof segment === "string" ? roots.segments.get(segment) : null;
   const raw: unknown = stored instanceof Y.Map ? stored.get("text") : null;
   if (!(stored instanceof Y.Map) || !(raw instanceof Y.Text)) return null;
@@ -83,23 +85,25 @@ function narration(handle: SharedDocumentHandle, beat: string, record: Y.Map<unk
 export function readSharedCreationContent(handle: SharedDocumentHandle, beat: string, writer: string): string {
   sharedCreationObservationCost.builds++;
   const roots = collabState(handle).roots, record = roots.beats.get(beat);
-  watchSharedCreationMap(roots.beats); watchSharedCreationMap(roots.beats, beat);
-  watchSharedCreationChildren(roots.beats, "joins"); watchSharedCreationChildren(roots.beats, "splitSource");
-  for (const root of [roots.visuals, roots.gallery, roots.comments, roots.replies, roots.statusEvents, roots.retiredStatus, roots.headings, roots.retiredJoins]) {
-    watchSharedCreationMap(root); watchSharedCreationChildren(root);
-  }
+  watchSharedCreationMap(roots.beats, beat);
+  const owned = (collection: "beats" | "headings" | "visuals" | "gallery" | "comments" | "replies", field: string, owner: string) => {
+    const keys = sharedCreationRecordKeys(handle, collection, field, owner);
+    watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field); return keys;
+  };
   if (!(record instanceof Y.Map)) return "null";
-  const attachments = (["visuals", "gallery"] as const).flatMap(collection => sharedCreationRecordKeys(handle, collection, "beat", beat).flatMap(id => {
+  const attachments = (["visuals", "gallery"] as const).flatMap(collection => owned(collection, "beat", beat).flatMap(id => {
     const value = roots[collection].get(id);
+    watchSharedCreationMap(roots[collection], id); if (value instanceof Y.Map && collection === "gallery") watchSharedCreationMap(value, "retired");
     return value instanceof Y.Map && (collection !== "gallery" || isSharedGalleryShown(roots, id, value))
       ? [[collection, id, fields(value, writer, key => key === "text" || key === "markRecords" || key === "retired"), collection === "visuals" ? text(handle, value, writer) : null]] : [];
   }));
-  const comments = sharedCreationRecordKeys(handle, "comments", "rowId", beat).map(id => [id, roots.comments.get(id)] as const);
+  const comments = owned("comments", "rowId", beat).map(id => [id, roots.comments.get(id)] as const);
   const commentIds = new Set(comments.map(([id]) => id));
-  const replies = [...commentIds].flatMap(comment => sharedCreationRecordKeys(handle, "replies", "commentId", comment).map(id => [id, roots.replies.get(id)] as const));
-  const index = observeSharedJoinIndex(handle);
+  const replies = [...commentIds].flatMap(comment => owned("replies", "commentId", comment).map(id => [id, roots.replies.get(id)] as const));
+  const index = sharedCreationReadsSettled(handle) ? observeSharedJoinIndex(handle) : createSharedJoinIndex(roots.beats).index;
   const connected = new Set([beat]);
   for (const from of connected) for (const neighbor of index.neighbors(from)) connected.add(neighbor);
+  watchSharedCreationJoins(roots.beats, connected);
   const register = (key: string, fallback: unknown) => {
     watchSharedCreationMap(roots.meta, key);
     const item = roots.meta._map.get(key);
@@ -107,30 +111,33 @@ export function readSharedCreationContent(handle: SharedDocumentHandle, beat: st
   };
   const joins = [...connected].sort().flatMap(from => index.entries(from).map(entry => {
     const group = sharedJoinRetirementGroup(from, entry), glue = sharedJoinGlueRegisterField(group);
+    watchSharedCreationMap(roots.retiredJoins, entry.id); watchSharedCreationMap(roots.retiredJoins, group);
     return [from, entry.id, entry.into, entry.glue, entry.generation, roots.retiredJoins.has(entry.id), roots.retiredJoins.has(group),
       projectSharedJoinGlue(entry.glue, roots.meta.get(glue)), register(glue, entry.glue), FORMAT_MARKS.map(format => register(sharedJoinFormatRegisterField(group, format), false))];
   }));
   const joinedText = [...connected].filter(id => id !== beat).sort().map(id => {
     const value = roots.beats.get(id); return [id, value instanceof Y.Map ? narration(handle, id, value, writer) : null];
   });
-  const statusKeys = sharedStatusEventKeys(handle, { scope: "beat", record: beat as SharedContentRef }) ?? [...roots.statusEvents.keys()];
+  const statusKeys = (sharedCreationReadsSettled(handle) ? sharedStatusEventKeys(handle, { scope: "beat", record: beat as SharedContentRef }) : null) ?? [...roots.statusEvents.keys()];
+  const ownStatus = statusKeys.filter(id => { const event = readSharedStatusEvent(roots.statusEvents.get(id)); return event?.target.scope === "beat" && event.target.record === beat; });
+  watchSharedCreationMembers(roots.statusEvents, ownStatus, raw => { const event = readSharedStatusEvent(raw); return event?.target.scope === "beat" && event.target.record === beat; });
+  for (const id of ownStatus) { watchSharedCreationMap(roots.statusEvents, id); watchSharedCreationMap(roots.retiredStatus, id); }
   const status = statusKeys.filter(id => {
     const event = readSharedStatusEvent(roots.statusEvents.get(id)); return event?.target.scope === "beat" && event.target.record === beat && !roots.retiredStatus.has(id);
   }).sort().map(id => [id, sharedJson(roots.statusEvents.get(id))]);
-  const splits = sharedCreationRecordKeys(handle, "beats", "splitSource", beat);
-  const headings = sharedCreationRecordKeys(handle, "headings", "firstBeat", beat);
+  const splits = owned("beats", "splitSource", beat);
+  const headings = owned("headings", "firstBeat", beat);
   return JSON.stringify([fields(record, writer, unstamped), narration(handle, beat, record, writer), attachments, joins, status,
     comments.map(([id, value]) => [id, fields(value, writer, key => key === "updatedAt")]), replies.map(([id, value]) => [id, fields(value, writer)]), splits, headings, joinedText]);
 }
 
 export function isSharedCreationRetired(handle: SharedDocumentHandle, beat: string): boolean {
   sharedCreationObservationCost.checks++;
-  if (!observeSharedCreationMarkers(handle).has(beat)) return false;
+  if (!readSharedCreationMarkers(handle).has(beat)) return false;
   const state = collabState(handle);
   const read = () => {
-    watchSharedCreationMap(state.roots.beats, beat);
-    const record = state.roots.beats.get(beat), raw: unknown = record instanceof Y.Map ? record.get(SHARED_CREATION_RETIREMENT_FIELD) : null;
-    if (record instanceof Y.Map) watchSharedCreationMap(record, SHARED_CREATION_RETIREMENT_FIELD);
+    watchSharedCreationMap(state.roots.creationRetired, beat);
+    const raw: unknown = state.roots.creationRetired.get(beat);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
     const { observed, writer } = raw as Record<string, unknown>;
     return typeof observed === "string" && typeof writer === "string" && readSharedCreationContent(handle, beat, writer) === observed;
@@ -138,22 +145,21 @@ export function isSharedCreationRetired(handle: SharedDocumentHandle, beat: stri
   return cachedSharedCreationObservation(handle, beat, read);
 }
 
+export function readSharedCreationHidden(handle: SharedDocumentHandle, beat: string): boolean {
+  if (!readSharedCreationMarkers(handle).has(beat)) return false;
+  return peekSharedCreationObservation(handle, beat) ?? isSharedCreationRetired(handle, beat);
+}
+
 export function readSharedCreationRetirements(handle: SharedDocumentHandle): ReadonlySet<string> {
-  const markers = observeSharedCreationMarkers(handle);
-  const state = collabState(handle), hidden = sharedCreationObservationHidden(handle);
-  const settled = state.reads.keep(state.roots.beats, "creation-hidden-revision", () => ({ revision: -1 }));
-  if (state.reads.settled && settled.revision === state.revision) return hidden;
-  pruneSharedCreationObservations(handle, markers);
-  for (const beat of markers) if (sharedCreationObservationDirty(handle, beat)) {
-    if (isSharedCreationRetired(handle, beat)) hidden.add(beat); else hidden.delete(beat);
-  }
-  if (state.reads.settled) settled.revision = state.revision;
+  const markers = readSharedCreationMarkers(handle), hidden = new Set<string>();
+  if (!markers.size) return hidden;
+  for (const beat of readSharedCreationCandidates(handle)) if (readSharedCreationHidden(handle, beat)) hidden.add(beat);
   return hidden;
 }
 
 export function isSharedCreationRecordShown(handle: SharedDocumentHandle, collection: SharedRecordCollection, fields: Readonly<Record<string, unknown>>): boolean {
-  if (!["gallery", "visuals", "comments", "replies"].includes(collection) || !observeSharedCreationMarkers(handle).size) return true;
+  if (!["gallery", "visuals", "comments", "replies"].includes(collection) || !readSharedCreationMarkers(handle).size) return true;
   const beat = collection === "comments" ? fields.rowId : collection === "replies"
     ? sharedCreationRecordOwner(handle, "comments", "rowId", String(fields.commentId)) : fields.beat;
-  return typeof beat !== "string" || !readSharedCreationRetirements(handle).has(beat);
+  return typeof beat !== "string" || !readSharedCreationHidden(handle, beat);
 }
