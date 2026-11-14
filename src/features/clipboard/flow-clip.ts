@@ -73,3 +73,25 @@ export function pasteFlowClipboard(doc: DocumentView, range: FlowRange, data: Pi
   if (!pasted || !("rows" in pasted) || !slice.wholeIds.length && !headers.length) return pasted;
   return { ...pasted, clipboard: { comments: state.comments, people: state.people, productionTags: state.productionTags, brollShots: state.brollShots } };
 }
+
+function embeddedGallery(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const slot = value as { visualImage?: unknown; annotation?: unknown; moreImages?: unknown };
+  return !!slot.visualImage || embeddedGallery(slot.annotation) || Array.isArray(slot.moreImages) && slot.moreImages.some(embeddedGallery);
+}
+
+export function pasteSharedFlowClipboard(doc: DocumentView, range: FlowRange, data: Pick<DataTransfer, "getData">, ports: FlowPorts,
+  inertBody: (html: string) => ParentNode, migrate: (input: unknown) => ValidatedDocument): FlowOutcome | undefined {
+  const body = (): ParentNode => inertBody(data.getData("text/html"));
+  const raw = data.getData(MIME) || data.getData("application/x-splitpage-scenes") ||
+    body().querySelector("[" + ATTR + "]")?.getAttribute(ATTR) || body().querySelector("[data-splitpage-scenes]")?.getAttribute("data-splitpage-scenes");
+  let input: { beats?: { rows?: unknown }; rows?: unknown } | null;
+  try { input = raw ? JSON.parse(raw) as typeof input : null; } catch { return undefined; }
+  const rows = input?.beats?.rows ?? input?.rows;
+  if (Array.isArray(rows) && rows.some(embeddedGallery)) {
+    return { refused: "paste-gallery-legacy-image" };
+  }
+  const clip = beatsOnClipboard(type => data.getData(type));
+  if (clip && isMove(clip, doc)) return { refused: "move-in-shared-session" };
+  return pasteFlowClipboard(doc, range, data, ports, inertBody, migrate);
+}

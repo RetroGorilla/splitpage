@@ -200,6 +200,20 @@ test("shared flow refuses a missing operation form without applying a standalone
   } finally { a.session.dispose(); h.close(); }
 });
 
+test("shared flow refuses a changed standalone plan with an empty operation list", () => {
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "abc" }] }), a = sharedHarness(adapterReplica(h.a));
+  try {
+    const before = encodeSharedState(h.a);
+    const command = flowCommand("empty-form", doc => ({ rows: [{ ...doc.rows[0], id: "R1", audioText: "changed" }],
+      sections: undefined, removedComments: [], selection: at, ops: [] }),
+    { ...stamps, operations: { id: "command", by: "Alice" }, beatStamp: () => { throw new Error("No stamp on refusal"); } });
+    assert.deepEqual(a.session.run(command), { kind: "rejected", reason: "flow-operations-empty" });
+    assert.deepEqual(a.executed, []);
+    assert.deepEqual(encodeSharedState(h.a), before);
+    assert.equal(a.session.read(doc => doc?.rows[0]?.audioText), "abc");
+  } finally { a.session.dispose(); h.close(); }
+});
+
 test("Writer command ports give no operations request when the author answers null", () => {
   const source = createFlowLoadRuntime().ports;
   const ports = writerFlowCommands(source, { author: { next: () => null }, writer: () => { throw new Error("No writer read in standalone"); } });

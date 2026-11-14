@@ -210,6 +210,7 @@ const FIELDS: readonly Site[] = [
   ["application/commands/comments.ts#toggleResolveCommand", "resolvedAt 4, resolvedBy 4, updatedAt 1", "comment-stamp"],
   ["application/commands/document-edit.ts#applyRewrites", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/flow.ts#standaloneFlowCommand", "updatedAt 1, updatedBy 1", "beat-stamp"],
+  ["application/commands/flow-paste.ts#sharedFlowPaste", "anchorId 1, name 1", "record-with-text"],
   ["application/commands/flow.ts#initializeFlowParagraphs", "paragraphStart 1, paragraphsDecided 1", "paragraph-start"],
   ["application/commands/gallery.ts#galleryPlan", "updatedAt 1, updatedBy 1", "beat-stamp"],
   ["application/commands/import-rows.ts#importRowsCommand", "paragraphStart 1, updatedAt 1, updatedBy 1", "beat-stamp", "stated-write"],
