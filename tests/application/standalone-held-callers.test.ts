@@ -49,7 +49,7 @@ const TRANSITIONS_AND_MERGE = {
 };
 
 const BRIDGE = {
-  "bootstrap/wiring/session-owner.ts": 3
+  "bootstrap/wiring/session-owner.ts": 1
 };
 
 const OWNER_ALIASES = {
