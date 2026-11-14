@@ -14,7 +14,7 @@ import { isDraftBox, isScriptCell } from "../../../features/editing/cell-page.ts
 
 export const renderEditing = { cells: cellEditing, selection: editorSelection, paint: paintGuard, undo: undoGuard };
 export const renderDraft = { appendMedia: appendDraftMedia, model: draftModel, edit: editDraft, isDraft: isDraftBox, isScript: isScriptCell };
-export const renderUndo = { track: (): void => { undoOwner().track(); } };
+export const renderUndo = { track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); } };
 
 export const edits: DocumentEdits = {
   run: runCommand,

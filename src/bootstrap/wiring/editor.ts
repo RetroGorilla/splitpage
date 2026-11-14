@@ -129,12 +129,23 @@ import {
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
+import { sharedSessionParts } from "./shared-session.ts";
+import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
+import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
+import type { FlowRange } from "../../core/flow/flow.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
+let placeWriterRange: (range: FlowRange) => void = () => {};
+
+function placeSharedSelection(selection: SharedUndoSelection): void {
+  const parts = sharedSessionParts();
+  const range = parts ? resolveSharedBufferedSelection(parts.handle, [selection.anchor, selection.focus]) : undefined;
+  if (range) placeWriterRange(range);
+}
 let scheduleWriterStats: () => void = inactiveWriter;
 
 type RootInput = Pick<Event, "target">;
@@ -323,6 +334,7 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
     const step = control?.writerUndoStep;
     undoRoutePorts.writerStep = step ? dir => !sharedUndoRoute() && step(dir) : skipWriterUndo;
+    placeWriterRange = range => { control?.writerFlowControl()?.place(range); };
     writerReplayed = control?.writerReplayed ?? noWriterReplay;
     control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
@@ -340,7 +352,11 @@ const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
   replay: function (dir) {
     const shared = sharedUndoRoute();
-    if (shared) { stepSharedUndo(shared, dir, message => { showToast(message, "warn"); }); return; }
+    if (shared) {
+      const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
+      if (outcome.ok && outcome.selection) placeSharedSelection(outcome.selection);
+      return;
+    }
     if (dir === "redo") undoOwner().redo(); else undoOwner().undo();
   },
   writerStep: skipWriterUndo,
