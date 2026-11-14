@@ -143,7 +143,8 @@ function setup(count: 2 | 3 = 2) {
   return set;
 }
 function ports(handle: SharedDocumentHandle, name: string, stamps: typeof alice) {
-  return sharedGalleryPorts({ handle: () => handle, author: sharedAuthorPort({ handle: () => handle, name: () => name }), stamps });
+  const author = sharedAuthorPort({ handle: () => handle, name: () => name });
+  return sharedGalleryPorts({ handle: () => handle, author: () => author.next(), stamps });
 }
 function project(handle: SharedDocumentHandle) {
   const { document, recovery } = projectSharedDocumentWithRecovery(handle);
