@@ -12,6 +12,7 @@ import { pictureA } from "./projection-record-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import type { SharedPreparedWrite } from "../../../src/adapters/collab/prepare.ts";
 import { readSharedSplitRetired } from "../../../src/adapters/collab/structure-plan.ts";
@@ -464,4 +465,29 @@ for (const order of ORDERS) test(`an embed that names the new beat but is no bou
   const text = (collabState(run.set.a).roots.segments.get("b:R1") as Y.Map<unknown>).get("text") as Y.Text;
   collabState(run.set.a).doc.transact(() => text.insertEmbed(1, { b: beat, extra: true }));
   run.flush(); run.check("still undone", whole);
+}));
+
+for (const order of ORDERS) test(`rule 103: another writer types V in the new visual, bolds it, takes the bold back and deletes V while the undo is in flight: the split is undone: ${order}`, () => scenario(order, run => {
+  const record = run.command(split()), beat = run.beat(record);
+  run.reverse(record, true, false);
+  const visual = { owner: beat as SharedContentRef, segment: beat as SharedContentRef, field: "visualText" as const }, gap = readSharedPaintedText(run.set.b, visual)?.emptyGap;
+  assert.ok(gap);
+  run.send({ kind: "text-insert", id: "v", by: "Other", target: visual, at: { left: null, right: gap, affinity: "before" }, content: [{ value: "V", marks: [] }] });
+  const range = () => { const captured = captureSharedTextRange(run.set.b, visual, 0, 1); assert.ok(captured); return captured; };
+  run.send({ kind: "mark", id: "bold", by: "Other", target: visual, observed: [range()], mark: { kind: "b", value: true } });
+  run.send({ kind: "mark", id: "plain", by: "Other", target: visual, observed: [range()], mark: { kind: "b", value: null } });
+  run.send({ kind: "text-delete", id: "w", by: "Other", target: visual, observed: [createSharedAnchor(run.set.b, visual, 0, "after")] });
+  run.flush(); run.check("taken back", whole);
+}));
+
+for (const order of ORDERS) test(`declared limit: a mark that no longer holds still passes over its boundary, so the split it hides behind keeps holding: ${order}`, () => scenario(order, run => {
+  const record = run.command(split());
+  run.reverse(record, true, false);
+  const inner = executeSharedCommand(run.set.b, [operation({ kind: "split", id: "inner", by: "Other", target, at: { left: flowBaseReference("R1", "audioText", 0), right: null, affinity: "after" },
+    observed: [], boundary: "Rt", beat: "Rt", fields: {} })], { label: "split", selection: null, typing: null }, { base: readSharedRevision(run.set.b) });
+  assert.ok(inner.record);
+  const back = reverseSharedUndoRecord(run.set.b, inner.record, { by: "Other", nextId: () => "back" }); assert.ok(back.ok && back.effective);
+  const hidden = inner.record.parts[0]; assert.ok(hidden?.kind === "beat-split");
+  run.send(gallery(hidden.beat, "Other"));
+  run.flush(); run.check("declared", [["R1", "a"], ["Rs", "bcd"], ["R2", "ef"]]);
 }));

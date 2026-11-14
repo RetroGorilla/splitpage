@@ -79,8 +79,8 @@ export const undoLimits: readonly UndoLimit[] = [
   {
     id: "redone-recovery", state: "waits",
     title: "Recovery lists a character undone and redone inside a removed beat as edited after the removal",
-    history: "R2 cd. Alice inserts x. Bob removes R2. Alice undoes and redoes. Needs removal, which the owner refuses by name until its executor lands.",
-    shown: "not yet: undo of remove is refused by name, asks the executor nothing and keeps the stack"
+    history: "R2 cd. Alice inserts x. Bob removes R2. Alice undoes and redoes. Needs removal, which the owner skips while not supported (rule 71).",
+    shown: "rule 71: an undo of remove the executor cannot reverse is skipped once, asks the executor nothing, and the next undo reaches the step before"
   },
   {
     id: "redone-mark-reversed", state: "resolved",
