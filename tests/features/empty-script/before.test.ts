@@ -12,7 +12,6 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
 import { replaceRange, beatPos } from "../../../src/core/flow/flow.ts";
 
