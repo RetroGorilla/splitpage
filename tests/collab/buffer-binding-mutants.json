@@ -713,5 +713,11 @@
     "find": "if (result.ok && result.effective) form.changed?.();",
     "replace": "",
     "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "discarding an empty-name hold retains its clipboard description",
+    "file": "src/application/editing/buffered-field.ts",
+    "find": "active = null; target = null; label = undefined;",
+    "replace": "active = null; target = null;",
+    "tests": ["tests/features/shared-undo-surfaces.test.ts"]
   }]
 }
