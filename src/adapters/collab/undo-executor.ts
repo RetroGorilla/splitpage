@@ -18,7 +18,7 @@ import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
-import { readSharedRecords } from "./record-reader.ts";
+import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
 import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { SharedTextPreparationError } from "./executor-text-plan.ts";
@@ -35,9 +35,12 @@ import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, plan
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedSplitUndo, recordSharedSplit } from "./undo-split.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
+import { isSharedGalleryShown, readSharedRetirementObservation, readSharedStoredPicture } from "./gallery-retirement.ts";
+import { readSharedRemovalState } from "./removal-state.ts";
+import * as Y from "yjs";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -148,10 +151,12 @@ function fieldNow(handle: SharedDocumentHandle, part: Extract<SharedUndoPart, { 
   return record.has(part.field) ? { value: sharedPreparedValue(record.get(part.field)) as Extract<SharedFieldValue, { clear?: false }>["value"] } : { clear: true };
 }
 
-function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress): SharedJsonFields | null {
-  const found = readSharedRecords(handle, target.collection).find(item => item.key === target.record);
+function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress, stored = false): SharedJsonFields | null {
+  // why: a command is recorded against the stored picture, hidden or not, so a change to an undone picture is a change.
+  const found = stored && target.collection === "gallery" ? readSharedStoredPictureFields(handle, target.record)
+    : readSharedRecords(handle, target.collection).find(item => item.key === target.record)?.fields;
   if (!found) return null;
-  const fields: Record<string, SharedJsonValue> = { ...sharedPreparedValue(found.fields) as SharedJsonFields };
+  const fields: Record<string, SharedJsonValue> = { ...sharedPreparedValue(found) as SharedJsonFields };
   const scope = target.collection === "tags" ? "tag" : target.collection === "shots" ? "shot" : null;
   // why: a status is set by events beside the fields, so the status the record shows is read with them.
   if (scope) fields.status = readSharedStatus(handle, { scope, record: target.record as SharedContentRef } as SharedStatusEvent["target"]);
@@ -167,11 +172,16 @@ function recordFields(handle: SharedDocumentHandle, target: SharedRecordAddress)
 }
 
 function recordNow(handle: SharedDocumentHandle, part: { readonly kind: string; readonly target: SharedRecordAddress }): SharedJsonFields | null {
-  // why: a visual and a picture's creation or removal are parts of a beat; their undo comes with the structure commands.
-  if (!SHARED_UNDO_RECORDS.includes(part.target.collection) && !(part.target.collection === "gallery" && part.kind === "record-field")) {
+  // why: a visual is a part of a beat; its undo comes with the structure commands.
+  if (!SHARED_UNDO_RECORDS.includes(part.target.collection) && part.target.collection !== "gallery") {
     throw new SharedUndoRefusal("undo-unsupported:" + part.kind + ":" + part.target.collection);
   }
   return recordFields(handle, part.target);
+}
+
+function beatRemoved(handle: SharedDocumentHandle, beat: SharedJsonValue | undefined): boolean {
+  const stored = typeof beat === "string" ? collabState(handle).roots.beats.get(beat) : null, flags: unknown = stored instanceof Y.Map ? stored.get("removals") : null;
+  return flags instanceof Y.Map && readSharedRemovalState([...flags.entries()]).removed;
 }
 
 function recordField(fields: SharedJsonFields, field: string): SharedFieldValue {
@@ -251,13 +261,25 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: () => ({ effective: command !== null, part: { kind: "status", target: part.target, event: command ? eventKey(handle, command.id) : part.event, value: part.value } }) };
     }
     case "record-create": {
-      const now = recordNow(handle, part), effective = now !== null && same(now, part.fields);
+      const now = recordNow(handle, part), gallery = part.target.collection === "gallery";
+      // why: a picture is taken back only while its beat stands; a removed beat holds it in recovery.
+      const effective = now !== null && same(now, part.fields) && !(gallery && beatRemoved(handle, now.beat));
       // why: undoing a creation removes the record only while it still holds what the creation wrote.
-      if (effective) operations.push(operationOf({ kind: "record-delete", ...author(), target: part.target }));
-      return { inverse: () => ({ effective, part: { ...part, kind: "record-delete" } }) };
+      if (effective) operations.push(operationOf({ kind: gallery ? "gallery-retire" : "record-delete", ...author(), ...gallery ? { record: part.target.record } : { target: part.target } }));
+      return { inverse: () => ({ effective, part: gallery ? { ...part, kind: "record-retired",
+        retirement: effective ? readSharedRetirementObservation(readSharedStoredPicture(collabState(handle).roots, part.target.record)) : null } : { ...part, kind: "record-delete" } }) };
+    }
+    case "record-retired": {
+      const { roots } = collabState(handle), record = readSharedStoredPicture(roots, part.target.record);
+      // why: a redo takes back only the retirement its undo wrote; another one, or one no longer holding, uses it up.
+      const effective = part.retirement !== null && readSharedRetirementObservation(record) === part.retirement && !isSharedGalleryShown(roots, part.target.record, record);
+      if (effective) operations.push(operationOf({ kind: "gallery-restore", ...author(), record: part.target.record }));
+      return { inverse: () => ({ effective, part: { kind: "record-create", target: part.target, fields: effective ? recordFields(handle, part.target) ?? part.fields : part.fields } }) };
     }
     case "record-delete": {
-      const effective = recordNow(handle, part) === null, wrote = part.fields.author;
+      // why: a picture an undo retired is still stored, so its key is taken although no reader shows it.
+      const stored = part.target.collection === "gallery" ? readSharedStoredPicture(collabState(handle).roots, part.target.record) !== null : false;
+      const effective = recordNow(handle, part) === null && !stored, wrote = part.fields.author;
       // why: a comment or reply keeps its author, so it is put back in that person's name.
       const by = (part.target.collection === "comments" || part.target.collection === "replies") && typeof wrote === "string" ? wrote : writer.by;
       if (effective) operations.push(operationOf({ kind: "record-create", id: writer.nextId(), by, target: part.target, fields: part.fields }));
@@ -384,7 +406,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       if (visible) typed.set(key, visible);
       else if (!typed.has(key) && !before.has(key)) before.set(key, readSharedTextHistory(handle, operation.target));
     } else if (operation.kind === "record-create" || operation.kind === "record-set" || operation.kind === "record-delete") {
-      if (!records.has(recordKey(operation.target))) records.set(recordKey(operation.target), recordFields(handle, operation.target));
+      if (!records.has(recordKey(operation.target))) records.set(recordKey(operation.target), recordFields(handle, operation.target, true));
     } else if (operation.kind === "scalar" && !sharedStampOperation(operation)) {
       // why: assumed rule 35 on #1414: a stamp is left out of the undo record, so stamped typing still groups.
       const record = scalarTarget(handle, operation.target);
@@ -415,8 +437,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
       // why: a character the command moved into another beat of the same text was not deleted by it, so its undo never
       // brings that character back, even after someone else deleted it, as a heading made from that line does.
-      const kept = was ? readSharedVisibleUnits(handle, operation.target) : null;
-      const deleted = was ? undoUnits(was.units.filter(unit => !is.live(unit.unit) && !kept?.has(unit.unit.client + ":" + unit.unit.clock))) : [];
+      const gone = was ? was.units.filter(unit => !is.live(unit.unit)) : [], kept = gone.length ? readSharedVisibleUnits(handle, operation.target) : null;
+      const deleted = undoUnits(gone.filter(unit => !kept?.has(unit.unit.client + ":" + unit.unit.clock)));
       if (inserted.length || deleted.length) parts.push({ kind: "text", target: operation.target, inserted, deleted });
     } else if (operation.kind === "mark") {
       const scope = scopes.get(operation);
@@ -450,7 +472,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (statusKinds(operation)) {
       parts.push({ kind: "status", target: operation.target, event: eventKey(handle, operation.id), value: operation.value });
     } else if (operation.kind === "record-create" || operation.kind === "record-set" || operation.kind === "record-delete") {
-      const key = recordKey(operation.target), was = records.get(key) ?? null, is = recordFields(handle, operation.target);
+      const key = recordKey(operation.target), was = records.get(key) ?? null, is = recordFields(handle, operation.target, true);
       if (recorded.has(key)) continue;
       recorded.add(key);
       // why: one record is described once per command, by what it was before and what it is after.
@@ -483,7 +505,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (operation.kind === "discard") {
       parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
-      && operation.kind !== "split-retire" && operation.kind !== "split-restore") {
+      && operation.kind !== "split-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }
