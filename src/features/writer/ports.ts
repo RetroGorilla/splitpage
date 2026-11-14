@@ -15,6 +15,7 @@ import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { Command, CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
+import type { FlowCommandSource } from "../../application/commands/flow.ts";
 import type { FlowDoc, FlowPorts, FlowRange, FlowRow } from "../../core/flow/flow.ts";
 import type { Run } from "../../core/text/runs.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
@@ -46,6 +47,7 @@ export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | 
 }
 
 export interface FlowWriterPorts {
+  readonly commands?: FlowCommandSource;
   readonly openFind?: () => void;
   readonly closeFind?: () => void;
   readonly pictures?: Pick<PictureStore, "imgHtml">;
