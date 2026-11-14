@@ -45,10 +45,12 @@ const ways: readonly (readonly [string, (run: ReturnType<typeof setup>) => void,
     run.perform("type", [typeAt("y", "R1", 4, "Y")]);
     run.other({ kind: "text-delete", id: "gone", by: "Bob", target: cell("R1"), observed: [createSharedAnchor(run.set.b, cell("R1"), 4, "after")] });
   }, [["R1", "abcd"], ["R2", "ef"]]],
-  ["the other person removed the beat", run => {
-    run.perform("type", [typeAt("y", "R1", 4, "Y")]);
-    run.other({ kind: "remove", id: "gone", by: "Bob", removalKind: "beat", targets: ["R1"], boundaries: ["R1"], observed: [], components: [], gallery: [], at: 0 });
-  }, [["R2", "ef"]]],
+  ["the other person removed the new beat of a split", run => {
+    run.perform("split", [operation({ kind: "split", id: "cut", by: "Alice", target: cell("R1"), at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" },
+      observed: [], boundary: "Rs", beat: "Rs", fields: {} })]);
+    const beat = projectSharedDocumentWithRecovery(run.set.b).document.rows[1]?.id; assert.ok(beat);
+    run.other({ kind: "remove", id: "gone", by: "Bob", removalKind: "beat", targets: [beat], boundaries: [beat], observed: [], components: [], gallery: [], at: 0 });
+  }, [["R1", "ab"], ["R2", "ef"]]],
   ["the other person changed the new beat of a split", run => {
     run.perform("split", [operation({ kind: "split", id: "cut", by: "Alice", target: cell("R1"), at: { left: flowBaseReference("R1", "audioText", 1), right: null, affinity: "after" },
       observed: [], boundary: "Rs", beat: "Rs", fields: {} })]);
