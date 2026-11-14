@@ -5,6 +5,8 @@ import type { Command, DocumentView, Plan } from "../session/document-session.ts
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { applyParagraphFlags, paragraphCells, paragraphFlagsAfterOrder } from "./paragraphs.ts";
 import type { DocumentScene } from "../../core/document/scenes.ts";
+import { sharedRemoval } from "./shared-structure.ts";
+import type { SharedStructurePorts } from "./shared-structure.ts";
 
 export const BEAT_PASTE_FIELDS: readonly string[] = Object.freeze(["comments", "people", "productionTags", "brollShots"]);
 
@@ -74,7 +76,7 @@ export function pasteBeatsCommand(paste: BeatPaste): Command {
   };
 }
 
-export function removeBeatsCommand(rowIds: readonly string[]): Command {
+export function removeBeatsCommand(rowIds: readonly string[], shared?: SharedStructurePorts): Command {
   return {
     name: "remove-scenes",
     needs: "edit",
@@ -85,6 +87,7 @@ export function removeBeatsCommand(rowIds: readonly string[]): Command {
       const scenes = scenesAfterRemoval(doc, new Set(gone));
       const flags = paragraphFlagsAfterOrder(doc, doc.rows.filter(row => !gone.includes(row.id)).map(row => row.id), scenes);
       return {
+        ...sharedRemoval(doc, gone, flags, shared),
         changes: changeSet({ rowsRemoved: gone, cells: paragraphCells(flags), docFields: hadScenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true }),
         apply: function (live) {
           const out = new Set(gone);

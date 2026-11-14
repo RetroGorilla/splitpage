@@ -109,7 +109,7 @@ export const builderOperationCoverage = [
     ["missing predecessor", []]
   ]]),
   classified("serve pending composition", ["deleteBeatCommand", "structure", "remove,scalar", [
-    ["observed beat removal", ["remove"]],
+    ["observed beat removal, including every part of a joined row", ["remove"]],
     ["surviving paragraph flags", ["scalar"]],
     ["scene first-beat derivation / empty-scene recovery / missing beat", []]
   ]]),
@@ -126,14 +126,16 @@ export const builderOperationCoverage = [
     ["source occupies part of segment", ["move-in-shared-session"]],
     ["edge/missing beat", []]
   ]]),
-  classified("serve pending composition", ["splitBeatCommand", "structure", "text-delete,split,segment-create,record-create", [
+  classified("serve pending composition", ["splitBeatCommand", "structure", "text-delete,split,scalar | visual-split-in-shared-session", [
     ["narration split", ["split"]],
-    ["visual component split with a new empty narration segment", ["split", "segment-create", "record-create"]],
+    ["visual component split refused by name when an author is present", ["visual-split-in-shared-session"]],
     ["delete selected observed span before splitting", ["text-delete"]],
+    ["stamp the retained beat; the new beat stamp travels in its creation", ["scalar"]],
     ["initial beat defaults belong to creation / unsupported field/missing row", []]
   ]]),
-  classified("serve pending composition", ["joinBeatsCommand", "structure", "join", [
+  classified("serve pending composition", ["joinBeatsCommand", "structure", "join,scalar", [
     ["join narration with glue and retained visual/gallery origins", ["join"]],
+    ["stamp the retained beat", ["scalar"]],
     ["status rank derives from the join group", []],
     ["missing next/header/gallery-limit guards", []]
   ]]),
@@ -149,10 +151,9 @@ export const builderOperationCoverage = [
     ["partial-source/cross-scene structural cut-paste", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["null/empty plan or incomplete apply", []]
   ]]),
-  classified("serve pending composition", ["removeBeatsCommand", "structure", "remove,scalar | cross-scene-structural-paste", [
-    ["observed distinct existing beats", ["remove"]],
+  classified("serve pending composition", ["removeBeatsCommand", "structure", "remove,scalar", [
+    ["observed distinct existing beats, including every part of joined rows", ["remove"]],
     ["surviving paragraph repair", ["scalar"]],
-    ["cross-scene structural cut", ["cross-scene-structural-paste"]],
     ["scene-anchor derivation / empty-scene recovery / missing/duplicate/no-op ids", []]
   ]]),
   classified("could not classify", ["addSceneCommand", "structure", "heading-create,text-insert", [
@@ -373,4 +374,8 @@ export const flowOperationCoverage = [
 export const sharedRefusalCoverage = [
   { refusal: "move-in-shared-session", source: "8-schema-hypotheses.md §1 Candidate B: Move part of a segment; structure-results.md MOVE concurrent; issue #1414 assumed rule 40: every move" },
   { refusal: "cross-scene-structural-paste", source: "8-schema-hypotheses.md §3 MOVE cut-paste; structure-results.md MOVE cut-paste" }
+] as const;
+
+export const sharedBuilderRefusalCoverage = [
+  { refusal: "visual-split-in-shared-session", source: "stage-2-composition-plan.md C5b: visual splits have no shared form" }
 ] as const;
