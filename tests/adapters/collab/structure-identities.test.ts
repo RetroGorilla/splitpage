@@ -61,7 +61,7 @@ test("literal created keys, native record projections and every ordinary load-id
     assert.deepEqual(readSharedRecords(set.a, "visuals").map(record => record.key).filter(key => key.startsWith("structure_")), [visual]);
     assert.deepEqual(readSharedRecords(set.a, "gallery").map(record => record.key).filter(key => key.startsWith("structure_")), [gallery, secondGallery]);
     const roots = collabState(set.a).roots;
-    const blocks = readProjectionBlocks(roots.order, roots.segments, roots.beats, value => readProjectionUnits(set.a, value.get("text"), value.get("markRecords")));
+    const blocks = readProjectionBlocks(roots, value => readProjectionUnits(set.a, value.get("text"), value.get("markRecords")));
     assert.deepEqual(blocks.filter(block => block.id === beat).map(block => ({ id: block.id, segment: block.segment })), [{ id: beat, segment }]);
     const projected = projectSharedDocument(set.a), loaded = runtime.load(projected);
     assert.deepEqual(projected.rows.map(row => row.id), ["R1", beat]); assert.deepEqual(loaded.rows.map(row => row.id), ["R1", beat]);
