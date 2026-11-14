@@ -149,7 +149,13 @@ beyond Stage 1 on purpose (assumed rule 24 on issue #1414):
   unit to its restoration.
 - **Deleted text**: restore each unit as a new unit at the place of the deleted
   one, with the marks the deleted one would show now. Skip a unit someone has
-  already restored, and a unit whose character is visible again.
+  already restored, and a unit whose character is visible again. A unit the
+  command moved into another beat of the same text (Enter over a selection
+  moves the text after it into the new beat) was not deleted by the command,
+  so its record does not list it, and its undo never brings it back, even after
+  someone else deleted it. A heading made from the new beat's first line is
+  such a deletion: it consumes the `# ` and the line break. Literals in
+  `undo-heading-consumed.test.ts`, on three copies in every delivery order.
 - **A mark added**: take the command's own occurrences away. The cancellation
   stays with the occurrence: an occurrence of the same mark over the same
   range, made without either having seen the other, is cancelled with it,

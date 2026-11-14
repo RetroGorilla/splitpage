@@ -230,10 +230,10 @@ for (const order of ORDERS) test(`Enter over a selection, the new beat headed by
   headRs(run, beat); run.flush(); same("headed", headedSplit2);
   const parts = (record: SharedUndoRecord) => record.parts.map(part => part.kind === "beat-split" ? part.retired : part.kind);
   const undone = run.reverse(execution.record, true); assert.deepEqual(parts(undone), ["text", true]);
-  same("undone", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["# Q\n"]]);
+  same("undone", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
   const redone = run.reverse(undone, true); assert.deepEqual(parts(redone), ["text", false]);
-  same("redone", [[["R1", "ab"], ["Rs", "cd"], ["R2", "ef"]], ["# Q\n"]]);
-  run.reverse(redone, true); same("undone again", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["# Q\n"]]);
+  same("redone", [[["R1", "ab"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
+  run.reverse(redone, true); same("undone again", [[["R1", "abX"], ["Rs", "cd"], ["R2", "ef"]], ["Q"]]);
 }, HEADED));
 
 for (const order of ORDERS) test(`a split undone while another writer heads the new beat stays headed, and its redo is used up, never refused: ${order}`, () => scenario(order, run => {
