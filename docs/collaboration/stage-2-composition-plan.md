@@ -276,6 +276,15 @@ that wires its surface:
   the same `shown` as `src/bootstrap/wiring/buffered-input.ts`. No beat buffer may
   be holding when the add-scene form gets keys, and teardown handles a dispose
   during a first composition.
+- **The cuts that wire the record builders** (#1569). Each record builder takes
+  `sharedRecordPorts({ handle, author: () => authorPort.next() })`
+  (`src/bootstrap/wiring/ports/shared-records.ts`) as its last argument.
+- **The switch, refusals** (#1568). The switch passes
+  `refused: sharedCommandRefusalNotice(notices)` into `createSharedSession`; the
+  shared Writer's reporting callbacks respect `notified`, so a refusal shown once
+  is not shown again.
+- **The switch, rule 85** (#1570). Its wiring for the title and scene-name boxes'
+  undo is described in that pull request's body.
 - **The cut that wires add-section.** It describes its plan with `typing: null`, so
   the replica records it at execution like any described command (C2).
 

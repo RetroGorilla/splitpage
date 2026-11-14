@@ -31,6 +31,8 @@ import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { standaloneSession } from "./session-owner.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
+import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
+import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
@@ -87,6 +89,7 @@ export interface SharedWriterSource {
   readonly author: { readonly next: () => { readonly id: string; readonly by: string } | null };
   readonly writer: () => string;
   readonly handle: () => SharedDocumentHandle | null;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
 }
 
 export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
@@ -114,7 +117,9 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
           }
           let dismissedGhost: typeof tagGhost = null;
           return createFlowWriter({
-            ...(shared && commands ? { paintedText: shared.text.paintedText, bufferedText: shared.text.bufferedText, commands: commands.commands } : {}),
+            ...(shared && commands ? { paintedText: shared.text.paintedText, bufferedText: shared.text.bufferedText, commands: commands.commands,
+              visualBuffer: writerVisualBuffer(shared.text, { document: () => documentReader.current(), lifetime: shared.lifetime, decode: flowCell,
+                storedHtml: text.storedHtmlFromDom, shown: edit => paintGuard().whileShown(edit) }) } : {}),
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,

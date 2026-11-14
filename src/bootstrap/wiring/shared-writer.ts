@@ -21,7 +21,7 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
       const text = sharedBufferPorts(parts.handle, parts.session, { ...effects, author, readers: productionReaders, stamps: sessionStamps });
       stopWriterRuntimeFeature();
       mountWriterRuntimeFeature({ text, author: parts.author, writer: () => String(collabState(parts.handle).doc.clientID),
-        handle: () => entered === parts ? parts.handle : null });
+        handle: () => entered === parts ? parts.handle : null, lifetime: parts.session });
     },
     settle: () => {
       const refused = entered ? entered.session.admit() : null;
