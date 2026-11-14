@@ -1,4 +1,6 @@
-import { describeFlow, flowIdentity } from "./operations.ts";
+import { describeFlow } from "./operations.ts";
+import { cellLength } from "../text/runs.ts";
+import { toHtml } from "../text/html.ts";
 import { isCollapsed, normalizedSections, selectionToOwnBeat, withinOneBeat } from "./flow.ts";
 import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange } from "./flow.ts";
 
@@ -12,11 +14,9 @@ export function setVisualForRange(doc: FlowDoc, range: FlowRange, html: string, 
   if (selected.head.kind !== "beat") return null;
   const rowId = selected.head.rowId;
   if (ports.trace) {
-    const original = (isolated?.rows ?? doc.rows).find(row => row.id === rowId);
-    if (original) {
-      if (original.visualText) ports.trace.emit({ kind: "record-set", target: { collection: "visuals", record: flowIdentity(rowId + ":visual") }, field: "html", value: html });
-      else ports.trace.emit({ kind: "record-create", target: { collection: "visuals", record: flowIdentity(rowId + ":visual") }, fields: { beat: rowId, html } });
-    }
+    const original = (isolated?.rows ?? doc.rows).find(row => row.id === rowId), cell = ports.cells(original?.visualText), piece = ports.cells(html);
+    // why: a set replaces the beat's visual text whole, as a select-all edit in a Split cell does, so text undo covers it.
+    if (original && toHtml(cell) !== toHtml(piece)) ports.trace.replace(rowId, cell, 0, cellLength(cell), piece, "visualText");
   }
   const rows = (isolated?.rows ?? doc.rows).map(row => row.id === rowId ? { ...row, visualText: html } : row);
   return isolated ? { ...isolated, rows } : { rows, sections: normalizedSections(doc.sections), removedComments: [], selection: selected };
