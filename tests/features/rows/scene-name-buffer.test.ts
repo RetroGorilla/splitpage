@@ -662,12 +662,25 @@ test("Split rename rule 6: name text the document refuses goes to recovery throu
   } finally { page.close(); }
 });
 
-test("Split rename: a new scene's name form is not opened in a shared session, and the person is told", () => {
+test("Split rename rule 87: a new scene's name form opens in a shared session and its first key creates the heading", () => {
   const page = sharedRename();
   try {
     const row = page.rows.querySelector('.row[data-id="R2"]'); assert.ok(row);
     const add = row.appendChild(document.createElement("button")); add.setAttribute("data-action", "add-section"); add.setAttribute("data-id", "R2");
     add.click();
-    assert.deepEqual([document.querySelector(".section-rename") !== null, page.commands, page.reports], [false, [], [{ kind: "rejected", reason: "not shared" }]]);
+    assert.deepEqual([document.querySelector(".section-rename") !== null, page.commands, page.reports, page.a.executed], [true, [], [], []]);
+    page.edge.type("N");
+    assert.deepEqual([page.commands, page.reports, page.a.executed.map(command => command.operations.map(op => op.kind))], [[], [], [["heading-create", "text-insert"]]]);
+  } finally { page.close(); }
+});
+
+test("Split rename: without the shared scene creation port, opening a new name form stays refused with a notice", () => {
+  const page = sharedRename("Scene", { creation: false });
+  try {
+    const row = page.rows.querySelector('.row[data-id="R2"]'); assert.ok(row);
+    const add = row.appendChild(document.createElement("button")); add.setAttribute("data-action", "add-section"); add.setAttribute("data-id", "R2");
+    add.click();
+    assert.deepEqual([document.querySelector(".section-rename") !== null, page.commands, page.reports, page.a.executed],
+      [false, [], [{ kind: "rejected", reason: "not shared" }], []]);
   } finally { page.close(); }
 });
