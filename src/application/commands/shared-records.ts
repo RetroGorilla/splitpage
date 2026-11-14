@@ -5,9 +5,9 @@ import type { CommandRefusal, DocumentView, Plan, SharedPlan } from "../session/
 import type { LiveEdit } from "./document-edit.ts";
 
 export interface SharedRecordPorts {
-  author(): { readonly id: string; readonly by: string } | null;
-  ranks(collection: SharedRegistryCollection): readonly string[];
-  heads(scope: "tag" | "shot", record: string): readonly string[];
+  readonly author: () => { readonly id: string; readonly by: string } | null;
+  readonly ranks: (collection: SharedRegistryCollection) => readonly string[];
+  readonly heads: (scope: "tag" | "shot", record: string) => readonly string[];
 }
 
 export type SharedRecordTrial = (trial: DocumentShape | DocumentView) => SharedPlan | CommandRefusal | null;
