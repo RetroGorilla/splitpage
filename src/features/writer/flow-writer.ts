@@ -1,4 +1,4 @@
-import { flowCommand } from "../../application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../application/commands/flow.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { Command, CommandOutcome } from "../../application/session/document-session.ts";
 import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
@@ -33,6 +33,8 @@ interface RowStep {
 }
 
 export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
+  const commands = ports.commands;
+  const commit = commands ? commitShared : commitStandalone;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const isCurrent = () => ports.lifetime.epoch() === epoch;
@@ -64,16 +66,24 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     }));
   }
 
-  function commit(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+  function commitStandalone(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
     if (!isCurrent() || ports.editingBlocked()) return null;
     let result: FlowOutcome = null;
-    const command = flowCommand(name, doc => {
+    const command = standaloneFlowCommand(name, doc => {
       result = operation(doc);
       return result;
     }, ports.text, before);
     const outcome = runPlanned(command);
     const applied = took(outcome);
     return applied || outcome.kind === "noop" ? result : null;
+  }
+
+  function commitShared(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+    if (!isCurrent() || ports.editingBlocked() || !commands) return null;
+    const prepared = commands.prepare(name, operation, ports.text, before);
+    const outcome = runPlanned(prepared.command);
+    const applied = took(outcome);
+    return applied || outcome.kind === "noop" ? prepared.result() : null;
   }
 
   const surface = createSurface({
