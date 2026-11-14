@@ -276,15 +276,11 @@ export function report(result) {
   lines.push("", "| Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |", "| --- | --- | --- | --- | --- | --- | --- |");
   const stats = (row, select, digits = 2) => summary(row.runs.map(select), digits);
   for (const row of result.admission) lines.push(`| ${row.name} / ${row.phase} | ${stats(row, r => r.current.single.p50)} | ${stats(row, r => r.current.single.p95)} | ${stats(row, r => r.current.single.max)} | ${stats(row, r => r.direct.single.p50)} | ${stats(row, r => r.decode.single.p50)} / ${stats(row, r => r.decode.single.p95)} | ${stats(row, r => 100 * (1 - r.direct.single.total / r.current.single.total))} / ${stats(row, r => 100 * (1 - r.decode.single.total / r.current.single.total))} |`);
-  lines.push("", "Input budget screen only; passing admission alone does not establish end-to-end input latency.", "",
-    "| Script / state | Available added p50 ms (Stage 0 reference) | Added p50 budget | Admission p50 alone vs 8 ms | Admission p95 alone vs 25/40 ms | Any admission above 50 ms |",
-    "| --- | --- | --- | --- | --- | --- |");
+  lines.push("", "Stage 0 local-input results: not measured. Back-to-back remote admissions do not measure local typing or its added latency.", "",
+    "| Script / state | Local-input p50 | Local-input p95 | Typing long tasks |",
+    "| --- | --- | --- | --- |");
   for (const row of result.admission) {
-    const added = Math.min(3, 8 - { short: 2.5, long: 2.8, large: 5.3 }[row.name]);
-    const p50 = median(row.runs.map(run => run.current.single.p50));
-    const p95 = median(row.runs.map(run => run.current.single.p95));
-    const status = (value, limit) => value > limit ? "EXCEEDS" : "within alone";
-    lines.push(`| ${row.name} / ${row.phase} | ${added.toFixed(1)} | ${status(p50, added)} | ${status(p50, 8)} | ${status(p95, row.name === "large" ? 40 : 25)} | ${row.runs.some(run => run.current.single.max > 50) ? "yes" : "no"} |`);
+    lines.push(`| ${row.name} / ${row.phase} | not measured | not measured | not measured |`);
   }
   lines.push("", "| Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const row of result.admission) for (const count of [100, 1000]) {

@@ -4,7 +4,7 @@ import test from "node:test";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import * as Y from "yjs";
-import { apply, fixtures, quantile, restoreCheckpoint, saveCheckpoint, scaleFixture, summary, writer } from "../../../collab/measure/run.mjs";
+import { apply, fixtures, quantile, report, restoreCheckpoint, saveCheckpoint, scaleFixture, summary, writer } from "../../../collab/measure/run.mjs";
 import { enterSharedDocument } from "../../../../src/core/migrate.ts";
 import { encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.ts";
@@ -19,6 +19,30 @@ test("nearest-rank percentiles and cross-run medians keep tails and outliers", (
   assert.equal(quantile(samples, 0.95), 475);
   assert.equal(summary([5, 1, 100, 3, 2]), "3.00 [1.00–100.00]");
   assert.equal(summary([1, 2, 3, 4]), "2.50 [1.00–4.00]");
+});
+
+test("report keeps admission measurements separate from unmeasured local-input results", () => {
+  const runs = Array.from({ length: 5 }, (_, index) => {
+    const timing = { total: 100 + index, p50: 1 + index, p95: 2 + index, max: 3 + index };
+    const mode = { single: timing, 100: { total: 10 + index }, 1000: { total: 20 + index } };
+    return { current: mode, direct: mode, decode: mode, batch: mode,
+      footprint: { plain: 1, shared: 2, extra: 1, ratio: 2 },
+      heap: { 100: { peak: 2, retained: 1 }, 1000: { peak: 3, retained: 2 } } };
+  });
+  const admission = ["short", "long", "large"].flatMap(name => ["fresh", "edited"].map(phase => ({ name, phase, per1000Typed: 1000, runs })));
+  const output = report({ commit: "synthetic", node: process.version, arch: "synthetic", rounds: 5, growth: [], admission });
+  const headers = output.split("\n").filter(line => line.startsWith("| Script"));
+  assert.deepEqual(headers, [
+    "| Script | Fresh plain bytes | Fresh bytes / plain / cap % | Edited bytes / fresh plain / cap % | Edited plain bytes / edited multiple | Bytes per 1,000 corrected characters | Bytes per 100 undo/redo pairs |",
+    "| Script / state | Bytes added by 1,000 typed characters without deletion |",
+    "| Script / state | Admission p50 ms | p95 ms | max ms | Direct p50 ms | Decode-only p50 / p95 ms | Trial + validation % / trial estimate % (500 total) |",
+    "| Script / state | Local-input p50 | Local-input p95 | Typing long tasks |",
+    "| Script / state / burst | Current ms | Direct ms | Decode-only ms | One trial ms | Current / direct | Peak heap delta MiB | Retained heap delta MiB | Heap passes |",
+    "| Script / state | Plain retained MiB | Shared retained MiB | Shared minus plain MiB | Shared / plain |"
+  ]);
+  assert.match(output, /Stage 0 local-input results: not measured/);
+  for (const row of admission) assert.ok(output.includes(`| ${row.name} / ${row.phase} | not measured | not measured | not measured |`));
+  for (const verdict of ["Added p50 budget", "Available added p50", "EXCEEDS", "within alone", "Input budget screen"]) assert.equal(output.includes(verdict), false, verdict);
 });
 
 test("checkpoint round trips binary updates and refuses a changed source or runtime", () => {
