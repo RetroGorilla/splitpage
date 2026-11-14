@@ -616,15 +616,36 @@ both in the form a command writes:
 - **The props of a shot** are read as `{ key, rank, fields }` and written as
   `{ id, name }`. The part holds the written form, so a shot with props is
   restored, re-created and changed back like any other.
+- **The video links of a picture** are read and written the same way as props,
+  without their rank and their `extra` metadata.
+
+A change to a picture's fields is a `record-field` part like any other
+(`undo-picture-fields.test.ts`): its caption, annotation and image
+(`picture`), its video links, the beat it belongs to and its place among
+the beat's pictures (`rank`). The undo writes the earlier value while the
+field still holds what the command wrote, so it is used up when another writer
+changed that field first or removed the picture. A change to another field
+of the same picture leaves it whole. A picture in a removed beat is changed
+back in recovery and comes back with the beat. A picture field holds no
+stamp, so there is none to leave.
 
 Declared, not changed here:
 
 - Undoing your removal of another person's comment restores its text as it
   was when you removed it. An edit its author made at the same moment as your
   removal is not in it.
-- A gallery slot and a visual are parts of a beat. Their undo comes with the
-  structure commands; until then a record of one is refused by name
-  (`undo-unsupported:record-create:gallery`) and nothing is written. The
+- An undo of a field change and another writer's change to the same field
+  that did not see each other are two sets of one key: the one from the higher
+  client id stays, as for every record field ("A field" under
+  [Rules an executor follows](#rules-an-executor-follows)). When the undo is
+  from the higher client id, the other writer's value is replaced. One literal
+  test pins each direction for a picture's caption.
+- A link's `extra` metadata is not written back when the undo restores a link
+  that was removed.
+- A visual, and a picture's creation or removal, are parts of a beat. Their
+  undo comes with the structure commands; until then a record of one is
+  refused by name (`undo-unsupported:record-field:visuals`,
+  `undo-unsupported:record-create:gallery`) and nothing is written. The
   refused entry stays on top of the stack and blocks the entries below it
   until the wiring decides what to do with a refused entry.
 
