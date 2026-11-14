@@ -237,6 +237,7 @@ const FIELDS: readonly Site[] = [
   ["application/session/document-session.ts#anchorPoint", "field 1, rowId 1", "rollback"],
   ["application/session/session-merge.ts#startSessionMerge", "updatedAt 1, updatedBy 1", "beat-stamp", "local-merge"],
   ["application/transitions/transitions.ts#createTransitions", "docId 2", "document-id"],
+  ["bootstrap/wiring/ports/writer-visual-buffer.ts#writerVisualBuffer", "field 1", "no-document"],
   ["core/collab/projection/fields.ts#projectSharedBeatFields", "updatedAt 1, updatedBy 1", "beat-stamp-read"],
   ["core/collab/projection/text.ts#projectSharedCommentAnchors", "field 1, rowId 1", "anchor-repair"],
   ["core/document/broll.ts#newBrollShot", "desc 1, name 1, owner 1", "record-stated", "shot-from-line"],
@@ -258,7 +259,8 @@ const FIELDS: readonly Site[] = [
   ["features/comments/comments.ts#postComment", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
   ["features/comments/comments.ts#postReply", "createdAt 1", "comment-stamp"],
   ["features/merge/local-merge.ts#offerFileMerge", "docId 1", "local-merge"],
-  ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"]
+  ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"],
+  ["features/writer/flow-visual-box.ts#bufferedVisualBox", "field 4", "no-document"]
 ];
 
 const RECORDS: readonly Site[] = [
