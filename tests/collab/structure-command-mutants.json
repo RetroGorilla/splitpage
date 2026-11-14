@@ -74,10 +74,10 @@
       "replace": "for (const target of [operation.target]) {"
     },
     {
-      "label": "structure ports read joined parts without a handle",
+      "label": "structure ports answer without a handle",
       "file": "src/bootstrap/wiring/ports/shared-values.ts",
-      "find": "return ports && { author: ports.author,",
-      "replace": "return { ...ports, author: source.author,"
+      "find": "const values = sharedValuePorts(source);",
+      "replace": "const values = sharedValuePorts({ ...source, handle: () => source.handle() ?? {} as SharedDocumentHandle });"
     }
   ]
 }

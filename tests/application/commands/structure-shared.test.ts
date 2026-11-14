@@ -525,7 +525,9 @@ test("a visual split in a shared session is refused by name with nothing sent; s
   const h = setup(), a = sharedHarness(adapterReplica(h.a));
   try {
     const make: Make = (stamps, shared) => splitBeatCommand("R1", "visualText", textCut(0, 0), "N1", { ...stamps, cells }, shared);
-    assert.deepEqual(a.session.read(doc => doc ? run(h.a, { make }, "Alice", 5).plan(doc, capabilities()) : null), { refused: "visual-split-in-shared-session" });
+    const refused = a.session.read(doc => doc ? run(h.a, { make }, "Alice", 5).plan(doc, capabilities()) : null);
+    assert.ok(refused && "refused" in refused);
+    assert.deepEqual(refused, { refused: "visual-split-in-shared-session" });
     const before = encodeSharedState(h.a), revision = readSharedRevision(h.a);
     assert.deepEqual(a.session.run(run(h.a, { make }, "Alice", 5)), { kind: "rejected", reason: "visual-split-in-shared-session" });
     assert.deepEqual(encodeSharedState(h.a), before);
