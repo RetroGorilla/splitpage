@@ -58,6 +58,7 @@ export const SHARED_LEAVE_FAILED = "leave-failed";
 export const SHARED_SWITCHING = "session-switching";
 
 interface Running {
+  readonly ports: SharedSwitchPorts;
   readonly parts: SharedSessionParts;
   readonly replica: SharedReplica;
   readonly kept: Record<string, unknown>;
@@ -156,7 +157,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     }, createSessionCapabilities("shared", ports.common)));
     if (!made.session) throw new Error("The shared session was not built");
     const parts: SharedSessionParts = { handle, session: made.session, undo, author };
-    running = { parts, replica, kept, live: value => { on = value; }, stopRoute: made.stopRoute, end: () => { alive = false; } };
+    running = { ports, parts, replica, kept, live: value => { on = value; }, stopRoute: made.stopRoute, end: () => { alive = false; } };
     undoOwner().adopt(null);
     holdMergeBase(null);
     made.bound = true;
@@ -194,9 +195,14 @@ function sameDocument(landed: ValidatedDocument): boolean {
   return current !== null && JSON.stringify(current) === JSON.stringify(landed);
 }
 
+export function leaveRunningSharedSession(): SharedSwitchOutcome {
+  return running ? leaveSharedSession(running.ports) : { ok: false, reason: SHARED_NOT_RUNNING };
+}
+
 export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
+  ports = now.ports;
   const faults = new Faults();
   let holding: string | null = null;
   if (!faults.attempt(() => { holding = ports.bindings.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
