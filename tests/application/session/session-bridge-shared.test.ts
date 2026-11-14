@@ -272,3 +272,26 @@ test("D3, D37: leaving without the standalone capabilities is refused by name; w
     assert.equal(standaloneSession().held()?.title, "Left");
   } finally { made.stop(); }
 });
+
+test("assumed rule 4: entering is refused by name once the session has ended, and nothing is built", () => {
+  const made = start();
+  try {
+    liveSession().dispose();
+    let built = 0;
+    assert.throws(() => adoptShared(() => { built++; throw new Error("built"); }, capabilities("shared")), /^Error: The document session has ended$/);
+    assert.deepEqual([built, sharedSession(), made.replaced()], [0, false, 0]);
+  } finally { made.stop(); }
+});
+
+test("D36: enter, leave and enter again: each app listener hears every later change once, and no disposed owner still tells it anything", () => {
+  const made = start();
+  try {
+    const first = hydrated(made);
+    adoptReplacement(migrateRows(projection("Left"), made.migration.ports), capabilities("standalone"));
+    const second = hydrated(made);
+    second.replica.write("remote", { ...projection("Shared"), title: "Again" });
+    assert.deepEqual(made.heard, ["adopt", "edit", "adopt", "adopt", "adopt", "remote"]);
+    first.replica.write("remote", { ...projection("Shared"), title: "Stale" });
+    assert.deepEqual([made.heard.length, first.replica.observers(), second.replica.observers(), currentDocument()?.title], [6, 0, 1, "Again"]);
+  } finally { made.stop(); }
+});

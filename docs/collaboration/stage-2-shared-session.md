@@ -150,7 +150,7 @@ yet). Every step below has a literal in
   - It subscribes numbering and the app's listeners to the new owner, but not
     the b-roll reconciler (D36). It disposes the standalone owner and announces
     the replacement.
-  - Entering twice is refused.
+  - Entering twice is refused, and so is entering once the session has ended.
 - **While shared.** `sharedSession()` answers `true`.
   - The common members (`read`, `run`, `refresh`, `subscribe`, the
     counters) go to the shared owner.
