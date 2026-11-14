@@ -14,6 +14,8 @@ const DRAFTS = {
   },
   "application/recovery/drafts-ports.ts#DraftsMount.taker": { "bootstrap/wiring/drafts.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsMount.applyTaken": { "bootstrap/wiring/drafts.ts": 1 },
+  "application/recovery/drafts-ports.ts#DraftsMount.detachSource": { "bootstrap/wiring/drafts.ts": 1 },
+  "application/recovery/drafts-ports.ts#DraftsMount.resumeWriting": { "bootstrap/wiring/drafts.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsPorts.transitions": { "application/recovery/drafts.ts": 1 },
   "application/recovery/drafts-ports.ts#DraftsPorts.identity.copyHistory": { "application/recovery/drafts.ts": 1 },
   "bootstrap/wiring/recovery-owners.ts#desktopDrafts": { "bootstrap/wiring/drafts.ts": 1 },

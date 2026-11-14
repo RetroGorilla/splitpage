@@ -83,6 +83,8 @@ export interface DraftsMount {
   readonly noteChange: () => void;
   readonly taker: DesktopDraftStore["taker"];
   readonly applyTaken: (taken: unknown) => Promise<string>;
+  readonly detachSource: () => boolean;
+  readonly resumeWriting: () => boolean;
   readonly testing: Readonly<Record<string, unknown>>;
   readonly dispose: () => void;
 }

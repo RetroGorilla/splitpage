@@ -1,0 +1,9 @@
+{"mutants":[
+  {"label":"detach leaves the retry timer armed","file":"src/application/recovery/drafts.ts","find":"    detachEpoch++;\n    schedule().cancel();\n    schedule().cancelRetry();\n","replace":"    detachEpoch++;\n    schedule().cancel();\n","tests":["tests/application/recovery/drafts.test.ts"]},
+  {"label":"resume restarts the draft sequence","file":"src/application/recovery/drafts.ts","find":"    if (!ports || !detached) return false;\n    detached = false;\n","replace":"    if (!ports || !detached) return false;\n    detached = false;\n    draftSeq = 0;\n","tests":["tests/application/recovery/drafts.test.ts"]},
+  {"label":"a discard chosen before the detach is still sent","file":"src/application/recovery/drafts.ts","find":"        if (discardEpoch !== detachEpoch) return null;\n        discardWaiting = false;\n","replace":"        discardWaiting = false;\n","tests":["tests/application/recovery/drafts.test.ts"]},
+  {"label":"resume without a detach is not a no-op","file":"src/application/recovery/drafts.ts","find":"    if (!ports || !detached) return false;","replace":"    if (!ports) return false;","tests":["tests/application/recovery/drafts.test.ts"]},
+  {"label":"a write answer from before the detach updates the owner","file":"src/application/recovery/drafts.ts","find":"      if (epoch !== detachEpoch) return r;\n","replace":"","tests":["tests/application/recovery/drafts.test.ts"]},
+  {"label":"a NEED_BASE answer from before the detach is resent","file":"src/application/recovery/drafts.ts","find":" && !retriedWithBase && epoch === detachEpoch) {","replace":" && !retriedWithBase) {","tests":["tests/application/recovery/drafts.test.ts"]},
+  {"label":"the resumed writer waits for the source's write","file":"src/application/recovery/drafts.ts","find":"    schedule().dropPending();\n    draftInFlight = null;\n","replace":"    schedule().dropPending();\n","tests":["tests/application/recovery/drafts.test.ts"]}
+]}
