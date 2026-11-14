@@ -95,8 +95,8 @@ function picture(slot: Bag): SharedJsonFields {
 }
 function storedLinks(record: SharedPictureRecord): Bag[] {
   return (Array.isArray(record.fields.links) ? record.fields.links : []).map(entry => {
-    const { rank: _rank, extra: _extra, ...fields } = bag(bag(entry).fields);
-    return fields;
+    const fields = bag(bag(entry).fields);
+    return Object.fromEntries(Object.keys(fields).filter(key => key !== "rank" && key !== "extra").map(key => [key, fields[key]]));
   });
 }
 function extraOf(slot: Bag): Bag {
