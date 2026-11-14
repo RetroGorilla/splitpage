@@ -15,7 +15,7 @@ import { getEditorName } from "./preferences-owner.ts";
 import { undoOwner } from "./undo.ts";
 import { writerControls } from "./writer.ts";
 import { draftResume } from "./recovery-owners.ts";
-import { mountDraftsFeature, stopDraftsFeature } from "./drafts.ts";
+import { draftSource } from "./drafts.ts";
 import { confirmSavedNow } from "./save-owners.ts";
 import { documentLocation, setHome } from "./location-owner.ts";
 
@@ -58,7 +58,7 @@ export function mountSharedSessionFeature(): void {
               undoOwner().flush();
             },
             detach: () => {
-              stopDraftsFeature(); detached = true;
+              draftSource.detachSource(); detached = true;
               setHome("none"); documentLocation().markWrittenOut(false); confirmSavedNow();
             },
             bindings, common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
@@ -69,7 +69,7 @@ export function mountSharedSessionFeature(): void {
           const result = await enterSharedSession(ports);
           const parts = sharedSessionParts();
           if (result.ok && parts) peer = createSharedTestPeer(parts, ports);
-          else if (detached) { detached = false; mountDraftsFeature(); }
+          else if (detached) { detached = false; draftSource.resumeWriting(); }
           return result;
         } finally { switching = false; }
       },
@@ -81,7 +81,7 @@ export function mountSharedSessionFeature(): void {
           const result = leaveSharedSession(ports);
           if (result.ok) {
             peer?.dispose(); peer = null; ports = null;
-            if (detached) { detached = false; mountDraftsFeature(); }
+            if (detached) { detached = false; draftSource.resumeWriting(); }
           }
           return result;
         } finally { switching = false; }

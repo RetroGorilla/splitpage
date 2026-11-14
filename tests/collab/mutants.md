@@ -637,7 +637,8 @@ empty target drops the session refusal notice marker | src/features/empty-script
 first input wiring drops the session refusal notice marker | src/bootstrap/wiring/ports/empty-script.ts: flattens the rejected outcome | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 empty target refusals miss the shared notice | src/bootstrap/wiring/ports/empty-script.ts: bypasses sharedCommandReport | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 the hook omits the real command refusal notice | src/bootstrap/wiring/shared-test.ts: omits commandRefused | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
-detaching leaves the source draft timers armed | src/bootstrap/wiring/shared-test.ts: omits stopDraftsFeature | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+detaching leaves the source draft timers armed | src/bootstrap/wiring/shared-test.ts: omits draftSource.detachSource | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+leaving does not resume the draft writer | src/bootstrap/wiring/shared-test.ts: omits draftSource.resumeWriting after a leave | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 detaching leaves standalone autosave pending | src/bootstrap/wiring/shared-test.ts: omits confirmSavedNow | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 the hook fails to count a missing painted base | src/bootstrap/wiring/shared-test.ts: omits the missingBase increment | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 native ownership scans are not counted | src/application/editing/buffered-field.ts: omits ownershipScan | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json

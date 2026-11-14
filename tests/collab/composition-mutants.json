@@ -477,8 +477,15 @@
     {
       "label": "detaching leaves the source draft timers armed",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "stopDraftsFeature(); detached = true;",
+      "find": "draftSource.detachSource(); detached = true;",
       "replace": "detached = true;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "leaving does not resume the draft writer",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "            peer?.dispose(); peer = null; ports = null;\n            if (detached) { detached = false; draftSource.resumeWriting(); }\n",
+      "replace": "            peer?.dispose(); peer = null; ports = null;\n",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
