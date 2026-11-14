@@ -4,6 +4,7 @@ import { CELL_TEXT_DERIVES } from "../commands/cell-text.ts";
 import { readBufferedFieldKey } from "../../core/collab/buffer.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import { SCENE_NAME_MAX } from "../../core/flow/flow.ts";
+import { TITLE_MAX } from "../../core/document/file-title.ts";
 
 export type BufferedTextField = "audioText" | "visualText" | "heading" | "title";
 
@@ -34,6 +35,13 @@ export function bufferedFieldTarget(key: string): BufferedFieldTarget | null {
 export function unsettledHeading(text: string): { readonly reason: string; readonly hold: boolean } | null {
   if (!cappedText(text, SCENE_NAME_MAX)) return { reason: "buffer-heading-empty", hold: true };
   return Array.from(text).length > SCENE_NAME_MAX ? { reason: "buffer-heading-length", hold: false } : null;
+}
+
+export function unsettledTitle(text: string, stored: string): { readonly reason: string; readonly hold: boolean } | null {
+  const units = Array.from(text).length;
+  // why: the session view caps a title at TITLE_MAX, so a longer stored title would no longer match any screen;
+  // only growth is refused, so a title another writer took past the cap can still be shortened
+  return units > TITLE_MAX && units > Array.from(stored).length ? { reason: "buffer-title-length", hold: false } : null;
 }
 
 export function bufferedFieldChanges(key: string): ChangeSet {

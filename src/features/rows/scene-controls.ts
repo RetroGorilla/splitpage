@@ -12,8 +12,10 @@ import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { NOT_SHARED } from "../../application/session/shared-session.ts";
 import { closeRowMenus } from "./row-menu.ts";
-import { bindSceneName } from "./scene-name-buffer.ts";
-import type { SceneNameBuffer, SceneNameBufferPorts } from "./scene-name-buffer.ts";
+import { bindBufferedInput } from "../common/buffered-input.ts";
+import type { BufferedInput, BufferedInputPorts } from "../common/buffered-input.ts";
+import { headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
+import { headingPos } from "../../core/flow/flow.ts";
 
 export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current" | "numbering">;
@@ -25,7 +27,7 @@ export interface SceneControlsPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly scroll: (x: number, y: number) => void;
   readonly stopScroll: () => void;
-  readonly sharedNames?: SceneNameBufferPorts;
+  readonly sharedNames?: BufferedInputPorts;
 }
 
 export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
@@ -41,7 +43,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     readonly line: HTMLFormElement;
     readonly returnTo: HTMLElement | null;
     readonly settle: (focus: boolean) => void;
-    readonly bound: SceneNameBuffer | null;
+    readonly bound: BufferedInput | null;
   } | null = null;
   let pointerAway = false;
   const animations = new Map<HTMLElement, Animation>();
@@ -101,7 +103,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (restoreFocus && returnTo?.isConnected && !motion) returnTo.focus();
   }
   function nameAt(parent: Element, sceneId: string | null, beatId: string, value: string, save: (name: string, focus: boolean) => void,
-    shared?: SceneNameBufferPorts): void {
+    shared?: BufferedInputPorts): void {
     if (!parent.isConnected) return;
     cancelName();
     if (naming) return;
@@ -149,7 +151,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       const state = ports.document.current();
       return state && sceneId !== null ? storedSceneName(state, sceneId) : null;
     };
-    const bound = shared && sceneId !== null ? bindSceneName({ input, sceneId, name, place }, shared) : null;
+    const bound = shared && sceneId !== null ? bindBufferedInput({
+      inputs: [input], key: headingFieldKey(sceneId), stored: name, unsettled: unsettledHeading, place,
+      position: offset => headingPos(sceneId, offset), owns: pos => pos.kind === "heading" && pos.sceneId === sceneId
+    }, shared) : null;
     naming = { sceneId, beatId, line: made, returnTo, settle, bound };
     animateName(made, false);
     input.focus(); input.select();

@@ -391,19 +391,19 @@
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a collapsed delete in the Split rename form is buffered without a target",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": "if (type.startsWith(\"delete\") && type !== \"deleteByCut\" && type !== \"deleteByDrag\" && input.selectionStart === input.selectionEnd) return;",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "Enter on a settled Split rename is refused instead of submitting",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": "    if (type === \"insertLineBreak\" && !binding.held()) return;\n",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "Enter on a held empty Split rename submits it",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": "if (type === \"insertLineBreak\" && !binding.held()) return;",
     "replace": "if (type === \"insertLineBreak\") return;",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
@@ -415,43 +415,43 @@
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a blur leaves a held Split rename held",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "  input.addEventListener(\"blur\", blurred);\n",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "    input.addEventListener(\"blur\", blurred);\n",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a blur the Split rename is refocused from still ends its hold",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "queueMicrotask(() => { if (!focused()) settleHeld(); });",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "queueMicrotask(() => { if (!active()) settleHeld(); });",
     "replace": "settleHeld();",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "the selection leaving a held Split rename keeps the hold",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "  input.ownerDocument.addEventListener(\"selectionchange\", selectionMoved);\n",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "  doc.addEventListener(\"selectionchange\", selectionMoved);\n",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a selection change inside the Split rename form ends its hold",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "at && !input.form?.contains(at)",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "at && !(input.form ?? input).contains(at)",
     "replace": "at",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a Split rename repaint drops the selection direction",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": "map(caret.end), caret.direction);",
     "replace": "map(caret.end));",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "the Split rename form stays in a header that a paint replaced",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "    form.place();\n",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "    form.place?.();\n",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "the Split rename caret is not moved past someone else's text",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": "input.setSelectionRange(map(caret.start), map(caret.end), caret.direction);",
     "replace": "input.setSelectionRange(caret.start, caret.end, caret.direction);",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
@@ -463,28 +463,88 @@
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "closing a Split rename does not repaint the rows",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "      ports.repaintRows();\n",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "      ports.repaint();\n",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a key that inserted nothing leaves a held Split rename held",
-    "file": "src/features/rows/scene-name-buffer.ts",
-    "find": "  input.addEventListener(\"keyup\", released);\n",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "    input.addEventListener(\"keyup\", released);\n",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "a bare modifier ends a held Split rename",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": " && !MODIFIERS.has(key.key)",
     "replace": "",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "the key that empties a Split rename ends the hold it makes",
-    "file": "src/features/rows/scene-name-buffer.ts",
+    "file": "src/features/common/buffered-input.ts",
     "find": "if (binding.held() && !key.isComposing",
     "replace": "if (!key.isComposing",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
+  }, {
+    "label": "a shared title still runs the set-title command",
+    "file": "src/features/title/routes.ts",
+    "find": "  if (mount.shared) {",
+    "replace": "  if (!mount.ports) {",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "the Writer's title is not bound in a shared session",
+    "file": "src/features/title/routes.ts",
+    "find": "inputs: [mount.main, mount.writer]",
+    "replace": "inputs: [mount.main]",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a settled shared title leaves the page title stale",
+    "file": "src/features/title/routes.ts",
+    "find": "changed: ports.pageTitle,",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a buffered input repaints only the input being typed in",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "for (const input of inputs) if (input.value !== text) input.value = text;",
+    "replace": "typing().value = text;",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a buffered input reads every field from the input being typed in",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "runs: input => [{ text: input.value, marks: {} }],",
+    "replace": "runs: () => [{ text: typing().value, marks: {} }],",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a shared title has no length verdict",
+    "file": "src/features/title/routes.ts",
+    "find": "      unsettled: text => unsettledTitle(text, stored() ?? \"\"),\n",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a shared title is read from the capped session view",
+    "file": "src/features/title/routes.ts",
+    "find": "stored = () => painted.stored(TITLE_FIELD_KEY);",
+    "replace": "stored = ports.current;",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a title past the cap cannot be shortened",
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "units > TITLE_MAX && units > Array.from(stored).length",
+    "replace": "units > TITLE_MAX",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a title past the cap is held instead of refused",
+    "file": "src/application/editing/buffered-field-key.ts",
+    "find": "{ reason: \"buffer-title-length\", hold: false }",
+    "replace": "{ reason: \"buffer-title-length\", hold: true }",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "closing the shared title routes does not settle",
+    "file": "src/features/title/routes.ts",
+    "find": "if (open && bound.dispose()) open = false;",
+    "replace": "open = false;",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
   }, {
     "label": "a visual commit addressed to the narration",
     "file": "src/adapters/collab/buffer.ts",
