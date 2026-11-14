@@ -27,10 +27,13 @@ test("through the real draft wiring, a detached writer writes and discards nothi
     assert.equal((await flushDraftNow()).ok, true);
     assert.equal(sent.length, 1);
     draftsTesting().noteChange();
-    assert.equal(draftSource.detachSource(), true);
-    assert.equal(draftsTesting().status().pending, false);
+    assert.deepEqual(draftSource.detachSource(), { ok: false, reason: "pending" });
+    assert.equal((await flushDraftNow()).ok, true);
+    assert.equal(draftSource.detachRefusal(), null);
+    assert.deepEqual(draftSource.detachSource(), { ok: true });
     currentDocument().rows[0].audioText = "While detached"; noteSessionEdit();
-    assert.deepEqual(await flushDraftNow(), { ok: true });
+    assert.deepEqual(await flushDraftNow(), { ok: false, code: "DETACHED" });
+    assert.deepEqual(await flushDraftNow({ keep: true }), { ok: false, code: "DETACHED" });
     assert.deepEqual(sent.length, 1);
     assert.equal(draftSource.resumeWriting(), true);
     assert.equal(draftSource.resumeWriting(), false);
