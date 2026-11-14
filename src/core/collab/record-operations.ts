@@ -51,6 +51,14 @@ function highest(ranks: readonly string[]): string | null {
   return top;
 }
 
+function movedToEnd(order: readonly string[], keys: readonly string[], kept: readonly string[]): ReadonlySet<string> {
+  for (let stay = kept.length; stay > 0; stay--) {
+    const unmoved = kept.slice(0, stay);
+    if (json(keys.slice(0, stay)) === json(unmoved) && json(order.filter(id => unmoved.includes(id))) === json(unmoved)) return new Set(kept.slice(stay));
+  }
+  return new Set(kept);
+}
+
 export function sharedRegistryOperations(edit: SharedRegistryEdit): SharedRegistryOperations {
   const operations: SharedOperation[] = [], author = edit.author;
   const next = () => (author.id + ":" + operations.length) as SharedContentRef;
@@ -58,7 +66,7 @@ export function sharedRegistryOperations(edit: SharedRegistryEdit): SharedRegist
     const before = keyed(edit.before[collection]), after = keyed(edit.after[collection]);
     if (!before || !after) return { refused: "records-without-id" };
     const kept = [...after.keys()].filter(id => before.has(id)), order = [...before.keys()].filter(id => after.has(id));
-    if (json(kept) !== json(order)) return { refused: "records-reordered" };
+    const moved = movedToEnd(order, [...after.keys()], kept);
     let rank = highest(edit.ranks(collection));
     for (const entry of after.values()) {
       const key = String(entry.id) as SharedContentRef, target = { collection, record: key }, was = before.get(key);
@@ -70,9 +78,14 @@ export function sharedRegistryOperations(edit: SharedRegistryEdit): SharedRegist
         operations.push({ kind: "record-create", id: next(), by: author.by, target, fields: { ...fields, rank, extra: extra(collection, entry) } as SharedJsonFields });
         continue;
       }
+      if (moved.has(key)) {
+        rank = rankAfter(rank);
+        operations.push({ kind: "record-set", id: next(), by: author.by, target, field: "rank", value: rank });
+      }
       for (const field of storedFields(collection)) {
         if (json(was[field]) === json(entry[field])) continue;
-        operations.push(entry[field] === undefined ? { kind: "record-set", id: next(), by: author.by, target, field, clear: true }
+        // why: clearing removes only the owner this copy saw; an assignment made elsewhere at once survives (rule 54).
+        operations.push(entry[field] === undefined || field === "owner" && entry[field] === "" ? { kind: "record-set", id: next(), by: author.by, target, field, clear: true }
           : { kind: "record-set", id: next(), by: author.by, target, field, value: entry[field] as SharedJsonValue });
       }
       if (extra(collection, was) !== extra(collection, entry)) operations.push({ kind: "record-set", id: next(), by: author.by, target, field: "extra", value: extra(collection, entry) });

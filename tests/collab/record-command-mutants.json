@@ -1,9 +1,24 @@
 {
   "tests": ["tests/application/commands/records-shared.test.ts", "tests/features/tags/production-tags-mount.test.ts"],
   "mutants": [{
-    "label": "a reordered registry is stated as sets and creates",
+    "label": "an owner set to nobody is written as an empty value that can win over an assignment the writer never saw",
     "file": "src/core/collab/record-operations.ts",
-    "find": "if (json(kept) !== json(order)) return { refused: \"records-reordered\" };",
+    "find": "entry[field] === undefined || field === \"owner\" && entry[field] === \"\" ? {",
+    "replace": "entry[field] === undefined ? {"
+  }, {
+    "label": "a record the edit moved to the end keeps its stored rank",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "if (moved.has(key)) {",
+    "replace": "if (false) {"
+  }, {
+    "label": "the fewest records are not chosen to move for a reorder",
+    "file": "src/core/collab/record-operations.ts",
+    "find": "for (let stay = kept.length; stay > 0; stay--) {",
+    "replace": "for (let stay = 0; stay > 0; stay--) {"
+  }, {
+    "label": "a cleared owner projects as a missing field instead of no owner",
+    "file": "src/core/collab/projection/fields.ts",
+    "find": "if (!Object.hasOwn(out, \"owner\")) out.owner = \"\";",
     "replace": ""
   }, {
     "label": "a record without an id or with a repeated id is diffed by a made-up key",
@@ -38,8 +53,8 @@
   }, {
     "label": "a dropped stored field is written as a value instead of cleared",
     "file": "src/core/collab/record-operations.ts",
-    "find": "operations.push(entry[field] === undefined ? {",
-    "replace": "operations.push(false ? {"
+    "find": "operations.push(entry[field] === undefined || field",
+    "replace": "operations.push(false || field"
   }, {
     "label": "a status change names no parents",
     "file": "src/core/collab/record-operations.ts",

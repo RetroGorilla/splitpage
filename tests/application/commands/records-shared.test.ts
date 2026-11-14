@@ -19,6 +19,7 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { sharedRegistryOperations } from "../../../src/core/collab/record-operations.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
+import { planQuickAdd } from "../../../src/core/production/tags.ts";
 import { replicas, operation } from "../../adapters/collab/executor-support.ts";
 import { sharedHarness, adapterReplica } from "../session/shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
@@ -53,6 +54,7 @@ function documentWith(records: Registries, rows: readonly Fields[] = [row("R1", 
 
 const create = (index: number, collection: string, record: string, fields: Fields) => ({ kind: "record-create", id: "w1_1:" + index, by: "Alice", target: { collection, record }, fields });
 const set = (index: number, collection: string, record: string, field: string, value: unknown) => ({ kind: "record-set", id: "w1_1:" + index, by: "Alice", target: { collection, record }, field, value });
+const clear = (index: number, collection: string, record: string, field: string) => ({ kind: "record-set", id: "w1_1:" + index, by: "Alice", target: { collection, record }, field, clear: true });
 const remove = (index: number, collection: string, record: string) => ({ kind: "record-delete", id: "w1_1:" + index, by: "Alice", target: { collection, record } });
 const status = (index: number, scope: string, record: string, value: string, parents: readonly string[] = []) => ({ kind: "status", id: "w1_1:" + index, by: "Alice", target: { scope, record }, value, parents });
 
@@ -103,8 +105,10 @@ const cases: readonly RecordLiteral[] = [
     twice: { tags: [{ ...DRONE, owner: "p2", notes: "spare", status: "have" }, MUG, { id: CUP, cat: "prop", name: "Cup", owner: "p2", notes: "spare", status: "have" }] } },
   { name: "advance a tag's status", make: (s, who) => updateTagsCommand([{ cat: "gear", name: "Drone" }], { status: { next: true } }, ids(who), s),
     operations: [status(0, "tag", D, "sourcing")], after: { tags: [{ ...DRONE, status: "sourcing" }, MUG] }, twice: { tags: [{ ...DRONE, status: "sourcing" }, MUG] } },
+  { name: "unassign a tag's owner", make: (s, who) => updateTagsCommand([{ cat: "gear", name: "Drone" }], { owner: { id: "nobody" } }, ids(who), s),
+    operations: [clear(0, "tags", D, "owner")], after: { tags: [{ ...DRONE, owner: "" }, MUG] }, twice: { tags: [{ ...DRONE, owner: "" }, MUG] } },
   { name: "delete a person", make: s => deletePersonCommand("p1", s),
-    operations: [remove(0, "people", "p1"), set(1, "tags", D, "owner", ""), set(2, "shots", "b1", "owner", "")],
+    operations: [remove(0, "people", "p1"), clear(1, "tags", D, "owner"), clear(2, "shots", "b1", "owner")],
     after: { people: [BOB], tags: [{ ...DRONE, owner: "" }, MUG], shots: [{ ...CITY, owner: "" }] },
     twice: { people: [BOB], tags: [{ ...DRONE, owner: "" }, MUG], shots: [{ ...CITY, owner: "" }] } },
   { name: "delete a tag that labels no text", make: s => deleteTagsCommand([{ cat: "gear", name: "Drone", unlabel: false }], () => [], STAMPS, s),
@@ -281,6 +285,43 @@ for (const order of ORDERS) {
   });
 }
 
+for (const target of ["tag", "shot"] as const) for (const deleter of ["Alice", "Bob"] as const) for (const order of ORDERS) {
+  test(`deleting a person while the other copy moves a ${target} away from them and back keeps that assignment and lists it, ${deleter} deleting: ${order}`, () => {
+    const h = setup(), a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
+    try {
+      const [deleting, assigning] = deleter === "Alice" ? [{ session: a.session, handle: h.a }, { session: b.session, handle: h.b }] : [{ session: b.session, handle: h.b }, { session: a.session, handle: h.a }];
+      const other: Who = deleter === "Alice" ? "Bob" : "Alice", assign = ports(assigning.handle, other);
+      const owner = (id: string) => target === "tag" ? updateTagsCommand([{ cat: "gear", name: "Drone" }], { owner: { id } }, ids(other), assign)
+        : setShotsCommand(["b1"], {}, { id }, ids(other), assign);
+      assert.equal(assigning.session.run(owner("p2")).kind, "applied");
+      assert.equal(deleting.session.run(deletePersonCommand("p1", ports(deleting.handle, deleter))).kind, "applied");
+      assert.equal(assigning.session.run(owner("p1")).kind, "applied");
+      flush(h.queue, order);
+      assert.deepEqual(agreeing("away and back", [h.a, h.b], order), {
+        document: documentWith({ people: [BOB], tags: [{ ...DRONE, owner: target === "tag" ? "p1" : "" }, MUG], shots: [{ ...CITY, owner: target === "shot" ? "p1" : "" }] }),
+        recovery: [{ kind: "deleted-person", person: "p1", name: "Ann", by: deleter, owners: [{ collection: target === "tag" ? "tags" : "shots", record: target === "tag" ? D : "b1" }], mentions: [] }]
+      });
+    } finally { a.session.dispose(); b.session.dispose(); h.close(); }
+  });
+}
+
+test("quick-add of a renamed tag's old name moves the tag's record to the end with a rank, as the standalone list does", () => {
+  const h = setup(), a = sharedHarness(adapterReplica(h.a));
+  try {
+    send(h.a, { kind: "record-set", id: "renamed", by: "Bob", target: { collection: "tags", record: D }, field: "name", value: "Boom" });
+    const before = project(h.a).document;
+    assert.deepEqual(before, documentWith({ tags: [{ ...DRONE, name: "Boom" }, MUG] }));
+    const readers = fakeMigration().ports.readers;
+    const make = (s: SharedRecordPorts | undefined) => gearQuickAddCommand(doc => planQuickAdd(doc, readers, "Drone"), s);
+    assert.equal(a.session.run(make(ports(h.a, "Alice"))).kind, "applied");
+    assert.deepEqual(a.executed.map(entry => entry.operations), [[set(0, "tags", D, "rank", "0000000002"), set(1, "tags", D, "name", "Drone"), clear(2, "tags", D, "owner")]]);
+    flush(h.queue, "D1");
+    const expected = documentWith({ tags: [MUG, { ...DRONE, owner: "" }] });
+    assert.deepEqual(agreeing("quick-add rename", [h.a, h.b]), { document: expected, recovery: [] });
+    assert.deepEqual(standalone(before, make(undefined)), expected);
+  } finally { a.session.dispose(); h.close(); }
+});
+
 test("a second status change names the first as its parent", () => {
   const h = setup(), a = sharedHarness(adapterReplica(h.a));
   try {
@@ -334,11 +375,23 @@ test("record commands that change nothing, or run without an author, ask for no 
 test("the registry diff refuses lists it cannot state as record operations", () => {
   const edit = (before: Fields[], after: Fields[]) => sharedRegistryOperations({ before: { people: before, tags: [], shots: [] }, after: { people: after, tags: [], shots: [] },
     ranks: () => [], heads: () => [], author: { id: "w1_1", by: "Alice" } });
-  assert.deepEqual(edit([ANN, BOB], [BOB, ANN]), { refused: "records-reordered" });
   assert.deepEqual(edit([ANN], [ANN, { name: "Cy" }]), { refused: "records-without-id" });
   assert.deepEqual(edit([ANN, ANN], [ANN]), { refused: "records-without-id" });
   assert.deepEqual(sharedRegistryOperations({ before: { people: [], tags: [null], shots: [] }, after: { people: [], tags: [], shots: [] },
     ranks: () => [], heads: () => [], author: { id: "w1_1", by: "Alice" } }), { refused: "records-without-id" });
+});
+
+test("the registry diff states a reorder by ranking the fewest records after the highest rank, in their new order", () => {
+  const CY = { id: "p3", name: "Cy" }, DI = { id: "p4", name: "Di" };
+  const edit = (before: Fields[], after: Fields[]) => sharedRegistryOperations({ before: { people: before, tags: [], shots: [] }, after: { people: after, tags: [], shots: [] },
+    ranks: () => ["0000000000", "0000000001", "0000000002"], heads: () => [], author: { id: "w1_1", by: "Alice" } });
+  const rank = (index: number, record: string, value: string) => ({ kind: "record-set", id: "w1_1:" + index, by: "Alice", target: { collection: "people", record }, field: "rank", value });
+  assert.deepEqual(edit([ANN, BOB], [BOB, ANN]), { operations: [rank(0, "p1", "0000000003")] });
+  assert.deepEqual(edit([ANN, BOB, CY], [CY, ANN, BOB]), { operations: [rank(0, "p1", "0000000003"), rank(1, "p2", "0000000004")] });
+  assert.deepEqual(edit([ANN, BOB, CY], [ANN, CY, BOB]), { operations: [rank(0, "p2", "0000000003")] });
+  assert.deepEqual(edit([ANN, BOB], [DI, ANN, BOB]), { operations: [
+    { kind: "record-create", id: "w1_1:0", by: "Alice", target: { collection: "people", record: "p4" }, fields: { name: "Di", rank: "0000000003", extra: "{}" } },
+    rank(1, "p1", "0000000004"), rank(2, "p2", "0000000005")] });
 });
 
 test("the registry diff clears a stored field the edit drops and sets one it changes", () => {
