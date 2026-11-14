@@ -178,11 +178,13 @@ C4 must pass `refused: sharedCommandRefusalNotice(notices)` when it builds
 `createSharedSession`, with `notices` from `ports/effects.ts`, and register
 `registerSharedOperationFamilies` before executing. The bridge's standalone-only
 outcome doors call the same owner's `refuse` method, preserving their named
-outcomes while displaying the warning. C6 must pass the composed session's `run`
-through to Writer, together with `writerFlowCommands(...).commands`; it must not
-wrap rejected outcomes in another notice. Find and Production already receive
+outcomes while displaying the warning. C6 must spread both ports returned by
+`writerFlowCommands(flow, { author, writer, handle: () => handle })` into Writer
+and pass `session.run` through without another refusal notice. Find and Production already receive
 `sharedCommandGuard(sharedSession, notices)` through their named ports and refuse
 bulk tagging before scans, edits or standalone undo.
+Split replace-all and the tag composer use the same guard before their existing
+fallback or success messages can overwrite a refusal; Writer find uses its served flow path.
 
 ## 4 The switch
 

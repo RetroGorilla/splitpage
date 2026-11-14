@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer } from "../../../src/features/tags/production-tags.ts";
+import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer, applyTag } from "../../../src/features/tags/production-tags.ts";
 import type { ProductionTagPorts } from "../../../src/features/tags/ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeSharedCommands } from "../fakes.ts";
+import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { replicas } from "../../adapters/collab/executor-support.ts";
+import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { createProductionIndex } from "../../../src/application/production/production-index.ts";
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
@@ -26,6 +30,7 @@ function fixture() {
   const index = createProductionIndex(migration.ports.readers, deepFreeze);
   const notices = fakeNotices();
   const ports: ProductionTagPorts = {
+    sharedCommands: fakeSharedCommands(),
     document: reader.document,
     edits: edits.edits,
     refresh: { request: (job) => { jobs.push(job); }, cancel: () => {} },
@@ -46,6 +51,28 @@ function fixture() {
   };
   return { ports, jobs, edits, migration, notices };
 }
+
+test("rule 73: the tag composer refuses single and bulk tagging without a success toast or standalone undo", () => {
+  for (const all of [false, true]) {
+    const set = replicas(), shared = sharedHarness(adapterReplica(set.a)), h = fixture();
+    document.body.innerHTML = '<div id="tag-quote"></div><input id="tag-name"><div id="tag-cats"></div><div id="tag-name-list"></div>' +
+      '<input id="tag-all" type="checkbox"><div id="tag-hint"></div><div id="tag-modal" hidden></div>';
+    const mounted = startProductionTags({ ...h.ports,
+      sharedCommands: sharedCommandGuard(() => shared.session.read(doc => doc !== null), h.notices.notices),
+      undo: { breakCoalescing: () => { assert.fail("standalone undo reached"); } }
+    });
+    try {
+      openTagComposer({ quotedText: "Cup", rowId: "R1", field: "visualText" });
+      (document.getElementById("tag-name") as HTMLInputElement).value = "Cup";
+      (document.getElementById("tag-all") as HTMLInputElement).checked = all;
+      const before = encodeSharedState(set.a);
+      applyTag();
+      assert.deepEqual(h.notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual([h.edits.ran, shared.undo], [[], []]);
+    } finally { mounted.dispose(); shared.session.dispose(); set.close(); }
+  }
+});
 
 for (const selection of ["partial-end", "partial-start", "enclosing", "inside", "before", "after"] as const) {
   test("the Tag button checks the selected range for an existing tag: " + selection, () => {

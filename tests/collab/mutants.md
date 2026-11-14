@@ -1,3 +1,5 @@
+C5d Split replace-all adds a fallback notice | src/features/find/find.ts | src/features/find/ports.test.ts: one warning before standalone work | tests/collab/visible-refusal-mutants.json
+C5d tag composer reports success after refusal | src/features/tags/production-tags.ts | tests/features/tags/production-tags-mount.test.ts: single and bulk tagging refuse once | tests/collab/visible-refusal-mutants.json
 C5d Writer repeats the session refusal | src/features/writer/flow-writer.ts | tests/features/writer/flow-command-ports.test.ts: one warning across session and Writer | tests/collab/visible-refusal-mutants.json
 C5d missing shared form becomes a silent no-op | src/application/session/shared-session.ts | tests/application/commands/shared-refusals.test.ts: one literal per refused builder | tests/collab/visible-refusal-mutants.json
 C5d session drops its refusal notice | src/application/session/shared-session.ts | tests/application/commands/shared-refusals.test.ts: warning exactly once | tests/collab/visible-refusal-mutants.json

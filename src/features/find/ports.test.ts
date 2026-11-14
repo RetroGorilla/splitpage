@@ -5,17 +5,17 @@ import { fakeDocument, fakeNotices, fakeFindPresent, fakeSharedCommands } from "
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
-import { startFind, findQueryChanged, runBulkTag } from "./find.ts";
+import { startFind, findQueryChanged, runBulkTag, replaceAll } from "./find.ts";
 import { sharedCommandGuard } from "../../bootstrap/wiring/ports/shared-command-notices.ts";
 import { replicas } from "../../../tests/adapters/collab/executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../../tests/application/session/shared-session-support.ts";
 import { encodeSharedState } from "../../adapters/collab/document.ts";
 
-test("rule 88: Find bulk tagging refuses once before scanning, editing or standalone undo", () => {
+test("rules 73 and 88: Find bulk tagging and Split replace-all refuse once before standalone work", () => {
   const win = jsdomWindow() as unknown as Window & typeof globalThis;
   const realm = globalThis as unknown as Record<string, unknown>;
   realm.window = win; realm.document = win.document; realm.CSS = win.CSS;
-  win.document.body.innerHTML = '<input id="find-input" value="Cup">';
+  win.document.body.innerHTML = '<input id="find-input" value="Cup"><input id="replace-input" value="Mug">';
   const set = replicas();
   const shared = sharedHarness(adapterReplica(set.a));
   const notices = fakeNotices();
@@ -29,11 +29,14 @@ test("rule 88: Find bulk tagging refuses once before scanning, editing or standa
     flags: { setFindOpen: () => {} }, options: { matchesCase: () => false }, bulkTag: fail, present: fakeFindPresent().present
   });
   try {
-    const before = encodeSharedState(set.a);
-    runBulkTag();
-    assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
-    assert.deepEqual(encodeSharedState(set.a), before);
-    assert.deepEqual(shared.undo, []);
+    for (const run of [runBulkTag, replaceAll]) {
+      notices.shown.length = 0;
+      const before = encodeSharedState(set.a);
+      run();
+      assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual(shared.undo, []);
+    }
   } finally { mounted.dispose(); shared.session.dispose(); set.close(); win.close(); }
 });
 

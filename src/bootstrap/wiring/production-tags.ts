@@ -11,12 +11,15 @@ import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 import type { ProjectFileServices } from "../../application/formats/project-file-services.ts";
 import { currentPlainTags } from "./plain-tags.ts";
+import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
+import { sharedSession } from "./session-owner.ts";
 
 const production = owned<ReturnType<typeof productionTags.startProductionTags>>();
 
 export function mountProductionTagsFeature() {
   return production.replace(() => {
     const ports: ProductionTagPorts = {
+      sharedCommands: sharedCommandGuard(sharedSession, notices),
       document: documentReader, edits, refresh, stamping, text, production: productionOwner,
       editing: tagEditing, undo: undoControl, view: tagView, notices, ids
     };

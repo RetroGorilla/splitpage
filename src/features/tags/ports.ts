@@ -105,6 +105,7 @@ export interface TagPanelPorts {
 }
 
 export interface ProductionTagPorts {
+  readonly sharedCommands: SharedCommandGuard;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly refresh: { readonly request: CommonDocumentSession["refresh"]; readonly cancel: CommonDocumentSession["cancelRefresh"] };
