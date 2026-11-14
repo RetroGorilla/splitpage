@@ -11,6 +11,7 @@ export interface BufferedFieldPorts extends Pick<BufferedTextCommit, "open">, Pi
   readonly missingBase: (rowId: string) => void;
   readonly recovered: (rowId: string) => void;
   readonly report: (outcome: CommandOutcome) => void;
+  readonly ownershipScan?: () => void;
 }
 
 export interface BufferedFieldEvent {
@@ -140,6 +141,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   }
 
   function ownership(event: BufferedFieldEvent): { readonly ok: boolean; readonly adopted: boolean } {
+    ports.ownershipScan?.();
     surface.normalize();
     let ok = true, adopted = false;
     for (const beat of surface.fields()) {

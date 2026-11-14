@@ -14,7 +14,7 @@ import type { FlowRange } from "../../core/flow/flow.ts";
 
 export const SHARED_WRITER_NO_AUTHOR = "The shared Writer has no author";
 
-export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings {
+export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan">): SharedBindings {
   let entered: SharedSessionParts | null = null;
   let cancelReopen: (() => void) | null = null;
   let pendingSelection: FlowRange | null = null;
@@ -26,7 +26,7 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
     cancelReopen = null;
     pendingSelection = selection;
     reopenPending = open;
-    stopWriterRuntimeFeature();
+    if (!stopWriterRuntimeFeature()) throw new Error("The Writer could not finish");
     const control = mountWriterRuntimeFeature(shared);
     if (!open) return;
     const releases: Array<() => void> = [];

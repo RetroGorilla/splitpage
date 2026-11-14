@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Writer checkpoint',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'checkpoint.splitpage'))
+wait F.state().title === 'Shared Writer checkpoint'
+click #btn-write
+wait window.__writerFlowTest.on()
+eval window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r1',offset:5},head:{kind:'beat',rowId:'r1',offset:5}});true
+eval S.enter()
+expect window.__writerFlowTest.on()
+expect window.__writerFlowTest.selection().head.rowId === 'r1' && window.__writerFlowTest.selection().head.offset === 5
+eval S.peer.hold();document.getElementById('writer-doc').focus();true
+press x
+expect S.read().app.rows[0].audioText === 'Hellox'
+expect window.__writerFlowTest.selection().head.offset === 6
+eval S.peer.type('r1',0,'Y');S.peer.type('r2',5,'!');true
+expect S.read().peer.rows[0].audioText === 'YHello' && S.read().peer.rows[1].audioText === 'World!'
+expect S.read().app.rows[0].audioText === 'Hellox' && S.read().app.rows[1].audioText === 'World'
+eval S.peer.release('reverse')
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect S.read().app.rows[0].audioText === 'YHellox' && S.read().app.rows[1].audioText === 'World!'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r1"]').textContent === 'YHellox'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r2"]').textContent === '\u200bWorld!'
+eval window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r1',offset:0},head:{kind:'beat',rowId:'r1',offset:0}});true
+key ctrl KeyZ
+expect S.read().app.rows[0].audioText === 'YHello' && S.read().app.rows[1].audioText === 'World!'
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect window.__writerFlowTest.selection().anchor.offset === 6 && window.__writerFlowTest.selection().head.offset === 6
+key ctrl+shift KeyZ
+expect S.read().app.rows[0].audioText === 'YHellox' && S.read().app.rows[1].audioText === 'World!'
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect window.__writerFlowTest.selection().anchor.offset === 7 && window.__writerFlowTest.selection().head.offset === 7
+expect S.counters().ownershipScans > 0 && S.counters().recovered === 0 && S.counters().missingBase === 0
+eval window.projection=S.read().app;S.leave()
+expect F.state().docId !== projection.docId
+expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
+expect S.read().peer === null
+expect window.__writerFlowTest.on()
+expect document.querySelector('#writer-doc .wr-beat[data-id="r1"]').textContent === 'YHellox'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r2"]').textContent === '\u200bWorld!'

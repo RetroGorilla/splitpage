@@ -40,7 +40,7 @@ export interface FlowWriter {
   readonly selectedText: () => string | null;
   readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly check: () => string[];
-  readonly dispose: () => void;
+  readonly dispose: () => boolean | void;
 }
 
 export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | "last" | "nextRedo"> {

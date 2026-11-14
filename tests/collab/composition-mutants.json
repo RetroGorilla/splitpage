@@ -5,7 +5,8 @@
     "tests/collab/undo-seam.test.ts",
     "tests/features/writer/buffer-undo.test.ts",
     "tests/bootstrap/shared-switch.test.ts",
-    "src/test/shared-writer-app.test.mjs"
+    "src/test/shared-writer-app.test.mjs",
+    "src/test/shared-hook-app.test.mjs"
   ],
   "mutants": [
     {
@@ -465,6 +466,76 @@
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); }",
       "replace": "track: (): void => { undoOwner().track(); }"
+    },
+    {
+      "label": "the hook omits the real command refusal notice",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "commandRefused: sharedCommandRefusalNotice(notices),",
+      "replace": "commandRefused: undefined,",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "detaching leaves the source draft timers armed",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "stopDraftsFeature(); detached = true;",
+      "replace": "detached = true;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "detaching leaves standalone autosave pending",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "documentLocation().markWrittenOut(false); confirmSavedNow();",
+      "replace": "documentLocation().markWrittenOut(false);",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the hook fails to count a missing painted base",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "counts.missingBase++; notices.show",
+      "replace": "notices.show",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "native ownership scans are not counted",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "    ports.ownershipScan?.();\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the shared Writer omits its empty-script control",
+      "file": "src/bootstrap/wiring/writer.ts",
+      "find": "return shared ? mountWriterEmptyScript(flow, root, shared) : flow;",
+      "replace": "return flow;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the Writer discards a flow whose disposal refuses",
+      "file": "src/features/writer/writer.ts",
+      "find": "  if (flowWriter.dispose() === false) return false;",
+      "replace": "  flowWriter.dispose();",
+      "tests": ["tests/features/writer/runtime-mount.test.ts"]
+    },
+    {
+      "label": "the first shared narration caret is placed without focus",
+      "file": "src/bootstrap/wiring/writer-empty-script.ts",
+      "find": "flow.repaint(); host.focus(); flow.place(range, true);",
+      "replace": "flow.repaint(); flow.place(range, true);",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "encoded peer updates never reach the app",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      receive(item.side, item.update);\n",
+      "replace": "      if (item.side === \"peer\") receive(item.side, item.update);\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "used-up shared undo steps do not warn",
+      "file": "src/bootstrap/wiring/undo.ts",
+      "find": "const notice = sharedUndoNotice(outcome, direction);",
+      "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
     }
   ]
 }

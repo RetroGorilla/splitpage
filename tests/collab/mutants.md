@@ -608,3 +608,13 @@ first command trims initial narration | src/application/commands/empty-script.ts
 empty target drops the session refusal notice marker | src/features/empty-script/empty-script.ts: forgets an already-shown session warning | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 first input wiring drops the session refusal notice marker | src/bootstrap/wiring/ports/empty-script.ts: flattens the rejected outcome | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 empty target refusals miss the shared notice | src/bootstrap/wiring/ports/empty-script.ts: bypasses sharedCommandReport | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
+the hook omits the real command refusal notice | src/bootstrap/wiring/shared-test.ts: omits commandRefused | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+detaching leaves the source draft timers armed | src/bootstrap/wiring/shared-test.ts: omits stopDraftsFeature | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+detaching leaves standalone autosave pending | src/bootstrap/wiring/shared-test.ts: omits confirmSavedNow | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+the hook fails to count a missing painted base | src/bootstrap/wiring/shared-test.ts: omits the missingBase increment | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+native ownership scans are not counted | src/application/editing/buffered-field.ts: omits ownershipScan | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+the shared Writer omits its empty-script control | src/bootstrap/wiring/writer.ts: returns the bare flow | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+the Writer discards a flow whose disposal refuses | src/features/writer/writer.ts: ignores false from dispose | tests/features/writer/runtime-mount.test.ts | tests/collab/composition-mutants.json
+the first shared narration caret is placed without focus | src/bootstrap/wiring/writer-empty-script.ts: omits host.focus | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+encoded peer updates never reach the app | src/bootstrap/wiring/shared-test-peer.ts: drops delivery to the app | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+used-up shared undo steps do not warn | src/bootstrap/wiring/undo.ts: omits notices for effective-false outcomes | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json

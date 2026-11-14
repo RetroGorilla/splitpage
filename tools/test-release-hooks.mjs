@@ -21,6 +21,7 @@ const CONVERTED = Object.freeze([
   "__saveStatusTest",
   "__sceneSelectTest",
   "__settingsTest",
+  "__sharedTest",
   "__splitpageFormats",
   "__targetTest",
   "__undoTest",

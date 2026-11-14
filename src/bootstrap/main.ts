@@ -36,6 +36,7 @@ import { mountFileMenuDropdownFeature } from "./wiring/file-menu.ts";
 import { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 import { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 import { mountWriterRuntimeFeature } from "./wiring/writer.ts";
+import { mountSharedSessionFeature } from "./wiring/shared-test.ts";
 import { mountPrompterRuntimeFeature } from "./wiring/prompter.ts";
 import { mountUpdateFeature } from "./wiring/update.ts";
 import { mountOnboardingFeature } from "./wiring/onboarding.ts";
@@ -122,5 +123,6 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountAppDataFeature();
   mountNewTabFeature();
   mountSettingsFeature();
+  mountSharedSessionFeature();
   startAppWhenReady(document, wiring, failStartup);
 }

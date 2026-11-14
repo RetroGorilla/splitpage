@@ -39,6 +39,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/find.ts": { functions: ["mountFindFeature", "mountFindEventsFeature"] },
   "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },
   "src/bootstrap/wiring/drafts.ts": { functions: ["mountDraftsFeature"] },
+  "src/bootstrap/wiring/shared-test.ts": { functions: ["mountSharedSessionFeature"] },
   "src/bootstrap/wiring/desktop.ts": { functions: ["mountDesktopFeature", "startDesktopShell"] },
   "src/bootstrap/wiring/prompter.ts": { functions: ["mountPrompterRuntimeFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
