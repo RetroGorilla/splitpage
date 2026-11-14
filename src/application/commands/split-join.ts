@@ -9,6 +9,9 @@ import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan, CommandRefusal } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
+import type { FlowPorts } from "../../core/flow/flow.ts";
+import { sharedCreatedBeat, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
+import type { SharedStructurePorts } from "./shared-structure.ts";
 
 export interface JoinPorts extends CellTextPorts {
   readonly plainText: (html: string | null | undefined) => string;
@@ -66,16 +69,27 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
   });
 }
 
-export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts): Command {
+function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined): Pick<Plan, "shared"> {
+  const by = shared?.author();
+  if (!shared || !by) return {};
+  const trace = sharedStructureTrace(doc, shared, by), cell = shared.cells(row.audioText), cut = clampRange(cell, at.from, at.to);
+  trace.delete(row.id, cell, cut.from, cut.to);
+  trace.split(row.id, cut.from, { id: createdId, ...sharedCreatedBeat(ports) });
+  return { shared: sharedStructureList(trace, shared, by, [row.id]) };
+}
+
+export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts, shared?: SharedStructurePorts): Command {
   return {
     name: "split-scene",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       if (SPLIT_FIELDS.indexOf(field) === -1) return null;
       const row = doc.rows.find(function (r) { return r.id === rowId; });
       if (!row) return null;
+      if (shared && field !== "audioText") return { refused: "visual-split-in-shared-session" };
       const halves = halvesOf(at, textOf(row[field]), ports);
       return {
+        ...sharedSplit(doc, row, at, createdId, ports, shared),
         changes: splitChanges(rowId, field, createdId),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });
@@ -111,7 +125,15 @@ function joinChanges(prevId: string, curId: string, takesVisual: boolean, raises
   });
 }
 
-export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
+function sharedJoin(doc: DocumentView, prevId: string, curId: string, flow: Omit<FlowPorts, "operations">, shared: SharedStructurePorts | undefined): Pick<Plan, "shared"> {
+  const by = shared?.author();
+  if (!shared || !by) return {};
+  const trace = sharedStructureTrace(doc, shared, by);
+  joinWithPrevious(doc, curId, { ...flow, trace });
+  return { shared: sharedStructureList(trace, shared, by, [prevId]) };
+}
+
+export function joinBeatsCommand(intoId: string, ports: JoinPorts, shared?: SharedStructurePorts): Command {
   return {
     name: "join-scenes",
     needs: "edit",
@@ -121,12 +143,14 @@ export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
       if (!prev || !cur) return null;
       if (sceneBeforeBeat(doc, cur.id)) return { refused: "remove the scene header before joining these beats" };
       const curHasVisual = hasVisual(cur, ports.plainText);
-      const result = joinWithPrevious(doc, cur.id, { cells: html => ports.cells(html ?? ""), newId: () => "", hasVisual: row => hasVisual(row, ports.plainText) });
+      const flow = { cells: (html: string | null | undefined) => ports.cells(html ?? ""), newId: () => "", hasVisual: (row: unknown) => hasVisual(row, ports.plainText) };
+      const result = joinWithPrevious(doc, cur.id, flow);
       if (!result || !("rows" in result)) return result && "refused" in result ? result : null;
       const joined = result.rows[at];
       if (!joined) return null;
       const raisesStatus = rankOf(cur.status) > rankOf(prev.status);
       return {
+        ...sharedJoin(doc, prev.id, cur.id, flow, shared),
         changes: joinChanges(prev.id, cur.id, curHasVisual, raisesStatus),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === intoId; });

@@ -4,6 +4,9 @@ import type { DocumentScene } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
+import { flowIdentity } from "../../core/flow/operations.ts";
+import { sharedParagraphFlags, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
+import type { SharedStructurePorts } from "./shared-structure.ts";
 
 function sceneEdit(name: string, update: (doc: DocumentView) => readonly DocumentScene[] | null): Command {
   return {
@@ -37,7 +40,17 @@ export function renameSceneCommand(id: string, name: string): Command {
   });
 }
 
-export function removeSceneCommand(id: string): Command {
+function sharedHeadingRemoval(doc: DocumentView, scene: DocumentScene, flagged: boolean, shared: SharedStructurePorts | undefined): Pick<Plan, "shared"> {
+  const by = shared?.author();
+  if (!shared || !by) return {};
+  const trace = sharedStructureTrace(doc, shared, by), first = sceneFirstBeatId(scene);
+  trace.emit({ kind: "heading-remove", heading: flowIdentity(scene.id), observed: trace.span(scene.id, 0, scene.name.length, "heading"),
+    newBeat: null, nextBeat: flowIdentity(first) });
+  sharedParagraphFlags(trace, flagged ? [] : [{ rowId: first, start: true }]);
+  return { shared: sharedStructureList(trace, shared, by, []) };
+}
+
+export function removeSceneCommand(id: string, shared?: SharedStructurePorts): Command {
   return {
     name: "remove-section", needs: "edit",
     plan(doc): Plan | null {
@@ -45,9 +58,10 @@ export function removeSceneCommand(id: string): Command {
       const scene = scenes?.find(item => item.id === id);
       if (!scene) return null;
       const rowId = sceneFirstBeatId(scene);
-      const changes = doc.rows.find(row => row.id === rowId)?.paragraphStart === true
-        ? [] : [{ rowId, field: "paragraphStart" }];
+      const flagged = doc.rows.find(row => row.id === rowId)?.paragraphStart === true;
+      const changes = flagged ? [] : [{ rowId, field: "paragraphStart" }];
       return {
+        ...sharedHeadingRemoval(doc, scene, flagged, shared),
         changes: changeSet({ cells: changes, docFields: ["sections"], derive: CELL_TEXT_DERIVES, saveNow: true }),
         apply(live) {
           const first = live.rows.find(row => row.id === rowId);

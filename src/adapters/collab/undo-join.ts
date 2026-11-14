@@ -5,7 +5,8 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { collabState } from "./state.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { sharedStructureIdentity, sharedStructureReference } from "./structure-identity.ts";
-import { interpretSharedStructure, readSharedStructureRemoval, readSharedStructureStream, sharedStructurePlanIndex } from "./structure-plan.ts";
+import { bindSharedStructurePlan, interpretSharedStructure, readSharedStructureRemoval, readSharedStructureStream, sharedStructurePlanIndex } from "./structure-plan.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
 import { readPlannedStructureIndex, sharedOrderPlan } from "./structure-order-index.ts";
 import { sharedPlannedSegmentAt } from "./structure-order.ts";
 import { projectSharedJoinGlue, sharedJoinFormatRegisterField, sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
@@ -85,6 +86,24 @@ export function readSharedJoinPlace(handle: SharedDocumentHandle, from: string, 
     const groups = new Set(liveJoins(handle, from, into).map(item => sharedJoinRetirementGroup(from, item)));
     const part = parts.find((part, index) => part.owner === from && part.group !== null && groups.has(part.group) && parts.slice(0, index).some(other => other.owner === into));
     return { removed, joined: part ? { glue: part.glue } : null, root: readSharedJoinedTextGeometry(prep.view, into)?.root ?? into };
+  } finally { prep.close(); }
+}
+
+export function readSharedJoinedFields(handle: SharedDocumentHandle, beat: string): string[] {
+  const prep = createSharedPreparation(handle);
+  try {
+    bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
+    const geometry = readSharedJoinedTextGeometry(prep.view, beat);
+    return [beat, ...geometry && !geometry.removed ? geometry.fields.filter(field => field !== beat) : []];
+  } finally { prep.close(); }
+}
+
+export function readSharedJoinedParts(handle: SharedDocumentHandle, beat: string): { readonly beat: string; readonly length: number }[] {
+  const prep = createSharedPreparation(handle);
+  try {
+    bindSharedStructurePlan(prep.view, observeSharedStructureIndex(handle));
+    const geometry = readSharedJoinedTextGeometry(prep.view, beat);
+    return geometry && !geometry.removed ? geometry.parts.map(part => ({ beat: part.owner, length: part.to - part.from })) : [];
   } finally { prep.close(); }
 }
 
