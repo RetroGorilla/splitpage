@@ -358,6 +358,7 @@ const ENGINES: readonly Site[] = [
   ["application/commands/production-records.ts#registerTagCommand", "addRegistryTag 1", "record-stated"],
   ["application/commands/production-records.ts#tagCellsCommand", "addRegistryTag 1", "record-with-text"],
   ["application/commands/production-records.ts#tagEntry", "addRegistryTag 1", "record-stated"],
+  ["application/commands/recovery.ts#recoveryCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/rows.ts#addBeatCommand", "Plan.shared (provided) 1", "stated-write", "beat-stamp"],
   ["application/commands/rows.ts#deleteBeatCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/rows.ts#sharedAddition", "Plan.shared (provided) 1", "stated-write", "beat-stamp"],
