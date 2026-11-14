@@ -23,7 +23,7 @@ test("C9 standalone: no DOM, no registered action, no recovery/document reads or
     }
     assert.deepEqual([f.state.currentReads, f.state.reads, f.state.docReads, f.state.subscriptions], reads);
     assert.deepEqual(reads.slice(1), [0, 0, 0]); assert.deepEqual(f.calls, []);
-    const definition = recoveryPanelActions(() => panel, f.ports)[0]; assert.ok(definition);
+    const definition = recoveryPanelActions({ current: () => panel, session: f.ports.session })[0]; assert.ok(definition);
     assert.deepEqual(definition.availability?.("command-menu"), { enabled: false, visible: false });
     definition.run("command-menu"); assert.equal(f.ports.host.childElementCount, 0);
   } finally { off(); panel.dispose(); f.ports.host.remove(); }
@@ -52,7 +52,7 @@ test("C9 follows mode changes, registers once, releases a vanished session and d
 
 test("C9 an unavailable action and a still-connected button cannot call a controller after the session ends", () => {
   const f = fakeRecoveryPanelPorts([removed]); let opened = 0;
-  const definition = recoveryPanelActions(() => ({ open: () => { opened++; }, dispose: () => {} }), f.ports)[0]; assert.ok(definition);
+  const definition = recoveryPanelActions({ current: () => ({ open: () => { opened++; }, dispose: () => {} }), session: f.ports.session })[0]; assert.ok(definition);
   definition.run("command-menu"); assert.equal(opened, 0);
   f.state.shared = true; const panel = createRecoveryPanel(f.ports);
   try {
