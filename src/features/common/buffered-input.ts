@@ -100,8 +100,9 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   function step(input: HTMLInputElement, event: Event): void {
     if (event.type === "keydown") {
       const key = event as KeyboardEvent;
+      if (binding.keydown(key)) return;
       if (binding.held() && !key.isComposing && key.keyCode !== 229 && !MODIFIERS.has(key.key)) pressed = true;
-      binding.keydown(key); return;
+      return;
     }
     if (event.type === "input") { binding.input(); return; }
     if (event.type === "compositionstart") { binding.start(event, range(input)); return; }
