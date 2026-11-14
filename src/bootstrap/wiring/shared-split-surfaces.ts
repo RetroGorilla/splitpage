@@ -26,29 +26,38 @@ function placeInSplit(rowId: string, offset: number): boolean {
 }
 
 export function sharedSplitSurfaces(split: SharedBindings, effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings {
-  let entered: SharedSessionParts | null = null;
+  let entered: SharedSessionParts | null = null, waiting: (() => void) | null = null;
   let surfaces: { readonly title: ReturnType<typeof mountTitlesFeature>; readonly scenes: ReturnType<typeof mountSceneHeadersFeature>;
     readonly empty: ReturnType<typeof mountSharedEmptyScript> | null } | null = null;
+  function mount(parts: SharedSessionParts): void {
+    const author = (): { readonly id: string; readonly by: string } => {
+      const next = parts.author.next();
+      if (!next) throw new Error("The shared Split has no author");
+      return next;
+    };
+    const text = sharedBufferPorts(parts.handle, parts.session, {
+      ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders, stamps: sessionStamps
+    });
+    const names = sharedBufferedInputPorts(text, sharedBufferedInputHistory(parts.handle, parts.session, parts.undo));
+    const title = mountTitlesFeature(names), scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));
+    surfaces = { title, scenes, empty: null };
+    const host = document.getElementById("rows");
+    const empty = host ? mountSharedEmptyScript({ handle: parts.handle, session: parts.session, author: parts.author,
+      writer: () => String(collabState(parts.handle).doc.clientID), stamps: sessionStamps }, { host, edits, notices, report: effects.report, place: placeInSplit }) : null;
+    surfaces = { title, scenes, empty };
+  }
   return {
     enter: parts => {
       split.enter(parts);
-      if (entered === parts && surfaces) return;
+      if (entered === parts && (surfaces || waiting)) return;
       entered = parts;
-      const author = (): { readonly id: string; readonly by: string } => {
-        const next = parts.author.next();
-        if (!next) throw new Error("The shared Split has no author");
-        return next;
-      };
-      const text = sharedBufferPorts(parts.handle, parts.session, {
-        ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders, stamps: sessionStamps
+      if (parts.session.revision() !== 0) { mount(parts); return; }
+      // why: the switch binds before it hydrates, and the name boxes read their stored text as they bind
+      const stop = parts.session.subscribe(() => {
+        stop(); waiting = null;
+        if (entered === parts && !surfaces) mount(parts);
       });
-      const names = sharedBufferedInputPorts(text, sharedBufferedInputHistory(parts.handle, parts.session, parts.undo));
-      const title = mountTitlesFeature(names), scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));
-      surfaces = { title, scenes, empty: null };
-      const host = document.getElementById("rows");
-      const empty = host ? mountSharedEmptyScript({ handle: parts.handle, session: parts.session, author: parts.author,
-        writer: () => String(collabState(parts.handle).doc.clientID), stamps: sessionStamps }, { host, edits, notices, report: effects.report, place: placeInSplit }) : null;
-      surfaces = { title, scenes, empty };
+      waiting = stop;
     },
     settle: () => {
       if (surfaces && !(surfaces.title.finish() && surfaces.scenes.finish() && (surfaces.empty?.finish() ?? true))) return SHARED_SPLIT_SURFACE_PENDING;
@@ -57,6 +66,7 @@ export function sharedSplitSurfaces(split: SharedBindings, effects: Pick<Buffere
     leave: () => {
       const held = surfaces;
       if (held?.empty && !held.empty.dispose()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
+      waiting?.(); waiting = null;
       surfaces = null; entered = null;
       const errors: unknown[] = [];
       if (held) for (const restore of [() => { mountTitlesFeature(); }, () => { mountSceneHeadersFeature(); }]) {

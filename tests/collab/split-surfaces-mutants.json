@@ -1,0 +1,91 @@
+{
+  "tests": [
+    "src/test/shared-split-surfaces-app.test.mjs"
+  ],
+  "mutants": [
+    {
+      "label": "the shared Split mounts the standalone title, whose whole-field command has no shared plan",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "const title = mountTitlesFeature(names), scenes",
+      "replace": "const title = mountTitlesFeature(), scenes"
+    },
+    {
+      "label": "the shared Split mounts the standalone scene name boxes",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));",
+      "replace": "scenes = mountSceneHeadersFeature();"
+    },
+    {
+      "label": "the shared Split's add-scene box gets no shared creation port",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));",
+      "replace": "scenes = mountSceneHeadersFeature(names);"
+    },
+    {
+      "label": "the shared Split mounts no empty-script surface",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "const empty = host ? mountSharedEmptyScript(",
+      "replace": "const empty = false ? mountSharedEmptyScript("
+    },
+    {
+      "label": "the surfaces mount before hydration, while the title field does not exist yet",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "      if (parts.session.revision() !== 0) { mount(parts); return; }",
+      "replace": "      mount(parts); return;"
+    },
+    {
+      "label": "entering again while the surfaces wait subscribes a second time",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "if (entered === parts && (surfaces || waiting)) return;",
+      "replace": "if (entered === parts && surfaces) return;"
+    },
+    {
+      "label": "leaving before the first delivery keeps waiting for it",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "      waiting?.(); waiting = null;\n",
+      "replace": "      waiting = null;\n"
+    },
+    {
+      "label": "settling ignores an open title composition",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "!(surfaces.title.finish() && ",
+      "replace": "!(true && "
+    },
+    {
+      "label": "settling ignores an open scene-name composition",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": " && surfaces.scenes.finish() && ",
+      "replace": " && true && "
+    },
+    {
+      "label": "leaving keeps the shared title binding instead of the standalone title",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "[() => { mountTitlesFeature(); }, ",
+      "replace": "[() => {}, "
+    },
+    {
+      "label": "leaving keeps the shared scene name boxes instead of the standalone ones",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": ", () => { mountSceneHeadersFeature(); }]",
+      "replace": ", () => {}]"
+    },
+    {
+      "label": "the shared title reports itself finished during a composition",
+      "file": "src/features/title/routes.ts",
+      "find": "      finish: () => !open || bound.finish(),",
+      "replace": "      finish: () => true,"
+    },
+    {
+      "label": "the scene controls report themselves finished during a name composition",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "    finish: () => !naming?.bound || naming.bound.finish(),",
+      "replace": "    finish: () => true,"
+    },
+    {
+      "label": "the scene headers wiring drops the controls' finish",
+      "file": "src/bootstrap/wiring/scene-headers.ts",
+      "find": "finish: controls.finish,",
+      "replace": "finish: () => true,"
+    }
+  ]
+}
