@@ -317,8 +317,13 @@ function planJoin(handle: SharedDocumentHandle, part: SharedJoinUndoPart, author
 // why: a record holds only what its own command wrote, so it is read before the updates held meanwhile are applied.
 function beforeHeldUpdates<T>(handle: SharedDocumentHandle, run: () => T): T { return sharedWriteFrame(collabState(handle), run); }
 
-export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
-  return beforeHeldUpdates(handle, () => reverseRecord(handle, record, writer));
+export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter,
+  done?: (reversal: SharedUndoReversal) => void): SharedUndoReversal {
+  return beforeHeldUpdates(handle, () => {
+    const reversal = reverseRecord(handle, record, writer);
+    done?.(reversal);
+    return reversal;
+  });
 }
 
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
@@ -354,8 +359,12 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
 
 export function executeSharedCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
-  options: { readonly base?: number } = {}): SharedCommandExecution {
-  return beforeHeldUpdates(handle, () => executeCommand(handle, operations, description, options));
+  options: { readonly base?: number; readonly done?: (execution: SharedCommandExecution) => void } = {}): SharedCommandExecution {
+  return beforeHeldUpdates(handle, () => {
+    const execution = executeCommand(handle, operations, description, options);
+    options.done?.(execution);
+    return execution;
+  });
 }
 
 function executeCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,

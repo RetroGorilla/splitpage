@@ -2,6 +2,7 @@ import type { ReplicaExecution, ReplicaPort } from "../../application/session/sh
 import type { SharedUndo } from "../../application/editing/undo/shared-undo.ts";
 import { executeSharedOperations } from "./execute.ts";
 import { executeSharedCommand } from "./undo-executor.ts";
+import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import { createSharedIncrementalProjector } from "./incremental-project.ts";
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import type { SharedDocumentHandle } from "./types.ts";
@@ -24,11 +25,19 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
     const description = options.description;
     if (!undo || !description) return executeSharedOperations(handle, operations, { base: options.base });
     let result: ReplicaExecution = { ok: false, reason: "undo-not-run" };
+    const failed: { thrown: boolean; error: unknown } = { thrown: false, error: undefined };
+    // why: a document callback that throws after the commit is rethrown by the write frame; the record is taken first
     undo.perform(() => {
-      const done = executeSharedCommand(handle, operations, description, { base: options.base });
-      result = done.result;
-      return done.result.ok ? done.record : null;
+      let kept: SharedUndoRecord | null = null;
+      try {
+        executeSharedCommand(handle, operations, description, { base: options.base, done: done => {
+          result = done.result;
+          kept = done.result.ok ? done.record : null;
+        } });
+      } catch (error) { failed.thrown = true; failed.error = error; }
+      return kept;
     });
+    if (failed.thrown) throw failed.error;
     return result;
   };
   return Object.freeze({
