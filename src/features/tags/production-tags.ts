@@ -139,8 +139,8 @@ export function healTagRegistry() {
   const plan = tagRecordsPlan((currentDocument as NonNullable<typeof currentDocument>)());
   if (!plan) return 0;
   let count = 0;
-  if (plan.apply) (stampDocument as NonNullable<typeof stampDocument>)(registryHealingStamp(plan, function (n) { count = n; }));
-  plan.commit();
+  const outcome = plan.apply ? (stampDocument as NonNullable<typeof stampDocument>)(registryHealingStamp(plan, function (n) { count = n; })) : null;
+  if (!outcome || outcome.kind === "applied") plan.commit();
   return count;
 }
 
