@@ -312,7 +312,8 @@ test("quick-add of a renamed tag's old name moves the tag's record to the end wi
     const before = project(h.a).document;
     assert.deepEqual(before, documentWith({ tags: [{ ...DRONE, name: "Boom" }, MUG] }));
     const readers = fakeMigration().ports.readers;
-    const make = (s: SharedRecordPorts | undefined) => gearQuickAddCommand(doc => planQuickAdd(doc, readers, "Drone"), s);
+    const plan = planQuickAdd as unknown as (doc: unknown, read: typeof readers, raw: string) => ReturnType<typeof planQuickAdd>;
+    const make = (s: SharedRecordPorts | undefined) => gearQuickAddCommand(doc => plan(doc, readers, "Drone"), s);
     assert.equal(a.session.run(make(ports(h.a, "Alice"))).kind, "applied");
     assert.deepEqual(a.executed.map(entry => entry.operations), [[set(0, "tags", D, "rank", "0000000002"), set(1, "tags", D, "name", "Drone"), clear(2, "tags", D, "owner")]]);
     flush(h.queue, "D1");
