@@ -279,8 +279,8 @@ An undo needs seven operations a forward command never writes. Each is read by
 | `text-restore` | each deleted unit as a new character directly after the deleted unit, with a birth record that names the unit it restores and a copy of each mark it is given |
 | `mark-retract` | a removal that names one occurrence |
 | `status-retire` | `retiredStatus` for the standing events of one value, only while the beat shows that value and retiring changes it |
-| `split-retire` | deletes the boundary atom of one split beat; nothing when it is already gone |
-| `split-restore` | the boundary atom of one split beat again, directly after the deleted one; nothing when it is there |
+| `split-retire` | a mark in `meta` that holds what the undo saw of the new beat; the boundary atom stays; nothing when the split is already undone |
+| `split-restore` | deletes that mark, so the boundary reads as a boundary again; refused while the new beat has a row |
 | `gallery-retire` | the `retired` key of one picture, holding what the copy saw as it applies ([Pictures](#pictures)) |
 | `gallery-restore` | deletes the `retired` key of one picture; nothing when it is not there |
 
@@ -505,10 +505,10 @@ every copy will read it after each of its operations. The parts:
 | boundaries | how many boundary atoms of the new beat its segment holds |
 | predecessor | the boundary just before the new beat's own, passing over other undone splits' boundaries; a boundary read as text joins the block before it, so the undo holds only while that block is still the source beat |
 | joins | the joins into the new beat from other beats that are not retired |
-| attachments | the new beat's visual and gallery records, without the birth records an insertion leaves in their mark records |
+| attachments | the new beat's visual and gallery records, with only the mark records whose mark still shows: no birth record, no mark a removal took back |
 | status | the new beat's standing status events |
 
-Every part is read through the library's public calls only: the stored
+No source module of the watch reads a private field of the library; the one test that does, walking a text's items, is unchanged from main (`tests/adapters/collab/structure-identities.test.ts:401`). Every part is read through the library's public calls only: the stored
 document through a small read view over its maps and texts, the planned one
 through the preparation view. The structure index and the watch read a
 boundary atom with the same reader, so an embed that names the beat but is no
@@ -544,6 +544,12 @@ source beat; the new beat's text then still joins the source beat.
 Declared limit: a change to the new beat that is taken back before the undo
 arrives does not keep the split.
 
+Declared limit: the predecessor passes over every marked boundary, also one whose
+mark no longer holds. When another writer splits the source beat, undoes that
+split and then adds a picture to its hidden beat while this undo is in flight,
+the result is `a` / `bcd` / `ef` rather than `a` / `b` / `cd` / `ef`; all copies agree
+and nothing is lost (literal in `undo-split.test.ts`).
+
 Cost. All marks are read in one pass per part. The incremental projection
 keeps each part until something it reads changes; the boundary and predecessor
 parts follow the structure index's count of boundary changes per segment, so
@@ -556,7 +562,7 @@ projection reads 11 with 1 mark and 308 with 100.
 Declared limit, retention: a redo deletes its mark, but a mark whose redo is
 used up stays in `meta`. A later cut may delete it: the retention work in
 section 6 of the collaboration plan (garbage collection, retained recovery
-content and quotas). Nothing deletes a mark today.
+content and quotas). There is no retention clean-up today; only a redo deletes a mark.
 
 A split also makes the new beat's empty visual (#1545). It stays stored with
 the new beat while the split is undone and comes back with it on redo. Literal
