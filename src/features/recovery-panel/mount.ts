@@ -16,15 +16,16 @@ export function createRecoveryPanel(ports: RecoveryPanelPorts): RecoveryPanelCon
   }
   function button(parent: HTMLElement, label: string, run: () => void): void {
     const button = parent.appendChild(document.createElement("button")); button.type = "button"; button.textContent = label;
+    button.className = "btn-outline";
     button.addEventListener("click", () => { if (!disposed && button.isConnected) run(); });
   }
   function entryRow(parent: HTMLElement, entry: SharedRecoveryEntry): void {
-    const row = parent.appendChild(document.createElement("article")); row.className = "history-card"; row.dataset.recoveryKind = entry.kind;
+    const row = parent.appendChild(document.createElement("article")); row.className = "history-card history-detail"; row.dataset.recoveryKind = entry.kind;
     const content = recoveryPanelContent(entry, ports), name = sharedRecoveryEntryName(entry);
     row.appendChild(document.createElement("h3")).textContent = content.label;
     row.appendChild(document.createElement("p")).textContent = content.by || "No author recorded";
     row.appendChild(document.createElement("pre")).textContent = content.text;
-    const actions = row.appendChild(document.createElement("div")); actions.className = "history-card-actions";
+    const actions = row.appendChild(document.createElement("div")); actions.className = "history-restore";
     const removed = entry.kind === "removed-beat" || entry.kind === "removed-heading";
     const restore = entry.kind === "deleted-person" ? sharedRecoveryPersonRestore(entry, ports.document.current()?.people ?? [], preview) !== null
       : removed && !!entry.removal?.ids.length;
