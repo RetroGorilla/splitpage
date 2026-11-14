@@ -7,7 +7,7 @@
   The BroadcastChannel case is tested through the real session and identity
   wiring, beside unchanged standalone reassignment.
 - Automatic last-file resume is not permitted while shared (rule 74). Its named
-  `lastFile.permitted` port reads the current owner and active hold. The check runs before stored
+  `lastFile.permitted` port takes the central `lastFileResume` capability. The check runs before stored
   handle lookup and after handle lookup, permission and file reading. The same
   check reaches `openProjectFile` and `loadFileIntoEditor`, including a switch
   while project or import parsing waits (D12). This automatic startup work shows
@@ -36,10 +36,18 @@ ports also uses the retained ports: they own the mounted bindings. Rollback and
 completed leave release them; a refused or pre-landing failed leave keeps the
 running session and its ports for a retry, as the existing fault model requires.
 
-The shared `documentEntry` port performs that admission. Feature callers receive
-it by name. `documentTransitions().open` and `startNew` also use it, so a direct
-caller cannot adopt over a shared owner. Standalone transition behavior keeps its
-existing reentrancy; the shared leave-and-entry boundary holds commands.
+The shared `documentEntry` port performs leave-first admission. Feature callers
+receive it by name. The canonical capability port makes every mode-only read
+hold-aware before consulting the current mode, including draft, history, reload
+and automatic-resume access. Its mode-only fields come from the existing mode
+capability names, so a later mode capability also receives the hold gate.
+The common edit and comment readers keep their existing forwarding.
+
+The wrapped transition owner explicitly lists all of its methods. `open` and
+`startNew` take leave-first admission; `recover` and `restore` take the same
+central entry permission before any migration, identity or replacement work.
+`copyId` reads identity without replacing the document. Standalone transition
+behavior keeps its existing reentrancy; the shared leave-and-entry boundary holds commands.
 
 Entry admission reads the existing command-hold state before the owner mode.
 An entry-only scope covers the whole enter or leave, including settlement,
@@ -49,6 +57,17 @@ Entry-only scopes preserve command settlement and enclosing command refusals.
 An external entry during that scope refuses as `session-switching`. A leave-first
 entry resumes after the switch scope has released; its admitted transition calls
 the original assignment directly, while public re-entry during the switch remains guarded.
+The switch's own adoption and standalone landing use its existing internal owner
+door, rather than the public transition wrapper.
+
+The entry matrix runs every listed entry in both the enter `docId` callback and
+the leave replacement notification. It requires a named capability refusal,
+unchanged document and revision, zero picker, file, permission, history, reload
+snapshot, draft, fetch, routing and import-dialog access, and successful switch
+completion. After leave a normal entry succeeds. Its structural census compares
+both runtime methods and declared methods (including inherited capability fields)
+against literal classifications, so a new transition or capability needs an audit.
+Close and Present keep their existing non-replacement behavior and composed tests.
 
 Pending openings belong to the existing transition `Started` lifetime. Each
 tracked operation has an epoch token, retired on completion, failure, cancellation
@@ -69,14 +88,20 @@ ports, so file-entry callers need no hook-owned accessor or binding defaults.
 
 ## Standalone and interface text
 
-No standalone typing, undo or save path gains work. With no hold, command admission
-keeps its existing single null check. Entry admission consults the shared hold
-state and performs one cheap mode read; a direct transition reads the mode twice.
-A file opening also adds token/Set bookkeeping and promise-completion handlers.
-Entries are rare and off the typing, undo and save paths; their standalone
-decisions and results stay unchanged.
+Standalone decisions and results stay unchanged. With no hold, command admission
+keeps its existing single null check. Each mode-only capability read now reads
+the shared hold state before forwarding to the existing owner capability; it
+allocates nothing on that path. This includes callers such as autosave and draft
+scheduling that already ask those capabilities. Common edit and comment reads
+and typing and undo admission gain no work from this gate.
+Entry admission also reads the mode; a direct open or New reads it twice.
+Direct recovery and restore read the entry permission before their existing work.
+A file opening adds token/Set bookkeeping and promise-completion handlers.
+These entries are rare and off the typing, undo and save execution paths.
 The only text used by the new admission is the existing notice:
 "This is not available in a shared session yet."
+The quiet automatic-resume capability names its shared-mode refusal
+`last-file-resume-shared`; a switch hold returns `session-switching`.
 
 The browser suites for real file-entry interaction belong to the hook cut; this
 cut uses composed application tests without starting a browser.

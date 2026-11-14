@@ -107,8 +107,8 @@ function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): Share
 }
 
 export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {
-  const held = sessionEntryRefusal();
-  if (held) return { ok: false, reason: held };
+  const holdReason = sessionEntryRefusal();
+  if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
   try { return await enterAvailableSession(ports); } finally { release(); }
 }
@@ -209,8 +209,8 @@ export function leaveRunningSharedSession(): SharedSwitchOutcome {
 }
 
 export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
-  const held = sessionEntryRefusal();
-  if (held) return { ok: false, reason: held };
+  const holdReason = sessionEntryRefusal();
+  if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
   try { return leaveAvailableSession(ports); } finally { release(); }
 }

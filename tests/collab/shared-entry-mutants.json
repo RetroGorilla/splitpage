@@ -142,7 +142,7 @@
     {
       "label": "document entry bypasses the shared leave",
       "file": "src/bootstrap/wiring/ports/document-entry.ts",
-      "find": "const result = held ? { ok: false, reason: held } as const : leaveRunningSharedSession();",
+      "find": "const result = permission.allowed ? leaveRunningSharedSession() : { ok: false, reason: permission.reason } as const;",
       "replace": "const result = { ok: true };",
       "tests": [
         "tests/bootstrap/shared-entry-paths.test.ts"
@@ -357,18 +357,18 @@
     },
     {
       "label": "admit when the owner is standalone during enter",
-      "file": "src/bootstrap/wiring/ports/document-entry.ts",
-      "find": "if (!held && !sharedSession()) return null;",
-      "replace": "if (!sharedSession()) return null;",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "return holdReason ? { allowed: false, reason: holdReason } : read();",
+      "replace": "return holdReason && sharedSession() ? { allowed: false, reason: holdReason } : read();",
       "tests": [
         "tests/bootstrap/shared-entry-switch-enter.test.ts"
       ]
     },
     {
       "label": "admit when the owner is standalone during leave",
-      "file": "src/bootstrap/wiring/ports/document-entry.ts",
-      "find": "if (!held && !sharedSession()) return null;",
-      "replace": "if (!sharedSession()) return null;",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "return holdReason ? { allowed: false, reason: holdReason } : read();",
+      "replace": "return holdReason && sharedSession() ? { allowed: false, reason: holdReason } : read();",
       "tests": [
         "tests/bootstrap/shared-entry-switch-leave-new.test.ts",
         "tests/bootstrap/shared-entry-switch-leave-open.test.ts"
@@ -423,8 +423,8 @@
     {
       "label": "enter admits a nested switch into its scope",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const held = sessionEntryRefusal();\n  if (held) return { ok: false, reason: held };",
-      "replace": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const held = sessionEntryRefusal();\n  void held;",
+      "find": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
+      "replace": "export async function enterSharedSession(ports: SharedSwitchPorts): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
@@ -432,19 +432,82 @@
     {
       "label": "leave admits a nested switch into its scope",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const held = sessionEntryRefusal();\n  if (held) return { ok: false, reason: held };",
-      "replace": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const held = sessionEntryRefusal();\n  void held;",
+      "find": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
+      "replace": "export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
     },
     {
       "label": "automatic resume ignores the switch hold while standalone",
-      "file": "src/bootstrap/wiring/ports/local-files.ts",
-      "find": "permitted: () => !sessionEntryRefusal() && !sharedSession()",
-      "replace": "permitted: () => !sharedSession()",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "lastFileResume: entryRead(() => sharedSession() ? SHARED_RESUME : AVAILABLE)",
+      "replace": "lastFileResume: () => sharedSession() ? SHARED_RESUME : AVAILABLE",
       "tests": [
         "tests/bootstrap/shared-entry-switch-auto.test.ts"
+      ]
+    },
+    {
+      "label": "recover bypasses the hold",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "recover: recovery => entered(() => original.recover(recovery), false)",
+      "replace": "recover: original.recover",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "restore bypasses the hold",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "restore: restoration => entered(() => original.restore(restoration), false)",
+      "replace": "restore: original.restore",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "restore reads history before the refusal",
+      "file": "src/application/session/session-merge.ts",
+      "find": "  opts = opts || {};\n  if (historyRefused()) return \"refused\";",
+      "replace": "  opts = opts || {};",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "reload reads the file before the refusal",
+      "file": "src/application/transitions/local-files.ts",
+      "find": "async function reloadFileFromDisk() {\n  if (!reloadPermitted()) return;",
+      "replace": "async function reloadFileFromDisk() {",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
+      ]
+    },
+    {
+      "label": "a new owner method is not in the table",
+      "file": "src/bootstrap/wiring/transition-owners.ts",
+      "find": "    copyId: original.copyId",
+      "replace": "    unlisted: original.restore, copyId: original.copyId",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory.test.ts"
+      ]
+    },
+    {
+      "label": "a new capability method is not in the table",
+      "file": "src/bootstrap/wiring/ports/capabilities.ts",
+      "find": "  ...standaloneReads,",
+      "replace": "  unlisted: () => AVAILABLE, ...standaloneReads,",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory.test.ts"
+      ]
+    },
+    {
+      "label": "standalone entry ignores its refused permission",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "if (permission.allowed && !sharedSession()) return null;",
+      "replace": "if (!sharedSession()) return null;",
+      "tests": [
+        "tests/bootstrap/shared-entry-inventory-enter.test.ts"
       ]
     }
   ]

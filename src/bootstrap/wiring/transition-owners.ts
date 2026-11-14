@@ -12,6 +12,7 @@ import { currentHome } from "./location-owner.ts";
 import { confirmedGeneration } from "./save-owners.ts";
 import { holdSessionCommands, liveSession, onDocumentReplaced, sharedSession } from "./session-owner.ts";
 import { documentEntry } from "./ports/document-entry.ts";
+import { capabilities } from "./ports/capabilities.ts";
 
 export interface LegacyTransitionPorts {
   readonly live: LiveDocumentPort;
@@ -69,17 +70,22 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     identity: ports.identity,
     history: ports.history
   });
-  function entered<T>(run: () => T): T {
-    const shared = sharedSession();
-    const refusal = documentEntry.before();
+  function entered<T>(run: () => T, leaveFirst: boolean): T {
+    const shared = leaveFirst && sharedSession();
+    const permission = leaveFirst ? null : capabilities.documentEntry();
+    const refusal = leaveFirst ? documentEntry.before() : permission && !permission.allowed ? { refused: permission.reason } : null;
     if (refusal) throw new Error(refusal.refused);
     if (!shared) return run();
     const release = holdSessionCommands("document-entry");
     try { return run(); } finally { release(); }
   }
-  const transitions: Transitions<DocumentDestination> = { ...original,
-    open: arrival => entered(() => original.open(arrival)),
-    startNew: arrival => entered(() => original.startNew(arrival)) };
+  const transitions: Transitions<DocumentDestination> = {
+    open: arrival => entered(() => original.open(arrival), true),
+    startNew: arrival => entered(() => original.startNew(arrival), true),
+    recover: recovery => entered(() => original.recover(recovery), false),
+    restore: restoration => entered(() => original.restore(restoration), false),
+    copyId: original.copyId
+  };
   const mine: Started = Object.freeze({
     transitions: transitions,
     operations: operations,
