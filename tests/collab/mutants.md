@@ -617,4 +617,5 @@ the shared Writer omits its empty-script control | src/bootstrap/wiring/writer.t
 the Writer discards a flow whose disposal refuses | src/features/writer/writer.ts: ignores false from dispose | tests/features/writer/runtime-mount.test.ts | tests/collab/composition-mutants.json
 the first shared narration caret is not placed | src/bootstrap/wiring/writer-empty-script.ts: omits flow.place | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 encoded peer updates never reach the app | src/bootstrap/wiring/shared-test-peer.ts: drops delivery to the app | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
+the test peer has no operation families before its first command | src/bootstrap/wiring/shared-test-peer.ts: omits family registration | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json
 used-up shared undo steps do not warn | src/bootstrap/wiring/undo.ts: omits notices for effective-false outcomes | src/test/shared-hook-app.test.mjs | tests/collab/composition-mutants.json

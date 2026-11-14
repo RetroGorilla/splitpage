@@ -155,6 +155,7 @@ test("real draft and autosave owners cancel pending source work on detach and pr
     assert.deepEqual(await hook.enter(), { ok: true });
     assert.equal(currentHome().kind, "none");
     assert.equal(autoSavePolicy().pending(), false);
+    assert.ok(timers.every(timer => !timer.active), "source draft and autosave timers are cancelled before shared editing");
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     assert.deepEqual(hook.leave(), { ok: true });
     assert.ok(timers.every(timer => !timer.active));

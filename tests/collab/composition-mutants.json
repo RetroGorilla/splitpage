@@ -531,6 +531,13 @@
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
+      "label": "the test peer has no operation families before its first command",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "  registerSharedOperationFamilies(handle, ports.structure);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
       "label": "used-up shared undo steps do not warn",
       "file": "src/bootstrap/wiring/undo.ts",
       "find": "const notice = sharedUndoNotice(outcome, direction);",
