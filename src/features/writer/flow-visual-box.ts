@@ -8,6 +8,11 @@ import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 
 export interface FlowVisualBoxPorts {
+  readonly buffer?: FlowVisualBufferMount;
+  readonly opened?: (cell: HTMLElement, range: FlowRange, first: boolean) => void;
+  readonly closing?: () => boolean;
+  readonly closed?: (cell: HTMLElement) => void;
+  readonly repaint?: (paint: () => void) => void;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
   readonly selection: () => FlowRange | null;
@@ -27,7 +32,75 @@ export interface FlowVisualBoxPorts {
   readonly paste: (cell: HTMLElement, data: Pick<DataTransfer, "getData">) => void;
 }
 
+export interface FlowVisualBufferControl {
+  readonly painted: () => void;
+  readonly refresh: (paint: () => void) => void;
+  readonly finish: () => boolean;
+  readonly selectionStart: (range: FlowRange) => boolean;
+  readonly selectionEnd: () => void;
+  readonly dispose: () => boolean;
+}
+
+export type FlowVisualBufferMount = (root: HTMLElement, repaint: () => void) => FlowVisualBufferControl;
+
 export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
+  return ports.buffer ? bufferedVisualBox(ports, ports.buffer) : standaloneVisualBox(ports);
+}
+
+function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMount): ReturnType<typeof standaloneVisualBox> {
+  let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false;
+  const control = standaloneVisualBox({ ...ports,
+    input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,
+    opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.painted(); },
+    closing: () => { if (binding && !binding.finish()) return false; binding?.selectionEnd(); return true; },
+    closed: target => { target.dataset.field = "inactive-visual"; selection = null; binding?.painted(); },
+    repaint: paint => { if (binding) binding.refresh(paint); else paint(); },
+    save: (range, html, first) => {
+      if (!first) return range;
+      try {
+        const next = ports.save(range, html, first);
+        if (next?.head.kind === "beat") { cell.dataset.id = next.head.rowId; cell.dataset.field = "visualText"; selection = null; }
+        return next;
+      } finally { binding?.selectionEnd(); binding?.painted(); }
+    },
+    paste: (target, data) => {
+      const range = target.ownerDocument.getSelection()?.rangeCount ? target.ownerDocument.getSelection()?.getRangeAt(0).cloneRange() : null;
+      const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: data.getData("text/plain") });
+      Object.defineProperty(event, "getTargetRanges", { value: () => range ? [range] : [] });
+      if (!target.dispatchEvent(event)) return;
+      ports.paste(target, data);
+      target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: data.getData("text/plain") }));
+    }
+  });
+  const box = control.element, cell = box.querySelector<HTMLElement>(".wr-flow-visual-text") as HTMLElement;
+  cell.dataset.field = "inactive-visual";
+  const gate = (event: Event): void => {
+    if (!ports.current() || ports.blocked() && ["beforeinput", "input", "compositionstart", "compositionend"].includes(event.type)) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (event.type === "input") { cell.innerHTML = selection ? "" : ports.doc().rows.find(row => row.id === cell.dataset.id)?.visualText ?? ""; binding?.painted(); }
+      return;
+    }
+    if (event.type === "compositionstart") composing = true;
+    if (event.type === "compositionend") composing = false;
+    if (selection && (event.type === "beforeinput" || event.type === "compositionstart") && !binding?.selectionStart(selection)) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+  };
+  const types = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop"];
+  for (const type of types) box.addEventListener(type, gate, true);
+  binding = mount(box, control.refresh);
+  const stopped = (event: Event): void => { if (event.defaultPrevented) event.stopImmediatePropagation(); };
+  for (const type of types) box.addEventListener(type, stopped, true);
+  const released = (): void => { if (!composing && selection) binding?.selectionEnd(); };
+  box.addEventListener("keyup", released);
+  return { ...control, dispose: () => {
+    if (!binding?.dispose()) return;
+    for (const type of types) { box.removeEventListener(type, gate, true); box.removeEventListener(type, stopped, true); }
+    box.removeEventListener("keyup", released); binding = null; control.dispose();
+  } };
+}
+
+function standaloneVisualBox(ports: FlowVisualBoxPorts) {
   const root = ports.root;
   const doc = root.ownerDocument;
   const parent = root.parentElement;
@@ -92,12 +165,14 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
 
   function close(restore = true): void {
     if (box.hidden) return;
+    if (ports.closing && !ports.closing()) return;
     composing = false;
     save();
     if (!first && ports.current() && !ports.blocked()) ports.leave(cell);
     const range = target;
     target = null;
     box.hidden = true;
+    ports.closed?.(cell);
     if (restore && range && ports.current()) ports.place(range);
   }
 
@@ -130,6 +205,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     shownHtml = row.visualText ?? "";
     pictures.innerHTML = first ? "" : ports.thumbnails(row);
     box.hidden = false;
+    ports.opened?.(cell, range, first);
     position();
     cell.focus({ preventScroll: true });
     const selection = window.getSelection();
@@ -156,7 +232,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     }
   }
 
-  function refresh(): void {
+  function refreshUnbuffered(): void {
     if (!ports.current()) { close(false); note.hidden = true; return; }
     if (target?.head.kind === "beat" && !rowOf(target.head.rowId)) close(false);
     if (target?.head.kind === "beat" && !first && !composing && !dirty && !saving) {
@@ -195,6 +271,9 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     }
     position();
   }
+
+  const repaint = ports.repaint;
+  const refresh = repaint ? () => { repaint(refreshUnbuffered); } : refreshUnbuffered;
 
   function onInput(event: Event): void {
     if (rejected()) return;
@@ -282,6 +361,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   if (parent) listeners.push([parent, "scroll", refresh]);
   listeners.forEach(([element, event, handler]) => element.addEventListener(event, handler));
   return {
+    element: box,
     open,
     refresh,
     close,

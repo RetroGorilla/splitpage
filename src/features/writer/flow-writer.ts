@@ -132,6 +132,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   });
 
   visual = createFlowVisualBox({
+    ...(ports.visualBuffer ? { buffer: ports.visualBuffer } : {}),
     root, doc: ports.doc, selection: surface.selection, prepare: surface.prepareVisual, place: range => { surface.place(range); }, current: isCurrent,
     plainVisual: ports.plainVisual,
     blocked: ports.editingBlocked,
