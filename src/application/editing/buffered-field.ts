@@ -12,6 +12,7 @@ export interface BufferedFieldPorts extends Pick<BufferedTextCommit, "open">, Pi
   readonly recovered: (rowId: string) => void;
   readonly report: (outcome: CommandOutcome) => void;
   readonly ownershipScan?: () => void;
+  readonly abandonment?: (abandon: () => void) => () => void;
 }
 
 export interface BufferedFieldEvent {
@@ -229,6 +230,19 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
 
   const stopAdmission = ports.beforeCommand(() => committing || finish());
 
+  function abandon(): void {
+    if (committing) return;
+    surface.composition(false); ended = false; refusedComposition = false; composedFromHold = null; target = null; label = undefined;
+    const held = active;
+    if (!held) return;
+    active = null;
+    surface.reset(held.rowId);
+    try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
+    surface.repaint(held.rowId);
+  }
+
+  const stopAbandonment = ports.abandonment?.(abandon);
+
   return {
     native: (event, dispatch) => {
       if (event.type === "compositionstart") surface.composition(true);
@@ -335,7 +349,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     base: rowId => active?.rowId === rowId ? active.base : null,
     dispose: () => {
       if (!finish()) return false;
-      stopAdmission(); target = null; surface.composition(false);
+      stopAdmission(); stopAbandonment?.(); target = null; surface.composition(false);
       return true;
     }
   };

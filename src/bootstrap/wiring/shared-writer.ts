@@ -19,6 +19,8 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
   let cancelReopen: (() => void) | null = null;
   let pendingSelection: FlowRange | null = null;
   let reopenPending = false;
+  const abandons = new Set<() => void>();
+  const abandonment = (abandon: () => void): (() => void) => { abandons.add(abandon); return () => { abandons.delete(abandon); }; };
   function restart(shared?: SharedWriterSource): void {
     const open = writerView().writerOpen() || reopenPending;
     const selection = pendingSelection ?? writerControls()?.writerFlowControl()?.selection() ?? null;
@@ -60,7 +62,8 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
         if (!next) throw new Error(SHARED_WRITER_NO_AUTHOR);
         return next;
       };
-      const text = sharedBufferPorts(parts.handle, parts.session, { ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders, stamps: sessionStamps });
+      const text = sharedBufferPorts(parts.handle, parts.session, { ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders,
+        stamps: sessionStamps, abandonment });
       restart({ text, author: parts.author, writer: () => String(collabState(parts.handle).doc.clientID),
         handle: () => entered === parts ? parts.handle : null, lifetime: parts.session });
     },
@@ -70,6 +73,7 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
       if (refused.kind === "failed") effects.report(refused);
       return refused.kind === "rejected" ? refused.reason : "settle-failed";
     },
+    abandon: () => { for (const abandon of [...abandons]) abandon(); },
     leave: () => {
       entered = null;
       restart();

@@ -235,7 +235,8 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
           if (!shared) return flow;
           const handle = shared.handle();
           return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,
-            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report }) : flow;
+            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,
+            ...(shared.text.bufferedText.abandonment ? { abandonment: shared.text.bufferedText.abandonment } : {}) }) : flow;
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,

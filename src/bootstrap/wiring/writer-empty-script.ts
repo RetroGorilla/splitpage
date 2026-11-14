@@ -8,10 +8,10 @@ import { edits } from "./ports/editing.ts";
 import { notices } from "./ports/effects.ts";
 
 export function mountWriterEmptyScript(flow: FlowWriter, host: HTMLElement,
-  shared: Parameters<typeof mountSharedEmptyScript>[0] & Pick<BufferedFieldPorts, "report">): FlowWriter {
+  shared: Parameters<typeof mountSharedEmptyScript>[0] & Pick<BufferedFieldPorts, "report" | "abandonment">): FlowWriter {
   const handle = shared.handle;
   const empty = mountSharedEmptyScript(shared, {
-    host, edits, notices, report: shared.report,
+    host, edits, notices, report: shared.report, ...(shared.abandonment ? { abandonment: shared.abandonment } : {}),
     place: (rowId, offset) => {
       const anchor = createSharedAnchor(handle, sharedBufferedTarget(handle, rowId), offset, "before");
       const range = anchor ? resolveSharedBufferedSelection(handle, [anchor, anchor]) : null;
