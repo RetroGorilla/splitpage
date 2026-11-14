@@ -72,6 +72,10 @@ const EDGE_SEQUENCES: readonly {
     events: [["keydown", "x", true], ["cut", null, true], ["keyup", "x", true]] },
   { label: "Ctrl+V", value: "", act: edge => edge.paste("Q"), after: ["Q", 1, 1],
     events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "empty Ctrl+V at a caret", value: "Draft", act: edge => { edge.select(2); edge.paste(""); }, after: ["Draft", 2, 2],
+    events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
+  { label: "empty Ctrl+V over a selection", value: "Draft", act: edge => { edge.select(1, 4); edge.paste(""); }, after: ["Dt", 1, 1],
+    events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
   { label: "Ctrl+V at a surrogate boundary with maxlength", value: "aaaaaaaZ", max: 10,
     act: edge => { edge.select(7); edge.paste("X😀Q"); }, after: ["aaaaaaaXZ", 8, 8],
     events: [["keydown", "v", true], ["paste", null, true], ["beforeinput", "insertFromPaste", true], ["input", "insertFromPaste", false], ["keyup", "v", true]] },
@@ -270,6 +274,17 @@ function emptied(name = "Scene"): RenamePage {
 }
 
 const EMPTY_REPORT = [{ kind: "rejected", reason: "buffer-heading-empty" }];
+
+test("Split rename: a cancelled paste on an already empty held name ends only the existing hold at keyup", () => {
+  const page = emptied();
+  try {
+    page.input().addEventListener("beforeinput", event => { event.preventDefault(); }, { once: true });
+    assert.equal(page.edge.paste("Q"), false);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, written(page), holds(page)],
+      ["Scene", "Scene", [0, 0], EMPTY_REPORT, [], []]);
+    copies(page, ["Scene"]);
+  } finally { page.close(); }
+});
 
 test("Split rename rule 4: Enter on a held empty name only ends the hold: the form stays open on the stored name and tells once; Escape then closes it", () => {
   const page = emptied();

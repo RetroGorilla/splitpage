@@ -127,11 +127,11 @@ export function edgeInput(current: () => HTMLInputElement) {
     copied: () => copied,
     paste: (text: string, during?: () => void) => chord("v", { ctrlKey: true }, field => {
       const native = text.replace(/\r\n|\r|\n/g, "\r\n");
-      if (!clipboard(field, "paste", native) || !before(field, "insertFromPaste", native)) return false;
+      if (!clipboard(field, "paste", native) || !before(field, "insertFromPaste", native || null)) return false;
       during?.();
       const [from, to] = span(field), put = fitted(field, native.replace(/\r\n/g, " "));
-      if (!put && from === to) return false;
-      replace(field, from, to, put); after(field, "insertFromPaste", put);
+      if (native && !put && from === to) return false;
+      replace(field, from, to, put); after(field, "insertFromPaste", put || null);
       return true;
     }),
     undo: (restored: string | null, selection?: readonly [number, number]) => history("z", "historyUndo", restored, selection),

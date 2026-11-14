@@ -33,7 +33,7 @@ export interface BufferedInput {
   readonly dispose: () => boolean;
 }
 
-const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown"] as const;
+const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop", "pointerdown", "focus"] as const;
 
 const MODIFIERS: ReadonlySet<string> = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "Dead", "Process"]);
 
@@ -60,6 +60,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   const doc = first.ownerDocument;
   let composing = false, kept: KeptCaret | null = null, open = true, pressed = false;
   let paste: { readonly before: string; readonly from: number; readonly to: number } | null = null;
+  let clipboardPending = false;
   const active = () => inputs.find(input => doc.activeElement === input) ?? null;
   const typing = () => active() ?? first;
   const caretNow = (input: HTMLInputElement): KeptCaret => {
@@ -101,6 +102,11 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     position: (_rowId, offset) => form.position(offset),
     ...unsettled ? { unsettled: (_rowId: string, text: string) => unsettled(text) } : {}
   });
+  function discardClipboard(): void {
+    if (!clipboardPending) return;
+    clipboardPending = false; paste = null;
+    binding.discardUnchangedInput();
+  }
   function step(input: HTMLInputElement, event: Event): void {
     if (event.type === "keydown") {
       const key = event as KeyboardEvent;
@@ -109,6 +115,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       return;
     }
     if (event.type === "input") {
+      clipboardPending = false;
       if (paste) {
         const { before, from, to } = paste; paste = null;
         const end = input.value.length - (before.length - to);
@@ -122,14 +129,17 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     }
     if (event.type === "compositionstart") { binding.start(event, range(input)); return; }
     if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
+    if (event.type !== "beforeinput") return;
     const native = event as InputEvent, type = native.inputType;
     if (native.isComposing || /Composition/.test(type)) return;
     if (!binding.dirty() && input.value === ports.painted.text(key)) ports.painted.field(key, input.value);
     if (type === "insertFromPaste" || type === "deleteByCut") {
       if (composing) { binding.settledFor(native); return; }
+      if (input.selectionStart === input.selectionEnd && (type === "deleteByCut" || !native.data)) return;
+      clipboardPending = true;
       if (type === "insertFromPaste") paste = { before: input.value, from: input.selectionStart ?? 0, to: input.selectionEnd ?? 0 };
       binding.beforeInput({ type: native.type, inputType: type === "insertFromPaste" ? "insertText" : "deleteContentBackward",
-        isComposing: false, data: native.data, preventDefault: () => { paste = null; native.preventDefault(); } }, range(input), range(input));
+        isComposing: false, data: native.data, preventDefault: () => { clipboardPending = false; paste = null; native.preventDefault(); } }, range(input), range(input));
       return;
     }
     // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event
@@ -142,7 +152,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   }
   function listener(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
-    ports.shown(() => { binding.native(event, () => { step(input, event); }); });
+    ports.shown(() => { binding.native(event, () => { if (event.type !== "input") discardClipboard(); step(input, event); }); });
   }
   function painted(): void {
     const focused = active(), caret = kept ?? (focused ? caretNow(focused) : null), dirty = binding.dirty();
@@ -159,17 +169,20 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   function settleHeld(): void {
     if (open && binding.held()) ports.shown(() => binding.finish());
   }
-  function released(): void {
+  function released(event: Event): void {
+    if (clipboardPending) ports.shown(() => binding.native(event, discardClipboard));
     // why: some keys on an input send no input event (an empty Backspace, a redo with no history), so a key that
     // inserted nothing ends the hold once the browser's default has run
     if (pressed) settleHeld();
     pressed = false;
   }
   function blurred(): void {
+    ports.shown(discardClipboard);
     // why: a repaint re-homes the form, blurring it until the paint refocuses; the hold ends only if focus stays away
     queueMicrotask(() => { if (!active()) settleHeld(); });
   }
   function selectionMoved(): void {
+    ports.shown(discardClipboard);
     const selection = doc.getSelection(), at = selection?.rangeCount ? selection.anchorNode : null, input = active();
     if (!input || at && !(input.form ?? input).contains(at)) settleHeld();
   }
@@ -181,6 +194,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   doc.addEventListener("selectionchange", selectionMoved);
   const stopPainted = ports.onPainted(painted);
   const stopCheck = ports.beforePaint(() => {
+    ports.shown(discardClipboard);
     binding.canPaint();
     const input = active();
     kept = input ? caretNow(input) : null;
@@ -188,10 +202,10 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   reset();
   return {
     held: binding.held,
-    finish: () => ports.shown(() => binding.finish()),
+    finish: () => ports.shown(() => { discardClipboard(); return binding.finish(); }),
     dispose: () => {
       if (!open) return true;
-      if (!ports.shown(() => binding.dispose())) return false;
+      if (!ports.shown(() => { discardClipboard(); return binding.dispose(); })) return false;
       open = false;
       stopPainted(); stopCheck();
       for (const input of inputs) {

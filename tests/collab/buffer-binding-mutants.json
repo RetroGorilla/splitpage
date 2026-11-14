@@ -641,5 +641,11 @@
     "find": "end >= from && input.value.slice(0, from) === before.slice(0, from) && input.value.slice(end) === before.slice(to)",
     "replace": "true",
     "tests": ["tests/features/title/title-buffer.test.ts"]
+  }, {
+    "label": "a cancelled clipboard input leaves its pending target and ingress hold",
+    "file": "src/features/common/buffered-input.ts",
+    "find": "    binding.discardUnchangedInput();\n",
+    "replace": "",
+    "tests": ["tests/features/title/title-buffer.test.ts"]
   }]
 }

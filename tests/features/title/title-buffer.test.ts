@@ -38,6 +38,76 @@ const caret = (input: HTMLInputElement) => [input.selectionStart, input.selectio
 const inserted = (value: string) => ({ kind: "text-insert", content: [{ value, marks: [] }] });
 const UNSUPPORTED = [{ kind: "rejected", reason: "buffer-unsupported-input" }];
 
+for (const clipboard of ["empty paste", "cut without selection"] as const) {
+  test(`shared title: ${clipboard} takes no hold and a remote change reaches both inputs and every copy`, () => {
+    const page = sharedTitle();
+    try {
+      page.main.focus(); page.edge.select(2);
+      const during: unknown[] = [];
+      page.main.addEventListener("beforeinput", () => { during.push(holds(page)); }, { once: true });
+      if (clipboard === "empty paste") page.edge.paste(""); else page.edge.cut();
+      assert.deepEqual(during, clipboard === "empty paste" ? [[]] : []);
+      remote(page, 0, "!"); page.h.queue.flush("dup"); page.paint();
+      assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page), holds(page)],
+        ["!Draft", "!Draft", "!Draft", [3, 3, "none"], [], [], []]);
+      copies(page, ["!Draft", "user"]);
+    } finally { page.close(); }
+  });
+}
+
+for (const [label, act, from, to, noHold] of [
+  ["empty paste at a caret", (page: TitlePage) => page.edge.paste(""), 2, 2, true],
+  ["paste at a caret", (page: TitlePage) => page.edge.paste("Q"), 2, 2, false],
+  ["paste over a selection", (page: TitlePage) => page.edge.paste("raf"), 1, 4, false],
+  ["cut over a selection", (page: TitlePage) => page.edge.cut(), 1, 4, false]
+] as const) {
+  test(`shared title: a cancelled ${label} releases its unchanged pending target at keyup without an edit`, () => {
+    const page = sharedTitle();
+    try {
+      page.main.focus(); page.edge.select(from, to);
+      let beforeHold: unknown = null;
+      page.main.addEventListener("beforeinput", event => {
+        beforeHold = holds(page);
+        event.preventDefault();
+      }, { once: true });
+      assert.equal(act(page), false);
+      assert.deepEqual(beforeHold, noHold ? [] : ["buffer"]);
+      assert.deepEqual([page.stored(), page.main.value, page.reports, written(page), holds(page)], ["Draft", "Draft", [], [], []]);
+      remote(page, 0, "!"); page.h.queue.flush("dup"); page.paint();
+      assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page), holds(page)],
+        ["!Draft", "!Draft", "!Draft", [from + 1, to + 1, from === to ? "none" : "forward"], [], [], []]);
+      copies(page, ["!Draft", "user"]);
+    } finally { page.close(); }
+  });
+}
+
+test("shared title: paint after a cancelled paste releases queued remote text before any keyup", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.select(2);
+    const snapshots: unknown[] = [];
+    page.main.addEventListener("beforeinput", event => {
+      event.preventDefault(); remote(page, 0, "!"); page.h.queue.deliverFrom("B", "D1");
+      snapshots.push([page.stored(), holds(page)]);
+      page.paint();
+      snapshots.push([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page), holds(page)]);
+    }, { once: true });
+    assert.equal(page.edge.paste("Q"), false);
+    assert.deepEqual(snapshots, [["Draft", ["buffer"]], ["!Draft", "!Draft", "!Draft", [3, 3, "none"], [], [], []]]);
+    copies(page, ["!Draft", "user"]);
+  } finally { page.close(); }
+});
+
+test("shared title: an empty paste over a selection is the recorded native deletion", () => {
+  const page = sharedTitle();
+  try {
+    page.main.focus(); page.edge.select(1, 4); assert.equal(page.edge.paste(""), true);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, written(page), holds(page)],
+      ["Dt", "Dt", "Dt", [1, 1, "none"], [], [[{ kind: "text-delete", observed: 3 }]], []]);
+    copies(page, ["Dt", "user"]);
+  } finally { page.close(); }
+});
+
 test("shared title: typing settles each keystroke as title text operations on the document, with no set-title command", () => {
   const page = sharedTitle();
   try {

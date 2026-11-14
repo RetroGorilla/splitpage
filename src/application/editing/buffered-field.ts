@@ -29,6 +29,7 @@ export interface BufferedFieldBinding {
   readonly beforeInput: (event: BufferedFieldEvent & { readonly inputType: string; readonly isComposing: boolean; readonly data?: string | null },
     range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
+  readonly discardUnchangedInput: () => void;
   readonly start: (event: BufferedFieldEvent, range: FlowRange | null) => void;
   readonly keydown: (event: BufferedFieldKey) => boolean;
   readonly end: (event: { readonly data: string }) => void;
@@ -266,6 +267,11 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
         active.edit.replace(from, to, surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept); target = null;
       }
       if (!surface.composition() && !holding()) finish();
+    },
+    discardUnchangedInput: () => {
+      if (!target || !active || active.fault || surface.composition() || !same(text(active.beat), active.edit.text())) return;
+      target = null; typed = null;
+      if (!holding()) finish();
     },
     start: (event, range) => {
       ended = false; refusedComposition = false; composedFromHold = null;

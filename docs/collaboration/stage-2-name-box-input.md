@@ -11,6 +11,8 @@ recorded events; they dispatch no synthetic events from production handlers.
 | Action | Sequence after keydown, before keyup |
 | --- | --- |
 | Ctrl+V | paste; beforeinput(insertFromPaste); input(insertFromPaste) |
+| Empty Ctrl+V at a caret | paste; beforeinput(insertFromPaste); input(insertFromPaste) |
+| Empty Ctrl+V over a selection | paste; beforeinput(insertFromPaste); input(insertFromPaste) |
 | Ctrl+X with a selection | cut; beforeinput(deleteByCut); input(deleteByCut) |
 | Ctrl+X without a selection | cut |
 | Ctrl+Z with native history | beforeinput(historyUndo); input(historyUndo) |
@@ -39,6 +41,27 @@ With maxlength 10, the same paste kept `A B C D\tE\u0001`, caret `[10,10]`.
 With `aaaaaaaZ`, caret 7, maxlength 10 and clipboard `X😀Q`, the result was
 `aaaaaaaXZ`, caret 8: truncation keeps a prefix and never half a surrogate pair.
 These observations passed three browser assertions. No native OS IME was used.
+
+The empty-clipboard follow-up used the same isolated Edge 157 harness and
+`navigator.clipboard.writeText("")`. At caret `[2,2]` in `Draft`, empty paste
+sent paste, beforeinput and input before keyup, with null data on both input
+events, leaving `Draft` and caret `[2,2]`. Over `[1,4]` it sent the same events
+with null data, leaving `Dt` and caret `[1,1]`. Cutting with nothing selected
+sent cut between keydown and keyup, with no beforeinput or input, leaving
+`Draft` and caret `[2,2]`. The helpers reproduce these events, including the
+trailing input for an empty paste at a caret.
+
+The binding does not rely on that trailing input. A collapsed empty paste or
+empty cut beforeinput opens no edit. Other clipboard beforeinputs remember that
+they await input. At the next observed native or lifecycle event, paint, finish
+or disposal, an unchanged native value discards only that waiting target and
+settles its no-op, releasing queued updates. It does not turn a missing input
+into an identical-text replacement. A pre-existing empty-name hold stays under
+its existing rules. Regression tests cancel a native beforeinput after the
+binding sees it, so the default mutation and its input do not happen; keyup or
+paint then releases the hold, and another writer's `!` reaches `!Draft` on each
+copy. These are cancellation tests, not an alternative claimed Edge sequence.
+The follow-up passed three literal event, value and caret assertions.
 
 ## Rule 84
 
