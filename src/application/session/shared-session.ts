@@ -37,11 +37,13 @@ export interface SharedSessionPorts {
   readonly timers: TimerPort;
   readonly timing?: RefreshTiming | undefined;
   readonly after?: SessionCounters | undefined;
+  readonly refused?: ((reason: string) => void) | undefined;
 }
 
 export type SharedAdmissionRefusal = Extract<CommandOutcome, { readonly kind: "rejected" | "failed" }>;
 
 export interface SharedDocumentSession extends CommonDocumentSession {
+  refuse: (reason: string) => CommandOutcome;
   revision: () => number;
   admit: () => SharedAdmissionRefusal | null;
   hold: (reason: string) => () => void;
@@ -115,6 +117,11 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   let delivering = false;
   let running: Running | null = null;
   let entered = false;
+
+  function refuse(reason: string): CommandOutcome {
+    ports.refused?.(reason);
+    return { kind: "rejected", reason, ...(ports.refused ? { notified: true as const } : {}) };
+  }
 
   // why: The change set compares held documents, since the entry port decides what is held; the replica's
   // report names rows by the projection's own ids and covers one publication, so a missed one makes it whole.
@@ -225,7 +232,8 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     if (refused) return refused;
     entered = true;
     try {
-      return decide(command);
+      const outcome = decide(command);
+      return outcome.kind === "rejected" ? refuse(outcome.reason) : outcome;
     } finally {
       entered = false;
     }
@@ -275,6 +283,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     readAt: function (select) { return select(document, revision); },
     recovery: function () { return recovery; },
     run: run,
+    refuse,
     beforeCommand: listener => {
       if (disposed) return () => {};
       admissions.push(listener);

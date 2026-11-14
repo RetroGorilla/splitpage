@@ -222,7 +222,8 @@ function standalone(member: string) {
 }
 
 function refusedWhileShared(member: string): CommandOutcome | null {
-  return running().current.kind === "shared" ? { kind: "rejected", reason: standaloneOnly(member) } : null;
+  const now = running().current;
+  return now.kind === "shared" ? now.session.refuse(standaloneOnly(member)) : null;
 }
 
 const session: DocumentSession = {
