@@ -122,6 +122,12 @@ const draftPorts: LegacyDraftPorts = {
   noteChange: () => { drafts.owner()?.noteChange(); }
 };
 
+export const draftSource: Pick<DraftsMount, "detachRefusal" | "detachSource" | "resumeWriting"> = {
+  detachRefusal: () => { const mounted = drafts.owner(); return mounted ? mounted.detachRefusal() : "no-owner"; },
+  detachSource: () => drafts.owner()?.detachSource() ?? { ok: false, reason: "no-owner" },
+  resumeWriting: () => drafts.owner()?.resumeWriting() ?? false
+};
+
 export function draftTaker(): ReturnType<DraftsMount["taker"]> {
   const mounted = drafts.owner();
   return mounted ? mounted.taker() : null;

@@ -531,8 +531,8 @@
     {
       "label": "draft flush takes entry permission",
       "file": "src/application/recovery/drafts.ts",
-      "find": "if (draftStopped || !runningOnDesktop() || draftsRefused()) return false;",
-      "replace": "if (draftStopped || !runningOnDesktop() || draftEntryRefused()) return false;",
+      "find": "if (draftStopped || detached || !runningOnDesktop() || draftsRefused()) return false;",
+      "replace": "if (draftStopped || detached || !runningOnDesktop() || draftEntryRefused()) return false;",
       "tests": [
         "tests/bootstrap/shared-entry-bookkeeping.test.ts"
       ]
