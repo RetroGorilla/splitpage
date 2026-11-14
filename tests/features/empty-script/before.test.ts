@@ -34,14 +34,16 @@ for (const order of ["dup", "rev"] as const) test("rule 91 feasibility: existing
         at: { left: null, right, affinity: "before" }, fields: { status: "todo", visualText: "", audioText: text, imageRef: null, updatedAt: "", updatedBy: null } })], { base: readSharedRevision(handle) }), { ok: true });
     }
     h.queue.flush(order); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
-    for (const handle of [h.a, h.b, late]) {
-      const projected = projectSharedDocumentWithRecovery(handle);
-      assert.deepEqual(projected.document, { schema: 2, title: "", docId: "d00000000000000000000000000000000", rows: [
+    const readings = [h.a, h.b, late].map(handle => projectSharedDocumentWithRecovery(handle));
+    for (const projected of readings) {
+      assert.deepEqual(projected, { document: { schema: 2, title: "", docId: "d00000000000000000000000000000000", rows: [
         { id: "structure_1_006600720065007300680041_beat_0", status: "todo", visualText: "", audioText: "one", imageRef: null, updatedAt: "", updatedBy: null },
         { id: "structure_2_006600720065007300680042_beat_0", status: "todo", visualText: "", audioText: "two", imageRef: null, updatedAt: "", updatedBy: null }
-      ], comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 });
-      assert.deepEqual(projected.recovery.filter(entry => entry.kind === "scene-with-no-beats"), [{ kind: "scene-with-no-beats", heading: { id: "H1", name: "Scene" }, beforeRowId: null }]);
+      ], comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 }, recovery: [
+        ...emptyScriptRecovery("last beat"), { kind: "scene-with-no-beats", heading: { id: "H1", name: "Scene" }, beforeRowId: null }
+      ] });
     }
+    assertReplicasAgree("rule 91 existing-operation feasibility", readings.map((output, index) => ({ replica: index === 0 ? "A" : index === 1 ? "B" : "C", order: index === 2 ? "late-C" : order === "rev" ? "D2" : "D1", output })));
   } finally { destroySharedDocument(late); h.close(); }
 });
 
@@ -57,6 +59,14 @@ test("standalone whole-script cross-beat removal recreates one empty beat throug
   const result = replaceRange(doc, { anchor: beatPos("R1", 0), head: beatPos("R2", 2) }, [], { ...createFlowLoadRuntime().ports, newId: () => "blank" }, true);
   assert.ok(result && "rows" in result);
   assert.deepEqual(result.rows, [{ id: "blank", visualText: "", imageRef: null, audioText: "", status: "todo" }]);
+});
+
+test("standalone removing every beat of a scene retains its heading and repairs one empty follower", () => {
+  const doc = { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }], comments: [], sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }] };
+  const result = replaceRange(doc, { anchor: beatPos("R1", 0), head: beatPos("R2", 2) }, [], { ...createFlowLoadRuntime().ports, newId: () => "blank" }, true);
+  assert.ok(result && "rows" in result);
+  assert.deepEqual(result.rows, [{ id: "blank", visualText: "", imageRef: null, audioText: "", status: "todo" }]);
+  assert.deepEqual(result.sections, [{ id: "H1", name: "Scene", firstSceneId: "blank" }]);
 });
 
 

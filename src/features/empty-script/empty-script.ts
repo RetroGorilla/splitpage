@@ -43,7 +43,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   }
   const before = (event: Event): void => { begin(event); };
   const typed = (event: Event): void => {
-    if (disposed || !current() || !ports.edits.allowed() || !release && !empty()) { event.preventDefault(); return; }
+    if (!current() || !ports.edits.allowed() || !release && !empty()) { event.preventDefault(); return; }
     if (!release && !begin(event)) return;
     pending = false;
     if (!composing && !(event as InputEvent).isComposing) finish();

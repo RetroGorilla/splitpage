@@ -1,19 +1,19 @@
 import { emptyScriptCommand } from "../../../application/commands/empty-script.ts";
-import type { CommonDocumentSession } from "../../../application/session/document-session.ts";
+import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
 import type { StampPorts } from "../../../application/session/ports.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import type { EmptyScriptPorts } from "../../../features/empty-script/ports.ts";
 import { startEmptyScript } from "../../../features/empty-script/empty-script.ts";
 import { holdSharedBuffer } from "../../../adapters/collab/ingress.ts";
 import { observeSharedStructureOrder } from "../../../adapters/collab/structure-order-index.ts";
-import { sharedStructureIdentity } from "../../../adapters/collab/structure-identity.ts";
+import { sharedStructureKey } from "../../../core/collab/structure-key.ts";
 import { collabState } from "../../../adapters/collab/state.ts";
 import { readSharedContentRef } from "../../../core/collab/read-operation.ts";
 import type { SharedAuthorPort } from "./shared-author.ts";
 
 export function mountSharedEmptyScript(shared: {
   readonly handle: SharedDocumentHandle;
-  readonly session: Pick<CommonDocumentSession, "read" | "run" | "epoch" | "subscribe" | "beforeCommand">;
+  readonly session: Pick<SharedDocumentSession, "read" | "run" | "epoch" | "subscribe" | "beforeCommand">;
   readonly author: SharedAuthorPort;
   readonly writer: () => string;
   readonly stamps: StampPorts;
@@ -29,7 +29,7 @@ export function mountSharedEmptyScript(shared: {
       const author = shared.author.next(); if (!author) return { ok: false, reason: "empty-script-no-author" };
       const raw = order.at(0), first = raw === undefined ? null : readSharedContentRef(raw);
       if (raw !== undefined && !first) return { ok: false, reason: "empty-script-placement-unavailable" };
-      const id = readSharedContentRef(author.id), rowId = readSharedContentRef(sharedStructureIdentity(shared.writer(), author.id, "beat"));
+      const id = readSharedContentRef(author.id), rowId = readSharedContentRef(sharedStructureKey(shared.writer(), author.id, "beat"));
       if (!id || !rowId) return { ok: false, reason: "empty-script-identity-unavailable" };
       const result = shared.session.run(emptyScriptCommand(text, { ...shared.stamps, author: { ...author, id },
         created: rowId, gap: { left: null, right: first, affinity: "before" } }));

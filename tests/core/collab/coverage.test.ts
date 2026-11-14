@@ -11,7 +11,7 @@ import { operationExamples } from "./operation-examples.ts";
 import { beatPos, caretAt, moveBeats, selectionToOwnBeat } from "../../../src/core/flow/flow.ts";
 import type { FlowPorts } from "../../../src/core/flow/flow.ts";
 
-test("Stage 0: exported command builders cannot escape the literal 51-builder operation decision table", () => {
+test("Stage 0: exported command builders cannot escape the literal 52-builder operation decision table", () => {
   const directory = new URL("../../../src/application/commands/", import.meta.url);
   const files = readdirSync(directory).filter(file => file.endsWith(".ts")).map(file => fileURLToPath(new URL(file, directory)));
   const program = ts.createProgram(files, { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext, allowJs: true, types: [] });
@@ -32,9 +32,9 @@ test("Stage 0: exported command builders cannot escape the literal 51-builder op
       if (builds) builders.push(exported.name);
     }
   }
-  assert.equal(builders.length, 51);
+  assert.equal(builders.length, 52);
   assert.deepEqual(builders.sort(), builderOperationCoverage.map(row => row[0]).sort());
-  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 10, 15]);
+  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 10, 16]);
 });
 
 test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one lost-intent classes", () => {

@@ -17,12 +17,15 @@ import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts
 import type { EmptyScriptPorts } from "../../../src/features/empty-script/ports.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+import { fakeNotices } from "../fakes.ts";
+import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 
 function mounted(handle: SharedDocumentHandle, session: ReturnType<typeof sharedHarness>["session"], host: HTMLElement, writer: string,
   place: EmptyScriptPorts["place"], author = sharedAuthorPort({ handle: () => handle, name: () => writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara" })) {
   const notices: string[] = [];
+  const notice = fakeNotices();
   const control = mountSharedEmptyScript({ handle, session, author, writer: () => writer, stamps: bufferStamps(writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara") },
-    { host, edits: { allowed: () => true }, notices: { show: text => { notices.push(text); } }, place });
+    { host, edits: { allowed: () => true }, notices: { show: (text, tone) => { notices.push(text); return notice.notices.show(text, tone); } }, place });
   const area = host.previousElementSibling; assert.ok(area instanceof HTMLElement);
   const input = area.querySelector("textarea"); assert.ok(input);
   return { control, input, area, notices };
@@ -49,10 +52,11 @@ function agrees(h: ReturnType<typeof removedEmptyScript>, name: typeof emptyScri
 
 for (const name of emptyScriptHistories) for (const order of ["dup", "rev"] as const) for (const mode of ["writer", "split"] as const) {
   test("rule 91: " + name + " offers typing in " + mode + "/" + order, () => {
-    const h = removedEmptyScript(name, order);
+    const h = removedEmptyScript(name, order), late = createMonitoredSharedDocument();
     try {
-      for (const handle of [h.a, h.b]) inspectEmptyScriptViews(handle, ui => {
-        const page = mounted(handle, ui.session, mode === "writer" ? ui.writerRoot : ui.splitRoot, handle === h.a ? "1" : "2", (row, offset) => ui.place(mode, row, offset));
+      assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
+      for (const handle of [h.a, h.b, late]) inspectEmptyScriptViews(handle, ui => {
+        const page = mounted(handle, ui.session, mode === "writer" ? ui.writerRoot : ui.splitRoot, handle === h.a ? "1" : handle === h.b ? "2" : "3", (row, offset) => ui.place(mode, row, offset));
         try { assert.equal(page.area.hidden, false); assert.equal(page.input.disabled, false); page.input.focus(); assert.equal(document.activeElement, page.input); }
         finally { assert.equal(page.control.dispose(), true); }
       });
@@ -74,7 +78,7 @@ for (const name of emptyScriptHistories) for (const order of ["dup", "rev"] as c
       assert.equal(shown.writerBeats, 1); assert.equal(shown.splitCells, 2); assert.equal(shown.writerHeadings, 0);
       agrees(h, name, [emptyScriptRow(firstEmptyScriptBeat, "Hi")], order);
       const other = inspectEmptyScriptViews(h.b); assert.equal(other.writerBeats, 1); assert.equal(other.splitCells, 2); assert.equal(other.writerHeadings, 0);
-    } finally { h.close(); }
+    } finally { destroySharedDocument(late); h.close(); }
   });
 }
 
@@ -100,10 +104,15 @@ test("rule 91: composition holds ingress and refuses unmount until its initial t
   const one = document.getElementById("one"), two = document.getElementById("two"); assert.ok(one && two);
   const pa = mounted(h.a, a.session, one, "1", () => true), pb = mounted(h.b, b.session, two, "2", () => true);
   try {
+    pa.input.focus();
     pa.input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    pa.input.blur(); assert.deepEqual(pa.notices, []);
+    pa.input.dispatchEvent(new window.KeyboardEvent("keyup", { key: "Process", bubbles: true }));
+    type(pb.input, "two"); h.queue.deliverFrom("B", "dup");
+    assert.equal(a.session.read(doc => doc?.rows.length), 0);
+    assert.equal(pa.input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "insertCompositionText", data: "漢", bubbles: true, cancelable: true })), true);
     pa.input.value = "漢";
     pa.input.dispatchEvent(new window.InputEvent("input", { inputType: "insertCompositionText", data: "漢", isComposing: true, bubbles: true }));
-    type(pb.input, "two"); h.queue.deliverFrom("B", "dup");
     assert.equal(a.session.read(doc => doc?.rows.length), 0); assert.equal(pa.control.dispose(), false);
     assert.equal(pa.area.isConnected, true); assert.equal(pa.input.value, "漢");
     pa.input.dispatchEvent(new window.CompositionEvent("compositionend", { data: "漢", bubbles: true }));
@@ -129,6 +138,63 @@ test("rule 91: a cancelled composition and a cancelled native key create nothing
   } finally { page.control.dispose(); a.session.dispose(); h.close(); }
 });
 
+for (const refusal of ["empty-script-no-author", "empty-script-identity-unavailable", "empty-script-placement-unavailable", "viewing-only"] as const) {
+  test("rule 91: refused first input keeps its text and writes nothing: " + refusal, () => {
+    const h = removedEmptyScript("last beat", "dup"), a = sharedHarness(adapterReplica(h.a));
+    if (refusal === "empty-script-placement-unavailable") collabState(h.a).doc.getArray<unknown>("order").insert(0, [0]);
+    if (refusal === "viewing-only") a.deny("viewing-only");
+    document.body.innerHTML = "<div id=host></div>";
+    const host = document.getElementById("host"); assert.ok(host);
+    const page = mounted(h.a, a.session, host, refusal === "empty-script-identity-unavailable" ? "invalid" : "1", () => true,
+      refusal === "empty-script-no-author" ? { next: () => null } : undefined);
+    try {
+      const before = encodeSharedState(h.a);
+      type(page.input, "kept");
+      assert.equal(page.input.value, "kept"); assert.equal(page.area.hidden, false);
+      assert.deepEqual(page.notices, [refusal]); assert.deepEqual(a.executed, []);
+      assert.deepEqual(encodeSharedState(h.a), before);
+    } finally { page.input.value = ""; page.control.dispose(); a.session.dispose(); h.close(); }
+  });
+}
+
+test("rule 91: first input cannot take another buffer's ingress hold", () => {
+  const h = removedEmptyScript("last beat", "dup"), a = sharedHarness(adapterReplica(h.a)), release = holdSharedBuffer(h.a);
+  document.body.innerHTML = "<div id=host></div>";
+  const host = document.getElementById("host"); assert.ok(host);
+  const page = mounted(h.a, a.session, host, "1", () => true);
+  try {
+    assert.equal(page.input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "insertText", data: "x", bubbles: true, cancelable: true })), false);
+    assert.deepEqual(a.executed, []); assert.deepEqual(page.notices, ["buffer-pending"]);
+    assert.equal(page.control.dispose(), true); assert.deepEqual([...collabState(h.a).ingress.holds], ["buffer"]);
+  } finally { release(); page.control.dispose(); a.session.dispose(); h.close(); }
+});
+
+test("rule 91: a failed first command is surfaced and its native text is retained", () => {
+  const h = removedEmptyScript("last beat", "dup"), a = sharedHarness(adapterReplica(h.a));
+  document.body.innerHTML = "<div id=host></div>";
+  const host = document.getElementById("host"); assert.ok(host);
+  const failure = new Error("command failed");
+  const page = mounted(h.a, { ...a.session, run: () => ({ kind: "failed", error: failure }) }, host, "1", () => true);
+  try {
+    page.input.value = "kept"; assert.throws(() => page.control.finish(), failure);
+    assert.equal(page.input.value, "kept"); assert.deepEqual(a.executed, []);
+  } finally { page.input.value = ""; page.control.dispose(); a.session.dispose(); h.close(); }
+});
+
+test("rule 91: a committed creation with an effect failure is not retried as another first beat", () => {
+  const h = removedEmptyScript("last beat", "dup"), failure = new Error("dirty effect failed");
+  const a = sharedHarness(adapterReplica(h.a), { effect: name => { if (name === "dirty") throw failure; } });
+  document.body.innerHTML = "<div id=host></div>";
+  const host = document.getElementById("host"); assert.ok(host);
+  const page = mounted(h.a, a.session, host, "1", () => true);
+  try {
+    type(page.input, "kept"); assert.equal(page.input.value, ""); assert.equal(page.area.hidden, true);
+    assert.equal(page.control.finish(), true); assert.equal(a.executed.length, 1); assert.deepEqual(page.notices, []);
+    assert.deepEqual(a.reported, [failure]); assert.deepEqual([...collabState(h.a).ingress.holds], []);
+    agrees(h, "last beat", [emptyScriptRow(firstEmptyScriptBeat, "kept")], "dup");
+  } finally { page.control.dispose(); a.session.dispose(); h.close(); }
+});
+
 test("seeded rule 91: three simultaneous starts, both delivery orders, duplicates and a late joiner", () => {
   let seed = 0x91c6;
   for (let step = 0; step < 20; step++) {
@@ -144,6 +210,9 @@ test("seeded rule 91: three simultaneous starts, both delivery orders, duplicate
     try {
       for (const index of seed & 2 ? [2, 0, 1] : [1, 2, 0]) { const page = pages[index], text = ["one", "two", "three"][index]; assert.ok(page && text); type(page.input, text); }
       agrees(h, name, [emptyScriptRow(firstEmptyScriptBeat, "one"), emptyScriptRow(secondEmptyScriptBeat, "two", "Bob"), emptyScriptRow("structure_3_00770033005f0031_beat_0", "three", "Cara")], order);
+      assert.deepEqual(projectSharedDocumentWithRecovery(h.c), { document: emptyScriptDocument([
+        emptyScriptRow(firstEmptyScriptBeat, "one"), emptyScriptRow(secondEmptyScriptBeat, "two", "Bob"), emptyScriptRow("structure_3_00770033005f0031_beat_0", "three", "Cara")
+      ]), recovery: emptyScriptRecovery(name) });
       for (const page of pages) assert.deepEqual(page.notices, []);
     } finally { for (const page of pages) page.control.dispose(); for (const session of sessions) session.session.dispose(); h.close(); }
   }
