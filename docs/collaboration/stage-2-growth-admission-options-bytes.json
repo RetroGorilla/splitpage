@@ -1,0 +1,1464 @@
+{
+  "node": "v24.22.1",
+  "probes": {
+    "typed": {
+      "bytes": 320,
+      "parts": {
+        "text": 10,
+        "markRecords:birth": 310
+      },
+      "changed": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentString",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "text",
+          "bytes": 10,
+          "value": [
+            "x"
+          ]
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "[2166572391,\"[\\\"text-birth\\\",\\\"m1\\\",0]\"]",
+          "category": "markRecords:birth",
+          "bytes": 310,
+          "value": [
+            {
+              "type": "birth",
+              "operation": "[\"text-birth\",\"m1\",0]",
+              "writer": 2166572391,
+              "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,167,4,0]}",
+              "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,167,4,65]}",
+              "observed": [],
+              "born": {
+                "client": 2166572391,
+                "clock": 551,
+                "length": 1
+              }
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentString",
+          "origin": {
+            "client": 2166572391,
+            "clock": 184
+          },
+          "rightOrigin": null,
+          "parent": null,
+          "key": null
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "[2166572391,\"[\\\"text-birth\\\",\\\"m1\\\",0]\"]"
+        }
+      ],
+      "deletes": [],
+      "birthFields": {
+        "type": 12,
+        "operation": 33,
+        "writer": 16,
+        "start": 73,
+        "end": 72,
+        "observed": 11,
+        "born": 41
+      },
+      "birthObjectBytes": 260,
+      "birthFramingBytes": 50
+    },
+    "corrected": {
+      "bytes": 328,
+      "parts": {
+        "envelope + delete set": 9,
+        "tombstones": 9,
+        "markRecords:birth": 310
+      },
+      "changed": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentDeleted",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "tombstones",
+          "bytes": 9,
+          "value": []
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "[2166572391,\"[\\\"text-birth\\\",\\\"m1\\\",0]\"]",
+          "category": "markRecords:birth",
+          "bytes": 310,
+          "value": [
+            {
+              "type": "birth",
+              "operation": "[\"text-birth\",\"m1\",0]",
+              "writer": 2166572391,
+              "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,167,4,0]}",
+              "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,167,4,65]}",
+              "observed": [],
+              "born": {
+                "client": 2166572391,
+                "clock": 551,
+                "length": 1
+              }
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentDeleted",
+          "origin": {
+            "client": 2166572391,
+            "clock": 184
+          },
+          "rightOrigin": null,
+          "parent": null,
+          "key": null
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "[2166572391,\"[\\\"text-birth\\\",\\\"m1\\\",0]\"]"
+        }
+      ],
+      "deletes": [
+        [
+          2166572391,
+          [
+            {
+              "clock": 551,
+              "len": 1
+            }
+          ]
+        ]
+      ]
+    },
+    "undo-redo": {
+      "bytes": 362,
+      "parts": {
+        "envelope + delete set": 9,
+        "markRecords:birth": 344,
+        "tombstones": 9
+      },
+      "changed": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentDeleted",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "tombstones",
+          "bytes": 9,
+          "value": []
+        },
+        {
+          "id": "2166572391:553",
+          "length": 1,
+          "kind": "ContentString",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "text",
+          "bytes": 10,
+          "value": [
+            "x"
+          ]
+        },
+        {
+          "id": "2166572391:554",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "[2166572391,\"[\\\"text-restore\\\",\\\"m3\\\",0,2166572391,551]\"]",
+          "category": "markRecords:birth",
+          "bytes": 344,
+          "value": [
+            {
+              "type": "birth",
+              "operation": "[\"text-restore\",\"m3\",0,2166572391,551]",
+              "writer": 2166572391,
+              "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,169,4,0]}",
+              "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,169,4,65]}",
+              "observed": [],
+              "born": {
+                "client": 2166572391,
+                "clock": 553,
+                "length": 1
+              }
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:553",
+          "length": 1,
+          "kind": "ContentString",
+          "origin": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "rightOrigin": null,
+          "parent": null,
+          "key": null
+        },
+        {
+          "id": "2166572391:554",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "[2166572391,\"[\\\"text-restore\\\",\\\"m3\\\",0,2166572391,551]\"]"
+        }
+      ],
+      "deletes": [
+        [
+          2166572391,
+          [
+            {
+              "clock": 551,
+              "len": 1
+            }
+          ]
+        ]
+      ]
+    },
+    "split": {
+      "bytes": 477,
+      "parts": {
+        "text": 8,
+        "segments/b:r1/text": 58,
+        "beats/structure_2166572391_006d0031_beat_0": 46,
+        "beats/structure_2166572391_006d0031_beat_0/id": 51,
+        "beats/structure_2166572391_006d0031_beat_0/segment": 24,
+        "beats/structure_2166572391_006d0031_beat_0/splitBy": 31,
+        "beats/structure_2166572391_006d0031_beat_0/visual": 57,
+        "beats/structure_2166572391_006d0031_beat_0/joins": 16,
+        "beats/structure_2166572391_006d0031_beat_0/removals": 19,
+        "visuals/structure_2166572391_006d0031_visual_0": 50,
+        "visuals/structure_2166572391_006d0031_visual_0/beat": 53,
+        "visuals/structure_2166572391_006d0031_visual_0/rank": 27,
+        "visuals/structure_2166572391_006d0031_visual_0/text": 15,
+        "visuals/structure_2166572391_006d0031_visual_0/markRecords": 22
+      },
+      "changed": [
+        {
+          "id": "2166572391:28",
+          "length": 2,
+          "kind": "ContentString",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "text",
+          "bytes": 11,
+          "value": [
+            "H",
+            "e"
+          ]
+        },
+        {
+          "id": "2166572391:30",
+          "length": 155,
+          "kind": "ContentString",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "text",
+          "bytes": 166,
+          "value": [
+            "y",
+            " ",
+            "—",
+            " ",
+            "w",
+            "e",
+            "l",
+            "c",
+            "o",
+            "m",
+            "e",
+            " ",
+            "b",
+            "a",
+            "c",
+            "k",
+            ".",
+            " ",
+            "I",
+            "f",
+            " ",
+            "y",
+            "o",
+            "u",
+            " ",
+            "h",
+            "a",
+            "v",
+            "e",
+            " ",
+            "b",
+            "e",
+            "e",
+            "n",
+            " ",
+            "f",
+            "o",
+            "l",
+            "l",
+            "o",
+            "w",
+            "i",
+            "n",
+            "g",
+            " ",
+            "t",
+            "h",
+            "e",
+            " ",
+            "c",
+            "h",
+            "a",
+            "n",
+            "n",
+            "e",
+            "l",
+            ",",
+            " ",
+            "y",
+            "o",
+            "u",
+            " ",
+            "k",
+            "n",
+            "o",
+            "w",
+            " ",
+            "w",
+            "e",
+            " ",
+            "h",
+            "a",
+            "v",
+            "e",
+            " ",
+            "b",
+            "e",
+            "e",
+            "n",
+            " ",
+            "b",
+            "u",
+            "i",
+            "l",
+            "d",
+            "i",
+            "n",
+            "g",
+            " ",
+            "t",
+            "h",
+            "i",
+            "s",
+            " ",
+            "o",
+            "u",
+            "t",
+            " ",
+            "i",
+            "n",
+            " ",
+            "p",
+            "u",
+            "b",
+            "l",
+            "i",
+            "c",
+            ".",
+            " ",
+            "T",
+            "o",
+            "d",
+            "a",
+            "y",
+            " ",
+            "I",
+            " ",
+            "w",
+            "a",
+            "n",
+            "t",
+            " ",
+            "t",
+            "o",
+            " ",
+            "s",
+            "h",
+            "o",
+            "w",
+            " ",
+            "y",
+            "o",
+            "u",
+            " ",
+            "e",
+            "x",
+            "a",
+            "c",
+            "t",
+            "l",
+            "y",
+            " ",
+            "h",
+            "o",
+            "w",
+            " ",
+            "i",
+            "t",
+            " ",
+            "w",
+            "o",
+            "r",
+            "k",
+            "s",
+            "."
+          ]
+        },
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentType",
+          "path": "beats",
+          "key": "structure_2166572391_006d0031_beat_0",
+          "category": "beats/structure_2166572391_006d0031_beat_0",
+          "bytes": 46,
+          "value": [
+            "YMap"
+          ]
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "beats/structure_2166572391_006d0031_beat_0",
+          "key": "id",
+          "category": "beats/structure_2166572391_006d0031_beat_0/id",
+          "bytes": 51,
+          "value": [
+            "structure_2166572391_006d0031_beat_0"
+          ]
+        },
+        {
+          "id": "2166572391:553",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "beats/structure_2166572391_006d0031_beat_0",
+          "key": "segment",
+          "category": "beats/structure_2166572391_006d0031_beat_0/segment",
+          "bytes": 24,
+          "value": [
+            "b:r1"
+          ]
+        },
+        {
+          "id": "2166572391:554",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "beats/structure_2166572391_006d0031_beat_0",
+          "key": "splitBy",
+          "category": "beats/structure_2166572391_006d0031_beat_0/splitBy",
+          "bytes": 31,
+          "value": [
+            "Measurement"
+          ]
+        },
+        {
+          "id": "2166572391:555",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "beats/structure_2166572391_006d0031_beat_0",
+          "key": "visual",
+          "category": "beats/structure_2166572391_006d0031_beat_0/visual",
+          "bytes": 57,
+          "value": [
+            "structure_2166572391_006d0031_visual_0"
+          ]
+        },
+        {
+          "id": "2166572391:556",
+          "length": 1,
+          "kind": "ContentType",
+          "path": "beats/structure_2166572391_006d0031_beat_0",
+          "key": "joins",
+          "category": "beats/structure_2166572391_006d0031_beat_0/joins",
+          "bytes": 16,
+          "value": [
+            "YMap"
+          ]
+        },
+        {
+          "id": "2166572391:557",
+          "length": 1,
+          "kind": "ContentType",
+          "path": "beats/structure_2166572391_006d0031_beat_0",
+          "key": "removals",
+          "category": "beats/structure_2166572391_006d0031_beat_0/removals",
+          "bytes": 19,
+          "value": [
+            "YMap"
+          ]
+        },
+        {
+          "id": "2166572391:558",
+          "length": 1,
+          "kind": "ContentType",
+          "path": "visuals",
+          "key": "structure_2166572391_006d0031_visual_0",
+          "category": "visuals/structure_2166572391_006d0031_visual_0",
+          "bytes": 50,
+          "value": [
+            "YMap"
+          ]
+        },
+        {
+          "id": "2166572391:559",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "visuals/structure_2166572391_006d0031_visual_0",
+          "key": "beat",
+          "category": "visuals/structure_2166572391_006d0031_visual_0/beat",
+          "bytes": 53,
+          "value": [
+            "structure_2166572391_006d0031_beat_0"
+          ]
+        },
+        {
+          "id": "2166572391:560",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "visuals/structure_2166572391_006d0031_visual_0",
+          "key": "rank",
+          "category": "visuals/structure_2166572391_006d0031_visual_0/rank",
+          "bytes": 27,
+          "value": [
+            "0000000000"
+          ]
+        },
+        {
+          "id": "2166572391:561",
+          "length": 1,
+          "kind": "ContentType",
+          "path": "visuals/structure_2166572391_006d0031_visual_0",
+          "key": "text",
+          "category": "visuals/structure_2166572391_006d0031_visual_0/text",
+          "bytes": 15,
+          "value": [
+            "YText"
+          ]
+        },
+        {
+          "id": "2166572391:562",
+          "length": 1,
+          "kind": "ContentType",
+          "path": "visuals/structure_2166572391_006d0031_visual_0",
+          "key": "markRecords",
+          "category": "visuals/structure_2166572391_006d0031_visual_0/markRecords",
+          "bytes": 22,
+          "value": [
+            "YMap"
+          ]
+        },
+        {
+          "id": "2166572391:563",
+          "length": 1,
+          "kind": "ContentEmbed",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "segments/b:r1/text",
+          "bytes": 58,
+          "value": [
+            {
+              "b": "structure_2166572391_006d0031_beat_0"
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:30",
+          "length": 155,
+          "kind": "ContentString",
+          "origin": {
+            "client": 2166572391,
+            "clock": 29
+          },
+          "rightOrigin": null,
+          "parent": null,
+          "key": null
+        },
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentType",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": "beats",
+          "key": "structure_2166572391_006d0031_beat_0"
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "key": "id"
+        },
+        {
+          "id": "2166572391:553",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "key": "segment"
+        },
+        {
+          "id": "2166572391:554",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "key": "splitBy"
+        },
+        {
+          "id": "2166572391:555",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "key": "visual"
+        },
+        {
+          "id": "2166572391:556",
+          "length": 1,
+          "kind": "ContentType",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "key": "joins"
+        },
+        {
+          "id": "2166572391:557",
+          "length": 1,
+          "kind": "ContentType",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 551
+          },
+          "key": "removals"
+        },
+        {
+          "id": "2166572391:558",
+          "length": 1,
+          "kind": "ContentType",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": "visuals",
+          "key": "structure_2166572391_006d0031_visual_0"
+        },
+        {
+          "id": "2166572391:559",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 558
+          },
+          "key": "beat"
+        },
+        {
+          "id": "2166572391:560",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 558
+          },
+          "key": "rank"
+        },
+        {
+          "id": "2166572391:561",
+          "length": 1,
+          "kind": "ContentType",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 558
+          },
+          "key": "text"
+        },
+        {
+          "id": "2166572391:562",
+          "length": 1,
+          "kind": "ContentType",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 558
+          },
+          "key": "markRecords"
+        },
+        {
+          "id": "2166572391:563",
+          "length": 1,
+          "kind": "ContentEmbed",
+          "origin": {
+            "client": 2166572391,
+            "clock": 29
+          },
+          "rightOrigin": {
+            "client": 2166572391,
+            "clock": 30
+          },
+          "parent": null,
+          "key": null
+        }
+      ],
+      "deletes": []
+    },
+    "split-undo": {
+      "bytes": 416,
+      "parts": {
+        "meta/splitRetired:structure_2166572391_006d0031_beat_0": 416
+      },
+      "changed": [
+        {
+          "id": "2166572391:564",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "meta",
+          "key": "splitRetired:structure_2166572391_006d0031_beat_0",
+          "category": "meta/splitRetired:structure_2166572391_006d0031_beat_0",
+          "bytes": 416,
+          "value": [
+            {
+              "observed": "[{\"id\":\"structure_2166572391_006d0031_beat_0\",\"joins\":{},\"removals\":{},\"segment\":\"b:r1\",\"splitBy\":\"Measurement\",\"visual\":\"structure_2166572391_006d0031_visual_0\"},1,{\"kind\":\"b\",\"id\":\"r1\",\"before\":null},[],[[\"visuals\",\"structure_2166572391_006d0031_visual_0\",{\"beat\":\"structure_2166572391_006d0031_beat_0\",\"rank\":\"0000000000\",\"text\":[]},{}]],[]]"
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:564",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": "meta",
+          "key": "splitRetired:structure_2166572391_006d0031_beat_0"
+        }
+      ],
+      "deletes": []
+    },
+    "bold": {
+      "bytes": 278,
+      "parts": {
+        "markRecords:add": 278
+      },
+      "changed": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "[2166572391,\"[\\\"range-mark\\\",\\\"m1\\\",0]\"]",
+          "category": "markRecords:add",
+          "bytes": 278,
+          "value": [
+            {
+              "type": "add",
+              "operation": "[\"range-mark\",\"m1\",0]",
+              "writer": 2166572391,
+              "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,28,0]}",
+              "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,29,65]}",
+              "mark": {
+                "kind": "b",
+                "value": true
+              },
+              "born": null
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "[2166572391,\"[\\\"range-mark\\\",\\\"m1\\\",0]\"]"
+        }
+      ],
+      "deletes": []
+    },
+    "bold-undo": {
+      "bytes": 331,
+      "parts": {
+        "markRecords:remove": 310,
+        "markRecords:ContentAny": 21
+      },
+      "changed": [
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "[2166572391,\"[\\\"mark-retract\\\",\\\"m2\\\",0]\"]",
+          "category": "markRecords:remove",
+          "bytes": 310,
+          "value": [
+            {
+              "type": "remove",
+              "operation": "[\"mark-retract\",\"m2\",0]",
+              "writer": 2166572391,
+              "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,28,0]}",
+              "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,29,65]}",
+              "observed": [
+                "[2166572391,\"[\\\"range-mark\\\",\\\"m1\\\",0]\"]"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "2166572391:553",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "provenance",
+          "category": "markRecords:ContentAny",
+          "bytes": 21,
+          "value": [
+            true
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "[2166572391,\"[\\\"mark-retract\\\",\\\"m2\\\",0]\"]"
+        },
+        {
+          "id": "2166572391:553",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "provenance"
+        }
+      ],
+      "deletes": []
+    },
+    "long-author": {
+      "bytes": 320,
+      "parts": {
+        "text": 10,
+        "markRecords:birth": 310
+      },
+      "changed": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentString",
+          "path": "segments/b:r1/text",
+          "key": null,
+          "category": "text",
+          "bytes": 10,
+          "value": [
+            "x"
+          ]
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "path": "segments/b:r1/markRecords",
+          "key": "[2166572391,\"[\\\"text-birth\\\",\\\"m1\\\",0]\"]",
+          "category": "markRecords:birth",
+          "bytes": 310,
+          "value": [
+            {
+              "type": "birth",
+              "operation": "[\"text-birth\",\"m1\",0]",
+              "writer": 2166572391,
+              "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,167,4,0]}",
+              "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,231,138,141,137,8,167,4,65]}",
+              "observed": [],
+              "born": {
+                "client": 2166572391,
+                "clock": 551,
+                "length": 1
+              }
+            }
+          ]
+        }
+      ],
+      "decoded": [
+        {
+          "id": "2166572391:551",
+          "length": 1,
+          "kind": "ContentString",
+          "origin": {
+            "client": 2166572391,
+            "clock": 184
+          },
+          "rightOrigin": null,
+          "parent": null,
+          "key": null
+        },
+        {
+          "id": "2166572391:552",
+          "length": 1,
+          "kind": "ContentAny",
+          "origin": null,
+          "rightOrigin": null,
+          "parent": {
+            "client": 2166572391,
+            "clock": 26
+          },
+          "key": "[2166572391,\"[\\\"text-birth\\\",\\\"m1\\\",0]\"]"
+        }
+      ],
+      "deletes": []
+    }
+  },
+  "variants": [
+    {
+      "shape": "real insertion run 1",
+      "bytes": 324052
+    },
+    {
+      "shape": "real insertion run 10",
+      "bytes": 33008
+    },
+    {
+      "shape": "real insertion run 100",
+      "bytes": 4198
+    },
+    {
+      "shape": "real insertion run 1000",
+      "bytes": 1323
+    },
+    {
+      "shape": "binary-anchors",
+      "bytes": 226570
+    },
+    {
+      "shape": "tuple-record",
+      "bytes": 155570
+    },
+    {
+      "shape": "current-writer-id",
+      "bytes": 346052
+    },
+    {
+      "shape": "36-character-id-prefix",
+      "bytes": 394052
+    },
+    {
+      "shape": "1 undo-redo pairs",
+      "bytes": 362
+    },
+    {
+      "shape": "10 undo-redo pairs",
+      "bytes": 3578
+    },
+    {
+      "shape": "100 undo-redo pairs",
+      "bytes": 35901
+    },
+    {
+      "shape": "native-text",
+      "bytes": 1017
+    },
+    {
+      "shape": "compact-birth",
+      "bytes": 44802
+    },
+    {
+      "shape": "compact-birth-no-observed",
+      "bytes": 42802
+    },
+    {
+      "shape": "stamps",
+      "bytes": 98
+    },
+    {
+      "shape": "typed-with-stamps",
+      "bytes": 336610
+    }
+  ],
+  "editedLocal": [
+    {
+      "name": "short",
+      "bytes": 5223,
+      "observed": [
+        100
+      ],
+      "births": [
+        {
+          "type": "birth",
+          "operation": "[\"text-birth\",\"m1\",0]",
+          "writer": 2166572392,
+          "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,232,138,141,137,8,0,0]}",
+          "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,232,138,141,137,8,0,65]}",
+          "observed": [
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10701\\\",0]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10703\\\",0,2]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10705\\\",0,3]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10707\\\",0,4]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10709\\\",0,5]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10711\\\",0,6]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10713\\\",0,7]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10715\\\",0,8]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10717\\\",0,9]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10719\\\",0,10]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10721\\\",0,11]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10723\\\",0,12]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10725\\\",0,13]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10727\\\",0,14]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10729\\\",0,15]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10731\\\",0,16]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10733\\\",0,17]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10735\\\",0,18]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10737\\\",0,19]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10739\\\",0,20]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10741\\\",0,21]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10743\\\",0,22]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10745\\\",0,23]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10747\\\",0,24]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10749\\\",0,25]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10751\\\",0,26]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10753\\\",0,27]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10755\\\",0,28]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10757\\\",0,29]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10759\\\",0,30]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10761\\\",0,31]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10763\\\",0,32]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10765\\\",0,33]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10767\\\",0,34]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10769\\\",0,35]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10771\\\",0,36]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10773\\\",0,37]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10775\\\",0,38]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10777\\\",0,39]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10779\\\",0,40]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10781\\\",0,41]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10783\\\",0,42]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10785\\\",0,43]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10787\\\",0,44]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10789\\\",0,45]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10791\\\",0,46]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10793\\\",0,47]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10795\\\",0,48]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10797\\\",0,49]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10799\\\",0,50]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10801\\\",0,51]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10803\\\",0,52]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10805\\\",0,53]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10807\\\",0,54]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10809\\\",0,55]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10811\\\",0,56]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10813\\\",0,57]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10815\\\",0,58]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10817\\\",0,59]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10819\\\",0,60]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10821\\\",0,61]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10823\\\",0,62]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10825\\\",0,63]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10827\\\",0,64]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10829\\\",0,65]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10831\\\",0,66]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10833\\\",0,67]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10835\\\",0,68]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10837\\\",0,69]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10839\\\",0,70]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10841\\\",0,71]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10843\\\",0,72]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10845\\\",0,73]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10847\\\",0,74]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10849\\\",0,75]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10851\\\",0,76]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10853\\\",0,77]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10855\\\",0,78]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10857\\\",0,79]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10859\\\",0,80]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10861\\\",0,81]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10863\\\",0,82]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10865\\\",0,83]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10867\\\",0,84]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10869\\\",0,85]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10871\\\",0,86]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10873\\\",0,87]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10875\\\",0,88]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10877\\\",0,89]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10879\\\",0,90]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10881\\\",0,91]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10883\\\",0,92]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10885\\\",0,93]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10887\\\",0,94]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10889\\\",0,95]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10891\\\",0,96]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10893\\\",0,97]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10895\\\",0,98]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10897\\\",0,99]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10899\\\",0,100]\"]"
+          ],
+          "born": {
+            "client": 2166572392,
+            "clock": 0,
+            "length": 1
+          }
+        }
+      ],
+      "editedBytes": 9159062,
+      "editedBinaryAnchors": 7127876,
+      "editedTupleRecords": 5707876,
+      "editedNativeReferences": 9155672,
+      "localKeyNativeReferences": 1833,
+      "editedTupleAndNativeReferences": 5704486
+    },
+    {
+      "name": "long",
+      "bytes": 5224,
+      "observed": [
+        100
+      ],
+      "births": [
+        {
+          "type": "birth",
+          "operation": "[\"text-birth\",\"m1\",0]",
+          "writer": 2166572392,
+          "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,232,138,141,137,8,0,0]}",
+          "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,232,138,141,137,8,0,65]}",
+          "observed": [
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10701\\\",0]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10703\\\",0,2]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10705\\\",0,3]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10707\\\",0,4]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10709\\\",0,5]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10711\\\",0,6]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10713\\\",0,7]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10715\\\",0,8]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10717\\\",0,9]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10719\\\",0,10]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10721\\\",0,11]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10723\\\",0,12]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10725\\\",0,13]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10727\\\",0,14]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10729\\\",0,15]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10731\\\",0,16]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10733\\\",0,17]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10735\\\",0,18]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10737\\\",0,19]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10739\\\",0,20]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10741\\\",0,21]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10743\\\",0,22]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10745\\\",0,23]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10747\\\",0,24]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10749\\\",0,25]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10751\\\",0,26]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10753\\\",0,27]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10755\\\",0,28]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10757\\\",0,29]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10759\\\",0,30]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10761\\\",0,31]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10763\\\",0,32]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10765\\\",0,33]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10767\\\",0,34]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10769\\\",0,35]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10771\\\",0,36]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10773\\\",0,37]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10775\\\",0,38]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10777\\\",0,39]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10779\\\",0,40]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10781\\\",0,41]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10783\\\",0,42]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10785\\\",0,43]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10787\\\",0,44]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10789\\\",0,45]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10791\\\",0,46]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10793\\\",0,47]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10795\\\",0,48]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10797\\\",0,49]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10799\\\",0,50]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10801\\\",0,51]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10803\\\",0,52]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10805\\\",0,53]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10807\\\",0,54]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10809\\\",0,55]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10811\\\",0,56]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10813\\\",0,57]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10815\\\",0,58]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10817\\\",0,59]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10819\\\",0,60]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10821\\\",0,61]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10823\\\",0,62]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10825\\\",0,63]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10827\\\",0,64]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10829\\\",0,65]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10831\\\",0,66]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10833\\\",0,67]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10835\\\",0,68]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10837\\\",0,69]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10839\\\",0,70]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10841\\\",0,71]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10843\\\",0,72]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10845\\\",0,73]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10847\\\",0,74]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10849\\\",0,75]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10851\\\",0,76]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10853\\\",0,77]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10855\\\",0,78]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10857\\\",0,79]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10859\\\",0,80]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10861\\\",0,81]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10863\\\",0,82]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10865\\\",0,83]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10867\\\",0,84]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10869\\\",0,85]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10871\\\",0,86]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10873\\\",0,87]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10875\\\",0,88]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10877\\\",0,89]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10879\\\",0,90]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10881\\\",0,91]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10883\\\",0,92]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10885\\\",0,93]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10887\\\",0,94]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10889\\\",0,95]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10891\\\",0,96]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10893\\\",0,97]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10895\\\",0,98]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10897\\\",0,99]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10899\\\",0,100]\"]"
+          ],
+          "born": {
+            "client": 2166572392,
+            "clock": 0,
+            "length": 1
+          }
+        }
+      ],
+      "editedBytes": 7922046,
+      "editedBinaryAnchors": 5867750,
+      "editedTupleRecords": 4447750,
+      "editedNativeReferences": 7918656,
+      "localKeyNativeReferences": 1834,
+      "editedTupleAndNativeReferences": 4444360
+    },
+    {
+      "name": "large",
+      "bytes": 5224,
+      "observed": [
+        100
+      ],
+      "births": [
+        {
+          "type": "birth",
+          "operation": "[\"text-birth\",\"m1\",0]",
+          "writer": 2166572392,
+          "start": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,232,138,141,137,8,0,0]}",
+          "end": "{\"v\":1,\"segment\":\"b:r1\",\"relative\":[0,232,138,141,137,8,0,65]}",
+          "observed": [
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10701\\\",0]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10703\\\",0,2]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10705\\\",0,3]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10707\\\",0,4]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10709\\\",0,5]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10711\\\",0,6]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10713\\\",0,7]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10715\\\",0,8]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10717\\\",0,9]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10719\\\",0,10]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10721\\\",0,11]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10723\\\",0,12]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10725\\\",0,13]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10727\\\",0,14]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10729\\\",0,15]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10731\\\",0,16]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10733\\\",0,17]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10735\\\",0,18]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10737\\\",0,19]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10739\\\",0,20]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10741\\\",0,21]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10743\\\",0,22]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10745\\\",0,23]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10747\\\",0,24]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10749\\\",0,25]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10751\\\",0,26]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10753\\\",0,27]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10755\\\",0,28]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10757\\\",0,29]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10759\\\",0,30]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10761\\\",0,31]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10763\\\",0,32]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10765\\\",0,33]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10767\\\",0,34]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10769\\\",0,35]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10771\\\",0,36]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10773\\\",0,37]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10775\\\",0,38]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10777\\\",0,39]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10779\\\",0,40]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10781\\\",0,41]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10783\\\",0,42]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10785\\\",0,43]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10787\\\",0,44]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10789\\\",0,45]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10791\\\",0,46]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10793\\\",0,47]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10795\\\",0,48]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10797\\\",0,49]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10799\\\",0,50]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10801\\\",0,51]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10803\\\",0,52]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10805\\\",0,53]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10807\\\",0,54]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10809\\\",0,55]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10811\\\",0,56]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10813\\\",0,57]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10815\\\",0,58]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10817\\\",0,59]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10819\\\",0,60]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10821\\\",0,61]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10823\\\",0,62]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10825\\\",0,63]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10827\\\",0,64]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10829\\\",0,65]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10831\\\",0,66]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10833\\\",0,67]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10835\\\",0,68]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10837\\\",0,69]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10839\\\",0,70]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10841\\\",0,71]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10843\\\",0,72]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10845\\\",0,73]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10847\\\",0,74]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10849\\\",0,75]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10851\\\",0,76]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10853\\\",0,77]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10855\\\",0,78]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10857\\\",0,79]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10859\\\",0,80]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10861\\\",0,81]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10863\\\",0,82]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10865\\\",0,83]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10867\\\",0,84]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10869\\\",0,85]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10871\\\",0,86]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10873\\\",0,87]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10875\\\",0,88]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10877\\\",0,89]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10879\\\",0,90]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10881\\\",0,91]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10883\\\",0,92]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10885\\\",0,93]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10887\\\",0,94]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10889\\\",0,95]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10891\\\",0,96]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10893\\\",0,97]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10895\\\",0,98]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10897\\\",0,99]\"]",
+            "[2166572391,\"[\\\"range-mark\\\",\\\"m10899\\\",0,100]\"]"
+          ],
+          "born": {
+            "client": 2166572392,
+            "clock": 0,
+            "length": 1
+          }
+        }
+      ],
+      "editedBytes": 8577933,
+      "editedBinaryAnchors": 6517933,
+      "editedTupleRecords": 5097933,
+      "editedNativeReferences": 8574543,
+      "localKeyNativeReferences": 1834,
+      "editedTupleAndNativeReferences": 5094543
+    }
+  ]
+}
