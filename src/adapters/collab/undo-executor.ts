@@ -2,7 +2,7 @@ import type {
   SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
   SharedTextAddress
 } from "../../core/collab/operations.ts";
-import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
