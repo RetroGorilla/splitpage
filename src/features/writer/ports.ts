@@ -20,6 +20,7 @@ import type { FlowDoc, FlowPorts, FlowRange, FlowRow } from "../../core/flow/flo
 import type { Run } from "../../core/text/runs.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
 import type { WriterFindAccess } from "../common/writer-find.ts";
+import type { FlowVisualBufferMount } from "./flow-visual-box.ts";
 
 export interface FlowWriter {
   readonly settle?: () => boolean;
@@ -47,6 +48,7 @@ export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | 
 }
 
 export interface FlowWriterPorts {
+  readonly visualBuffer?: FlowVisualBufferMount;
   readonly commands?: FlowCommandSource;
   readonly openFind?: () => void;
   readonly closeFind?: () => void;
