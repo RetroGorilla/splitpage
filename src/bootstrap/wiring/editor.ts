@@ -30,6 +30,7 @@ import { mountRowRoutes } from "../../features/rows/routes.ts";
 import type { RowRoutePorts } from "../../features/rows/routes.ts";
 import { mountTitleRoutes } from "../../features/title/routes.ts";
 import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
+import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { caretAfterStep } from "../../features/undo/caret.ts";
 import { mountUndoRoutes, undoGesture } from "../../features/undo/routes.ts";
@@ -453,7 +454,11 @@ export const stopMediaFeature = mediaRoutes.stop;
 
 const rowRoutes = owned<ReturnType<typeof mountRowRoutes>>();
 
-let sceneHeaders: ReturnType<typeof mountSceneHeaders> | null = null;
+const sceneHeaders = owned<ReturnType<typeof mountSceneHeaders>>();
+
+export function mountSceneHeadersFeature(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): ReturnType<typeof mountSceneHeaders> {
+  return sceneHeaders.replace(function () { return mountSceneHeaders(sharedNames, sharedScenes); });
+}
 
 function openLinkInNewWindow(href: string): void {
   try {
@@ -479,7 +484,7 @@ const rowRoutePorts: RowRoutePorts = {
   move: function (rowId, targetId, after) { cellEditing().moveRow(rowId, targetId, after); },
   add: addRow,
   moveBy: function (rowId, dir) {
-    if (sceneHeaders?.confirmMove(rowId, dir)) return;
+    if (sceneHeaders.owner()?.confirmMove(rowId, dir)) return;
     moveRow(rowId, dir);
     refocusRowMenu(rowId);
   },
@@ -494,9 +499,8 @@ const rowRoutePorts: RowRoutePorts = {
 export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   return rowRoutes.replace(function () {
     const routes = mountRowRoutes({ window: window, rows: document.getElementById("rows") as Element, ports: rowRoutePorts });
-    const scenes = mountSceneHeaders();
-    sceneHeaders = scenes;
-    return { ...routes, dispose() { if (sceneHeaders === scenes) sceneHeaders = null; scenes.dispose(); routes.dispose(); } };
+    mountSceneHeadersFeature();
+    return { ...routes, dispose() { sceneHeaders.stop(); routes.dispose(); } };
   }, function (owner) {
     return [
       function () { return routeRootClick("cell-link", function (e) { return owner.linkClick(e); }); },

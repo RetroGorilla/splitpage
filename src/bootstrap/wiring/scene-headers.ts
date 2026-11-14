@@ -14,7 +14,9 @@ import { focusMemory, rowDrag, sceneView } from "./editor-owners.ts";
 import { stopDragScroll, updateDragScroll } from "./rows.ts";
 import { breakUndoGroup } from "./undo.ts";
 
-export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): { confirmMove: (rowId: string, dir: -1 | 1) => boolean; dispose: () => void } {
+export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): {
+  confirmMove: (rowId: string, dir: -1 | 1) => boolean; finish: () => boolean; dispose: () => void;
+} {
   const controls = mountSceneControls(window, {
     document: documentReader, edits, scenes: sceneView(), focus: focusMemory(),
     drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll, structure: sharedStructureCommands,
@@ -54,5 +56,5 @@ export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes
     if (!scene) { boundary.cancel(); return false; }
     return !boundary.press(scene.id, dir < 0 ? "Alt+ArrowUp" : "Alt+ArrowDown");
   }
-  return { confirmMove, dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
+  return { confirmMove, finish: controls.finish, dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
 }

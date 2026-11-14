@@ -20,6 +20,7 @@ interface TitleRoutesMount {
 }
 
 export interface TitleRoutes {
+  readonly finish: () => boolean;
   readonly dispose: () => void;
 }
 
@@ -35,6 +36,7 @@ export function mountTitleRoutes(mount: TitleRoutesMount): TitleRoutes {
       position: offset => beatPos(TITLE_FIELD_KEY, offset), owns: pos => pos.kind === "beat" && pos.rowId === TITLE_FIELD_KEY
     }, mount.shared);
     return {
+      finish: () => !open || bound.finish(),
       dispose(): void {
         if (open && bound.dispose()) open = false;
       }
@@ -64,6 +66,7 @@ export function mountTitleRoutes(mount: TitleRoutesMount): TitleRoutes {
   mount.writer.addEventListener("input", onWriterInput);
 
   return {
+    finish: () => true,
     dispose(): void {
       if (!open) return;
       open = false;

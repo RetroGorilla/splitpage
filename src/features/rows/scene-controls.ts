@@ -37,6 +37,7 @@ export interface SceneControlsPorts {
 export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
   readonly hint: (id: string | null, text: string) => void;
   readonly reset: () => void;
+  readonly finish: () => boolean;
   readonly dispose: () => void;
 } {
   const doc = window.document, life = createViewLifetime(window);
@@ -427,6 +428,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       if (live) live.textContent = active ? text : "";
     },
     reset,
+    finish: () => !naming?.bound || naming.bound.finish(),
     dispose() { life.dispose(); reset(); }
   };
 }
