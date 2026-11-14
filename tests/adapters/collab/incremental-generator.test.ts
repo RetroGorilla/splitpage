@@ -23,7 +23,7 @@ import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/remo
 
 test("seeded incremental projection agrees at every authored and delivered revision with no declared limits", t => {
   const declaredLimits: readonly string[] = [], violations: string[] = [], kinds = new Set<string>(), choices = new Set<string>();
-  let histories = 0, checkpoints = 0, commands = 0, lateJoiners = 0;
+  let histories = 0, checkpoints = 0, commands = 0, lateJoiners = 0, discards = 0;
   const reported = incrementalReports.compared;
   for (const seed of [1, 73, 1414, 0xfedcba98]) for (const writers of [2, 3]) for (const order of ["D1", "rev", "dup"] as const) {
     const run = replicas(writers, { title: "Script", rows: [
@@ -77,6 +77,7 @@ test("seeded incremental projection agrees at every authored and delivered revis
         submit({ kind: "discard", entry: { kind: "deleted-person", key: person }, removals: [] });
         assert.equal(checkpoints, beforeDiscard + 1);
         assert.equal(projector.read().recovery.some(entry => entry.kind === "deleted-person" && entry.person === person), false);
+        discards++;
         for (const [kind, row] of [["split", "R2"], ["split-before", "R3"]] as const) submit({ kind,
           target: { owner: row, segment: "b:" + row, field: "audioText" }, at: { left: null, right: flowBaseReference(row, "audioText", 1 + pick(4)), affinity: "before" },
           observed: [], boundary: prefix + kind + "boundary", beat: prefix + kind + "beat", fields: { status: "todo" } });
@@ -125,12 +126,13 @@ test("seeded incremental projection agrees at every authored and delivered revis
     finally { for (const stop of stops) stop(); for (const projector of projectors) projector.dispose(); run.close(); }
   }
   assert.deepEqual(violations, declaredLimits);
+  t.diagnostic(JSON.stringify({ histories, commands, checkpoints, lateJoiners, discards, reports: incrementalReports.compared - reported, choices: choices.size, declaredLimits }));
   assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1440);
-  assert.equal(checkpoints, 3068);
-  assert.equal(incrementalReports.compared - reported, 3032);
+  assert.equal(discards, 60);
+  assert.equal(checkpoints, 3004);
+  assert.equal(incrementalReports.compared - reported, 2968);
   assert.equal(choices.size, 216);
   assert.deepEqual([...kinds].sort(), ["discard", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "split", "split-before", "status", "status-retire", "text-delete", "text-insert", "text-restore"]);
   assert.deepEqual([...new Set(operationExamples.map(example => example.operation.kind))].sort(), [...kinds].sort());
-  t.diagnostic(JSON.stringify({ histories, commands, checkpoints, lateJoiners, choices: choices.size, declaredLimits }));
 });
