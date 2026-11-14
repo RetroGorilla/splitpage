@@ -193,6 +193,7 @@ test("shared title rule 84: paste cannot mask a native difference outside its ca
     assert.deepEqual([page.stored(), page.main.value, caret(page.main), page.reports, written(page), holds(page)],
       ["Draft", "XrQaft", [3, 3, "none"], [{ kind: "rejected", reason: "buffer-native-evidence" }], [], ["buffer"]]);
     copies(page, ["Draft", "user"]);
+    page.edge.imeSet("Z"); page.edge.imeCancel();
   } finally { page.close(); }
 });
 
