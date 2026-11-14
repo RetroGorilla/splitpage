@@ -505,7 +505,7 @@
     {
       "label": "the shared Writer omits its empty-script control",
       "file": "src/bootstrap/wiring/writer.ts",
-      "find": "return shared ? mountWriterEmptyScript(flow, root, shared) : flow;",
+      "find": "if (!shared) return flow;\n          const handle = shared.handle();\n          return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,\n            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report }) : flow;",
       "replace": "return flow;",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },

@@ -20,7 +20,7 @@ test("flow selection and input callbacks count only the selection until the idle
       replace: () => false, leave: noop, selection: () => null, pickedText: () => "", firstFrom: () => 0 },
     openVisual: noop, isCurrent: () => true, finish: () => null, repaint: noop, caret: noop, format: noop,
     marks: () => ({}), beforeReplay: noop, afterReplay: noop, comment: noop, jumpComment: noop,
-    selection: () => null, selectedText: () => selected, place: noop, check: () => [], dispose: noop
+    selection: () => null, selectedText: () => selected, place: noop, check: () => [], dispose: () => true
   };
   const writer = startWriter({ ...h.ports,
     text: { ...h.ports.text, productionReaders: { ...h.ports.text.productionReaders, wordCount: html => {

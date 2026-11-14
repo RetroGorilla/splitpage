@@ -29,7 +29,7 @@ import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
 import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
-import { standaloneSession } from "./session-owner.ts";
+import { sessionStamps, standaloneSession } from "./session-owner.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
@@ -232,7 +232,10 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             newCommentId: () => randomIds.id("c"),
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
-          return shared ? mountWriterEmptyScript(flow, root, shared) : flow;
+          if (!shared) return flow;
+          const handle = shared.handle();
+          return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,
+            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report }) : flow;
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,

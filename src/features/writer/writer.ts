@@ -412,15 +412,15 @@ export function startWriter(given: WriterFeaturePorts) {
     onWriterFormat, updateWriterFormatState, readWriterSize, applyWriterSize,
     openWriter, closeWriter, writerUndoStep,
     connectFlowUndo, writerReplayed, writerFlowControl,
-    dispose: function (): boolean | void {
-      if (disposed) return;
-      if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return;
+    dispose: function (): boolean {
+      if (disposed) return true;
+      if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return false;
       if (activeWriter === mine) {
         closeWriter();
         if (flowWriter) return false;
       }
       disposed = true;
-      if (activeWriter !== mine) return;
+      if (activeWriter !== mine) return true;
       activeWriter = null;
       GUARDED_EVENTS.forEach(function (type) { root.removeEventListener(type, guardWriterEdit, true); });
       selectionFormatting = null;
@@ -450,6 +450,7 @@ export function startWriter(given: WriterFeaturePorts) {
       appActions = null;
       hideTagGhost = null;
       scheduleIdleRefresh = null;
+      return true;
     }
   };
 }
