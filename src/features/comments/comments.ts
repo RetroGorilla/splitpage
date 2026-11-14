@@ -532,7 +532,9 @@ export function closeCommentComposer(cancelled?: boolean) {
   composerVersion++;
   (document.getElementById("comment-modal") as HTMLElement).hidden = true;
   if (cancelled && pendingComment) {
-    (ports as CommentsRuntimePorts).edits.edit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id), sharedComments()));
+    const shared = sharedComments();
+    (ports as CommentsRuntimePorts).edits.edit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id),
+      shared && { ports: shared, anchor: pendingComment.id }));
   }
   pendingComment = null;
   (ports as CommentsRuntimePorts).selection.dropLink();

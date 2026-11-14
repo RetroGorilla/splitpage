@@ -10,7 +10,11 @@ export interface SharedCommentUnwrap {
   readonly before: readonly Run[];
   readonly after: readonly Run[];
 }
-export type SharedCommentMarkRemovals = { readonly operations: readonly Omit<SharedMarkChange, "id" | "by">[] } | { readonly refused: string };
+export interface SharedCommentCell {
+  readonly owner: string;
+  readonly field: SharedTextAddress["field"];
+  readonly runs: readonly Run[];
+}
 
 function sorted(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sorted);
@@ -18,39 +22,45 @@ function sorted(value: unknown): unknown {
   return Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted((value as Record<string, unknown>)[key])]));
 }
 
+function withoutAnchors(marks: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(marks ?? {}).filter(([key]) => key !== "cmt"));
+}
+
 function rest(char: Char): string {
-  if ("atom" in char && char.atom) return JSON.stringify(sorted(char.atom));
+  if ("atom" in char && char.atom) return JSON.stringify(sorted({ ...char.atom, marks: withoutAnchors(char.atom.marks) }));
   const text = char as { readonly ch: string; readonly marks?: Readonly<Record<string, unknown>> };
-  const marks = Object.fromEntries(Object.entries(text.marks ?? {}).filter(([key]) => key !== "cmt"));
-  return JSON.stringify([text.ch, sorted(marks)]);
+  return JSON.stringify([text.ch, sorted(withoutAnchors(text.marks))]);
 }
 
 function anchors(char: Char): readonly string[] {
-  return "atom" in char && char.atom ? [] : (char as { readonly marks?: { readonly cmt?: readonly string[] } }).marks?.cmt ?? [];
+  const marks = ("atom" in char && char.atom ? char.atom.marks : (char as { readonly marks?: unknown }).marks) as { readonly cmt?: readonly string[] } | undefined;
+  return marks?.cmt ?? [];
 }
 
-export function sharedCommentMarkRemovals(unwraps: readonly SharedCommentUnwrap[]): SharedCommentMarkRemovals {
-  const operations: Omit<SharedMarkChange, "id" | "by">[] = [];
-  for (const unwrap of unwraps) {
+export function sharedCommentRewriteRefused(anchor: string, unwraps: readonly SharedCommentUnwrap[]): boolean {
+  return unwraps.some(unwrap => {
     const before = explode(unwrap.before), after = explode(unwrap.after);
-    if (before.length !== after.length) return { refused: "comment-unwrap-rewrite" };
-    const removed = new Map<string, number[]>();
-    for (let offset = 0; offset < before.length; offset++) {
-      const was = before[offset] as Char, now = after[offset] as Char;
-      if (rest(was) !== rest(now) || anchors(now).some(anchor => !anchors(was).includes(anchor))) return { refused: "comment-unwrap-rewrite" };
-      for (const anchor of anchors(was)) if (!anchors(now).includes(anchor)) removed.set(anchor, [...removed.get(anchor) ?? [], offset]);
+    return before.length !== after.length || before.some((was, offset) => {
+      const now = after[offset] as Char;
+      return rest(was) !== rest(now) || anchors(now).some(id => !anchors(was).includes(id)) || anchors(was).some(id => id !== anchor && !anchors(now).includes(id));
+    });
+  });
+}
+
+export function sharedCommentMarkRemovals(anchor: string, cells: readonly SharedCommentCell[]): readonly Omit<SharedMarkChange, "id" | "by">[] {
+  const operations: Omit<SharedMarkChange, "id" | "by">[] = [];
+  for (const cell of cells) {
+    const offsets = explode(cell.runs).flatMap((char, offset) => anchors(char).includes(anchor) ? [offset] : []);
+    if (!offsets.length) continue;
+    const observed: SharedContentRef[] = [];
+    for (let i = 0; i < offsets.length;) {
+      let end = i + 1;
+      while (end < offsets.length && offsets[end] === (offsets[i] as number) + end - i) end++;
+      observed.push(flowBaseReference(cell.owner, cell.field, offsets[i] as number, (offsets[i] as number) + end - i));
+      i = end;
     }
-    for (const [anchor, offsets] of [...removed].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
-      const observed: SharedContentRef[] = [];
-      for (let i = 0; i < offsets.length;) {
-        let end = i + 1;
-        while (end < offsets.length && offsets[end] === (offsets[i] as number) + end - i) end++;
-        observed.push(flowBaseReference(unwrap.owner, unwrap.field, offsets[i] as number, (offsets[i] as number) + end - i));
-        i = end;
-      }
-      operations.push({ kind: "mark", target: { owner: unwrap.owner as SharedContentRef, segment: unwrap.owner as SharedContentRef, field: unwrap.field }, observed,
-        mark: { kind: "comment", id: anchor as SharedContentRef, value: null } });
-    }
+    operations.push({ kind: "mark", target: { owner: cell.owner as SharedContentRef, segment: cell.owner as SharedContentRef, field: cell.field }, observed,
+      mark: { kind: "comment", id: anchor as SharedContentRef, value: null } });
   }
-  return { operations };
+  return operations;
 }

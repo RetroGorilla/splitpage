@@ -7,7 +7,7 @@ import type { SharedCommentPorts } from "../../../src/application/commands/comme
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
-import { armDeleteComment, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -21,7 +21,8 @@ const SOURCE: Record<string, unknown> = {
 const DOC: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...SOURCE };
 
 function fixture(shared: SharedCommentPorts | null) {
-  document.body.innerHTML = '<div id="comment-modal" hidden><div id="comment-body-editable"></div></div><div id="comments-panel" hidden></div>';
+  document.body.innerHTML = '<div id="comment-modal" hidden><div id="comment-modal-quote"></div><input id="comment-name"><div id="comment-body-editable"></div></div>'
+    + '<div id="comments-panel" hidden></div>';
   const commands: Command[] = [];
   const clock = { nowIso: () => AT };
   const ports: CommentStatePorts = {
@@ -65,6 +66,8 @@ function drive() {
   toggleResolve("C1");
   setCommentAssignee("C1", "Bob");
   armDeleteComment(document.createElement("button"), "C1");
+  openCommentComposer({ id: "C1", rowId: "R1", field: "audioText", quotedText: "bc" });
+  closeCommentComposer(true);
 }
 
 test("D26: the comment feature passes its shared ports to resolve, assign and delete", () => {
@@ -80,7 +83,9 @@ test("D26: the comment feature passes its shared ports to resolve, assign and de
         set("w1_1:updatedAt", "updatedAt", AT)], undo: false },
       { operations: [set("w1_2:assignee", "assignee", "Bob"), set("w1_2:updatedAt", "updatedAt", AT)] },
       { operations: [{ kind: "mark", target: { owner: "R1", segment: "R1", field: "audioText" }, observed: ['["flow-base","R1","audioText",1,3]'],
-        mark: { kind: "comment", id: "C1", value: null }, id: "w1_3:0", by: "Ada" }, { kind: "record-delete", id: "w1_3:delete:0", by: "Ada", target: comment }] }
+        mark: { kind: "comment", id: "C1", value: null }, id: "w1_3:0", by: "Ada" }, { kind: "record-delete", id: "w1_3:delete:0", by: "Ada", target: comment }] },
+      { operations: [{ kind: "mark", target: { owner: "R1", segment: "R1", field: "audioText" }, observed: ['["flow-base","R1","audioText",1,3]'],
+        mark: { kind: "comment", id: "C1", value: null }, id: "w1_4:0", by: "Ada" }] }
     ]);
   } finally { owner.dispose(); }
 });
@@ -90,6 +95,6 @@ test("D26: with no shared ports the comment feature plans standalone commands", 
   const owner = startComments(fake.ports);
   try {
     drive();
-    assert.deepEqual(planned(fake.commands), [undefined, undefined, undefined]);
+    assert.deepEqual(planned(fake.commands), [undefined, undefined, undefined, undefined]);
   } finally { owner.dispose(); }
 });

@@ -1,3 +1,4 @@
+import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { addReplyCommand, deleteCommentCommand, toggleResolveCommand, unwrapCommentAnchorCommand } from "../../../src/application/commands/comments.ts";
@@ -6,6 +7,7 @@ import type { RewritePlanner } from "../../../src/application/commands/document-
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { sharedCommentPorts } from "../../../src/bootstrap/wiring/ports/shared-comments.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
@@ -17,7 +19,7 @@ import type { ValidatedDocument } from "../../../src/core/document/validated.ts"
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
-import { sharedCommentMarkRemovals } from "../../../src/core/collab/comment-mark-operations.ts";
+import { sharedCommentMarkRemovals, sharedCommentRewriteRefused } from "../../../src/core/collab/comment-mark-operations.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { replicas, operation } from "../../adapters/collab/executor-support.ts";
 import { sharedHarness, adapterReplica } from "../session/shared-session-support.ts";
@@ -32,6 +34,7 @@ const cells = createFlowLoadRuntime().cells;
 const anchor = (id: string, text: string) => '<span class="cmt-anchor" data-cmt="' + id + '">' + text + "</span>";
 const at = (second: number) => "2026-11-13T10:00:0" + second + ".000Z";
 const R1_AUDIO = "a" + anchor("C1", "bc") + "d", R1_VISUAL = "x" + anchor("C2", "yz");
+const TOKEN = '<span class="broll-key" data-broll-id="S1" contenteditable="false">B-roll:</span>';
 const REPLY = { id: "r1", author: "Bob", body: "ok", createdAt: at(1) };
 const C1 = { id: "C1", rowId: "R1", field: "audioText", anchorId: "C1", quotedText: "bc", author: "Ann", body: "note", resolved: false, resolvedBy: null, resolvedAt: null,
   assignee: "", createdAt: at(0), updatedAt: at(0), kind: "anchor", replies: [REPLY] };
@@ -57,11 +60,14 @@ function documentWith(shape: Shape): Fields {
 
 function unwrapping(rowId: string, field: string, id: string): RewritePlanner {
   return function (doc) {
-    const found = doc.rows.find(r => r.id === rowId), html = String(found?.[field] ?? ""), wrapped = anchor(id, "");
-    const start = html.indexOf(wrapped.slice(0, -7));
-    if (start === -1) return [];
-    const close = html.indexOf("</span>", start), open = html.indexOf(">", start) + 1;
-    return [{ rowId, field, html: html.slice(0, start) + html.slice(open, close) + html.slice(close + 7) }];
+    const found = doc.rows.find(r => r.id === rowId);
+    if (!found) return [];
+    const box = document.createElement("div");
+    box.innerHTML = String(found[field] ?? "");
+    const span = box.querySelector('.cmt-anchor[data-cmt="' + id + '"]');
+    if (!span) return [];
+    span.replaceWith(...span.childNodes);
+    return [{ rowId, field, html: box.innerHTML }];
   };
 }
 
@@ -84,13 +90,13 @@ const cases: readonly CommentLiteral[] = [
   { name: "delete a comment anchored in a visual cell", make: s => deleteCommentCommand("C2", unwrapping("R1", "visualText", "C2"), s),
     operations: [mark(0, "visualText", "C2", 1, 3), remove(0, "comments", "C2")],
     after: { visual: "xyz", comments: [C1] }, recovery: [] },
-  { name: "unwrap a comment's anchor", make: s => unwrapCommentAnchorCommand(unwrapping("R1", "audioText", "C1"), s),
+  { name: "unwrap a comment's anchor", make: s => unwrapCommentAnchorCommand(unwrapping("R1", "audioText", "C1"), s && { ports: s, anchor: "C1" }),
     operations: [mark(0, "audioText", "C1", 1, 3)],
     after: { audio: "abcd" }, recovery: [{ kind: "comment-without-words", comment: "C1", rowId: "R1", field: "audioText" }] }
 ];
 
-function setup() {
-  const set = replicas(2, SOURCE);
+function setup(source: unknown = SOURCE) {
+  const set = replicas(2, source);
   for (const handle of [set.a, set.b, set.c]) registerSharedOperationFamilies(handle, { cells: createFlowLoadRuntime().cells });
   return set;
 }
@@ -256,9 +262,9 @@ test("comment delete and unwrap with no author, or no shared ports, plan as befo
   const counting: SharedCommentPorts = { author: () => { asked++; return { id: "w9_1", by: "Alice" }; }, cells };
   const live: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(documentWith({})) };
   assert.equal(deleteCommentCommand("C9", unwrapping("R1", "audioText", "C9"), counting).plan(live, capabilities()), null);
-  assert.equal(unwrapCommentAnchorCommand(unwrapping("R1", "audioText", "C9"), counting).plan(live, capabilities()), null);
+  assert.equal(unwrapCommentAnchorCommand(unwrapping("R1", "audioText", "C9"), { ports: counting, anchor: "C9" }).plan(live, capabilities()), null);
   assert.equal(asked, 0);
-  const nobody: SharedCommentPorts = { author: () => null, cells: () => { throw new Error("no cells expected"); } };
+  const nobody: SharedCommentPorts = { author: () => null, cells };
   for (const literal of cases) {
     const plan = literal.make(nobody).plan(live, capabilities());
     assert.ok(plan && !("refused" in plan) && plan.shared === undefined, literal.name);
@@ -271,22 +277,130 @@ test("an unwrap rewrite that changes more than comment marks is refused by name 
   try {
     const before = encodeSharedState(h.a);
     const rewrite: RewritePlanner = () => [{ rowId: "R1", field: "audioText", html: "abcd!" }];
-    assert.deepEqual(a.session.run(unwrapCommentAnchorCommand(rewrite, ports(h.a, "Alice"))), { kind: "rejected", reason: "comment-unwrap-rewrite" });
+    assert.deepEqual(a.session.run(unwrapCommentAnchorCommand(rewrite, { ports: ports(h.a, "Alice"), anchor: "C1" })), { kind: "rejected", reason: "comment-unwrap-rewrite" });
     assert.deepEqual(a.session.run(deleteCommentCommand("C1", () => [{ rowId: "R1", field: "audioText", html: "<b>abcd</b>" }], ports(h.a, "Alice"))), { kind: "rejected", reason: "comment-unwrap-rewrite" });
     assert.deepEqual(a.session.run(deleteCommentCommand("C1", () => [{ rowId: "R1", field: "title", html: "abcd" }], ports(h.a, "Alice"))), { kind: "rejected", reason: "comment-unwrap-rewrite" });
+    assert.deepEqual(a.session.run(deleteCommentCommand("C1", () => [{ rowId: "R9", field: "audioText", html: "abcd" }], ports(h.a, "Alice"))), { kind: "rejected", reason: "comment-unwrap-rewrite" });
+    assert.deepEqual(a.session.run(deleteCommentCommand("C1", () => [{ rowId: "R1", field: "visualText", html: "xyz" }], ports(h.a, "Alice"))), { kind: "rejected", reason: "comment-unwrap-rewrite" });
     assert.deepEqual(a.executed, []);
     assert.deepEqual(encodeSharedState(h.a), before);
   } finally { a.session.dispose(); h.close(); }
 });
 
-test("comment mark removals group each anchor's offsets into spans and refuse any other change", () => {
-  const unwrap = (before: string, after: string) => sharedCommentMarkRemovals([{ owner: "R1", field: "audioText", before: cells(before), after: cells(after) }]);
-  const removal = (id: string, spans: readonly [number, number][]) => ({ kind: "mark", target: { owner: "R1", segment: "R1", field: "audioText" },
-    observed: spans.map(([from, to]) => flowBaseReference("R1", "audioText", from, to)), mark: { kind: "comment", id, value: null } });
-  assert.deepEqual(unwrap(anchor("C1", "ab") + "c" + anchor("C1", "d"), "abcd"), { operations: [removal("C1", [[0, 2], [3, 4]])] });
-  assert.deepEqual(unwrap(anchor("C2", "a") + anchor("C1", "b"), "ab"), { operations: [removal("C1", [[1, 2]]), removal("C2", [[0, 1]])] });
-  assert.deepEqual(unwrap("ab", "ab"), { operations: [] });
-  assert.deepEqual(unwrap(anchor("C1", "ab"), "ab "), { refused: "comment-unwrap-rewrite" });
-  assert.deepEqual(unwrap(anchor("C1", "ab"), "aB"), { refused: "comment-unwrap-rewrite" });
-  assert.deepEqual(unwrap("ab", anchor("C1", "ab")), { refused: "comment-unwrap-rewrite" });
+test("comment mark removals cover every span of the comment's mark in every cell and no other comment's mark", () => {
+  const removal = (owner: string, field: "audioText" | "visualText", spans: readonly [number, number][]) => ({ kind: "mark", target: { owner, segment: owner, field },
+    observed: spans.map(([from, to]) => flowBaseReference(owner, field, from, to)), mark: { kind: "comment", id: "C1", value: null } });
+  assert.deepEqual(sharedCommentMarkRemovals("C1", [
+    { owner: "R1", field: "audioText", runs: cells(anchor("C1", "ab") + "c" + anchor("C1", "d")) },
+    { owner: "R1", field: "visualText", runs: cells(anchor("C2", "x")) },
+    { owner: "R3", field: "audioText", runs: cells("a" + anchor("C0", "b" + anchor("C1", "c")) + anchor("C1", "d") + TOKEN + anchor("C1", TOKEN)) }
+  ]), [removal("R1", "audioText", [[0, 2], [3, 4]]), removal("R3", "audioText", [[2, 4], [5, 6]])]);
+  assert.deepEqual(sharedCommentMarkRemovals("C1", [{ owner: "R1", field: "audioText", runs: cells("ab") }]), []);
+});
+
+test("an unwrap rewrite may only take away the comment's own marks, on words and on tokens", () => {
+  const refused = (before: string, after: string) => sharedCommentRewriteRefused("C1", [{ owner: "R1", field: "audioText", before: cells(before), after: cells(after) }]);
+  assert.equal(refused(anchor("C1", "ab") + "c" + anchor("C1", "d"), "abc" + anchor("C1", "d")), false);
+  assert.equal(refused(anchor("C1", TOKEN + "b"), TOKEN + "b"), false);
+  assert.equal(refused(anchor("C1", "a" + TOKEN + "b"), "a" + TOKEN + "b"), false);
+  assert.equal(refused(anchor("C1", "ab" + TOKEN), "ab" + TOKEN), false);
+  assert.equal(refused(anchor("C1", "ab"), "ab "), true);
+  assert.equal(refused(anchor("C1", "ab"), "aB"), true);
+  assert.equal(refused("ab", anchor("C1", "ab")), true);
+  assert.equal(refused(anchor("C2", "ab"), "ab"), true);
+  assert.equal(refused(anchor("C1", TOKEN), '<span class="broll-key" data-broll-id="S2" contenteditable="false">B-roll:</span>'), true);
+});
+
+const comment = (id: string, quotedText: string, createdAt: string, replies: readonly Fields[] = []) => ({ id, author: "Ann", createdAt, rowId: "R1", field: "audioText", anchorId: id,
+  body: "note", quotedText, resolved: false, resolvedAt: null, resolvedBy: null, replies });
+const splitAt = (id: string, owner: string, offset: number, beat: string) => ({ kind: "split", id, by: "Bob", target: { owner, segment: owner, field: "audioText" },
+  at: { left: flowBaseReference("R1", "audioText", offset), right: null, affinity: "after" }, observed: [], boundary: beat, beat, fields: {} });
+const JOIN = { kind: "join", id: "joined", by: "Bob", from: "R2", into: "R1", glue: " " };
+interface Scenario { readonly name: string; readonly source: unknown; readonly prep: readonly unknown[]; readonly make: (shared: SharedCommentPorts | undefined) => Command }
+const deleting = (s: SharedCommentPorts | undefined) => deleteCommentCommand("C1", unwrapping("R1", "audioText", "C1"), s);
+const unwrapC1 = (s: SharedCommentPorts | undefined) => unwrapCommentAnchorCommand(unwrapping("R1", "audioText", "C1"), s && { ports: s, anchor: "C1" });
+const single = (audio: string, r2 = "ef") => ({ rows: [{ id: "R1", audioText: audio }, { id: "R2", audioText: r2 }], comments: [comment("C1", "bc", at(0), [REPLY])] });
+const scenarios: readonly Scenario[] = [
+  { name: "delete after a split between the anchor's words", source: SOURCE, prep: [splitAt("cut", "R1", 1, "Rb")], make: deleting },
+  { name: "unwrap after a split between the anchor's words", source: SOURCE, prep: [splitAt("cut", "R1", 1, "Rb")], make: unwrapC1 },
+  { name: "delete one of two overlapping anchors", source: { rows: [{ id: "R1", audioText: "a" + anchor("C0", "b" + anchor("C1", "c")) + anchor("C1", "d") }, { id: "R2", audioText: "ef" }],
+    comments: [comment("C0", "bc", at(3)), comment("C1", "cd", at(0))] }, prep: [], make: deleting },
+  { name: "delete an anchor in three fragments across two splits", source: single("a" + anchor("C1", "bcd") + "e"),
+    prep: [splitAt("cut", "R1", 1, "Rb"), splitAt("cut2", "structure_2_006300750074_beat_0", 2, "Rc")], make: deleting },
+  { name: "delete an anchor with a fragment in a joined beat", source: single("a" + anchor("C1", "bc") + "d", anchor("C1", "e") + "f"), prep: [JOIN], make: deleting },
+  { name: "delete an anchor that starts with a B-roll token", source: single("a" + anchor("C1", TOKEN + "bc") + "d"), prep: [], make: deleting },
+  { name: "delete an anchor with a B-roll token inside", source: single("a" + anchor("C1", "b" + TOKEN + "c") + "d"), prep: [], make: deleting },
+  { name: "delete an anchor that ends with a B-roll token", source: single("a" + anchor("C1", "bc" + TOKEN) + "d"), prep: [], make: deleting },
+  { name: "unwrap an anchor with a B-roll token inside", source: single("a" + anchor("C1", "b" + TOKEN + "c") + "d"), prep: [], make: unwrapC1 }
+];
+
+const SPLIT = "structure_2_006300750074_beat_0", SPLIT2 = "structure_2_0063007500740032_beat_0";
+const split = (id: string, audio: string) => ({ id, status: "todo", visualText: "", audioText: audio, imageRef: null });
+const docOf = (rows: readonly Fields[], comments: readonly Fields[]) => ({ schema: 2, title: "", docId: "d00000000000000000000000000000000", rows, comments,
+  people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 });
+const markOn = (index: number, owner: string, spans: readonly [number, number][]) => ({ kind: "mark", target: { owner, segment: owner, field: "audioText" },
+  observed: spans.map(([from, to]) => flowBaseReference(owner, "audioText", from, to)), mark: { kind: "comment", id: "C1", value: null }, id: "w1_1:" + index, by: "Alice" });
+const DELETES = [remove(0, "replies", "[\"C1\",\"r1\"]"), remove(1, "comments", "C1")];
+const C0 = { ...C1, id: "C0", anchorId: "C0", createdAt: at(3), updatedAt: at(3), replies: [] };
+const R2 = row("R2", { audioText: "ef" });
+const WITHOUT_WORDS = [{ kind: "comment-without-words", comment: "C1", rowId: "R1", field: "audioText" }];
+const EXPECTED: Readonly<Record<string, { readonly operations: readonly unknown[]; readonly document: Fields; readonly recovery: readonly unknown[] }>> = {
+  "delete after a split between the anchor's words": { operations: [markOn(0, "R1", [[1, 2]]), markOn(1, SPLIT, [[0, 1]]), ...DELETES],
+    document: docOf([row("R1", { audioText: "ab", visualText: R1_VISUAL }), split(SPLIT, "cd"), R2], [C2]), recovery: [] },
+  "unwrap after a split between the anchor's words": { operations: [markOn(0, "R1", [[1, 2]]), markOn(1, SPLIT, [[0, 1]])],
+    document: docOf([row("R1", { audioText: "ab", visualText: R1_VISUAL }), split(SPLIT, "cd"), R2], [C1, C2]), recovery: WITHOUT_WORDS },
+  "delete one of two overlapping anchors": { operations: [markOn(0, "R1", [[2, 4]]), remove(0, "comments", "C1")],
+    document: docOf([row("R1", { audioText: "a" + anchor("C0", "bc") + "d" }), R2], [C0]), recovery: [] },
+  "delete an anchor in three fragments across two splits": { operations: [markOn(0, "R1", [[1, 2]]), markOn(1, SPLIT, [[0, 1]]), markOn(2, SPLIT2, [[0, 1]]), ...DELETES],
+    document: docOf([row("R1", { audioText: "ab" }), split(SPLIT, "c"), split(SPLIT2, "de"), R2], []), recovery: [] },
+  "delete an anchor with a fragment in a joined beat": { operations: [{ ...markOn(0, "R1", [[1, 3]]), observed: [flowBaseReference("R1", "audioText", 1, 3), flowBaseReference("R1", "audioText", 5, 6)] }, ...DELETES],
+    document: docOf([row("R1", { audioText: "abcd ef" })], []), recovery: [] },
+  "delete an anchor that starts with a B-roll token": { operations: [markOn(0, "R1", [[1, 4]]), ...DELETES],
+    document: docOf([row("R1", { audioText: "a" + TOKEN + "bcd" }), R2], []), recovery: [] },
+  "delete an anchor with a B-roll token inside": { operations: [markOn(0, "R1", [[1, 4]]), ...DELETES],
+    document: docOf([row("R1", { audioText: "ab" + TOKEN + "cd" }), R2], []), recovery: [] },
+  "delete an anchor that ends with a B-roll token": { operations: [markOn(0, "R1", [[1, 4]]), ...DELETES],
+    document: docOf([row("R1", { audioText: "abc" + TOKEN + "d" }), R2], []), recovery: [] },
+  "unwrap an anchor with a B-roll token inside": { operations: [markOn(0, "R1", [[1, 4]])],
+    document: docOf([row("R1", { audioText: "ab" + TOKEN + "cd" }), R2], [C1]), recovery: WITHOUT_WORDS }
+};
+
+function owned(handle: SharedDocumentHandle) {
+  const author = sharedAuthorPort({ handle: () => handle, name: () => "Alice" });
+  const owner = sharedUndoOwner(handle, () => author.next(), () => 0, error => { throw error; });
+  return { owner, harness: sharedHarness(adapterReplica(handle, owner)), ports: { author: () => author.next(), cells } };
+}
+
+for (const scenario of scenarios) for (const order of ORDERS) {
+  test(`shared comment command removes every fragment of the comment's mark: ${scenario.name}, ${order}; undo puts every fragment back`, () => {
+    const h = setup(scenario.source), { owner, harness, ports: shared } = owned(h.a), expected = EXPECTED[scenario.name];
+    assert.ok(expected);
+    try {
+      if (scenario.prep.length) send(h.b, ...scenario.prep);
+      flush(h.queue, order);
+      const before = agreeing("before", [h.a, h.b], order);
+      assert.equal(harness.session.run(scenario.make(shared)).kind, "applied");
+      assert.deepEqual(harness.executed.map(entry => entry.operations), [expected.operations]);
+      flush(h.queue, order);
+      assert.deepEqual(agreeing(scenario.name, [h.a, h.b], order), { document: expected.document, recovery: expected.recovery });
+      assert.deepEqual(owner.sizes().undo, 1);
+      assert.ok(owner.undo().ok);
+      flush(h.queue, order);
+      assert.deepEqual(agreeing("undone", [h.a, h.b], order), before);
+      assert.ok(owner.redo().ok);
+      flush(h.queue, order);
+      assert.deepEqual(agreeing("redone", [h.a, h.b], order), { document: expected.document, recovery: expected.recovery });
+    } finally { harness.session.dispose(); h.close(); }
+  });
+}
+
+for (const literal of cases) test(`shared comment command records one owner undo entry, and undo through the owner restores the document: ${literal.name}`, () => {
+  const h = setup(), { owner, harness, ports: shared } = owned(h.a);
+  try {
+    assert.equal(harness.session.run(literal.make(shared)).kind, "applied");
+    assert.deepEqual(owner.sizes().undo, 1);
+    assert.ok(owner.undo().ok);
+    flush(h.queue, "D1");
+    assert.deepEqual(agreeing(literal.name, [h.a, h.b]), { document: documentWith({}), recovery: [] });
+  } finally { harness.session.dispose(); h.close(); }
 });
