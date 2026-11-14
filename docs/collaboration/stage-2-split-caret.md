@@ -78,8 +78,8 @@ literal separately proves that the stored character stays U+0020.
 
 | Column | Native typed space | Plain space after repaint | Shared paint |
 | --- | --- | --- | --- |
-| Narration | U+00A0, 5.0625 px | U+0020, 0 px | U+0020, 5.0625 px |
-| Visual | U+00A0, 4.21875 px | U+0020, 0 px | U+0020, 4.21875 px |
+| Narration | U+00A0, 5.0625 px | U+0020, 0 px | U+0020, 5.046875 px |
+| Visual | U+00A0, 4.21875 px | U+0020, 0 px | U+0020, 4.203125 px |
 
 The native typing sequence is keydown, keypress, beforeinput (`insertText`,
 data ` `), input (`insertText`, data ` `), keyup. The fixture uses that sequence,
