@@ -15,7 +15,7 @@ test("C9 standalone: no DOM, no registered action, no recovery/document reads or
   const f = fakeRecoveryPanelPorts([removed]), panel = createRecoveryPanel(f.ports), registry = createActionRegistry();
   const off = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
   try {
-    panel.open(); assert.equal(f.ports.host.childElementCount, 0); assert.deepEqual(registry.list(), []); assert.equal(f.mode.size, 0);
+    panel.open(); assert.equal(f.ports.host.childElementCount, 0); assert.deepEqual(registry.list(), []); assert.equal(f.mode.size, 0); assert.equal(f.state.modeRegistrations, 0);
     const beforeReplacement = f.state.currentReads; f.changed(); assert.equal(f.state.currentReads, beforeReplacement);
     const reads = [f.state.currentReads, f.state.reads, f.state.docReads, f.state.subscriptions];
     for (let key = 0; key < 20; key++) {
@@ -60,7 +60,7 @@ test("C9 binding lifetime has zero standalone listeners, open-only subscription 
   const actions = startRecoveryPanelActions({ registry, current: () => panel, session: f.ports.session });
   const counts = () => [f.mode.size, f.state.subscriptions, registry.list().length];
   try {
-    assert.deepEqual(counts(), [0, 0, 0]);
+    assert.deepEqual(counts(), [0, 0, 0]); assert.equal(f.state.modeRegistrations, 0);
     for (const rollback of [false, true]) {
       f.state.shared = true; panel.enter(); actions.enter(); panel.enter(); actions.enter();
       assert.deepEqual(counts(), [2, 0, 1]);
