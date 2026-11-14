@@ -22,7 +22,7 @@ The feasibility literals precede the feature: each copy sends the existing `segm
 
 `startEmptyScript` mounts a local textarea outside the editable host. It shows while the shared projection is empty and creates no document content until native input commits. Beforeinput/composition takes the existing M1 ingress hold. One command creates a fresh beat carrying the plain text, empty visual and normal creation stamp; the existing structure key resolves its id before caret placement. IME waits for compositionend, cancelled input creates nothing, and refused creation retains its local text for retry. A committed command with an effect error is accepted as committed and is never retried as another beat.
 
-Concurrent first inputs get distinct author-derived beat ids, so both texts survive. Initial text goes before the retained structure; no removal or recovery event is changed. A native input/composition, stale draft or refused creation prevents unsafe disposal. A target cannot take another surface's buffer hold.
+Concurrent first inputs get distinct author-derived beat ids, so both texts survive. Initial text goes before the retained structure; no removal or recovery event is changed. A native input/composition, stale draft or refused creation prevents unsafe disposal. A target cannot take another surface's buffer hold. Rejected input without a hold restores the empty DOM value, so a later command cannot publish unadmitted text; an already-held draft is retained.
 
 ## Evidence and limits
 
@@ -32,7 +32,7 @@ The first input is one command and one undo entry. Its existing structural inver
 
 ## Shared app wiring in C6/C7
 
-Call `mountSharedEmptyScript({ handle, session, author, writer, stamps }, { host, edits, notices, place })` for the active shared view only. `host` is Writer's narration root or Split's rows root, already attached; the factory inserts the target before it. Use the existing shared author port, stamp ports, editing capability and notices. `writer()` returns the current handle's client id string, as in the Writer flow ports. Do not construct this factory or subscribe it in standalone mode: standalone keys and pastes execute no added read, branch, allocation or hook.
+Call `mountSharedEmptyScript({ handle, session, author, writer, stamps }, { host, edits, report, place })` for the active shared view only. `host` is Writer's narration root or Split's rows root, already attached; the factory inserts the target before it. Use the existing author, stamp and editing ports; `report` is the existing buffered-field feedback port. `writer()` returns the current handle's client id string, as in the Writer flow ports. Do not construct this factory or subscribe it in standalone mode: standalone keys and pastes execute no added read, branch, allocation or hook.
 
 `place(rowId, offset)` must paint the current committed projection, then place the narration caret in that resolved beat in the active view, returning whether it succeeded. Call `finish()` before leaving the view; honor a false result. Likewise honor `dispose()` returning false while native input, composition or a retained draft cannot settle. The running app does not call this factory in this cut.
 

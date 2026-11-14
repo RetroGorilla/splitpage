@@ -99,7 +99,7 @@ export function fakeEmptyScriptPorts(initial: DocumentView) {
   const ports: EmptyScriptPorts = {
     host: document.body.appendChild(document.createElement("div")), document: reader.document,
     lifetime: { epoch: () => state.epoch, beforeCommand: listener => { commands.add(listener); return () => { commands.delete(listener); }; } },
-    edits: { allowed: () => state.allowed }, notices: notices.notices,
+    edits: { allowed: () => state.allowed }, report: outcome => { notices.notices.show(outcome.kind === "rejected" ? outcome.reason : outcome.kind, "warn"); },
     hold: () => {
       if (state.holdRefusal) return { ok: false, reason: state.holdRefusal };
       state.held++; return { ok: true, release: () => { state.held--; } };

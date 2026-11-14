@@ -29,7 +29,8 @@ test("an empty-script target is hidden and rejects native input once a beat exis
   try {
     assert.equal(p.area.hidden, true); assert.equal(before(p.input), false); assert.equal(input(p.input, "late"), false);
     assert.deepEqual([p.created, p.state.held], [[], 0]);
-    p.input.value = "";
+    assert.equal(p.input.value, ""); assert.deepEqual([...p.commands].map(finish => finish()), [true]);
+    assert.deepEqual(p.created, []);
   } finally { assert.equal(p.control.dispose(), true); }
 });
 
@@ -45,7 +46,8 @@ test("an empty-script target respects read-only admission for beforeinput and in
   const p = page([], fake => { fake.state.allowed = false; });
   try {
     assert.equal(p.input.disabled, true); assert.equal(before(p.input), false); assert.equal(input(p.input, "denied"), false);
-    assert.deepEqual([p.created, p.state.held], [[], 0]); p.input.value = "";
+    assert.deepEqual([p.created, p.state.held], [[], 0]); assert.equal(p.input.value, "");
+    assert.deepEqual([...p.commands].map(finish => finish()), [true]); assert.deepEqual(p.created, []);
   } finally { assert.equal(p.control.dispose(), true); }
 });
 
@@ -89,6 +91,18 @@ test("an empty-script target cannot retry an uncommitted draft into another epoc
     assert.equal(p.control.finish(), false); assert.deepEqual(p.created, ["kept"]); assert.equal(p.input.value, "kept");
     p.state.epoch--; assert.equal(p.control.finish(), true); assert.deepEqual(p.created, ["kept", "kept"]);
   } finally { assert.equal(p.control.dispose(), true); }
+});
+
+test("an empty-script target can settle its retained draft after the next native key is cancelled", () => {
+  const p = page([], fake => { fake.state.createRefusal = "empty-script-no-author"; });
+  try {
+    assert.equal(before(p.input), true); input(p.input, "kept");
+    assert.equal(before(p.input), true);
+    p.input.dispatchEvent(new window.KeyboardEvent("keyup", { key: "x", bubbles: true }));
+    assert.equal(p.state.held, 1); assert.equal(p.input.value, "kept");
+    p.state.createRefusal = null; assert.equal(p.control.finish(), true);
+    assert.deepEqual(p.created, ["kept", "kept"]); assert.equal(p.state.held, 0);
+  } finally { p.input.value = ""; p.input.dispatchEvent(new window.KeyboardEvent("keyup")); p.control.dispose(); }
 });
 
 test("an empty-script target ignores a compositionend without its compositionstart", () => {

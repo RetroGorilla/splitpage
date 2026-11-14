@@ -1,6 +1,41 @@
 {
   "mutants": [
     {
+      "label": "cancelled key leaves a retained draft pending",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!composing && pending && input.value === beforeInput)",
+      "replace": "if (!composing && pending && !input.value)",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "cancelled key releases a retained draft's hold",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!input.value) end();",
+      "replace": "end();",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "cancelled key compares its draft with an empty baseline",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "beforeInput = input.value;",
+      "replace": "beforeInput = \"\";",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "unadmitted DOM input becomes a later draft",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release) { input.value = \"\"; paint(); }",
+      "replace": "",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "rejected native input clears an already-held draft",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (!release) { input.value = \"\"; paint(); }",
+      "replace": "input.value = \"\"; paint();",
+      "tests": ["tests/features/empty-script/guards.test.ts"]
+    },
+    {
       "label": "empty input creates a beat",
       "file": "src/application/commands/empty-script.ts",
       "find": "if (!text) return null;",
@@ -58,8 +93,8 @@
     {
       "label": "composition opens its own buffer twice",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "if (!release) {",
-      "replace": "if (true) {",
+      "find": "if (!release) {\n      const held = ports.hold();",
+      "replace": "if (true) {\n      const held = ports.hold();",
       "tests": [
         "tests/features/empty-script/shared.test.ts"
       ]
@@ -195,8 +230,8 @@
     {
       "label": "composition keyup releases remote ingress",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "if (!composing && pending && !input.value)",
-      "replace": "if (pending && !input.value)",
+      "find": "if (!composing && pending && input.value === beforeInput)",
+      "replace": "if (pending && input.value === beforeInput)",
       "tests": [
         "tests/features/empty-script/shared.test.ts"
       ]
@@ -204,8 +239,8 @@
     {
       "label": "cancelled native key keeps remote ingress held",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "pending = false; end(); paint();",
-      "replace": "pending = false; paint();",
+      "find": "if (!input.value) end();",
+      "replace": "",
       "tests": [
         "tests/features/empty-script/shared.test.ts",
         "tests/features/empty-script/guards.test.ts"

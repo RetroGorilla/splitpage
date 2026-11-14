@@ -17,7 +17,7 @@ export function mountSharedEmptyScript(shared: {
   readonly author: SharedAuthorPort;
   readonly writer: () => string;
   readonly stamps: StampPorts;
-}, surface: Pick<EmptyScriptPorts, "host" | "edits" | "notices" | "place">) {
+}, surface: Pick<EmptyScriptPorts, "host" | "edits" | "report" | "place">) {
   const order = observeSharedStructureOrder(shared.handle);
   return startEmptyScript({ ...surface, lifetime: shared.session,
     document: { current: () => shared.session.read(doc => doc), onChange: shared.session.subscribe },

@@ -17,15 +17,13 @@ import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts
 import type { EmptyScriptPorts } from "../../../src/features/empty-script/ports.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import { fakeNotices } from "../fakes.ts";
 import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 
 function mounted(handle: SharedDocumentHandle, session: ReturnType<typeof sharedHarness>["session"], host: HTMLElement, writer: string,
   place: EmptyScriptPorts["place"], author = sharedAuthorPort({ handle: () => handle, name: () => writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara" })) {
   const notices: string[] = [];
-  const notice = fakeNotices();
   const control = mountSharedEmptyScript({ handle, session, author, writer: () => writer, stamps: bufferStamps(writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara") },
-    { host, edits: { allowed: () => true }, notices: { show: (text, tone) => { notices.push(text); return notice.notices.show(text, tone); } }, place });
+    { host, edits: { allowed: () => true }, report: outcome => { notices.push(outcome.kind === "rejected" ? outcome.reason : outcome.kind); }, place });
   const area = host.previousElementSibling; assert.ok(area instanceof HTMLElement);
   const input = area.querySelector("textarea"); assert.ok(input);
   return { control, input, area, notices };

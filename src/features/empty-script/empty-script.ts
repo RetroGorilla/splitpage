@@ -7,10 +7,10 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   input.className = "empty-script-input"; input.rows = 2; input.placeholder = "Start writing";
   input.setAttribute("aria-label", "Start writing"); input.dataset.undoOwner = "document";
   ports.host.before(area);
-  let release: (() => void) | null = null, composing = false, pending = false, committing = false, beforeComposition = "", disposed = false;
+  let release: (() => void) | null = null, composing = false, pending = false, committing = false, beforeInput = "", beforeComposition = "", disposed = false;
   const current = () => ports.lifetime.epoch() === epoch;
   const empty = () => ports.document.current()?.rows.length === 0;
-  const notify = (reason: string) => { ports.notices.show(reason, "warn"); };
+  const notify = (reason: string) => { ports.report({ kind: "rejected", reason }); };
   function paint(): void {
     area.hidden = !current() || !empty() && !pending && !composing && !input.value;
     input.disabled = !current() || !ports.edits.allowed();
@@ -23,7 +23,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
       if (!held.ok) { event.preventDefault(); notify(held.reason); return false; }
       release = held.release;
     }
-    pending = true;
+    beforeInput = input.value; pending = true;
     return true;
   }
   function finish(): boolean {
@@ -43,7 +43,11 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   }
   const before = (event: Event): void => { begin(event); };
   const typed = (event: Event): void => {
-    if (!current() || !ports.edits.allowed() || !release && !empty()) { event.preventDefault(); return; }
+    if (!current() || !ports.edits.allowed() || !release && !empty()) {
+      event.preventDefault();
+      if (!release) { input.value = ""; paint(); }
+      return;
+    }
     if (!release && !begin(event)) return;
     pending = false;
     if (!composing && !(event as InputEvent).isComposing) finish();
@@ -55,7 +59,13 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
     if (!(event as CompositionEvent).data) input.value = beforeComposition;
     finish();
   };
-  const released = (): void => { if (!composing && pending && !input.value) { pending = false; end(); paint(); } };
+  const released = (): void => {
+    if (!composing && pending && input.value === beforeInput) {
+      pending = false;
+      if (!input.value) end();
+      paint();
+    }
+  };
   const blur = (): void => { if (!composing) finish(); };
   const listeners: readonly (readonly [string, EventListener])[] = [["beforeinput", before], ["input", typed], ["compositionstart", start], ["compositionend", stop], ["keyup", released], ["blur", blur]];
   for (const [name, listener] of listeners) input.addEventListener(name, listener);
