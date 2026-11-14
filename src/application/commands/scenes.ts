@@ -63,7 +63,9 @@ export function removeSceneCommand(id: string): Command {
 export function moveSceneCommand(id: string, targetId: string, after: boolean): Command {
   return {
     name: "move-section", needs: "edit",
-    plan(doc): Plan | null {
+    plan(doc, capability) {
+      const can = capability.moves();
+      if (!can.allowed) return { refused: can.reason };
       const groups = sceneGroups(doc);
       const moving = groups.find(group => group.scene.id === id);
       const target = groups.find(group => group.scene.id === targetId);

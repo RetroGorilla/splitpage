@@ -45,7 +45,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   function took(outcome: CommandOutcome): boolean {
     if (outcome.kind === "failed") throw outcome.error;
-    if (outcome.kind === "rejected") ports.notice(outcome.reason, "warn");
+    if (outcome.kind === "rejected" && !outcome.notified) ports.notice(outcome.reason, "warn");
     return outcome.kind === "applied" || outcome.kind === "committed";
   }
 

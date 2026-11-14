@@ -254,6 +254,7 @@ function replaceCurrent() {
 export function replaceAll() {
   if (findingInPresent()) return;
   if (writerFind) { replaceWriterMatches(true); return; }
+  if ((ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;
   const needle = findNeedle();
   if (!needle) return;
   const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
@@ -464,6 +465,7 @@ function refreshBulkTagRow() {
 
 export function runBulkTag() {
   if (findingInPresent()) return;
+  if ((ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;
   const doc = (ports as FindRuntimePorts).document.current();
   if (!doc) return;
   const needle = bulkTagNeedle();

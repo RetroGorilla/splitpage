@@ -316,6 +316,7 @@ function untaggedMentionsHtml(item: PresentedProductionEntry) {
 }
 
 export function tagAllMentions(key: string | null) {
+  if ((ports as TagPanelPorts).sharedCommands.refuseUnsupported()) return;
   const item = findTagByKey(key);
   if (!item) return;
   (ports as TagPanelPorts).undo.breakCoalescing();

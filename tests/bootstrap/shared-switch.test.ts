@@ -10,7 +10,7 @@ import { migrateRows } from "../../src/core/migrate.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
 import { observeSharedTransactions } from "../../src/adapters/collab/document.ts";
 import {
-  currentCapabilities, currentDocument, holdMergeBase, mergeBase, onDocumentReplaced, runCommand, sharedSession, standaloneSession, startSessionBridge
+  currentCapabilities, currentDocument, holdMergeBase, liveSession, mergeBase, onDocumentReplaced, onRefresh, runCommand, sharedSession, standaloneSession, startSessionBridge
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, stepSharedUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
@@ -26,7 +26,7 @@ const START_ID = "d" + "1".repeat(32), newId = (n: number): string => "d" + Stri
 const source = (): Record<string, unknown> => ({ docId: START_ID, title: "Pilot", rows: [{ id: "R1", audioText: "ab", lengthSeconds: 3 }] });
 
 type Fault = "refusal" | "settle" | "docId" | "migrate" | "replaced-while-shared" | "replaced-while-standalone" | "bindings.enter" | "bindings.settle"
-  | "bindings.leave" | "hydration" | "detach" | "destroy" | "report" | "bridge entry";
+  | "bindings.leave" | "hydration" | "detach" | "destroy" | "report" | "bridge entry" | "timers.stop";
 
 interface Switch {
   readonly ports: SharedSwitchPorts;
@@ -41,6 +41,7 @@ interface Switch {
   readonly onReplaced: (run: () => void) => void;
   readonly onDocId: (run: () => void) => void;
   readonly onMigrate: (run: () => void) => void;
+  readonly advance: (ms: number) => void;
   readonly stop: () => void;
 }
 
@@ -51,6 +52,7 @@ function start(): Switch {
   let settleHook = (): void => {}, leaveHook = (): void => {}, replacedHook = (): void => {}, docIdHook = (): void => {}, migrateHook = (): void => {};
   let parts: SharedSessionParts | null = null;
   const trip = (at: Fault): void => { if (armed.delete(at)) throw new Error("fault at " + at); };
+  const clock = fakeClock();
   const stops = [startDocumentGuard(false, error => { throw error; }), startUndo(undoPorts())];
   stops.push(startSessionBridge({
     entry: raw => { trip("bridge entry"); return migrateRows(raw, migration.ports); },
@@ -88,7 +90,7 @@ function start(): Switch {
     editor: () => "Ada",
     structure: { cells: createFlowLoadRuntime().cells },
     report: error => { reported.push(String(error)); trip("report"); },
-    timers: fakeClock(),
+    timers: { now: clock.now, start: clock.start, stop: handle => { trip("timers.stop"); clock.stop(handle); } },
     now: () => 0
   };
   return {
@@ -102,6 +104,7 @@ function start(): Switch {
     onReplaced: run => { replacedHook = run; },
     onDocId: run => { docIdHook = run; },
     onMigrate: run => { migrateHook = run; },
+    advance: ms => { clock.advance(ms); },
     stop: () => {
       armed.clear();
       try { if (sharedSessionParts()) leaveSharedSession(ports); } finally { while (stops.length) stops.pop()?.(); }
@@ -286,7 +289,7 @@ for (const fault of LEAVE_FAULTS_A_KEPT) {
 const LEAVE_FAULTS_A_LANDED: readonly Fault[] = ["replaced-while-standalone", "destroy", "report"];
 
 for (const fault of LEAVE_FAULTS_A_LANDED) {
-  test(`class A, leaving with one callback fault at ${fault} after the copy has landed: leaving completes, the shared parts are gone, and the error is reported`, async () => {
+  test(`class ${fault === "report" ? "B" : "A"}, leaving with ${fault === "report" ? "a throwing destroy listener and a throwing report" : "one callback fault at " + fault} after the copy has landed: leaving completes, the shared parts are gone, and the error is reported`, async () => {
     const s = start();
     try {
       assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
@@ -394,4 +397,37 @@ test("leaving restarts the bindings, clears the author's handle before the owner
     assert.deepEqual([state(), currentDocument()?.docId, currentCapabilities().comment()], [[false, false, false, "Pilot"], newId(2), { allowed: false, reason: "left" }]);
     assert.deepEqual(leaveSharedSession(s.ports), { ok: false, reason: SHARED_NOT_RUNNING });
   } finally { s.stop(); }
+});
+
+for (const where of ["docId", "migrate"] as const) {
+  test(`C: a standalone undo issued from inside entering's ${where} is refused as session-switching, and the shared copy keeps what was captured`, async () => {
+    const s = start();
+    try {
+      assert.equal(runCommand(titleCommand("Pilot 2")).kind, "applied");
+      undoOwner().flush();
+      const outcomes: unknown[] = [];
+      const inside = (): void => { if (!sharedSession()) outcomes.push(undoOwner().undo()); };
+      if (where === "docId") s.onDocId(inside); else s.onMigrate(inside);
+      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.equal(outcomes.length, 1);
+      assert.equal((outcomes[0] as { ok?: boolean }).ok, false, JSON.stringify(outcomes[0]));
+      assert.deepEqual([currentDocument()?.title, sharedSession()], ["Pilot 2", true]);
+    } finally { s.stop(); }
+  });
+}
+
+test("class A, leaving with a throwing timers.stop: no shared refresh reaches the listeners afterwards, though its timer could not be cancelled", async () => {
+  const s = start();
+  const heard: string[][] = [];
+  const unhear = onRefresh(jobs => { heard.push([...jobs]); });
+  try {
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    liveSession().refresh("probe");
+    s.arm("timers.stop");
+    assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
+    assert.equal(s.reported[0], "Error: fault at timers.stop");
+    s.advance(5000);
+    assert.deepEqual([heard, state()], [[], [false, false, false, "Pilot"]]);
+    await roundTrip(s, "Pilot");
+  } finally { unhear(); s.stop(); }
 });

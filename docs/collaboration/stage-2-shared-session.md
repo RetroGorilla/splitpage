@@ -174,6 +174,15 @@ as `not shared`; an empty operation list is a no-op. The default base is the rev
 of the projection the plan read, so a projection that fell behind refuses as
 `stale-base`. A refused list produces no change and calls no subscriber.
 
+The optional `refused(reason)` notice port receives a rejected command's named
+reason once. C4 supplies it with `sharedCommandRefusalNotice(notices)` from the
+effects wiring port: rule 73's warning sentence for missing shared forms and named
+planner/executor refusals, with the existing `moves` capability wording retained.
+The rejected outcome retains its reason and carries `notified: true` when the port
+was supplied, so a feature does not display it a second time. `refuse(reason)`
+also serves the bridge's standalone-only outcome doors. These refusals write no
+document state, record no undo and publish no change.
+
 A plan whose `shared` part declares `undo: false` is still one `edit` with its
 generation and effect pass, but the undo port is not told. Its one caller is the
 buffer's recovery write (assumed rule 29 on #1414): undoing it would throw the

@@ -83,8 +83,18 @@ function inserts(view: SharedSplitReadView, segment: string): readonly unknown[]
 
 function stamped(key: string): boolean { return key === "stamp" || key.startsWith("stamp:"); }
 
-function born(_key: string, value: unknown): boolean {
-  return !!value && typeof value === "object" && (value as { readonly type?: unknown }).type === "birth";
+function typed(value: unknown): unknown { return value && typeof value === "object" ? (value as { readonly type?: unknown }).type : null; }
+
+// why: a mark record counts only while its mark shows: a birth record shows nothing, and a removal takes back the marks
+// it observed, so a mark added and taken back leaves the visual as the undo saw it (rule 103).
+function shownMarks(view: SharedSplitReadView, path: readonly string[]): unknown {
+  const records = canonical(view, path);
+  if (!records || typeof records !== "object" || Array.isArray(records)) return records;
+  const entries = Object.entries(records), taken = new Set(entries.flatMap(([, value]) => {
+    const observed = typed(value) === "remove" ? (value as { readonly observed?: unknown }).observed : null;
+    return Array.isArray(observed) ? observed.filter((item): item is string => typeof item === "string") : [];
+  }));
+  return Object.fromEntries(entries.filter(([key, value]) => typed(value) === "add" && !taken.has(key)));
 }
 
 interface SharedSplitWatchedPart {
@@ -145,8 +155,7 @@ export const SHARED_SPLIT_WATCHED_PARTS: readonly SharedSplitWatchedPart[] = Obj
       visit(1);
       const beat = view.get([collection, key, "beat"]);
       if (typeof beat !== "string" || !beats.has(beat)) continue;
-      // why: every insertion leaves a birth record, so only records that show a mark count; typing taken back leaves none.
-      found.get(beat)?.push([collection, key, canonical(view, [collection, key], field => field === "markRecords"), canonical(view, [collection, key, "markRecords"], born)]);
+      found.get(beat)?.push([collection, key, canonical(view, [collection, key], field => field === "markRecords"), shownMarks(view, [collection, key, "markRecords"])]);
     }
     return found;
   },

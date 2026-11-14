@@ -80,8 +80,8 @@ makes the change and returns its record, or `null` when it changed nothing.
 | Standalone | Shared | Test |
 | --- | --- | --- |
 | A new change after an undo parks the redo entries and brings them back when the text returns to the parked state | A new command clears redo | different: a new command clears redo; nothing is parked |
-| An undo that cannot apply is refused and its entry is dropped | A refused undo keeps its entry, so it can be asked again | a refusal from the executor leaves both stacks as they were |
-| (no such outcome) | An entry whose change is already gone is used up: it is removed, adds no redo and the same key press reaches no older entry | top item: an entry whose change is already gone is used up, adds no redo and reaches no older entry |
+| An undo that cannot apply is refused and its entry is dropped | Rule 71: a step that cannot be undone is skipped: the outcome keeps its `undo-unsupported:<kind>` reason and adds `skipped`, the message "This step cannot be undone in a shared session yet." is shown once, the entry is dropped and counted (`skipped()`), nothing is added to the other stack, and the next undo reaches the step before. Skipped: an unsupported part, and an executor refusal no later state lifts (`undo-unsupported:*`, `invalid-operation`). Kept: a refusal a later state can lift (`missing-target` and other preparation refusals), `command-in-progress`, `undo-in-progress`, `held`, and an executor that throws | rule 71: one unsupported entry on top of two supported ones: three undos give the skip, then the two older steps; rule 71: a refusal from the executor that a later state can lift leaves both stacks as they were |
+| (no such outcome) | An entry whose change is already gone is used up: it is removed, adds no redo and the same key press reaches no older entry. Rule 90: the outcome says so (`reason: "used-up"`), so the message "That step could not be undone because someone else changed it." is shown once. Typing in a beat someone removed is not used up: its undo waits for the beat's restore, as decided, and its `missing-target` refusal keeps the step | top item, rule 90: an entry whose change is already gone is used up, says so, adds no redo and reaches no older entry; and in `undo-notice.test.ts`: rule 90, four ways a step is used up on real copies |
 | A group whose text ends as it began leaves no entry, whatever was typed in between | A group that deletes earlier text and types the same letters again keeps its entry: the new letters are other characters, and the entry's undo brings the first ones back so that older entries still reach them | different: a group that deletes earlier text and types the same letter again keeps its entry, which names both characters; and in `decided-rows.test.ts`: different: deleting an earlier letter and typing it again keeps an entry; its undo brings the first letter back, so the older entry still reaches it |
 | An entry restores the cell's earlier content | An entry reverses its own parts; other people's changes to the same text stay | decided: undo covers only your own changes; the other writer's text and format stay, and there is nothing older to reach |
 | Groups single text changes of any origin | Groups only records marked as typing, so a cut and a paste are always two entries | decided: a cut and a paste into the same cell are two entries even in the same millisecond; undoing the paste leaves the cut |
@@ -279,8 +279,8 @@ An undo needs seven operations a forward command never writes. Each is read by
 | `text-restore` | each deleted unit as a new character directly after the deleted unit, with a birth record that names the unit it restores and a copy of each mark it is given |
 | `mark-retract` | a removal that names one occurrence |
 | `status-retire` | `retiredStatus` for the standing events of one value, only while the beat shows that value and retiring changes it |
-| `split-retire` | deletes the boundary atom of one split beat; nothing when it is already gone |
-| `split-restore` | the boundary atom of one split beat again, directly after the deleted one; nothing when it is there |
+| `split-retire` | a mark in `meta` that holds what the undo saw of the new beat; the boundary atom stays; nothing when the split is already undone |
+| `split-restore` | deletes that mark, so the boundary reads as a boundary again; refused while the new beat has a row |
 | `gallery-retire` | the `retired` key of one picture, holding what the copy saw as it applies ([Pictures](#pictures)) |
 | `gallery-restore` | deletes the `retired` key of one picture; nothing when it is not there |
 
@@ -505,10 +505,10 @@ every copy will read it after each of its operations. The parts:
 | boundaries | how many boundary atoms of the new beat its segment holds |
 | predecessor | the boundary just before the new beat's own, passing over other undone splits' boundaries; a boundary read as text joins the block before it, so the undo holds only while that block is still the source beat |
 | joins | the joins into the new beat from other beats that are not retired |
-| attachments | the new beat's visual and gallery records, without the birth records an insertion leaves in their mark records |
+| attachments | the new beat's visual and gallery records, with only the mark records whose mark still shows: no birth record, no mark a removal took back |
 | status | the new beat's standing status events |
 
-Every part is read through the library's public calls only: the stored
+No source module of the watch reads a private field of the library; the one test that does, walking a text's items, is unchanged from main (`tests/adapters/collab/structure-identities.test.ts:401`). Every part is read through the library's public calls only: the stored
 document through a small read view over its maps and texts, the planned one
 through the preparation view. The structure index and the watch read a
 boundary atom with the same reader, so an embed that names the beat but is no
@@ -544,6 +544,12 @@ source beat; the new beat's text then still joins the source beat.
 Declared limit: a change to the new beat that is taken back before the undo
 arrives does not keep the split.
 
+Declared limit: the predecessor passes over every marked boundary, also one whose
+mark no longer holds. When another writer splits the source beat, undoes that
+split and then adds a picture to its hidden beat while this undo is in flight,
+the result is `a` / `bcd` / `ef` rather than `a` / `b` / `cd` / `ef`; all copies agree
+and nothing is lost (literal in `undo-split.test.ts`).
+
 Cost. All marks are read in one pass per part. The incremental projection
 keeps each part until something it reads changes; the boundary and predecessor
 parts follow the structure index's count of boundary changes per segment, so
@@ -556,7 +562,7 @@ projection reads 11 with 1 mark and 308 with 100.
 Declared limit, retention: a redo deletes its mark, but a mark whose redo is
 used up stays in `meta`. A later cut may delete it: the retention work in
 section 6 of the collaboration plan (garbage collection, retained recovery
-content and quotas). Nothing deletes a mark today.
+content and quotas). There is no retention clean-up today; only a redo deletes a mark.
 
 A split also makes the new beat's empty visual (#1545). It stays stored with
 the new beat while the split is undone and comes back with it on redo. Literal

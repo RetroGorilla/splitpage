@@ -390,8 +390,8 @@
     {
       "label": "the undo route arrives only after the shared owner is seen",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
-      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
+      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
+      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
     },
     {
       "label": "the standalone undo reset runs after the bindings",
@@ -440,6 +440,18 @@
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    faults.errors.unshift(error);\n    running = null;\n",
       "replace": "    faults.errors.push(error);\n    running = null;\n"
+    },
+    {
+      "label": "standalone undo replay goes round the command hold",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "      return heldOutcome() ?? refusedWhileShared(\"replay\") ?? swept(standalone(\"replay\").replay(task));",
+      "replace": "      return refusedWhileShared(\"replay\") ?? swept(standalone(\"replay\").replay(task));"
+    },
+    {
+      "label": "a shared refresh acts after leaving when its timer was not cancelled",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "refresh: jobs => { if (alive) owner.refresh(jobs); }",
+      "replace": "refresh: owner.refresh"
     }
   ]
 }

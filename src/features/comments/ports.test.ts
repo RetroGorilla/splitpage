@@ -70,7 +70,8 @@ function fixture() {
     personColors: { personColor: () => "#000000" },
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
-    clearDraftUndo: () => {}
+    clearDraftUndo: () => {},
+    shared: () => null
   };
   return { ports, calls };
 }

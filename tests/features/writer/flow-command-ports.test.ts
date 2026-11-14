@@ -13,14 +13,17 @@ import { createEditorSelection } from "../../../src/application/editing/selectio
 import { beatPos } from "../../../src/core/flow/flow.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { writerPage } from "./painted-base-support.ts";
-import { fakeFlowCommandEffects, fakeWriterBufferEffects } from "../fakes.ts";
+import { fakeFlowCommandEffects, fakeWriterBufferEffects, fakeNotices } from "../fakes.ts";
+import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { SHARED_SESSION_DISABLED } from "../../../src/application/session/ports.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 
 test("the Writer uses its shared command ports for formatting and asks the author once per admitted command", () => {
   const h = replicas(2, { rows: [{ id: "R1", audioText: "abc" }, { id: "R2", audioText: "def" }] });
   registerSharedOperationFamilies(h.a, { cells: createFlowLoadRuntime().cells });
-  const a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));
+  const sessionNotices = fakeNotices();
+  const a = sharedHarness(adapterReplica(h.a), { refused: sharedCommandRefusalNotice(sessionNotices.notices) }), b = sharedHarness(adapterReplica(h.b));
   const author = sharedAuthorPort({ handle: () => h.a, name: () => "Alice" });
   let requests = 0;
   const commands = writerFlowCommands({ cells: fromHtml, newId: () => "new", hasVisual: () => false }, { author: { next: () => { requests++; return author.next(); } }, writer: () => "1" });
@@ -57,5 +60,13 @@ test("the Writer uses its shared command ports for formatting and asks the autho
     assert.equal(applySharedUpdate(h.b, encodeSharedState(h.a)).ok, true);
     for (const session of [a.session, b.session]) assert.deepEqual(session.read(doc => doc?.rows.map(row => row.audioText)), ["a", "<strong>b</strong>c", "def"]);
     assert.deepEqual(notices, []);
+    writer.caret("R1", 1);
+    const before = encodeSharedState(h.a);
+    const undoEntries = a.undo.length;
+    root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(sessionNotices.shown.map(item => [item.message, item.kind]), [[SHARED_SESSION_DISABLED.moves, "warn"]]);
+    assert.deepEqual(notices, []);
+    assert.deepEqual(encodeSharedState(h.a), before);
+    assert.equal(a.undo.length, undoEntries);
   } finally { writer.dispose(); a.session.dispose(); b.session.dispose(); h.close(); }
 });

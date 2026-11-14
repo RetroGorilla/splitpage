@@ -14,6 +14,8 @@ import { bulkTagRows } from "./production-index.ts";
 import { prompterControls } from "./prompter.ts";
 import { prompterState } from "./ports/preferences.ts";
 import { writerControls } from "./writer.ts";
+import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
+import { sharedSession } from "./session-owner.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
@@ -21,6 +23,7 @@ const events = owned<ReturnType<typeof mountFindEvents>>();
 export function mountFindFeature(): FindControls {
   return find.replace(() => {
     const ports: FindPorts = {
+      sharedCommands: sharedCommandGuard(sharedSession, portNotices),
       writer: () => writerControls()?.writerFlowControl()?.find ?? null,
       document: portDocument,
       edits: portEdits,
