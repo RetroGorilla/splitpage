@@ -1,6 +1,7 @@
 interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
-  readonly copy: (e: ClipboardEvent, cell: Element, cut: boolean) => boolean;
+  readonly sharedCell: (cell: Element) => boolean;
+  readonly copy: (e: Pick<ClipboardEvent, "clipboardData" | "preventDefault">, cell: Element, cut: boolean) => boolean;
   readonly afterCut: (cell: Element) => void;
   readonly pasteBeats: (data: DataTransfer | null, cell: Element) => boolean;
   readonly pasteDraft: (cell: Element, html: string, text: string) => void;
@@ -24,6 +25,7 @@ interface ClipboardRoutesMount<Owner, Place, Extra> {
 
 export interface ClipboardRoutes {
   readonly paste: (e: ClipboardEvent) => void;
+  readonly dragStart: (e: DragEvent) => boolean;
   readonly insert: (cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined) => void;
   readonly dispose: () => void;
 }
@@ -64,6 +66,13 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
     const active = realm.document.activeElement;
     const fresh = active && active.closest ? active.closest(".cell-editable") : null;
     ports.afterCut(fresh || cell);
+  }
+
+  function dragStart(event: DragEvent): boolean {
+    if (!open || event.defaultPrevented) return false;
+    const cell = cellAround(event), data = event.dataTransfer;
+    if (!cell || !data || !ports.sharedCell(cell) || !ports.scriptCell(cell)) return false;
+    return ports.copy({ clipboardData: data, preventDefault: () => {} }, cell, false);
   }
 
   function insert(cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined, fromPaste = false): void {
@@ -114,6 +123,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
 
   return {
     paste: paste,
+    dragStart,
     insert: insert,
     dispose: function () {
       if (!open) return;

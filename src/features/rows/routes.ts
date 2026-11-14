@@ -4,6 +4,7 @@ import { linkOpenedBy } from "../common/link-press.ts";
 export interface RowRoutePorts {
   readonly mac: boolean;
   readonly scriptCell: (cell: Element) => boolean;
+  readonly cellDragStart: (event: DragEvent) => boolean;
   readonly openLink: (href: string) => void;
   readonly dragging: () => string | null;
   readonly setDragging: (rowId: string | null) => void;
@@ -80,6 +81,7 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
   }
 
   function onDragStart(e: Event): void {
+    if (ports.cellDragStart(e as DragEvent)) return;
     const row = closest(e, ".row");
     if (!row || !row.getAttribute("draggable")) return;
     const rowId = idOf(row);
