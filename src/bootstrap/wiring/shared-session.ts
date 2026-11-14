@@ -92,7 +92,7 @@ function leaveTo(ports: SharedSwitchPorts, raw: Record<string, unknown>): void {
 
 function build(ports: SharedSwitchPorts, handle: SharedDocumentHandle, author: SharedAuthorPort): { readonly replica: SharedReplica; readonly parts: SharedSessionParts } {
   registerSharedOperationFamilies(handle, ports.structure);
-  const undo = sharedUndoOwner(handle, () => author.next(), ports.now);
+  const undo = sharedUndoOwner(handle, () => author.next(), ports.now, ports.report);
   const replica = createSharedReplica(handle, undefined, undo);
   const made: { session: SharedDocumentSession | null } = { session: null };
   try {
