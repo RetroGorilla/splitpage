@@ -128,7 +128,7 @@ import {
 } from "../../features/comments/comments.ts";
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
-import { configureUndo, undoOwner } from "./undo.ts";
+import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
@@ -309,7 +309,7 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       },
       undo: {
         applying: function () { return undoGuard().applying(); },
-        breakCoalescing: () => { undoOwner().breakCoalescing(); },
+        breakCoalescing: breakUndoGroup,
         flush: () => { undoOwner().flush(); },
         latest: () => undoOwner().last()
       },
@@ -337,7 +337,11 @@ function editorRoots(): Element[] {
 const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
-  replay: function (dir) { if (dir === "redo") undoOwner().redo(); else undoOwner().undo(); },
+  replay: function (dir) {
+    const shared = sharedUndoRoute();
+    if (shared) { stepSharedUndo(shared, dir, message => { showToast(message, "warn"); }); return; }
+    if (dir === "redo") undoOwner().redo(); else undoOwner().undo();
+  },
   writerStep: skipWriterUndo,
   stale: screenIsStale,
   scriptCell: isScriptCell,

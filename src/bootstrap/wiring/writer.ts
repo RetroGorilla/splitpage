@@ -27,7 +27,7 @@ import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
 import { screenIsStale } from "../../features/rows/render.ts";
-import { undoOwner } from "./undo.ts";
+import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { standaloneSession } from "./session-owner.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
@@ -161,7 +161,7 @@ export function mountWriterRuntimeFeature() {
             undo: {
               step: undoStep,
               flush: () => { undoOwner().flush(); },
-              breakCoalescing: () => { undoOwner().breakCoalescing(); },
+              breakCoalescing: breakUndoGroup,
               last: () => undoOwner().last(),
               nextRedo: () => undoOwner().nextRedo()
             },
