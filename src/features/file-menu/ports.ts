@@ -116,6 +116,7 @@ export interface FileMenuDropdownMount extends FileMenuControls {
 
 export interface FileMenuDropdownPorts {
   readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
+  readonly openingActivity: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
   readonly document: Pick<DocumentReader, "current">;
   readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;

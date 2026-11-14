@@ -48,6 +48,7 @@ function harness() {
   const notices = fakeNotices();
   const ports: FileMenuDropdownPorts = {
     entry: { before: () => null },
+    openingActivity: { track: work => work() },
     document: { current: () => state.document },
     place: { home: () => state.home },
     desktop: () => state.desktop,
@@ -203,6 +204,23 @@ test("a recent file opens through the recent-files, handle and opening ports", a
     assert.ok(opened.handle);
     assert.equal(mounted.fileMenuOpen(), false);
   } finally { mounted.dispose(); }
+});
+
+for (const refused of [false, true]) test("C8 File menu Recent " + (refused ? "refuses before routing or reading" : "admits before tracking its asynchronous read"), async () => {
+  page(); const h = harness(); h.state.desktop = true;
+  h.state.recent = [{ fileId: "f1", name: "Recent.splitpage", title: "Recent" }];
+  let release!: (value: { where: "this-tab" }) => void, pending: Promise<unknown> | null = null, tracked = 0;
+  const route = new Promise<{ where: "this-tab" }>(resolve => { release = resolve; });
+  const mounted = startFileMenu({ ...h.ports, entry: { before: () => { h.calls.push(["entry"]); return refused ? { refused: "buffer-composition" } : null; } },
+    openingActivity: { track: work => { tracked++; const result = work(); pending = Promise.resolve(result); return result; } },
+    recents: { ...h.ports.recents, routeOpen: () => { h.calls.push(["routeOpen"]); return route; } } });
+  try {
+    mounted.toggleFileMenu(true); mounted.toggleSubmenu("recent", true); await settled(); h.calls.length = 0;
+    win.document.querySelector('[data-recent-id="f1"]')?.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+    assert.deepEqual(names(h.calls), refused ? ["entry"] : ["entry", "routeOpen"]); assert.equal(tracked, refused ? 0 : 1);
+    release({ where: "this-tab" }); if (pending) await pending;
+    assert.deepEqual(names(h.calls), refused ? ["entry"] : ["entry", "routeOpen", "readFile", "makeDesktopHandle", "openDocument"]);
+  } finally { release({ where: "this-tab" }); if (pending) await pending; mounted.dispose(); }
 });
 
 test("a recent file whose read finishes after disposal is not opened", async () => {

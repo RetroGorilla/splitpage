@@ -49,7 +49,7 @@ or a new lifetime. Synchronous results and promise identity stay unchanged.
 port before settling and after its microtask, refusing with `opening-pending`
 before constructing a shared document. File open, import, draft resume and
 desktop open-with have composed pending-to-landing literals; manual resume,
-plain Open and the external prompter fetch use the same lifetime.
+plain Open, Recent reads and the external prompter fetch use the same lifetime.
 
 ## Hook connection
 

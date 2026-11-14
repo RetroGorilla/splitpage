@@ -253,8 +253,12 @@ async function refreshRecents(focusFirst?: boolean) {
   }
 }
 
-async function openRecentFile(fileId: string | null) {
-  if (!fileId || !recentsSupported()) return;
+function openRecentFile(fileId: string | null): Promise<void> {
+  if (!fileId || !recentsSupported() || (ports as FileMenuDropdownPorts).entry.before()) return Promise.resolve();
+  return (ports as FileMenuDropdownPorts).openingActivity.track(() => readRecentFile(fileId));
+}
+
+async function readRecentFile(fileId: string) {
   const mounted = activeMount;
   let handle;
   let file;

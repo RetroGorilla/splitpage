@@ -16,7 +16,7 @@ import { resetProductionPanel } from "./ports/production.ts";
 import { confirmation } from "./ports/saving.ts";
 import { draftResume, seedCheck, startup } from "./ports/startup.ts";
 import { text } from "./ports/text.ts";
-import { opening, transitions } from "./ports/transitions.ts";
+import { opening, openingActivity, transitions } from "./ports/transitions.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
@@ -31,6 +31,7 @@ export function mountNewTabFeature(): NewTabMount {
   return newTab.replace(() => {
     const ports: NewTabPorts = {
       entry: documentEntry,
+      openingActivity,
       screen,
       document: documentReader,
       place,

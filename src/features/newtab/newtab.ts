@@ -289,9 +289,13 @@ async function refreshRecents() {
   renderRecents(Array.isArray(entries) ? entries as RecentEntry[] : []);
 }
 
-async function openRecent(fileId: string | null) {
+function openRecent(fileId: string | null): Promise<void> {
+  if (!fileId || !recentsSupported() || ports.entry.before()) return Promise.resolve();
+  return ports.openingActivity.track(() => readRecent(fileId));
+}
+
+async function readRecent(fileId: string) {
   const mounted = activeMount;
-  if (!fileId || !recentsSupported()) return;
   let entry;
   try {
     const r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });

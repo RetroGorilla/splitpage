@@ -33,6 +33,7 @@ interface StarterChoice {
 
 export interface NewTabPorts {
   readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
+  readonly openingActivity: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
   readonly screen: () => ScreenState;
   readonly document: Pick<DocumentReader, "current">;
   readonly place: Pick<DocumentPlace, "home">;

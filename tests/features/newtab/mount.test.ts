@@ -44,6 +44,7 @@ function harness() {
   const starter = { id: "sample", name: "Sample", desc: "A starter", state: { title: "Starter", rows: [{ id: "s", audioText: "Hello" }] } };
   const ports: NewTabPorts = {
     entry: { before: () => null },
+    openingActivity: { track: work => work() },
     screen: view.screen,
     document: { current: () => null },
     place: { home: () => state.home },
@@ -147,6 +148,24 @@ test("paste scans its migrated document before adoption and dropped files keep t
     win.document.getElementById("newtab-page")?.dispatchEvent(drop);
     assert.deepEqual(h.calls.at(-1), ["openDocument", { kind: "file", file, handle: null }]);
   } finally { mounted.dispose(); }
+});
+
+for (const refused of [false, true]) test("C8 New tab Recent " + (refused ? "refuses before routing or reading" : "admits before tracking its asynchronous read"), async () => {
+  page(); const h = harness(); h.state.desktop = true;
+  let release!: (value: { where: "this-tab" }) => void, pending: Promise<unknown> | null = null, tracked = 0;
+  const route = new Promise<{ where: "this-tab" }>(resolve => { release = resolve; });
+  const mounted = startNewTab({ ...h.ports, entry: { before: () => { h.calls.push(["entry"]); return refused ? { refused: "buffer-composition" } : null; } },
+    openingActivity: { track: work => { tracked++; const result = work(); pending = Promise.resolve(result); return result; } },
+    recents: { ...h.ports.recents, routeOpen: () => { h.calls.push(["routeOpen"]); return route; },
+      read: async id => { h.calls.push(["readFile"]); return { id, name: "Recent.splitpage" } as MalformedDesktopReply<RecentFileData>; } } });
+  try {
+    await settled(); h.calls.length = 0;
+    win.document.getElementById("newtab-cards")?.insertAdjacentHTML("beforeend", '<button data-newtab-action="open-recent" data-file-id="f1">Recent</button>');
+    click("open-recent");
+    assert.deepEqual(h.calls.map(call => call[0]), refused ? ["entry"] : ["entry", "routeOpen"]); assert.equal(tracked, refused ? 0 : 1);
+    release({ where: "this-tab" }); if (pending) await pending;
+    assert.deepEqual(h.calls.map(call => call[0]), refused ? ["entry"] : ["entry", "routeOpen", "readFile", "makeDesktopHandle", "openDocument"]);
+  } finally { release({ where: "this-tab" }); if (pending) await pending; mounted.dispose(); }
 });
 
 test("auto-show observes location, seed, last file, desktop launch and draft facts", async () => {

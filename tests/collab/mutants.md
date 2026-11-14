@@ -652,3 +652,7 @@ external prompter fetches after refused leave | src/features/prompter/prompter.t
 external prompter onboarding crosses refused entry | src/features/prompter/prompter.ts | tests/features/prompter/runtime-mount.test.ts | tests/collab/shared-entry-mutants.json
 external prompter fetch has no opening token | src/features/prompter/prompter.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
 draft resume has no opening token | src/bootstrap/wiring/drafts.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+File menu Recent routes before shared admission | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
+File menu Recent omits its pending opening | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
+New tab Recent routes before shared admission | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+New tab Recent omits its pending opening | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json

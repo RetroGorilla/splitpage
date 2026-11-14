@@ -282,6 +282,42 @@
       "tests": [
         "tests/bootstrap/shared-entry-paths.test.ts"
       ]
+    },
+    {
+      "label": "File menu Recent routes before shared admission",
+      "file": "src/features/file-menu/file-menu.ts",
+      "find": "if (!fileId || !recentsSupported() || (ports as FileMenuDropdownPorts).entry.before()) return Promise.resolve();",
+      "replace": "if (!fileId || !recentsSupported()) return Promise.resolve();",
+      "tests": [
+        "tests/features/file-menu/dropdown-mount.test.ts"
+      ]
+    },
+    {
+      "label": "File menu Recent omits its pending opening",
+      "file": "src/features/file-menu/file-menu.ts",
+      "find": "return (ports as FileMenuDropdownPorts).openingActivity.track(() => readRecentFile(fileId));",
+      "replace": "return readRecentFile(fileId);",
+      "tests": [
+        "tests/features/file-menu/dropdown-mount.test.ts"
+      ]
+    },
+    {
+      "label": "New tab Recent routes before shared admission",
+      "file": "src/features/newtab/newtab.ts",
+      "find": "if (!fileId || !recentsSupported() || ports.entry.before()) return Promise.resolve();",
+      "replace": "if (!fileId || !recentsSupported()) return Promise.resolve();",
+      "tests": [
+        "tests/features/newtab/mount.test.ts"
+      ]
+    },
+    {
+      "label": "New tab Recent omits its pending opening",
+      "file": "src/features/newtab/newtab.ts",
+      "find": "return ports.openingActivity.track(() => readRecent(fileId));",
+      "replace": "return readRecent(fileId);",
+      "tests": [
+        "tests/features/newtab/mount.test.ts"
+      ]
     }
   ]
 }
