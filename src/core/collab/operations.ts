@@ -87,10 +87,7 @@ export interface SharedSplitRetire extends SharedOperationAuthor {
 }
 export interface SharedSplitRestore extends SharedOperationAuthor {
   readonly kind: "split-restore";
-  readonly target: SharedTextAddress;
   readonly beat: SharedContentRef;
-  readonly unit: SharedContentRef;
-  readonly before: SharedContentRef | null;
 }
 export interface SharedSoftRemove extends SharedOperationAuthor {
   readonly kind: "remove";
