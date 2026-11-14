@@ -61,6 +61,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
     stale: () => false, painted: () => {}, shown: edit => edit(), announce: () => {}
   });
   const tags = tagged ? startProductionTags({
+    sharedCommands: { refuseUnsupported: () => false },
     document: fakeDocument(doc).document, edits: fakeEdits().edits,
     refresh: { request: () => {}, cancel: () => {} }, stamping: { stamp: () => { throw new Error("No stamp expected"); } },
     text: { cellOf: () => [], productionReaders: migration.ports.readers, inertBody: () => document.body, sanitizeHtml: html => String(html ?? "") },
