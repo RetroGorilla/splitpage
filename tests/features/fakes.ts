@@ -20,11 +20,16 @@ import type { Command, CommandOutcome, DocumentView, SessionListener } from "../
 import type { UndoControl } from "../../src/application/editing/undo-control.ts";
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
+import type { SharedCommandGuard } from "../../src/application/session/document-edits.ts";
+
+export function fakeSharedCommands(): SharedCommandGuard {
+  return { refuseUnsupported: () => false };
+}
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
-import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
+import type { FlowWriterPorts, WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import type { BufferedFieldPorts } from "../../src/application/editing/buffered-field.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
@@ -54,6 +59,18 @@ export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): Capab
     moves: allowed
   } satisfies CapabilityPort;
   return { ...defaults, ...overrides };
+}
+
+export function fakeFlowCommandEffects() {
+  const notices: string[] = [];
+  const effects: Pick<FlowWriterPorts, "moveBeat" | "undo" | "caretAfterStep" | "notice" | "changed" | "selectionMoved" | "plainVisual" | "beatInput" | "typeAtBeatEdge" | "beatKeydown" | "beatSelection" | "leaveBeat" | "newCommentId" | "openComment"> = {
+    moveBeat: swapBeatsCommand,
+    undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
+    caretAfterStep: () => 0, notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
+    plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false,
+    beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "comment", openComment: () => {}
+  };
+  return { effects, notices };
 }
 
 export function fakePrintDialog() {
@@ -87,7 +104,7 @@ export function fakeWriterBufferEffects() {
   return { effects, reports, missing, recovered };
 }
 
-export function fakeWriterPorts(initial: DocumentView) {
+export function fakeWriterPorts(initial: DocumentView, visual: Pick<FlowWriterPorts, "visualBuffer"> = {}) {
   const reader = fakeDocument(initial);
   const notices = fakeNotices();
   const editing = fakeEdits();
@@ -97,6 +114,7 @@ export function fakeWriterPorts(initial: DocumentView) {
   const state = { open: false, allowed: true, size: null as number | null, lifetime: 1, serial: 0 };
   const ports: WriterFeaturePorts = {
     flow: { prepareSplit: () => {}, splitReady: () => true, create: (root, selectionMoved, step) => createFlowWriter({
+      ...visual,
       root, selectionMoved, doc: () => initial, lifetime: { epoch: () => 0 }, heldSelection: selection,
       flow: { cells: html => [{ text: String(html ?? ""), marks: {} }], newId: () => "new", hasVisual: row => !!row.visualText },
       decode: html => [{ text: html, marks: {} }], storedHtml: html => html, run: editing.edits.run, moveBeat: swapBeatsCommand,

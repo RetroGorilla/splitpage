@@ -3,14 +3,17 @@ import * as Y from "yjs";
 import assert from "node:assert/strict";
 import { bufferedWriter } from "./buffer-support.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { observeSharedTransactions, transactSharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
+import { observeSharedTransactions, transactSharedDocument, encodeSharedState, applySharedUpdate } from "../../../src/adapters/collab/document.ts";
 import { sharedCommand, registerSplits } from "../../application/session/shared-session-support.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { beatPos, startBeat } from "../../../src/core/flow/flow.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
-import type { FlowDoc } from "../../../src/core/flow/flow.ts";
+import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
+import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
+import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
+import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
 
 test("rule 27: missing base counts once, refuses native input and repaints; the very next input works", () => {
   const page = bufferedWriter("ab", false);
@@ -32,6 +35,7 @@ test("commit refreshes the painted base before the next keystroke", () => {
     assert.deepEqual([page.surface.paintedBase("R1")?.text, page.surface.paintedBase("R1")?.revision], ["abZ", 2]);
     assert.equal(page.native(3, 3, "Y"), true);
     assert.deepEqual([page.text(), page.a.executed.map(command => command.base)], ["abZY", [1, 2]]);
+    assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "Z", true], ["typing", "Y", true]]);
     assert.deepEqual(page.reports, []);
   } finally { page.close(); }
 });
@@ -104,23 +108,31 @@ for (const [type, data, label, dirty, text] of [
   ["insertText", "Z", "replace-selection", true, "abcdQ"],
   ["deleteContentForward", "", "delete-selection", false, "abcd"]
 ] as const) {
-  test(`rule 31 dependency: whole-start cross-beat ${type} keeps document and selection until removal/join handlers land`, () => {
+  test(`rule 72 lifts rule 31 dependency: whole-start cross-beat ${type} commits on both copies`, () => {
     const commands: string[] = [];
-    const snapshot: { bytes?: Uint8Array } = {};
     const page = bufferedWriter("abcd", true, (name, operation) => {
       commands.push(name);
       assert.equal(page.text(), text);
       assert.equal(collabState(page.h.a).ingress.holds.has("buffer"), false);
-      snapshot.bytes = encodeSharedState(page.h.a);
-      const edited = operation(page.a.session.read(doc => { assert.ok(doc); return doc as FlowDoc; }));
-      assert.ok(edited && "ops" in edited && edited.ops);
-      assert.equal(edited.ops.some(op => op.kind === "join" || op.kind === "remove"), true, JSON.stringify(edited.ops));
-      const outcome = page.a.session.run(sharedCommand(name, edited.ops));
-      assert.deepEqual(outcome, { kind: "rejected", reason: "unhandled-kind" });
-      return { refused: "unhandled-kind" };
+      const stamps = { clock: { nowIso: () => "2026-11-13T12:00:00.000Z" }, editor: { name: () => "Alice" } };
+      const ports = writerFlowCommands({ cells: fromHtml, newId: () => "new", hasVisual: () => false }, {
+        author: { next: () => ({ id: "native_command", by: "Alice" }) }, writer: () => "1"
+      });
+      const prepared = ports.commands.prepare(name, doc => {
+        const edited = operation(doc);
+        assert.ok(edited && "ops" in edited && edited.ops);
+        assert.equal(edited.ops.some(op => op.kind === "join" || op.kind === "remove"), true, JSON.stringify(edited.ops));
+        return edited;
+      }, stamps);
+      const outcome = page.a.session.run(prepared.command);
+      assert.equal(outcome.kind, "applied", JSON.stringify(outcome));
+      return prepared.result();
     });
     try {
       registerSplits(page.h.a);
+      registerSharedRecordHandlers(page.h.a);
+      registerSharedRemovalHandlers(page.h.a);
+      registerSharedJoinHandlers(page.h.a);
       if (dirty) page.native(4, 4, "Q", undefined, "insertText", "R1", false);
       const selected = { anchor: beatPos("R1", 0), head: beatPos("R2", 2) };
       page.surface.place(selected);
@@ -129,11 +141,15 @@ for (const [type, data, label, dirty, text] of [
       Object.defineProperty(input, "getTargetRanges", { value: () => [target] });
       assert.equal(page.root.dispatchEvent(input), false);
       assert.deepEqual(commands, [label]);
-      assert.deepEqual(page.surface.selection(), selected);
-      assert.ok(snapshot.bytes);
-      assert.deepEqual(encodeSharedState(page.h.a), snapshot.bytes);
+      const created = "structure_1_006e00610074006900760065005f0063006f006d006d0061006e0064005f006f005f0032_beat_0";
+      const after = beatPos(data ? created : "R2", data.length);
+      assert.deepEqual(page.surface.selection(), { anchor: after, head: after });
+      assert.equal(applySharedUpdate(page.h.b, encodeSharedState(page.h.a)).ok, true);
+      for (const handle of [page.h.a, page.h.b]) {
+        assert.deepEqual(projectSharedDocumentWithRecovery(handle).document.rows.map(row => [row.id, row.audioText]), data ? [[created, "Z"], ["R2", "xt"]] : [["R2", "xt"]]);
+      }
       assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
-      assert.deepEqual(page.notices, ["unhandled-kind"]);
+      assert.deepEqual(page.notices, ["Removed 1 beat"]);
       assert.deepEqual(page.reports, []);
     } finally { page.close(); }
   });

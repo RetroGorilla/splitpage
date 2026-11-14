@@ -3,6 +3,9 @@ import type { PaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import type { FlowPos, FlowRange } from "../../core/flow/flow.ts";
+import { unitSafePrefix } from "../../core/document/text-policy.ts";
+import type { SharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
+import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
 
 export interface BufferedInputPorts {
   readonly field: (surface: BufferedFieldSurface<HTMLInputElement>) => BufferedFieldBinding;
@@ -12,6 +15,7 @@ export interface BufferedInputPorts {
   readonly repaint: () => void;
   readonly onPainted: (listener: () => void) => () => void;
   readonly beforePaint: (check: () => void) => () => void;
+  readonly history?: SharedUndoActions & { readonly selection: (key: string, selection: SharedUndoSelection) => FlowRange | undefined };
 }
 
 export interface BufferedInputField {
@@ -21,17 +25,20 @@ export interface BufferedInputField {
   readonly owns: (pos: FlowPos) => boolean;
   readonly stored: () => string | null;
   readonly unsettled?: (text: string) => { readonly reason: string; readonly hold: boolean } | null;
+  readonly pasteLimit: number;
   readonly place?: () => void;
   readonly changed?: () => void;
+  readonly opening?: string;
 }
 
 export interface BufferedInput {
   readonly held: () => boolean;
   readonly finish: () => boolean;
   readonly dispose: () => boolean;
+  readonly revert: () => boolean;
 }
 
-const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown"] as const;
+const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop", "pointerdown", "focus"] as const;
 
 const MODIFIERS: ReadonlySet<string> = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "Dead", "Process"]);
 
@@ -57,6 +64,17 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   if (!first) throw new Error("A buffered input needs an input element");
   const doc = first.ownerDocument;
   let composing = false, kept: KeptCaret | null = null, open = true, pressed = false;
+  let paste: { readonly before: string; readonly from: number; readonly to: number } | null = null;
+  let clipboardPending = false;
+  let expected: PaintedText | null = null, foreign = false;
+  let replay: FlowRange | undefined;
+  function sameName(a: PaintedText | null, b: PaintedText | null): boolean {
+    return !!a && !!b && a.text === b.text && a.emptyGap === b.emptyGap
+      && Array.from({ length: a.text.length }, (_, at) => a.identity(at) === b.identity(at)).every(Boolean);
+  }
+  function checkName(): void {
+    if (form.opening !== undefined && expected && !sameName(expected, ports.painted.current(key))) foreign = true;
+  }
   const active = () => inputs.find(input => doc.activeElement === input) ?? null;
   const typing = () => active() ?? first;
   const caretNow = (input: HTMLInputElement): KeptCaret => {
@@ -68,6 +86,12 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     const [anchor, head] = input.selectionDirection === "backward" ? [to, from] : [from, to];
     return { anchor: form.position(anchor), head: form.position(head) };
   };
+  function putRange(input: HTMLInputElement, selection: FlowRange | undefined): boolean {
+    if (!input.isConnected || !selection || !form.owns(selection.anchor) || !form.owns(selection.head)) return false;
+    const { anchor, head } = { anchor: selection.anchor.offset, head: selection.head.offset };
+    input.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : anchor < head ? "forward" : "none");
+    return true;
+  }
   function reset(): void {
     const text = form.stored();
     if (text === null) return;
@@ -84,32 +108,69 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     normalize: () => {},
     reset, repaint: reset,
     runs: input => [{ text: input.value, marks: {} }],
+    text: input => input.value,
+    write: (input, value) => { input.value = value; input.setSelectionRange(value.length, value.length); },
+    committed: (before, written) => {
+      if (form.opening === undefined) return;
+      if (expected && !sameName(expected, before)) foreign = true;
+      expected = written;
+      checkName();
+    },
     selection: () => { const input = active(); return input ? range(input) : null; },
     composition: value => { if (value !== undefined) composing = value; return composing; },
     restore: (_rowId, selection) => {
-      const input = typing();
-      if (!input.isConnected || !selection || !form.owns(selection.anchor) || !form.owns(selection.head)) return;
-      const { anchor, head } = { anchor: selection.anchor.offset, head: selection.head.offset };
-      input.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : anchor < head ? "forward" : "none");
+      putRange(typing(), selection);
     },
     changed: () => { form.changed?.(); },
     key: pos => form.owns(pos) ? key : null,
     position: (_rowId, offset) => form.position(offset),
     ...unsettled ? { unsettled: (_rowId: string, text: string) => unsettled(text) } : {}
   });
+  function discardClipboard(): void {
+    if (!clipboardPending) return;
+    clipboardPending = false; paste = null;
+    binding.discardUnchangedInput();
+  }
   function step(input: HTMLInputElement, event: Event): void {
     if (event.type === "keydown") {
       const key = event as KeyboardEvent;
       if (binding.keydown(key)) return;
+      const direction = (key.ctrlKey || key.metaKey) && !key.altKey
+        ? key.key.toLowerCase() === "z" ? key.shiftKey ? "redo" : "undo" : key.key.toLowerCase() === "y" ? "redo" : null : null;
+      if (direction && !key.isComposing && key.keyCode !== 229) { history(direction, key); return; }
       if (binding.held() && !key.isComposing && key.keyCode !== 229 && !MODIFIERS.has(key.key)) pressed = true;
       return;
     }
-    if (event.type === "input") { binding.input(); return; }
+    if (event.type === "input") {
+      clipboardPending = false;
+      if (paste) {
+        const { before, from, to } = paste; paste = null;
+        const end = input.value.length - (before.length - to);
+        if (end >= from && input.value.slice(0, from) === before.slice(0, from) && input.value.slice(end) === before.slice(to)) {
+          const inserted = unitSafePrefix(input.value.slice(from, end), Math.max(0, form.pasteLimit - before.length + to - from));
+          input.value = before.slice(0, from) + inserted + before.slice(to);
+          input.setSelectionRange(from + inserted.length, from + inserted.length);
+        }
+      }
+      binding.input(); return;
+    }
     if (event.type === "compositionstart") { binding.start(event, range(input)); return; }
     if (event.type === "compositionend") { binding.end(event as CompositionEvent); return; }
+    if (event.type !== "beforeinput") return;
     const native = event as InputEvent, type = native.inputType;
     if (native.isComposing || /Composition/.test(type)) return;
+    if (type === "historyUndo" || type === "historyRedo") { history(type === "historyUndo" ? "undo" : "redo", native); return; }
     if (!binding.dirty() && input.value === ports.painted.text(key)) ports.painted.field(key, input.value);
+    if (type === "insertFromPaste" || type === "deleteByCut") {
+      if (composing) { binding.settledFor(native); return; }
+      if (input.selectionStart === input.selectionEnd && (type === "deleteByCut" || !native.data)) return;
+      clipboardPending = true;
+      if (type === "insertFromPaste") paste = { before: input.value, from: input.selectionStart ?? 0, to: input.selectionEnd ?? 0 };
+      binding.beforeInput({ type: native.type, inputType: type === "insertFromPaste" ? "insertText" : "deleteContentBackward",
+        isComposing: false, data: native.data, preventDefault: () => { clipboardPending = false; paste = null; native.preventDefault(); } }, range(input), range(input));
+      binding.describe(type === "insertFromPaste" ? "paste" : "cut");
+      return;
+    }
     // why: an input gives no target range, so a collapsed delete is left to the browser and adopted at its input event
     if (type.startsWith("delete") && type !== "deleteByCut" && type !== "deleteByDrag" && input.selectionStart === input.selectionEnd) return;
     // why: Enter sends this before the form's submit, which closes a settled name; a held one is consumed below
@@ -118,11 +179,24 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     event.preventDefault();
     ports.report({ kind: "rejected", reason: "buffer-unsupported-input" });
   }
+  function history(direction: "undo" | "redo", event: Event): void {
+    event.preventDefault(); event.stopPropagation();
+    if (!binding.settledFor(event)) return;
+    if (!ports.history) { ports.report({ kind: "rejected", reason: "buffer-unsupported-input" }); return; }
+    const result = ports.history[direction]();
+    replay = result.ok && result.selection ? ports.history.selection(key, result.selection) : undefined;
+    if (!result.ok && "reason" in result) ports.report({ kind: "rejected", reason: result.reason });
+    if (form.opening !== undefined) expected = ports.painted.current(key);
+    if (result.ok && result.effective) form.changed?.();
+    ports.repaint();
+  }
   function listener(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
-    ports.shown(() => { binding.native(event, () => { step(input, event); }); });
+    ports.shown(() => { checkName(); binding.native(event, () => { if (event.type !== "input") discardClipboard(); step(input, event); }); });
   }
   function painted(): void {
+    checkName();
+    const selection = replay; replay = undefined;
     const focused = active(), caret = kept ?? (focused ? caretNow(focused) : null), dirty = binding.dirty();
     kept = null;
     form.place?.();
@@ -130,6 +204,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
     if (!caret || !caret.input.isConnected) return;
     const input = caret.input;
     if (doc.activeElement !== input) input.focus({ preventScroll: true });
+    if (putRange(input, selection)) return;
     const after = ports.painted.base(key), length = input.value.length;
     const map = (offset: number) => dirty ? Math.min(offset, length) : followed(caret.base, after, offset, length);
     input.setSelectionRange(map(caret.start), map(caret.end), caret.direction);
@@ -137,17 +212,20 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   function settleHeld(): void {
     if (open && binding.held()) ports.shown(() => binding.finish());
   }
-  function released(): void {
+  function released(event: Event): void {
+    if (clipboardPending) ports.shown(() => binding.native(event, discardClipboard));
     // why: some keys on an input send no input event (an empty Backspace, a redo with no history), so a key that
     // inserted nothing ends the hold once the browser's default has run
     if (pressed) settleHeld();
     pressed = false;
   }
   function blurred(): void {
+    ports.shown(discardClipboard);
     // why: a repaint re-homes the form, blurring it until the paint refocuses; the hold ends only if focus stays away
     queueMicrotask(() => { if (!active()) settleHeld(); });
   }
   function selectionMoved(): void {
+    ports.shown(discardClipboard);
     const selection = doc.getSelection(), at = selection?.rangeCount ? selection.anchorNode : null, input = active();
     if (!input || at && !(input.form ?? input).contains(at)) settleHeld();
   }
@@ -159,17 +237,30 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   doc.addEventListener("selectionchange", selectionMoved);
   const stopPainted = ports.onPainted(painted);
   const stopCheck = ports.beforePaint(() => {
+    ports.shown(discardClipboard);
     binding.canPaint();
     const input = active();
     kept = input ? caretNow(input) : null;
   });
   reset();
+  if (form.opening !== undefined) expected = ports.painted.current(key);
   return {
     held: binding.held,
-    finish: () => ports.shown(() => binding.finish()),
+    finish: () => ports.shown(() => { discardClipboard(); return binding.finish(); }),
+    revert: () => ports.shown(() => {
+      discardClipboard();
+      if (!binding.finish()) return false;
+      checkName();
+      if (foreign) { ports.report({ kind: "rejected", reason: "buffer-heading-changed" }); return true; }
+      if (form.opening === undefined || form.stored() === form.opening) return true;
+      ports.painted.field(key, typing().value);
+      if (!binding.replace(form.opening, "rename-cancel")) return false;
+      ports.repaint();
+      return true;
+    }),
     dispose: () => {
       if (!open) return true;
-      if (!ports.shown(() => binding.dispose())) return false;
+      if (!ports.shown(() => { discardClipboard(); return binding.dispose(); })) return false;
       open = false;
       stopPainted(); stopCheck();
       for (const input of inputs) {

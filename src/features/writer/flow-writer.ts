@@ -1,4 +1,4 @@
-import { flowCommand } from "../../application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../application/commands/flow.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { Command, CommandOutcome } from "../../application/session/document-session.ts";
 import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
@@ -33,6 +33,8 @@ interface RowStep {
 }
 
 export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
+  const commands = ports.commands;
+  const commit = commands ? commitShared : commitStandalone;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   const isCurrent = () => ports.lifetime.epoch() === epoch;
@@ -43,7 +45,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   function took(outcome: CommandOutcome): boolean {
     if (outcome.kind === "failed") throw outcome.error;
-    if (outcome.kind === "rejected") ports.notice(outcome.reason, "warn");
+    if (outcome.kind === "rejected" && !outcome.notified) ports.notice(outcome.reason, "warn");
     return outcome.kind === "applied" || outcome.kind === "committed";
   }
 
@@ -64,16 +66,24 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     }));
   }
 
-  function commit(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+  function commitStandalone(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
     if (!isCurrent() || ports.editingBlocked()) return null;
     let result: FlowOutcome = null;
-    const command = flowCommand(name, doc => {
+    const command = standaloneFlowCommand(name, doc => {
       result = operation(doc);
       return result;
     }, ports.text, before);
     const outcome = runPlanned(command);
     const applied = took(outcome);
     return applied || outcome.kind === "noop" ? result : null;
+  }
+
+  function commitShared(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+    if (!isCurrent() || ports.editingBlocked() || !commands) return null;
+    const prepared = commands.prepare(name, operation, ports.text, before);
+    const outcome = runPlanned(prepared.command);
+    const applied = took(outcome);
+    return applied || outcome.kind === "noop" ? prepared.result() : null;
   }
 
   const surface = createSurface({
@@ -122,6 +132,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   });
 
   visual = createFlowVisualBox({
+    ...(ports.visualBuffer ? { buffer: ports.visualBuffer } : {}),
     root, doc: ports.doc, selection: surface.selection, prepare: surface.prepareVisual, place: range => { surface.place(range); }, current: isCurrent,
     plainVisual: ports.plainVisual,
     blocked: ports.editingBlocked,
@@ -278,6 +289,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const writer: FlowWriter = {
     openVisual: (rowId, highlight) => {
       if (!isCurrent() || !rowOf(rowId)) return;
+      if (visual?.settle && !visual.settle()) return;
       surface.place(caretAt(beatPos(rowId, 0)), true);
       visual?.open(caretAt(beatPos(rowId, 0)), highlight);
     },
@@ -327,7 +339,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         return index < 0 ? 0 : index;
       }
     },
-    ...(surface.settle ? { settle: surface.settle } : {}),
+    ...(visual.settle ? { settle: () => !!visual?.settle?.() && (surface.settle?.() ?? true) } : surface.settle ? { settle: surface.settle } : {}),
     isCurrent,
     finish: () => { visual?.close(false); return isCurrent() ? surface.finish() : null; },
     repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
@@ -346,6 +358,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
     dispose: () => {
+      if (visual?.settle && !visual.settle()) return;
       if (surface.settle && !surface.settle()) return;
       ports.closeFind?.();
       observer.disconnect();

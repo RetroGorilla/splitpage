@@ -2,6 +2,7 @@ import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
@@ -15,6 +16,11 @@ import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
+import { sharedSceneCreation } from "../../../src/bootstrap/wiring/ports/shared-scenes.ts";
+import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 
 export type RenamePage = ReturnType<typeof sharedRename>;
 
@@ -27,9 +33,17 @@ function headerNode(name: string): HTMLElement {
   return header;
 }
 
-export function sharedRename(name = "Scene", options: { readonly author?: (serial: number) => string } = {}) {
+export function sharedRename(name = "Scene", options: {
+  readonly author?: (serial: number) => string;
+  readonly creation?: boolean;
+  readonly undo?: (h: Stage1ExecutorHarness) => SharedUndo;
+} = {}) {
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }, { id: "R2", text: "next" }], { sections: [{ id: "H1", name, firstSceneId: "R1" }] });
-  const a = sharedHarness(adapterReplica(h.a)), { effects, reports, recovered } = fakeWriterBufferEffects();
+  let reversals = 0;
+  if (!options.undo) registerSharedUndoOperationHandlers(h.a);
+  const owner = options.undo?.(h) ?? sharedUndoOwner(h.a, () => ({ id: "undo" + ++reversals, by: "Alice" }), () => 0, error => { throw error; });
+  const a = sharedHarness(adapterReplica(h.a, owner)), { effects, reports, recovered } = fakeWriterBufferEffects();
+  registerSharedHeadingHandlers(h.a);
   let serial = 0, depth = 0, repaints = 0;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => { const next = ++serial; return { id: options.author?.(next) ?? "native:" + next, by: "Alice" }; } });
@@ -52,7 +66,9 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
     edits: { allowed: () => true, run: command => { commands.push(command.name); return { kind: "noop" }; } },
     scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
     ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
+    ...options.creation === false ? {} : { sharedScenes: sharedSceneCreation(h.a, a.session, () => ({ id: "create_scene", by: "Alice" })) },
     sharedNames: {
+      history: sharedBufferedInputHistory(h.a, a.session, owner),
       field: surface => createBufferedField(shared.bufferedText, surface),
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
@@ -69,7 +85,7 @@ export function sharedRename(name = "Scene", options: { readonly author?: (seria
   }
   const edge = edgeInput(input);
   const stored = () => readSharedPaintedText(h.a, sharedBufferedTarget(h.a, "heading:H1"))?.text;
-  return { h, a, controls, reports, recovered, commands, open, input, edge, stored, paint, rows,
+  return { h, a, controls, reports, recovered, commands, open, input, edge, stored, paint, rows, owner,
     repaints: () => repaints, shownDepth: () => depth,
     close: () => { controls.dispose(); a.session.dispose(); h.destroy(); document.body.innerHTML = ""; } };
 }

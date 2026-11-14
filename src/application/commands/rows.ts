@@ -95,7 +95,9 @@ export function moveBeatCommand(rowId: string, targetId: string, after: boolean,
   return {
     name: "move-scene",
     needs: "edit",
-    plan: function (doc): Plan | null {
+    plan: function (doc, capability) {
+      const can = capability.moves();
+      if (!can.allowed) return { refused: can.reason };
       const from = indexOf(doc.rows, rowId), to = indexOf(doc.rows, targetId);
       if (from === -1 || to === -1 || from === to) return null;
       const ids = idsOf(doc);
@@ -125,6 +127,8 @@ export function swapBeatsCommand(rowId: string, dir: -1 | 1): Command {
     name: "swap-scenes",
     needs: "edit",
     plan: function (doc, capability) {
+      const can = capability.moves();
+      if (!can.allowed) return { refused: can.reason };
       const at = indexOf(doc.rows, rowId);
       const other = at + dir;
       if (at === -1 || other < 0 || other >= doc.rows.length) return null;

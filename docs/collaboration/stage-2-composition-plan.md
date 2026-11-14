@@ -108,19 +108,21 @@ Not a package 14 duty: the cross-beat composition limit of rule 31 ([stage-2-buf
 | # | Duty | Source | Must be true |
 | --- | --- | --- | --- |
 | D32 | Undo record seam | Found here: section 1, shared undo row | (a) A local shared command runs through `executeSharedCommand` inside `SharedUndo.perform`, once, with a `SharedCommandDescription`: `SharedPlan` gains a label, a selection as anchors and a typing key, since `Plan` carries none of them today. (b) A plan with `undo: false` records nothing. (c) `breakGroup` is called where the standalone owner's `breakCoalescing` is (`src/application/editing/cell-editing.ts:127`, `:136`, `:149`, `:162`; `src/bootstrap/wiring/editor.ts:311`; `src/bootstrap/wiring/ports/editing.ts:30`); `hold` has one standalone trigger, a file save (`src/application/save/file-saving.ts:124`), which is refused while shared, so the shared hold has no trigger and that is recorded. (d) Undo and redo write through `reverseSharedUndoRecord` outside `session.run`, so they first pass the session's `beforeCommand` admission: open typing commits before the undo reads the document. (e) The undo and redo actions reach the shared owner while shared |
-| D33 | A refused undo entry | Correction to rule 39; [stage-2-shared-undo.md](stage-2-shared-undo.md) ("until the wiring decides what to do with a refused entry") | Decided and pinned (Q10) |
+| D33 | A refused undo entry | Correction to rule 39; [stage-2-shared-undo.md](stage-2-shared-undo.md) ("owner rule 71 ... pending in the undo owner's own pull request") | Decided and pinned (Q10) |
 | D34 | Undo on the switch | Plan section 4 ("Undo may reset on restart in v1") | Entering resets the standalone owner and starts an empty shared owner; leaving drops the shared owner. Declared |
 | D35 | Recovery panel | #1414 tracker 11 ("the recovery panel itself (package 14)"); plan section 6 | A feature lists `session.recovery()` by kind, restores (`restore`, person restore) and discards (`sharedRecoveryDiscardOperation`) as local actions with their undo policy (rule 52), and shows nothing in a standalone session or a release build |
 
 ## 3 Commands in a shared session
 
-Found here. The shared session refuses every plan without `shared`
-(`shared-session.ts:237`). Of the 46 builders below, only the four comment
-commands have a shared form, and it is used only when the caller passes an author,
-which none does. Native typing reaches the document through the buffers instead of
-`cellTextCommand`. Every other builder is refused as `not shared` once a shared
-session is composed. What the person sees for that refusal is unverified; D25
-requires a visible reason.
+The shared session refuses every plan without `shared`. The original audit below
+predates the shared flow command (#1557), including visual replacement (#1560),
+and paste/cut in the title and name bindings (#1558). Whole-beat flow paste is
+served through `sharedFlowPaste` (#1561). The title and name bindings use shared
+text, not the whole-field `titleCommand` or `renameSceneCommand`. Native typing
+uses buffers, not `cellTextCommand`. The current builder inventory and composition
+classes extend the Stage 0 table in `tests/core/collab/coverage-fixture.ts`;
+`serve pending composition` names the serve rows whose builders still await C5b/C5c.
+C5d does not add their shared forms. A plan without one is visibly refused too.
 
 "Exists" names shared operation kinds in `src/core/collab/operations.ts` that the
 command's change maps onto; "none" means no kind or no planner. Line numbers are in
@@ -129,20 +131,20 @@ command's change maps onto; "none" means no kind or no planner. Line numbers are
 | Family | Builders | Shared operation | Proposed |
 | --- | --- | --- | --- |
 | Whole-cell text | `cellTextCommand` (`cell-text.ts:117`) | None for a whole cell; native typing goes through the buffers | Serve typing through the buffers. Refuse its other callers (Split input shortcuts, toolbar formatting and link confirm through `ce.edit`) until each has a range form |
-| Writer flow | `flowCommand` (`flow.ts:30`) | Exists: `FlowEdit.ops` (`src/core/flow/flow.ts:65`) when `FlowPorts.operations` is given (text, mark, split, join, remove, heading kinds) | Serve (Q11) |
-| Paragraph starts | `initializeFlowParagraphs` (`flow.ts:11`), run through `amend` | None | Blocked by Q8 item 4 |
+| Writer flow | `flowCommand`, `standaloneFlowCommand` (`flow.ts`) | `flowCommand` sends `FlowEdit.ops` with an author request; visual replacement sends text operations (#1557, #1560) | Flow: served. Standalone builder: refuse in shared mode |
+| Paragraph starts | `initializeFlowParagraphs` (`flow.ts`), run through `amend` | None | Refuse the write; C6 derives undecided paragraphs on open (decided rule 78) |
 | Split and join | `splitBeatCommand` (`split-join.ts:69`), `joinBeatsCommand` (`:114`) | Exists: `split`, `join` | Serve |
 | Beats | `addBeatCommand` (`rows.ts:26`), `deleteBeatCommand` (`:47`) | Exists: `segment-create`, `remove` | Serve |
 | Moves | `moveBeatCommand` (`rows.ts:94`), `swapBeatsCommand` (`:123`), `moveSceneCommand` (`scenes.ts:63`) | `segment-move` is registered as a refusal (rule 40) | Refuse with `moves` |
-| Scenes | `addSceneCommand` (`scenes.ts:22`), `renameSceneCommand` (`:32`), `removeSceneCommand` (`:40`) | `heading-create` (built for paste and finalize), `heading-remove`; no heading text binding until 9d | Remove: serve. Rename: refuse until 9d. Add: could not classify (whether `heading-create` fits the header button's form is unverified) |
-| Beat selection | `removeBeatsCommand` (`beats.ts:77`), `pasteBeatsCommand` (`:29`) | `remove` over several beats exists (its undo is refused); paste of beats would need `segment-create`, text and record operations together | Remove: serve, undo refused and declared. Paste: could not classify |
+| Scenes | `addSceneCommand`, `renameSceneCommand`, `removeSceneCommand` (`scenes.ts`), `sharedSceneCommand` (`shared-scenes.ts`) | `heading-create`, `heading-remove`; shared creation uses `sharedSceneCommand` and `sharedSceneCreation` (#1562) | Shared creation: served. Remove: serve pending composition. Legacy add and whole-field rename: could not classify, refuse; those builders still have no shared plan |
+| Beat selection | `removeBeatsCommand`, `pasteBeatsCommand` (`beats.ts`) | `remove` over several beats; Writer whole-beat paste uses `flowCommand` and `sharedFlowPaste` (#1561) | Remove: serve pending composition. Legacy `pasteBeatsCommand`: could not classify, refuse; its builder still has no shared plan |
 | Cell clipboard | `pasteCommand` (`clipboard.ts:227`), `cutCommand` (`:315`) | Exists: `text-insert`, `text-delete`; attachments are records | Q11; attachments refused (rule 11) |
 | Status | `beatStatusCommand` (`beat-status.ts:37`), `setBeatFilmedCommand` (`:59`) | Exists: `status` | Serve |
 | Numbers and settings | `beatLengthCommand` (`beat-length.ts:41`), `targetLengthCommand` (`document-settings.ts:18`), `wordsPerMinuteCommand` (`:36`) | Exists: `scalar` on beat and document | Serve |
-| Title | `titleCommand` (`title.ts:31`), `fileTitleCommand` (`:11`) | `scalar` on the document exists; whether the title is stored as a scalar or as text is unverified; its binding is 9e | Could not classify; refuse until 9e |
-| Gallery | `galleryCommand` (`gallery.ts:32`) | Record operations exist; undo of a gallery record is refused; images wait for the Stage 3 pending-image design | Refuse |
-| B-roll records | `addShotCommand`, `setShotsCommand`, `deleteShotCommand`, `addShotPropCommand`, `removeShotPropCommand` (`broll-records.ts:29` to `:98`) | Exists: `record-create`, `record-set`, `record-delete` | Serve |
-| Production records | `registerTagCommand` (`production-records.ts:70`), `addPersonCommand` (`:80`), `deleteTagsCommand` (`:107`), `gearQuickAddCommand` (`:122`), `updateTagsCommand` (`:147`), `deletePersonCommand` (`:174`) | Exists: record operations; person deletion follows rule 54 | Serve, writing no person colour (Q8 item 1) |
+| Title | `titleCommand`, `fileTitleCommand` (`title.ts`) | Shared title typing, paste and cut use text through the binding (#1548, #1558); these whole-field builders have no shared plan | Could not classify; refuse the whole-field builders |
+| Gallery | `galleryCommand` (`gallery.ts:58`) | Exists: `record-create`, `record-set`, `record-delete` on gallery records, built by `sharedGalleryOperations` (`src/core/collab/gallery-operations.ts`); undo of every part is supported (#1553, #1555) | Serve (C5c): pictures by content reference, web video links, thumbnails, captions, annotations, order and removal. An edit names the record shown in the slot it changed: the edit runs a second time on a copy whose links carry their slot, and pictures are told apart by content reference. Refused by name: `gallery-local-file` (a link with a file location), `gallery-embedded-image` (an old-style embedded image or a picture without a content reference), `gallery-joined-beat` (a joined row whose other beats, through any live join, hold a gallery record with a picture or link, even one folded into a picture this row shows), `gallery-overflow` (a gallery past the first 61 entries before or after the edit) and `gallery-slot-unknown` (the copy's edit did not match the edit). Stated limit: `gallery-order-unavailable` refuses a move to the front when no rank sorts before the first picture's, as when the last of three hydrated pictures is made the cover; nothing is written |
+| B-roll records | `addShotCommand`, `setShotsCommand`, `deleteShotCommand`, `addShotPropCommand`, `removeShotPropCommand` (`broll-records.ts:31` to `:102`) | Built (C5c): each builder diffs people, tags and shots before and after its edit into `record-create`, `record-set` (value, clear, or `extra` for fields the table does not store) and `record-delete`, and a shot status into a `status` event whose parents are the current heads (`sharedRegistryOperations`, `src/core/collab/record-operations.ts`). New records rank after the highest stored rank. A reorder, such as Quick Add re-adding a renamed tag's old name, moves the fewest records to the end with `rank` writes. An owner set to nobody is a clear, so it removes only the assignment this copy saw. A record without a unique id is refused (`records-without-id`). The projection reads a tag or shot with no stored owner as owner `""`, as a migrated document has | Serve |
+| Production records | `registerTagCommand` (`production-records.ts:72`), `addPersonCommand` (`:82`), `deleteTagsCommand` (`:110`), `gearQuickAddCommand` (`:135`), `updateTagsCommand` (`:158`), `deletePersonCommand` (`:185`) | Built (C5c) the same way, tag status as a `status` event. Person deletion follows rule 54: the delete clears the owner assignments this copy saw, and an assignment it never saw (made by another copy at the same time, even one moving the owner away and back) stays and is listed in the `deleted-person` recovery entry, whichever copy deletes. No person colour is written (Q8 item 1). `deleteTagsCommand` with labels to unwrap rewrites whole cells and is refused as `tag-text-rewrite`, for C5d; without them it serves | Serve, except `deleteTagsCommand` with text rewrites |
 | Tagging text | `tagCellsCommand` (`production-records.ts:54`), `retagCommand` (`:91`), `createBulkTagRows` (`bulk-tags.ts:14`), `rewriteCellsCommand` (`document-edit.ts:80`) | A `tag` mark exists; these rewrite whole cells, and `retagCommand` also rewrites mentions through `tag-rewrites.ts` | Could not classify; refuse until each has a range form |
 | Import | `importRowsCommand` (`import-rows.ts:30`) | None | Refuse |
 | Comments with a shared form | `addCommentCommand` (`comments.ts:66`), `addReplyCommand` (`:89`), `setCommentAssigneeCommand` (`:113`), `toggleResolveCommand` (`:134`) | Exists, when given an author | Serve (D26) |
@@ -155,8 +157,47 @@ Not commands, not counted: the helpers in `production-actions.ts`, `paragraphs.t
 `textCut`, `cellHtml`, `isBlankBeat`, `chosenOwner`.
 
 Could not classify: `addSceneCommand`, `pasteBeatsCommand`, the two title commands,
-the four tagging-text builders and `editStamp`. Each is refused until it is
-classified.
+`renameSceneCommand`, the tagging-text command builders and `editStamp`. Each is
+refused until its shared form lands. `createBulkTagRows` is a standalone helper:
+both bulk-tag actions refuse before calling it, including preview and undo work
+(rule 88). It is included in the same inventory, rather than a separate list.
+
+### C5d refusal delivery and the remaining composition calls
+
+`sharedCommandRefusalNotice(notices)` in
+`src/bootstrap/wiring/ports/shared-command-notices.ts` maps every named command or
+executor refusal to the rule 73 warning sentence, including `not shared`,
+`flow-clipboard-records-unavailable`, `flow-operations-unavailable`,
+`flow-operations-empty`, `move-in-shared-session` and `unhandled-kind`. Gallery's
+`gallery-local-file`, `gallery-embedded-image`, `gallery-joined-beat`, `gallery-overflow`,
+`gallery-order-unavailable` and `gallery-slot-unknown` use that same default branch, as do
+`tag-text-rewrite`, `records-without-id`, `visual-selection-unavailable` and `buffer-heading-changed`. The exact
+`moves` capability reason keeps its existing sentence (D23, rules 40 and 92).
+No capability-table entry is added. The three move builders ask `moves` before
+inspecting their targets. Writer respects an outcome's `notified` marker so the
+session and feature do not show the same refusal twice.
+
+C4 must pass `refused: sharedCommandRefusalNotice(notices)` when it builds
+`createSharedSession`, with `notices` from `ports/effects.ts`, and register
+`registerSharedOperationFamilies` before executing. Its call to `sharedBufferPorts`
+passes `report: sharedCommandReport(notices, report)` in the effects argument:
+direct buffer reports, including the visual selection and changed-heading refusals,
+use the same warning, already-notified outcomes are not repeated, and other outcomes
+go to the existing report callback. The bridge's standalone-only
+outcome doors call the same owner's `refuse` method, preserving their named
+outcomes while displaying the warning. C6 must spread both ports returned by
+`writerFlowCommands(flow, { author, writer, handle: () => handle })` into Writer
+and pass `session.run` through without another refusal notice. Find and Production already receive
+`sharedCommandGuard(sharedSession, notices)` through their named ports and refuse
+bulk tagging before scans, edits or standalone undo.
+Split replace-all and the tag composer use the same guard before their existing
+fallback or success messages can overwrite a refusal; Writer find uses its served flow path.
+
+After C5c's record builders (#1569), the existing builder inventory still has 52 entries:
+18 serve, 15 serve pending composition, 10 refuse (including `createBulkTagRows`) and
+9 could not classify. The eleven record builders are served when passed
+`sharedRecordPorts({ handle, author })` as their optional last argument. The
+whole-cell tagging builders still have no shared form and remain refused.
 
 ## 4 The switch
 
@@ -240,7 +281,17 @@ Found in the same review, for other cuts:
   tab with the same `docId`, then marks the document not written out and shows
   "It now has its own version history", which is false while shared.
 - **C5c.** `src/features/tags/production-tags.ts:142` skips registry healing
-  when its stamp is refused and then runs `plan.commit()` anyway.
+  when its stamp is refused and then runs `plan.commit()` anyway. Fixed in C5c:
+  it commits only after an applied stamp, or when there was nothing to apply.
+
+Found in the review of #1559 (C2):
+
+- **C4.** The same shared undo owner goes to the replica (`createSharedReplica(handle,
+  count, undo)`) and to the undo actions (`sharedUndoActions(session, undo)`); the
+  grouping breaks C2 left at the standalone `breakCoalescing` call sites are routed
+  to it; the owner is reset on entering and on leaving.
+- **C6.** The Writer consumes the selection anchors an undo or redo returns
+  (`SharedUndoOutcome.selection`) to put the caret back.
 
 ### Order of leaving
 
@@ -285,7 +336,7 @@ must be merged or answered first.
 | C4 Switch module | `src/bootstrap/wiring/shared-session.ts` with enter and leave in the order of section 4 and the C4 duties listed there, without the bindings (step 7 and leaving step 2 are ports filled by C6 and C7); the in-page peer with D38; D8 as Q6 decides; `mountSharedSessionFeature` in `main.ts` registering nothing yet; `MOUNT_ORDER` updated | C1, C2, C3; package 13 (merged); Q3, Q4, Q5, the `dirty` part of Q6 | The order test; refusals of step 1 each as a literal; D4 and D5 against `save/session-replacement.test.ts`; D15a to D15c; rule 26 literal: a decline at the bound, then release, and the declined update arrives; mutant: detach after replacement |
 | C5a Flow commands | `flowCommand` copies `FlowEdit.ops` into `Plan.shared` when its ports carry an operations request; the Writer command ports pass the request only when the author port answers (C1, so never in standalone). The beat stamp step comes through a port built in the wiring from `sharedBeatStamp`, because `src/application` may not import `src/adapters` | C1, C3; Q11 | The flow differential suites unchanged; one literal per flow command on a shared session; the rule 31 tests whose expected refusal changes, changed visibly; standalone `perf-ab` typing, new scene, delete and undo rows, because `flowCommand` is on the typing path |
 | C5b Structure and values | Shared lists for the "serve" rows: split, join, add and delete beat, remove beats, remove scene, status, beat length, target length, words per minute | C1, C3; package 10 for their undo (refused where not built) | One literal per builder on a shared session and through the undo owner; standalone tests of each builder unchanged |
-| C5c Records and comments | Shared lists for the b-roll and production record builders, and for comment delete and unwrap; comment features pass the author (D26) | C1, C3; package 8 | One literal per builder; rule 54 cases through the real command; stamp rule 49 through the real command |
+| C5c Records and comments | Shared lists for the gallery command, the b-roll and production record builders, and for comment delete and unwrap; comment features pass the author (D26). The record builders take `sharedRecordPorts({ handle, author })` (`src/bootstrap/wiring/ports/shared-records.ts`) as their last argument; the integration lane passes it from the record features' wiring, with `author` taken from the shared author port | C1, C3; package 8 | One literal per builder; rule 54 cases through the real command; stamp rule 49 through the real command |
 | C5d Visible refusals | Every "refuse" and "could not classify" builder shows a reason in a shared session; move commands ask `moves` (D23) | C3; Q12 | A test per builder that its refusal writes nothing and shows the reason; an inventory test listing every builder under `src/application/commands/` with its class from section 3, failing on a new builder |
 | C6 Writer composed | Start the Writer with the shared ports; `recovered` notice and counters (D19, D20); the paragraph-start write on open as Q8 item 4 decides | C4, C5a; package 9c (merged); Q8 item 4 | `tests/features/writer` buffer tests run against the composed wiring as well as the support world; standalone `buffer-cost.test.ts` counts unchanged |
 | C7 Split composed | Mount and unmount `mountSharedSplitBuffer`; D16 and D17 handlers off or routed; D18 literals; the visual-cell commit calls `sharedBrollIntroducedByText` for a typed `B-roll:` line (D27) | C4, C5a, C5b; package 9c (merged); Q11 | `cell-buffer-cost.test.ts` standalone counts unchanged; new literals for R7 and the direction edge; a test per old handler that it does not act on a prevented event; the rule 55 R5 tests whose expected refusal changes, changed visibly; mutant: `typeAtMarks` left on |
@@ -357,51 +408,54 @@ standalone app is untouched by C1 to C10.
 
 ## Open questions
 
-Each has a recommended answer. None is decided here.
+These are the historical questions. The owner decided Q1–Q12 in rules 71–83
+on #1414 (Q6 and Q9 retain the earlier decisions); rules 84–88 add the title/name
+clipboard, visual, add-scene and whole-beat-paste duties. The recommendations below
+record the proposal, not permission to override those decisions.
 
-- **Q1. The flag.** Recommended: the `__sharedTest` hook in test builds only,
+- **Q1. The flag.** **Decided: rule 79** (the test hook only). Recommended: the `__sharedTest` hook in test builds only,
   no URL parameter and no setting, until Stage 4 adds the handoff.
-- **Q2. Whole-document entries while shared.** Restore and recover are already
+- **Q2. Whole-document entries while shared.** **Decided: rule 77** (leave first). Restore and recover are already
   refused (#1519). Open (rule 37): open, new, last-file resume, inbound open,
   prompter launch and plain Open. Recommended: open, new, inbound open and plain
   Open leave the shared session first (section 4, leaving), then run as today;
   last-file resume never runs while shared (it runs only at startup, Q3); the
   prompter launch reads the projection and is allowed.
-- **Q3. Startup while shared.** Recommended: a shared session cannot exist
+- **Q3. Startup while shared.** **Decided: rule 74.** Recommended: a shared session cannot exist
   until `openInitialDocument` has settled, so D11 and rule 53 item 2 cannot
   occur in Stage 2. Hydrating a retained replica at startup is Stage 3.
-- **Q4. The `docId`.** Plan section 3 decides that an instance's `docId` is
+- **Q4. The `docId`.** **Decided: rule 75** (new ids at both ends). Plan section 3 decides that an instance's `docId` is
   minted when the instance is created, that the source file keeps its own, and
   that each standalone export gets a new one. Stage 2 has no instance, so two
   things are open: whether the test hook's hydration counts as creating one
   (recommended: yes, mint at entry), and what the document left behind on leaving
   is. Recommended: it is a standalone copy, so it gets a new `docId`, as an
   export would.
-- **Q5. Unsaved standalone work at entry, and a pending draft restore.**
+- **Q5. Unsaved standalone work at entry, and a pending draft restore.** **Decided: rule 76.**
   Recommended: refuse entry while a draft restore is pending; on entry, the
   existing standalone draft stays on disk (drafts are refused while shared) and
   is not deleted on leaving until the standalone document is saved or
   explicitly discarded. This changes rule 53 item 3's behaviour and needs a
   ruling.
-- **Q6. The unsaved mark and the close question for a shared edit.** Saving and
+- **Q6. The unsaved mark and the close question for a shared edit.** **Decided: rule 60** (assumed, now decided). Saving and
   drafts are settled by package 13. Open: whether `dirty` marks the shared
   document unsaved, and whether closing asks. Recommended: no unsaved mark and no
   close question in Stage 2 (there is no local replica storage to be unsaved
   against); the save status shows nothing new until Stage 3's wording.
-- **Q7. Snapshots in a shared session** (rule 53 item 6). Recommended: keep
+- **Q7. Snapshots in a shared session** **Decided: rule 80** (none while shared). (rule 53 item 6). Recommended: keep
   the conservative reading of #1519 (none) until the plan review.
-- **Q8. The four commit-time writer questions** (person colour, cue rename,
+- **Q8. The four commit-time writer questions** **Decided: rules 81, 82 and 83** (items 1 to 3) **and rule 78** (item 4: paragraphs derived until the first paragraph edit). (person colour, cue rename,
   owner from `@Name`, paragraph starts). For the product owner. The first three
   block only commit-time writer cuts after C10. Paragraph starts blocks C6
   (D28); recommended for that cut only: the Writer writes no paragraph starts on
   open in a shared session and shows them as derived, which is option (b) up to
   the first paragraph edit, and needs the ruling before C6.
-- **Q9. A heading name over 200 characters.** Stage 0 decided "shown in full
+- **Q9. A heading name over 200 characters.** **Decided: rule 61** (assumed, now decided). Stage 0 decided "shown in full
   with a notice" (rule 46 item 4). Open: how that meets rule 42 item 4, where a
   pasted name is cut as the standalone app cuts it, when another person's typing
   lengthens a pasted name. Recommended: the paste command keeps cutting what it
   writes; a name that becomes longer later shows in full with the notice.
-- **Q10. A refused undo entry** (gallery, visuals, unsupported structure). The
+- **Q10. A refused undo entry** **Decided: rule 71** (skipped with a message). (gallery, visuals, unsupported structure). The
   documented and tested design is the opposite of the recommendation:
   [stage-2-shared-undo.md](stage-2-shared-undo.md), "A refused undo keeps its
   entry, so it can be asked again", pinned by "a refusal from the executor leaves
@@ -409,7 +463,7 @@ Each has a recommended answer. None is decided here.
   then drop the entry and count it, as the standalone owner drops an entry it
   cannot apply, so older entries stay reachable. This changes the owner and that
   pinned test.
-- **Q11. Enter, formatting, paste and cut in a shared session.** Assumed rule 31
+- **Q11. Enter, formatting, paste and cut in a shared session.** **Decided: rule 72** (served). Assumed rule 31
   refuses ordinary cross-beat input until removal and join handlers land, and
   rule 55 R5 refuses Enter, formatting, paste and cut in a Split cell, "as in the
   Writer". D25 makes them work through C5a and C5b. This overturns those
@@ -418,8 +472,8 @@ Each has a recommended answer. None is decided here.
   in `tests/features/editing/cell-buffer.test.ts`). Recommended: serve them, since
   plan section 2 makes normal writing mandatory and rule 31 names the dependency
   as temporary; change each pinned test visibly in the cut that serves it.
-- **Q12. What a refused command says.** Recommended: one sentence through the
+- **Q12. What a refused command says (decided rule 73).** One sentence through the
   existing warning toast, "This is not available in a shared session yet.", for
   every builder refused for lack of a shared form; moves keep their own `moves`
-  reason. Whether it becomes an entry in `SHARED_SESSION_DISABLED` is for the
-  author of C5d.
+  reason. C5d uses the shared session's notice port and adds no entry to
+  `SHARED_SESSION_DISABLED`.

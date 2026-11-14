@@ -61,6 +61,12 @@ export type SharedUndoPart =
     readonly fields: SharedJsonFields;
   }
   | {
+    readonly kind: "record-retired";
+    readonly target: SharedRecordAddress;
+    readonly fields: SharedJsonFields;
+    readonly retirement: string | null;
+  }
+  | {
     readonly kind: "record-field";
     readonly target: SharedRecordAddress;
     readonly field: string;
@@ -81,9 +87,6 @@ export type SharedUndoPart =
     readonly kind: "beat-split";
     readonly beat: SharedContentRef;
     readonly source: SharedContentRef;
-    readonly segment: SharedContentRef;
-    readonly boundary: SharedContentRef;
-    readonly before: SharedContentRef | null;
     readonly retired: boolean;
     readonly content: string;
   }
@@ -123,6 +126,12 @@ export type SharedUndoPart =
 export interface SharedUndoSelection {
   readonly anchor: SharedContentRef;
   readonly focus: SharedContentRef;
+}
+
+export interface SharedCommandDescription {
+  readonly label: string;
+  readonly selection: SharedUndoSelection | null;
+  readonly typing: string | null;
 }
 
 export interface SharedUndoRecord {

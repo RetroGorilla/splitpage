@@ -87,10 +87,7 @@ export interface SharedSplitRetire extends SharedOperationAuthor {
 }
 export interface SharedSplitRestore extends SharedOperationAuthor {
   readonly kind: "split-restore";
-  readonly target: SharedTextAddress;
   readonly beat: SharedContentRef;
-  readonly unit: SharedContentRef;
-  readonly before: SharedContentRef | null;
 }
 export interface SharedSoftRemove extends SharedOperationAuthor {
   readonly kind: "remove";
@@ -189,6 +186,10 @@ export interface SharedMarkRetract extends SharedOperationAuthor {
   readonly target: SharedTextAddress;
   readonly occurrences: readonly SharedContentRef[];
 }
+export interface SharedGalleryRetire extends SharedOperationAuthor {
+  readonly kind: "gallery-retire" | "gallery-restore";
+  readonly record: SharedContentRef;
+}
 export type SharedStatusRetire = SharedOperationAuthor & {
   readonly kind: "status-retire";
   readonly event: SharedContentRef;
@@ -211,7 +212,7 @@ export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkCh
   | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSplitRetire | SharedSplitRestore | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
   | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
-  | SharedRecoveryDiscard | SharedDiscardRetire;
+  | SharedRecoveryDiscard | SharedDiscardRetire | SharedGalleryRetire;
 
 export function replaceObservedText(
   deletion: SharedTextDelete, insertion: SharedTextInsert

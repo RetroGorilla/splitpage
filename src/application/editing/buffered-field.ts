@@ -29,6 +29,7 @@ export interface BufferedFieldBinding {
   readonly beforeInput: (event: BufferedFieldEvent & { readonly inputType: string; readonly isComposing: boolean; readonly data?: string | null },
     range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
+  readonly discardUnchangedInput: () => void;
   readonly start: (event: BufferedFieldEvent, range: FlowRange | null) => void;
   readonly keydown: (event: BufferedFieldKey) => boolean;
   readonly end: (event: { readonly data: string }) => void;
@@ -40,6 +41,8 @@ export interface BufferedFieldBinding {
   readonly moved: (range: FlowRange | null) => void;
   readonly base: (rowId: string) => PaintedText | null;
   readonly dispose: () => boolean;
+  readonly replace: (text: string, label: string) => boolean;
+  readonly describe: (label: string) => void;
 }
 
 export interface BufferedFieldSurface<E> {
@@ -52,11 +55,14 @@ export interface BufferedFieldSurface<E> {
   readonly normalize: () => void;
   readonly reset: (rowId: string) => void;
   readonly runs: (field: E) => readonly Run[];
+  readonly text?: (field: E) => string;
   readonly selection: () => FlowRange | null;
   readonly composition: (value?: boolean) => boolean;
   readonly repaint: (rowId: string) => void;
   readonly restore: (rowId: string, selection: FlowRange | undefined) => void;
   readonly changed: () => void;
+  readonly write?: (field: E, text: string) => void;
+  readonly committed?: (before: PaintedText, written: PaintedText) => void;
   readonly key?: (pos: FlowPos) => string | null;
   readonly position?: (key: string, offset: number) => FlowPos;
   readonly unsettled?: (key: string, text: string) => { readonly reason: string; readonly hold: boolean } | null;
@@ -66,6 +72,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   let active: { rowId: string; beat: E; base: PaintedText; edit: BufferedTextEdit; fault: boolean } | null = null;
   let target: readonly [number, number] | null = null;
   let typed: string | null = null;
+  let label: string | undefined;
   const same = surface.foldSpaceForm ? sameUpToSpaceForm : (a: string, b: string) => a === b;
   let ended = false;
   let committing = false;
@@ -73,6 +80,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   let composedFromHold: string | null = null;
   const keyOf = surface.key ?? ((pos: FlowPos) => pos.kind === "beat" ? pos.rowId : null);
   const at = surface.position ?? beatPos;
+  const text = surface.text ?? ((field: E) => projection(surface.runs(field)));
   function one(range: FlowRange | null): string | null {
     const key = range ? keyOf(range.anchor) : null;
     return key !== null && range && keyOf(range.head) === key ? key : null;
@@ -112,7 +120,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
 
   function reconcile(): void {
     if (!active || !active.edit.isOpen() || active.fault) return;
-    const next = projection(surface.runs(active.beat)), before = active.edit.text();
+    const next = text(active.beat), before = active.edit.text();
     if (!target) {
       const replacement = surface.foldSpaceForm ? foldedNativeReplacement(before, next) : bufferedNativeReplacement(before, next);
       if (replacement) active.edit.replace(replacement.from, replacement.to, replacement.insert);
@@ -136,7 +144,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     let ok = true, adopted = false;
     for (const beat of surface.fields()) {
       if (active?.beat === beat && active.edit.isOpen()) continue;
-      const rowId = surface.rowId(beat), shown = surface.painted(rowId), next = projection(surface.runs(beat));
+      const rowId = surface.rowId(beat), shown = surface.painted(rowId), next = text(beat);
       if (active?.beat === beat && !active.edit.isOpen() && same(next, active.edit.text())) { surface.reset(rowId); continue; }
       if (shown !== undefined && same(next, shown)) continue;
       if (active?.edit.isOpen()) { refuse(event, "buffer-pending"); surface.reset(rowId); ok = false; continue; }
@@ -163,7 +171,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     return true;
   }
 
-  function settle(): boolean {
+  function settle(restoring = false): boolean {
     if (surface.composition()) { ports.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
     if (!active) return true;
     reconcile();
@@ -173,7 +181,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     }
     const held = active, range = surface.selection();
     const selection: readonly [number, number] | undefined = range && one(range) === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
-    const unsettled = surface.unsettled?.(held.rowId, held.edit.text());
+    const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());
     if (unsettled) {
       active = null; target = null;
       surface.reset(held.rowId);
@@ -187,11 +195,13 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     committing = true;
     try {
       const runs = surface.runs(held.beat);
-      outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection);
+      outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection, label);
     }
     catch (error) { outcome = { kind: "failed", error }; }
     finally { committing = false; }
     if (held.edit.isOpen()) return recover(held, outcome, selection);
+    if (outcome.written) surface.committed?.(held.base, outcome.written);
+    label = undefined;
     active = null; target = null;
     surface.repaint(held.rowId); surface.restore(held.rowId, outcome.selection);
     surface.changed();
@@ -254,16 +264,22 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (!begin(event, intended) || !intended) return true;
       const from = Math.min(intended.anchor.offset, intended.head.offset), to = Math.max(intended.anchor.offset, intended.head.offset);
       target = [from, to]; typed = event.data ?? null;
+      label = undefined;
       return true;
     },
     input: () => {
       if (!active || !active.edit.isOpen()) return;
       reconcile();
-      if (target && !active.fault && same(projection(surface.runs(active.beat)), active.edit.text())) {
+      if (target && !active.fault && same(text(active.beat), active.edit.text())) {
         const [from, to] = target, kept = active.edit.text().slice(from, to);
         active.edit.replace(from, to, surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept); target = null;
       }
       if (!surface.composition() && !holding()) finish();
+    },
+    discardUnchangedInput: () => {
+      if (!target || !active || active.fault || surface.composition() || !same(text(active.beat), active.edit.text())) return;
+      target = null; typed = null;
+      if (!holding()) finish();
     },
     start: (event, range) => {
       ended = false; refusedComposition = false; composedFromHold = null;
@@ -295,6 +311,16 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       } else finish();
     },
     finish,
+    describe: value => { label = value; },
+    replace: (value, description) => {
+      if (!surface.write || !finish()) return false;
+      const range = surface.selection();
+      if (!range || !begin(checkpoint("replace"), range) || !active) return false;
+      active.edit.replace(0, active.edit.text().length, value);
+      surface.write(active.beat, value);
+      target = null; label = description;
+      return settle(true);
+    },
     settledFor,
     canPaint: () => {
       const checked = ownership(checkpoint("paint"));

@@ -6,7 +6,8 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
 import { readSharedHeadingActiveRemovals, readSharedHeadingRemovalState } from "./removal-state.ts";
-import { readStoredSharedRecord } from "./record-codec.ts";
+import { readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { isSharedGalleryShown, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
 import { sharedStatusTargetVersion } from "./status-index.ts";
@@ -16,6 +17,10 @@ import type { CollabRoots } from "./roots.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { sharedJoinEndpointField, sharedJoinEndpointOffset } from "./join-endpoint.ts";
 import { readSharedActiveDiscards } from "./discard.ts";
+import { readSharedSplitHolds, readSharedSplitMarks, readSharedSplitObservationPart, readSharedSplitRetiredBeat, sharedSplitRetiredField,
+  sharedSplitStoreView } from "./split-retirement.ts";
+import type { SharedSplitObservationPart } from "./split-retirement.ts";
+import { observeSharedStructureIndex } from "./structure-index.ts";
 import type { SharedActiveDiscard, SharedDeletedPerson } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
@@ -28,6 +33,7 @@ export class SharedProjectionSource {
   private readonly joinFields = new Map<string, readonly string[]>();
   private readonly joinReaders = new Map<string, Set<string>>();
   private readonly joinSegments = new Map<string, readonly string[]>();
+  private readonly retiredGallery = new Set<string>();
   private ownership = "";
   readonly handle: SharedDocumentHandle;
 
@@ -52,11 +58,12 @@ export class SharedProjectionSource {
         const slot = JSON.stringify([name, key]);
         this.keyVersions.set(slot, (this.keyVersions.get(slot) ?? 0) + 1);
         if (name === "beats") this.unindexJoins(key);
+        if (name === "beats" && (!path.length || path[1] === "joins")) this.versions.set("beat-joins", this.version("beat-joins") + 1);
         if (name === "meta") {
           for (const id of this.joinReaders.get(key) ?? []) {
             const scope = JSON.stringify(["join-glue", id]); this.versions.set(scope, this.version(scope) + 1);
           }
-          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !isSharedJoinFormatRegisterField(key) && !key.startsWith(sharedJoinEndpointField("")))
+          if (key !== "title" && key !== "titleMarks" && !key.startsWith(sharedJoinGlueRegisterField("")) && !isSharedJoinFormatRegisterField(key) && !key.startsWith(sharedJoinEndpointField("")) && readSharedSplitRetiredBeat(key) === null)
             this.versions.set("meta-fields", this.version("meta-fields") + 1);
         }
       }
@@ -79,6 +86,22 @@ export class SharedProjectionSource {
     const name = scope === "document" ? "meta" : "beats";
     return this.cache.read(["fields", name, key], [scope === "document" ? this.version("meta-fields") : this.keyVersion(name, key)],
       () => readProjectionFields(scope === "document" ? this.inputRoots.meta : this.inputRoots[name].get(key), scope));
+  }
+
+  private splitRetirements(): ReadonlySet<string> {
+    const marks = this.cache.read(["split-marks"], [this.version("meta:keys")], () => readSharedSplitMarks(this.inputRoots.meta));
+    if (!marks.size) return marks;
+    const view = sharedSplitStoreView(this.inputRoots), ids = [...marks], beats = ids.map(id => this.keyVersion("beats", id));
+    const visit = (count: number) => this.cache.counted("split-observation", "visits", count);
+    // why: the structure index follows boundary atoms by identity, so typing reads no boundary again; a moved atom does.
+    const index = observeSharedStructureIndex(this.handle);
+    const segments = [...new Set(ids.map(id => this.fields("beat", id)?.segment))].map(segment => typeof segment === "string" ? index.boundaryVersion(segment) : null);
+    const part = (name: SharedSplitObservationPart, dependencies: readonly unknown[]) =>
+      this.cache.read(["split-observation", name], [marks, ...dependencies], () => readSharedSplitObservationPart(view, marks, name, visit));
+    const parts = [part("record", beats), part("boundaries", [...beats, ...segments]), part("predecessor", [...beats, ...segments]),
+      part("joins", [this.version("beat-joins"), this.version("retiredJoins")]), part("attachments", [this.version("visuals"), this.version("gallery")]),
+      part("status", [this.version("statusEvents"), this.version("retiredStatus")])];
+    return this.cache.read(["split-retired"], [marks, ...ids.map(id => this.keyVersion("meta", sharedSplitRetiredField(id))), ...parts], () => readSharedSplitHolds(view, marks, parts));
   }
 
   headingRemoved(id: string): boolean { return this.heading(id).removed; }
@@ -119,10 +142,18 @@ export class SharedProjectionSource {
   records(collection: SharedRecordCollection) {
     const records = this.keys(collection).flatMap(key => {
       const value = this.cache.read(["record", collection, key], [this.keyVersion(collection, key)], () => {
-        const fields = readStoredSharedRecord(collection, key, this.inputRoots[collection].get(key));
-        return fields ? { key, fields } : null;
+        if (collection !== "gallery") {
+          const fields = readStoredSharedRecord(collection, key, this.inputRoots[collection].get(key));
+          return fields ? { key, fields } : null;
+        }
+        const read = readStoredSharedGalleryRecord(key, readSharedStoredPicture(this.inputRoots, key));
+        if (read?.retired) this.retiredGallery.add(key); else this.retiredGallery.delete(key);
+        return read ? { key, fields: read.fields } : null;
       }, "record");
-      return value ? [value] : [];
+      // why: only a picture an undo retired reads its beat's removals, so a document without one reads nothing more.
+      const shown = value && collection === "gallery" && this.retiredGallery.has(key) ? this.cache.read(["record-retired", key], [value, this.keyVersion("beats", String(value.fields.beat))],
+        () => isSharedGalleryShown(this.inputRoots, key, readSharedStoredPicture(this.inputRoots, key)) ? value : null) : value;
+      return shown ? [shown] : [];
     });
     return this.cache.read(["records", collection], records, () => sortSharedRecordReadings(collection, [...records]));
   }
@@ -158,9 +189,10 @@ export class SharedProjectionSource {
   }
 
   blocks(includeUnits = true) {
-    const streams = this.streams(includeUnits), fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id) }));
-    const records = this.cache.read(["block-records"], fields.flatMap(value => [value.id, value.fields]), () => fields.map(({ id, fields }) =>
-      ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null })));
+    const streams = this.streams(includeUnits), retirements = this.splitRetirements();
+    const fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id), retired: retirements.has(id) }));
+    const records = this.cache.read(["block-records"], fields.flatMap(value => [value.id, value.fields, value.retired]), () => fields.map(({ id, fields, retired }) =>
+      ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired })));
     return this.cache.read(["blocks", String(includeUnits)], [streams, records], () => {
       let index = 0;
       return projectSharedBlocks(streams, records, (parts, build) => this.cache.read(["block-units", String(includeUnits), String(index++)], parts, build));
@@ -168,7 +200,7 @@ export class SharedProjectionSource {
   }
 
   private structureToken(): string {
-    const streams = this.streams(false);
+    const streams = this.streams(false), retirements = this.splitRetirements();
     return JSON.stringify([streams.map(stream => {
       let gap = false;
       const boundaries = stream.parts.flatMap(part => {
@@ -177,7 +209,7 @@ export class SharedProjectionSource {
       });
       return [stream.segment, stream.inOrder, stream.head, boundaries];
     }),
-    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment]; })]);
+    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, retirements.has(id)]; })]);
   }
 
   status(target: SharedStatusEvent["target"]): string {

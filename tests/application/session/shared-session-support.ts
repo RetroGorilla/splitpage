@@ -6,6 +6,8 @@ import type { SessionChange } from "../../../src/application/session/change-set.
 import type { Command, SessionCounters } from "../../../src/application/session/document-session.ts";
 import type { Capability } from "../../../src/application/session/ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
+import type { SharedCommandDescription } from "../../../src/core/collab/undo-record.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
 import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
@@ -17,6 +19,7 @@ import { fakeClock } from "../session-fakes.ts";
 import type { FakeClock } from "../session-fakes.ts";
 
 export interface SharedHarnessHooks {
+  refused?: (reason: string) => void;
   record?: () => void;
   effect?: (name: "dirty" | "draft" | "save") => void;
   asked?: () => void;
@@ -29,14 +32,15 @@ export interface SharedHarness {
   published: SessionChange[];
   undo: { changes: SessionChange["changes"]; selection: FlowSelectionPair | undefined }[];
   executed: { operations: readonly SharedOperation[]; base: number }[];
+  described: (SharedCommandDescription | null)[];
   refreshes: string[][];
   reported: unknown[];
   clock: FakeClock;
   deny: (reason: string | null) => void;
 }
 
-export function adapterReplica(handle: SharedDocumentHandle): ReplicaPort {
-  return createSharedReplica(handle);
+export function adapterReplica(handle: SharedDocumentHandle, undo?: Pick<SharedUndo, "perform">): ReplicaPort {
+  return createSharedReplica(handle, undefined, undo);
 }
 
 export function registerSplits(handle: SharedDocumentHandle): void {
@@ -45,17 +49,18 @@ export function registerSplits(handle: SharedDocumentHandle): void {
 
 export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = {}): SharedHarness {
   const log: string[] = [], published: SessionChange[] = [], refreshes: string[][] = [], reported: unknown[] = [];
-  const undo: SharedHarness["undo"] = [], executed: SharedHarness["executed"] = [];
+  const undo: SharedHarness["undo"] = [], executed: SharedHarness["executed"] = [], described: SharedHarness["described"] = [];
   const clock = fakeClock();
   let denied: string | null = null;
   const can = (): Capability => { hooks.asked?.(); return denied === null ? { allowed: true } : { allowed: false, reason: denied }; };
   const session = createSharedSession({
+    refused: hooks.refused,
     replica: {
       revision: replica.revision,
       project: () => { log.push("project"); return replica.project(); },
       changes: replica.changes,
       recovery: replica.recovery,
-      execute: (operations, options) => { log.push("execute"); executed.push({ operations, base: options.base }); return replica.execute(operations, options); },
+      execute: (operations, options) => { log.push("execute"); executed.push({ operations, base: options.base }); described.push(options.description); return replica.execute(operations, options); },
       observe: replica.observe
     },
     entry: enterSharedDocument,
@@ -72,7 +77,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
     after: hooks.after
   });
   session.subscribe(change => { published.push(change); log.push("publish:" + change.kind); });
-  return { session, log, published, undo, executed, refreshes, reported, clock, deny: reason => { denied = reason; } };
+  return { session, log, published, undo, executed, described, refreshes, reported, clock, deny: reason => { denied = reason; } };
 }
 
 export interface FakeReplica {

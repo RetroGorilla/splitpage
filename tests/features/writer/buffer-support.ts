@@ -13,6 +13,8 @@ import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import type { BufferedTextCommit, BufferedTextEdit } from "../../../src/application/editing/ports.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
+import type { SharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
 
 export function keyOf(type: string, insert: string): string | null {
   if (type === "insertText" && Array.from(insert).length === 1) return insert;
@@ -34,8 +36,10 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     key?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
     author?: (serial: number) => string;
     fields?: Record<string, unknown>;
+    undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform">;
+    history?: SharedUndoActions;
   } = {}) {
-  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a));
+  const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a, options.undo?.(h)));
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
@@ -62,7 +66,7 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     decode: fromHtml, storedHtml: html => html, moveBeat: () => {}, editingBlocked: () => false,
     syncBeat: () => { throw new Error("Shared native input reached whole-field synchronization"); },
     commit: (name, operation, before) => { if (command) return command(name, operation, before); throw new Error("Shared native input reached the standalone model command"); },
-    undo: () => { notices.push("undo"); }, ...(options.key ? { beatKeydown: options.key } : {}),
+    undo: direction => { if (options.history) options.history[direction](); else notices.push("undo"); }, ...(options.key ? { beatKeydown: options.key } : {}),
     notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
     settings: () => ({ enter: "double", tick: "delete", gapTyping: "here", markdown: true }), openFind: () => {}, plainVisual: () => ""
   });

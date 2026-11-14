@@ -1,4 +1,6 @@
-import type { BufferedTextCommit } from "../../application/editing/ports.ts";
+import type { BufferedTextCommit, PaintedText } from "../../application/editing/ports.ts";
+import type { BufferedCommit } from "../../core/collab/buffer.ts";
+import type { SharedCommandDescription } from "../../core/collab/undo-record.ts";
 import type { CommonDocumentSession, CommandOutcome } from "../../application/session/document-session.ts";
 import { NO_CHANGES } from "../../application/session/change-set.ts";
 import { bufferedFieldChanges, bufferedFieldTarget } from "../../application/editing/buffered-field-key.ts";
@@ -35,6 +37,14 @@ export function sharedBufferedTarget(handle: SharedDocumentHandle, key: string):
   return { owner, segment: owner, field: field.field };
 }
 
+export const SHARED_TYPING_LABEL = "typing";
+
+function typingDescription(painted: PaintedText, commit: BufferedCommit): SharedCommandDescription {
+  const first = commit.splices[0], preceding = first && first.from > 0 ? painted.identity(first.from - 1) : null;
+  const anchor = !first ? null : preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null;
+  return { label: SHARED_TYPING_LABEL, selection: anchor ? { anchor, focus: anchor } : null, typing: commit.splices.map(splice => splice.insert).join("") };
+}
+
 export function createSharedBufferedText(
   handle: SharedDocumentHandle,
   session: Pick<CommonDocumentSession, "run" | "epoch" | "read">,
@@ -59,7 +69,7 @@ export function createSharedBufferedText(
           if (!open) throw new Error("Buffered edit is closed");
           buffer.replace(from, to, insert);
         },
-        commit: (runs, selection) => {
+        commit: (runs, selection, label) => {
           stranded = false;
           if (!open) return { kind: "rejected", reason: "buffer-closed" };
           if (sharedBufferDeliveryBusy(handle)) return { kind: "rejected", reason: "buffer-delivery" };
@@ -76,7 +86,8 @@ export function createSharedBufferedText(
               return {
                 changes: bufferedFieldChanges(rowId),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
-                shared: { operations: [...operations, ...tags, ...stamp], base: commit.base }
+                shared: { operations: [...operations, ...tags, ...stamp], base: commit.base,
+                  description: label ? { ...typingDescription(painted, commit), label, typing: null } : typingDescription(painted, commit) }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }
@@ -95,7 +106,7 @@ export function createSharedBufferedText(
                 : { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
             }
             const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "audioText" ? undefined : { key: rowId, target }) : undefined;
-            return restored ? { ...outcome, selection: restored } : outcome;
+            return { ...outcome, ...restored ? { selection: restored } : {}, ...local ? { written: local } : {} };
           }
           return outcome;
         },

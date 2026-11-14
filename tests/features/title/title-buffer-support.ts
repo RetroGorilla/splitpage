@@ -2,6 +2,7 @@ import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
@@ -13,12 +14,19 @@ import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 
 export type TitlePage = ReturnType<typeof sharedTitle>;
 
-export function sharedTitle(title = "Draft", fields: Record<string, unknown> = { titleOrigin: "user" }) {
+export function sharedTitle(title = "Draft", fields: Record<string, unknown> = { titleOrigin: "user" },
+  options: { readonly undo?: (h: Stage1ExecutorHarness) => SharedUndo } = {}) {
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }], { ...fields, title });
-  const a = sharedHarness(adapterReplica(h.a)), { effects, reports, recovered } = fakeWriterBufferEffects();
+  let reversals = 0;
+  if (!options.undo) registerSharedUndoOperationHandlers(h.a);
+  const owner = options.undo?.(h) ?? sharedUndoOwner(h.a, () => ({ id: "undo" + ++reversals, by: "Alice" }), () => 0, error => { throw error; });
+  const a = sharedHarness(adapterReplica(h.a, owner)), { effects, reports, recovered } = fakeWriterBufferEffects();
   let serial = 0, depth = 0, repaints = 0, pageTitles = 0;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => ({ id: "native:" + ++serial, by: "Alice" }) });
@@ -37,6 +45,7 @@ export function sharedTitle(title = "Draft", fields: Record<string, unknown> = {
     main, writer,
     ports: { run: command => { commands.push(command.name); return { kind: "noop" }; }, current, pageTitle: () => { pageTitles++; } },
     shared: {
+      history: sharedBufferedInputHistory(h.a, a.session, owner),
       field: surface => createBufferedField(shared.bufferedText, surface),
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
@@ -47,7 +56,7 @@ export function sharedTitle(title = "Draft", fields: Record<string, unknown> = {
     }
   });
   const stored = () => readSharedPaintedText(h.a, sharedBufferedTarget(h.a, TITLE_FIELD_KEY))?.text;
-  return { h, a, main, writer, routes, reports, recovered, commands, stored, paint, viewTitle: current,
+  return { h, a, main, writer, routes, reports, recovered, commands, stored, paint, owner, viewTitle: current,
     edge: edgeInput(() => main), writerEdge: edgeInput(() => writer),
     target: () => sharedBufferedTarget(h.a, TITLE_FIELD_KEY),
     repaints: () => repaints, pageTitles: () => pageTitles, shownDepth: () => depth,

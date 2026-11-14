@@ -2,6 +2,7 @@ import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
@@ -21,8 +22,8 @@ import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/remo
 type Field = "visualText" | "audioText";
 
 export function bufferedSplit(seed = [{ id: "R1", text: "the the" }], sourceReady = true,
-  options: { readonly author?: (serial: number) => string; readonly structure?: boolean } = {}) {
-  const h = new Stage1ExecutorHarness(seed), a = sharedHarness(adapterReplica(h.a));
+  options: { readonly author?: (serial: number) => string; readonly structure?: boolean; readonly undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform"> } = {}) {
+  const h = new Stage1ExecutorHarness(seed), a = sharedHarness(adapterReplica(h.a, options.undo?.(h)));
   if (options.structure) { registerSplits(h.a); registerSharedRemovalHandlers(h.a); }
   const { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   let serial = 0, ready = sourceReady;
