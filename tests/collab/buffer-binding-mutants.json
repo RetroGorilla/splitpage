@@ -410,7 +410,7 @@
   }, {
     "label": "a shared Split rename keeps the native length limit",
     "file": "src/features/rows/scene-controls.ts",
-    "find": "if (!shared) input.maxLength = 200;",
+    "find": "input.removeAttribute(\"maxlength\");",
     "replace": "input.maxLength = 200;",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
@@ -456,9 +456,9 @@
     "replace": "input.setSelectionRange(caret.start, caret.end, caret.direction);",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
-    "label": "a new scene's name form opens in a shared session",
+    "label": "a new scene's name form opens without the shared creation port",
     "file": "src/features/rows/scene-controls.ts",
-    "find": "if (!ports.sharedNames) return true;",
+    "find": "if (!ports.sharedNames || ports.sharedScenes) return true;",
     "replace": "if (ports) return true;",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
