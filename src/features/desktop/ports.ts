@@ -24,6 +24,8 @@ export interface DesktopMount extends DesktopHandOff {
 }
 
 export interface DesktopPorts {
+  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
+  readonly opening: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
   readonly running: () => boolean;
   readonly shell: () => DesktopShell | null;
   readonly canOpenPrompterInBrowser: () => boolean;

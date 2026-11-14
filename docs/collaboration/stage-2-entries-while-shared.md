@@ -1,6 +1,6 @@
 # Entries while shared (C8)
 
-## Completed independently of the leave port
+## Entry decisions
 
 - A rejected duplicate-identity stamp returns before changing the written-out
   flag, copying history, announcing an identity or showing the copy notice.
@@ -19,26 +19,54 @@
 - Present opens the prompter from the shared projection without leaving or
   changing shared bytes or undo.
 
-## Blocked leave-first integration
+- Open, New, starters, the demo, import, drop, recent files, inbound files,
+  desktop open-with, manual resume and external prompter links leave first
+  (rule 77). A held binding refuses the entry before history, reset, identity,
+  local file access or fetching an external script. The existing shared-mode
+  notice is shown and the shared document and undo are unchanged.
+- Reload remains refused before local file access. Shared edits do not mark a
+  local file unsaved and do not ask an unsaved question on close (rule 60).
 
-The requested base is switch head `2f4927822`. Its
-`leaveSharedSession(ports: SharedSwitchPorts)` needs the caller's ports, including
-the binding lifecycle, standalone capabilities, migration and id source. The
-switch retains no caller ports, `sharedSessionParts()` returns only handle,
-session, undo and author, and no app factory builds `SharedSwitchPorts`.
-Consequently `documentTransitions()` and the file-entry wiring cannot obtain
-the current switch's leave operation.
+## Structure
 
-C8 needs a current-session leave callback backed by the ports used for entry,
-or an explicit way for the switch caller to supply that callback to the entry
-wiring for the session's lifetime. The switch is unchanged. No replacement
-leave sequence or default refusal policy is introduced here.
+The switch retains the ports used by its successful entry.
+`leaveRunningSharedSession()` delegates to its existing leave sequence without
+requiring entry callers to reproduce those ports. An explicit leave with other
+ports also uses the retained ports: they own the mounted bindings. Rollback and
+completed leave release them; a refused or pre-landing failed leave keeps the
+running session and its ports for a retry, as the existing fault model requires.
 
-Open, New, inbound open, plain Open and manual resume still need that connection,
-their failure/refusal tests and their deliberate-defect mutants. This includes
-external prompter links that open a file; reading the current projection through
-Present is already covered. No PR is opened until C4 is merged and this branch
-has merged `origin/main`.
+The shared `documentEntry` port performs that admission. Feature callers receive
+it by name. `documentTransitions().open` and `startNew` also use it, so a direct
+caller cannot adopt over a shared owner. Standalone transition behavior keeps its
+existing reentrancy; the shared leave-and-entry boundary holds commands.
+
+Pending openings belong to the existing transition `Started` lifetime. Each
+tracked operation has an epoch token, retired on completion, failure, cancellation
+or document replacement. Old completion cannot clear a later operation's token
+or a new lifetime. Synchronous results and promise identity stay unchanged.
+`openingStatus` exposes only the read through a `Pick`. The switch reads that
+port before settling and after its microtask, refusing with `opening-pending`
+before constructing a shared document. File open, import, draft resume and
+desktop open-with have composed pending-to-landing literals; manual resume,
+plain Open and the external prompter fetch use the same lifetime.
+
+## Hook connection
+
+The hook must provide `openingStatus` as `SharedSwitchPorts.opening`. The pending
+check is currently composed in the switch's `refusedNow`; the hook's remaining
+entry refusals continue through its `refusal` port. The switch owns the leave
+ports, so file-entry callers need no hook-owned accessor or binding defaults.
+
+## Standalone and interface text
+
+No standalone typing, undo or save path gains work. Opening paths gain admission
+and transient opening metadata, without changing their decisions or results.
+The only text used by the new admission is the existing notice:
+"This is not available in a shared session yet."
+
+The browser suites for real file-entry interaction belong to the hook cut; this
+cut uses composed application tests without starting a browser.
 
 ## Assumed product rules
 

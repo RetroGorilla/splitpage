@@ -232,6 +232,17 @@ test("each refusal of step 1 changes nothing and settles nothing, and so does en
   } finally { s.stop(); }
 });
 
+for (const duringSettle of [false, true]) test("C8 opening admission " + (duringSettle ? "appears while settling" : "is pending before entry") + " and writes nothing", async () => {
+  const s = start(); let pending = !duringSettle;
+  const ports = { ...s.ports, opening: { openingPending: () => pending } };
+  try {
+    if (duringSettle) s.onSettle(() => { pending = true; });
+    assert.deepEqual(await enterSharedSession(ports), { ok: false, reason: "opening-pending" });
+    assert.deepEqual([s.log, sharedSession(), currentDocument()?.docId, sharedSessionParts(), s.reported],
+      [duringSettle ? ["settle"] : [], false, START_ID, null, []]);
+  } finally { s.stop(); }
+});
+
 test("a refusal that arises while entering waits for the microtask is honoured after it, with nothing replaced", async () => {
   const s = start();
   try {

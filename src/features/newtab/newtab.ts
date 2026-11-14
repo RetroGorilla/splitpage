@@ -124,6 +124,7 @@ function startStarterScript(id: string | null) {
 }
 
 function openPasteAsNewDocument() {
+  if (ports.entry.before()) return;
   const mounted = activeMount;
   ports.importText({
     intoNewDocument: function (rows, scan) {

@@ -627,3 +627,28 @@ first command trims initial narration | src/application/commands/empty-script.ts
 empty target drops the session refusal notice marker | src/features/empty-script/empty-script.ts: forgets an already-shown session warning | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 first input wiring drops the session refusal notice marker | src/bootstrap/wiring/ports/empty-script.ts: flattens the rejected outcome | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
 empty target refusals miss the shared notice | src/bootstrap/wiring/ports/empty-script.ts: bypasses sharedCommandReport | tests/features/empty-script/shared.test.ts | tests/collab/empty-script-mutants.json
+entry facade ignores the running session | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+foreign leave ports replace the entry-owned bindings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+shared entry ignores pending openings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+opening capture never becomes pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+opening completion leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+synchronous opening leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+synchronous opening failure leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+opening tokens survive epoch invalidation | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+settled old opening clears the next opening | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
+document entry bypasses the shared leave | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+document entry accepts a refused leave | src/bootstrap/wiring/ports/document-entry.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+direct transitions bypass shared admission | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+open source access precedes shared admission | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+plain Open ignores entry admission | src/application/transitions/local-files.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+manual resume ignores entry admission | src/application/transitions/local-files.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+desktop open-with ignores entry refusal | src/features/desktop/desktop.ts | tests/features/desktop/mount.test.ts | tests/collab/shared-entry-mutants.json
+desktop open-with drops its opening token | src/features/desktop/desktop.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+New and demo write after refused admission | src/features/file-menu/file-menu.ts | tests/features/file-menu/dropdown-mount.test.ts | tests/collab/shared-entry-mutants.json
+new-tab writes after refused admission | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+new-tab paste opens its dialog after refusal | src/features/newtab/newtab.ts | tests/features/newtab/mount.test.ts | tests/collab/shared-entry-mutants.json
+resume banner requests permission after refusal | src/features/file-menu/mount.ts | tests/features/file-menu/mount.test.ts | tests/collab/shared-entry-mutants.json
+external prompter fetches after refused leave | src/features/prompter/prompter.ts | tests/features/prompter/runtime-mount.test.ts | tests/collab/shared-entry-mutants.json
+external prompter onboarding crosses refused entry | src/features/prompter/prompter.ts | tests/features/prompter/runtime-mount.test.ts | tests/collab/shared-entry-mutants.json
+external prompter fetch has no opening token | src/features/prompter/prompter.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json
+draft resume has no opening token | src/bootstrap/wiring/drafts.ts | tests/bootstrap/shared-entry-paths.test.ts | tests/collab/shared-entry-mutants.json

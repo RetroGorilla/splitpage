@@ -17,7 +17,7 @@ import { applyStashedWork, captureRestore, desktopDrafts, draftResume, stillRest
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "./save-owners.ts";
 import { mergeBase, noteAbsorbedDirty } from "./session-owner.ts";
-import { openDocument } from "./transition-owners.ts";
+import { documentOpenings, openDocument } from "./transition-owners.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
@@ -127,5 +127,5 @@ export function draftTaker(): ReturnType<DraftsMount["taker"]> {
 
 export function applyTakenDraft(taken: unknown): Promise<string> {
   const mounted = drafts.owner();
-  return mounted ? mounted.applyTaken(taken) : Promise.resolve("failed");
+  return mounted ? documentOpenings.track(() => mounted.applyTaken(taken)) : Promise.resolve("failed");
 }

@@ -34,7 +34,7 @@ interface Started {
   readonly operations: Operations;
   readonly sources: LegacyDocumentSources;
   readonly history: HistoryPort;
-  readonly openings: Set<OperationContext>;
+  readonly openings: Set<{ readonly epoch: number }>;
 }
 
 let started: Started | null = null;
@@ -85,7 +85,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     operations: operations,
     sources: createDocumentSources<LegacyOpening>(),
     history: ports.history,
-    openings: new Set<OperationContext>()
+    openings: new Set<{ readonly epoch: number }>()
   });
   started = mine;
   const releaseEpoch = onDocumentReplaced(() => {
@@ -125,13 +125,13 @@ export function openDocument(opening: LegacyOpening): Promise<unknown> {
 export const documentOpenings: DocumentOpeningActivity = {
   openingPending: () => started !== null && started.openings.size > 0,
   track: work => {
-    const mine = running(), context = mine.operations.capture();
+    const mine = running(), context = { epoch: liveSession().epoch() };
     mine.openings.add(context);
     const close = () => { mine.openings.delete(context); };
     try {
       const result = work();
-      const then = result && (typeof result === "object" || typeof result === "function") ? (result as PromiseLike<unknown>).then : null;
-      if (typeof then === "function") void Promise.resolve(result).then(close, close);
+      const pending = result !== null && (typeof result === "object" || typeof result === "function") && "then" in result && typeof result.then === "function";
+      if (pending) void Promise.resolve(result).then(close, close);
       else close();
       return result;
     } catch (error) { close(); throw error; }

@@ -28,7 +28,7 @@ import { notices } from "./effects.ts";
 import { exports as formats, fileDelivery } from "./files.ts";
 import { place } from "./location.ts";
 import { confirmation, saves, fileConflicts } from "./saving.ts";
-import { transitions, history } from "./transitions.ts";
+import { transitions, history, openingActivity } from "./transitions.ts";
 import { panelControl } from "./panels.ts";
 import { brollView, preferenceValues } from "./preferences.ts";
 import { resetProductionPanel } from "./production.ts";
@@ -44,6 +44,7 @@ import { documentEntry } from "./document-entry.ts";
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
   return {
+    opening: openingActivity,
     entry: documentEntry,
     capability: capabilities,
     document: documentReader,

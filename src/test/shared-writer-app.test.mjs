@@ -31,6 +31,7 @@ const ALLOWED = { edit: () => ({ allowed: true }), comment: () => ({ allowed: tr
 const reports = [], recovered = [], missing = [], errors = [];
 let ids = 0;
 const ports = {
+  opening: { openingPending: () => false },
   refusal: () => null,
   settle: () => { undoOwner().flush(); },
   detach: () => {},

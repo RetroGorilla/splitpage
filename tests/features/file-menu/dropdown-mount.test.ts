@@ -111,6 +111,16 @@ test("a new script keeps the owners, arguments and order of the document-creatin
   } finally { mounted.dispose(); }
 });
 
+test("C8 New and demo admission refuses before history, reset, identity and closing panels", () => {
+  page(); const h = harness();
+  const mounted = startFileMenu({ ...h.ports, entry: { before: () => ({ refused: "buffer-composition" }) } });
+  try {
+    assert.equal(mounted.startNewScript(), false); assert.equal(mounted.openLongDemo(), false);
+    assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "migrateRows"]);
+    assert.deepEqual(shown(h.notices), []);
+  } finally { mounted.dispose(); }
+});
+
 test("a new script over an empty document keeps no snapshot", () => {
   page();
   const h = harness();

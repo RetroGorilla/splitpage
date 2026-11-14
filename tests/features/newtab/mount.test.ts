@@ -117,6 +117,17 @@ test("blank and starter creation keep preparation, reset, transition, confirmati
   }
 });
 
+test("C8 new-tab admission refuses blank, starter and paste before adoption or opening the import dialog", async () => {
+  page(); const h = harness();
+  const mounted = startNewTab({ ...h.ports, entry: { before: () => ({ refused: "buffer-composition" }) } });
+  try {
+    await settled(); h.calls.length = 0;
+    click("new"); click("starter"); click("paste");
+    assert.deepEqual(h.arrivals, []); assert.equal(h.pasted() === null, true);
+    assert.deepEqual(h.calls.map(call => call[0]), ["makeId", "migrateRows", "migrateRows"]);
+  } finally { mounted.dispose(); }
+});
+
 test("paste scans its migrated document before adoption and dropped files keep their source arguments", async () => {
   page();
   const h = harness();

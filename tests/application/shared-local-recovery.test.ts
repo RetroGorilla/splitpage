@@ -104,6 +104,7 @@ test("shared reload refuses the project and import routes before conflict, desti
   const unused = recorder(calls);
   const notices = fakeNotices();
   const ports: LocalFilesOwnerPorts = {
+    opening: { track: work => work() },
     entry: { before: () => null },
     capability: SHARED, document: { current: unused("current") }, session: { noteAbsorbedDirty: unused("dirty"), noteReload: unused("reload") },
     transitions: { open: unused("open") }, history: { keep: unused("snapshot") }, saving: { confirmSavedNow: unused("confirm") }, saves: { unsaved: unused("unsaved") },

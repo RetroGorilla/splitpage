@@ -18,6 +18,7 @@ function harness() {
   const state = { permission: "granted", dirty: false };
   const owner: LocalFilesOwner = createLocalFilesOwner();
   const ports: LocalFilesOwnerPorts = {
+    opening: { track: work => work() },
     entry: { before: () => null },
     capability: MAY_EDIT,
     document: { current: () => doc },

@@ -60,6 +60,8 @@ interface PrompterOpening {
 }
 
 export interface PrompterFeaturePorts {
+  readonly entry: import("../../application/transitions/ports.ts").DocumentEntryAdmission;
+  readonly openingActivity: Pick<import("../../application/transitions/ports.ts").DocumentOpeningActivity, "track">;
   readonly document: Pick<DocumentReader, "current" | "numbering">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf"> & {
     readonly productionReaders: Pick<TextServices["productionReaders"], "wordCount">;
