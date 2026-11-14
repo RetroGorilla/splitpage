@@ -54,7 +54,7 @@ export function page(handle: SharedDocumentHandle, name = "Bob") {
   const ports: RecoveryPanelPorts = recoveryPanelPorts({ host, session: { current: () => state.shared ? h.session : null,
     onChange: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     document: { current: () => h.session.read(doc => doc) }, text: { htmlToPlainText },
-    parts: () => state.parts ? { handle, author: { next: () => state.author ? { id: state.badIdentity ? " " : "action" + ++serial, by: name } : null } } : null,
+    parts: () => state.parts ? { handle, author: { next: () => state.author ? { id: state.badIdentity ? "" : "action" + ++serial, by: name } : null } } : null,
     run: h.session.run, notices: notices.notices });
   const panel = createRecoveryPanel(ports), off = startRecoveryPanelActions({ registry, current: () => panel, session: ports.session });
   const open = () => { assert.equal(registry.invoke("recovery", "command-menu").kind, "ran"); };
