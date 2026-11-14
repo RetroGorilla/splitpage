@@ -63,6 +63,7 @@ interface Running {
   readonly kept: Record<string, unknown>;
   readonly live: (on: boolean) => void;
   readonly stopRoute: () => void;
+  readonly end: () => void;
 }
 
 let running: Running | null = null;
@@ -131,7 +132,7 @@ export async function enterSharedSession(ports: SharedSwitchPorts): Promise<Shar
 function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly kept: Record<string, unknown>; readonly hydration: ValidatedDocument;
   readonly handle: SharedDocumentHandle; readonly releaseCommands: () => void }): SharedSwitchOutcome {
   const { kept, hydration, handle, releaseCommands } = prepared, base = mergeBase();
-  let on = true;
+  let on = true, alive = true;
   const author = sharedAuthorPort({ handle: () => on ? handle : null, name: ports.editor });
   const made: { session: SharedDocumentSession | null; replica: SharedReplica | null; swap: OwnerSwap | null; stopRoute: (() => void) | null;
     releaseSession: (() => void) | null; bound: boolean } = { session: null, replica: null, swap: null, stopRoute: null, releaseSession: null, bound: false };
@@ -146,7 +147,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {
       const session = createSharedSession({
         replica: replica, entry: owner.entry, undo: { record: () => {} },
-        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: owner.refresh },
+        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },
         capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after
       });
       made.session = session;
@@ -155,7 +156,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     }, createSessionCapabilities("shared", ports.common)));
     if (!made.session) throw new Error("The shared session was not built");
     const parts: SharedSessionParts = { handle, session: made.session, undo, author };
-    running = { parts, replica, kept, live: value => { on = value; }, stopRoute: made.stopRoute };
+    running = { parts, replica, kept, live: value => { on = value; }, stopRoute: made.stopRoute, end: () => { alive = false; } };
     undoOwner().adopt(null);
     holdMergeBase(null);
     made.bound = true;
@@ -166,6 +167,8 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
   } catch (error) {
     faults.errors.unshift(error);
     running = null;
+    // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
+    alive = false;
     // why: the kept standalone owner comes back first, with no migration, and only then do the shared parts go
     if (made.bound) faults.attempt(() => { ports.bindings.leave(); });
     on = false;
@@ -229,6 +232,7 @@ export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcom
     return keep(new Error("The standalone copy did not land as captured"));
   }
   running = null;
+  now.end();
   faults.attempt(() => { swap.commit(); });
   faults.attempt(now.stopRoute);
   faults.attempt(() => { now.replica.dispose(); });

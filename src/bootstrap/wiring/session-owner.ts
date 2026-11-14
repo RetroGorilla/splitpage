@@ -152,6 +152,10 @@ export interface OwnerSwap {
 
 let commandHold: string | null = null;
 
+function heldOutcome(): CommandOutcome | null {
+  return commandHold ? { kind: "rejected", reason: commandHold } : null;
+}
+
 export function holdSessionCommands(reason: string): () => void {
   const outer = commandHold;
   commandHold = reason;
@@ -232,7 +236,7 @@ const session: DocumentSession = {
   absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return standalone("absorbMerged").absorbMerged(kind, unwrapped(merged)); },
   absorbReload: function (content: ReloadedContent) { return standalone("absorbReload").absorbReload(unwrapped(content)); },
   settle: function (kind: AbsorbedKind) { standalone("settle").settle(kind); },
-  run: function (command: Command) { return commandHold ? { kind: "rejected", reason: commandHold } : swept(owner().run(command)); },
+  run: function (command: Command) { return heldOutcome() ?? swept(owner().run(command)); },
   replay: function (task: Replay) { return refusedWhileShared("replay") ?? swept(standalone("replay").replay(task)); },
   amend: function (task: Replay) { return refusedWhileShared("amend") ?? swept(standalone("amend").amend(task)); },
   stamp: function (task: Stamp) { return refusedWhileShared("stamp") ?? swept(standalone("stamp").stamp(task)); },
@@ -267,10 +271,10 @@ export function startSessionBridge(ports: SessionBridgePorts): () => void {
   try {
     releases.push(ports.undo.route(function (task) {
       if (started !== mine) return STALE;
-      return refusedWhileShared("replay") ?? swept(standalone("replay").replay(task));
+      return heldOutcome() ?? refusedWhileShared("replay") ?? swept(standalone("replay").replay(task));
     }, sessionStamps, function (task) {
       if (started !== mine) return STALE;
-      return refusedWhileShared("amend") ?? swept(standalone("amend").amend(task));
+      return heldOutcome() ?? refusedWhileShared("amend") ?? swept(standalone("amend").amend(task));
     }));
   } catch (error) {
     release();
