@@ -49,15 +49,23 @@ export function edgeInput(current: () => HTMLInputElement) {
       return key(field, "keypress", text, modifiers) && insert(field, text, during);
     });
   }
+  function erased(field: HTMLInputElement, name: "Backspace" | "Delete"): boolean {
+    const [from, to] = span(field), type = name === "Backspace" ? "deleteContentBackward" : "deleteContentForward";
+    if (!before(field, type, null)) return false;
+    const [start, end] = from !== to ? [from, to] : name === "Backspace" ? [from - 1, from] : [from, from + 1];
+    if (start < 0 || end > field.value.length) return false;
+    replace(field, start, end, ""); after(field, type, null);
+    return true;
+  }
   function erase(name: "Backspace" | "Delete"): boolean {
-    return chord(name, {}, field => {
-      const [from, to] = span(field), type = name === "Backspace" ? "deleteContentBackward" : "deleteContentForward";
-      if (!before(field, type, null)) return false;
-      const [start, end] = from !== to ? [from, to] : name === "Backspace" ? [from - 1, from] : [from, from + 1];
-      if (start < 0 || end > field.value.length) return false;
-      replace(field, start, end, ""); after(field, type, null);
-      return true;
-    });
+    return chord(name, {}, field => erased(field, name));
+  }
+  function held(name: "Backspace" | "Delete", repeats: number): number {
+    const field = current();
+    let count = key(field, "keydown", name) && erased(field, name) ? 1 : 0;
+    for (let repeat = 0; repeat < repeats; repeat++) if (key(field, "keydown", name, { repeat: true }) && erased(field, name)) count++;
+    key(field, "keyup", name);
+    return count;
   }
   function history(name: string, type: string, restored: string | null): boolean {
     return chord(name, { ctrlKey: true }, field => {
@@ -91,6 +99,7 @@ export function edgeInput(current: () => HTMLInputElement) {
     },
     backspace: () => erase("Backspace"),
     delete: () => erase("Delete"),
+    hold: held,
     enter: () => chord("Enter", {}, field => {
       if (!key(field, "keypress", "Enter") || !before(field, "insertLineBreak", null)) return false;
       field.form?.requestSubmit();

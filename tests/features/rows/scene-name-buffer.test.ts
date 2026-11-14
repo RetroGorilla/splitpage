@@ -63,6 +63,11 @@ const EDGE_SEQUENCES: readonly {
     events: [["keydown", "Backspace", true], ["beforeinput", "deleteContentBackward", true], ["keyup", "Backspace", true]] },
   { label: "Delete in an empty input", value: "", act: edge => edge.delete(), after: ["", 0, 0],
     events: [["keydown", "Delete", true], ["beforeinput", "deleteContentForward", true], ["keyup", "Delete", true]] },
+  { label: "Backspace held down past the start", value: "ab", act: edge => edge.hold("Backspace", 3), after: ["", 0, 0],
+    events: [["keydown", "Backspace", true], ["beforeinput", "deleteContentBackward", true], ["input", "deleteContentBackward", false],
+      ["keydown", "Backspace repeat", true], ["beforeinput", "deleteContentBackward", true], ["input", "deleteContentBackward", false],
+      ["keydown", "Backspace repeat", true], ["beforeinput", "deleteContentBackward", true],
+      ["keydown", "Backspace repeat", true], ["beforeinput", "deleteContentBackward", true], ["keyup", "Backspace", true]] },
   { label: "Ctrl+X with nothing selected", value: "", act: edge => edge.cut(), after: ["", 0, 0],
     events: [["keydown", "x", true], ["cut", null, true], ["keyup", "x", true]] },
   { label: "Ctrl+V", value: "", act: edge => edge.paste("Q"), after: ["Q", 1, 1],
@@ -92,7 +97,7 @@ for (const sequence of EDGE_SEQUENCES) {
     const events: Recorded[] = [];
     for (const type of RECORDED_TYPES) {
       (type === "submit" ? input.form : input)?.addEventListener(type, event => {
-        const detail = event instanceof window.KeyboardEvent ? event.key : event instanceof window.InputEvent ? event.inputType
+        const detail = event instanceof window.KeyboardEvent ? event.key + (event.repeat ? " repeat" : "") : event instanceof window.InputEvent ? event.inputType
           : event instanceof window.CompositionEvent ? event.data : null;
         events.push([event.type, detail, event.cancelable]);
       });
@@ -410,6 +415,43 @@ for (const [label, act, typed] of [
     } finally { page.close(); }
   });
 }
+
+test("Split rename rule 4: Backspace held down until the name is gone keeps it held: the repeats change nothing and tell nothing, and the next letter replaces it once", () => {
+  const page = sharedRename();
+  try {
+    page.open();
+    page.edge.select(5);
+    assert.equal(page.edge.hold("Backspace", 8), 5);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page), page.a.executed.length], ["S", "", [0, 0], [], ["buffer"], 4]);
+    page.edge.type("N");
+    assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page)], ["N", "N", [], []]);
+    copies(page, ["N"]);
+  } finally { page.close(); }
+});
+
+for (const name of ["Backspace", "Delete"] as const) {
+  test(`Split rename rule 4: ${name} held down over a selected name keeps it held through the repeats; a fresh ${name} then ends the hold once`, () => {
+    const page = sharedRename();
+    try {
+      page.open();
+      page.edge.selectAll();
+      assert.equal(page.edge.hold(name, 3), 1);
+      assert.deepEqual([page.stored(), page.input().value, page.reports, holds(page), page.a.executed.length], ["Scene", "", [], ["buffer"], 0]);
+      assert.equal(name === "Backspace" ? page.edge.backspace() : page.edge.delete(), false);
+      assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page), page.a.executed.length], ["Scene", "Scene", [0, 0], EMPTY_REPORT, [], 0]);
+      copies(page, ["Scene"]);
+    } finally { page.close(); }
+  });
+}
+
+test("Split rename rule 4: Backspace held down on a name already held ends the hold once, at its release", () => {
+  const page = emptied();
+  try {
+    assert.equal(page.edge.hold("Backspace", 3), 0);
+    assert.deepEqual([page.stored(), page.input().value, caret(page), page.reports, holds(page), page.a.executed.length], ["Scene", "Scene", [0, 0], EMPTY_REPORT, [], 0]);
+    copies(page, ["Scene"]);
+  } finally { page.close(); }
+});
 
 test("Split rename rule 4: a composition begun in a held empty name and committed replaces the name once, with no report", () => {
   const page = emptied();
