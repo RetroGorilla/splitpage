@@ -376,6 +376,33 @@ test("after leaving, the ordinary draft schedule writes the changed landed copy 
   }
 });
 
+test("leaving while a save from before entry is still writing schedules a draft of the landed copy", async () => {
+  const store = draftStore();
+  script();
+  const target = createHeldFileHandle({ name: "source.splitpage", text: buildSplitpageFile(exportDocumentOf(currentDocument())), lastModified: 1000 });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
+  confirmSavedNow();
+  currentDocument().rows[0].audioText = "Captured source"; noteSessionEdit(); undoOwner().flush();
+  target.holdOp("close");
+  const saving = requestSave({ kind: "save" });
+  try {
+    await target.arrivedAt("close");
+    draftsTesting().setTiming({ idle: 5, max: 5 });
+    assert.deepEqual(await hook.enter(), { ok: true });
+    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    store.writes.length = 0;
+    assert.deepEqual(hook.leave(), { ok: true });
+    const landed = currentDocument().docId;
+    await new Promise(resolve => { setTimeout(resolve, 60); });
+    assert.deepEqual(store.writes.map(write => [write.text, write.docId, write.shared, write.kept]), [["Shared Captured source", landed, false, true]]);
+  } finally {
+    draftsTesting().setTiming({ idle: 1500, max: 5000 });
+    target.gates.releaseAll("file.close"); await saving;
+    if (sharedSession()) hook.leave();
+    await releaseDesktop();
+  }
+});
+
 test("the composed recovery panel binding offers the Recovery action only while shared, restores and discards a peer's removal, and closes on leave", async () => {
   script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "Removed words", visualText: "" }]);
   assert.equal(appActions.has("recovery"), false);
@@ -427,13 +454,25 @@ test("stopping the app in a shared session leaves it and releases the hook and i
   const app = await import("../bootstrap/app.ts");
   const { rewireApp } = await import("./_app-boot.mjs");
   const { startupReady } = await import("../application/startup-signal.ts");
-  const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
+  const { leaveRunningSharedSession, sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
   script();
   const standalone = listenerCounts();
   assert.equal(standalone["document compositionstart/C"], 1);
   assert.deepEqual(await hook.enter(), { ok: true });
   hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
-  app.stopApp();
+  let sharedAtRelease = null, started = null;
+  const remove = document.removeEventListener;
+  document.removeEventListener = function (type, listener, options) {
+    if (type === "compositionstart" && options === true) started = listener;
+    else if (type === "compositionend" && options === true && listener === started && sharedAtRelease === null) {
+      sharedAtRelease = sharedSessionParts() !== null;
+      if (sharedAtRelease) leaveRunningSharedSession();
+    }
+    return remove.call(this, type, listener, options);
+  };
+  try { app.stopApp(); } finally { delete document.removeEventListener; }
+  assert.equal(document.removeEventListener, remove);
+  assert.equal(sharedAtRelease, false, "the hook left the shared session before it released its listeners");
   assert.equal(sharedSessionParts(), null);
   assert.equal(sharedSession(), false);
   assert.equal(window.__sharedTest, undefined);
