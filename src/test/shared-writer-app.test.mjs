@@ -78,6 +78,23 @@ function typeIn(element, root, character) {
   return true;
 }
 
+function replaceIn(rowId, from, to, text) {
+  const element = beat(rowId), root = document.getElementById("writer-doc"), node = element.lastChild;
+  root.focus();
+  window.getSelection().setBaseAndExtent(node, from, node, to);
+  const range = window.getSelection().getRangeAt(0);
+  root.dispatchEvent(new window.KeyboardEvent("keydown", { key: text, bubbles: true, cancelable: true }));
+  const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: text });
+  const target = range.cloneRange();
+  Object.defineProperty(before, "getTargetRanges", { value: () => [target] });
+  if (!element.dispatchEvent(before)) return false;
+  node.data = node.data.slice(0, from) + text + node.data.slice(to);
+  window.getSelection().setBaseAndExtent(node, from + text.length, node, from + text.length);
+  element.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+  root.dispatchEvent(new window.KeyboardEvent("keyup", { key: text, bubbles: true }));
+  return true;
+}
+
 function remoteAtStart(other, rowId, text) {
   remoteAt(other, rowId, text, 0);
 }
@@ -141,6 +158,30 @@ for (const [side, merged, caret] of [["lower", "abYx", 3], ["higher", "abxY", 2]
     beat("r1").dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
     assert.equal(audio(), "abY");
     assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", caret)));
+  } finally {
+    destroySharedDocument(other);
+    assert.deepEqual(leaveSharedSession(ports), { ok: true });
+  }
+});
+
+test("shared Writer undo of identical retyped text leaves the caret after remote text typed in the same gap", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "the the", visualText: "", status: "todo" }] }));
+  undoOwner().flush();
+  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  const parts = sharedSessionParts(), other = createSharedDocument();
+  try {
+    collabState(other).doc.clientID = collabState(parts.handle).doc.clientID - 1;
+    registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });
+    assert.equal(applySharedUpdate(other, encodeSharedState(parts.handle)).ok, true);
+    writerControls().openWriter();
+    assert.equal(replaceIn("r1", 4, 7, "the"), true);
+    remoteAt(other, "r1", "n", 4);
+    assert.equal(applySharedUpdate(parts.handle, encodeSharedState(other)).ok, true);
+    assert.equal(audio(), "the nthe");
+    beat("r1").dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
+    assert.equal(audio(), "the nthe");
+    assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 5)));
   } finally {
     destroySharedDocument(other);
     assert.deepEqual(leaveSharedSession(ports), { ok: true });
