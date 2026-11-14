@@ -30,7 +30,7 @@ Complete projected documents and recovery are literal on two copies and a fresh 
 
 Input without beforeinput is also refused while another buffer owns ingress: its unadmitted DOM text is cleared, release and settlement create nothing, and both copies and a fresh joiner stay empty. An already-held draft survives and can later commit. Whitespace-only input and leading/trailing whitespace remain literal in the command and both rendered views, in both delivery orders.
 
-The first input is one command and one undo entry. Its existing structural inverse is refused as `undo-unsupported:segment-create`, with unchanged encoded state; undo is not widened here. Other refusals are `buffer-pending`, `buffer-composition`, `empty-script-stale`, `empty-script-no-author`, `empty-script-placement-unavailable`, `empty-script-identity-unavailable`, and the session's own admission refusal. An unexpected no-op is `empty-script-no-change`; a failed command surfaces its error without clearing the draft.
+The first input is one command and one undo entry. Under rule 71 its unsupported structural inverse answers `undo-unsupported:segment-create` with `skipped: true`, drops that entry and increments `skipped()` once, with unchanged encoded state. Later ordinary typing remains undoable and another undo reaches the older entry. Undo is not widened here. Other refusals are `buffer-pending`, `buffer-composition`, `empty-script-stale`, `empty-script-no-author`, `empty-script-placement-unavailable`, `empty-script-identity-unavailable`, and the session's own admission refusal. An unexpected no-op is `empty-script-no-change`; a failed command surfaces its error without clearing the draft.
 
 ## Shared app wiring in C6/C7
 
