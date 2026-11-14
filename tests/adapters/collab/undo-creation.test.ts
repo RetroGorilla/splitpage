@@ -419,3 +419,21 @@ for (const order of ORDERS) test(`own comment text undo leaves its updated time 
     assert.deepEqual(h.owner.undo(), { ok: true, effective: true, label: "create", selection: null }); h.check(before);
   } finally { h.close(); }
 });
+
+for (const collection of ["gallery", "comments"] as const) for (const order of ORDERS) for (const seen of [true, false]) for (const incoming of [true, false]) test(`retargeting a child uses creation undo up: ${collection}, incoming=${incoming}, seen=${seen}/${order}`, () => {
+  const h = start(order);
+  try {
+    if (incoming) {
+      h.send([collection === "gallery" ? createRecord("gallery", "G1", { beat: "R2", rank: "1", picture: { imageRef: { sha256: "c".repeat(64) } }, links: [] }, "Bob")
+        : createRecord("comments", "C1", { id: "C1", rowId: "R2", field: "audioText", author: "Bob", createdAt: 0, text: "Keep" }, "Bob")]); h.flush();
+    }
+    const beat = incoming ? h.create("x") : withRecords(h);
+    h.send([setRecord(collection, collection === "gallery" ? "G1" : "C1", collection === "gallery" ? "beat" : "rowId", incoming ? beat : "R2", "Bob")]);
+    const other = projectSharedDocumentWithRecovery(h.b); if (seen) h.flush();
+    const encoded = encodeSharedState(h.a);
+    assert.deepEqual(h.owner.undo(), seen ? { ok: true, effective: false, label: "create", selection: null, reason: "used-up" } : { ok: true, effective: true, label: "create", selection: null });
+    if (seen) assert.deepEqual(encodeSharedState(h.a), encoded);
+    h.check(other);
+    if (!seen) assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
+  } finally { h.close(); }
+});

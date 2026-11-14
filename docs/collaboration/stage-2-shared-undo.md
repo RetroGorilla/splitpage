@@ -26,6 +26,7 @@ names what the command changed by identity, never by offset.
 | `scalar`, `record-field` | the field, the value before and the value written |
 | `status`, `status-retired` | the beat, the status event and its value |
 | `record-create`, `record-delete` | the record and its fields |
+| `beat-create` | the stored beat identity, creating copy, initial observation and retirement direction |
 | `structure` | the command kind and the operation identity |
 
 `typing` is the text a keystroke inserted (`""` for a deletion key), or `null`
@@ -682,6 +683,9 @@ that creation part. Their records remain stored and follow the parent beat's
 conditional visibility, so an unseen edit to an initial child cannot be lost
 to a separate record deletion. Comment `updatedAt` is excluded like other
 stamps; changing comment content or ownership still uses the creation up.
+The ownership index follows changed ownership fields as well as added and
+removed keys, so moving an existing picture or comment onto the beat also
+invalidates retirement, including an unseen concurrent move.
 
 Assumed for an unseen concurrent change: the local undo can succeed before
 that change arrives. Once delivered, the changed observation invalidates the

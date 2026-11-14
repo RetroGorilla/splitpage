@@ -7,6 +7,12 @@
   ],
   "mutants": [
     {
+      "label": "creation ownership ignores retargeted children",
+      "file": "src/adapters/collab/creation-record-index.ts",
+      "find": "event.path.length === 1 && event.keysChanged.has(field)",
+      "replace": "false"
+    },
+    {
       "label": "creation treats an own restored format as foreign work",
       "file": "src/adapters/collab/creation-retirement.ts",
       "find": "markWriters.get(source) === writer ? \"own\" : source",
