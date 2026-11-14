@@ -135,6 +135,11 @@ import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-sel
 import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
 import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
 import type { FlowRange } from "../../core/flow/flow.ts";
+import { beatPos } from "../../core/flow/flow.ts";
+import type { RowFieldStep } from "../../core/text/steps.ts";
+import type { ChangeSet } from "../../application/session/change-set.ts";
+import type { UndoDirection } from "../../application/editing/undo/undo.ts";
+import { replayedTextSteps } from "../../application/editing/undo/replayed-steps.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
@@ -364,11 +369,7 @@ const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
   replay: function (dir) {
     const shared = sharedUndoRoute();
-    if (shared) {
-      const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
-      if (outcome.ok && outcome.selection) placeSharedSelection(outcome.selection);
-      return;
-    }
+    if (shared) { replaySharedStep(shared, dir); return; }
     if (dir === "redo") undoOwner().redo(); else undoOwner().undo();
   },
   writerStep: skipWriterUndo,
@@ -545,7 +546,7 @@ export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
 
 export const stopRowsEditingFeature = rowsEditor.stop;
 
-function afterUndoApplied(steps: readonly unknown[]): void {
+function undoCellStep(steps: readonly unknown[]): UndoCellStep | null {
   let cellStep: UndoCellStep | null = null;
   const doc = liveDocument.current();
   for (const st of steps as readonly UndoCellStep[]) {
@@ -554,17 +555,49 @@ function afterUndoApplied(steps: readonly unknown[]): void {
     if (!doc.rows.some(function (r) { return r.id === st.rowId; })) continue;
     if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
   }
+  return cellStep;
+}
+
+function placeCellCaret(cellStep: UndoCellStep | null): boolean {
+  if (!cellStep) return false;
+  const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
+  const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
+  if (!cell) return false;
+  cell.focus();
+  placeCaretAtTextOffset(cell, caretAfterStep(decodeCell, cellStep));
+  return true;
+}
+
+function afterUndoApplied(steps: readonly unknown[]): void {
+  const cellStep = undoCellStep(steps);
   undoGuard().whileApplying(renderProduction);
   undoOwner().settleAfterApply();
   if (writerReplayed(steps)) return;
-  if (cellStep) {
-    const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
-    const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
-    if (cell) {
-      cell.focus();
-      placeCaretAtTextOffset(cell, caretAfterStep(decodeCell, cellStep));
-    }
-  }
+  placeCellCaret(cellStep);
+}
+
+// why: the visual box is a cell: caretAfterStep gives its caret, and the box opens there
+function placeReplayedCaret(steps: readonly RowFieldStep[]): boolean {
+  if (!steps.length) return false;
+  if (!viewFlags().writerOpen()) return placeCellCaret(undoCellStep(steps));
+  if (steps.some(step => step.key === "audioText")) return writerReplayed(steps);
+  const visual = undoCellStep(steps);
+  if (!visual) return false;
+  const at = beatPos(visual.rowId, caretAfterStep(decodeCell, visual));
+  placeWriterVisual({ anchor: at, head: at });
+  return true;
+}
+
+function replaySharedStep(shared: NonNullable<ReturnType<typeof sharedUndoRoute>>, dir: UndoDirection): void {
+  const before = liveDocument.current();
+  let replayed: ChangeSet | null = null;
+  const stop = liveSession().subscribe(change => { if (change.kind === "replay") replayed = change.changes; });
+  let outcome: ReturnType<typeof stepSharedUndo>;
+  try { outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); }); } finally { stop(); }
+  if (!outcome.ok || !outcome.effective) return;
+  const after = liveDocument.current(), changed: ChangeSet | null = replayed;
+  const steps = before && after && changed ? replayedTextSteps(before, after, changed) : [];
+  if (!placeReplayedCaret(steps) && outcome.selection) placeSharedSelection(outcome.selection);
 }
 
 export function onRootInput(e: RootInput): void {

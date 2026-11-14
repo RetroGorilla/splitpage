@@ -467,63 +467,30 @@
       "replace": "track: (): void => { undoOwner().track(); }"
     },
     {
-      "label": "undo puts the caret at the old offsets",
-      "file": "src/adapters/collab/undo-executor.ts",
-      "find": "const previous = offset > 0 ? after.identity(offset - 1) : null;",
-      "replace": "const previous = offset > 0 ? before.painted.identity(offset - 1) : null;",
+      "label": "the shared undo caret comes from the undo record instead of the painted values",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "if (!placeReplayedCaret(steps) && outcome.selection) placeSharedSelection(outcome.selection);",
+      "replace": "if (outcome.selection) placeSharedSelection(outcome.selection);",
       "tests": [
-        "tests/collab/undo-selection.test.ts",
-        "tests/features/undo-selection.test.ts"
+        "src/test/undo-caret-parity.test.mjs"
       ]
     },
     {
-      "label": "undo collapses to the start",
-      "file": "src/adapters/collab/undo-executor.ts",
-      "find": "let offset = b.length - same;",
-      "replace": "let offset = 0; while (offset < a.length && offset < b.length && a[offset] === b[offset]) offset++;",
+      "label": "the shared undo reads the before value after the step",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "replayedTextSteps(before, after, changed)",
+      "replace": "replayedTextSteps(after, after, changed)",
       "tests": [
-        "tests/collab/undo-selection.test.ts",
-        "tests/features/undo-selection.test.ts"
+        "src/test/undo-caret-parity.test.mjs"
       ]
     },
     {
-      "label": "redo keeps the undo caret",
-      "file": "src/adapters/collab/undo-executor.ts",
-      "find": "inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };",
-      "replace": "inverse: { label: record.label, parts: inverse, selection: caret ?? record.selection, typing: null } };",
+      "label": "the shared undo looks the row up by the saved address instead of the painted row",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "replayedTextSteps(before, after, changed)",
+      "replace": "replayedTextSteps(before, after, outcome.selection ? { ...changed, cells: [{ rowId: String(sharedAnchorTarget(outcome.selection.focus)?.owner), field: \"audioText\" }] } : changed)",
       "tests": [
-        "tests/collab/undo-selection.test.ts",
-        "tests/features/undo-selection.test.ts"
-      ]
-    },
-    {
-      "label": "undo after redo forgets the caret rule",
-      "file": "src/adapters/collab/undo-executor.ts",
-      "find": "typing: null, ...record.caretText ? { caretText: record.caretText } : {} } };",
-      "replace": "typing: null } };",
-      "tests": [
-        "tests/collab/undo-selection.test.ts",
-        "tests/features/undo-selection.test.ts"
-      ]
-    },
-    {
-      "label": "a merged typing group forgets the caret rule",
-      "file": "src/core/collab/undo-record.ts",
-      "find": ",\n    ...first.caretText ? { caretText: first.caretText } : {} } : null;",
-      "replace": " } : null;",
-      "tests": [
-        "tests/collab/undo-selection.test.ts",
-        "tests/features/undo-selection.test.ts"
-      ]
-    },
-    {
-      "label": "the caret ignores marks",
-      "file": "src/adapters/collab/undo-executor.ts",
-      "find": " && before.marks[a.length - 1 - index] === shown.marks[b.length - 1 - index]",
-      "replace": "",
-      "tests": [
-        "tests/collab/undo-selection.test.ts",
-        "tests/features/undo-selection.test.ts"
+        "src/test/undo-caret-parity.test.mjs"
       ]
     }
   ]
