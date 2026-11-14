@@ -400,7 +400,12 @@ Assumed rules, for the plan review (numbers as in the lane's report on #1414):
   is not an insertion: emptying a name and then pasting a new one ends the hold
   with the report, while selecting the name and pasting over it replaces it. A
   removal of the heading by someone else waits behind the hold and lands once it
-  ends. A composition records
+  ends. A key held down to clear the name repeats on the emptied heading: Edge
+  sends each repeat as a `keydown` with `repeat` set, then its `beforeinput`, and
+  one `keyup` at release. While a heading is held, the binding prevents a repeated
+  `keydown`, so neither it nor the `beforeinput` it would cause ends the hold or
+  reports; a fresh press still ends it. A repeat always repeats the last fresh
+  press, and a fresh press made while held ends the hold itself. A composition records
   at `compositionstart` whether it began in a heading held empty; cancelling it
   then puts the name back with the one report, whatever text the cancel leaves.
   A composition that began elsewhere and is cancelled is a plain cancel.
@@ -458,7 +463,9 @@ the plan review:
   so a key pressed while the
   name is held that is not a bare modifier (Shift, Control, Alt, Meta, AltGraph,
   CapsLock, a dead key) or a composition key ends the hold at its `keyup` if
-  nothing inserted by then; a hold already ended does not report again. A letter,
+  nothing inserted by then; a hold already ended does not report again. A repeat
+  of a key held down to clear the name is prevented and is not a key press, as
+  in the Writer, so releasing it keeps the hold. A letter,
   with or without Shift or after a dead key, and a committed composition replace
   the name once. Paste is not an insertion: emptying a name and then pasting a new
   one gives the report, while selecting the name and pasting is refused as any

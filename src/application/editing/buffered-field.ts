@@ -18,13 +18,19 @@ export interface BufferedFieldEvent {
   readonly preventDefault: () => void;
 }
 
+export interface BufferedFieldKey extends BufferedFieldEvent {
+  readonly repeat: boolean;
+  readonly isComposing: boolean;
+  readonly keyCode: number;
+}
+
 export interface BufferedFieldBinding {
   readonly native: (event: BufferedFieldEvent, dispatch: () => void) => void;
   readonly beforeInput: (event: BufferedFieldEvent & { readonly inputType: string; readonly isComposing: boolean; readonly data?: string | null },
     range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
   readonly start: (event: BufferedFieldEvent, range: FlowRange | null) => void;
-  readonly keydown: (event: { readonly isComposing: boolean; readonly keyCode: number }) => void;
+  readonly keydown: (event: BufferedFieldKey) => boolean;
   readonly end: (event: { readonly data: string }) => void;
   readonly finish: () => boolean;
   readonly settledFor: (event: BufferedFieldEvent) => boolean;
@@ -268,7 +274,13 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
       if (begin(event, range)) composedFromHold = hold?.reason ?? null;
       surface.composition(true);
     },
-    keydown: event => { if (!event.isComposing && event.keyCode !== 229) { refusedComposition = false; ended = false; } },
+    keydown: event => {
+      if (event.isComposing || event.keyCode === 229) return false;
+      refusedComposition = false; ended = false;
+      // why: a key held down to clear a field repeats on the emptied field; only a fresh press ends the hold it made
+      if (event.repeat && holding()) { event.preventDefault(); return true; }
+      return false;
+    },
     end: event => {
       surface.composition(false); ended = true;
       const heldReason = composedFromHold; composedFromHold = null;
