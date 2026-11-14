@@ -108,6 +108,12 @@ typing verdict, paste limit, stored whitespace, empty hold and caret mapping
 apply. Enter closes over the stored name and focuses the scene-name button.
 Drop and native history remain refused before and after creation.
 
+Before creation, the same ingress hold defers remote delivery during the first
+native edit or composition. It ends after creation has bound the heading, or
+after a cancelled or blank edit. A no-op clipboard event takes no hold. Command
+admission refuses a first composition, and repaint re-homes its form and keeps
+its selection. Cancelling that composition stores nothing and releases the hold.
+
 Assumed rule 99 retains ordinary heading-create concurrency: when two people
 name the same automatic scene, both names survive. The higher writer's heading
 owns the beat; the lower writer's name becomes `scene-with-no-beats` in recovery.

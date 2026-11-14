@@ -3,8 +3,10 @@ import { changeSet } from "../session/change-set.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import type { SharedContentRef } from "../../core/collab/operations.ts";
 import { flowBaseReference } from "../../core/collab/base-reference.ts";
+import type { SharedDocumentSession } from "../session/shared-session.ts";
 
-export interface SharedSceneCreation {
+export interface SharedSceneCreation extends Pick<SharedDocumentSession, "beforeCommand"> {
+  readonly hold: () => () => void;
   readonly create: (firstBeat: string, name: string) => { readonly heading: string | null; readonly outcome: CommandOutcome };
 }
 

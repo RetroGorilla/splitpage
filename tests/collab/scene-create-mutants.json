@@ -1,6 +1,16 @@
 {
   "tests": ["tests/features/rows/scene-create.test.ts"],
   "mutants": [{
+    "label": "the first native name edit never holds incoming changes",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };",
+    "replace": "const hold = (): void => {};"
+  }, {
+    "label": "a local command ignores the first composition",
+    "file": "src/features/rows/scene-controls.ts",
+    "find": "ports.sharedScenes?.beforeCommand(() => creating || finish())",
+    "replace": "undefined"
+  }, {
     "label": "a first composition input creates before compositionend",
     "file": "src/features/rows/scene-controls.ts",
     "find": "if (bound || composing || naming?.line !== made) return;",

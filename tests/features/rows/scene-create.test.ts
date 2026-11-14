@@ -46,6 +46,27 @@ for (const kind of ["automatic", "add"] as const) {
   });
 }
 
+for (const composed of [false, true]) test(`the first ${composed ? "composition" : "key"} holds a concurrent name until its own heading is bound`, async () => {
+  const pages = sceneCreationPages(), { a, b, h } = pages;
+  try {
+    const input = a.open("automatic"); b.open("automatic");
+    const delivery = () => {
+      b.edge.type("B"); h.queue.flush("dup");
+      assert.deepEqual([...collabState(h.a).ingress.holds], ["buffer"]);
+      assert.equal(projectSharedDocumentWithRecovery(h.a).document.sections, undefined);
+      assert.equal(input.isConnected, true);
+    };
+    if (composed) { a.edge.imeSet("N"); delivery(); a.edge.imeCommit("N"); }
+    else a.edge.type("N", delivery);
+    pages.copies("dup", { document: createdDocument([{ id: HB, name: "B", firstSceneId: "R1" }]),
+      recovery: [{ kind: "scene-with-no-beats", heading: { id: HA, name: "N" }, beforeRowId: "R1" }] });
+    a.paint(); b.paint(); await Promise.resolve();
+    assert.deepEqual([input.isConnected, input.value, input.selectionStart, b.input().value, b.input().selectionStart, a.reports, b.reports],
+      [false, "N", 1, "B", 1, [], []]);
+    assert.deepEqual([...collabState(h.a).ingress.holds], []);
+  } finally { pages.close(); }
+});
+
 for (const kind of ["automatic", "add"] as const) for (const order of ["D1", "rev", "dup"] as const) {
   test(`shared ${kind}: neighbouring typing stays in its beat, ${order}`, () => {
     const pages = sceneCreationPages(), { a, h } = pages;
@@ -144,8 +165,8 @@ for (const kind of ["automatic", "add"] as const) for (const order of ["D1", "re
       pages.copies(order, { document: createdDocument([{ id: HB, name: "B", firstSceneId: "R1" }]),
         recovery: [{ kind: "scene-with-no-beats", heading: { id: HA, name: "A" }, beforeRowId: "R1" }] });
       a.paint(); b.paint(); await Promise.resolve();
-      assert.deepEqual([first.isConnected, second.isConnected, second.value, second.selectionStart, a.reports, b.reports, a.recovered, b.recovered],
-        [false, true, "B", 1, [], [], [], []]);
+      assert.deepEqual([first.isConnected, first.value, first.selectionStart, first.selectionEnd, second.isConnected, second.value, second.selectionStart, a.reports, b.reports, a.recovered, b.recovered],
+        [false, "A", 1, 1, true, "B", 1, [], [], [], []]);
       b.edge.type("x");
       pages.copies(order, { document: createdDocument([{ id: HB, name: "Bx", firstSceneId: "R1" }]),
         recovery: [{ kind: "scene-with-no-beats", heading: { id: HA, name: "A" }, beforeRowId: "R1" }] });
@@ -187,6 +208,38 @@ test("shared creation refuses a drop and history before the first name, and a re
     a.edge.enter(); a.doc.getElementById("away")?.focus();
     assert.deepEqual([input.isConnected, input.value, a.a.executed, a.reports.at(-1)], [true, "N", [], { kind: "rejected", reason: "read-only" }]);
     assert.deepEqual(a.standalone, []);
+    pages.copies("dup", { document: createdDocument(), recovery: [] });
+  } finally { pages.close(); }
+});
+
+test("a first composition survives repaint, blocks a local command, and cancellation releases its hold without storing a name", () => {
+  const pages = sceneCreationPages(), { a, h } = pages;
+  try {
+    const input = a.open("automatic"); a.edge.imeSet("N");
+    a.edge.select(0, 1, "backward"); a.paint();
+    assert.deepEqual([input.isConnected, input.value, input.selectionStart, input.selectionEnd, input.selectionDirection, [...collabState(h.a).ingress.holds]],
+      [true, "N", 0, 1, "backward", ["buffer"]]);
+    const command = { name: "other", needs: "edit" as const, plan: () => null };
+    assert.deepEqual(a.a.session.run(command), { kind: "rejected", reason: "buffer-pending" });
+    assert.deepEqual(a.reports, [{ kind: "rejected", reason: "buffer-composition" }]);
+    a.edge.imeCancel(); a.edge.press("Escape");
+    assert.deepEqual([input.isConnected, a.a.executed, [...collabState(h.a).ingress.holds]], [false, [], []]);
+    assert.deepEqual(a.a.session.run(command), { kind: "noop" });
+    pages.copies("dup", { document: createdDocument(), recovery: [] });
+  } finally { pages.close(); }
+});
+
+test("a cancelled first paste releases its temporary hold at keyup, and empty paste or cut takes none", () => {
+  const pages = sceneCreationPages(), { a, h } = pages;
+  try {
+    const input = a.open("automatic");
+    input.addEventListener("beforeinput", event => { event.preventDefault(); }, { once: true });
+    assert.equal(a.edge.paste("N"), false);
+    assert.deepEqual([input.value, a.a.executed, [...collabState(h.a).ingress.holds]], ["", [], []]);
+    const held: string[][] = [];
+    input.addEventListener("beforeinput", () => { held.push([...collabState(h.a).ingress.holds]); });
+    a.edge.paste(""); a.edge.cut();
+    assert.deepEqual([held, a.reports, [...collabState(h.a).ingress.holds]], [[[]], [], []]);
     pages.copies("dup", { document: createdDocument(), recovery: [] });
   } finally { pages.close(); }
 });

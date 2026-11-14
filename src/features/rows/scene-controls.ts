@@ -118,7 +118,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (!shared || sceneId === null) input.maxLength = 200;
     input.setAttribute("aria-label", "Scene name");
     made.append(input);
-    let bound: BufferedInput | null = null;
+    let bound: BufferedInput | null = null, pending: BufferedInput | null = null;
     function settle(focus: boolean): void {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
@@ -148,6 +148,13 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
     if (heading) heading.append(made); else parent.before(made);
     const place = (): void => {
+      if (sceneId === null) {
+        const row = doc.querySelector('#rows .row[data-id="' + cssAttr(beatId) + '"]');
+        const at = heading ? header("")?.querySelector('[role="heading"]') : null;
+        if (at && !at.contains(made)) at.append(made);
+        else if (!heading && row && made.nextElementSibling !== row) row.before(made);
+        return;
+      }
       const at = sceneId !== null ? header(sceneId)?.querySelector('[role="heading"]') : null;
       if (at && !at.contains(made)) at.append(made);
     };
@@ -165,7 +172,28 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     }
     if (shared && sceneId !== null) bind(sceneId);
     if (shared && sceneId === null) {
-      let composing = false;
+      let composing = false, creating = false, release: (() => void) | null = null;
+      let caret: readonly [number | null, number | null, "forward" | "backward" | "none"] | null = null;
+      const end = (): void => { const done = release; release = null; done?.(); };
+      const finish = (): boolean => {
+        if (composing) { shared.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
+        end(); return true;
+      };
+      const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
+      const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish());
+      const stopCheck = shared.beforePaint(() => {
+        if (!composing) end();
+        caret = doc.activeElement === input ? [input.selectionStart, input.selectionEnd, input.selectionDirection ?? "none"] : null;
+      });
+      const stopPainted = shared.onPainted(() => {
+        place();
+        if (caret && input.isConnected) { input.focus({ preventScroll: true }); input.setSelectionRange(...caret); }
+        caret = null;
+      });
+      pending = { held: () => release !== null, finish, dispose: () => {
+        if (!finish()) return false;
+        stopAdmission?.(); stopCheck(); stopPainted(); return true;
+      } };
       const create = (): void => {
         if (bound || composing || naming?.line !== made) return;
         const verdict = unsettledHeading(input.value);
@@ -173,27 +201,39 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
         if (verdict) { shared.report({ kind: "rejected", reason: verdict.reason }); return; }
         const from = input.selectionStart, to = input.selectionEnd;
         shared.shown(() => {
-          const result = ports.sharedScenes?.create(beatId, input.value);
+          creating = true;
+          let result: ReturnType<SharedSceneCreation["create"]> | undefined;
+          try { result = ports.sharedScenes?.create(beatId, input.value); }
+          finally { creating = false; }
           if (!result?.heading) {
             shared.report(result?.outcome ?? { kind: "rejected", reason: NOT_SHARED }); return;
           }
           sceneId = result.heading;
           bind(sceneId);
           naming = { sceneId, beatId, line: made, returnTo, settle, bound };
+          pending?.dispose(); pending = null;
           shared.repaint();
           input.setSelectionRange(from, to);
         });
       };
-      input.addEventListener("compositionstart", () => { composing = true; });
-      input.addEventListener("compositionend", () => { composing = false; create(); });
-      input.addEventListener("input", create);
+      input.addEventListener("compositionstart", () => { if (!bound) { composing = true; hold(); } });
+      input.addEventListener("compositionend", () => { composing = false; create(); end(); });
+      input.addEventListener("input", () => { create(); if (!composing) end(); });
+      for (const type of ["keydown", "keyup", "blur", "pointerdown", "focus", "cut", "paste", "drop"]) {
+        input.addEventListener(type, () => { if (!composing) end(); });
+      }
       input.addEventListener("beforeinput", event => {
-        if (!bound && (event.inputType === "insertFromDrop" || /^history/.test(event.inputType))) {
+        if (bound) return;
+        if (event.inputType === "insertFromDrop" || /^history/.test(event.inputType)) {
           event.preventDefault(); shared.report({ kind: "rejected", reason: "buffer-unsupported-input" });
+          return;
         }
+        if (event.inputType === "insertLineBreak") return;
+        if (input.selectionStart === input.selectionEnd && (event.inputType === "deleteByCut" || event.inputType === "insertFromPaste" && !event.data)) return;
+        hold();
       });
     }
-    naming = { sceneId, beatId, line: made, returnTo, settle, bound };
+    naming = { sceneId, beatId, line: made, returnTo, settle, bound: bound ?? pending };
     animateName(made, false);
     input.focus(); input.select();
   }
