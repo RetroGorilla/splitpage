@@ -146,8 +146,8 @@ for (const surface of SURFACES.filter(entry => entry.name === "rename form" || e
       return owner;
     });
     assert.ok(owner && opened.box);
-    const actions = sharedUndoActions(opened.session, owner), box = opened.box;
-    const writer = bufferedWriter("ab", true, undefined, undefined, { h: opened.h, undo: () => owner!, history: actions });
+    const selectedOwner = owner, actions = sharedUndoActions(opened.session, selectedOwner), box = opened.box;
+    const writer = bufferedWriter("ab", true, undefined, undefined, { h: opened.h, undo: () => selectedOwner, history: actions });
     try {
       opened.typeA();
       writer.surface.paint();
@@ -383,16 +383,16 @@ for (const key of [TITLE_FIELD_KEY, headingFieldKey("H1")]) {
       try {
         const [a, b, c] = peers;
         assert.ok(a && b && c);
-        const order = (["D1", "rev", "dup"] as const)[seed % 3]!;
+        const order = (["D1", "rev", "dup"] as const)[seed % 3]; assert.ok(order);
         const actions = [() => { a.input.focus(); a.edge.select(6); a.edge.type("x"); },
           () => { b.input.focus(); b.edge.select(0); b.edge.paste("Y"); },
           () => { c.input.focus(); c.edge.select(2, 4); c.edge.cut(); }];
-        for (const at of seed & 1 ? [2, 0, 1] : [1, 2, 0]) actions[at]!();
+        for (const at of seed & 1 ? [2, 0, 1] : [1, 2, 0]) { const action = actions[at]; assert.ok(action); action(); }
         assert.deepEqual(peers.map(peer => [peer.input.value, peer.input.selectionStart, peer.input.selectionEnd]), [["abcdefx", 7, 7], ["Yabcdef", 1, 1], ["abef", 2, 2]]);
         h.queue.flush(order); for (const peer of peers) { peer.input.focus(); peer.paint(); }
         assert.deepEqual(peers.map(peer => [peer.input.value, peer.input.selectionStart, peer.input.selectionEnd]), [["Yabefx", 6, 6], ["Yabefx", 1, 1], ["Yabefx", 3, 3]]);
         for (const [at, expected, carets] of [[0, "Yabef", [5, 1, 3]], [1, "abef", [4, 0, 2]], [2, "abcdef", [6, 0, 2]]] as const) {
-          const peer = peers[at]!; peer.input.focus(); peer.edge.undo(null); h.queue.flush(order); for (const peer of peers) { peer.input.focus(); peer.paint(); }
+          const peer = peers[at]; assert.ok(peer); peer.input.focus(); peer.edge.undo(null); h.queue.flush(order); for (const peer of peers) { peer.input.focus(); peer.paint(); }
           assert.deepEqual(peers.map(peer => [peer.input.value, peer.input.selectionStart, peer.input.selectionEnd]), carets.map(caret => [expected, caret, caret]));
           for (const handle of [h.a, h.b, h.c]) assert.equal(field(handle, key), expected);
         }
