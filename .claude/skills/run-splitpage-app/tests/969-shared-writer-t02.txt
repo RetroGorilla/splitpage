@@ -1,0 +1,81 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T02 forward','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'ab','visualText':''}],'comments':[]})],'trace.splitpage'))
+wait F.state().title === 'T02 forward'
+click #btn-write
+wait W.on()
+eval S.enter()
+wait S.read().peer !== null
+expect W.on()
+eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',2,2));true
+ime set c
+eval S.peer.type('r1',0,'X');true
+eval S.peer.release('forward')
+expect text(0) === 'ab'
+ime commit c
+eval JSON.stringify(W.selection())
+expect same()
+expect text(0) === 'Xabc' && beat('r1') === 'Xabc'
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 4
+key ctrl KeyZ
+eval JSON.stringify(W.selection())
+expect text(0) === 'Xab' && beat('r1') === 'Xab'
+expect same()
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 3 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 3
+eval window.projection=S.read().app;S.leave()
+expect S.read().peer === null
+expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T02 duplicate','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'ab','visualText':''}],'comments':[]})],'trace.splitpage'))
+wait F.state().title === 'T02 duplicate'
+click #btn-write
+wait W.on()
+eval S.enter()
+wait S.read().peer !== null
+expect W.on()
+eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',2,2));true
+ime set c
+eval S.peer.type('r1',0,'X');true
+eval S.peer.release('duplicate')
+expect text(0) === 'ab'
+ime commit c
+eval JSON.stringify(W.selection())
+expect same()
+expect text(0) === 'Xabc' && beat('r1') === 'Xabc'
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 4
+key ctrl KeyZ
+eval JSON.stringify(W.selection())
+expect text(0) === 'Xab' && beat('r1') === 'Xab'
+expect same()
+expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 3 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 3
+eval window.projection=S.read().app;S.leave()
+expect S.read().peer === null
+expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T02 boundary','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'ab','visualText':''},{'id':'r2','audioText':'cd','visualText':''}],'comments':[]})],'trace.splitpage'))
+wait F.state().title === 'T02 boundary'
+click #btn-write
+wait W.on()
+eval S.enter()
+wait S.read().peer !== null
+expect W.on()
+eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r2',0,0));true
+ime set Z
+eval S.peer.type('r1',2,'Y');true
+eval S.peer.release('forward')
+expect text(1) === 'cd'
+ime commit Z
+eval JSON.stringify(W.selection())
+expect same()
+expect text(0) === 'abY' && text(1) === 'Zcd' && beat('r1') === 'abY' && beat('r2') === 'Zcd'
+expect W.selection().anchor.rowId === 'r2' && W.selection().anchor.offset === 1 && W.selection().head.rowId === 'r2' && W.selection().head.offset === 1
+key ctrl KeyZ
+eval JSON.stringify(W.selection())
+expect text(0) === 'abY' && text(1) === 'cd' && beat('r2') === 'cd'
+expect same()
+expect W.selection().anchor.rowId === 'r2' && W.selection().anchor.offset === 0 && W.selection().head.rowId === 'r2' && W.selection().head.offset === 0
+eval window.projection=S.read().app;S.leave()
+expect S.read().peer === null
+expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
