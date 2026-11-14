@@ -66,6 +66,8 @@ import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { changes, preferenceValues } from "./ports/preferences.ts";
+import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
+import { sharedSession } from "./session-owner.ts";
 
 const tags = owned<ReturnType<typeof mountTags>>();
 
@@ -74,6 +76,7 @@ const panelState = owned<TagPanelMount>();
 export function mountTagPanelsFeature(): TagPanelMount {
   return panelState.replace(() => {
     const ports: TagPanelPorts = {
+      sharedCommands: sharedCommandGuard(sharedSession, portNotices),
       focus: portFocus, footage: productionFootage,
       beats: { setFilmed: setBeatFilmed, reveal: (id) => { portActions.invoke("reveal-row", "button", id); } },
       view: portView, preferences: { panelGrouping: preferenceValues.panelGrouping }, changes, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
