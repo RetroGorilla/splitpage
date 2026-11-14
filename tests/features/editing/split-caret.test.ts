@@ -65,6 +65,17 @@ for (const [points, expected] of [[[5, 5], [2, 2]], [[6, 4], [3, 1]]] as const) 
 }
 
 for (const field of ["audioText", "visualText"] as const) {
+  test(`rule 89 ${field}: queued caret restoration waits for the paint guard before changing either endpoint`, () => {
+    const p = splitCaretPage("aaaaaa");
+    try {
+      p.select(field, 2, 4); p.defer(); p.remote(field, "insert", 0, 0, "a");
+      assert.deepEqual(p.points(field), [2, 4]);
+      p.flush();
+      assert.deepEqual([p.points(field), p.a.executed, p.reports, p.missing, p.recovered], [[3, 5], [], [], [], []]);
+      p.h.join(); p.h.queue.flush("dup");
+      for (const handle of [p.h.a, p.h.b, p.h.c]) assert.equal(projectSharedDocumentWithRecovery(handle).document.rows[0]?.[field], "aaaaaaa");
+    } finally { p.close(); }
+  });
   test(`rule 89 ${field}: a stale selection snapshot does not take focus back from the title`, () => {
     const p = splitCaretPage();
     try {
