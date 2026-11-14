@@ -1,7 +1,8 @@
 import type { SharedRecordCollection } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
-import { readStoredSharedRecord } from "./record-codec.ts";
+import { readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { isSharedGalleryShown, readSharedStoredPicture } from "./gallery-retirement.ts";
 
 export interface SharedRecordReading { readonly key: string; readonly fields: Readonly<Record<string, unknown>> }
 
@@ -26,11 +27,16 @@ export function readSharedRecords(handle: SharedDocumentHandle, collection: Shar
   return withSharedSnapshot(handle, copy => {
     const root = copy.roots[collection], result: SharedRecordReading[] = [];
     for (const key of [...root.keys()].sort()) {
-      const fields = readStoredSharedRecord(collection, key, root.get(key));
-      if (fields) result.push({ key, fields });
+      const raw = root.get(key), gallery = collection === "gallery" ? readStoredSharedGalleryRecord(key, raw) : null;
+      const fields = gallery ? gallery.fields : readStoredSharedRecord(collection, key, raw);
+      if (fields && !(gallery?.retired && !isSharedGalleryShown(copy.roots, key, raw))) result.push({ key, fields });
     }
     return sortSharedRecordReadings(collection, result);
   });
+}
+
+export function readSharedStoredPictureFields(handle: SharedDocumentHandle, key: string): Readonly<Record<string, unknown>> | null {
+  return withSharedSnapshot(handle, copy => readStoredSharedGalleryRecord(key, readSharedStoredPicture(copy.roots, key))?.fields ?? null);
 }
 
 export function sortSharedRecordReadings(collection: SharedRecordCollection, result: SharedRecordReading[]): SharedRecordReading[] {

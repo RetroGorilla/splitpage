@@ -108,7 +108,7 @@ Not a package 14 duty: the cross-beat composition limit of rule 31 ([stage-2-buf
 | # | Duty | Source | Must be true |
 | --- | --- | --- | --- |
 | D32 | Undo record seam | Found here: section 1, shared undo row | (a) A local shared command runs through `executeSharedCommand` inside `SharedUndo.perform`, once, with a `SharedCommandDescription`: `SharedPlan` gains a label, a selection as anchors and a typing key, since `Plan` carries none of them today. (b) A plan with `undo: false` records nothing. (c) `breakGroup` is called where the standalone owner's `breakCoalescing` is (`src/application/editing/cell-editing.ts:127`, `:136`, `:149`, `:162`; `src/bootstrap/wiring/editor.ts:311`; `src/bootstrap/wiring/ports/editing.ts:30`); `hold` has one standalone trigger, a file save (`src/application/save/file-saving.ts:124`), which is refused while shared, so the shared hold has no trigger and that is recorded. (d) Undo and redo write through `reverseSharedUndoRecord` outside `session.run`, so they first pass the session's `beforeCommand` admission: open typing commits before the undo reads the document. (e) The undo and redo actions reach the shared owner while shared |
-| D33 | A refused undo entry | Correction to rule 39; [stage-2-shared-undo.md](stage-2-shared-undo.md) ("until the wiring decides what to do with a refused entry") | Decided and pinned (Q10) |
+| D33 | A refused undo entry | Correction to rule 39; [stage-2-shared-undo.md](stage-2-shared-undo.md) ("owner rule 71 ... pending in the undo owner's own pull request") | Decided and pinned (Q10) |
 | D34 | Undo on the switch | Plan section 4 ("Undo may reset on restart in v1") | Entering resets the standalone owner and starts an empty shared owner; leaving drops the shared owner. Declared |
 | D35 | Recovery panel | #1414 tracker 11 ("the recovery panel itself (package 14)"); plan section 6 | A feature lists `session.recovery()` by kind, restores (`restore`, person restore) and discards (`sharedRecoveryDiscardOperation`) as local actions with their undo policy (rule 52), and shows nothing in a standalone session or a release build |
 
@@ -255,6 +255,15 @@ Found in the review of #1551, for other cuts:
   "It now has its own version history", which is false while shared.
 - **C5c.** `src/features/tags/production-tags.ts:142` skips registry healing
   when its stamp is refused and then runs `plan.commit()` anyway.
+
+Found in the review of #1559 (C2):
+
+- **C4.** The same shared undo owner goes to the replica (`createSharedReplica(handle,
+  count, undo)`) and to the undo actions (`sharedUndoActions(session, undo)`); the
+  grouping breaks C2 left at the standalone `breakCoalescing` call sites are routed
+  to it; the owner is reset on entering and on leaving.
+- **C6.** The Writer consumes the selection anchors an undo or redo returns
+  (`SharedUndoOutcome.selection`) to put the caret back.
 
 ### Order of leaving
 

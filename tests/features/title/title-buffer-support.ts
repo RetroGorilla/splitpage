@@ -2,6 +2,7 @@ import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
@@ -16,9 +17,10 @@ import { edgeInput } from "../edge-input.ts";
 
 export type TitlePage = ReturnType<typeof sharedTitle>;
 
-export function sharedTitle(title = "Draft", fields: Record<string, unknown> = { titleOrigin: "user" }) {
+export function sharedTitle(title = "Draft", fields: Record<string, unknown> = { titleOrigin: "user" },
+  options: { readonly undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform"> } = {}) {
   const h = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }], { ...fields, title });
-  const a = sharedHarness(adapterReplica(h.a)), { effects, reports, recovered } = fakeWriterBufferEffects();
+  const a = sharedHarness(adapterReplica(h.a, options.undo?.(h))), { effects, reports, recovered } = fakeWriterBufferEffects();
   let serial = 0, depth = 0, repaints = 0, pageTitles = 0;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => ({ id: "native:" + ++serial, by: "Alice" }) });

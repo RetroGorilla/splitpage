@@ -31,6 +31,7 @@ const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   "heading-create": "heading", "heading-finalize": "heading",
   "segment-move": "move refusal",
   "text-restore": "undo", "mark-retract": "undo", "status-retire": "undo", "split-retire": "undo", "split-restore": "undo",
+  "gallery-retire": "undo", "gallery-restore": "undo",
   scalar: "executor", status: "executor"
 };
 
@@ -57,7 +58,7 @@ test("every operation kind has one owner: a family the composition registers, or
   try {
     const registered = Object.keys(registeredSharedOperationHandlers(handle)).sort();
     assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor").map(([kind]) => kind).sort());
-    assert.deepEqual(registered, ["discard", "discard-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
+    assert.deepEqual(registered, ["discard", "discard-retire", "gallery-restore", "gallery-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
       "mark", "mark-retract", "record-create", "record-delete", "record-set", "remove", "restore", "segment-create", "segment-move", "split",
       "split-before", "split-restore", "split-retire", "status-retire", "text-delete", "text-insert", "text-restore"]);
   } finally { destroySharedDocument(handle); }

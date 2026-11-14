@@ -61,6 +61,12 @@ export type SharedUndoPart =
     readonly fields: SharedJsonFields;
   }
   | {
+    readonly kind: "record-retired";
+    readonly target: SharedRecordAddress;
+    readonly fields: SharedJsonFields;
+    readonly retirement: string | null;
+  }
+  | {
     readonly kind: "record-field";
     readonly target: SharedRecordAddress;
     readonly field: string;

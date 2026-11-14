@@ -11,7 +11,7 @@ function writerWithUndo() {
   let serial = 0;
   const page = bufferedWriter("ab", true, undefined, undefined, { undo: h => {
     registerSharedUndoOperationHandlers(h.a);
-    const owner = sharedUndoOwner(h.a, () => ({ id: "undo" + ++serial, by: "Alice" }), () => 0);
+    const owner = sharedUndoOwner(h.a, () => ({ id: "undo" + ++serial, by: "Alice" }), () => 0, error => { throw error; });
     held.owner = owner;
     return owner;
   } });

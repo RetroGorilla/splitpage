@@ -228,6 +228,16 @@ agrees and nothing is lost or doubled. The generator tells this apart from a
 defect: an order a writer saw and its own command changed fails the run; an
 order changed by what arrived from a writer who had not seen it is this limit.
 
+Pictures have their own seeded generator in `undo-gallery.test.ts`: 36
+histories of 20 steps in which Alice adds pictures and undoes and redoes, Bob
+renames pictures his copy holds, Carol removes and restores the beat, and
+messages arrive one at a time, some twice. Each delivery is followed by a check
+that the incremental projection equals a fresh one; at the end every copy and
+a late joiner must read the same. Its table of declared limits,
+`DECLARED_LIMITS`, is empty: no shown picture without a record or record
+without a picture, no picture another writer renamed left hidden, and no
+removal that lists a picture that is not stored.
+
 `redone-mark-reversed` was a limit of the Stage 1 prototype, where formatting
 belonged to the shared library. Here a mark is a record the adapter writes. It
 has one literal test in `limits.test.ts`, on the shared document.
@@ -254,7 +264,7 @@ meanwhile and every copy agrees once both have arrived. Two literal tests in
   `executeSharedOperations` call with the origin `local-undo`, and returns the
   inverse record. `supportsSharedUndoPart` is the owner's `supports` port.
 
-An undo needs five operations a forward command never writes. Each is read by
+An undo needs seven operations a forward command never writes. Each is read by
 `readOperation` like any other and has a handler registered by
 `registerSharedUndoOperationHandlers`:
 
@@ -265,6 +275,8 @@ An undo needs five operations a forward command never writes. Each is read by
 | `status-retire` | `retiredStatus` for the standing events of one value, only while the beat shows that value and retiring changes it |
 | `split-retire` | deletes the boundary atom of one split beat; nothing when it is already gone |
 | `split-restore` | the boundary atom of one split beat again, directly after the deleted one; nothing when it is there |
+| `gallery-retire` | the `retired` key of one picture, holding what the copy saw as it applies ([Pictures](#pictures)) |
+| `gallery-restore` | deletes the `retired` key of one picture; nothing when it is not there |
 
 How the points left open by the model are met:
 
@@ -660,12 +672,119 @@ Declared, not changed here:
   test pins each direction for a picture's caption.
 - A link's `extra` metadata is not written back when the undo restores a link
   that was removed.
-- A visual, and a picture's creation or removal, are parts of a beat. Their
-  undo comes with the structure commands; until then a record of one is
-  refused by name (`undo-unsupported:record-field:visuals`,
-  `undo-unsupported:record-create:gallery`) and nothing is written. The
-  refused entry stays on top of the stack and blocks the entries below it
-  until the wiring decides what to do with a refused entry.
+- A visual is part of a beat. Its undo comes with the structure commands; until
+  then a record of one is refused by name (`undo-unsupported:record-create:visuals`,
+  `undo-unsupported:record-field:visuals`) and nothing is written. The undo owner
+  still keeps a refused entry on top of the stack today; owner rule 71 on the
+  tracking issue changes that to skipping the step with a message, and that
+  change is pending in the undo owner's own pull request.
+
+#### Pictures
+
+A picture added to a beat's gallery, and a picture removed from it, can be
+undone (`undo-gallery.test.ts`). The undo of an added picture does not delete
+its record. It writes `gallery-retire`, which puts a `retired` key in the
+picture's own record holding what the undo saw:
+
+- `observed`: every key of the record and of its nested maps, each with the id
+  of the library item that holds its last write and whether that write was a
+  deletion. The library keeps that id when older items merge into the latest,
+  so every copy and a late joiner compute the same list.
+- `seen`: the keys of the beat's removals the undo's copy held.
+
+A picture is hidden while that key is there, the record still gives the same
+`observed` list, and no removal of its beat outside `seen` lists the picture.
+A rename, a new link or any other write to the picture changes the list, so a
+change another writer made without seeing the undo shows the picture again on
+every copy, in any delivery order. A removal of the beat made without seeing the
+undo lists the picture, which brings it back with the beat; a removal made after
+seeing it does not list it, because the attachment index leaves hidden pictures
+out. A stamp is not written to a picture, and typing in its beat changes neither
+check.
+
+| Part | Its undo | Used up when |
+| --- | --- | --- |
+| `record-create` of a picture | `gallery-retire`: hides the record | the picture is hidden or no longer holds exactly the fields the command wrote, or its beat is removed |
+| `record-retired` | `gallery-restore`: deletes the `retired` key, so the same record with the same content reference shows again | the stored retirement is not the one this undo wrote (its `observed` list is kept in the part), or it no longer holds |
+| `record-delete` of a picture | creates the record with the fields it had | the record is stored, also when it is hidden |
+
+A command is recorded against the stored picture, hidden or not. A change to a
+hidden picture is a `record-field` part with the stored earlier value, never a
+creation, and its undo is the field undo above: the field goes back and the
+picture stays shown, because the change made the retirement no longer hold and
+the add's undo is used up. A redo is bound to the retirement its undo wrote, so
+a later retirement from another device is not taken back by it.
+
+One read decides which pictures a beat shows, in
+`src/adapters/collab/gallery-retirement.ts`, over stored state and over the
+state an operation list plans. A staged write has no library item yet, so the
+`observed` check cannot run on planned state. Instead each operation notes what
+it does to a picture as it is prepared: `gallery-retire` hides it, because its
+observation is taken as it applies; `gallery-restore` and any field write show
+it, because they delete the retirement or change what it observed. A picture
+with no note reads as stored. A removal later in the same list lists the
+pictures that read shows, so one list and the same operations as separate lists
+write the same removal (`undo-gallery.test.ts`, three list forms, and a check at
+the end of every generated history).
+
+| Consumer | Module | Reads |
+| --- | --- | --- |
+| Projection and recovery list | `projection-source.ts` | shown pictures |
+| `readSharedRecords` | `record-reader.ts` | shown pictures; the recorder's stored reading |
+| Attachment index | `structure-index.ts` | shown pictures |
+| Removal preparation | `removal-executor.ts` | the planned read |
+| Retire and restore preparation | `undo-handlers.ts` | notes the planned state; reads the stored record as it applies |
+| Field writes | `record-executor.ts` | notes the planned state |
+| Picture undo and redo | `undo-executor.ts` | shown pictures for the undo, the stored picture for the recorder and the redo's retirement |
+| Split and restore guards | `undo-removal.ts` | shown pictures, without the retirement key |
+| Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
+| Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |
+| Hydration | `hydrate.ts` | writes only |
+| Incremental projection | `incremental-project.ts` | observes changes only |
+| Text targets and scalar fields | `text-target.ts`, `scalar-executor.ts` | other collections only |
+
+The one deliberate exception is identity occupancy: a hidden record is still
+stored, so nothing is created over its key, a removal's undo does not recreate
+it, and a field write addresses it. `tests/adapters/collab/gallery-reads.test.ts`
+scans the adapter folder for direct reads of the stores and fails on a module not
+in this table.
+
+A hand-made `record-create` or `record-set` that names `retired` is refused
+(`invalid-record-field`, `immutable-record-field`).
+
+What garbage collection can and cannot remove: it replaces only the content of
+a deleted item and keeps its id and length, so the id and deletion flag the
+observation lists for each key survive collection, an encoded reload and a late
+joiner. It replaces the items themselves only under a deleted parent, and the
+observation never walks into a deleted nested map; a deleted picture record
+takes its retirement with it. So collection removes only what the observation
+does not read, never an entry it lists.
+
+Cost: the projection reads the beat's removals only for a picture whose stored
+keys include `retired`, so a document where no picture was undone reads nothing
+more. Measured on the reviewer's probe, 100 retired pictures add 100 observation
+checks to a keystroke that also writes the beat's stamp, none to narration-only
+typing, and none when no picture is retired. The cache is left as it is.
+
+What is kept, and for how long: one `retired` key inside the undone picture's
+record. The redo deletes it; it goes with the record when the record is
+deleted. A used-up undo leaves its key in place for as long as the record lives,
+and nothing is written to `meta`.
+
+The choices made here, assumed rules on the tracking issue:
+
+- Only a removal of the picture's beat counts as a change to its beat. Typing,
+  fields, status and joins in the beat do not use the undo up.
+- An undo is used up when its copy shows the beat removed; the picture stays
+  in recovery with the beat.
+- A removal and restore of the beat made without seeing the undo still bring
+  the picture back, although the beat stands again.
+- A hand-made `record-set` on a hidden picture shows it again. The app cannot
+  name a hidden picture.
+- The redo of an undone removal hides the picture rather than deleting it, so
+  the record stays stored.
+- A link's `extra` field is not kept through a re-creation, as a shot's prop
+  rank is not.
 
 ### The generator on the shared document
 
