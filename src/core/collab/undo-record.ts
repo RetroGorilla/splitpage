@@ -141,6 +141,17 @@ export interface SharedCommandDescription {
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
   readonly recorded?: FlowSelectionPair;
+  readonly cells?: readonly SharedRecordedCell[];
+}
+
+export interface SharedRecordedCell {
+  readonly rowId: string;
+  readonly field: string;
+}
+
+export interface SharedRecordedSelection {
+  readonly before: SharedUndoSelection;
+  readonly after: SharedUndoSelection;
 }
 
 export interface SharedUndoRecord {
@@ -148,7 +159,8 @@ export interface SharedUndoRecord {
   readonly parts: readonly SharedUndoPart[];
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
-  readonly recorded?: FlowSelectionPair;
+  readonly recorded?: SharedRecordedSelection;
+  readonly cells?: readonly SharedRecordedCell[];
 }
 
 export function sharedUndoPartName(part: SharedUndoPart): string {
@@ -171,6 +183,12 @@ function sameTarget(a: SharedTextAddress, b: SharedTextAddress): boolean {
   return a.owner === b.owner && a.segment === b.segment && a.field === b.field;
 }
 
+function cellsOf(first: SharedUndoRecord, second: SharedUndoRecord): { readonly cells?: readonly SharedRecordedCell[] } {
+  const cells = [...first.cells ?? []];
+  for (const cell of second.cells ?? []) if (!cells.some(kept => kept.rowId === cell.rowId && kept.field === cell.field)) cells.push(cell);
+  return cells.length ? { cells } : {};
+}
+
 export function mergeSharedUndoRecords(first: SharedUndoRecord, second: SharedUndoRecord): SharedUndoRecord | null {
   const parts: SharedUndoPart[] = [...first.parts];
   for (const part of second.parts) {
@@ -190,5 +208,5 @@ export function mergeSharedUndoRecords(first: SharedUndoRecord, second: SharedUn
   }
   const kept = parts.filter(part => part.kind !== "text" || part.inserted.length > 0 || part.deleted.length > 0);
   return kept.length ? { label: first.label, parts: kept, selection: first.selection, typing: (first.typing ?? "") + (second.typing ?? ""),
-    ...first.recorded ? { recorded: first.recorded } : {} } : null;
+    ...first.recorded ? { recorded: first.recorded } : {}, ...cellsOf(first, second) } : null;
 }

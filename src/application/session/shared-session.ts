@@ -197,7 +197,8 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     try {
       const described = shared.undo === false ? null : shared.description ?? { label: name, selection: null, typing: null };
       // why: standalone keeps the plan's selection with its undo entry; the shared record keeps it for the replay
-      const description = described && plan.selection ? { ...described, recorded: plan.selection } : described;
+      const cells = plan.changes.cells.flatMap(cell => cell.rowId !== null && cell.field !== null ? [{ rowId: cell.rowId, field: cell.field }] : []);
+      const description = described ? { ...described, ...plan.selection ? { recorded: plan.selection } : {}, ...cells.length ? { cells } : {} } : described;
       const result = ports.replica.execute(shared.operations, { base: base, description: description });
       if (!result.ok) return { kind: "rejected", reason: result.reason };
     } catch (error) {

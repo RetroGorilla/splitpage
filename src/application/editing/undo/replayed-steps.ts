@@ -1,30 +1,19 @@
-import type { Step, StepRow } from "../../../core/text/steps.ts";
-import { invertSteps } from "../../../core/text/steps.ts";
-import type { ChangeSet } from "../../session/change-set.ts";
+import type { RowFieldStep, StepRow } from "../../../core/text/steps.ts";
+import type { SharedRecordedCell } from "../../../core/collab/undo-record.ts";
 import type { UndoDirection } from "./undo.ts";
-import { diffStates } from "./history.ts";
 
 export interface ReplayedDocument {
   readonly rows?: readonly Readonly<StepRow>[];
 }
 
-const WRITTEN_ORDER: readonly string[] = Object.freeze(["id", "audioText", "visualText", "imageRef", "status"]);
-
-// why: diffStates follows key order, so projected rows take the field order flow.ts writes
-function written(row: Readonly<StepRow>): StepRow {
-  const keys = [...WRITTEN_ORDER.filter(key => Object.hasOwn(row, key)), ...Object.keys(row).filter(key => !WRITTEN_ORDER.includes(key))];
-  return Object.fromEntries(keys.map(key => [key, row[key]]));
-}
-
-function changedRows(doc: ReplayedDocument, changes: ChangeSet): StepRow[] {
-  const rows = doc.rows ?? [];
-  if (changes.whole || changes.cells.some(cell => cell.rowId === null)) return rows.map(written);
-  const named = new Set<unknown>([...changes.cells.map(cell => cell.rowId), ...changes.rowsInserted, ...changes.rowsRemoved]);
-  return rows.filter(row => named.has(row.id)).map(written);
-}
-
-// why: standalone replays a record's diffStates steps, reversed for undo; the changed rows give the same steps
-export function replayedSteps(before: ReplayedDocument, after: ReplayedDocument, changes: ChangeSet, dir: UndoDirection): Step[] {
-  const was = { rows: changedRows(before, changes) }, now = { rows: changedRows(after, changes) };
-  return dir === "undo" ? invertSteps(diffStates(now, was)) : diffStates(was, now);
+// why: standalone replays the cells its entry wrote, reversed for undo; the record keeps them from commit
+export function replayedSteps(before: ReplayedDocument, after: ReplayedDocument, cells: readonly SharedRecordedCell[], dir: UndoDirection): RowFieldStep[] {
+  const row = (doc: ReplayedDocument, rowId: string) => (doc.rows ?? []).find(item => item.id === rowId);
+  const steps: RowFieldStep[] = [];
+  for (const cell of dir === "undo" ? [...cells].reverse() : cells) {
+    const was = row(before, cell.rowId), now = row(after, cell.rowId);
+    if (!was || !now || was[cell.field] === now[cell.field]) continue;
+    steps.push({ op: "rowField", rowId: cell.rowId, key: cell.field, before: was[cell.field], after: now[cell.field] });
+  }
+  return steps;
 }
