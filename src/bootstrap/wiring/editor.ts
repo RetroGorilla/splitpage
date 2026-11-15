@@ -592,10 +592,10 @@ function replaySharedStep(shared: NonNullable<ReturnType<typeof sharedUndoRoute>
   const before = liveDocument.current();
   const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
   if (!outcome.ok || !outcome.effective) return;
-  const after = liveDocument.current(), parts = sharedSessionParts();
-  const cells = (outcome.cells ?? []).map(cell => parts ? { ...cell, rowId: sharedRowShowing(parts.handle, cell.rowId) } : cell);
+  const after = liveDocument.current(), parts = sharedSessionParts(), replayed = shared.replayed();
+  const cells = (replayed?.cells ?? []).map(cell => parts ? { ...cell, rowId: sharedRowShowing(parts.handle, cell.rowId) } : cell);
   const steps = before && after ? replayedSteps(before, after, cells, dir) : [];
-  const recorded = parts && outcome.recorded ? resolveSharedRecordedSelection(parts.handle, outcome.recorded) : null;
+  const recorded = parts && replayed?.recorded ? resolveSharedRecordedSelection(parts.handle, replayed.recorded) : null;
   if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);
 }
 

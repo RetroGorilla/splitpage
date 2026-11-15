@@ -393,8 +393,8 @@
     {
       "label": "the undo route arrives only after the shared owner is seen",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
-      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
+      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
+      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n"
     },
     {
       "label": "a failed entry resets the standalone undo",
@@ -490,7 +490,7 @@
       "label": "the shared undo looks the row up by the saved address instead of the painted row",
       "file": "src/bootstrap/wiring/editor.ts",
       "find": "replayedSteps(before, after, cells, dir)",
-      "replace": "replayedSteps(before, after, outcome.cells ?? [], dir)",
+      "replace": "replayedSteps(before, after, replayed?.cells ?? [], dir)",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]
