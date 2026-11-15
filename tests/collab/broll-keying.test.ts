@@ -1,12 +1,19 @@
-import { test } from "node:test";
+import "../../src/test/_dom.mjs";
+import { test as nodeTest } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
-import { scriptCellOf } from "../../src/bootstrap/richtext.ts";
+import { fromHtml, scriptCellOf } from "../../src/bootstrap/richtext.ts";
 import { htmlToPlainText } from "../../src/bootstrap/plain-text.ts";
-import { sharedBrollKeyingPorts } from "../../src/bootstrap/wiring/ports/shared-broll-keying.ts";
+import { sharedBrollKeyingPorts, sharedLeftCellKeying } from "../../src/bootstrap/wiring/ports/shared-broll-keying.ts";
 import { sharedAuthorPort } from "../../src/bootstrap/wiring/ports/shared-author.ts";
 import { sharedUndoOwner } from "../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedCommandRefusalNotice } from "../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { sharedCommandRefusalNotice, sharedCommandReport } from "../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { sharedBufferPorts } from "../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { writerVisualBuffer } from "../../src/bootstrap/wiring/ports/writer-visual-buffer.ts";
+import { createFlowVisualBox } from "../../src/features/writer/flow-visual-box.ts";
+import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
+import { beatPos, caretAt } from "../../src/core/flow/flow.ts";
+import type { CommandOutcome } from "../../src/application/session/document-session.ts";
 import { keySharedLeftCell } from "../../src/application/commands/shared-broll-keying.ts";
 import { readSharedRevision, createSharedDocument, destroySharedDocument, applySharedUpdate, encodeSharedState } from "../../src/adapters/collab/document.ts";
 import { createSharedAnchor } from "../../src/adapters/collab/anchors.ts";
@@ -26,7 +33,7 @@ import type { SharedDocumentHandle } from "../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../src/core/collab/base-reference.ts";
 import { adapterReplica, sharedHarness, sharedCommand } from "../application/session/shared-session-support.ts";
 import { operation } from "../adapters/collab/executor-support.ts";
-import { fakeNotices } from "../features/fakes.ts";
+import { fakeNotices, fakeWriterBufferEffects } from "../features/fakes.ts";
 import { agreedRows, deliverAll, findReplicas, sendAs } from "../features/find/shared-replace-support.ts";
 import type { FindOrder } from "../features/find/shared-replace-support.ts";
 import { bufferReaders, bufferStamps } from "./buffer-readers.ts";
@@ -51,13 +58,56 @@ function typedLine(name: string) {
   return set;
 }
 
+(globalThis as unknown as Record<string, unknown>).CSS = window.CSS;
+
+type Surface = "split" | "writer";
+let surface: Surface = "split";
+const teardown: (() => void)[] = [];
+
+function test(name: string, run: () => void): void {
+  for (const each of ["split", "writer"] as const) nodeTest(each === "split" ? name : name + " (Writer leave)", () => {
+    surface = each;
+    try { run(); } finally {
+      surface = "split";
+      for (const close of teardown.splice(0)) close();
+    }
+  });
+}
+
+function writerLeave(handle: SharedDocumentHandle, name: string, harness: ReturnType<typeof sharedHarness>, keying: ReturnType<typeof sharedBrollKeyingPorts>,
+  notices: ReturnType<typeof fakeNotices>, author: ReturnType<typeof sharedAuthorPort>) {
+  const session = harness.session, kinds: CommandOutcome["kind"][] = [], { effects } = fakeWriterBufferEffects(), guard = createPaintGuard();
+  const counted = { read: session.read, run: (command: Parameters<typeof session.run>[0]) => { const outcome = session.run(command); kinds.push(outcome.kind); return outcome; } };
+  const text = sharedBufferPorts(handle, session, { ...effects, readers: bufferReaders, stamps: bufferStamps(name, () => AT),
+    author: () => { const next = author.next(); assert.ok(next); return next; } });
+  const holder = document.body.appendChild(document.createElement("section")), root = holder.appendChild(document.createElement("div"));
+  const doc = () => { const view = session.read(value => value); assert.ok(view); return view; };
+  const forbidden = () => { assert.fail("The shared Writer leave reached a standalone callback"); };
+  const box = createFlowVisualBox({ root, buffer: writerVisualBuffer(text, { document: doc, lifetime: session, decode: fromHtml, storedHtml: html => html, shown: guard.whileShown }),
+    doc, selection: () => null, prepare: range => range, place: () => {}, current: () => true, blocked: () => guard.painting(), plainVisual: () => "", thumbnails: () => "",
+    save: forbidden, input: forbidden, keydown: forbidden, notice: forbidden, undo: forbidden, paste: forbidden,
+    leave: sharedLeftCellKeying(counted, keying, { open: () => true, notify: sharedCommandReport(notices.notices, outcome => { assert.fail(String(outcome.kind)); }) }) });
+  teardown.push(() => { box.dispose(); holder.remove(); });
+  return (rowId = "R1"): CommandOutcome["kind"][] => {
+    kinds.length = 0;
+    if (!session.read(value => !!value?.rows.some(row => row.id === rowId))) return [];
+    box.open(caretAt(beatPos(rowId, 0)));
+    assert.equal(box.element.hidden, false);
+    box.close();
+    assert.equal(box.element.hidden, true);
+    return [...kinds];
+  };
+}
+
 function copy(handle: SharedDocumentHandle, name: string, notices = fakeNotices()) {
   const author = sharedAuthorPort({ handle: () => handle, name: () => name });
   const owner = sharedUndoOwner(handle, () => author.next(), () => 0, error => { throw error; });
   const harness = sharedHarness(adapterReplica(handle, owner), { refused: sharedCommandRefusalNotice(notices.notices) });
   const ports = sharedBrollKeyingPorts(handle, { author: () => author.next(), cells: scriptCellOf, readers: bufferReaders, plainTextOf: htmlToPlainText,
     stamps: bufferStamps(name, () => AT) });
-  return { owner, session: harness.session, notices, harness, ports, leave: (rowId = "R1") => keySharedLeftCell(harness.session, rowId, ports).map(outcome => outcome.kind) };
+  const leave = surface === "writer" ? writerLeave(handle, name, harness, ports, notices, author)
+    : (rowId = "R1") => keySharedLeftCell(harness.session, rowId, ports).map(outcome => outcome.kind);
+  return { owner, session: harness.session, notices, harness, ports, leave };
 }
 
 function shots(handle: SharedDocumentHandle) {

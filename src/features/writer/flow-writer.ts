@@ -330,7 +330,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     },
     ...(visual.settle ? { settle: () => !!visual?.settle?.() && (surface.settle?.() ?? true) } : surface.settle ? { settle: surface.settle } : {}),
     isCurrent,
-    finish: () => { visual?.close(false); return isCurrent() ? surface.finish() : null; },
+    finish: () => { if (visual?.abandon) visual.abandon(); else visual?.close(false); return isCurrent() ? surface.finish() : null; },
     repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
     caret,
     format,

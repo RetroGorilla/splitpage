@@ -46,14 +46,19 @@ export interface FlowVisualBufferControl {
 
 export type FlowVisualBufferMount = (root: HTMLElement, repaint: () => void) => FlowVisualBufferControl;
 
-export function createFlowVisualBox(ports: FlowVisualBoxPorts): ReturnType<typeof standaloneVisualBox> & { readonly settle?: () => boolean } {
+export function createFlowVisualBox(ports: FlowVisualBoxPorts): ReturnType<typeof standaloneVisualBox> & {
+  readonly settle?: () => boolean; readonly abandon?: () => void } {
   return ports.buffer ? bufferedVisualBox(ports, ports.buffer) : standaloneVisualBox(ports);
 }
 
 function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMount) {
-  let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false;
+  let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false, abandoning = false;
+  const abandoned = (close: () => void): void => {
+    abandoning = true;
+    try { close(); } finally { abandoning = false; }
+  };
   const control = standaloneVisualBox({ ...ports,
-    input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,
+    input: () => {}, leave: cell => { if (!abandoning) ports.leave(cell); }, keydown: () => false, beforeWrite: () => null,
     opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.selectionKeep(selection); binding?.painted(); },
     closing: () => { if (binding && !binding.finish()) return false; binding?.selectionEnd(); return true; },
     closed: target => { target.dataset.field = "inactive-visual"; selection = null; binding?.selectionKeep(null); binding?.painted(); },
@@ -103,10 +108,12 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   for (const type of types) box.addEventListener(type, stopped, true);
   const released = (): void => { if (!composing && selection) binding?.selectionEnd(); };
   box.addEventListener("keyup", released);
-  return { ...control, settle: () => binding?.finish() ?? true, dispose: () => {
+  // why: rule 198 on #1414: in a shared session a view switch or teardown commits the box but is not a leave,
+  // so it keys nothing; the standalone box keys on both, as before.
+  return { ...control, settle: () => binding?.finish() ?? true, abandon: () => { abandoned(() => { control.close(false); }); }, dispose: () => {
     if (!binding?.dispose()) return;
     for (const type of types) { box.removeEventListener(type, gate, true); box.removeEventListener(type, stopped, true); }
-    box.removeEventListener("keyup", released); binding = null; control.dispose();
+    box.removeEventListener("keyup", released); binding = null; abandoned(() => { control.dispose(); });
   } };
 }
 
