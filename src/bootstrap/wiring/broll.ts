@@ -117,8 +117,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       rows: portRows,
       records: {
         brollEntries: () => broll.owner()?.brollEntries() ?? [],
-        addBrollProp: (id, name) => broll.owner()?.addBrollProp(id, name) ?? NOTHING_RAN,
-        renameBrollInScript: (entry, name) => broll.owner()?.renameBrollInScript(entry, name) ?? false,
+        renameBrollInScript: (entry, name, quiet) => broll.owner()?.renameBrollInScript(entry, name, quiet) ?? NOTHING_RAN,
         updateBrollBadge: () => broll.owner()?.updateBrollBadge()
       }
     };
