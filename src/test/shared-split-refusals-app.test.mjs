@@ -51,7 +51,8 @@ function select(cell, from, to = from) {
 }
 function snapshot(cell) {
   const s = document.getSelection();
-  return { doc: hook.read(), html: cell.innerHTML, active: document.activeElement,
+  return { doc: hook.read(), encoded: encodeSharedState(sharedSessionParts().handle), updates: hook.peer.appliedUpdates().slice(),
+    html: cell.innerHTML, active: document.activeElement,
     anchor: s.anchorNode, head: s.focusNode, offsets: [s.anchorOffset, s.focusOffset] };
 }
 async function enter(order, mention = false) {
@@ -128,6 +129,8 @@ for (const field of ["audioText", "visualText"]) for (const order of ["forward",
           assert.equal(e.defaultPrevented, true, label);
           assert.deepEqual(warningCalls, [["This is not available in a shared session yet.", "warn"]], label);
           assert.deepEqual(hook.read(), before.doc, label);
+          assert.deepEqual(encodeSharedState(sharedSessionParts().handle), before.encoded, label);
+          assert.deepEqual(hook.peer.appliedUpdates(), before.updates, label);
           assert.equal(cell.innerHTML, before.html, label);
           assert.equal(document.activeElement, before.active, label);
           assert.equal(document.getSelection().anchorNode, before.anchor, label);
@@ -151,13 +154,14 @@ for (const field of ["audioText", "visualText"]) for (const order of ["forward",
     const cell = cellOf(field); select(cell, 3); pending(cell, true);
     hook.peer.hold(); hook.peer.remove("r1"); hook.peer.type("r2", 0, "Z"); hook.peer.release(order);
     assert.equal(currentDocument().rows[0].id, "r1");
+    hook.peer.hold();
     warningCalls.length = 0;
     const count = hook.counters().recovered;
     try {
       cell.dispatchEvent(new window.CompositionEvent("compositionupdate", { bubbles: true, data: "X" }));
       cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "X", isComposing: true }));
       cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "X" }));
-      await tick(); hook.peer.deliver(order);
+      await tick(); assert.equal(hook.peer.deliver("duplicate"), 1);
       assert.equal(hook.counters().recovered, count + 1);
       assert.deepEqual(warningCalls, [["Your writing was kept in recovery.", "warn"]]);
       assert.deepEqual(hook.read().app, hook.read().peer);
