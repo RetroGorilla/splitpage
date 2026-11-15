@@ -38,7 +38,7 @@ export function entrySwitchFixture() {
   setHome("none");
   let serial = 0;
   const standalone = currentCapabilities(), errors: unknown[] = [];
-  const ports: SharedSwitchPorts = { opening: openingStatus, refusal: () => null, settle: () => {}, detach: () => {},
+  const ports: SharedSwitchPorts = { opening: openingStatus, commandRefused: undefined, refusal: () => null, settle: () => {}, detach: () => {},
     bindings: { enter: () => {}, settle: () => null, leave: () => {} }, common: standalone, standalone,
     migrate: migrateRows, docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Editor",
     structure: { cells: fromHtml }, timers: fakeClock(), now: () => 0, report: error => { errors.push(error); } };

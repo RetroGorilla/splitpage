@@ -78,7 +78,7 @@
     {
       "label": "Writer visual disposal ignores composition",
       "file": "src/features/writer/flow-writer.ts",
-      "find": "if (visual?.settle && !visual.settle()) return;\n      if (surface.settle",
+      "find": "if (visual?.settle && !visual.settle()) return false;\n      if (surface.settle",
       "replace": "if (surface.settle",
       "tests": [
         "tests/features/writer/visual-buffer.test.ts"

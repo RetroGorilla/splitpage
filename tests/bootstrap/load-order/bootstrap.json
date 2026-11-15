@@ -1,6 +1,8 @@
 {
   "loadOnly": [
     "src/bootstrap/wiring/views.ts",
+    "src/bootstrap/wiring/shared-test.ts",
+    "src/bootstrap/wiring/shared-test-peer.ts",
     "src/bootstrap/wiring/overlay.ts",
     "src/bootstrap/wiring/startup.ts",
     "src/application/screen.ts",
@@ -26,5 +28,5 @@
     "src/bootstrap/wiring/ports/person-colors.ts",
     "src/bootstrap/wiring/ports/rows.ts"
   ],
-  "expectedLoads": 25
+  "expectedLoads": 27
 }
