@@ -375,8 +375,20 @@
     {
       "label": "a blur in tag notes does not retry a refused write",
       "file": "src/features/tags/mount.ts",
-      "find": "if (box.value !== box.defaultValue) ports.setTagNotes(box.getAttribute(\"data-key\"), box.value);",
-      "replace": "if (!box) ports.setTagNotes(box.getAttribute(\"data-key\"), box.value);"
+      "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
+      "replace": "if (!box) ports.setTagNotes("
+    },
+    {
+      "label": "standalone, a blur in tag notes writes what its typing did not",
+      "file": "src/features/tags/mount.ts",
+      "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
+      "replace": "if (box.value !== box.defaultValue) ports.setTagNotes("
+    },
+    {
+      "label": "the tag entity wiring reports no shared session, so a refused notes write is never retried on blur",
+      "file": "src/bootstrap/wiring/production.ts",
+      "find": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: sharedSession",
+      "replace": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: () => false"
     },
     {
       "label": "a tag rename closes its box before the outcome",

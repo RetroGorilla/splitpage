@@ -261,6 +261,7 @@ for (const literal of served) for (const order of ORDERS) test(`C7 record caller
 });
 
 const REFUSED = "This is not available in a shared session yet.";
+const ADMISSION_HELD = "held-for-test";
 const reply = name => {
   openCommentsPanel();
   if (!document.querySelector('.reply-composer[data-for="C1"]')) toggleReplyComposer("C1");
@@ -463,7 +464,7 @@ const HELD_PATHS = [
     setup: () => { $('[data-action="gallery-open"][data-id="r1"][data-slot="1"]').click(); } }
 ];
 
-for (const path of HELD_PATHS) for (const order of ORDERS) test(`C7 record held: ${path.name} refused by a pending buffer writes nothing, keeps text, focus, selection and open state, and warns once, ${order}`, async () => {
+for (const path of HELD_PATHS) for (const order of ORDERS) test(`C7 record held: ${path.name} refused at admission by a session hold writes nothing, keeps text, focus, selection and open state, and warns once, ${order}`, async () => {
   const f = await enter();
   let stop = () => {};
   try {
@@ -471,7 +472,7 @@ for (const path of HELD_PATHS) for (const order of ORDERS) test(`C7 record held:
     const target = $(path.target);
     if (path.how === "click") target.focus();
     const view = focused(), state = path.state();
-    stop = f.parts.session.beforeCommand(() => false);
+    stop = f.parts.session.hold(ADMISSION_HELD);
     const start = refusedOnce(f, order, () => { FIRE[path.how](target); }, () => {
       const now = focused();
       assert.equal(now.active, view.active, "focus stays where it was");
@@ -498,7 +499,7 @@ const HELD_OWNER_CALLS = [
 
 for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record held: the owner call for ${call.name} reports held, writes nothing and warns once, ${order}`, async () => {
   const f = await enter();
-  const stop = f.parts.session.beforeCommand(() => false);
+  const stop = f.parts.session.hold(ADMISSION_HELD);
   try {
     const start = refusedOnce(f, order, call.act);
     stop();
@@ -507,6 +508,12 @@ for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record
     agree(f, withZ(start));
     assert.deepEqual(warnings(), []);
   } finally { stop(); tidy(f); }
+});
+
+for (const call of HELD_OWNER_CALLS) test(`C7 record held: the owner call for ${call.name} refused by a listener that announces it is not announced again`, async () => {
+  const f = await enter();
+  const stop = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return false; });
+  try { refusedOnce(f, "local-first", call.act); } finally { stop(); tidy(f); }
 });
 
 const doc = () => currentDocument();
@@ -558,7 +565,7 @@ for (const path of TYPED_PATHS) for (const order of ORDERS) test(`C7 record held
   try {
     path.setup();
     const typed = boxValue(path.box), before = path.saved(), warned = () => noticeCalls.filter(call => call[1] === "warn");
-    stop = f.parts.session.beforeCommand(() => false);
+    stop = f.parts.session.hold(ADMISSION_HELD);
     noticeCalls.length = 0;
     path.refuse($(path.target));
     assert.deepEqual([warned(), boxValue(path.box), path.saved()], [[[REFUSED, "warn"]], typed, before], "after the refusal");
@@ -610,9 +617,9 @@ const PREP_CHOICES = [
   } }
 ];
 
-for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record held: ${choice.name} refused by a pending buffer shows the refusal once and no success notice, ${order}`, async () => {
+for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record held: ${choice.name} refused at admission by a session hold shows the refusal once and no success notice, ${order}`, async () => {
   const f = await enter();
-  const stop = f.parts.session.beforeCommand(() => false);
+  const stop = f.parts.session.hold(ADMISSION_HELD);
   try {
     openProductionPanel();
     const start = refusedOnce(f, order, choice.act);
@@ -767,7 +774,7 @@ async function refusedNotes() {
   const f = await enter();
   try {
     brollOpen("b1"); typeIn(NOTES, "Wide", [4, 4]);
-    const stop = f.parts.session.beforeCommand(() => false);
+    const stop = f.parts.session.hold(ADMISSION_HELD);
     try { blurOut($(NOTES)); } finally { stop(); }
     assert.equal(shotB1().notes, "");
   } finally { tidy(f); }

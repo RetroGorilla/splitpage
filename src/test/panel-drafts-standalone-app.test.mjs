@@ -92,6 +92,16 @@ for (const row of ROWS) test(`standalone panel drafts as on main: ${row.name}`, 
   } finally { tidy(); }
 });
 
+test("standalone panel drafts as on main: a blur in tag notes stores nothing its typing did not store", () => {
+  open();
+  try {
+    mode("cat"); expand("#production-panel", "prop mug");
+    const box = $(`#production-panel .tag-notes-input${MUG}`);
+    box.focus(); box.value = "Wide"; box.blur();
+    assert.deepEqual(currentDocument().productionTags.map(t => [t.id, t.notes]), [["t_mug", ""], ["t_lamp", ""]]);
+  } finally { tidy(); }
+});
+
 test("standalone panel drafts as on main: a b-roll prop draft in script A does not reach script B's shot with the same id", () => {
   open("Script A", "City");
   try {
