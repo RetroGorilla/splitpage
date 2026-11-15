@@ -48,6 +48,27 @@ export function readSharedVisibleUnits(handle: SharedDocumentHandle, target: Sha
   return visible;
 }
 
+// why: a split keeps the new beat in the same text, so a character can now be shown by any beat that text holds.
+export function readSharedSegmentHistories(handle: SharedDocumentHandle, raw: SharedTextAddress): SharedTextHistory[] | null {
+  const own = readSharedTextHistory(handle, raw);
+  if (!own) return null;
+  const prep = createSharedPreparation(handle);
+  let owners: string[];
+  try { owners = sharedTextCommandPlan(prep.view, own.target).sources.filter(source => source.field === own.target.field).map(source => source.owner); }
+  catch (error) {
+    if (error instanceof SharedTextPreparationError) return [own];
+    throw error;
+  } finally { prep.close(); }
+  const found = [own], seen = new Set<string>([own.target.owner]);
+  for (const owner of owners) {
+    if (seen.has(owner)) continue;
+    seen.add(owner);
+    const other = readSharedTextHistory(handle, { ...own.target, owner: owner as SharedContentRef });
+    if (other && other.target.segment === own.target.segment && !found.some(item => item.target.owner === other.target.owner)) found.push(other);
+  }
+  return found;
+}
+
 export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedTextAddress): SharedTextHistory | null {
   const prep = createSharedPreparation(handle);
   try {

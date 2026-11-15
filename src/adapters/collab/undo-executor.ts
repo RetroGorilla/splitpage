@@ -1,6 +1,6 @@
 import type {
   SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
-  SharedTextAddress
+  SharedInlineValue, SharedTextAddress
 } from "../../core/collab/operations.ts";
 import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
@@ -8,7 +8,7 @@ import type { SharedUndoReversal } from "../../application/editing/undo/shared-u
 import { readOperation } from "../../core/collab/read-operation.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedBaseExecutionResult } from "./execute.ts";
-import type { SharedMarkGroup } from "./mark-record.ts";
+import type { SharedMarkGroup, SharedTextIdentity } from "./mark-record.ts";
 import type { SharedHistoryUnit, SharedTextHistory } from "./text-history.ts";
 import { executeSharedOperations } from "./execute.ts";
 import { collabState, sharedWriteFrame } from "./state.ts";
@@ -18,7 +18,7 @@ import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
 import { anchorSharedRecordedSide } from "./recorded-selection.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
-import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
+import { readSharedSegmentHistories, readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
 import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
 import { createSharedPreparation } from "./prepare.ts";
@@ -147,6 +147,12 @@ function historyOf(handle: SharedDocumentHandle, target: SharedTextAddress): Sha
   return history;
 }
 
+function segmentHistoriesOf(handle: SharedDocumentHandle, target: SharedTextAddress): SharedTextHistory[] {
+  const histories = readSharedSegmentHistories(handle, target);
+  if (!histories?.length) throw new SharedUndoRefusal("missing-target");
+  return histories;
+}
+
 function fieldNow(handle: SharedDocumentHandle, part: Extract<SharedUndoPart, { kind: "scalar" }>): SharedFieldValue {
   const record = scalarTarget(handle, part.target);
   if (!record) throw new SharedUndoRefusal("missing-target");
@@ -206,29 +212,36 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       return { inverse: () => ({ effective: true, part: { ...part, retired: !part.retired } }) };
     }
     case "text": {
-      const history = historyOf(handle, part.target), removed: SharedHistoryUnit[] = [];
+      const histories = segmentHistoriesOf(handle, part.target), history = histories[0] as SharedTextHistory;
+      const shown = (unit: SharedTextIdentity) => histories.flatMap(beat => { const live = beat.live(beat.follow(unit)); return live ? [{ beat, live }] : []; })[0] ?? null;
+      const removed = new Map<SharedTextHistory, SharedHistoryUnit[]>();
       for (const identity of part.inserted) {
-        const unit = readSharedAnchorUnit(identity), live = unit && history.live(history.follow(unit));
-        if (live && !removed.includes(live)) removed.push(live);
+        const unit = readSharedAnchorUnit(identity), found = unit && shown(unit), held = found ? removed.get(found.beat) ?? [] : [];
+        if (found && !held.includes(found.live)) removed.set(found.beat, [...held, found.live]);
       }
-      const restores = part.deleted.flatMap(unit => {
+      const restores = new Map<SharedTextHistory, { original: SharedTextIdentity; unit: SharedContentRef; left: SharedContentRef | null; value: SharedInlineValue; marks: readonly SharedContentRef[] }[]>();
+      for (const unit of part.deleted) {
         const original = readSharedAnchorUnit(unit.identity);
-        if (!original || original.after || !history.known(original) || history.live(original) || history.back(original)) return [];
-        return [{ original, unit: unit.identity, left: history.left(original)?.identity ?? null, value: unit.value, marks: history.shown(original) }];
-      }).sort((a, b) => history.order(a.original) - history.order(b.original));
-      const restore = restores.length ? author() : null;
+        if (!original || original.after || !history.known(original) || histories.some(beat => beat.live(original) || beat.back(original))) continue;
+        // why: a restored character sits beside its deleted original, so it goes in the beat of the character before it.
+        const left = histories.flatMap(beat => { const found = beat.left(original); return found ? [{ beat, found }] : []; })
+          .sort((a, b) => history.order(b.found.unit) - history.order(a.found.unit))[0], beat = left?.beat ?? history;
+        restores.set(beat, [...restores.get(beat) ?? [], { original, unit: unit.identity, left: left?.found.identity ?? null, value: unit.value, marks: history.shown(original) }]);
+      }
+      const restoring = [...restores].map(([beat, units]) => ({ beat, id: author(), units: units.sort((a, b) => history.order(a.original) - history.order(b.original)) }));
       // why: a restored character is placed after a visible neighbour, so it is written before this undo deletes any.
-      if (restore) operations.push(operationOf({ kind: "text-restore", ...restore, target: history.target, units: restores.map(({ unit, left, value, marks }) => ({ unit, left, value, marks })) }));
-      if (removed.length) operations.push(operationOf({ kind: "text-delete", ...author(), target: history.target, observed: removed.map(unit => unit.identity) }));
+      for (const { beat, id, units } of restoring) operations.push(operationOf({ kind: "text-restore", ...id, target: beat.target, units: units.map(({ unit, left, value, marks }) => ({ unit, left, value, marks })) }));
+      for (const [beat, units] of removed) operations.push(operationOf({ kind: "text-delete", ...author(), target: beat.target, observed: units.map(unit => unit.identity) }));
       return { inverse: after => {
-        const now = after(part.target), inserted = restore && now ? now.records.flatMap(item => {
-          if (item.record.type !== "birth" || !namedBy(item.record.operation, "text-restore", restore.id) || !readSharedTextRestoreOperation(item.record.operation)) return [];
+        const beats = histories.flatMap(beat => { const now = after(beat.target); return now ? [now] : []; });
+        const inserted = beats.flatMap(now => now.records.flatMap(item => {
+          if (item.record.type !== "birth" || !restoring.some(({ id }) => namedBy(item.record.operation, "text-restore", id.id)) || !readSharedTextRestoreOperation(item.record.operation)) return [];
           // why: one restored value can be two units; the inverse names every unit the restore wrote.
           const { client, clock, length } = item.record.born;
           return Array.from({ length }, (_, unit) => now.live({ client, clock: clock + unit })).filter(unit => unit !== null);
-        }).sort((a, b) => a.index - b.index).map(unit => unit.identity) : [];
-        removed.sort((a, b) => a.index - b.index);
-        return { effective: removed.length + inserted.length > 0, part: { kind: "text", target: part.target, inserted, deleted: undoUnits(removed) } };
+        })).sort((a, b) => history.order(a.unit) - history.order(b.unit)).map(unit => unit.identity);
+        const deleted = [...removed.values()].flat().sort((a, b) => history.order(a.unit) - history.order(b.unit));
+        return { effective: deleted.length + inserted.length > 0, part: { kind: "text", target: part.target, inserted, deleted: undoUnits(deleted) } };
       } };
     }
     case "mark-add": {
