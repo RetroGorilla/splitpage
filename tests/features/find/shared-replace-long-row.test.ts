@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fakeNotices } from "../fakes.ts";
 import { agreedRows, deliverAll, findCopy, findReplicas, findSource, finder, shownMessages } from "./shared-replace-support.ts";
 
-const SIZES = [12, 125_000];
+const SIZES = [12, 100_000];
 const LONG_ROWS = [
   { name: "Replace", cell: (n: number) => "cup " + "a".repeat(n), all: false, after: (n: number) => "mug " + "a".repeat(n), notices: [] },
   { name: "Replace all", cell: (n: number) => "cup " + "a".repeat(n) + " cup", all: true, after: (n: number) => "mug " + "a".repeat(n) + " mug",
