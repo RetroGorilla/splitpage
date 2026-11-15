@@ -1,13 +1,30 @@
+import * as Y from "yjs";
 import type { SharedBrollLineKey } from "../../core/collab/broll-keying.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabProjectedVisualTargets } from "./painted-visual-targets.ts";
 import { readSharedTextHistory } from "./text-history.ts";
 import { collabState } from "./state.ts";
-import { readStoredRecordDeletion } from "./record-deletion.ts";
+import { SHARED_RECORD_DELETION_FIELD, readStoredRecordDeletion, sharedRecordDeletionStoreView, sharedRecordStatusObservation } from "./record-deletion.ts";
 
 export function sharedBrollShotRemoved(handle: SharedDocumentHandle, id: string): boolean {
   return readStoredRecordDeletion(collabState(handle).roots.shots.get(id)) !== null;
+}
+
+const UNMADE_SHOT_FIELDS: ReadonlySet<string> = Object.freeze(new Set(["rank", "extra", SHARED_RECORD_DELETION_FIELD]));
+
+// why: rule 196 on #1414: cleanup may run on a copy that never held the creation's fields, so a shot is untouched only
+// while each stored field is its creator's first write, with no prop entry and no standing status since.
+export function sharedBrollShotUntouched(handle: SharedDocumentHandle, id: string): boolean {
+  const { roots } = collabState(handle), shot: unknown = roots.shots.get(id);
+  if (!(shot instanceof Y.Map) || !shot._item) return false;
+  const creator = shot._item.id.client;
+  for (const [field, item] of shot._map) {
+    if (item.deleted || item.left !== null || item.id.client !== creator || UNMADE_SHOT_FIELDS.has(field)) return false;
+    const value: unknown = item.content.getContent()[0];
+    if (field === "props" && (!(value instanceof Y.Map) || value._map.size > 0)) return false;
+  }
+  return sharedRecordStatusObservation(sharedRecordDeletionStoreView(roots), "shot", id) === "[]";
 }
 
 // why: rule 196 on #1414: a restored character answers to the one it restored, so a line keyed again after an undo

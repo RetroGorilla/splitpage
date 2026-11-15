@@ -198,7 +198,8 @@ checks as any other:
 
 - `drop-repeated-broll-keys` deletes any key directly after another key, keeping the
   first in text order regardless of id. A dropped id held nowhere else in the script
-  loses its shot through normal record removal, preserving unseen edits in recovery.
+  loses its shot through normal record removal, but only while the shot is untouched
+  since it was made (`sharedBrollShotUntouched` in `adapters/collab/broll-keying.ts`).
   It has no undo entry and no stamp. A refusal or failure stops the leave there.
 - `key-broll-lines` (`sharedBrollKeying` in `core/collab/broll-keying.ts`) keys each
   named unkeyed line, makes its shot authored by the leaving copy, and stamps the beat. It
@@ -213,9 +214,14 @@ keys nothing. Assumed rules 196 to 199:
 
 - **196:** two copies leaving one line at once store one shot under one id. The text
   shows two keys side by side until any copy next leaves that cell. That leave drops
-  the later key in text order, removing its unheld shot if it has one. Both keying
-  undos are used up after another copy contributed a key, even after cleanup.
-  Two real lines with equal text keep their keys and shots.
+  the later key in text order. It removes that key's shot only when no key holds its
+  id and, as far as the cleaning copy has seen, nobody changed the shot after it was
+  made: no field written again, no prop, no status. A changed shot stays in the list
+  without a key, as standalone shows a shot whose line is gone ("The line this came
+  from is no longer in the script"), and nothing goes to recovery. An edit that races
+  the cleanup unseen follows rule 171: the removal stands and the edit is kept in one
+  recovery entry. Both keying undos are used up after another copy contributed a key,
+  even after cleanup. Two real lines with equal text keep their keys and shots.
 - **197:** text another copy types into the line meanwhile stays after the key, and
   the shot keeps the name the leaving copy saw.
 - **198:** a leave caused by session end, row removal or teardown keys nothing.

@@ -1,4 +1,4 @@
-import { sharedBrollLineKeys, sharedBrollShotRemoved } from "../../../adapters/collab/broll-keying.ts";
+import { sharedBrollLineKeys, sharedBrollShotRemoved, sharedBrollShotUntouched } from "../../../adapters/collab/broll-keying.ts";
 import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
 import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import type { SharedBrollKeyingPorts } from "../../../application/commands/shared-broll-keying.ts";
@@ -13,6 +13,7 @@ export function sharedBrollKeyingPorts(handle: SharedDocumentHandle, source: Pic
     readers: source.readers,
     plainTextOf: source.plainTextOf,
     lineKeys: rowId => sharedBrollLineKeys(handle, rowId),
-    shotRemoved: id => sharedBrollShotRemoved(handle, id)
+    shotRemoved: id => sharedBrollShotRemoved(handle, id),
+    shotUntouched: id => sharedBrollShotUntouched(handle, id)
   };
 }

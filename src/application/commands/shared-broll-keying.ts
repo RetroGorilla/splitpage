@@ -15,6 +15,7 @@ export interface SharedBrollKeyingPorts {
   readonly plainTextOf: FieldText;
   readonly lineKeys: (rowId: string) => SharedBrollLineKey | null;
   readonly shotRemoved: (id: string) => boolean;
+  readonly shotUntouched: (id: string) => boolean;
 }
 
 export const SHARED_BROLL_KEYING_LABEL = "key-broll-lines";
@@ -37,7 +38,7 @@ function planned(rowId: string, operations: readonly SharedOperation[], undo: bo
 function repeatsIn(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPorts, author: { readonly id: string; readonly by: string }): readonly SharedOperation[] | null {
   const left = leftCell(doc, rowId, ports);
   return left ? sharedBrollRepeats(left, doc.brollShots.map(shot => shot.id), author,
-    doc.rows.filter(row => row.id !== rowId).map(row => ports.cells(String(row.visualText ?? "")))) : null;
+    doc.rows.filter(row => row.id !== rowId).map(row => ports.cells(String(row.visualText ?? ""))), ports.shotUntouched) : null;
 }
 
 function keyingIn(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPorts, author: { readonly id: string; readonly by: string }): readonly SharedOperation[] | null {

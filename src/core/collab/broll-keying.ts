@@ -82,10 +82,10 @@ export function sharedBrollKeying(left: SharedBrollLeftCell, readers: Production
   return operations.length ? { operations, keys, shots: shots.map(shot => shot.id) } : null;
 }
 
-// why: rule 196 on #1414: of keys that copies put on one line at once, the projection keeps the first in the text;
-// later adjacent keys are deleted regardless of id, so copies cleaning at once delete the same keys.
+// why: rule 196 on #1414: a key right after another is dropped whatever its id, so copies cleaning at once agree; its
+// shot goes only if no key holds it and nobody changed it since it was made, so no one's edit is taken away.
 export function sharedBrollRepeats(left: Pick<SharedBrollLeftCell, "rowId" | "cell">, shotIds: readonly string[], author: { readonly id: string; readonly by: string },
-  otherCells: readonly (readonly Run[])[] = []): readonly SharedOperation[] | null {
+  otherCells: readonly (readonly Run[])[], untouched: (id: string) => boolean): readonly SharedOperation[] | null {
   const units = explode(left.cell), shots = new Set(shotIds), splices: SharedCellSplice[] = [];
   for (let at = 1; at < units.length; at++) {
     const key = units[at - 1]?.atom, repeat = units[at]?.atom;
@@ -103,7 +103,7 @@ export function sharedBrollRepeats(left: Pick<SharedBrollLeftCell, "rowId" | "ce
   const kept = units.filter((_, index) => !removed.has(index));
   const held = new Set([...kept, ...otherCells.flatMap(cell => explode(cell))].flatMap(unit => unit.atom?.atom === "broll" ? [unit.atom.id] : []));
   const dropped = new Set(splices.flatMap(item => { const atom = units[item.from]?.atom; return atom?.atom === "broll" ? [atom.id] : []; }));
-  for (const id of dropped) if (shots.has(id) && !held.has(id)) operations.push({ kind: "record-delete", id: (author.id + ":drop-shot:" + operations.length) as SharedContentRef,
+  for (const id of dropped) if (shots.has(id) && !held.has(id) && untouched(id)) operations.push({ kind: "record-delete", id: (author.id + ":drop-shot:" + operations.length) as SharedContentRef,
     by: author.by, target: { collection: "shots", record: id as SharedContentRef } });
   return operations;
 }

@@ -20,6 +20,7 @@ import { sharedStructurePorts } from "../../src/bootstrap/wiring/ports/shared-va
 import { deleteBeatCommand } from "../../src/application/commands/rows.ts";
 import type { SharedTextAddress } from "../../src/core/collab/operations.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
+import { executeSharedOperations } from "../../src/adapters/collab/execute.ts";
 import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
 import type { SharedDocumentHandle } from "../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../src/core/collab/base-reference.ts";
@@ -286,6 +287,13 @@ function usedUp(a: ReturnType<typeof copy>, set: ReturnType<typeof findReplicas>
   agreedShots(set);
 }
 
+function shotEdit(change: "field" | "status" | "prop", id: string, by: string): unknown {
+  const target = { collection: "shots", record: id };
+  return change === "field" ? { kind: "record-set", id: "shot-notes", by, target, field: "notes", value: "handheld" }
+    : change === "status" ? { kind: "status", id: "shot-status", by, target: { scope: "shot", record: id }, value: "shot", parents: [] }
+      : { kind: "record-set", id: "shot-prop", by, target, field: "props", value: [{ id: "p_mug", name: "Mug" }] };
+}
+
 const ATOMS: readonly Run[] = [
   { atom: "image", ref: { sha256: "a".repeat(64), mime: "image/png", width: 1, height: 1 }, text: "", marks: {} },
   { atom: "video", href: "https://example.com/clip.mp4", host: "example.com", text: "", marks: {} },
@@ -329,6 +337,39 @@ for (const order of ORDERS) {
       assert.deepEqual([a.owner.sizes(), b.owner.sizes()], [{ undo: 1, redo: 0, dropped: 0 }, { undo: 1, redo: 0, dropped: 0 }]);
     } finally { a.session.dispose(); b.session.dispose(); set.close(); }
   });
+
+  for (const change of ["none", "field", "status", "prop"] as const) for (const editor of change === "none" ? ["nobody"] as const : ["keyer", "other"] as const) {
+    for (const cleaner of ["keyer", "other"] as const) test(`rule 196: a dropped repeat's shot changed after it was made stays without a key; an untouched one goes: ${change} by ${editor}, cleaned by ${cleaner}: ${order}`, () => {
+      const set = writtenCell("B-roll: Close up"), a = copy(set.a, "Alice"), b = copy(set.b, "Bob");
+      try {
+        a.leave();
+        sendAs(set.b, { kind: "text-delete", id: "first-gone", by: "Bob", target: TARGET, observed: [flowBaseReference("R1", "visualText", 0, 1)] });
+        insertAt(set.b, 0, "B", "first-back");
+        b.leave(); deliverAll(set.queue, order);
+        const [kept, later] = explode(scriptCellOf(String(visual(set, "different ids", order)))).flatMap(unit => unit.atom?.atom === "broll" ? [unit.atom.id] : []);
+        assert.ok(kept && later && kept !== later);
+        const made = (who: typeof a) => who.harness.executed.some(entry => entry.operations.some(item => item.kind === "record-create" && item.target.record === later));
+        const keyer = made(a) ? { copy: a, handle: set.a, name: "Alice" } : { copy: b, handle: set.b, name: "Bob" };
+        const other = keyer.copy === a ? { copy: b, handle: set.b, name: "Bob" } : { copy: a, handle: set.a, name: "Alice" };
+        assert.equal(made(other.copy), false);
+        if (change !== "none") {
+          const by = editor === "keyer" ? keyer : other;
+          sendAs(by.handle, shotEdit(change, later, by.name)); deliverAll(set.queue, order);
+        }
+        const before = agreedShots(set).find(shot => shot.id === later); assert.ok(before);
+        assert.deepEqual((cleaner === "keyer" ? keyer : other).copy.leave(), ["applied"]); deliverAll(set.queue, order);
+        assert.equal(visual(set, "repeat dropped", order), KEY(kept) + " Close up");
+        const after = agreedShots(set);
+        assert.deepEqual(after.map(shot => shot.id).sort(), (change === "none" ? [kept] : [kept, later]).sort());
+        if (change !== "none") assert.deepEqual(after.find(shot => shot.id === later), before);
+        assert.doesNotMatch(JSON.stringify(projectSharedDocumentWithRecovery(set.a).recovery), new RegExp(later));
+        if (change === "none") {
+          const refused = executeSharedOperations(set.b, [operation(shotEdit("field", later, "Bob"))], { base: readSharedRevision(set.b) });
+          assert.equal(refused.ok, false);
+        }
+      } finally { a.session.dispose(); b.session.dispose(); set.close(); }
+    });
+  }
 
   test(`nameless marker waits for a name; an existing named key without a record is repaired by the leaving copy: ${order}`, () => {
     for (const keyed of [false, true]) {

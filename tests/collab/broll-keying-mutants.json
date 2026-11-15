@@ -15,6 +15,10 @@
     {"label":"adjacent keys with different ids are kept","file":"src/core/collab/broll-keying.ts","find":"if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\") continue;","replace":"if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\" || repeat.id !== key.id && !repeat.id.startsWith(\"broll_\")) continue;"},
     {"label":"a nameless marker is keyed","file":"src/core/collab/broll-keying.ts","find":"if (item.found.marker.key || !named.has(item.found.line.start)) return [];","replace":"if (item.found.marker.key) return [];"},
     {"label":"undo runs after another copy edited the keyed line","file":"src/adapters/collab/undo-executor.ts","find":"return !!history && !!unit && same(keyedLineState(history, undoUnits(keyedLine(history, unit.index))), keyedLineState(history, line.units))\n      && keyedContributions(history, unit.index, line.writer) === line.contributions;","replace":"return true;"},
+    {"label":"cleanup removes a changed shot","file":"src/core/collab/broll-keying.ts","find":"if (shots.has(id) && !held.has(id) && untouched(id)) operations.push(","replace":"if (shots.has(id) && !held.has(id)) operations.push("},
+    {"label":"the untouched check forgets a status set on the shot","file":"src/adapters/collab/broll-keying.ts","find":"return sharedRecordStatusObservation(sharedRecordDeletionStoreView(roots), \"shot\", id) === \"[]\";","replace":"return true;"},
+    {"label":"the untouched check forgets a prop added to the shot","file":"src/adapters/collab/broll-keying.ts","find":"if (field === \"props\" && (!(value instanceof Y.Map) || value._map.size > 0)) return false;","replace":""},
+    {"label":"the untouched check forgets a field its creator wrote again","file":"src/adapters/collab/broll-keying.ts","find":"item.deleted || item.left !== null || item.id.client !== creator","replace":"item.deleted || item.id.client !== creator"},
     {"label":"keying runs after a refused cleanup","file":"src/application/commands/shared-broll-keying.ts","find":"if (outcomes.some(outcome => outcome.kind === \"rejected\" || outcome.kind === \"failed\")) return outcomes;","replace":"if (false) return outcomes;"}
   ]
 }
