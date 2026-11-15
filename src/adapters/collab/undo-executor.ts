@@ -263,8 +263,6 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
       } };
     }
     case "scalar": {
-      // why: a scene's first beat can be set but never cleared, so an undo that would clear it is skipped (rule 71).
-      if (part.target.scope === "heading" && part.field === "firstSceneId" && part.prior.clear === true) throw new SharedUndoRefusal("undo-unsupported:scalar:firstSceneId");
       const effective = same(fieldNow(handle, part), part.written);
       // why: the earlier value is written only while the field still holds what the command wrote.
       if (effective) operations.push(operationOf({ kind: "scalar", ...author(), target: part.target, field: part.field, ...part.prior }));
@@ -401,6 +399,10 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   } catch (error) {
     if (error instanceof SharedUndoRefusal) return { ok: false, reason: error.message };
     throw error;
+  }
+  // why: a scene's first beat can be set but never cleared, so an undo that would clear it is skipped (rule 71).
+  if (record.parts.some(part => part.kind === "scalar" && part.target.scope === "heading" && part.field === "firstSceneId" && part.prior.clear === true)) {
+    return { ok: false, reason: "undo-unsupported:scalar:firstSceneId" };
   }
   if (operations.length) {
     const result = executeSharedOperations(handle, operations, { origin: "local-undo" });

@@ -87,8 +87,8 @@
     {
       "label": "rule 208: an undo that would clear a scene's first beat stays stuck instead of skipping",
       "file": "src/adapters/collab/undo-executor.ts",
-      "find": "if (part.target.scope === \"heading\" && part.field === \"firstSceneId\" && part.prior.clear === true) throw new SharedUndoRefusal(\"undo-unsupported:scalar:firstSceneId\");",
-      "replace": ""
+      "find": "part.field === \"firstSceneId\" && part.prior.clear === true)) {",
+      "replace": "part.field === \"firstSceneId\" && part.prior.clear === true && false)) {"
     }
   ]
 }
