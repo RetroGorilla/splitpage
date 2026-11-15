@@ -7,7 +7,7 @@ import type { FlowDoc, FlowOutcome, FlowRange, FlowRow, FlowSelectionPair } from
 import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/edits.ts";
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
-import type { FlowWriter, FlowWriterPorts } from "./ports.ts";
+import type { FlowWriter, FlowWriterPorts, SharedReplay } from "./ports.ts";
 import { flowMatchStart, searchFlow, visualMatchHighlight } from "./flow-find.ts";
 import { replaceFlowMatches } from "../../core/flow/find-replace.ts";
 import { rowSlots } from "../../core/document/gallery.ts";
@@ -23,14 +23,6 @@ import { inheritOpenedTags } from "../common/clipboard-tags.ts";
 const MARK_OF: Readonly<Record<string, MarkName>> = { bold: "b", italic: "i", underline: "u", strikeThrough: "s", highlight: "hl", direction: "dir" };
 const SHOWN_TAGS: Readonly<Record<string, string>> = { bold: "strong", italic: "em", underline: "u", strikeThrough: "s", highlight: "mark", direction: ".stage-dir" };
 const SETTINGS = { enter: "double", tick: "delete", gapTyping: "here", markdown: true } as const;
-
-interface RowStep {
-  readonly op?: string;
-  readonly rowId?: string;
-  readonly key?: string;
-  readonly before?: unknown;
-  readonly after?: unknown;
-}
 
 export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const commands = ports.commands;
@@ -224,16 +216,13 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     replayDir = dir;
   }
 
-  function afterReplay(steps: readonly unknown[]): void {
+  function afterReplay(steps: readonly unknown[], shared?: SharedReplay): void {
     surface.repaint();
-    const recorded = replaying;
+    const recorded = shared ? shared.recorded : replaying, dir = shared ? shared.dir : replayDir;
     replaying = null;
-    if (recorded) {
-      surface.restoreAfterReplay(replayDir === "undo" ? recorded.before ?? recorded.after : recorded.after);
-    } else {
-      const step = (steps as readonly RowStep[]).find(item => item.op === "rowField" && item.key === "audioText");
-      if (step && step.rowId) surface.restoreAfterReplay(caretAt(beatPos(step.rowId, ports.caretAfterStep(step))));
-    }
+    const placed = ports.replayPlacement(recorded, dir, steps);
+    if (placed?.kind === "recorded") surface.restoreAfterReplay(placed.range);
+    else if (placed?.kind === "step") surface.restoreAfterReplay(caretAt(beatPos(placed.step.rowId, ports.caretAfterStep(placed.step))));
     ports.changed();
   }
 

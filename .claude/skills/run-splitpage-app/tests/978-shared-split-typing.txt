@@ -1,0 +1,76 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Split typing',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'World',visualText:'Wide'}],comments:[]})],'split-typing.splitpage'))
+wait F.state().title === 'Shared Split typing'
+eval window.Q=function(id,f){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]')};window.A=function(id,f){var r=S.read().app.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.P=function(id,f){var r=S.read().peer.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.T=function(id,f){return Q(id,f).textContent.replace(/​/g,'').replace(/ /g,' ')};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer)};true
+eval window.at=function(id,f,o){var c=Q(id,f);c.focus();var w=document.createTreeWalker(c,4),n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.C=function(id,f){var c=Q(id,f),s=getSelection();if(!s.rangeCount||!c.contains(s.focusNode))return -1;var r=document.createRange();r.setStart(c,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/​/g,'').length};true
+expect !window.__writerFlowTest.on() && Q('r1','audioText') !== null
+eval S.enter()
+wait S.read().peer !== null
+expect !window.__writerFlowTest.on() && T('r1','audioText') === 'Hello' && T('r1','visualText') === 'Look'
+eval S.peer.hold();at('r1','audioText',5);true
+press x
+expect A('r1','audioText') === 'Hellox' && C('r1','audioText') === 6
+eval window.typed=S.peer.type('r1',0,'Y');true
+expect window.typed.kind === 'applied' && P('r1','audioText') === 'YHello' && A('r1','audioText') === 'Hellox' && S.counters().queued >= 2
+eval window.released=S.peer.release('forward');true
+expect window.released >= 2 && same() && A('r1','audioText') === 'YHellox' && T('r1','audioText') === 'YHellox'
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 7
+sleep 1100
+press z
+eval S.peer.deliver();true
+expect A('r1','audioText') === 'YHelloxz' && same() && C('r1','audioText') === 8
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r1','audioText') === 'YHellox' && same() && T('r1','audioText') === 'YHellox'
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r1','audioText') === 'YHello' && same() && T('r1','audioText') === 'YHello'
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r1','audioText') === 'YHello' && P('r1','audioText') === 'YHello' && same()
+key ctrl+shift KeyZ
+eval S.peer.deliver();true
+expect A('r1','audioText') === 'YHellox' && same()
+eval S.peer.hold();at('r1','visualText',4);true
+press s
+expect A('r1','visualText') === 'Looks' && C('r1','visualText') === 5
+eval window.typed=S.peer.type('r1',0,'B','visualText');true
+expect window.typed.kind === 'applied' && P('r1','visualText') === 'BLook' && A('r1','visualText') === 'Looks'
+eval window.released=S.peer.release('reverse');true
+expect window.released >= 2 && same() && A('r1','visualText') === 'BLooks' && T('r1','visualText') === 'BLooks'
+expect document.activeElement === Q('r1','visualText') && C('r1','visualText') === 6
+sleep 1100
+press !
+eval S.peer.deliver();true
+expect A('r1','visualText') === 'BLooks!' && same()
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r1','visualText') === 'BLooks' && same()
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r1','visualText') === 'BLook' && P('r1','visualText') === 'BLook' && same() && A('r1','audioText') === 'YHellox'
+eval window.applied=S.peer.appliedUpdates().length;S.peer.hold();at('r2','audioText',5);true
+press a
+eval window.typed=S.peer.type('r2',2,'Q');true
+expect A('r2','audioText') === 'Worlda' && P('r2','audioText') === 'WoQrld'
+eval window.released=S.peer.release('duplicate');true
+expect window.released >= 2 && S.peer.appliedUpdates().length - window.applied === 2 * window.released
+expect same() && A('r2','audioText') === 'WoQrlda' && T('r2','audioText') === 'WoQrlda' && C('r2','audioText') === 7
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r2','audioText') === 'WoQrld' && same()
+eval at('r2','visualText',4);true
+ime set k
+eval window.typed=S.peer.type('r2',0,'Z','visualText');window.delivered=S.peer.deliver('forward','app');true
+expect window.delivered === 1 && P('r2','visualText') === 'ZWide' && A('r2','visualText') === 'Wide'
+ime commit k
+expect A('r2','visualText') === 'ZWidek' && T('r2','visualText') === 'ZWidek' && C('r2','visualText') === 6
+eval S.peer.deliver();true
+expect same() && P('r2','visualText') === 'ZWidek'
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r2','visualText') === 'ZWide' && same()
+expect S.counters().recovered === 0 && S.counters().missingBase === 0
+eval window.projection=S.read().app;S.leave()
+expect S.read().peer === null && T('r1','audioText') === 'YHellox' && T('r1','visualText') === 'BLook' && T('r2','audioText') === 'WoQrld' && T('r2','visualText') === 'ZWide'
