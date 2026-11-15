@@ -6,6 +6,7 @@ import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import { createSharedIncrementalProjector } from "./incremental-project.ts";
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { acquireSharedTrialReplica } from "./trial-replica.ts";
 import { timingMarks } from "../../../shared/timing-marks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
@@ -19,6 +20,8 @@ export const REPLICA_DISPOSED = "replica-disposed";
 export function createSharedReplica(handle: SharedDocumentHandle, count?: (work: SharedProjectionWork, key: string) => void,
   undo?: Pick<SharedUndo, "perform">): SharedReplica {
   const projector = createSharedIncrementalProjector(handle, count);
+  let releaseTrial: () => void;
+  try { releaseTrial = acquireSharedTrialReplica(handle); } catch (error) { projector.dispose(); throw error; }
   let disposed = false;
   // why: After a failed publication the pair is the revision being retried and a fresh attempt at its document,
   // never the live revision beside the older document.
@@ -61,6 +64,6 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
       try { return listener(origin, { error }); }
       finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:session-receive:end"); }
     }),
-    dispose: () => { disposed = true; projector.dispose(); }
+    dispose: () => { disposed = true; try { projector.dispose(); } finally { releaseTrial(); } }
   });
 }

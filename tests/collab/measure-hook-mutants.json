@@ -52,8 +52,8 @@
     {
       "label": "an open-gate live apply spans the updates its frame drains",
       "file": "src/adapters/collab/document.ts",
-      "find": "    } else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, \"remote\"));",
-      "replace": "    } else { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { transactCollabState(state, \"remote\", () => Y.applyUpdate(state.doc, update, \"remote\")); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); } }",
+      "find": "        applyAdmittedUpdate(state, update, apply => transactRemoteCollabState(state, apply));",
+      "replace": "        if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { applyAdmittedUpdate(state, update, apply => transactCollabState(state, \"remote\", apply)); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }",
       "tests": ["tests/adapters/collab/timing-marks.test.ts"]
     },
     {
@@ -129,15 +129,15 @@
     {
       "label": "the held copy of a queued update is not marked",
       "file": "src/adapters/collab/document.ts",
-      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n      try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }\n      finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:end\"); }\n",
-      "replace": "      gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength;\n",
+      "find": "        if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n        try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }\n        finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:end\"); }\n",
+      "replace": "        gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength;\n",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
       "label": "the held copy is marked after the copy is made",
       "file": "src/adapters/collab/document.ts",
-      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n      try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }",
-      "replace": "      const copy = Uint8Array.from(update);\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n      try { gate.held.push(copy); gate.heldBytes += update.byteLength; }",
+      "find": "        if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n        try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }",
+      "replace": "        const copy = Uint8Array.from(update);\n        if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n        try { gate.held.push(copy); gate.heldBytes += update.byteLength; }",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
