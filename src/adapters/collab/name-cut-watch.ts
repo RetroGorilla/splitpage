@@ -1,29 +1,29 @@
 import * as Y from "yjs";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { collabState } from "./state.ts";
+import { collabState, guardSharedCallback } from "./state.ts";
 import { collabProjectedTextTarget } from "./text-target.ts";
 import { readSharedOwnHiddenUnits } from "./paint-base.ts";
 
 export function createSharedNameCutWatch(handle: SharedDocumentHandle, names: () => readonly SharedTextAddress[], since: number,
   count?: (address: SharedTextAddress) => void) {
-  const { roots } = collabState(handle);
+  const state = collabState(handle), { roots } = state;
   const texts = new Map<Y.Text, Set<SharedTextAddress>>(), pending = new Set<SharedTextAddress>();
   let structural = true;
-  const changed: Parameters<typeof roots.segments.observeDeep>[0] = events => {
+  const changed: Parameters<typeof roots.segments.observeDeep>[0] = events => guardSharedCallback(state, () => {
     for (const event of events) {
       if (event.target instanceof Y.Text) {
         for (const address of texts.get(event.target) ?? []) pending.add(address);
       } else if (event instanceof Y.YMapEvent && (event.path.length === 0 || event.keysChanged.has("head") || event.keysChanged.has("text"))) structural = true;
     }
-  };
-  const headings = (): void => { structural = true; };
-  const meta: Parameters<typeof roots.meta.observeDeep>[0] = events => {
+  });
+  const headings = (): void => guardSharedCallback(state, () => { structural = true; });
+  const meta: Parameters<typeof roots.meta.observeDeep>[0] = events => guardSharedCallback(state, () => {
     for (const event of events) {
       if (event.target instanceof Y.Text) for (const address of texts.get(event.target) ?? []) pending.add(address);
       else if (event.target === roots.meta && event instanceof Y.YMapEvent && event.keysChanged.has("title")) structural = true;
     }
-  };
+  });
   roots.segments.observeDeep(changed); roots.headings.observeDeep(headings); roots.meta.observeDeep(meta);
   return {
     check() {

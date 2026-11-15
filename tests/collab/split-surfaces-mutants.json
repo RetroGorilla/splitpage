@@ -307,6 +307,34 @@
       "find": "for (const address of texts.get(event.target) ?? []) pending.add(address);\n      } else",
       "replace": "for (const address of []) pending.add(address);\n      } else",
       "tests": ["tests/adapters/collab/name-cut-watch.test.ts"]
+    },
+    {
+      "label": "a shared Writer reopen settles again under the session-switch admission hold",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (sessionEntryRefusal() === SHARED_SWITCHING) return null;\n",
+      "replace": "",
+      "tests": ["src/test/shared-writer-app.test.mjs"]
+    },
+    {
+      "label": "an outside press leaves the pending add-scene name unsettled until a later blur or click",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "    if (pointerAway) naming?.bound?.finish();\n",
+      "replace": "",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "a document with no scenes fails while setting up its hidden-name watch",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "(normalizeScenes(doc?.sections) ?? []).map",
+      "replace": "normalizeScenes(doc?.sections).map",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "the hidden-name heading observer bypasses the shared callback guard",
+      "file": "src/adapters/collab/name-cut-watch.ts",
+      "find": "const headings = (): void => guardSharedCallback(state, () => { structural = true; });",
+      "replace": "const headings = (): void => { structural = true; };",
+      "tests": ["tests/adapters/collab/guarded-subscriptions.test.ts"]
     }
   ]
 }

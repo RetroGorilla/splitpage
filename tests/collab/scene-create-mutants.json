@@ -9,10 +9,10 @@
       "tests": ["tests/features/rows/scene-create.test.ts"]
     },
     {
-      "label": "a repaint keeps an unbound name form below an observed heading",
+      "label": "the unbound form paint listener survives binding and can resurrect the form",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "if (ports.sharedNames && sceneBeforeBeat(state, naming.beatId)) return false;",
-      "replace": "",
+      "find": "stopAdmission?.(); stopAbandon?.(); stopCheck(); stopPainted(); return true;",
+      "replace": "stopAdmission?.(); stopAbandon?.(); stopCheck(); return true;",
       "tests": ["tests/features/rows/scene-create.test.ts"]
     },
     {
@@ -37,10 +37,10 @@
       "tests": ["tests/features/rows/scene-create.test.ts"]
     },
     {
-      "label": "a first composition input creates before compositionend",
+      "label": "the first composition remains uncommitted after compositionend",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "if (bound || composing || naming?.line !== made) return false;",
-      "replace": "if (bound || naming?.line !== made) return false;",
+      "find": "input.addEventListener(\"compositionend\", () => { composing = false; finish(); });",
+      "replace": "input.addEventListener(\"compositionend\", () => { finish(); composing = false; });",
       "tests": ["tests/features/rows/scene-create.test.ts"]
     },
     {
@@ -53,8 +53,8 @@
     {
       "label": "a refused shared creation falls through to the standalone submit",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "if (shared) return;",
-      "replace": "if (false) return false;",
+      "find": "if (!binding.finish()) return;",
+      "replace": "if (!binding.finish()) { save(input.value, focus); return; }",
       "tests": ["tests/features/rows/scene-create.test.ts"]
     },
     {

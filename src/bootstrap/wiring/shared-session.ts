@@ -93,6 +93,8 @@ export function sharedSessionParts(): SharedSessionParts | null {
 }
 
 export function settleSharedSessionSurfaces(): string | null {
+  // why: the switch settles before rebinding; its Writer reopen runs while admission is held
+  if (sessionEntryRefusal() === SHARED_SWITCHING) return null;
   return running?.ports.bindings.settle() ?? null;
 }
 

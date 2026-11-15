@@ -550,7 +550,7 @@
     "file": "src/application/editing/buffered-field-key.ts",
     "find": "units > TITLE_MAX && units > Array.from(stored).length",
     "replace": "units > TITLE_MAX",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
+    "tests": ["tests/application/buffered-field-key.test.ts"]
   }, {
     "label": "a title past the cap is held instead of refused",
     "file": "src/application/editing/buffered-field-key.ts",

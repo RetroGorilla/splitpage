@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
+import { sharedWriterBindings } from "../bootstrap/wiring/shared-writer.ts";
+import { viewFlags } from "../bootstrap/wiring/preferences-owner.ts";
 import { SHARED_SPLIT_SURFACE_NOTICES, SHARED_SPLIT_SURFACE_PENDING, sharedSplitSurfaces } from "../bootstrap/wiring/shared-split-surfaces.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
@@ -81,12 +83,17 @@ function hooked(parts) {
 const split = { enter: parts => realSplit.enter(originals.get(parts) ?? parts), settle: () => realSplit.settle(), leave: () => realSplit.leave(),
   abandon: () => realSplit.abandon(), drop: () => realSplit.drop(), abandonable: () => realSplit.abandonable() };
 const surfaces = sharedSplitSurfaces(split, effects);
+const writing = sharedWriterBindings(effects);
+let withWriter = false;
 const ports = {
   opening: openingStatus,
   refusal: () => null, commandRefused: sharedCommandRefusalNotice(notices), settle: () => { undoOwner().flush(); }, detach: () => {},
   left: landed => { endings.push(landed); },
-  bindings: { enter: parts => surfaces.enter(hooked(parts)), settle: () => surfaces.settle(), leave: () => surfaces.leave(),
-    abandon: () => surfaces.abandon(), drop: () => surfaces.drop() },
+  bindings: { enter: parts => { if (withWriter) writing.enter(parts); surfaces.enter(hooked(parts)); },
+    settle: () => (withWriter ? writing.settle() : null) ?? surfaces.settle(),
+    leave: () => { surfaces.leave(); if (withWriter) writing.leave(); withWriter = false; },
+    abandon: () => { if (withWriter) writing.abandon(); surfaces.abandon(); },
+    drop: () => { if (withWriter) writing.drop(); surfaces.drop(); } },
   common: allowed, standalone: createSessionCapabilities("standalone", allowed), migrate: migrateRows,
   docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Alice", structure: { cells: html => fromHtml(html) },
   report: error => { errors.push(error); }, timers: { now: Date.now, start: (run, ms) => setTimeout(run, ms), stop: clearTimeout }, now: Date.now
@@ -97,9 +104,10 @@ const SOURCE = { schema: 5, title: "Shared Split", paragraphsDecided: true,
   sections: [{ id: "H1", name: "Scene", firstSceneId: "r1" }],
   rows: [{ id: "r1", audioText: "abc", visualText: "Wide for ", status: "todo" }, { id: "r2", audioText: "Other", visualText: "Close", status: "todo" }] };
 
-async function enter(source = SOURCE, adopt = true) {
+async function enter(source = SOURCE, adopt = true, writer = false) {
   reports.length = 0; errors.length = 0; noticeCalls.length = 0; endings.length = 0;
   if (adopt) { writerControls().closeWriter(); adoptReplacement(migrateRows(structuredClone(source))); }
+  withWriter = writer;
   assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts(); assert.ok(parts); assert.equal(screenIsStale(), false);
   const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
@@ -518,7 +526,7 @@ const CONTRACT = [
 ];
 for (const surface of CONTRACT.slice(0, 3)) for (const exit of ["blur", "outside press", "view switch"]) {
   test(`C7 surface contract: ${surface.name}, native with queued peer, ${exit}`, async () => {
-    const f = await enter();
+    const f = await enter(SOURCE, true, exit === "view switch");
     try {
       const input = surface.open();
       surface.native(input, surface.text);
@@ -532,10 +540,19 @@ for (const surface of CONTRACT.slice(0, 3)) for (const exit of ["blur", "outside
       if (exit === "blur") input.blur();
       if (exit === "outside press") {
         document.body.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+        assert.deepEqual(surface.read(currentDocument()), surface.typed, "the outside press itself finishes native text");
+        assert.equal(currentDocument().rows[1].audioText, "ZOther");
         input.blur();
         document.body.click();
       }
-      if (exit === "view switch") writerControls().openWriter();
+      if (exit === "view switch") {
+        let switched = null;
+        const off = viewFlags().onChange(change => {
+          if (change.flag === "writerOpen" && change.value) switched = { value: surface.read(currentDocument()), peer: currentDocument().rows[1].audioText };
+        });
+        try { writerControls().openWriter(); } finally { off(); }
+        assert.deepEqual(switched, { value: surface.typed, peer: "ZOther" }, "settlement precedes the view change");
+      }
       await Promise.resolve();
       assert.deepEqual(surface.read(currentDocument()), surface.typed);
       assert.equal(currentDocument().rows[1].audioText, "ZOther", "the exit finishes before releasing the peer delivery");
@@ -550,6 +567,7 @@ for (const surface of CONTRACT.slice(0, 3)) for (const exit of ["blur", "outside
       })));
       assert.deepEqual(leaveSharedSession(ports), { ok: true });
       assert.equal(surfaces.abandonable(), 0);
+      assert.equal(writing.abandonable(), 0);
       assert.equal(document.querySelector("#rows .section-rename"), null);
     } finally {
       writerControls().closeWriter();

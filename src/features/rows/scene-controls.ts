@@ -146,10 +146,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
       settle(true);
     });
     // why: Removing the focused line blurs before detaching it; only a real focus transfer may save here.
-    input.addEventListener("blur", event => {
-      if (!pointerAway && event.relatedTarget) settle(false);
-      else if (shared) queueMicrotask(() => { if (!pointerAway && !made.contains(doc.activeElement)) settle(false); });
-    });
+    input.addEventListener("blur", event => { if (!pointerAway && event.relatedTarget) settle(false); });
     made.addEventListener("keydown", event => {
       if (naming?.line !== made || event.isComposing) return;
       if (event.key === "Escape") {
@@ -293,6 +290,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
   }
   life.listen(doc, "pointerdown", event => {
     pointerAway = !!naming && !naming.line.contains(event.target);
+    if (pointerAway) naming?.bound?.finish();
   }, true);
   life.listen(doc, "pointercancel", () => { pointerAway = false; naming?.settle(false); });
   life.listen(window, "blur", () => { pointerAway = false; naming?.settle(false); });

@@ -53,7 +53,7 @@ function closeSplitCompletions(): void {
 function watchCuts(parts: SharedSessionParts): () => void {
   const hidden = new Map<string, ReadonlySet<string>>(), since = readSharedOwnClock(parts.handle);
   const watch = createSharedNameCutWatch(parts.handle, () => [TITLE_FIELD_KEY,
-    ...parts.session.read(doc => normalizeScenes(doc?.sections).map(scene => headingFieldKey(scene.id)))].map(key => sharedBufferedTarget(parts.handle, key)), since);
+    ...parts.session.read(doc => (normalizeScenes(doc?.sections) ?? []).map(scene => headingFieldKey(scene.id)))].map(key => sharedBufferedTarget(parts.handle, key)), since);
   function check(key: string, notice: string, units: readonly string[]): void {
     const now: ReadonlySet<string> = new Set(units);
     const before = hidden.get(key);

@@ -59,8 +59,8 @@
     {
       "label": "cancelled key compares its draft with an empty baseline",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "beforeInput = input.value;",
-      "replace": "beforeInput = \"\";",
+        "find": "if (!composing && pending && input.value === beforeInput)",
+        "replace": "if (!composing && pending && input.value === \"\")",
       "tests": ["tests/features/empty-script/guards.test.ts"]
     },
     {
