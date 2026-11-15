@@ -9,6 +9,7 @@ const globalsBefore = new Set(Reflect.ownKeys(globalThis));
 
 const modules: Record<string, Record<string, unknown>> = {
   "collab/base-reference.ts": await import("../../src/core/collab/base-reference.ts"),
+  "collab/broll-keying.ts": await import("../../src/core/collab/broll-keying.ts"),
   "collab/buffer.ts": await import("../../src/core/collab/buffer.ts"),
   "collab/buffer-operations.ts": await import("../../src/core/collab/buffer-operations.ts"),
   "collab/cell-text-operations.ts": await import("../../src/core/collab/cell-text-operations.ts"),

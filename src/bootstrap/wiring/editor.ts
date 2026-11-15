@@ -761,12 +761,12 @@ export const onRootFocusOut = editorBlur(editorFocusPorts);
 
 const editorFocus = owned<{ readonly dispose: () => void }>();
 
-export function mountFocusFeature(sharedSplit = false): { readonly dispose: () => void } {
+export function mountFocusFeature(sharedSplit?: { readonly leftCell: (cell: Element) => void }): { readonly dispose: () => void } {
   return editorFocus.replace(function () {
     const roots = editorRoots();
     const ports = sharedSplit ? { ...editorFocusPorts,
       isScriptCell: (cell: Element) => !cell.closest("#rows") && isScriptCell(cell),
-      blurredCell: (cell: Element) => { if (!cell.closest("#rows")) editorFocusPorts.blurredCell(cell); }
+      blurredCell: (cell: Element) => { if (!cell.closest("#rows")) editorFocusPorts.blurredCell(cell); else sharedSplit.leftCell(cell); }
     } : editorFocusPorts;
     return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports }) };
   });

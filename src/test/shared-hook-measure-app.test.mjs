@@ -225,7 +225,10 @@ function probed(run) {
   for (const [owner, name] of PROBES) {
     const real = owner[name], own = Object.hasOwn(owner, name);
     if (typeof real !== "function" || restore.some(entry => entry.owner === owner && entry.name === name)) continue;
-    owner[name] = function (...args) { now++; return real.apply(this, args); };
+    owner[name] = function (...args) {
+      if (owner !== Date || !/[\\/]jsdom[\\/].*Event-impl\.js/.test(new Error().stack)) now++;
+      return real.apply(this, args);
+    };
     restore.push({ owner, name, undo: () => { if (own) owner[name] = real; else delete owner[name]; } });
   }
   performance.mark = name => { recorded.push({ name, startTime: now }); if (PART_STARTS.has(name)) now++; };
@@ -269,13 +272,15 @@ function splitCell() {
   const range = document.createRange();
   range.selectNodeContents(cell); range.collapse(false);
   window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
-  return { cell, type: data => { press(cell, data, at => {
-    at.deleteContents();
-    const text = document.createTextNode(data);
-    at.insertNode(text);
-    window.getSelection().setBaseAndExtent(text, data.length, text, data.length);
-  }); } };
+  return { cell, type: data => { press(cell, data, inserted(data)); } };
 }
+
+const inserted = data => at => {
+  at.deleteContents();
+  const text = document.createTextNode(data);
+  at.insertNode(text);
+  window.getSelection().setBaseAndExtent(text, data.length, text, data.length);
+};
 
 test("unattributed time: on a clock that only marked stages and one deliberately unmarked listener advance, unattributed is exactly that listener's time", async () => {
   await shared(() => {
@@ -388,6 +393,27 @@ test("unattributed time is zero on a clock that every probed call advances: a ty
     assert.deepEqual(rows(hook.read().app).map(([, text]) => text).filter(text => text !== ""), ["Hello%^", "XYZWorld"], "the typing and the peer update both landed");
     assert.equal(hook.read().app.rows.length, 4, "Ctrl+Enter added a beat");
   });
+});
+
+test("unattributed time is zero when leaving a shared Split visual cell keys its b-roll line, and the keying runs as an input command with its write", async () => {
+  await shared(p => {
+    p.hold();
+    hook.timing(true);
+    writerControls().closeWriter();
+    const cellOf = (rowId, field) => document.querySelector(`#rows .cell-editable[data-id="${rowId}"][data-field="${field}"]`);
+    const visual = cellOf("r1", "visualText"), other = cellOf("r2", "audioText");
+    assert.ok(visual && other);
+    dispatched(() => { visual.focus(); });
+    const first = document.createTreeWalker(visual, window.NodeFilter.SHOW_TEXT).nextNode();
+    window.getSelection().setBaseAndExtent(first, 0, first, 0);
+    for (const character of "B-roll: ") press(visual, character, inserted(character));
+    assert.equal(hook.read().app.rows[0].visualText, "B-roll: Close up");
+    const left = probed(() => { dispatched(() => { other.focus(); }); });
+    assert.equal(left.parts.unattributed, 0, JSON.stringify(left.parts) + " " + left.names.join(" "));
+    const found = spans(left.names.map(name => "measure:" + name)), writes = of(found, "input-write");
+    assert.ok(writes.length >= 1 && writes.every(write => insideOne(write, of(found, "input-command"))), "the keying writes inside its command: " + left.names.join(" "));
+    assert.match(hook.read().app.rows[0].visualText, /class="broll-key"/, "leaving the cell keyed the line");
+  }, [{ id: "r1", audioText: "Hello", visualText: "Close up" }, { id: "r2", audioText: "World", visualText: "" }]);
 });
 
 const STRUCTURE = [
