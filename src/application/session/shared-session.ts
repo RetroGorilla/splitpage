@@ -42,6 +42,8 @@ export interface SharedSessionPorts {
 
 export type SharedAdmissionRefusal = Extract<CommandOutcome, { readonly kind: "rejected" | "failed" }>;
 
+export const SHARED_LISTENER_REFUSAL = "buffer-pending";
+
 export interface SharedDocumentSession extends CommonDocumentSession {
   refuse: (reason: string) => CommandOutcome;
   revision: () => number;
@@ -221,7 +223,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     if (admitting) return null;
     admitting = true;
     try {
-      for (const listener of admissions.slice()) if (!listener()) return { kind: "rejected", reason: "buffer-pending" };
+      for (const listener of admissions.slice()) if (!listener()) return { kind: "rejected", reason: SHARED_LISTENER_REFUSAL };
     } catch (error) { return { kind: "failed", error }; }
     finally { admitting = false; }
     return disposed ? { kind: "rejected", reason: DISPOSED } : null;

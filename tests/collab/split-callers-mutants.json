@@ -1,6 +1,7 @@
 {
   "tests": [
-    "src/test/shared-split-callers-app.test.mjs"
+    "src/test/shared-split-callers-app.test.mjs",
+    "src/test/shared-split-refusals-app.test.mjs"
   ],
   "mutants": [
     {
@@ -164,6 +165,48 @@
       "file": "src/features/clipboard/beat-select.ts",
       "find": "const entry = shared ? null : takeOut(w.ids);",
       "replace": "const entry = shared ? (ports as BeatSelectPorts).undo.last() : takeOut(w.ids);"
+    },
+    {
+      "label": "a listener that refused admission and announced it is announced again by the caller",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": " && outcome.reason !== SHARED_LISTENER_REFUSAL",
+      "replace": ""
+    },
+    {
+      "label": "Ctrl+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "    if (!sharedSessionParts()) cellEditing().sync(cellEl);\n    addRowAndFocus(",
+      "replace": "    cellEditing().sync(cellEl);\n    addRowAndFocus("
+    },
+    {
+      "label": "Alt+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "    if (!sharedSessionParts()) cellEditing().sync(cellEl);\n    splitCellField(cellEl);",
+      "replace": "    cellEditing().sync(cellEl);\n    splitCellField(cellEl);"
+    },
+    {
+      "label": "the split in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);",
+      "replace": "  (ports as BeatPortUse).cells.sync(cellEl);"
+    },
+    {
+      "label": "the beat paste in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "  if (!(ports as BeatSelectPorts).structure.ports()) (ports as BeatSelectPorts).cells.sync(cellEl);",
+      "replace": "  (ports as BeatSelectPorts).cells.sync(cellEl);"
+    },
+    {
+      "label": "Ctrl+Enter and Alt+Enter in a script cell are refused natively instead of reaching their shared commands",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
+      "replace": "key.key === \"Enter\" ||"
+    },
+    {
+      "label": "plain Enter in a script cell is no longer refused natively, so an unserved line break reaches standalone code",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
+      "replace": "key.key === \"Enter\" && false ||"
     }
   ]
 }

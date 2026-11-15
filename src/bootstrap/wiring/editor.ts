@@ -832,7 +832,7 @@ export function refuseSharedSplitNative(event: Event, cell: Element | null): boo
   if (event.type !== "keydown") return false;
   const key = event as KeyboardEvent, mod = key.ctrlKey || key.metaKey;
   if (key.isComposing || key.keyCode === 229) return false;
-  if (key.key === "Enter" || mod && /^(b|i|u)$/i.test(key.key)
+  if (key.key === "Enter" && !mod && !key.altKey || mod && /^(b|i|u)$/i.test(key.key)
     || key.altKey && !mod && (key.key === "ArrowUp" || key.key === "ArrowDown")) return true;
   return key.key === "Tab" && (!!currentWhoList()?.isOpen(cell) || !!currentPlainTags()?.isOpen(cell)
     || shownTagGhost()?.cellEl === cell || shownUntaggedSuggestion()?.cellEl === cell)
@@ -889,7 +889,8 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    cellEditing().sync(cellEl);
+    // why: in a shared session the command's admission settles the cell, and a second settle warns twice
+    if (!sharedSessionParts()) cellEditing().sync(cellEl);
     splitCellField(cellEl);
     return;
   }
@@ -910,7 +911,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    cellEditing().sync(cellEl);
+    if (!sharedSessionParts()) cellEditing().sync(cellEl);
     addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
     return;
   }
