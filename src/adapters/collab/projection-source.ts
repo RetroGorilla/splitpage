@@ -224,18 +224,14 @@ export class SharedProjectionSource {
     const fields = this.keys("beats").map(id => ({ id, fields: this.fields("beat", id), retired: retirements.has(id), hidden: anyHidden && hiddenCreations.has(id) }));
     const records = this.cache.read(["block-records"], fields.flatMap(value => [value.id, value.fields, value.retired, value.hidden]), () => fields.map(({ id, fields, retired, hidden }) =>
       ({ id, valid: fields?.id === id, segment: typeof fields?.segment === "string" ? fields.segment : null, retired, hidden })));
-    const headings = this.hiddenHeadings(hiddenCreations);
+    const beats = anyHidden ? new Set(fields.map(value => value.id)) : null;
+    const headings = beats ? JSON.stringify([...hiddenCreations].filter(id => !beats.has(id)).sort()) : "";
     return this.cache.read(["blocks", String(includeUnits)], [streams, records, headings], () => {
       let index = 0;
       const hidden = new Set([...records.filter(record => record.hidden).map(record => record.id), ...headings ? JSON.parse(headings) as string[] : []]);
       const projected = projectSharedBlocks(streams, records, (parts, build) => this.cache.read(["block-units", String(includeUnits), String(index++)], parts, build));
       return hidden.size ? projected.filter(block => block.id === null || !hidden.has(block.id)) : projected;
     });
-  }
-
-  private hiddenHeadings(hidden: ReadonlySet<string>): string {
-    return hidden.size
-      ? JSON.stringify([...hidden].filter(id => this.inputRoots.headings.has(id)).sort()) : "";
   }
 
   private structureToken(): string {
