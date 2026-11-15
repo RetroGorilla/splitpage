@@ -10,6 +10,8 @@ import { insertSharedHtml } from "./text-import.ts";
 import { createCollabText } from "./text-target.ts";
 import { readSharedTextTarget } from "./text-address.ts";
 import { editCollabText } from "./text-edit.ts";
+import { projectSharedDocument } from "./project.ts";
+import { enterSharedDocument } from "../../core/migrate.ts";
 
 type ImportBag = Record<string, unknown>;
 
@@ -52,6 +54,16 @@ function unique(entries: readonly ImportBag[]): void {
     if (typeof entry.id !== "string" || !entry.id || seen.has(entry.id)) throw new Error("Duplicated or missing document identity");
     seen.add(entry.id);
   }
+}
+
+export function hydrateSharedDocumentFromState(handle: SharedDocumentHandle, encoded: Uint8Array): void {
+  const state = collabState(handle);
+  assertSharedDocumentIdle(state);
+  if (!state.fresh || Y.encodeStateAsUpdate(state.doc).length !== 2) throw new Error("Hydration requires a fresh empty shared document");
+  transactSharedDocument(handle, "hydration", () => { Y.applyUpdate(state.doc, encoded); });
+  if (state.doc.store.pendingStructs || state.doc.store.pendingDs) throw new Error("The stored shared state is incomplete");
+  const projected = enterSharedDocument(projectSharedDocument(handle));
+  if (typeof projected.docId !== "string" || !projected.docId) throw new Error("The stored shared state holds no script");
 }
 
 export function hydrateSharedDocument(handle: SharedDocumentHandle, source: ValidatedDocument): void {

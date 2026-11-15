@@ -19,6 +19,9 @@ import { sharedCommentPorts } from "./shared-comments.ts";
 import { sharedGalleryPorts } from "./shared-gallery.ts";
 import { sharedRecordPorts } from "./shared-records.ts";
 import { sharedStructurePorts, sharedValuePorts } from "./shared-values.ts";
+import { timingMarks } from "../../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const refuse = sharedCommandRefusalNotice(notices);
 const SELECTION_SPANS = "split-selection-spans-beats", SELECTION_GONE = "split-selection-gone";
@@ -28,10 +31,13 @@ function refused(outcome: CommandOutcome): void {
 }
 
 function settle(): boolean {
-  const refusal = sharedSessionParts()?.session.admit() ?? null;
-  if (refusal?.kind === "failed") throw refusal.error;
-  if (refusal) refused(refusal);
-  return refusal === null;
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+  try {
+    const refusal = sharedSessionParts()?.session.admit() ?? null;
+    if (refusal?.kind === "failed") throw refusal.error;
+    if (refusal) refused(refusal);
+    return refusal === null;
+  } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
 }
 
 function narration(parts: SharedSessionParts, rowId: string) {
@@ -99,6 +105,12 @@ function captureSeen(parts: SharedSessionParts, rowId: string, read: SelectionRe
 }
 
 function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+  try { return settledSelection(rowId, read); }
+  finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
+}
+
+function settledSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {
   const parts = sharedSessionParts();
   if (!parts) return null;
   const seen = captureSeen(parts, rowId, read);
