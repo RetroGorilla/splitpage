@@ -78,12 +78,13 @@ function initDesktop() {
     if (!ports) return;
     const mine = ports;
     function proceed() {
+      if (mine.entry.before()) { mine.documentState.settled(); return; }
       const handle = mine.makeHandle(entry);
-      handle.getFile().then(function (file) {
+      mine.opening.track(() => handle.getFile().then(function (file) {
         return mine.documents.open({ kind: "file", file: file, handle: handle });
       }).catch(function () {
         mine.notices.show("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
-      }).then(mine.documentState.settled);
+      }).then(mine.documentState.settled));
     }
     const ready = (ports as DesktopPorts).document.current() ? null : (ports as DesktopPorts).startup.ready();
     if (ready) ready.then(proceed);

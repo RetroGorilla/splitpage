@@ -5,7 +5,9 @@
     "tests/collab/undo-seam.test.ts",
     "tests/features/writer/buffer-undo.test.ts",
     "tests/bootstrap/shared-switch.test.ts",
-    "src/test/shared-writer-app.test.mjs"
+    "src/test/shared-writer-app.test.mjs",
+    "src/test/shared-hook-app.test.mjs",
+    "src/test/shared-hook-routes-app.test.mjs"
   ],
   "mutants": [
     {
@@ -391,14 +393,14 @@
     {
       "label": "the undo route arrives only after the shared owner is seen",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
-      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
+      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
+      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });\n"
     },
     {
-      "label": "the standalone undo reset runs after the bindings",
+      "label": "a failed entry resets the standalone undo",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    undoOwner().adopt(null);\n    holdMergeBase(null);\n    made.bound = true;\n    ports.bindings.enter(parts);\n",
-      "replace": "    holdMergeBase(null);\n    made.bound = true;\n    ports.bindings.enter(parts);\n    undoOwner().adopt(null);\n"
+      "find": "    ports.detach();\n    // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history\n    undoOwner().adopt(null);\n",
+      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n"
     },
     {
       "label": "a failed entry leaves the restored standalone undo untracked",
@@ -465,6 +467,370 @@
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); }",
       "replace": "track: (): void => { undoOwner().track(); }"
+    },
+    {
+      "label": "the hook omits the real command refusal notice",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "commandRefused: sharedCommandRefusalNotice(notices),",
+      "replace": "commandRefused: undefined,",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "entry detaches without flushing the pending standalone draft",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  const flushed = await flushDraftNow();\n",
+      "replace": "  const flushed = { ok: true };\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "a refused entry flush answers the detach check instead of draft-not-kept",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  if (flushed.ok) return draftDetachRefusal();\n",
+      "replace": "  if (flushed || true) return draftDetachRefusal();\n",
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "a refused entry over an unsaved recovery copy shows no notice",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  notices.show(DRAFT_NOT_KEPT_NOTICE, \"warn\");\n  return DRAFT_NOT_KEPT;\n",
+      "replace": "  return DRAFT_NOT_KEPT;\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "leaving keeps the landed copy clean, so the next flush discards the stored draft",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
+      "replace": "[() => { noteDraftChange(); }]",
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "leaving does not resume the draft writer",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "...(kept ? [() => { draftSource.resumeWriting(); }] : []), ",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "the hook leaves the recovery panel binding out",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "const bindings = joinSharedBindings(writing, recoveryPanelBinding);",
+      "replace": "const bindings = joinSharedBindings(writing, { enter: () => {}, leave: () => {} });",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "a throwing second leave skips the first binding",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
+      "replace": "leave: () => { second.leave(); first.leave(); }",
+      "tests": ["tests/bootstrap/shared-switch.test.ts"]
+    },
+    {
+      "label": "joined bindings never leave the second binding",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
+      "replace": "leave: () => { first.leave(); }",
+      "tests": ["tests/bootstrap/shared-switch.test.ts", "src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "detaching leaves standalone autosave pending",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "documentLocation().markWrittenOut(false); confirmSavedNow();",
+      "replace": "documentLocation().markWrittenOut(false);",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the hook fails to count a missing painted base",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "counts.missingBase++; notices.show",
+      "replace": "notices.show",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "native ownership scans are not counted",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "    ports.ownershipScan?.();\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the shared Writer omits its empty-script control",
+      "file": "src/bootstrap/wiring/writer.ts",
+      "find": "if (!shared) return flow;\n          const handle = shared.handle();\n          return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,\n            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,\n            ...(shared.text.bufferedText.abandonment ? { abandonment: shared.text.bufferedText.abandonment } : {}) }) : flow;",
+      "replace": "return flow;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the Writer discards a flow whose disposal refuses",
+      "file": "src/features/writer/writer.ts",
+      "find": "  if (flowWriter.dispose() === false) return false;",
+      "replace": "  flowWriter.dispose();",
+      "tests": ["tests/features/writer/runtime-mount.test.ts"]
+    },
+    {
+      "label": "the first shared narration caret is not placed",
+      "file": "src/bootstrap/wiring/writer-empty-script.ts",
+      "find": "flow.repaint(); flow.place(range, true);",
+      "replace": "flow.repaint();",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "encoded peer updates never reach the app",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      receive(item.side, item.update, item.id);\n",
+      "replace": "      if (item.side === \"peer\") receive(item.side, item.update, item.id);\n",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the test peer has no operation families before its first command",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "  registerSharedOperationFamilies(handle, ports.structure);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "used-up shared undo steps do not warn",
+      "file": "src/bootstrap/wiring/undo.ts",
+      "find": "const notice = sharedUndoNotice(outcome, direction);",
+      "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "the release build keeps the shared hook and its peer",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "const startForTest = typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS ? startSharedTestHook : null;",
+      "replace": "const startForTest = startSharedTestHook;",
+      "tests": ["tests/bootstrap/shared-test-release.test.ts"]
+    },
+    {
+      "label": "the shared hook lives outside the app's start and stop",
+      "file": "src/bootstrap/app.ts",
+      "find": "    run([mountSharedSessionFeature, stopSharedSessionFeature]);\n",
+      "replace": "    mountSharedSessionFeature();\n",
+      "tests": ["src/test/shared-hook-app.test.mjs", "tests/bootstrap/wiring.test.ts"]
+    },
+    {
+      "label": "stopping the app does not leave the shared session",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    try { forceLeaveSharedSession(); } finally {",
+      "replace": "    try { void forceLeaveSharedSession; } finally {",
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "stopping the app keeps the hook's composition listeners",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "      document.removeEventListener(\"compositionstart\", composition, true);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs", "tests/bootstrap/wiring.test.ts"]
+    },
+    {
+      "label": "a final draft detach refusal answers enter-failed with no notice",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "      if (detachRefused) {",
+      "replace": "      if (detachRefused && false) {",
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "peer hold leaves delivery unpaused",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    hold: () => { paused = true; },",
+      "replace": "    hold: () => {},",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "peer release leaves delivery paused",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "=> { paused = false; return deliver(order); },",
+      "replace": "=> { return deliver(order); },",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "reverse delivery becomes forward",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    if (order === \"reverse\") updates.reverse();\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "duplicate delivery applies once",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      if (order === \"duplicate\") receive(item.side, item.update, item.id);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "Writer disposal reports success on a refused settlement",
+      "file": "src/features/writer/writer.ts",
+      "find": "if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return false;",
+      "replace": "if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return true;",
+      "tests": ["tests/features/writer/runtime-mount.test.ts"]
+    },
+    {
+      "label": "leaving schedules no draft for the landed copy",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
+      "replace": "[() => { noteSaveChange(); }]",
+      "tests": ["src/test/shared-hook-app.test.mjs"]
+    },
+    {
+      "label": "route: the public leave answers ok without leaving",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    try { return leaveRunningSharedSession(); } finally { switching = false; }",
+      "replace": "    try { return { ok: true }; } finally { switching = false; }",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: a leave-first entry goes ahead without leaving",
+      "file": "src/bootstrap/wiring/ports/document-entry.ts",
+      "find": "const result = permission.allowed ? leaveRunningSharedSession() :",
+      "replace": "const result = permission.allowed ? { ok: true } as const :",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: the switch's ordinary leave never hands the hook its way out",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (left) faults.attempt(() => { left(true); });\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs", "tests/bootstrap/shared-switch.test.ts"]
+    },
+    {
+      "label": "route: a forced leave abandons before trying the ordinary leave",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  const first = leaveSharedSession(now.ports);\n  if (first.ok || running !== now) return first;\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: a forced leave never abandons",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  faults.attempt(() => { now.ports.bindings.abandon?.(); });\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: the shared Writer binding abandons nothing",
+      "file": "src/bootstrap/wiring/shared-writer.ts",
+      "find": "    abandon: () => { abandonAll(false); },",
+      "replace": "    abandon: () => {},",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: a Writer composition is not abandoned at stop",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "  const stopAbandonment = ports.abandonment?.(abandon);",
+      "replace": "  const stopAbandonment = ports.abandonment?.(() => {});",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: an empty-script composition is not abandoned at stop",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "abandoning = ports.abandonment?.(abandon);",
+      "replace": "abandoning = ports.abandonment?.(() => {});",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: a dropped session never hands the hook its way out",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  if (left) faults.attempt(() => { left(false); });\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs", "tests/bootstrap/shared-switch.test.ts"]
+    },
+    {
+      "label": "failure: the hook forgets an open composition",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    ?? (composing ? \"buffer-composition\" : null)\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: the hook forgets a pending draft restore",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "\n    ?? (draftResume().restorePending() ? \"draft-restore-pending\" : null);",
+      "replace": ";",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: the hook passes an opening reader that is always idle",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "        opening: openingStatus\n",
+      "replace": "        opening: { openingPending: () => false }\n",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: the rollback never reattaches the draft writer",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "    if (made.detaching && ports.reattach) faults.attempt(ports.reattach);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs", "tests/bootstrap/shared-switch.test.ts"]
+    },
+    {
+      "label": "failure: reattaching keeps the cleared home",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, ",
+      "replace": "  runEvery([",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: reattaching keeps the cleared written-out mark",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "() => { documentLocation().markWrittenOut(kept.writtenOut); },",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: reattaching keeps the copy marked saved",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, ",
+      "replace": "    ",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: reattaching leaves the draft writer detached",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": " noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
+      "replace": " noteSaveChange(); }]);",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: reattaching stops at its first exception",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
+      "replace": "  for (const step of [() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]) step();",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: the way out stops at its first exception",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);",
+      "replace": "    for (const step of [() => { ending?.dispose(); },...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]) step();",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "abandonment: the selection-visual edit is not registered",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);",
+      "replace": "    const stopAbandonment = shared.bufferedText.abandonment?.(() => {});",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "abandonment: an abandoned selection-visual box still saves on close",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "      if (binding?.discarded?.()) return null;\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "drop: a dropped session never releases its surfaces",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  faults.attempt(() => { ports.bindings.drop?.(); });\n",
+      "replace": "",
+      "tests": ["tests/bootstrap/shared-switch.test.ts", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "drop: a released buffered field still refuses to finish",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "    if (released) return true;\n",
+      "replace": "",
+      "tests": ["tests/application/editing/buffered-field.test.ts", "src/test/shared-hook-routes-app.test.mjs"]
     }
   ]
 }

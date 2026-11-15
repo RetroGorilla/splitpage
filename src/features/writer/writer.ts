@@ -224,9 +224,9 @@ function attachFlowWriter() {
 function detachFlowWriter() {
   if (!flowWriter) return true;
   if (flowWriter.settle && !flowWriter.settle()) return false;
+  if (flowWriter.dispose() === false) return false;
   stopWriterLinks?.();
   stopWriterLinks = null;
-  flowWriter.dispose();
   flowWriter = null;
   updateWriterFormatState();
   const root = (document.getElementById("writer-doc") as HTMLElement);
@@ -260,7 +260,7 @@ export function closeWriter() {
   if (flow?.settle && !flow.settle()) return;
   const wasStale = flowMaker?.splitReady() === false;
   const at = flow?.finish()?.head;
-  detachFlowWriter();
+  if (!detachFlowWriter()) return;
   if (el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   el.inert = true;
   el.hidden = true;
@@ -412,15 +412,17 @@ export function startWriter(given: WriterFeaturePorts) {
     onWriterFormat, updateWriterFormatState, readWriterSize, applyWriterSize,
     openWriter, closeWriter, writerUndoStep,
     connectFlowUndo, writerReplayed, writerFlowControl,
-    dispose: function () {
-      if (disposed) return;
-      if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return;
+    dispose: function (): boolean {
+      if (disposed) return true;
+      if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return false;
+      if (activeWriter === mine) {
+        closeWriter();
+        if (flowWriter) return false;
+      }
       disposed = true;
-      if (activeWriter !== mine) return;
+      if (activeWriter !== mine) return true;
       activeWriter = null;
       GUARDED_EVENTS.forEach(function (type) { root.removeEventListener(type, guardWriterEdit, true); });
-      closeWriter();
-      detachFlowWriter();
       selectionFormatting = null;
       writerLinkCell = null;
       flowMaker = null;
@@ -448,6 +450,7 @@ export function startWriter(given: WriterFeaturePorts) {
       appActions = null;
       hideTagGhost = null;
       scheduleIdleRefresh = null;
+      return true;
     }
   };
 }

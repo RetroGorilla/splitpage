@@ -14,6 +14,7 @@ export interface KeyValueStorage {
 
 export interface ConflictStashPorts {
   readonly capability: Pick<CapabilityPort, "stash">;
+  readonly entryCapability: Pick<CapabilityPort, "stash">;
   readonly storage: () => KeyValueStorage | null | undefined;
   readonly internImage: (dataUrl: string) => void;
 }
@@ -90,7 +91,7 @@ export function createConflictStash(ports: ConflictStashPorts): ConflictStash {
       } catch (e) { return false; }
     },
     read: function (): StashedWork | null {
-      if (refused()) return null;
+      if (!ports.entryCapability.stash().allowed) return null;
       try {
         const raw = storage().getItem(STASH_KEY);
         return raw ? JSON.parse(raw) as StashedWork : null;
@@ -101,7 +102,7 @@ export function createConflictStash(ports: ConflictStashPorts): ConflictStash {
       try { storage().removeItem(STASH_KEY); } catch (e) {}
     },
     accept: function <T>(stash: T, theirs: unknown): T {
-      if (refused()) return stash;
+      if (!ports.entryCapability.stash().allowed) return stash;
       if (!stash || typeof stash !== "object") return stash;
       const work = stash as StashedWork;
       internBlobs(work.blobs);

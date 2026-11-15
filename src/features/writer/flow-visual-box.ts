@@ -40,6 +40,7 @@ export interface FlowVisualBufferControl {
   readonly selectionKeep: (range: FlowRange | null) => void;
   readonly selectionResolve: (report?: boolean) => FlowRange | null;
   readonly selectionEnd: () => void;
+  readonly discarded?: () => boolean;
   readonly dispose: () => boolean;
 }
 
@@ -63,6 +64,7 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
     }); else paint(); },
     save: (range, html, first) => {
       if (!first) return range;
+      if (binding?.discarded?.()) return null;
       try {
         const resolved = binding?.selectionResolve(true); if (!resolved) return null;
         const next = ports.save(resolved, html, first);
