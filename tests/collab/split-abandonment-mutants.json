@@ -12,14 +12,14 @@
     {
       "label": "Split ordinary abandonment never runs its surfaces",
       "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "abandon: () => { abandonAll(false); },",
-      "replace": "abandon: () => {},"
+      "find": "abandon: () => { closing = true; abandonAll(false); },",
+      "replace": "abandon: () => { closing = true; },"
     },
     {
       "label": "Split final abandonment is only ordinary abandonment",
       "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "drop: () => { abandonAll(true); },",
-      "replace": "drop: () => { abandonAll(false); },"
+      "find": "drop: () => { closing = true; abandonAll(true); },",
+      "replace": "drop: () => { closing = true; abandonAll(false); },"
     },
     {
       "label": "Split rollback never releases an unhydrated field",

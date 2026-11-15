@@ -14,6 +14,7 @@ export interface SharedBrollKeyingPorts {
   readonly readers: ProductionReaders;
   readonly plainTextOf: FieldText;
   readonly lineKeys: (rowId: string) => SharedBrollLineKey | null;
+  readonly shotRemoved: (id: string) => boolean;
 }
 
 export const SHARED_BROLL_KEYING_LABEL = "key-broll-lines";
@@ -27,7 +28,7 @@ function leftCell(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPort
 
 function planned(rowId: string, operations: readonly SharedOperation[], undo: boolean): Plan {
   return {
-    changes: changeSet({ cells: [{ rowId, field: "visualText" }], docFields: undo ? ["brollShots"] : [], derive: CELL_TEXT_DERIVES }),
+    changes: changeSet({ cells: [{ rowId, field: "visualText" }], docFields: undo || operations.some(operation => operation.kind === "record-delete") ? ["brollShots"] : [], derive: CELL_TEXT_DERIVES }),
     apply: () => { throw new Error("Keying a left cell is a shared command only"); },
     shared: undo ? { operations, description: { label: SHARED_BROLL_KEYING_LABEL, selection: null, typing: null } } : { operations, undo: false }
   };
@@ -35,12 +36,13 @@ function planned(rowId: string, operations: readonly SharedOperation[], undo: bo
 
 function repeatsIn(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPorts, author: { readonly id: string; readonly by: string }): readonly SharedOperation[] | null {
   const left = leftCell(doc, rowId, ports);
-  return left ? sharedBrollRepeats(left, doc.brollShots.map(shot => shot.id), author) : null;
+  return left ? sharedBrollRepeats(left, doc.brollShots.map(shot => shot.id), author,
+    doc.rows.filter(row => row.id !== rowId).map(row => ports.cells(String(row.visualText ?? "")))) : null;
 }
 
 function keyingIn(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPorts, author: { readonly id: string; readonly by: string }): readonly SharedOperation[] | null {
   const left = leftCell(doc, rowId, ports), lineKey = left ? ports.lineKeys(rowId) : null;
-  const keyed = left && lineKey ? sharedBrollKeying(left, ports.readers, ports.plainTextOf, lineKey, author) : null;
+  const keyed = left && lineKey ? sharedBrollKeying(left, ports.readers, ports.plainTextOf, lineKey, author, ports.shotRemoved) : null;
   return keyed ? [...keyed.operations, ports.beatStamp(rowId as SharedContentRef, { id: author.id + "_stamp", by: author.by })] : null;
 }
 
@@ -63,6 +65,7 @@ export function sharedBrollKeyingCommand(rowId: string, ports: SharedBrollKeying
 export function keySharedLeftCell(session: Pick<CommonDocumentSession, "read" | "run">, rowId: string, ports: SharedBrollKeyingPorts): readonly CommandOutcome[] {
   const outcomes: CommandOutcome[] = [];
   if (session.read(doc => !!doc && !!repeatsIn(doc, rowId, ports, NO_AUTHOR))) outcomes.push(session.run(sharedBrollRepeatCommand(rowId, ports)));
+  if (outcomes.some(outcome => outcome.kind === "rejected" || outcome.kind === "failed")) return outcomes;
   if (session.read(doc => !!doc && !!keyingIn(doc, rowId, ports, NO_AUTHOR))) outcomes.push(session.run(sharedBrollKeyingCommand(rowId, ports)));
   return outcomes;
 }

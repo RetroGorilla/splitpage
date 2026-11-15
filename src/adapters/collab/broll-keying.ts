@@ -3,6 +3,12 @@ import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabProjectedVisualTargets } from "./painted-visual-targets.ts";
 import { readSharedTextHistory } from "./text-history.ts";
+import { collabState } from "./state.ts";
+import { readStoredRecordDeletion } from "./record-deletion.ts";
+
+export function sharedBrollShotRemoved(handle: SharedDocumentHandle, id: string): boolean {
+  return readStoredRecordDeletion(collabState(handle).roots.shots.get(id)) !== null;
+}
 
 // why: rule 196 on #1414: a restored character answers to the one it restored, so a line keyed again after an undo
 // takes the id it had; a visual a join brought in is read-only to shared typing (rule 93), so it is not keyed.

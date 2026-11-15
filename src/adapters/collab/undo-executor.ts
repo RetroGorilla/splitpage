@@ -378,7 +378,13 @@ export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: Sh
 // why: rules 145 and 196 on #1414: keys and shots from leaving a cell are taken back, or put back, only together and
 // only while each is as the command left it; anything else uses the entry up.
 function keyingAsMade(handle: SharedDocumentHandle, record: SharedUndoRecord): boolean {
-  return record.parts.every(part => {
+  return (record.keyedShots ?? []).every(shot => same(recordNow(handle, { ...shot, kind: "record-create" }), shot.fields))
+    && (record.keyedLines ?? []).every(line => {
+    const history = readSharedTextHistory(handle, line.target), anchor = readSharedAnchorUnit(line.anchor);
+    const unit = history && anchor && history.live(history.follow(anchor));
+    return !!history && !!unit && same(keyedLineState(history, undoUnits(keyedLine(history, unit.index))), keyedLineState(history, line.units))
+      && keyedContributions(history, unit.index, line.writer) === line.contributions;
+  }) && record.parts.every(part => {
     if (part.kind === "record-create") { const now = recordNow(handle, part); return now !== null && same(now, part.fields); }
     if (part.kind === "record-delete") return recordNow(handle, part) === null;
     if (part.kind !== "text") return false;
@@ -387,6 +393,50 @@ function keyingAsMade(handle: SharedDocumentHandle, record: SharedUndoRecord): b
     return part.inserted.every(identity => { const unit = readSharedAnchorUnit(identity); return !!unit && !!history.live(history.follow(unit)); })
       && part.deleted.every(item => { const unit = readSharedAnchorUnit(item.identity); return !!unit && !unit.after && history.known(unit) && !history.live(unit) && !history.back(unit); });
   });
+}
+
+function keyedLine(history: SharedTextHistory, index: number): readonly SharedHistoryUnit[] {
+  let start = index, end = index;
+  while (start > 0 && history.units[start - 1]?.value !== "\n") start--;
+  while (end < history.units.length && history.units[end]?.value !== "\n") end++;
+  return history.units.slice(start, end);
+}
+
+function keyedLineState(history: SharedTextHistory, units: readonly SharedUndoUnit[]): unknown {
+  return units.map(unit => {
+    const anchor = readSharedAnchorUnit(unit.identity);
+    const root = anchor ? history.root(anchor) : null;
+    return { ...unit, identity: root ? { client: root.client, clock: root.clock } : null };
+  });
+}
+
+function keyedContributions(history: SharedTextHistory, index: number, writer: number): string {
+  const line = keyedLine(history, index), start = line[0]?.index ?? index, end = line.at(-1)?.index ?? index;
+  return history.contributions(history.units[start - 1]?.unit ?? null, history.units[end + 1]?.unit ?? null, writer);
+}
+
+function withKeyedLines(handle: SharedDocumentHandle, record: SharedUndoRecord, targets: readonly SharedTextAddress[] = []): SharedUndoRecord {
+  if (record.label !== SHARED_BROLL_KEYING_LABEL) return record;
+  const addresses = new Map([...targets, ...record.keyedLines?.map(line => line.target) ?? [], ...record.parts.flatMap(part => part.kind === "text" ? [part.target] : [])]
+    .map(target => [JSON.stringify(target), target]));
+  const inserted = new Set(record.parts.flatMap(part => part.kind === "text" ? part.inserted : []));
+  const shots = new Set(record.parts.flatMap(part => part.kind === "record-create" && part.target.collection === "shots" ? [part.target.record] : []));
+  const writer = collabState(handle).doc.clientID;
+  const keyedLines = [...addresses.values()].flatMap(target => {
+    const history = readSharedTextHistory(handle, target);
+    if (!history) return [];
+    const prior = record.keyedLines?.filter(line => same(line.target, target)).map(line => readSharedAnchorUnit(line.anchor)).filter(unit => unit !== null) ?? [];
+    const anchors = new Set(prior.flatMap(unit => { const live = history.live(history.follow(unit)); return live ? [live.identity] : []; }));
+    return history.units.filter(unit => inserted.has(unit.identity) || anchors.has(unit.identity)
+      || typeof unit.value !== "string" && unit.value.atom === "broll" && shots.has(unit.value.id)).map(unit => ({ target, anchor: unit.identity,
+      units: undoUnits(keyedLine(history, unit.index)), contributions: keyedContributions(history, unit.index, writer), writer }));
+  });
+  const ids = new Set(keyedLines.flatMap(line => line.units.flatMap(unit => typeof unit.value !== "string" && unit.value.atom === "broll" ? [unit.value.id] : [])));
+  const keyedShots = [...ids].map(id => {
+    const target: SharedRecordAddress = { collection: "shots", record: id };
+    return { target, fields: recordNow(handle, { target, kind: "record-create" }) };
+  });
+  return { ...record, keyedLines, keyedShots };
 }
 
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
@@ -421,7 +471,7 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   };
   const parts = planned.map(plan => plan.inverse(after));
   return { ok: true, effective: parts.some(part => part.effective), selection: record.selection,
-    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null } };
+    inverse: withKeyedLines(handle, { ...record, parts: parts.map(part => part.part), typing: null }) };
 }
 
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
@@ -577,5 +627,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
-  return { result, record: parts.length ? { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing } : null };
+  const targets: SharedTextAddress[] = operations.flatMap(operation => operation.kind === "scalar" && operation.target.scope === "beat"
+    ? [{ owner: operation.target.record, segment: operation.target.record, field: "visualText" as const }] : []);
+  return { result, record: parts.length ? withKeyedLines(handle, { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing }, targets) : null };
 }

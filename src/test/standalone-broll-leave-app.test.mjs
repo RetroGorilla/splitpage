@@ -55,7 +55,9 @@ const ROWS = [
   { name: "a marker typed in a narration cell", visual: "Wide", field: "audioText", at: 0, typed: "B-roll: ",
     left: { rows: [["Wide", "B-roll: Pour the coffee"], OTHER], shots: [] }, undone: { rows: [["Wide", "Pour the coffee"], OTHER], shots: [] } },
   { name: "a visual cell with nothing to key", visual: "Wide", field: "visualText", at: 4, typed: " shot",
-    left: { rows: [["Wide shot", "Pour the coffee"], OTHER], shots: [] }, undone: { rows: [["Wide", "Pour the coffee"], OTHER], shots: [] } }
+    left: { rows: [["Wide shot", "Pour the coffee"], OTHER], shots: [] }, undone: { rows: [["Wide", "Pour the coffee"], OTHER], shots: [] } },
+  { name: "a nameless marker typed in a visual cell", visual: "", field: "visualText", at: 0, typed: "B-roll: ",
+    left: { rows: [[KEY("B-roll:") + " ", "Pour the coffee"], OTHER], shots: [] }, undone: { rows: [["", "Pour the coffee"], OTHER], shots: [] } }
 ];
 
 for (const row of ROWS) test(`standalone leave: ${row.name}`, () => {

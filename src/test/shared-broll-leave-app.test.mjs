@@ -89,9 +89,11 @@ function agreed(fixture) {
   try {
     assert.equal(applySharedUpdate(late, encodeSharedState(fixture.parts.handle)).ok, true);
     const read = doc => ({ visual: doc.rows[0].visualText, shots: doc.brollShots.map(shot => [shot.id, shot.name]) });
+    const snapshot = doc => ({ text: doc.rows.map(row => [row.visualText, row.audioText]), shots: doc.brollShots,
+      keys: doc.rows.map(row => fromHtml(row.visualText).filter(run => run.atom === "broll").map(run => run.id)) });
     assertReplicasAgree("left Split cell", [
-      { order: "D1", replica: "A", output: read(currentDocument()) }, { order: "D1", replica: "B", output: read(projectSharedDocument(fixture.peer)) },
-      { order: "late-C", replica: "C", output: read(projectSharedDocument(late)) }
+      { order: "D1", replica: "A", output: snapshot(currentDocument()) }, { order: "D1", replica: "B", output: snapshot(projectSharedDocument(fixture.peer)) },
+      { order: "late-C", replica: "C", output: snapshot(projectSharedDocument(late)) }
     ]);
     return read(currentDocument());
   } finally { destroySharedDocument(late); }

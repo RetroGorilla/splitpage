@@ -64,16 +64,30 @@ const REPEATS: readonly RepeatRow[] = [
     deleted: ['["flow-base","R1","visualText",1,2]'] },
   { name: "three copies at once leave two later keys, both deleted", cell: KEY("bs_k1_0") + KEY(REPEAT("bs_k1_0", 2, 9)) + KEY(REPEAT("bs_k1_0", 3, 4)) + " Close up",
     shots: ["bs_k1_0"], deleted: ['["flow-base","R1","visualText",1,3]'] },
-  { name: "a later key with a shot of its own is not touched", cell: KEY("bs_k1_0") + KEY(REPEAT("bs_k1_0", 2, 9)) + " Close up",
-    shots: ["bs_k1_0", REPEAT("bs_k1_0", 2, 9)], deleted: [] },
+  { name: "a later adjacent key and its unheld shot are removed", cell: KEY("bs_k1_0") + KEY(REPEAT("bs_k1_0", 2, 9)) + " Close up",
+    shots: ["bs_k1_0", REPEAT("bs_k1_0", 2, 9)], deleted: ['["flow-base","R1","visualText",1,2]', "record-delete"] },
   { name: "two real lines with equal text are not touched", cell: KEY("bs_a") + " Close up<br>" + KEY("bs_b") + " Close up", shots: ["bs_a", "bs_b"], deleted: [] },
   { name: "a repeat of the same id on a second line is not touched", cell: KEY("bs_k1_0") + " Close up<br>" + KEY(REPEAT("bs_k1_0", 2, 9)) + " Close up",
     shots: ["bs_k1_0"], deleted: [] },
-  { name: "a key followed by an unrelated key is not touched", cell: KEY("bs_k1_0") + KEY("bs_other") + " Close up", shots: ["bs_k1_0"], deleted: [] }
+  { name: "an adjacent key with a different id is removed", cell: KEY("bs_k1_0") + KEY("bs_other") + " Close up", shots: ["bs_k1_0"], deleted: ['["flow-base","R1","visualText",1,2]'] }
 ];
 
 for (const row of REPEATS) test(`repeated keys: ${row.name}`, () => {
   const result = sharedBrollRepeats({ rowId: "R1", cell: bufferReaders.cellOf(row.cell) }, row.shots, AUTHOR);
   assert.deepEqual(result?.map(operation => operation.kind === "text-delete" ? operation.observed[0] : operation.kind) ?? [], row.deleted);
-  if (result) assert.deepEqual(result.map(operation => [operation.id, operation.by]), [["w1_1:repeat:0", "Alice"]]);
+  if (result) assert.deepEqual(result.map(operation => [operation.id, operation.by]), row.deleted.map((kind, index) => [kind === "record-delete" ? "w1_1:drop-shot:" + index : "w1_1:repeat:" + index, "Alice"]));
+});
+
+test("nameless markers wait; a named existing key with no shot gets its record unless it was removed", () => {
+  assert.equal(keyed("B-roll: "), null);
+  assert.deepEqual(keyed(KEY("bs_missing") + " Close up")?.shots, ["bs_missing"]);
+  const left = { rowId: "R1", cell: bufferReaders.cellOf(KEY("bs_missing") + " Close up"), state: state(KEY("bs_missing") + " Close up") };
+  assert.equal(sharedBrollKeying(left, bufferReaders, plain, () => null, AUTHOR, () => true), null);
+});
+
+test("cleanup keeps a dropped key's shot while another line in the script holds its id", () => {
+  const cell = bufferReaders.cellOf(KEY("bs_first") + KEY("bs_later") + " Close up");
+  const other = bufferReaders.cellOf(KEY("bs_later") + " Elsewhere");
+  const result = sharedBrollRepeats({ rowId: "R1", cell }, ["bs_first", "bs_later"], AUTHOR, [other]);
+  assert.deepEqual(result?.map(operation => operation.kind), ["text-delete"]);
 });
