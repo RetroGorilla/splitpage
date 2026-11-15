@@ -137,6 +137,75 @@ for (const fixture of FIXTURES) test(`Find replace differential, standalone agai
   } finally { a.session.dispose(); set.close(); }
 });
 
+function pictureAt(at: number) {
+  return pictured({ name: "", cell: "", find: "", put: "", after: "", shared: "same", picture: { at } });
+}
+function shownCell(html: string) {
+  const prototype = window.HTMLElement.prototype as unknown as { scrollIntoView?: () => void };
+  if (!prototype.scrollIntoView) prototype.scrollIntoView = () => {};
+  (window.CSS as unknown as { highlights: Map<string, unknown> }).highlights = new Map();
+  const Highlight = class { readonly range: Range; constructor(range: Range) { this.range = range; } };
+  (window as unknown as { Highlight: unknown }).Highlight = Highlight;
+  (globalThis as unknown as { Highlight: unknown }).Highlight = Highlight;
+  document.body.insertAdjacentHTML("beforeend", '<div id="rows"><div class="row" data-id="R1"><div class="cell-editable" data-field="audioText">' + html + "</div></div></div>");
+}
+function lit() {
+  const range = ((window.CSS as unknown as { highlights: Map<string, { range: Range }> }).highlights.get("splitpage-find-match"))?.range;
+  return range ? [range.startContainer.nodeValue, range.startOffset, range.endContainer.nodeValue, range.endOffset] : null;
+}
+const count = () => document.getElementById("find-count")?.textContent;
+
+for (const order of ORDERS) test(`one reading of the cell: a picture inside an earlier word leaves it unmatched, and the highlighted match is the replaced one: ${order}`, () => {
+  const notices = fakeNotices(), set = setup(source("cup cup")), a = copy(set.a, "Alice", notices);
+  try {
+    send(set.b, pictureAt(2));
+    flush(set.queue, order);
+    const html = agreeing("pictured", set, order)[0]?.audioText as string;
+    assert.equal(html, "cu" + PIC + "p cup");
+    const route = finder(a.session, notices, a.shared);
+    try {
+      shownCell(html);
+      route.search("cup", "mug");
+      assert.deepEqual([count(), lit()], ["1 of 2", ["p cup", 2, "p cup", 5]]);
+      route.replace();
+    } finally { route.dispose(); }
+    flush(set.queue, order);
+    assert.equal(agreeing("replaced", set, order)[0]?.audioText, "cu" + PIC + "p mug");
+  } finally { a.session.dispose(); set.close(); }
+});
+
+test("standalone today: a picture inside a word is skipped when searching, so highlight and Replace both take that word and the picture is deleted with it", () => {
+  const notices = fakeNotices(), h = harness();
+  h.session.adopt(source("cup cup"));
+  const html = "cu" + PIC + "p cup";
+  h.session.run(rewriteCellsCommand("picture", () => [{ rowId: "R1", field: "audioText", html }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+  const route = finder(h.session, notices);
+  try {
+    shownCell(html);
+    route.search("cup", "mug");
+    assert.deepEqual([count(), lit()], ["1 of 3", ["cu", 0, "p cup", 1]]);
+    route.replace();
+  } finally { route.dispose(); }
+  assert.equal(h.session.read(doc => doc?.rows[0]?.audioText), "mug cup");
+});
+
+for (const order of ORDERS) test(`one reading of the cell: a picture inside a tag's words keeps them out of the in-tag count and Replace all's notice: ${order}`, () => {
+  const notices = fakeNotices(), set = setup(source(TAG + " x")), a = copy(set.a, "Alice", notices);
+  try {
+    send(set.b, pictureAt(9));
+    flush(set.queue, order);
+    const before = encodeSharedState(set.a);
+    const route = finder(a.session, notices, a.shared);
+    try {
+      route.search("tape", "rope");
+      assert.equal(count(), "No matches");
+      route.replaceAll();
+    } finally { route.dispose(); }
+    assert.deepEqual(messages(notices), [["Nothing to replace.", "warn"]]);
+    assert.deepEqual(encodeSharedState(set.a), before);
+  } finally { a.session.dispose(); set.close(); }
+});
+
 test("a shared Replace writes text operations on the matched characters only, then the beat's stamp", () => {
   const notices = fakeNotices(), set = setup(source("a <strong>cup</strong> of cup")), a = copy(set.a, "Alice", notices);
   try {

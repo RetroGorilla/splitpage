@@ -30,7 +30,8 @@ import { idMap } from "../../core/document/id-map.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../../core/document/text-policy.ts";
 import { clampRange, deleteRange, replaceText, sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { cellLength, projection } from "../../core/text/runs.ts";
+import { cellLength, isMediaRun, projection } from "../../core/text/runs.ts";
+import type { Run } from "../../core/text/runs.ts";
 import type { SharedCellSplice } from "../../core/collab/cell-text-operations.ts";
 import { presentFindRanges } from "./present-ranges.ts";
 import { captureFindEscape } from "./keyboard-lock.ts";
@@ -66,11 +67,25 @@ function findNeedle() {
   return (document.getElementById("find-input") as HTMLInputElement).value || "";
 }
 
+function cellReader(): (html: string) => readonly Run[] {
+  return (ports as FindRuntimePorts).shared?.()?.cells ?? (ports as FindRuntimePorts).text.cellOf;
+}
+
+function domOffset(model: readonly Run[], at: number) {
+  let pos = 0, media = 0;
+  for (const run of model) {
+    if (pos >= at) break;
+    if (isMediaRun(run)) media++;
+    pos += run.atom ? 1 : run.text.length;
+  }
+  return at - media;
+}
+
 export function findInRows(rows: readonly DocumentRow[] | null | undefined, needle: string, matchCase: boolean) {
   const matches: FindMatch[] = [];
   let inTags = 0;
   if (!needle) return { matches: matches, inTags: inTags };
-  const read = (ports as FindRuntimePorts).shared?.()?.cells ?? (ports as FindRuntimePorts).text.cellOf;
+  const read = cellReader();
   (rows || []).forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
       const pieces = searchablePieces(read(row[field] as string));
@@ -184,10 +199,11 @@ function currentMatchRange() {
   if (!cell) return null;
   const idx = (ports as FindRuntimePorts).document.read(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return null;
-  const model = (ports as FindRuntimePorts).text.cellOf((((ports as FindRuntimePorts).document.current() as FindDocumentView).rows[idx] as DocumentRow)[m.field] as string);
+  const html = (((ports as FindRuntimePorts).document.current() as FindDocumentView).rows[idx] as DocumentRow)[m.field] as string;
+  const model = cellReader()(html);
   const hit = findInCell(model, findNeedle(), (ports as FindRuntimePorts).options.matchesCase())[m.nth];
   if (!hit) return null;
-  const range = domRangeFor(cell, hit.from, hit.to, projection(model));
+  const range = domRangeFor(cell, domOffset(model, hit.from), domOffset(model, hit.to), projection((ports as FindRuntimePorts).text.cellOf(html)));
   return range ? { cell: cell, range: range } : null;
 }
 
@@ -323,7 +339,7 @@ export function replaceAll() {
     return out;
   }
   const total = (ports as FindRuntimePorts).document.read(replacedAll).total;
-  const read = shared ? shared.cells : (ports as FindRuntimePorts).text.cellOf;
+  const read = cellReader();
   const inTags = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows.reduce(function (n, row) {
     return n + countInTags(read(row.visualText as string), needle, (ports as FindRuntimePorts).options.matchesCase()) +
                countInTags(read(row.audioText as string), needle, (ports as FindRuntimePorts).options.matchesCase());
