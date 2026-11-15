@@ -6,8 +6,8 @@ import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
-const TYPED = "The quick brown fox films a take by the window at dusk.";
-const KEY_GAP_MS = 60;
+export const TYPED = "The quick brown fox films a take by the window at dusk.";
+export const KEY_GAP_MS = 60;
 const SPLITS = 5;
 const EXPORT_RUNS = 5;
 const PICTURES = 10;

@@ -315,6 +315,31 @@ export function sourceFingerprint() {
     "HEAD:tests/collab/fixtures/projection-reference.json"], { encoding: "utf8" }).trim();
 }
 
+export function expectedAfter(state, updates, owner) {
+  const control = open(state);
+  try {
+    const address = target(owner), before = readSharedTextHistory(control, address).units.length;
+    apply(control, updates, "direct");
+    assert.equal(readSharedTextHistory(control, address).units.length, before + updates.length);
+    return encodeSharedState(control);
+  } finally { destroySharedDocument(control); }
+}
+
+export function admissionRound(source, state, updates, expected, round, withHeap) {
+  const measured = { footprint: footprint(source, state) };
+  const modes = ["current", "direct", "decode", "batch"];
+  for (const mode of [...modes.slice(round % 4), ...modes.slice(0, round % 4)]) {
+    measured[mode] = {};
+    if (mode !== "batch") measured[mode].single = timed(state, updates.slice(0, 500), mode, true);
+    for (const count of [100, 1000]) measured[mode][count] = timed(state, updates.slice(0, count), mode, false, count === 1000 ? expected : null);
+  }
+  if (withHeap) {
+    measured.heap = {};
+    for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, updates.slice(0, count));
+  }
+  return measured;
+}
+
 export function run(rounds = 5, saved = null, persist = () => {}) {
   assert.equal(process.versions.node, "24.22.1", "Use the repository Node pin");
   assert.equal(typeof globalThis.gc, "function", "Run with --expose-gc");
@@ -343,32 +368,15 @@ export function run(rounds = 5, saved = null, persist = () => {}) {
     if (row?.runs.length === rounds) continue;
     const state = states[index][phase], key = source.name + "/fresh";
     const generated = streams[key] ?? (streams[key] = updatesFor(states[index].fresh, source.document.rows[0].id));
-    const control = open(state);
-    let expected;
-    try {
-      const address = target(source.document.rows[0].id), before = readSharedTextHistory(control, address).units.length;
-      apply(control, generated.updates, "direct");
-      assert.equal(readSharedTextHistory(control, address).units.length, before + 1000);
-      expected = encodeSharedState(control);
-    }
-    finally { destroySharedDocument(control); }
+    assert.equal(generated.updates.length, 1000);
+    const expected = expectedAfter(state, generated.updates, source.document.rows[0].id);
     if (!row) {
       row = { name: source.name, phase, senderBase: key.split("/")[1], per1000Typed: expected.length - state.length, runs: [] };
       result.admission.push(row);
     }
     publish();
     for (let round = row.runs.length; round < rounds; round++) {
-      const measured = { footprint: footprint(source, state) };
-      const modes = ["current", "direct", "decode", "batch"];
-      for (const mode of [...modes.slice(round % 4), ...modes.slice(0, round % 4)]) {
-        measured[mode] = {};
-        if (mode !== "batch") measured[mode].single = timed(state, generated.updates.slice(0, 500), mode, true);
-        for (const count of [100, 1000]) measured[mode][count] = timed(state, generated.updates.slice(0, count), mode, false, count === 1000 ? expected : null);
-      }
-      if (!row.runs.some(run => run.heap)) {
-        measured.heap = {};
-        for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, generated.updates.slice(0, count));
-      }
+      const measured = admissionRound(source, state, generated.updates, expected, round, !row.runs.some(run => run.heap));
       row.runs.push(measured);
       publish();
       process.stderr.write(`${source.name} ${phase}: round ${round + 1}/${rounds}\n`);
