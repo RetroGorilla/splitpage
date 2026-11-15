@@ -8,8 +8,8 @@
   }, {
     "label": "held update skipped in the trial replica",
     "file": "src/adapters/collab/document.ts",
-    "find": "    if (state.trial) state.trial.attempt(update);\n    else copyTrial(state, update, count);",
-    "replace": "    if (state.trial && !closed) state.trial.attempt(update);\n    else copyTrial(state, update, count);"
+    "find": "    if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n    else copyTrial(state, update, count);",
+    "replace": "    if (state.trial && !closed) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n    else copyTrial(state, update, count);"
   }, {
     "label": "refused update left in the trial replica",
     "file": "src/adapters/collab/trial-replica.ts",
@@ -18,12 +18,12 @@
   }, {
     "label": "live written before the trial",
     "file": "src/adapters/collab/document.ts",
-    "find": "    if (state.trial) state.trial.attempt(update);",
-    "replace": "    if (state.trial) { if (!closed) Y.applyUpdate(state.doc, update, \"remote\"); state.trial.attempt(update); }"
+    "find": "    if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));",
+    "replace": "    if (state.trial) { if (!closed) Y.applyUpdate(state.doc, update, \"remote\"); state.trial.attempt(update, decoded, () => copyTrial(state, update, count)); }"
   }, {
     "label": "rebuild skipped after a refusal",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "    try { this.#rebuild(); } catch { this.#stale = true; }",
+    "find": "    this.#recover(true);",
     "replace": "    this.#stale = false;"
   }, {
     "label": "trial replica observers left after dispose",
@@ -55,5 +55,35 @@
     "file": "src/adapters/collab/document.ts",
     "find": "    if (state.trial?.takeStop()) announceSharedIntakeStop(state);",
     "replace": "    void state.trial?.takeStop();"
+  }, {
+    "label": "failed rebuild retried on every arrival",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "this.#stale && !this.#rebuildBlocked && !this.#stopped",
+    "replace": "this.#stale && !this.#stopped"
+  }, {
+    "label": "blocked rebuild refuses no-ops instead of using live copy trial",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "if (!this.#current()) { copyTrial(); return; }",
+    "replace": "if (!this.#current()) throw new Error(\"blocked\");"
+  }, {
+    "label": "failed recovery spends no rebuild budget",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "      if (!refused) this.#spend();",
+    "replace": "      void refused;"
+  }, {
+    "label": "held clocks hide invalid structs from the live trial",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "    if (overlapsHeld) copyTrial();",
+    "replace": "    void overlapsHeld;"
+  }, {
+    "label": "local reuse of a held clock trusts equal vectors",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "      if (after > before && Y.getState(this.#replica.doc.store, client) > before) return true;",
+    "replace": "      void after; void before; void client;"
+  }, {
+    "label": "surrogate item normalization leaves the replica clean",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "(part: { insert?: unknown }) => typeof part.insert === \"string\" && /[\\ud800-\\udfff]/.test(part.insert))) return true;",
+    "replace": "(part: { insert?: unknown }) => typeof part.insert === \"string\" && /[\\ud800-\\udfff]/.test(part.insert))) return false;"
   }]
 }

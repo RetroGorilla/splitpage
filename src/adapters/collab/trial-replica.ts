@@ -23,6 +23,7 @@ export class SharedTrialReplica implements IngressTrial {
   readonly #stops: (() => void)[] = [];
   #replica: CollabDocumentState;
   #stale = false;
+  #rebuildBlocked = false;
   #disposed = false;
   #spent = 0;
   #stopped = false;
@@ -64,8 +65,20 @@ export class SharedTrialReplica implements IngressTrial {
     this.#inflight.delete(transaction);
     // why: A remote transaction applies only an update the replica took at its trial; a stale replica is rebuilt whole.
     if (transaction.origin === "remote" || this.#stale) return;
+    if (this.#needsSnapshot(transaction)) { this.#stale = true; return; }
     this.#count?.("apply", "follow", update.byteLength);
     try { Y.applyUpdate(this.#replica.doc, update); } catch { this.#stale = true; }
+  }
+
+  #needsSnapshot(transaction: Y.Transaction): boolean {
+    for (const [client, after] of transaction.afterState) {
+      const before = transaction.beforeState.get(client) ?? 0;
+      if (after > before && Y.getState(this.#replica.doc.store, client) > before) return true;
+    }
+    // why: Wire encoding normalizes surrogate fragments per item; native item merges can change their encoded content.
+    for (const type of transaction.changedParentTypes.keys()) if (type instanceof Y.Text && type.toDelta().some(
+      (part: { insert?: unknown }) => typeof part.insert === "string" && /[\ud800-\udfff]/.test(part.insert))) return true;
+    return false;
   }
 
   #rebuild(): void {
@@ -75,19 +88,29 @@ export class SharedTrialReplica implements IngressTrial {
     this.#stale = false;
   }
 
-  #current(): void {
+  #current(): boolean {
     if (this.#disposed) throw new Error("The trial replica has ended");
+    for (const transaction of this.#inflight) {
+      if (transaction.origin !== "remote" && this.#needsSnapshot(transaction)) this.#stale = true;
+    }
     if (!this.#stale && [...this.#inflight].some(transaction => transaction.origin !== "remote")) {
       // why: A live transaction whose update is not announced yet is copied by what the replica lacks.
       const missing = Y.encodeStateAsUpdate(this.#live.doc, Y.encodeStateVector(this.#replica.doc));
       this.#count?.("encode", "flush", missing.byteLength); this.#count?.("apply", "flush", missing.byteLength);
       try { Y.applyUpdate(this.#replica.doc, missing); } catch { this.#stale = true; }
     }
-    if (this.#stale) this.#rebuild();
+    if (this.#stale && !this.#rebuildBlocked && !this.#stopped) this.#recover(false);
+    return !this.#stale;
   }
 
-  attempt(update: Uint8Array): void {
-    this.#current();
+  attempt(update: Uint8Array, decoded: ReturnType<typeof Y.decodeUpdate>, copyTrial: () => void): void {
+    if (!this.#current()) { copyTrial(); return; }
+    const overlapsHeld = this.#live.ingress.held.length > 0 && decoded.structs.some(struct => {
+      const live = Y.getState(this.#live.doc.store, struct.id.client);
+      const replica = Y.getState(this.#replica.doc.store, struct.id.client);
+      return struct.id.clock < replica && struct.id.clock + struct.length > live && replica > live;
+    });
+    if (overlapsHeld) copyTrial();
     this.#count?.("apply", "trial", update.byteLength);
     try { Y.applyUpdate(this.#replica.doc, update); } catch (error) { this.#refused(); throw error; }
   }
@@ -96,9 +119,22 @@ export class SharedTrialReplica implements IngressTrial {
   // and the last one stops intake, so invalid updates cannot force rebuilds without end.
   #refused(): void {
     this.#stale = true;
+    this.#recover(true);
+  }
+
+  #spend(): void {
     this.#spent++;
     if (this.#spent >= SHARED_TRIAL_REBUILD_BUDGET) { this.#stopped = true; this.#announce = true; }
-    try { this.#rebuild(); } catch { this.#stale = true; }
+  }
+
+  #recover(refused: boolean): void {
+    if (refused) this.#spend();
+    try { this.#rebuild(); } catch {
+      this.#stale = true;
+      // why: Accepted arrivals can grow the queue without removing the update that prevents a rebuild.
+      this.#rebuildBlocked = true;
+      if (!refused) this.#spend();
+    }
   }
 
   stopped(): boolean { return this.#stopped; }
@@ -110,7 +146,7 @@ export class SharedTrialReplica implements IngressTrial {
   }
 
   encode(): Uint8Array {
-    this.#current();
+    if (!this.#current()) throw new Error("The trial replica cannot be rebuilt while held updates remain");
     return Y.encodeStateAsUpdate(this.#replica.doc);
   }
 
@@ -121,6 +157,7 @@ export class SharedTrialReplica implements IngressTrial {
   release(): void { if (--this.#holders <= 0) this.dispose(); }
 
   released(): boolean {
+    this.#rebuildBlocked = false;
     if (this.#stale || this.#disposed) return true;
     if (sameVector(this.#live.doc, this.#replica.doc)) return true;
     this.#stale = true;

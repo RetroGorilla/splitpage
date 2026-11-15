@@ -401,6 +401,103 @@ function reasons(results: readonly { readonly ok: boolean; readonly reason?: str
   return totals;
 }
 
+test("failed rebuilds wait for a drain: 1,000 no-ops use live copy trials and three separate failures stop intake", () => {
+  const handle = createMonitoredSharedDocument(), counts = counter();
+  try {
+    const state = collabState(handle);
+    state.doc.clientID = 8;
+    const trial = startSharedTrialReplica(handle, counts.count);
+    let heard = 0;
+    observeSharedIntakeStopped(handle, () => { heard++; });
+    const dependent = crafted(7, [metaItem(7, 0, "", 1, Y.createID(8, 0)),
+      new Y.Item(Y.createID(7, 1), null, Y.createID(7, 2), null, null, META, "cycle", new Y.ContentAny([2])),
+      new Y.Item(Y.createID(7, 2), null, Y.createID(7, 1), null, null, META, "cycle", new Y.ContentAny([3]))]);
+    const release = holdSharedBuffer(handle);
+    assert.deepEqual(applySharedUpdate(handle, dependent), { ok: true });
+    transactSharedDocument(handle, "local-command", () => { state.roots.meta.set("base", 1); });
+    assert.equal(trial.stale, true);
+    counts.reset();
+    const results = Array.from({ length: 1000 }, () => applySharedUpdate(handle, Uint8Array.of(0, 0), counts.count));
+    assert.deepEqual(reasons(results), { ok: 1000 });
+    assert.deepEqual([counts.calls("encode:rebuild"), counts.calls("encode:copy"), trial.spent, trial.stopped()], [1, 1000, 1, false]);
+    assert.deepEqual(applySharedUpdate(handle, partialUpdate(11), counts.count), { ok: false, reason: "invalid-update" });
+    assert.deepEqual([counts.calls("encode:rebuild"), trial.spent], [1, 1]);
+    assert.equal(thrown(release), "TypeError");
+    assert.equal(state.ingress.held.length, 0);
+    assert.equal(matches(handle), true);
+    for (const client of [9, 10]) {
+      const end = holdSharedBuffer(handle);
+      const clock = Y.getState(state.doc.store, 8);
+      const bad = crafted(client, [metaItem(client, 0, "", 1, Y.createID(8, clock)),
+        new Y.Item(Y.createID(client, 1), null, Y.createID(client, 2), null, null, META, "cycle", new Y.ContentAny([2])),
+        new Y.Item(Y.createID(client, 2), null, Y.createID(client, 1), null, null, META, "cycle", new Y.ContentAny([3]))]);
+      assert.deepEqual(applySharedUpdate(handle, bad), { ok: true });
+      transactSharedDocument(handle, "local-command", () => { state.roots.meta.set("base", client); });
+      assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+      assert.equal(thrown(end), "TypeError");
+    }
+    assert.deepEqual([trial.spent, trial.stopped(), heard], [3, true, 1]);
+    assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: false, reason: "intake-stopped" });
+  } finally { destroySharedDocument(handle); }
+});
+
+test("held clock overlap checks live: hidden invalid structs are refused, genuine duplicates pass, disjoint updates copy no document", () => {
+  const outcomes: unknown[] = [];
+  for (const standing of [false, true]) {
+    const handle = createMonitoredSharedDocument(), counts = counter();
+    try {
+      if (standing) startSharedTrialReplica(handle, counts.count);
+      const release = holdSharedBuffer(handle);
+      const held = crafted(7, [metaItem(7, 0, "a", 1), metaItem(7, 1, "b", 2), metaItem(7, 2, "c", 3)]);
+      const accepted = applySharedUpdate(handle, held, counts.count);
+      const refused = applySharedUpdate(handle, partialUpdate(7), counts.count);
+      const duplicate = applySharedUpdate(handle, held, counts.count);
+      counts.reset();
+      const disjoint = applySharedUpdate(handle, crafted(9, [metaItem(9, 0, "other", 4)]), counts.count);
+      if (standing) assert.deepEqual([counts.calls("encode:copy"), counts.calls("encode:rebuild"), counts.calls("encode:flush")], [0, 0, 0]);
+      release();
+      outcomes.push([accepted, refused, duplicate, disjoint, collabState(handle).roots.meta.toJSON()]);
+    } finally { destroySharedDocument(handle); }
+  }
+  const expected = [{ ok: true }, { ok: false, reason: "invalid-update" }, { ok: true }, { ok: true }, { a: 1, b: 2, c: 3, other: 4 }];
+  assert.deepEqual(outcomes, [expected, expected]);
+});
+
+test("local reuse of a held clock rebuilds from live content even when vectors are equal", () => {
+  const handle = createMonitoredSharedDocument(), counts = counter();
+  try {
+    const state = collabState(handle);
+    state.doc.clientID = 7;
+    const trial = startSharedTrialReplica(handle, counts.count), release = holdSharedBuffer(handle);
+    assert.deepEqual(applySharedUpdate(handle, crafted(7, [metaItem(7, 0, "remote", 1)])), { ok: true });
+    transactSharedDocument(handle, "local-command", () => { state.roots.meta.set("local", 1); });
+    release();
+    assert.deepEqual(state.roots.meta.toJSON(), { local: 1 });
+    counts.reset();
+    assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+    assert.equal(same(trial.encode(), livePlusHeld(handle)), true);
+    assert.deepEqual([counts.calls("encode:rebuild"), trial.spent], [1, 0]);
+  } finally { destroySharedDocument(handle); }
+});
+
+test("local surrogate fragments rebuild like a fresh wire copy after native text items merge", () => {
+  const handle = createMonitoredSharedDocument(), counts = counter();
+  try {
+    const text = new Y.Text();
+    transactSharedDocument(handle, "local-command", () => { collabState(handle).roots.meta.set("text", text); });
+    const trial = startSharedTrialReplica(handle, counts.count);
+    transactSharedDocument(handle, "local-command", () => { text.insert(0, "\ud800"); });
+    transactSharedDocument(handle, "local-command", () => { text.insert(1, "\udc00"); });
+    counts.reset();
+    const release = holdSharedBuffer(handle);
+    assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+    release();
+    assert.equal(text.toString(), "\ud800\udc00");
+    assert.equal(same(trial.encode(), livePlusHeld(handle)), true);
+    assert.deepEqual([counts.calls("encode:rebuild"), trial.spent], [1, 0]);
+  } finally { destroySharedDocument(handle); }
+});
+
 test("the rebuild budget is 3 per replica: 1,000 refused updates in a row cost exactly 3 rebuilds of one live copy each, then intake stops and costs nothing", () => {
   const handle = hydrated(1), counts = counter();
   try {

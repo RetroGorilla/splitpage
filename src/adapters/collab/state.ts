@@ -20,7 +20,7 @@ export type SharedAdmissionWork = "encode" | "apply";
 export type SharedAdmissionCount = (work: SharedAdmissionWork, key: string, bytes: number) => void;
 
 export interface IngressTrial {
-  readonly attempt: (update: Uint8Array) => void;
+  readonly attempt: (update: Uint8Array, decoded: ReturnType<typeof Y.decodeUpdate>, copyTrial: () => void) => void;
   readonly stopped: () => boolean;
   readonly takeStop: () => boolean;
   readonly liveFailed: () => void;

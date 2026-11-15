@@ -85,7 +85,8 @@ copy of live, then the update. Inside a shared session the trial runs on one sta
 replica, `SharedTrialReplica` in `src/adapters/collab/trial-replica.ts`. `createSharedReplica`
 acquires it; ports on one document share it. The last port's `dispose`, or
 `destroySharedDocument`, releases it. A trial
-then costs about the size of the update instead of the whole history.
+normally costs about the size of the update. Stale recovery and checks of clocks held only
+in the replica can still copy the whole live history.
 
 ### What the replica contains
 
@@ -110,6 +111,17 @@ a struct whose origin is in A.
 This is assumed rule 210. No case goes the other way: against live alone, dependent structs
 only wait as pending, and the decode and zero-length checks do not depend on state.
 
+When an incoming struct overlaps clocks present in the replica but absent from live, the
+update is also tried on a fresh copy of live. Otherwise the library could skip invalid
+structs as duplicates of held clocks. Genuine held duplicates remain accepted. Disjoint
+updates keep the incremental path without a whole-document copy.
+
+A local write can reuse a held clock with different content. The local transaction's before
+state detects that collision and marks the replica stale. Local text containing surrogate
+units does the same: wire encoding normalizes fragments per item, and later native item
+merges can change the encoded content without changing the state vector. Both cases rebuild
+from live plus held before the next trial. A successful stale recovery spends no budget.
+
 An update can arrive inside a live local transaction or its notifications, before that
 transaction's `update` event. The replica then first copies what it lacks
 (`encodeStateAsUpdate(live, replicaVector)`). That copy carries the whole delete set; it
@@ -121,9 +133,17 @@ An update refused before it reaches the replica costs nothing: an update that do
 decode, a zero-length struct, a full buffer queue. An update whose application to the replica
 throws may have written part of itself there. That refusal rebuilds the replica at once from
 live plus held, one copy of each, and spends one unit of `SHARED_TRIAL_REBUILD_BUDGET` (3)
-for the replica's lifetime.
+for the replica's lifetime. A stale recovery that fails also spends one unit. If a refusal's
+rebuild fails, it spends the refusal's unit once, rather than charging twice.
 
-The third such refusal stops intake (assumed rule 211). Every later received update is
+A failed rebuild is latched until the held queue drains. New arrivals do not retry it,
+including accepted no-ops appended to the queue. While latched, every incoming update uses
+the original copy trial against live alone. Releasing held updates keeps the original live
+failure and drain behavior. Once the queue has drained, recovery may be tried again.
+
+Spending the third unit stops intake (assumed rule 211). If a stale recovery fails on a valid
+arrival, that arrival still gets its live copy trial and can be accepted; the stop is
+announced once, and all later arrivals are refused. Every later received update is
 answered `{ ok: false, reason: "intake-stopped" }` with no trial, no rebuild and no write to
 live. Local editing and undo go on, held updates already accepted are still released, and
 nothing is lost. `observeSharedIntakeStopped` reports the stop once; `sharedIntakeStopped`
@@ -158,7 +178,7 @@ stops and as the fallback of a leave. The projector publishes whatever revision 
 and the session takes it as remote. The person sees nothing beyond what that revision shows;
 no notice exists for it. The only new part is that the replica is marked stale, including when
 the remote transaction never ran, and is rebuilt from live plus held before the next trial.
-That rebuild does not spend the budget.
+That rebuild spends budget only if it fails.
 
 ### One mirror or two
 
@@ -172,6 +192,7 @@ three copies: live, the mirror and the trial replica.
 
 ### Memory
 
+The historical table below is from revision `7e5077d07`; samples not kept.
 Measured in Node with `--expose-gc`, adapter level only: heap after two forced collections,
 median of five passes, on the growth record's fixtures and its heavily edited states (same
 workload, `tests/collab/measure/run.mjs`). Each step is the heap added by that step. Live is
@@ -179,7 +200,11 @@ workload, `tests/collab/measure/run.mjs`). Each step is the heap added by that s
 and caches), and the trial replica is `startSharedTrialReplica`. The budget lines are from
 [Stage 0 audit 7](stage-0/7-performance-baseline.md): standalone after load is 7.13 MiB on long
 and 14.96 MiB on large, so the room for everything shared is 10 MiB on long and 14.96 MiB on
-large. These Node figures are not the browser application's heap.
+large. These are Node adapter heap estimates (`heapUsed`, excluding external backing
+storage), not browser figures. `tests/collab/measure/trial-heap.mjs` commits the runner;
+`trial-heap.json` records the new run's exact revision, five byte samples per row and medians
+in MiB. Run it once, alone, with `node --expose-gc --max-old-space-size=4096
+tests/collab/measure/trial-heap.mjs` after committing the code to measure.
 
 | Script / state | Encoded bytes | Live MiB | Mirror MiB | Trial replica MiB | Shared total without / with replica MiB | Room MiB |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -236,7 +261,9 @@ The trial is counted in bytes through the optional `count` hook of `applySharedU
 `startSharedTrialReplica`. For one received 26-byte update (a scalar change), the copy trial
 encodes and applies the whole document again: 1,938 bytes on the two-beat test document
 (943 copied) and 286,880 bytes on a 300-beat one (143,414 copied). The standing replica
-applies 52 bytes on both: the update once on the replica and once on live.
+applies 52 bytes on both: the update once on the replica and once on live. These are bytes
+moved by the adapter for those exact fixtures. A stale recovery copies the whole live
+document plus held updates, and a nested arrival can encode the complete delete set.
 
 ## Tests
 
@@ -247,4 +274,4 @@ revision against the same arrivals applied one by one. `tests/collab/ingress-gat
 holds nine deliberate defects, listed in `tests/collab/mutants.md`. The trial replica's cases
 are in `tests/adapters/collab/trial-replica.test.ts`, with its session lifetime in
 `tests/bootstrap/shared-switch.test.ts`. `tests/collab/trial-replica-mutants.json` holds its
-eleven deliberate defects.
+seventeen deliberate defects.
