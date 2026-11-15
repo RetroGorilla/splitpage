@@ -12,10 +12,8 @@ const WRITTEN_ORDER: readonly string[] = Object.freeze(["id", "audioText", "visu
 
 // why: diffStates follows key order, so projected rows take the field order flow.ts writes
 function written(row: Readonly<StepRow>): StepRow {
-  const ordered: StepRow = {};
-  for (const key of WRITTEN_ORDER) if (Object.hasOwn(row, key)) ordered[key] = row[key];
-  for (const key of Object.keys(row)) if (!Object.hasOwn(ordered, key)) ordered[key] = row[key];
-  return ordered;
+  const keys = [...WRITTEN_ORDER.filter(key => Object.hasOwn(row, key)), ...Object.keys(row).filter(key => !WRITTEN_ORDER.includes(key))];
+  return Object.fromEntries(keys.map(key => [key, row[key]]));
 }
 
 function changedRows(doc: ReplayedDocument, changes: ChangeSet): StepRow[] {
