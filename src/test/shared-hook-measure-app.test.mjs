@@ -19,7 +19,16 @@ const { fromHtml } = await import("../bootstrap/richtext.ts");
 const { addBeatCommand } = await import("../application/commands/rows.ts");
 const { encodeSharedState, encodeSharedStateVector, encodeSharedUpdate } = await import("../adapters/collab/document.ts");
 const { PART_SEAMS, markParts } = await import("../../tests/collab/measure/mark-parts.mjs");
+const { timingMarks } = await import("../../shared/timing-marks.ts");
 const hook = window.__sharedTest;
+
+function dispatched(run) {
+  if (!timingMarks.marksOn) return run();
+  performance.mark("measure:event:start");
+  try { return run(); } finally { performance.mark("measure:event:end"); }
+}
+
+const dispatch = (target, event) => dispatched(() => target.dispatchEvent(event));
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "World", visualText: "" }];
 const FILLED = "€".repeat(4);
@@ -33,16 +42,16 @@ function script(given = ROWS) {
 
 function appTypes(data) {
   const root = document.getElementById("writer-doc"), element = root.querySelector('.wr-beat[data-id="r1"]'), node = element.lastChild;
-  root.focus();
+  dispatched(() => { root.focus(); });
   const range = document.createRange();
   range.setStart(node, node.data.length); range.collapse(true);
   window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
   const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data });
   const target = range.cloneRange();
   Object.defineProperty(before, "getTargetRanges", { value: () => [target] });
-  assert.equal(element.dispatchEvent(before), true);
+  assert.equal(dispatch(element, before), true);
   node.data += data;
-  return () => { element.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data })); };
+  return () => { dispatch(element, new window.InputEvent("input", { bubbles: true, inputType: "insertText", data })); };
 }
 
 function fakeClock() {
@@ -216,7 +225,10 @@ function probed(run) {
   for (const [owner, name] of PROBES) {
     const real = owner[name], own = Object.hasOwn(owner, name);
     if (typeof real !== "function" || restore.some(entry => entry.owner === owner && entry.name === name)) continue;
-    owner[name] = function (...args) { now++; return real.apply(this, args); };
+    owner[name] = function (...args) {
+      if (owner !== Date || !/[\\/]jsdom[\\/].*Event-impl\.js/.test(new Error().stack)) now++;
+      return real.apply(this, args);
+    };
     restore.push({ owner, name, undo: () => { if (own) owner[name] = real; else delete owner[name]; } });
   }
   performance.mark = name => { recorded.push({ name, startTime: now }); if (PART_STARTS.has(name)) now++; };
@@ -228,7 +240,7 @@ function probed(run) {
   try { return { parts: markParts(recorded), names }; } catch (error) { assert.fail(error.message + " in " + names.join(" ")); }
 }
 
-const key = (element, name, options = {}) => element.dispatchEvent(new window.KeyboardEvent(name, { bubbles: true, cancelable: true, ...options }));
+const key = (element, name, options = {}) => dispatch(element, new window.KeyboardEvent(name, { bubbles: true, cancelable: true, ...options }));
 
 function press(element, data, insert, between = () => {}) {
   key(element, "keydown", { key: data });
@@ -236,16 +248,16 @@ function press(element, data, insert, between = () => {}) {
   const range = window.getSelection().getRangeAt(0).cloneRange();
   const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data });
   Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
-  assert.equal(element.dispatchEvent(before), true);
+  assert.equal(dispatch(element, before), true);
   insert(range);
   between();
-  element.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data }));
+  dispatch(element, new window.InputEvent("input", { bubbles: true, inputType: "insertText", data }));
   key(element, "keyup", { key: data });
 }
 
 function writerBeat() {
   const root = document.getElementById("writer-doc"), element = root.querySelector('.wr-beat[data-id="r1"]'), node = element.lastChild;
-  root.focus();
+  dispatched(() => { root.focus(); });
   const range = document.createRange();
   range.setStart(node, node.data.length); range.collapse(true);
   window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
@@ -260,13 +272,15 @@ function splitCell() {
   const range = document.createRange();
   range.selectNodeContents(cell); range.collapse(false);
   window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
-  return { cell, type: data => { press(cell, data, at => {
-    at.deleteContents();
-    const text = document.createTextNode(data);
-    at.insertNode(text);
-    window.getSelection().setBaseAndExtent(text, data.length, text, data.length);
-  }); } };
+  return { cell, type: data => { press(cell, data, inserted(data)); } };
 }
+
+const inserted = data => at => {
+  at.deleteContents();
+  const text = document.createTextNode(data);
+  at.insertNode(text);
+  window.getSelection().setBaseAndExtent(text, data.length, text, data.length);
+};
 
 test("unattributed time: on a clock that only marked stages and one deliberately unmarked listener advance, unattributed is exactly that listener's time", async () => {
   await shared(() => {
@@ -284,28 +298,33 @@ test("unattributed time: on a clock that only marked stages and one deliberately
   });
 });
 
-test("event spans: an event of the same type dispatched inside another leaves the outer span open, and an event stopped on its way closes after the listener that stopped it", async () => {
-  await shared(async p => {
+test("outer spans from the test's own dispatch: an unmarked capture listener on the window, a listener after one that stops the event on the same target, and a selectionchange on the document each count inside the event span", async () => {
+  await shared(p => {
     p.hold();
     hook.timing(true);
-    const elsewhere = document.body.appendChild(document.createElement("div"));
-    const made = new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "x" });
-    let nested = true;
-    const inner = () => { if (nested) { nested = false; elsewhere.dispatchEvent(made); } };
-    const { parts, names } = probed(() => {
-      document.addEventListener("input", inner, true);
-      try { writerBeat().type("!"); } finally { document.removeEventListener("input", inner, true); }
+    const listened = (target, type, listener, run, capture = false) => {
+      target.addEventListener(type, listener, capture);
+      try { run(); } finally { target.removeEventListener(type, listener, capture); }
+    };
+    const captured = probed(advance => {
+      listened(window, "keydown", () => { advance(5); }, () => { writerBeat().type("!"); }, true);
     });
-    elsewhere.remove();
-    assert.equal(parts.unattributed, 0, names.join(" "));
-    assert.equal(names.filter(name => name === "event:start").length, 6, "five key and input events and the nested one");
-    const root = document.getElementById("writer-doc"), stop = event => { event.stopPropagation(); };
-    root.addEventListener("keyup", stop);
-    performance.clearMarks();
-    try { key(root, "keyup", { key: "!" }); } finally { root.removeEventListener("keyup", stop); }
-    assert.deepEqual(marks(), ["measure:event:start"], "the stopped keyup does not reach the window");
-    await new Promise(resolve => { queueMicrotask(resolve); });
-    assert.deepEqual(marks(), ["measure:event:start", "measure:event:end"], "it closes in the microtask after the stopping listener");
+    assert.equal(captured.parts.unattributed, 5, "a capture listener on the window runs before the app's: " + JSON.stringify(captured.parts));
+    const stopped = probed(advance => {
+      const { root, type } = writerBeat();
+      listened(root, "keyup", event => { event.stopPropagation(); }, () => {
+        listened(root, "keyup", () => { advance(4); }, () => { type("?"); });
+      });
+    });
+    assert.equal(stopped.parts.unattributed, 4, "the listener after the stop on the same target still runs: " + JSON.stringify(stopped.parts));
+    assert.deepEqual(rows(hook.read().app), [["r1", "Hello!?"], ["r2", "World"]]);
+    const element = document.querySelector('#writer-doc .wr-beat[data-id="r1"]');
+    window.getSelection().setBaseAndExtent(element.lastChild, 0, element.lastChild, 0);
+    const moved = probed(() => { dispatch(document, new window.Event("selectionchange")); });
+    assert.deepEqual([moved.names[0], moved.names.at(-1)], ["event:start", "event:end"], moved.names.join(" "));
+    const movedSpans = spans(moved.names.map(name => "measure:" + name));
+    assert.ok(of(movedSpans, "input-handler").length === 1 && insideOne(of(movedSpans, "input-handler")[0], of(movedSpans, "event")),
+      "the Writer's selection handler runs inside the event span: " + moved.names.join(" "));
   });
 });
 
@@ -358,7 +377,7 @@ test("unattributed time is zero on a clock that every probed call advances: a ty
       const range = window.getSelection().getRangeAt(0).cloneRange();
       const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "^" });
       Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
-      assert.equal(cell.cell.dispatchEvent(before), true);
+      assert.equal(dispatch(cell.cell, before), true);
       range.deleteContents();
       const text = document.createTextNode("^");
       range.insertNode(text);
@@ -374,6 +393,27 @@ test("unattributed time is zero on a clock that every probed call advances: a ty
     assert.deepEqual(rows(hook.read().app).map(([, text]) => text).filter(text => text !== ""), ["Hello%^", "XYZWorld"], "the typing and the peer update both landed");
     assert.equal(hook.read().app.rows.length, 4, "Ctrl+Enter added a beat");
   });
+});
+
+test("unattributed time is zero when leaving a shared Split visual cell keys its b-roll line, and the keying runs as an input command with its write", async () => {
+  await shared(p => {
+    p.hold();
+    hook.timing(true);
+    writerControls().closeWriter();
+    const cellOf = (rowId, field) => document.querySelector(`#rows .cell-editable[data-id="${rowId}"][data-field="${field}"]`);
+    const visual = cellOf("r1", "visualText"), other = cellOf("r2", "audioText");
+    assert.ok(visual && other);
+    dispatched(() => { visual.focus(); });
+    const first = document.createTreeWalker(visual, window.NodeFilter.SHOW_TEXT).nextNode();
+    window.getSelection().setBaseAndExtent(first, 0, first, 0);
+    for (const character of "B-roll: ") press(visual, character, inserted(character));
+    assert.equal(hook.read().app.rows[0].visualText, "B-roll: Close up");
+    const left = probed(() => { dispatched(() => { other.focus(); }); });
+    assert.equal(left.parts.unattributed, 0, JSON.stringify(left.parts) + " " + left.names.join(" "));
+    const found = spans(left.names.map(name => "measure:" + name)), writes = of(found, "input-write");
+    assert.ok(writes.length >= 1 && writes.every(write => insideOne(write, of(found, "input-command"))), "the keying writes inside its command: " + left.names.join(" "));
+    assert.match(hook.read().app.rows[0].visualText, /class="broll-key"/, "leaving the cell keyed the line");
+  }, [{ id: "r1", audioText: "Hello", visualText: "Close up" }, { id: "r2", audioText: "World", visualText: "" }]);
 });
 
 const STRUCTURE = [

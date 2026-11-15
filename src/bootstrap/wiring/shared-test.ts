@@ -73,41 +73,10 @@ function reattachDraft(kept: Detached): void {
     () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);
 }
 
-const MEASURED_EVENTS = Object.freeze(["keydown", "keypress", "keyup", "beforeinput", "input", "compositionstart", "compositionupdate", "compositionend",
-  "cut", "copy", "paste", "drop", "focusin", "focusout", "mousedown", "mouseup", "click", "selectionchange"]);
-
-// why: one event span from the window's capture listener to a listener appended after the last bubbling one;
-// an event stopped on its way closes in the microtask after the listener that stopped it
-function measureEvents(): () => void {
-  const opened = (event: Event): void => {
-    let open = true;
-    const close = (): void => {
-      if (!open) return;
-      open = false;
-      window.removeEventListener(event.type, closed);
-      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:event:end");
-    };
-    const closed = (seen: Event): void => { if (seen === event) close(); };
-    for (const name of ["stopPropagation", "stopImmediatePropagation"] as const) {
-      const stop = event[name].bind(event);
-      Object.defineProperty(event, name, { configurable: true, value: () => { stop(); queueMicrotask(close); } });
-    }
-    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:event:start");
-    window.addEventListener(event.type, closed);
-  };
-  for (const type of MEASURED_EVENTS) window.addEventListener(type, opened, true);
-  return () => { for (const type of MEASURED_EVENTS) window.removeEventListener(type, opened, true); };
-}
-
 function startSharedTestHook(): () => void {
   let peer: ReturnType<typeof createSharedTestPeer> | null = null, detached: Detached | null = null;
   let switching = false, composing = false, live = true, detachRefused: string | null = null;
-  let withdraw = (): void => {}, unmeasure: (() => void) | null = null;
-  const timing = (on: boolean): void => {
-    timingMarks.marksOn = on === true;
-    unmeasure?.();
-    unmeasure = timingMarks.marksOn ? measureEvents() : null;
-  };
+  let withdraw = (): void => {};
   const counts = { recovered: 0, missingBase: 0, ownershipScans: 0 };
   const report = (error: unknown): void => { console.error(error); };
   const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
@@ -195,7 +164,7 @@ function startSharedTestHook(): () => void {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
-    timing,
+    timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
     recovery: () => {
@@ -207,7 +176,6 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
-    timing(false);
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
       document.removeEventListener("compositionend", composition, true);
