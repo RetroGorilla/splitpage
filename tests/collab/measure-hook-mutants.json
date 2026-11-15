@@ -19,7 +19,7 @@
       "file": "src/adapters/collab/document.ts",
       "find": "SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
       "replace": "SPLITPAGE_TEST_HOOKS) || timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
-      "tests": ["src/test/shared-hook-measure-app.test.mjs", "tests/adapters/collab/timing-marks.test.ts"]
+      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
     },
     {
       "label": "release build keeps the render mark",
@@ -124,7 +124,7 @@
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "duration - span.nested;",
       "replace": "duration;",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs", "src/test/shared-hook-measure-app.test.mjs"]
+      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
     },
     {
       "label": "the held copy of a queued update is not marked",
@@ -229,7 +229,7 @@
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "unattributed: outer - attributed",
       "replace": "unattributed: 0",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs", "src/test/shared-hook-measure-app.test.mjs"]
+      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
     },
     {
       "label": "an outer span nested in a part counts as that part's nested time",
