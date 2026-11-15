@@ -1,6 +1,7 @@
 import { collabState } from "../../adapters/collab/state.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { productionReaders } from "../document-ports.ts";
+import { sharedLeftCellKeying, sharedScriptBrollKeyingPorts } from "./ports/shared-broll-keying.ts";
 import { sharedBufferPorts } from "./ports/shared-buffer.ts";
 import { sharedCommandReport } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
@@ -21,6 +22,7 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
   let cancelReopen: (() => void) | null = null;
   let pendingSelection: FlowRange | null = null;
   let reopenPending = false;
+  let closing = false;
   const abandons = new Set<(final: boolean) => void>();
   const abandonment = (abandon: (final: boolean) => void): (() => void) => { abandons.add(abandon); return () => { abandons.delete(abandon); }; };
   const abandonAll = (final: boolean): void => {
@@ -64,15 +66,18 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
   return {
     enter: parts => {
       entered = parts;
+      closing = false;
       const author = (): { readonly id: string; readonly by: string } => {
         const next = parts.author.next();
         if (!next) throw new Error(SHARED_WRITER_NO_AUTHOR);
         return next;
       };
-      const text = sharedBufferPorts(parts.handle, parts.session, { ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders,
+      const notify = sharedCommandReport(notices, effects.report);
+      const text = sharedBufferPorts(parts.handle, parts.session, { ...effects, report: notify, author, readers: productionReaders,
         stamps: sessionStamps, abandonment });
       restart({ text, author: parts.author, writer: () => String(collabState(parts.handle).doc.clientID),
-        handle: () => entered === parts ? parts.handle : null, lifetime: parts.session });
+        handle: () => entered === parts ? parts.handle : null, lifetime: parts.session,
+        leftVisual: sharedLeftCellKeying(parts.session, sharedScriptBrollKeyingPorts(parts, sessionStamps), { open: () => !closing && entered === parts, notify }) });
     },
     settle: () => {
       const refused = entered ? entered.session.admit() : null;
@@ -80,10 +85,11 @@ export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingB
       if (refused.kind === "failed") effects.report(refused);
       return refused.kind === "rejected" ? refused.reason : "settle-failed";
     },
-    abandon: () => { abandonAll(false); },
-    drop: () => { abandonAll(true); },
+    abandon: () => { closing = true; abandonAll(false); },
+    drop: () => { closing = true; abandonAll(true); },
     abandonable: () => abandons.size,
     leave: () => {
+      closing = true;
       entered = null;
       restart();
     }
