@@ -1,7 +1,7 @@
 import { flowBaseReference } from "./base-reference.ts";
 import type { SharedIdentityGap, SharedInsertionChunk, SharedTextAddress, SharedTextDelete, SharedTextInsert } from "./operations.ts";
 import { FlowOperationTrace } from "../flow/operations.ts";
-import { explode, implode } from "../text/edits.ts";
+import { explode } from "../text/edits.ts";
 import type { Char } from "../text/edits.ts";
 import type { Run } from "../text/runs.ts";
 
@@ -30,25 +30,6 @@ function unitKey(unit: Char): string {
   return unit.atom ? JSON.stringify(["atom", sorted(unit.atom)]) : JSON.stringify([unit.ch, sorted(unit.marks)]);
 }
 
-function splitsPair(units: readonly Char[], at: number): boolean {
-  const high = units[at - 1], low = units[at];
-  const before = high && !high.atom ? high.ch.charCodeAt(0) : 0, after = low && !low.atom ? low.ch.charCodeAt(0) : 0;
-  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff;
-}
-
-export function sharedCellSplice(before: readonly Run[], after: readonly Run[]): SharedCellSplice | null {
-  const was = explode(before), now = explode(after);
-  let start = 0;
-  while (start < was.length && start < now.length && unitKey(was[start] as Char) === unitKey(now[start] as Char)) start++;
-  if (start === was.length && start === now.length) return null;
-  while (start > 0 && (splitsPair(was, start) || splitsPair(now, start))) start--;
-  let end = 0;
-  while (end < was.length - start && end < now.length - start
-    && unitKey(was[was.length - 1 - end] as Char) === unitKey(now[now.length - 1 - end] as Char)) end++;
-  while (end > 0 && (splitsPair(was, was.length - end) || splitsPair(now, now.length - end))) end--;
-  return { from: start, to: was.length - end, insert: implode(now.slice(start, now.length - end)) };
-}
-
 function merged(splices: readonly SharedCellSplice[], length: number): SharedCellSplice[] | null {
   const out: SharedCellSplice[] = [];
   for (const splice of splices) {
@@ -69,14 +50,13 @@ function chunks(owner: string, field: SharedCellText["field"], insert: readonly 
 }
 
 function gap(target: SharedTextAddress, splice: SharedCellSplice, length: number): SharedIdentityGap {
-  if (splice.to < length) return { left: null, right: flowBaseReference(target.owner, target.field, splice.to), affinity: "before" };
-  if (splice.from > 0) return { left: flowBaseReference(target.owner, target.field, splice.from - 1), right: null, affinity: "after" };
-  return { left: null, right: flowBaseReference(target.owner, target.field, 0), affinity: "before" };
+  if (splice.from < length) return { left: null, right: flowBaseReference(target.owner, target.field, splice.from), affinity: "before" };
+  return { left: flowBaseReference(target.owner, target.field, length - 1), right: null, affinity: "after" };
 }
 
 export function sharedCellTextOperations(cell: SharedCellText, splices: readonly SharedCellSplice[]): readonly SharedCellTextOperation[] | null {
   const was = explode(cell.before), parts = merged(splices, was.length);
-  if (!parts) return null;
+  if (!parts || (!was.length && parts.length)) return null;
   const result: Char[] = [];
   let kept = 0;
   for (const splice of parts) {

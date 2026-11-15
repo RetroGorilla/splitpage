@@ -1,6 +1,6 @@
 import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
-import { cellOf, inertBody, sanitizeHtml } from "../../../src/bootstrap/richtext.ts";
+import { cellOf, inertBody, sanitizeHtml, scriptCellOf } from "../../../src/bootstrap/richtext.ts";
 import { findQueryChanged, mountFindEvents, startFind } from "../../../src/features/find/find.ts";
 import type { SharedRewritePorts } from "../../../src/application/commands/document-edit.ts";
 import type { CommonDocumentSession } from "../../../src/application/session/document-session.ts";
@@ -80,7 +80,7 @@ export function findCopy(handle: SharedDocumentHandle, name: string, notices: No
   const author = sharedAuthorPort({ handle: () => handle, name: () => name });
   const owner = sharedUndoOwner(handle, () => author.next(), () => 0, error => { throw error; });
   const harnessed = sharedHarness(adapterReplica(handle, owner), { refused: sharedCommandRefusalNotice(notices.notices) });
-  const shared = sharedRewritePorts({ handle: () => handle, author: () => author.next(), stamps: bufferStamps(name, () => FIND_AT), cells: cellOf, readers: bufferReaders });
+  const shared = sharedRewritePorts({ handle: () => handle, author: () => author.next(), stamps: bufferStamps(name, () => FIND_AT), cells: scriptCellOf, readers: bufferReaders });
   return { owner, harness: harnessed, session: harnessed.session, shared };
 }
 

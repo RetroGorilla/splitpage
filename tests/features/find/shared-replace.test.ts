@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cellOf } from "../../../src/bootstrap/richtext.ts";
 import { sharedRewritePorts } from "../../../src/bootstrap/wiring/ports/shared-rewrites.ts";
+import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
 import { encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
+import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { operation } from "../../adapters/collab/executor-support.ts";
@@ -29,8 +31,19 @@ interface Fixture {
   readonly nth?: number;
   readonly matchCase?: boolean;
   readonly visual?: boolean;
+  readonly picture?: { readonly at: number; readonly bold?: boolean };
+  readonly joined?: { readonly audio: string; readonly visual: string; readonly audioAfter?: string };
   readonly after: string;
   readonly shared: "same" | "refused";
+}
+
+const PIC = '<img class="comment-img" data-blob="' + "a".repeat(64) + '" data-w="10" data-h="10" data-mime="image/png">';
+function pictured(fixture: Fixture) {
+  const field = fixture.visual ? "visualText" : "audioText", at = fixture.picture?.at ?? 0;
+  return { kind: "text-insert", id: "pic", by: "Bob", target: { owner: "R1", segment: "R1", field },
+    at: { left: null, right: flowBaseReference("R1", field, at), affinity: "before" },
+    content: [{ value: { atom: "image", ref: { sha256: "a".repeat(64), width: 10, height: 10, mime: "image/png" } },
+      marks: fixture.picture?.bold ? [{ kind: "b", value: true }] : [] }] };
 }
 
 const FIXTURES: readonly Fixture[] = [
@@ -58,19 +71,55 @@ const FIXTURES: readonly Fixture[] = [
   { name: "a visual cell", cell: "cup shot", find: "cup", put: "mug", visual: true, after: "mug shot", shared: "same" },
   { name: "beside emoji", cell: "\u{1F600}cup\u{1F600}", find: "cup", put: "mug", after: "\u{1F600}mug\u{1F600}", shared: "same" },
   { name: "a replacement holding the words", cell: "cup cup", find: "cup", put: "cupcup", all: true, after: "cupcup cupcup", shared: "same" },
-  { name: "markup characters in the replacement", cell: "a cup of", find: "cup", put: "<b>&", after: "a &lt;b&gt;&amp; of", shared: "same" }
+  { name: "markup characters in the replacement", cell: "a cup of", find: "cup", put: "<b>&", after: "a &lt;b&gt;&amp; of", shared: "same" },
+  { name: "a picture before the match", cell: "cup", find: "cup", put: "mug", picture: { at: 0 }, after: PIC + "mug", shared: "same" },
+  { name: "a picture right after the match", cell: "a cup.", find: "cup", put: "mug", picture: { at: 5 }, after: "a mug" + PIC + ".", shared: "same" },
+  { name: "a picture inside the bold run before the match", cell: "<strong>cup</strong> x", find: "cup", put: "mug", picture: { at: 0, bold: true },
+    after: "<strong>" + PIC + "mug</strong> x", shared: "same" },
+  { name: "a picture inside the bold run after the match", cell: "<strong>cup!</strong>", find: "cup", put: "mug", picture: { at: 3, bold: true },
+    after: "<strong>mug" + PIC + "!</strong>", shared: "same" },
+  { name: "a picture and a tag before the match", cell: TAG + "cup", find: "cup", put: "mug", picture: { at: 0 }, after: PIC + TAG + "mug", shared: "same" },
+  { name: "the second match after a picture", cell: "cup cup", find: "cup", put: "mug", nth: 1, picture: { at: 4 }, after: "cup " + PIC + "mug", shared: "same" },
+  { name: "every match around a picture", cell: "cup cup", find: "cup", put: "mug", all: true, picture: { at: 3 }, after: "mug" + PIC + " mug", shared: "same" },
+  { name: "a picture before the match in a visual cell", cell: "cup shot", find: "cup", put: "mug", visual: true, picture: { at: 0 }, after: PIC + "mug shot", shared: "same" },
+  { name: "every match beside a picture and a tag in a visual cell", cell: TAG + " cup", find: "cup", put: "mug", all: true, visual: true, picture: { at: 0 },
+    after: PIC + TAG + " mug", shared: "same" },
+  { name: "a match in narration joined from the next line", cell: "a cup of tea", find: "cup", put: "mug", nth: 1, joined: { audio: "the cup", visual: "" },
+    after: "a cup of tea the mug", shared: "same" },
+  { name: "every match in joined narration", cell: "a cup of tea", find: "cup", put: "mug", all: true, joined: { audio: "the cup", visual: "" },
+    after: "a mug of tea the mug", shared: "same" },
+  { name: "a visual joined from the next line", cell: "", find: "cup", put: "mug", all: true, visual: true, joined: { audio: "", visual: "cup", audioAfter: " " },
+    after: "mug", shared: "refused" },
+  { name: "a visual joined under this line's visual", cell: "R1", find: "cup", put: "mug", all: true, visual: true, joined: { audio: "", visual: "cup", audioAfter: " " },
+    after: "R1<br>mug", shared: "refused" },
+  { name: "every match, when one of them is in a joined visual", cell: "", find: "cup", put: "mug", all: true, visual: true,
+    joined: { audio: "cup", visual: "cup", audioAfter: " mug" }, after: "mug", shared: "refused" }
 ];
 
+function fixtureSource(fixture: Fixture) {
+  const document = source(fixture.cell, fixture.visual);
+  if (fixture.joined) (document.rows as Record<string, unknown>[])[1] = { id: "R2", status: "todo", audioText: fixture.joined.audio, visualText: fixture.joined.visual };
+  return document;
+}
 
 for (const fixture of FIXTURES) test(`Find replace differential, standalone against shared: ${fixture.name}`, () => {
-  const aloneNotices = fakeNotices(), h = harness();
-  h.session.adopt(source(fixture.cell, fixture.visual));
-  const alone = finder(h.session, aloneNotices, undefined, fixture.matchCase);
-  try { act(alone, fixture); } finally { alone.dispose(); }
-  const standalone = h.session.read(doc => doc?.rows.map(cells));
-  assert.deepEqual(standalone?.[0], expected(fixture.after, fixture.visual));
-  const sharedNotices = fakeNotices(), set = setup(source(fixture.cell, fixture.visual)), a = copy(set.a, "Alice", sharedNotices);
+  const sharedNotices = fakeNotices(), set = setup(fixtureSource(fixture)), a = copy(set.a, "Alice", sharedNotices);
   try {
+    if (fixture.picture) { send(set.b, pictured(fixture)); flush(set.queue, "D1"); }
+    if (fixture.joined) { send(set.b, { kind: "join", id: "joined", by: "Bob", from: "R2", into: "R1", glue: " " }); flush(set.queue, "D1"); }
+    const field = fixture.visual ? "visualText" : "audioText", start = agreeing("start", set)[0]?.[field] as string;
+    const aloneNotices = fakeNotices(), h = harness(), document = fixtureSource(fixture);
+    if (fixture.joined) {
+      const shown = projectSharedDocumentWithRecovery(set.a).document.rows;
+      document.rows = shown.map(row => ({ id: row.id, status: "todo", audioText: row.audioText, visualText: row.visualText }));
+    }
+    h.session.adopt(document);
+    if (fixture.picture) h.session.run(rewriteCellsCommand("picture", () => [{ rowId: "R1", field, html: start }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+    const alone = finder(h.session, aloneNotices, undefined, fixture.matchCase);
+    try { act(alone, fixture); } finally { alone.dispose(); }
+    const standalone = h.session.read(doc => doc?.rows.map(cells));
+    const audio = fixture.joined?.audioAfter;
+    assert.deepEqual(standalone?.[0], { ...expected(fixture.after, fixture.visual), ...audio === undefined ? {} : { audioText: audio } });
     const before = encodeSharedState(set.a);
     const route = finder(a.session, sharedNotices, a.shared, fixture.matchCase);
     try { act(route, fixture); } finally { route.dispose(); }
@@ -97,10 +146,10 @@ test("a shared Replace writes text operations on the matched characters only, th
     const target = { owner: "R1", segment: "R1", field: "audioText" };
     assert.deepEqual(operations.slice(0, 4).map(value => ({ kind: value.kind, target: value.target, ...value.at ? { at: value.at } : {},
       ...value.content ? { content: value.content } : {}, ...value.observed ? { observed: value.observed } : {} })), [
-      { kind: "text-insert", target, at: { left: null, right: flowBaseReference("R1", "audioText", 5), affinity: "before" },
+      { kind: "text-insert", target, at: { left: null, right: flowBaseReference("R1", "audioText", 2), affinity: "before" },
         content: [{ value: "mug", marks: [{ kind: "b", value: true }] }] },
       { kind: "text-delete", target, observed: [flowBaseReference("R1", "audioText", 2, 5)] },
-      { kind: "text-insert", target, at: { left: flowBaseReference("R1", "audioText", 8), right: null, affinity: "after" }, content: [{ value: "mug", marks: [] }] },
+      { kind: "text-insert", target, at: { left: null, right: flowBaseReference("R1", "audioText", 9), affinity: "before" }, content: [{ value: "mug", marks: [] }] },
       { kind: "text-delete", target, observed: [flowBaseReference("R1", "audioText", 9, 12)] }
     ]);
     const owner = (value: Record<string, unknown>) => { const at = value.target as { owner?: string; record?: string }; return at.owner ?? at.record; };
@@ -113,8 +162,8 @@ const RACES: readonly Race[] = [
   { name: "typing before the match", cell: "a cup of tea", at: 0, after: "Xa mug of tea" },
   { name: "typing after the match", cell: "a cup of tea", at: 6, after: "a mug Xof tea" },
   { name: "typing at the end", cell: "a cup of tea", at: 11, end: true, after: "a mug of teaX" },
-  { name: "typing just before the match", cell: "a cup of tea", at: 2, after: "a Xmug of tea" },
-  { name: "typing inside the match", cell: "a cup of tea", at: 3, after: "a Xmug of tea" },
+  { name: "typing just before the match", cell: "a cup of tea", at: 2, after: "a mugX of tea" },
+  { name: "typing inside the match", cell: "a cup of tea", at: 3, after: "a mugX of tea" },
   { name: "typing just after the match", cell: "a cup of tea", at: 5, after: "a mugX of tea" },
   { name: "typing between two matches of Replace all", cell: "cup and cup", all: true, at: 5, after: "mug aXnd mug" },
   { name: "typing inside a match that ends the cell", cell: "cup and cup", all: true, at: 9, after: "mug and mugX" },
@@ -151,6 +200,28 @@ for (const order of ORDERS) {
       flush(set.queue, order);
       assert.deepEqual(agreeing("retried", set, order)[0], expected("Xa mug of tea"));
       assert.deepEqual(a.owner.sizes(), { undo: 1, redo: 0, dropped: 0 });
+    } finally { a.session.dispose(); set.close(); }
+  });
+  test(`rule 185: a Replace whose line was removed after the search shows the changed-line notice, writes nothing and searches again: ${order}`, () => {
+    const notices = fakeNotices(), set = setup(source("a cup of tea")), a = copy(set.a, "Alice", notices);
+    try {
+      const route = finder(a.session, notices, a.shared);
+      try {
+        route.search("cup", "mug");
+        assert.equal(document.getElementById("find-count")?.textContent, "1 of 2");
+        send(set.b, { kind: "remove", id: "removed", by: "Bob", removalKind: "beat", targets: ["R1"], observed: [flowBaseReference("R1", "audioText", 0, 12)],
+          boundaries: ["R1"], components: [], gallery: [], at: 0 });
+        flush(set.queue, order);
+        const before = encodeSharedState(set.a);
+        route.replace();
+        assert.deepEqual(messages(notices), [[CHANGED, "warn"]]);
+        assert.deepEqual(encodeSharedState(set.a), before);
+        assert.deepEqual(a.owner.sizes(), { undo: 0, redo: 0, dropped: 0 });
+        assert.equal(document.getElementById("find-count")?.textContent, "1 of 1");
+        route.replace();
+      } finally { route.dispose(); }
+      flush(set.queue, order);
+      assert.deepEqual(agreeing("removed", set, order).map(row => row.audioText), ["a mug"]);
     } finally { a.session.dispose(); set.close(); }
   });
   test(`rule 185: a change elsewhere, even in the other cell of the same line, leaves the Replace standing: ${order}`, () => {
@@ -205,7 +276,7 @@ for (const order of ORDERS) {
       send(set.b, typing(1));
       flush(set.queue, order);
       assert.deepEqual(messages(notices), [["Replaced 3 matches", "ok"]]);
-      assert.deepEqual(agreeing("merged", set, order).map(row => row.audioText), ["Xmug and mug", "a mug"]);
+      assert.deepEqual(agreeing("merged", set, order).map(row => row.audioText), ["mugX and mug", "a mug"]);
     } finally { a.session.dispose(); set.close(); }
   });
 }
