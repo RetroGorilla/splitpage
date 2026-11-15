@@ -1,0 +1,86 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared removal',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'Removed words',visualText:'Shot'},{id:'r3',audioText:'Last',visualText:''}],comments:[]})],'removal.splitpage'))
+wait F.state().title === 'Shared removal'
+eval window.Q=function(id,f){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]')};window.A=function(id,f){var r=S.read().app.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.ids=function(w){return S.read()[w].rows.map(function(r){return r.id}).join()};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer)};true
+eval window.at=function(id,f,o){var c=Q(id,f);c.focus();var w=document.createTreeWalker(c,4),n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};true
+eval window.kept=function(w){var e=S.peer.recoveryEntries(w);return e&&e.length===1&&e[0].kind==='removed-beat'?[e[0].row.id,e[0].row.audioText,e[0].row.visualText].join('|'):JSON.stringify(e)};window.entry=function(){return document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]')};window.button=function(which){var b=document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:'+which);if(!b)return false;var r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b};true
+eval window.toasts=function(){return [].map.call(document.querySelectorAll('#toast-host .toast'),function(t){return t.textContent})};window.clear=function(){document.querySelectorAll('#toast-host .toast').forEach(function(t){t.dismiss()});return true};true
+eval S.enter()
+wait S.read().peer !== null
+eval document.activeElement && document.activeElement.blur();true
+key ctrl KeyK
+wait !document.getElementById('cmdk').hidden
+type recovery
+wait document.querySelector('#cmdk [data-cmd="recovery"]') !== null
+key Enter
+wait document.getElementById('shared-recovery-panel') !== null
+expect document.getElementById('shared-recovery-panel').textContent.includes('Nothing in recovery.')
+eval S.peer.hold();at('r2','audioText',13);true
+press !
+eval window.removed=S.peer.remove('r2');true
+expect window.removed === 'applied' && A('r2','audioText') === 'Removed words!' && ids('peer') === 'r1,r3'
+eval window.released=S.peer.release('forward');true
+expect window.released >= 2 && same() && ids('app') === 'r1,r3' && Q('r2','audioText') === null
+expect kept('app') === 'r2|Removed words!|Shot' && kept('peer') === kept('app') && JSON.stringify(S.recovery().app) === JSON.stringify(S.recovery().peer)
+wait entry() !== null
+expect entry().querySelector('pre').textContent.includes('Removed words!')
+expect getComputedStyle(entry().querySelector('pre')).userSelect !== 'none'
+eval window.getSelection().selectAllChildren(entry().querySelector('pre'));true
+expect window.getSelection().toString().includes('Removed words!')
+wait button('first-child')
+click #shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:first-child
+eval S.peer.deliver();true
+wait ids('app') === 'r1,r2,r3'
+expect same() && A('r2','audioText') === 'Removed words!' && entry() === null && Q('r2','audioText').textContent === 'Removed words!'
+expect S.peer.recoveryEntries('app').length === 0 && S.peer.recoveryEntries('peer').length === 0
+eval document.activeElement && document.activeElement.blur();true
+key ctrl KeyZ
+eval S.peer.deliver();true
+wait ids('app') === 'r1,r3'
+expect same() && kept('app') === 'r2|Removed words!|Shot' && kept('peer') === kept('app')
+wait entry() !== null
+key ctrl+shift KeyZ
+eval S.peer.deliver();true
+wait ids('app') === 'r1,r2,r3'
+expect same() && A('r2','audioText') === 'Removed words!' && S.peer.recoveryEntries('peer').length === 0
+wait entry() === null
+eval S.peer.hold();at('r2','visualText',4);true
+press x
+eval window.removed=S.peer.remove('r2');true
+expect window.removed === 'applied' && A('r2','visualText') === 'Shotx' && ids('peer') === 'r1,r3'
+eval window.released=S.peer.release('reverse');true
+expect window.released >= 2 && same() && ids('app') === 'r1,r3'
+expect kept('app') === 'r2|Removed words!|Shotx' && kept('peer') === kept('app')
+wait entry() !== null
+expect entry().querySelector('pre').textContent.includes('Shotx')
+eval window.getSelection().selectAllChildren(entry().querySelector('pre'));true
+expect window.getSelection().toString().includes('Shotx')
+wait button('last-child')
+click #shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:last-child
+eval S.peer.deliver();true
+wait entry() === null
+expect same() && ids('app') === 'r1,r3' && S.peer.recoveryEntries('app').length === 0 && S.peer.recoveryEntries('peer').length === 0
+eval document.activeElement && document.activeElement.blur();true
+key ctrl KeyZ
+eval S.peer.deliver();true
+wait entry() !== null
+expect same() && kept('app') === 'r2|Removed words!|Shotx' && kept('peer') === kept('app')
+key ctrl+shift KeyZ
+eval S.peer.deliver();true
+wait entry() === null
+expect S.peer.recoveryEntries('app').length === 0 && S.peer.recoveryEntries('peer').length === 0
+eval window.counted=S.counters().recovered;at('r3','audioText',4);clear();true
+wait toasts().length === 0
+ime set s
+eval window.removed=S.peer.remove('r3');window.delivered=S.peer.deliver('forward','app');true
+expect window.removed === 'applied' && window.delivered === 1 && ids('app') === 'r1,r3'
+ime commit s
+eval S.peer.deliver();true
+expect same() && ids('app') === 'r1' && kept('app') === 'r3|Lasts|' && kept('peer') === kept('app')
+expect S.counters().recovered === window.counted + 1 && toasts().filter(function(t){return t === 'Your writing was kept in recovery.'}).length === 1
+expect (function knownWrongStrayRefusalNoticeWhenACompositionDrainsTheRemovalOfItsOwnBeat(){return JSON.stringify(toasts()) === JSON.stringify(['This is not available in a shared session yet.','Your writing was kept in recovery.'])})()
+wait entry() !== null && entry().querySelector('pre').textContent.includes('Lasts')
+expect S.counters().missingBase === 0
+eval S.leave()
+expect S.read().peer === null && document.getElementById('shared-recovery-panel') === null
