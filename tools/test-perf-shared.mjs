@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { abbaOrder, passOrder, parseArgs, placeTools, sharedSummary, toolRevision, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
-import { KEY_GAP_MS, TYPED } from "./perf-record.mjs";
+import { KEY_GAP_MS, TYPED, parsePerf } from "./perf-record.mjs";
+import { PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
 import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, expectedKeys, parseShared, parseSharedArgs,
   sharedProblems, sharedReport, sharedRows, sharedSuiteText, traceFile, tracedCase } from "./perf-shared.mjs";
 import { TASK_RECORD, TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
@@ -25,6 +26,7 @@ function sampleTrace() {
     record(TASK_RECORD, 60, 10, { cat: "toplevel" }), record("FunctionCall", 60.5, 9), ...span("receive", 61, 69), ...span("trial", 62, 64), ...span("rebuild", 62.5, 63.5), ...span("live-apply", 65, 68),
     record(TASK_RECORD, 80, 5, { cat: "toplevel" }), record("FunctionCall", 80.5, 4),
     record(TASK_RECORD, 100, 10, { cat: "toplevel" }), dispatch("keydown", 101, 3), ...span("input-handler", 102, 103),
+    record(TASK_RECORD, 249, 4, { cat: "toplevel" }), dispatch("keyup", 250, 2), ...span("input-handler", 250.5, 251.5),
     { ...record(TASK_RECORD, 0, 500, { cat: "toplevel" }), tid: 2 }, { ...record("FunctionCall", 1, 400), tid: 2 }
   ];
 }
@@ -34,13 +36,15 @@ test("a trace gives each key the script time of its own tasks, its parts and the
   const zero = { validation: 0, apply: 0, projection: 0, rendering: 0, rebuild: 0 };
   assert.deepEqual(keys, [
     { at: 0, tasks: 2, script: 2 + 8 + 2 + 1, ...zero, input: 6, route: 2, plan: 2, write: 2, unattributed: 13 - 6, outer: 13, style: 1, layout: 0.25, paint: 1 },
-    { at: 100, tasks: 1, script: 3, ...zero, input: 1, route: 1, plan: 0, write: 0, unattributed: 2, outer: 3, style: 0, layout: 0, paint: 0 }
-  ]);
-  assert.deepEqual(groups, { validation: 2, apply: 3, projection: 0, rendering: 0, input: 7, rebuild: 1, route: 3, plan: 2, write: 2,
-    unattributed: 13 + 3 + 9 - 12, outer: 13 + 3 + 9, style: 1, layout: 0.25, paint: 1 }, "a task with neither a key nor a mark adds nothing, and another thread is ignored");
+    { at: 100, tasks: 2, script: 3 + 2, ...zero, input: 2, route: 2, plan: 0, write: 0, unattributed: 3, outer: 5, style: 0, layout: 0, paint: 0 }
+  ], "the last key's window runs to the end of the case, so its delayed keyup is its own");
+  assert.deepEqual(groups, { validation: 2, apply: 3, projection: 0, rendering: 0, input: 8, rebuild: 1, route: 4, plan: 2, write: 2,
+    unattributed: 13 + 5 + 9 - 13, outer: 13 + 5 + 9, style: 1, layout: 0.25, paint: 1 }, "a task with neither a key nor a mark adds nothing, and another thread is ignored");
+  assert.throws(() => traceRecords([record(TASK_RECORD, 0, 3), dispatch("keyup", 1, 1), record(TASK_RECORD, 5, 5), dispatch("keydown", 6, 2), ...span("input-handler", 6.5, 7.5)]),
+    /before the first keydown/, "key work that would fall outside every key is refused");
   assert.deepEqual(GROUP_NAMES, Object.keys(groups));
   assert.throws(() => traceRecords([...sampleTrace(), ...span("render", 200, 201)]), /outside every task record/);
-  assert.throws(() => traceRecords([...sampleTrace(), ...span("render", 17, 17.5)]), /Timing mark outside every outer span: measure:render:start/);
+  assert.throws(() => traceRecords([...sampleTrace(), ...span("render", 17, 17.5)]), /A timing mark lies outside every script record/);
   assert.throws(() => traceRecords(sampleTrace().filter((event) => !event.name.startsWith("measure:"))), /no measure: mark/);
   assert.deepEqual(SEAMS.filter((seam) => {
     try { traceRecords([record(TASK_RECORD, 0, 10), record("FunctionCall", 1, 8), ...span(seam, 2, 3)]); return false; } catch { return true; }
@@ -48,6 +52,13 @@ test("a trace gives each key the script time of its own tasks, its parts and the
   assert.deepEqual(TRACE_CATEGORIES.filter((category) => category.startsWith("disabled-by-default")), [], "the trace stays off the costly categories");
   const problem = tracedCase(() => { throw new Error("no file"); });
   assert.deepEqual(problem, { keys: [], groups: null, problem: "no file" });
+});
+
+test("a receive or drain span is no boundary of its own: marks with no browser script record around them are refused", () => {
+  assert.throws(() => traceRecords([record(TASK_RECORD, 0, 10), dispatch("keydown", 1, 1), ...span("receive", 3, 5), ...span("trial", 3.5, 4.5)]), /outside every script record/);
+  assert.throws(() => traceRecords([record(TASK_RECORD, 0, 10), dispatch("keydown", 1, 1), ...span("drain", 3, 5), ...span("live-apply", 3.5, 4.5)]), /outside every script record/);
+  assert.equal(traceRecords([record(TASK_RECORD, 0, 10), dispatch("keydown", 1, 1), record("TimerFire", 2.5, 3), ...span("receive", 3, 5), ...span("trial", 3.5, 4.5)]).groups.validation, 1,
+    "the same marks inside a script record are measured");
 });
 
 test("the cases cover typing on both surfaces at every rate, undo, peer and own structural edits, both backlog shapes and refusals", () => {
@@ -155,6 +166,19 @@ test("both comparisons write their records into one results file, each under its
   } finally { rmSync(work, { recursive: true, force: true }); }
 });
 
+test("every p50 is the median, the mean of the two middle values for an even count, and p95 is the nearest rank, in the shared and standalone tools", () => {
+  const latencies = Array.from({ length: 20 }, (_, i) => 20 - i);
+  const [shared] = parseShared(`PERF ${JSON.stringify({ kind: "case", label: "x", latencies })}\n`);
+  assert.deepEqual([shared.keys, shared.p50, shared.p95, shared.max], [20, 10.5, 19, 20]);
+  const [standalone] = parsePerf(`PERF ${JSON.stringify({ label: "short typing", latencies, longTasks: 0 })}\n`);
+  assert.deepEqual(standalone, { label: "short typing", keys: 20, p50: 10.5, p95: 19, max: 20, longTasks: 0 }, "the standalone row keeps its shape");
+  assert.deepEqual(latencyFigures([4, 1, 3]), { keys: 3, p50: 3, p95: 4, max: 4 });
+  assert.deepEqual(latencyFigures([]), { keys: 0, p50: null, p95: null, max: null });
+  assert.equal(median([1, 2, 3, 4]), 2.5);
+  assert.equal(nearestRank(Array.from({ length: 55 }, (_, i) => i + 1), 0.95), 53);
+  assert.match(PERCENTILE_RULE, /p95 is the nearest rank, the ceil\(0\.95 n\)-th smallest value/);
+});
+
 test("both trees measure with the running checkout's tools, and a real run refuses tools with local changes", async () => {
   const git = (status) => async (command, args) => args[0] === "status" ? status : "d".repeat(40) + "\n";
   assert.deepEqual(await toolRevision(git(""), ["tools"], false), { commit: "d".repeat(40), changed: false });
@@ -218,6 +242,7 @@ test("summaries report base, head and the difference per case, mark a dry run as
   assert.match(paired, /\| 0\.5 \/ 0\.25 \/ -0\.25 \| 250 \/ 125 \/ -125 \| 0 \/ 3 \/ \+3 \|$/m, "validation and the rebuild are their own columns");
   assert.match(paired, /Trial before admission: base copy per update, head standing replica\. Tools from cccccccc in both trees\./);
   assert.match(sharedSummary(record(0)), /tools from cccccccc in both trees/);
+  for (const summary of [paired, sharedSummary(record(0))]) assert.ok(summary.includes(PERCENTILE_RULE), "each summary states the percentile rule");
   assert.deepEqual(parseRound('noise\nROUND [{"name":"short"}]\n'), [{ name: "short" }]);
   assert.throws(() => parseRound("nothing"));
 });

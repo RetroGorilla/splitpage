@@ -53,11 +53,13 @@ export function traceRecords(events) {
   const scriptIn = (task) => outermost(complete.filter((event) => SCRIPT_RECORDS.includes(event.name) && within(event, task)));
   const measured = new Set([...marks, ...keyDispatches].map(taskOf));
   if (measured.has(null)) throw new Error("A timing mark or key event lies outside every task record");
+  const scripted = (mark) => scriptIn(taskOf(mark)).some((span) => span.ts <= mark.ts && mark.ts <= end(span));
+  if (!marks.every(scripted)) throw new Error("A timing mark lies outside every script record");
+  if (keyDispatches.some((event) => !keydowns.length || event.ts < keydowns[0].ts)) throw new Error("A key event lies before the first keydown");
   const render = (from, to) => Object.fromEntries(Object.entries(RENDER_RECORDS).map(([figure, names]) => [figure,
     round(ms(complete.filter((event) => names.includes(event.name) && event.ts >= from && event.ts < to).reduce((sum, event) => sum + event.dur, 0)))]));
   const keys = keydowns.map((keydown, index) => {
-    const gap = index > 0 ? keydown.ts - keydowns[index - 1].ts : Infinity;
-    const next = keydowns[index + 1]?.ts ?? keydown.ts + gap;
+    const next = keydowns[index + 1]?.ts ?? Infinity;
     const own = [...new Set(keyDispatches.filter((event) => event.ts >= keydown.ts && event.ts < next).map(taskOf))].sort((a, b) => a.ts - b.ts);
     const spans = own.flatMap(scriptIn), inside = marks.filter((mark) => own.some((task) => task.ts <= mark.ts && mark.ts <= end(task)));
     return { at: round(ms(keydown.ts - keydowns[0].ts)), tasks: own.length, script: round(ms(spans.reduce((sum, span) => sum + span.dur, 0))),

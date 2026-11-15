@@ -6,6 +6,7 @@ import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, buildArgs } from "./perf-record.mjs";
 import { GROUP_NAMES, REMOTE_RATES, SHARED_FIXTURES } from "./perf-shared.mjs";
 import { TRACE_CATEGORIES } from "./perf-trace.mjs";
+import { PERCENTILE_RULE, median } from "./perf-stats.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const SHARED_MIN_ROUNDS = 5;
@@ -127,7 +128,7 @@ export function sharedSummary(record) {
     ...GROUP_NAMES.map((g) => [`${g} ms`, "traced", (x) => x.groups?.[g]])];
   const lines = [
     ...(record.dryRun ? ["Dry run: pipeline check only, not evidence.", ""] : []),
-    `Shared composed-editor comparison: base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${caseRuns(record, "base", "traced").length} rounds per side and pass in ABBA order, tools from ${record.revisions.tool.commit.slice(0, 8)} in both trees. Each cell is base / head / head minus base.`,
+    `Shared composed-editor comparison: base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${caseRuns(record, "base", "traced").length} rounds per side and pass in ABBA order, tools from ${record.revisions.tool.commit.slice(0, 8)} in both trees. Each cell is base / head / head minus base. Within a run, ${PERCENTILE_RULE}.`,
     "",
     noise.within
       ? "Tracing moved no latency figure past the noise rule of audit 7 section 6, so one traced pass serves both: the budget figures and the parts both come from the traced pass. Both passes are given below."
@@ -169,7 +170,7 @@ async function sharedMain(args, repo) {
       kind: "shared-composed-editor", dryRun: args.dryRun, startedAt: new Date().toISOString(),
       conditions: { node: process.version, arch: process.arch, platform: process.platform, typedCharacters: TYPED.length, keyGapMs: KEY_GAP_MS,
         remoteRates: REMOTE_RATES, fixtures: args.only.split(","), clients: prepared.clients, replayUpdates: prepared.replayUpdates, minFreeMb: args.minFreeMb, rounds: args.rounds,
-        passes: PASSES, traceCategories: TRACE_CATEGORIES },
+        passes: PASSES, traceCategories: TRACE_CATEGORIES, percentiles: PERCENTILE_RULE },
       revisions, rounds: []
     };
     const persist = () => { if (args.out) writeRecord(args.out, record); };
@@ -218,12 +219,6 @@ export function measurements(text) {
   }
   if (!rows.length || new Set(rows.map((r) => r.label)).size !== rows.length) throw new Error("missing or duplicate performance cases");
   return rows;
-}
-
-export function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 export function report(base, head, runs) {

@@ -24,6 +24,7 @@ import { readSharedTextHistory } from "../../../src/adapters/collab/text-history
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { inlineStateImages } from "../../../src/adapters/storage/02c-blobs.ts";
 import { isMain } from "../../../tools/main-module.mjs";
+import { PERCENTILE_RULE, median } from "../../../tools/perf-stats.mjs";
 import { timingMarks } from "../../../shared/timing-marks.ts";
 import { markParts } from "./mark-parts.mjs";
 import { acquireReplica } from "./trial-method.mjs";
@@ -237,7 +238,7 @@ function timed(state, updates, mode, singles, expected) {
     else apply(handle, updates, mode);
     const total = performance.now() - start;
     if (expected) assert.deepEqual(encodeSharedState(handle), expected);
-    return { total, ...singles ? { p50: quantile(samples, 0.5), p95: quantile(samples, 0.95), max: Math.max(...samples) } : {} };
+    return { total, ...singles ? { p50: median(samples), p95: quantile(samples, 0.95), max: Math.max(...samples) } : {} };
   } finally { release(); destroySharedDocument(handle); }
 }
 
@@ -253,7 +254,7 @@ export function markedAdmission(state, updates) {
   } finally { timingMarks.marksOn = false; performance.clearMarks(); release(); destroySharedDocument(handle); }
   return Object.fromEntries(["validation", "rebuild", "apply", "unattributed", "outer"].map(figure => {
     const values = samples.map(parts => parts[figure]);
-    return [figure, { total: values.reduce((sum, value) => sum + value, 0), p50: quantile(values, 0.5), p95: quantile(values, 0.95) }];
+    return [figure, { total: values.reduce((sum, value) => sum + value, 0), p50: median(values), p95: quantile(values, 0.95) }];
   }));
 }
 
@@ -278,10 +279,6 @@ function footprint(fixture, state) {
   } finally { destroySharedDocument(handle); }
 }
 
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
 
 export function summary(values, digits = 2) {
   return `${median(values).toFixed(digits)} [${Math.min(...values).toFixed(digits)}–${Math.max(...values).toFixed(digits)}]`;
@@ -375,7 +372,7 @@ export function run(rounds = 5, saved = null, persist = () => {}) {
   const checkpoint = saved ? restoreCheckpoint(saved, fingerprint) : null;
   const sources = fixtures(), states = checkpoint?.states ?? [];
   const result = checkpoint?.result ?? { commit, node: process.version,
-    arch: process.arch, rounds, growth: [], admission: [] };
+    arch: process.arch, rounds, percentiles: PERCENTILE_RULE, growth: [], admission: [] };
   assert.equal(result.rounds, rounds);
   const streams = checkpoint?.streams ?? {};
   const publish = () => persist(saveCheckpoint({ fingerprint, result, states, streams }));

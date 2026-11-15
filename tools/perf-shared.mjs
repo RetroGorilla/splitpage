@@ -7,6 +7,7 @@ import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, parsePortBase } from "./perf-record.mjs";
 import { TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
+import { PERCENTILE_RULE, latencyFigures } from "./perf-stats.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 export const SHARED_FIXTURES = ["short", "long", "large", "edited"];
@@ -67,7 +68,6 @@ export const PAGE = `(function () {
   var rowId = function (index) { return S.read().app.rows[index].id; };
   var plainLength = function (html) { var d = document.createElement('div'); d.innerHTML = html || ''; return d.textContent.replace(/\\u200b/g, '').length; };
   var later = function (ms, run) { perf.timers.push(setTimeout(run, ms)); };
-  var q = function (lat, p) { return lat.length ? +lat[Math.min(lat.length - 1, Math.floor(p * lat.length))].toFixed(1) : null; };
   window.__perfShared = {
     chunk: function (text) { perf.data += text; return perf.data.length; },
     enter: async function () {
@@ -146,7 +146,7 @@ export const PAGE = `(function () {
       var consumed = replayed ? replayed.delivered + replayed.refused : 0;
       if (perf.replaying === 'remote') perf.cursor += consumed;
       var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
-      var out = { kind: 'case', label: label, keys: lat.length, p50: q(lat, 0.5), p95: q(lat, 0.95), max: lat.length ? +lat[lat.length - 1].toFixed(1) : null,
+      var out = { kind: 'case', label: label, latencies: lat.map(function (v) { return +v.toFixed(3); }),
         longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1),
         replayed: perf.replaying ? { source: perf.replaying, delivered: replayed ? replayed.delivered : 0, refused: replayed ? replayed.refused : 0,
           recovered: replayed ? replayed.recovered : 0 } : null, events: perf.events };
@@ -224,7 +224,8 @@ export function sharedSuiteText(data, traceDir = null) {
 }
 
 export function parseShared(stdout) {
-  return stdout.split("\n").filter((line) => line.startsWith("PERF ")).map((line) => JSON.parse(line.slice(5)));
+  return stdout.split("\n").filter((line) => line.startsWith("PERF ")).map((line) => JSON.parse(line.slice(5)))
+    .map((row) => row.kind === "case" ? { ...row, ...latencyFigures(row.latencies) } : row);
 }
 
 export function sharedProblems(found, fixture) {
@@ -323,7 +324,7 @@ export function sharedReport(rows, traced = false) {
   const lines = [
     "# Shared composed-editor measurement",
     "",
-    `- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms; latency is key-down to the frame after it, modifier key-downs left out`,
+    `- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms; latency is key-down to the frame after it, modifier key-downs left out; ${PERCENTILE_RULE}`,
     `- Remote rates: ${REMOTE_RATES.join(", ")} updates a second of pre-generated single-character edits to the first beat; peer structural edits are split, join, add and remove, pre-generated and delivered one update a second`,
     `- Backlog: ${BACKLOG_UPDATES} held peer updates released ${BACKLOG_AT_MS} ms into the typing, one by one or as one catch-up diff`,
     `- Own structural edits: ${OWN_STRUCTURAL_PRESSES} presses of Ctrl+Enter in a Split narration cell, each adding a beat at the caret through the selection capture`,

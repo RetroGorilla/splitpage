@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
-import { abbaOrder, median, placeTools, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { abbaOrder, placeTools, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { PERCENTILE_RULE, median } from "./perf-stats.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const PAIRED_FIXTURES = ["short", "long", "large"];
@@ -54,7 +55,7 @@ export function pairedSummary(record) {
   return [
     ...(record.dryRun ? ["Dry run: pipeline check only, not evidence.", ""] : []),
     `Adapter-level admission comparison (ms): base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${rowsOf("base").length} rounds per side in ABBA order. Each cell is base / head / head minus base.`,
-    `Trial before admission: base ${method("base")}, head ${method("head")}. Tools from ${record.revisions.tool.commit.slice(0, 8)} in both trees.`,
+    `Trial before admission: base ${method("base")}, head ${method("head")}. Tools from ${record.revisions.tool.commit.slice(0, 8)} in both trees. Within a round, ${PERCENTILE_RULE}.`,
     "",
     `| Script / state | ${columns.map(([name]) => name).join(" | ")} |`,
     `| --- | ${columns.map(() => "---").join(" | ")} |`,
@@ -78,7 +79,8 @@ export async function main(argv, repo = REPO) {
     const revisions = { tool };
     for (const side of ["base", "head"]) revisions[side] = { commit: shas[side], adapters: await tree(shas[side], "src/adapters"), collab: await tree(shas[side], "src/adapters/collab") };
     const record = { kind: "shared-admission-paired", dryRun: args.dryRun, startedAt: new Date().toISOString(),
-      conditions: { node: process.version, arch: process.arch, platform: process.platform, fixtures: args.only.split(","), minFreeMb: args.minFreeMb, rounds: args.rounds },
+      conditions: { node: process.version, arch: process.arch, platform: process.platform, fixtures: args.only.split(","), minFreeMb: args.minFreeMb, rounds: args.rounds,
+        percentiles: PERCENTILE_RULE },
       revisions, rounds: [] };
     const persist = () => { if (args.out) writeRecord(args.out, record); };
     persist();
