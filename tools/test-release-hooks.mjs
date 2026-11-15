@@ -53,8 +53,18 @@ const SHARED_HOOK_ONLY = Object.freeze([
   "joinerUndo",
   "recoveryEntries",
   "nameIdentities",
-  "nameBeat"
+  "nameBeat",
+  "enterFrom",
+  "refusedUpdate",
+  "stopReplay",
+  "There is no refused update of that kind",
+  "The stored shared state is incomplete",
+  "The stored shared state holds no script",
+  "marksOn"
 ]);
+
+const TIMING_MARKS = Object.freeze(["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
+  "input-handler", "input-command", "input-write"].flatMap((seam) => [`measure:${seam}:start`, `measure:${seam}:end`]));
 
 let passed = 0;
 const failures = [];
@@ -90,6 +100,8 @@ eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.
 eq("the render counters and blob store controls are left out", HOOK_ONLY.filter((marker) => release.includes(marker)), []);
 eq("history fault queues, controls and inspection code are left out", historyTestNames(release), []);
 eq("the shared session hook, its peer and their notices are left out", SHARED_HOOK_ONLY.filter((marker) => release.includes(marker)), []);
+eq("no timing mark is left in it", TIMING_MARKS.filter((mark) => release.includes(mark)), []);
+check("no timing mark name of any kind is left in it", !release.includes("measure:"), null);
 
 console.log("\nthe test build (node build.mjs --test):\n");
 
@@ -100,6 +112,7 @@ eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filt
 eq("it keeps the render counters and blob store controls", HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps every history fault and distinctive control name", historyTestNames(testBuild), [...HISTORY_TEST_NAMES].sort());
 eq("it keeps the shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
+eq("it keeps every timing mark", TIMING_MARKS.filter((mark) => !testBuild.includes(mark)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

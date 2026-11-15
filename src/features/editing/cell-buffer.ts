@@ -11,6 +11,9 @@ import type { CellBufferPorts } from "./ports.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import { followPaintedCaret } from "../../application/editing/painted-selection.ts";
 import type { CellPoints } from "../../core/text/selection.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const CELLS = '.cell-editable[data-field="audioText"], .cell-editable[data-field="visualText"]';
 const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop", "focusout"] as const;
@@ -228,11 +231,14 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   }
 
   function listener(event: Event): void {
-    const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
-    if (ports.refuseNative?.(event, cell && root.contains(cell) ? cell : null)) {
-      refuse(event, "buffer-unsupported-input"); return;
-    }
-    ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+    try {
+      const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+      if (ports.refuseNative?.(event, cell && root.contains(cell) ? cell : null)) {
+        refuse(event, "buffer-unsupported-input"); return;
+      }
+      ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });
+    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
   }
 
   for (const type of TYPES) root.addEventListener(type, listener, true);
