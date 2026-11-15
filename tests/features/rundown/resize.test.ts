@@ -9,7 +9,7 @@ import { cellOf } from "../../../src/bootstrap/richtext.ts";
 import { paintTargetOverlay, startTarget, targetOverlayParts } from "../../../src/features/rundown/target.ts";
 import { renderRundown, rundownLayout, rundownTicks, startRundown } from "../../../src/features/rundown/rundown.ts";
 import type { RundownPorts } from "../../../src/features/rundown/ports.ts";
-import { fakeActions, fakeDocument, fakeEdits, fakeNotices, fakePreferenceChanges } from "../fakes.ts";
+import { fakeActions, fakeDocument, fakeEdits, fakeNotices, fakePreferenceChanges, fakeStandaloneValues } from "../fakes.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
 Object.assign(globalThis, { requestAnimationFrame: () => 1, cancelAnimationFrame: () => {} });
@@ -56,7 +56,7 @@ function setup(t: TestContext, doc: ValidatedDocument, labelShown = true) {
     changes: fakePreferenceChanges().changes
   };
   const owner = startRundown(ports);
-  const target = startTarget({ document: source.document, edits: fakeEdits().edits, notices: fakeNotices().notices });
+  const target = startTarget({ document: source.document, edits: fakeEdits().edits, shared: fakeStandaloneValues(), notices: fakeNotices().notices });
   t.after(() => { target.dispose(); owner.dispose(); });
   const resize = (next: number): void => { width = next; renderRundown(); paintTargetOverlay(); };
   width = 333;

@@ -78,8 +78,8 @@
     {
       "label": "creation remains unsupported",
       "file": "src/adapters/collab/undo-executor.ts",
-      "find": ", \"beat-create\"]",
-      "replace": "]"
+      "find": "\"beat-create\", \"heading-creation\"]",
+      "replace": "\"heading-creation\"]"
     },
     {
       "label": "changed creation reverses anyway",
@@ -150,8 +150,8 @@
     {
       "label": "creation counts stamps as content",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "fields(record, writer, unstamped)",
-      "replace": "fields(record, writer, key => key === SHARED_CREATION_RETIREMENT_FIELD)"
+      "find": "return JSON.stringify([fields(record, writer, unstamped), narration(",
+      "replace": "return JSON.stringify([fields(record, writer, key => key === SHARED_CREATION_RETIREMENT_FIELD), narration("
     },
     {
       "label": "creation forgets restored character identity",
@@ -168,7 +168,7 @@
     {
       "label": "projection shows an undone creation",
       "file": "src/adapters/collab/projection-source.ts",
-      "find": ".filter(block => block.kind !== \"b\" || block.id === null || !hidden.has(block.id))",
+      "find": ".filter(block => block.id === null || !hidden.has(block.id))",
       "replace": ".filter(() => true)"
     },
     {
