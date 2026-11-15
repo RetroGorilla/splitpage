@@ -572,20 +572,23 @@ final scheme test makes redundant.
 ### Collaboration mutants in CI
 
 Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs in
-PR CI, in the job "Collaboration mutants", as four shards in parallel (the step
+PR CI, in the job "Collaboration mutants", as six shards in parallel (the step
 turns on bash's `extglob` first):
 
 ```
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/4 --concurrency 4 --baseline-timeout 900 --fail-on-survivor
+node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --baseline-timeout 900 --fail-on-survivor
 ```
 
 A survivor, an inconclusive mutant or a mutant that cannot be applied fails the
 shard, and the gate requires every shard. Each shard first runs its own
-baseline: every test file its mutants name, which with every fourth mutant is
+baseline: every test file its mutants name, which with every sixth mutant is
 nearly all of them. The baseline has its own time budget (`--baseline-timeout`),
 and when it fails the shard's log lists the failing tests. On 2026-11-13 the
-four baselines took 272 to 407 s on GitHub's 4-core runners; 900 s is a little
-over twice the slowest.
+four baselines took 272 to 407 s on GitHub's 4-core runners. On 2026-11-14 and
+2026-11-15 the four-shard baselines took 275 to 600 s, and two shards, in two
+runs, reached the job's 30-minute limit, so the job now runs six shards, each
+with about a sixth of the mutants. The baseline budget stays at 900 s, 1.5 times
+the slowest baseline measured.
 
 `tests/collab/undo-slow-mutants.json` runs in the nightly workflow instead, job
 `mutants`, at `--concurrency 2` with a 600 s timeout per mutant. Its entries are
