@@ -127,12 +127,12 @@ export function writer(handle, identity = {}) {
 
 export function workload(handle, document) {
   const edit = writer(handle), address = target(document.rows[0].id);
-  const fresh = encodeSharedState(handle).length;
+  const fresh = encodeSharedState(handle).length, clock = performance.now(), at = () => `${((performance.now() - clock) / 1000).toFixed(1)} s`;
   for (let block = 0; block < 100; block++) {
     edit.typeBatch(address, 100);
     const deletion = edit.command({ kind: "text-delete", target: address, observed: edit.history(address).units.slice(-100).map(unit => unit.identity) });
     edit.reverse(edit.reverse(deletion));
-    if ((block + 1) % 25 === 0) process.stderr.write(`Text workload: ${block + 1}/100 blocks\n`);
+    if ((block + 1) % 25 === 0) process.stderr.write(`Text workload: ${block + 1}/100 blocks, ${at()}\n`);
   }
   const afterText = encodeSharedState(handle).length;
   for (let index = 0; index < 200; index++) {
@@ -146,24 +146,27 @@ export function workload(handle, document) {
         observed: edit.history(target(owner)).units.map(unit => unit.identity), boundaries: [owner], components: [], gallery: [], at: 1 });
     }
     edit.reverse(record);
+    if (index === 49 || index === 99 || index === 199) process.stderr.write(`Structural workload: ${index + 1}/200 commands, ${at()}\n`);
   }
   for (let index = 0; index < 100; index++) {
     const record = edit.command({ kind: "mark", target: address, observed: edit.history(address).units.slice(0, 2).map(unit => unit.identity), mark: { kind: "b", value: true } });
     edit.reverse(record);
   }
-  process.stderr.write("Completed 200 structural commands with undo and 100 formatting commands with undo\n");
+  process.stderr.write(`Completed 200 structural commands with undo and 100 formatting commands with undo, ${at()}\n`);
   return { afterText, per1000Typed: (afterText - fresh) / 10 };
 }
 
 export function growth(fixture) {
-  const handle = open();
+  const handle = open(), clock = performance.now(), at = () => `${((performance.now() - clock) / 1000).toFixed(1)} s`;
   try {
     hydrateSharedDocument(handle, enterSharedDocument(copy(fixture.document)));
     const entered = enterSharedDocument(projectSharedDocument(handle));
     const fresh = encodeSharedState(handle);
+    process.stderr.write(`Growth: entered and encoded, ${at()}\n`);
     const textGrowth = workload(handle, fixture.document), edited = encodeSharedState(handle);
     const projected = enterSharedDocument(projectSharedDocument(handle));
     assert.deepEqual(projected, entered);
+    process.stderr.write(`Growth: workload done, encoded and projected, ${at()}\n`);
     const probe = open(edited);
     let per100Pairs;
     try {
@@ -173,6 +176,7 @@ export function growth(fixture) {
       for (let pair = 0; pair < 100; pair++) next = edit.reverse(edit.reverse(next));
       per100Pairs = encodeSharedState(probe).length - before;
     } finally { destroySharedDocument(probe); }
+    process.stderr.write(`Growth: probe of 100 undo and redo pairs done, ${at()}\n`);
     const plainFile = copy(projected);
     inlineStateImages(plainFile);
     return { name: fixture.name, plain: fixture.plain, fresh, edited, ...textGrowth, per100Pairs,

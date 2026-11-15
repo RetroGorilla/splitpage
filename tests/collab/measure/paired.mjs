@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { readFileSync, writeFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { admissionRound, expectedAfter, fixtures, growth, markedAdmission, updatesFor } from "./run.mjs";
 import { TRIAL_METHOD } from "./trial-method.mjs";
@@ -14,8 +15,9 @@ export function prepare(only) {
   const sources = fixtures().filter(source => only.includes(source.name));
   return { fixtures: sources.map(source => {
     process.stderr.write(`Preparing ${source.name}\n`);
-    const row = growth(source);
+    const row = growth(source), clock = performance.now();
     const stream = updatesFor(row.fresh, source.document.rows[0].id);
+    process.stderr.write(`Update stream of ${stream.updates.length} built, ${((performance.now() - clock) / 1000).toFixed(1)} s\n`);
     return { name: source.name, plain: source.plain, document: source.document, fresh: base64(row.fresh), edited: base64(row.edited),
       updates: stream.updates.map(base64) };
   }) };
