@@ -142,12 +142,12 @@ export class SharedProjectionSource {
       const shown = fields && scope && field === null ? { ...fields, status: this.status({ scope, record: key as SharedContentRef } as SharedStatusEvent["target"]) } : fields;
       return changed.length && shown ? [{ kind: "deleted-record" as const, collection, record: key, field, entry: nested, fields: shown, by: mark.by, changed, state: sharedRecordState(mark, now) }] : [];
     };
-    const parent = deletion ? readSharedDeletedRecordFields(collection, key, raw) : readStoredSharedRecord(collection, key, raw);
-    const own = deletion ? entry([collection, key], deletion, parent, null, null) : [];
+    const removed = deletion ? readSharedDeletedRecordFields(collection, key, raw) : null;
+    const own = deletion ? entry([collection, key], deletion, removed, null, null) : [];
     const field = collection === "shots" ? "props" as const : collection === "gallery" ? "links" as const : null, list: unknown = field && raw instanceof Y.Map ? raw.get(field) : null;
     if (!field || !(list instanceof Y.Map)) return own;
     const marked = [...list.keys()].sort().flatMap(item => { const mark = readStoredRecordDeletion(list.get(item)); return mark ? [[item, mark] as const] : []; });
-    if (!marked.length || !parent) return own;
+    if (!marked.length || !(deletion ? removed : readStoredSharedRecord(collection, key, raw))) return own;
     return [...own, ...marked.flatMap(([item, mark]) => entry([collection, key, field, item], mark, readSharedDeletedEntryFields(field, item, list.get(item)), field, item))];
   }
 
