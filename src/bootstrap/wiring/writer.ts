@@ -18,7 +18,7 @@ import { acceptTagGhost, hideTagGhost, maybeAutoTagShortcut, scheduleIdleRefresh
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { deleteBeatCommand, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { createFlowWriter } from "../../features/writer/flow-writer.ts";
-import { caretAfterStep } from "../../features/undo/caret.ts";
+import { caretAfterStep, replayPlacement } from "../../features/undo/caret.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
 import { gallerySize } from "../../core/document/gallery.ts";
@@ -191,6 +191,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               nextRedo: () => shared ? null : undoOwner().nextRedo()
             },
             caretAfterStep: step => caretAfterStep(html => flowCell(html as string | null | undefined), step),
+            replayPlacement: (recorded, dir, steps) => replayPlacement({ surface: "writer", dir, recorded, steps }),
             notice: (message, tone) => { notices.show(message, tone); },
             changed: () => { ["production", "broll", "writerStats"].forEach(job => { scheduleIdleRefresh(job); }); },
             selectionMoved,
