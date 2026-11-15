@@ -1,5 +1,5 @@
 import { createBufferedField } from "../../application/editing/buffered-field.ts";
-import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
+import type { BufferedFieldBinding, BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
@@ -21,7 +21,14 @@ export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTe
   try { mounted = mountCellBuffer({
     root: document.getElementById("rows") as HTMLElement,
     ports: {
-      field: surface => createBufferedField(shared.bufferedText, surface),
+      field: surface => {
+        const binding: BufferedFieldBinding = createBufferedField({ ...shared.bufferedText,
+          abandonment: abandon => shared.bufferedText.abandonment?.(final => {
+            if (final || !binding.finish()) abandon(final);
+          }) ?? (() => {})
+        }, surface);
+        return binding;
+      },
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
       page: createCellPage({ storedHtml: storedHtmlFromDom, caretSpot: ensureTrailingCaretSpot }),

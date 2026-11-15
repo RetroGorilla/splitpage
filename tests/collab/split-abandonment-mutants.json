@@ -1,0 +1,85 @@
+{
+  "tests": [
+    "src/test/shared-split-app.test.mjs"
+  ],
+  "mutants": [
+    {
+      "label": "Split does not pass its abandonment registry",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "stamps: sessionStamps, abandonment,",
+      "replace": "stamps: sessionStamps,"
+    },
+    {
+      "label": "Split ordinary abandonment never runs its surfaces",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "abandon: () => { abandonAll(false); },",
+      "replace": "abandon: () => {},"
+    },
+    {
+      "label": "Split final abandonment is only ordinary abandonment",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "drop: () => { abandonAll(true); },",
+      "replace": "drop: () => { abandonAll(false); },"
+    },
+    {
+      "label": "Split rollback never releases an unhydrated field",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "if (buffer && entered?.session.read(doc => doc) === null) abandonAll(true);",
+      "replace": "",
+      "tests": [
+        "src/test/shared-hook-routes-app.test.mjs"
+      ]
+    },
+    {
+      "label": "Split abandonment retains disposed registrations",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "return () => { abandons.delete(abandon); };",
+      "replace": "return () => {};"
+    },
+    {
+      "label": "Split ordinary abandon discards committable text",
+      "file": "src/bootstrap/wiring/split-buffer.ts",
+      "find": "if (final || !binding.finish()) abandon(final);",
+      "replace": "abandon(final);"
+    },
+    {
+      "label": "Split field loses final abandonment",
+      "file": "src/bootstrap/wiring/split-buffer.ts",
+      "find": "if (final || !binding.finish()) abandon(final);",
+      "replace": "if (final || !binding.finish()) abandon(false);"
+    },
+    {
+      "label": "Split field never registers for abandonment",
+      "file": "src/bootstrap/wiring/split-buffer.ts",
+      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n            if (final || !binding.finish()) abandon(final);\n          }) ?? (() => {})",
+      "replace": "abandonment: () => () => {}"
+    },
+    {
+      "label": "Input ordinary abandon discards committable text",
+      "file": "src/bootstrap/wiring/buffered-input.ts",
+      "find": "if (final || !binding.finish()) abandon(final);",
+      "replace": "abandon(final);"
+    },
+    {
+      "label": "Input field loses final abandonment",
+      "file": "src/bootstrap/wiring/buffered-input.ts",
+      "find": "if (final || !binding.finish()) abandon(final);",
+      "replace": "if (final || !binding.finish()) abandon(false);"
+    },
+    {
+      "label": "Input field never registers for abandonment",
+      "file": "src/bootstrap/wiring/buffered-input.ts",
+      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n          if (final || !binding.finish()) abandon(final);\n        }) ?? (() => {})",
+      "replace": "abandonment: () => () => {}"
+    },
+    {
+      "label": "Hook ordinary abandon forgets Split",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "() => { splitting.abandon?.(); }",
+      "replace": "() => {}",
+      "tests": [
+        "src/test/shared-hook-routes-app.test.mjs"
+      ]
+    }
+  ]
+}

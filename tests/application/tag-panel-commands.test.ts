@@ -14,7 +14,7 @@ function recording(log: string[], name = ""): TagPanelCommands {
   return {
     renderProduction: () => { log.push(name + "render"); },
     saveTagRename: (key, value) => { log.push(name + "rename:" + key + ":" + value); return key; },
-    addPersonForTag: (key, value) => { log.push(name + "person:" + key + ":" + value); },
+    addPersonForTag: (key, value) => { log.push(name + "person:" + key + ":" + value); return { changed: true, held: false }; },
     setTagOwner: (key, personId) => { log.push(name + "owner:" + key + ":" + personId); },
     setTagNotes: (key, text) => { log.push(name + "notes:" + key + ":" + text); }
   };

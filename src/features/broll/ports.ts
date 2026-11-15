@@ -13,7 +13,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
-import type { SharedRecordCommands } from "../../application/commands/shared-records.ts";
+import type { RecordCommandRun, SharedRecordCommands } from "../../application/commands/shared-records.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -52,7 +52,7 @@ export interface BrollRecordsPorts {
 
 interface BrollRecords {
   readonly brollEntries: () => BrollEntry[];
-  readonly addBrollProp: (shotId: string, rawName: string) => boolean;
+  readonly addBrollProp: (shotId: string, rawName: string) => RecordCommandRun;
   readonly brollShotsByProp: () => Record<string, string[]>;
   readonly maybeCaptureBroll: (e: InputEvent, cellEl: Element) => void;
   readonly anchorBrollInLeftCell: (cellEl: Element) => number;

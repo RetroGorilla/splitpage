@@ -153,8 +153,8 @@
     {
       "label": "first input blocks its own command admission",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "if (committing) return true;",
-      "replace": "if (committing) return false;",
+      "find": "if (committing || dropped) return true;",
+      "replace": "if (committing) return false;\n    if (dropped) return true;",
       "tests": [
         "tests/features/empty-script/shared.test.ts"
       ]

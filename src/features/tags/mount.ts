@@ -1,4 +1,5 @@
 import type { ButtonActions } from "../../application/actions.ts";
+import type { RecordCommandRun } from "../../application/commands/shared-records.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { prepContext } from "./outline.ts";
 
@@ -7,8 +8,9 @@ interface EntityPorts {
   readonly rootClick: (e: MouseEvent) => void;
   readonly renderProduction: () => void;
   readonly saveTagRename: (key: string | null, value: string) => string | null | undefined;
-  readonly addPersonForTag: (key: string | null, value: string) => void;
+  readonly addPersonForTag: (key: string | null, value: string) => RecordCommandRun;
   readonly setRenaming: (value: string | null) => void;
+  readonly renaming: () => string | null;
   readonly setAddingPerson: (value: string | null) => void;
   readonly setTagOwner: (key: string | null, value: string) => void;
   readonly setTagNotes: (key: string | null, value: string) => void;
@@ -107,13 +109,17 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
         e.preventDefault();
         const refocus = cardFocus(e.target);
         const key = ports.saveTagRename(e.target.getAttribute("data-key"), e.target.value);
-        refocus('.tag-entity-head, [data-prep="notes"]', key);
+        if (ports.renaming() === null) refocus('.tag-entity-head, [data-prep="notes"]', key);
       }
       else if (e.key === "Escape") { e.preventDefault(); ports.setRenaming(null); ports.renderProduction(); }
       return;
     }
     if (e.target.classList.contains("tag-person-input")) {
-      if (e.key === "Enter") { e.preventDefault(); const refocus = cardFocus(e.target); ports.addPersonForTag(e.target.getAttribute("data-key"), e.target.value); refocus('[data-action="tag-person-new"]'); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const refocus = cardFocus(e.target);
+        if (!ports.addPersonForTag(e.target.getAttribute("data-key"), e.target.value).held) refocus('[data-action="tag-person-new"]');
+      }
       else if (e.key === "Escape") { e.preventDefault(); const refocus = cardFocus(e.target); ports.setAddingPerson(null); ports.renderProduction(); refocus('[data-action="tag-person-new"]'); }
     }
   });
@@ -128,7 +134,10 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
     }
   });
   listen(el, "focusout", function (e) {
-    if (e.target.classList && e.target.classList.contains("tag-notes-input")) ports.queueAutoSave();
+    if (!e.target.classList || !e.target.classList.contains("tag-notes-input")) return;
+    const box = e.target as unknown as HTMLTextAreaElement;
+    if (box.value !== box.defaultValue) ports.setTagNotes(box.getAttribute("data-key"), box.value);
+    ports.queueAutoSave();
   });
   return life.dispose;
 }
@@ -350,7 +359,10 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       const personSaveBtn = e.target.closest('[data-action="tag-person-save"]');
       if (personSaveBtn) {
         const input = personSaveBtn.closest(".tag-entity")?.querySelector<HTMLInputElement>(".tag-person-input");
-        if (input) { const refocus = cardFocus(personSaveBtn); ports.addPersonForTag(personSaveBtn.getAttribute("data-key"), input.value); refocus('[data-action="tag-person-new"]'); }
+        if (input) {
+          const refocus = cardFocus(personSaveBtn);
+          if (!ports.addPersonForTag(personSaveBtn.getAttribute("data-key"), input.value).held) refocus('[data-action="tag-person-new"]');
+        }
         return true;
       }
 
@@ -385,7 +397,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
         if (input) {
           const refocus = cardFocus(tagRenameSave);
           const key = ports.saveTagRename(tagRenameSave.getAttribute("data-key"), input.value);
-          refocus('.tag-entity-head, [data-prep="notes"]', key);
+          if (ports.renaming() === null) refocus('.tag-entity-head, [data-prep="notes"]', key);
         }
         return true;
       }

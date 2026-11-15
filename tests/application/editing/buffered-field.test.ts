@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
-import type { BufferedFieldEvent } from "../../../src/application/editing/buffered-field.ts";
+import type { BufferedFieldEvent, BufferedFieldPorts } from "../../../src/application/editing/buffered-field.ts";
 import type { BufferedTextEdit, PaintedText } from "../../../src/application/editing/ports.ts";
 import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
@@ -13,7 +13,8 @@ const NBSP = "\u00a0";
 
 interface Field { readonly rowId: string; shown: string }
 
-function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: () => void) {
+function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: () => void,
+  session: Pick<BufferedFieldPorts, "abandonment"> = {}) {
   const field: Field = { rowId: "R1", shown: text };
   let painted = text, stored = text, revision = 1, composing = false, resets = 0;
   const reports: CommandOutcome[] = [], replaced: [number, number, string][][] = [], committed: string[] = [];
@@ -35,7 +36,8 @@ function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: 
     },
     beforeCommand: () => () => {},
     missingBase: () => {}, recovered: () => {},
-    report: outcome => { reports.push(outcome); }
+    report: outcome => { reports.push(outcome); },
+    ...(session.abandonment ? { abandonment: session.abandonment } : {})
   }, {
     ...(foldSpaceForm === undefined ? {} : { foldSpaceForm }),
     fields: () => [field],
@@ -69,6 +71,17 @@ function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: 
     return binding.finish();
   } };
 }
+
+test("rule 166: a field that still cannot finish after an ordinary abandon finishes after the final one, so a dropped session can dispose it", () => {
+  const steps: ((final: boolean) => void)[] = [], answers: boolean[] = [];
+  const page = fieldBinding("the", undefined, () => {
+    steps[0]?.(false); answers.push(page.binding.finish());
+    steps[0]?.(true); answers.push(page.binding.finish());
+  }, { abandonment: abandon => { steps.push(abandon); return () => { steps.splice(steps.indexOf(abandon), 1); }; } });
+  assert.equal(steps.length, 1);
+  assert.equal(page.key(3, 3, "the x", "insertText", "x"), true);
+  assert.deepEqual([answers, page.binding.dispose(), steps.length], [[false, true], true, 0]);
+});
 
 test("rule 55, T03 Split native whitespace: the space the browser shows as U+00A0 beside the Backspace target keeps its stored form and the next Backspace deletes it", () => {
   const page = fieldBinding("the the", true);

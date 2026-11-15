@@ -544,7 +544,7 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   const handlers = (label: string): commands.TagPanelCommands => ({
     renderProduction: () => { calls.push([label, "render"]); },
     saveTagRename: (key, value) => { calls.push([label, "rename", key, value]); return key; },
-    addPersonForTag: (key, value) => { calls.push([label, "person", key, value]); },
+    addPersonForTag: (key, value) => { calls.push([label, "person", key, value]); return { changed: true, held: false }; },
     setTagOwner: (key, person) => { calls.push([label, "owner", key, person]); },
     setTagNotes: (key, text) => { calls.push([label, "notes", key, text]); }
   });

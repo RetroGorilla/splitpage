@@ -18,17 +18,20 @@ import { preferenceValues } from "./ports/preferences.ts";
 import { resetProductionPanel } from "./ports/production.ts";
 import { confirmation, saves } from "./ports/saving.ts";
 import { screen } from "./ports/screen.ts";
-import { history, opening, transitions } from "./ports/transitions.ts";
+import { history, opening, openingActivity, transitions } from "./ports/transitions.ts";
 import { fileMenu } from "./file-menu-controls.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
+import { documentEntry } from "./ports/document-entry.ts";
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
   return fileMenu.replace(() => {
     const ports: FileMenuDropdownPorts = {
+      entry: documentEntry,
+      openingActivity,
       document: documentReader,
       place,
       desktop: presence.running,

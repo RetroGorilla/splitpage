@@ -11,7 +11,7 @@ import { BROLL_PANEL_GROUPS as GROUPS, brollGroups as brollGroupsFrom, filterCou
 import { cappedLongText, cappedText, escapeHtml, plainText } from "../../core/document/text-policy.ts";
 import { mountBroll } from "./mount.ts";
 import { deleteShotCommand, setShotsCommand } from "../../application/commands/broll-records.ts";
-import { addedBrollRecord, removeBrollProp } from "../../application/commands/production-actions.ts";
+import { newBrollRecord, removeBrollProp } from "../../application/commands/production-actions.ts";
 import { recordCommandRun } from "../../application/commands/shared-records.ts";
 import type { SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../../core/production/records.ts";
@@ -606,6 +606,7 @@ function typedChange(el: PanelInput) {
 }
 
 let drawingPanel = 0;
+let refusedTyped: string | null = null;
 
 function keepingFocus(container: HTMLElement, draw: () => void) {
   const active = document.activeElement as PanelInput | null;
@@ -613,24 +614,28 @@ function keepingFocus(container: HTMLElement, draw: () => void) {
   if (active && container.contains(active)) {
     const typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
     const ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
-    if (ownValue) {
-      const change = typedChange(active);
-      if (change) writeRecord(active.getAttribute("data-id"), change);
-    }
-    kept = { key: focusKey(active), typed: typed, ownValue: ownValue, value: active.value,
+    const change = ownValue ? typedChange(active) : null;
+    const saved = !change || typedAttempt(active, change) !== refusedTyped && writeTyped(active, change);
+    kept = { key: focusKey(active), typed: typed, ownValue: ownValue, saved: saved, value: active.value,
              start: typed ? active.selectionStart : 0, end: typed ? active.selectionEnd : 0 };
   }
+  const unsaved = Array.from(container.querySelectorAll<PanelInput>('input[type="text"], textarea'))
+    .filter(el => el !== active && typedSinceDrawn(el) && (!recordField(el) || typedChange(el))).map(el => ({ key: focusKey(el), value: el.value }));
   drawingPanel++;
   try {
     draw();
   } finally {
     drawingPanel--;
   }
+  for (const box of unsaved) {
+    const again = box.key ? container.querySelector<PanelInput>(box.key) : null;
+    if (again) again.value = box.value;
+  }
   if (!kept || !kept.key) return;
   const again = container.querySelector<PanelInput>(kept.key);
   if (!again) return;
   if (kept.ownValue) again.value = kept.value;
-  if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;
+  if (kept.ownValue && kept.saved && recordField(again)) again.defaultValue = kept.value;
   if (kept.typed) {
     try { again.setSelectionRange(kept.start, kept.end); } catch (e) { }
   }
@@ -719,6 +724,16 @@ function writeRecord(id: string | null, fields: ShotFields) {
   return !editShots(shared => setShotsCommand([(id as string)], fields, undefined, undefined, shared)).held;
 }
 
+function typedAttempt(el: PanelInput, change: ShotFields): string {
+  return JSON.stringify([el.getAttribute("data-id"), change]);
+}
+
+function writeTyped(el: PanelInput, change: ShotFields): boolean {
+  const saved = writeRecord(el.getAttribute("data-id"), change);
+  refusedTyped = saved ? null : typedAttempt(el, change);
+  return saved;
+}
+
 function updateRecord(id: string | null, fields: ShotFields) {
   if (writeRecord(id, fields)) renderBrollViews();
 }
@@ -729,20 +744,20 @@ function toggleBrollShot(id: string | null) {
   updateRecord(id, { status: rec.status === "shot" ? "unshot" : "shot" });
 }
 
-function bulkUpdate(fields: ShotFields, describe: (n: number) => string, owner?: OwnerChoice): boolean {
+function bulkUpdate(fields: ShotFields, describe: (n: number) => string, owner?: OwnerChoice, closing: () => void = () => {}) {
   const entries = (ports as PanelPortUse).records.brollEntries();
   const ids = selectedIds(entries);
-  if (!ids.length) return false;
+  if (!ids.length) { closing(); return; }
   (ports as PanelPortUse).undo.breakCoalescing();
   const n = ids.filter(function (id) {
     const rec = brollRecord(id);
     return rec && Object.keys(fields).some(function (k) { return (rec as NonNullable<ReturnType<typeof brollRecord>>)[k] !== fields[k]; });
   }).length;
   const run = n ? editShots(shared => setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids, shared)) : { changed: false, held: false };
-  if (run.held) return true;
+  if (run.held) return;
+  closing();
   renderBrollViews();
   if (run.changed) (ports as PanelPortUse).notices.show(describe(n), "ok");
-  return false;
 }
 
 function shotsWord(n: number) { return plural(n, "shot", "shots"); }
@@ -768,15 +783,15 @@ function bulkAssign(personId: string) {
   });
 }
 
-function bulkLocation(name: string): boolean {
+function bulkLocation(name: string, closing?: () => void) {
   const clean = cappedText(name, 80);
-  return bulkUpdate({ location: clean }, function (n) { return clean ? "Moved " + shotsWord(n) + " to " + clean + "." : "Cleared the location of " + shotsWord(n) + "."; });
+  bulkUpdate({ location: clean }, function (n) { return clean ? "Moved " + shotsWord(n) + " to " + clean + "." : "Cleared the location of " + shotsWord(n) + "."; }, undefined, closing);
 }
 
-function bulkAssignNewPerson(name: string): boolean {
+function bulkAssignNewPerson(name: string, closing: () => void) {
   const entries = (ports as PanelPortUse).records.brollEntries();
   const ids = selectedIds(entries);
-  if (!ids.length) return false;
+  if (!ids.length) { closing(); return; }
   (ports as PanelPortUse).undo.breakCoalescing();
   const known = (ports as PanelPortUse).document.read(function (doc) { return personNamed(doc, name); });
   const n = ids.filter(function (sid) {
@@ -784,12 +799,12 @@ function bulkAssignNewPerson(name: string): boolean {
     return rec && (!known || rec.owner !== known.id);
   }).length;
   const run = editShots(shared => setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids, shared));
-  if (run.held) return true;
+  if (run.held) return;
+  closing();
   renderBrollViews();
-  if (!run.changed) return false;
+  if (!run.changed) return;
   const who = (ports as PanelPortUse).document.read(function (doc) { return personNamed(doc, name); });
   (ports as PanelPortUse).notices.show("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
-  return false;
 }
 
 function clearSelection() {
@@ -829,7 +844,7 @@ function addBrollFromPanel() {
   if (!input) return;
   const name = cappedText(input.value, BROLL_NAME_MAX);
   if (!name) return;
-  const rec = addedBrollRecord({ name: name, origin: "list" }, shotEditPorts);
+  const rec = newBrollRecord({ name: name, origin: "list" }, shotEditPorts);
   if (!rec) return;
   input.value = "";
   openId = rec.id;
@@ -848,17 +863,19 @@ function jumpToBrollShot(id: string | null) {
 function commitPropInput(input: PanelInput) {
   const id = input.getAttribute("data-id");
   const name = input.value;
+  const blank = !plainText(name).trim();
+  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;
+  const selector = '.broll-prop-input[data-id="' + cssAttr(id) + '"]';
   input.value = "";
-  if (!plainText(name).trim()) return;
-  if (!(ports as PanelPortUse).records.addBrollProp((id as string), name) && (ports as PanelPortUse).shared.ports()) { input.value = name; return; }
+  if (blank) return;
   renderBrollViews();
-  const again = document.querySelector<HTMLInputElement>('.broll-prop-input[data-id="' + cssAttr(id) + '"]');
+  const again = document.querySelector<HTMLInputElement>(selector);
   if (again) again.focus();
 }
 
 function commitLocation(input: PanelInput) {
   const change = typedChange(input);
-  if (change && !writeRecord(input.getAttribute("data-id"), change) && brollRecord(input.getAttribute("data-id"))) return;
+  if (change && !writeTyped(input, change) && brollRecord(input.getAttribute("data-id"))) return;
   editingLocFor = null;
   renderBrollViews();
 }
@@ -995,11 +1012,10 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
   } else if (action === "broll-bulk-input-save") {
     const box = document.getElementById("broll-bulk-input") as HTMLInputElement | null;
     const value = box ? box.value : "";
-    const mode = bulkInput;
-    bulkInput = null;
-    if (mode === "person") { if (bulkAssignNewPerson(value)) bulkInput = mode; }
-    else if (mode === "location" && plainText(value).trim()) { if (bulkLocation(value)) bulkInput = mode; }
-    else renderBrollViews();
+    const closing = () => { bulkInput = null; };
+    if (bulkInput === "person") bulkAssignNewPerson(value, closing);
+    else if (bulkInput === "location" && plainText(value).trim()) bulkLocation(value, closing);
+    else { closing(); renderBrollViews(); }
   } else if (action === "broll-bulk-input-cancel") {
     bulkInput = null;
     renderBrollViews();
@@ -1033,7 +1049,7 @@ function onBrollFocusOut(e: PanelEvent) {
   if (!field || !brollRecord(el.getAttribute("data-id"))) return;
   if (field === "location") { commitLocation(el); return; }
   const change = typedChange(el);
-  if (change && !writeRecord(el.getAttribute("data-id"), change)) return;
+  if (change && !writeTyped(el, change)) return;
   if (field === "audioRef") editingRefFor = null;
   if (change || field === "audioRef") renderBrollViews();
 }

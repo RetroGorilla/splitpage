@@ -49,7 +49,7 @@ function fixture() {
     undo: { breakCoalescing: () => { calls.push("break"); } },
     actions: { invoke: (id) => { calls.push(id); return { kind: "ran", id }; } },
     notices: fakeNotices().notices,
-    records: { brollEntries: () => [], addBrollProp: () => false, renameBrollInScript: () => false, updateBrollBadge: () => {} },
+    records: { brollEntries: () => [], addBrollProp: () => ({ changed: false, held: false }), renameBrollInScript: () => false, updateBrollBadge: () => {} },
     rows: { focusField: (id, field) => { calls.push(id + ":" + field); } }
   };
   return { ports, calls, view };

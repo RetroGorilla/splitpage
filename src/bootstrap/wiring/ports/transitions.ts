@@ -1,9 +1,11 @@
-import type { DocumentDestination, HistoryPort } from "../../../application/transitions/ports.ts";
+import type { DocumentDestination, DocumentOpeningActivity, HistoryPort } from "../../../application/transitions/ports.ts";
 import type { Transitions } from "../../../application/transitions/transitions.ts";
-import { documentTransitions, keepSnapshot, openDocument } from "../transition-owners.ts";
+import { documentOpenings, documentTransitions, keepSnapshot, openDocument } from "../transition-owners.ts";
 import type { DocumentOpening } from "../../../application/transitions/sources.ts";
 
 export const opening: DocumentOpening = { open: (source) => openDocument(source) };
+export const openingStatus: Pick<DocumentOpeningActivity, "openingPending"> = { openingPending: documentOpenings.openingPending };
+export const openingActivity: Pick<DocumentOpeningActivity, "track"> = { track: documentOpenings.track };
 
 export const history: HistoryPort = { keep: (label, doc) => keepSnapshot(label, doc) };
 

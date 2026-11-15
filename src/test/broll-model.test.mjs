@@ -526,15 +526,16 @@ const shotsBy = () => {
 test("addBrollProp: an existing prop by any spelling, or a new registry entry for a new name", () => {
   const s = propsDoc();
   const kettle = s.productionTags.find((t) => t.name === "Kettle");
-  assert.equal(addBrollProp("b2", "  KETTLE "), true);
+  const added = { changed: true, held: false }, unchanged = { changed: false, held: false };
+  assert.deepEqual(addBrollProp("b2", "  KETTLE "), added);
   assert.deepEqual(s.brollShots[1].props, [{ id: kettle.id, name: "Kettle" }]);
-  assert.equal(addBrollProp("b2", "kettle"), false, "already there");
-  assert.equal(addBrollProp("b2", "Drone batteries"), true);
-  const added = s.productionTags.find((t) => t.name === "Drone batteries");
-  assert.ok(added && added.cat === "prop" && added.id, "registered as a prop, the way the Gear box registers a line");
-  assert.deepEqual(s.brollShots[1].props.map((p) => p.id), [kettle.id, added.id]);
-  assert.equal(addBrollProp("b2", "   "), false);
-  assert.equal(addBrollProp("nope", "Kettle"), false);
+  assert.deepEqual(addBrollProp("b2", "kettle"), unchanged, "already there");
+  assert.deepEqual(addBrollProp("b2", "Drone batteries"), added);
+  const batteries = s.productionTags.find((t) => t.name === "Drone batteries");
+  assert.ok(batteries && batteries.cat === "prop" && batteries.id, "registered as a prop, the way the Gear box registers a line");
+  assert.deepEqual(s.brollShots[1].props.map((p) => p.id), [kettle.id, batteries.id]);
+  assert.deepEqual(addBrollProp("b2", "   "), unchanged);
+  assert.deepEqual(addBrollProp("nope", "Kettle"), unchanged);
 });
 
 test("removeBrollProp takes a hand-added prop off by its key and leaves the breakdown alone", () => {

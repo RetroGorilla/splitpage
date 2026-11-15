@@ -44,6 +44,19 @@ function world(): { schedule: CaptureSchedule; captures: number[]; advance: (ms:
   return { schedule: schedule, captures: captures, advance: advance, armed: function () { return timers.length; } };
 }
 
+test("armed reports a waiting idle or maximum timer and nothing else", () => {
+  const w = world();
+  assert.equal(w.schedule.armed(), false);
+  w.schedule.noteChange();
+  assert.equal(w.schedule.armed(), true);
+  w.schedule.cancel();
+  assert.equal(w.schedule.armed(), false);
+  w.schedule.refused();
+  assert.deepEqual([w.schedule.armed(), w.schedule.backingOff()], [false, true]);
+  w.advance(5000);
+  assert.deepEqual([w.schedule.armed(), w.captures.length], [false, 1]);
+});
+
 test("a change captures after 1.5 s of quiet, and no later than 5 s after the first change", () => {
   const w = world();
   w.schedule.noteChange();

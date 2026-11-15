@@ -68,7 +68,7 @@ function setup(t: TestContext) {
   const notices = fakeNotices();
   const ownership = fakeOwnership();
   const edits: { rowId: string; message: string; row: DocumentRow }[] = [];
-  let accepted = true;
+  let accepted = true, held = false;
   const ports: GalleryPorts = {
     document: reader.document, notices: notices.notices,
     pictures: store.pictures, ownership: ownership.ownership,
@@ -78,7 +78,7 @@ function setup(t: TestContext) {
       const row = JSON.parse(JSON.stringify(source)) as DocumentRow;
       edit(row);
       edits.push({ rowId, message, row });
-      return accepted;
+      return { changed: accepted && !held, held };
     } }
   };
   const holder: { current: GalleryMount | null } = { current: null };
@@ -96,7 +96,7 @@ function setup(t: TestContext) {
   };
   const dispose = () => { holder.current?.dispose(); holder.current = null; unregister(); };
   return { ports, registry, reader, store, ref, notices, ownership, edits, frames, mount, loaded, dispose,
-    refuse: () => { accepted = false; } };
+    refuse: () => { accepted = false; }, hold: () => { held = true; } };
 }
 
 test("gallery mounts with ports, refuses missing originals, and keeps its action hidden", async (t) => {
@@ -182,6 +182,25 @@ test("a refused gallery edit leaves the annotator open and reports the failure",
     assert.equal(h.edits.length, 1);
     assert.equal(annotate.annotatorOpen(), true);
     assert.equal(h.notices.shown.at(-1)?.message, "Could not save the annotations to this picture.");
+  } finally {
+    h.dispose();
+  }
+});
+
+test("a gallery edit held by the shared session leaves the annotator open and adds no warning to the session's refusal", async (t) => {
+  const h = setup(t);
+  try {
+    h.hold();
+    h.mount();
+    await h.loaded();
+    pointer("pointerdown");
+    pointer("pointerup");
+    const shown = h.notices.shown.length;
+    click("annotate-done");
+    await settle();
+    assert.equal(h.edits.length, 1);
+    assert.equal(annotate.annotatorOpen(), true);
+    assert.equal(h.notices.shown.length, shown);
   } finally {
     h.dispose();
   }

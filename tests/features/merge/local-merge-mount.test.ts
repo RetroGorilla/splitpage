@@ -74,6 +74,7 @@ function setup(opts: Setup) {
   };
   const ports: MergeReviewPorts = {
     capability: fakeCapabilities(),
+    entryCapability: fakeCapabilities(),
     notices: fakeNotices().notices,
     document: { current: () => opts.mine },
     session: { mergeBase: () => (opts.mergeBase === undefined ? null : opts.mergeBase) },

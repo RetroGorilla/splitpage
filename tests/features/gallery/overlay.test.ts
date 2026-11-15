@@ -24,7 +24,7 @@ function setup(desktop = false) {
     document: fakeDocument(doc).document,
     notices: fakeNotices().notices,
     ownership: fakeOwnership().ownership,
-    cells: { editGallery: (rowId, label) => { edits.push(rowId + ": " + label); return true; } },
+    cells: { editGallery: (rowId, label) => { edits.push(rowId + ": " + label); return { changed: true, held: false }; } },
     undo: { breakCoalescing: () => {}, last: () => null, undo: () => {} },
     actions: fakeActions().actions,
     changes: changes.changes,
@@ -97,7 +97,7 @@ function retrySetup(fetchThumbnail: (href: string) => Promise<ImageRef | null>) 
     document: fakeDocument(doc).document,
     notices: notes.notices,
     ownership: fakeOwnership().ownership,
-    cells: { editGallery: (rowId, _label, edit) => { const row = doc.rows.find((r) => r.id === rowId); return !!row && !!edit(row); } },
+    cells: { editGallery: (rowId, _label, edit) => { const row = doc.rows.find((r) => r.id === rowId); return { changed: !!row && !!edit(row), held: false }; } },
     undo: { breakCoalescing: () => {}, last: () => null, undo: () => {} },
     actions: fakeActions().actions,
     changes: fakePreferenceChanges().changes,
@@ -124,6 +124,51 @@ test("gallery overlay: Retry thumbnail says nothing wrong when an automatic fetc
   (release as ((rec: ImageRef | null) => void) | null)?.(PICTURE);
   await settle();
   assert.deepEqual(shown, []);
+  closeGalleryOverlay();
+  owner.dispose();
+});
+
+const ANNOTATED: ImageRef = { sha256: "b".repeat(64), mime: "image/png", width: 480, height: 270 };
+
+function heldSetup(row: Record<string, unknown>) {
+  document.body.innerHTML = MODAL;
+  const doc = migrateRows({ title: "Gallery", rows: [{ id: "r1", visualText: "", audioText: "", ...row }] },
+    fakeMigration({ [PICTURE.sha256]: PICTURE, [ANNOTATED.sha256]: ANNOTATED }).ports);
+  const notes = fakeNotices();
+  const edits: string[] = [];
+  const ports: GalleryOverlayPorts = {
+    document: fakeDocument(doc).document,
+    notices: notes.notices,
+    ownership: fakeOwnership().ownership,
+    cells: { editGallery: (rowId, label) => { edits.push(rowId + ": " + label); return { changed: false, held: true }; } },
+    undo: { breakCoalescing: () => {}, last: () => null, undo: () => {} },
+    actions: fakeActions().actions,
+    changes: fakePreferenceChanges().changes,
+    pickPicture: () => {},
+    render: { slotPictureHtml: () => "", badgeHtml: () => "" },
+    video: { embedRefusal: () => "", playerSrc: () => null, thumbnailsAllowed: () => true, fetchThumbnail: () => Promise.resolve(PICTURE), hostLabel: () => "YouTube" },
+    sessionVideos: { has: () => false, url: () => null },
+    desktop: () => false
+  };
+  return { owner: mountOverlay(ports), shown: notes.shown, edits };
+}
+
+test("gallery overlay: a Retry thumbnail the shared session holds adds no warning to the session's refusal", async () => {
+  const { owner, shown, edits } = heldSetup({ imageLinks: [{ href: YOUTUBE, poster: true }] });
+  openGalleryOverlay("r1", 0, false);
+  press("retry-thumb");
+  await settle();
+  assert.deepEqual([edits, shown.map((n) => n.message)], [["r1: Thumbnail added"], []]);
+  closeGalleryOverlay();
+  owner.dispose();
+});
+
+test("gallery overlay: a Remove annotations the shared session holds adds no warning to the session's refusal", () => {
+  const marks = [{ kind: "pen", color: "#e5383b", width: 0.01, points: [0.1, 0.1, 0.2, 0.2] }];
+  const { owner, shown, edits } = heldSetup({ imageRef: ANNOTATED, imageAnnotation: { imageRef: PICTURE, marks } });
+  openGalleryOverlay("r1", 0, false);
+  press("unannotate");
+  assert.deepEqual([edits, shown.map((n) => n.message)], [["r1: Annotations removed"], []]);
   closeGalleryOverlay();
   owner.dispose();
 });

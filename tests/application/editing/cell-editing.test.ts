@@ -261,7 +261,7 @@ test("a gallery edit runs one command the page does not show yet, and announces 
     row.imageLinks = [];
     return true;
   });
-  assert.equal(done, true);
+  assert.deepEqual(done, { changed: true, held: false });
   assert.deepEqual(r.calls, ["undo.break", "run:gallery-edit"]);
   assert.deepEqual(r.shownRuns, [], "the screen paints a gallery edit from the session change");
   assert.deepEqual(r.announced, [{ message: "Video link removed", before: "entry0" }]);
@@ -270,9 +270,9 @@ test("a gallery edit runs one command the page does not show yet, and announces 
 
 test("a gallery edit for a missing scene, or one that changes nothing, does not announce", () => {
   const r = rig();
-  assert.equal(r.editing.editGallery("r9", "Gone", function () { return true; }), false);
+  assert.deepEqual(r.editing.editGallery("r9", "Gone", function () { return true; }), { changed: false, held: false });
   assert.deepEqual(r.calls, []);
-  assert.equal(r.editing.editGallery("r2", "Nothing", function () { return false; }), false);
+  assert.deepEqual(r.editing.editGallery("r2", "Nothing", function () { return false; }), { changed: false, held: false });
   assert.deepEqual(r.calls, ["undo.break", "run:gallery-edit"]);
   assert.deepEqual(r.announced, []);
 });

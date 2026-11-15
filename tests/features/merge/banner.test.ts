@@ -35,6 +35,7 @@ function mount(win: Realm, opts: { undo?: MergeUndoRecord | null; docId?: string
     window: win,
     ports: {
       capability: fakeCapabilities(),
+      entryCapability: fakeCapabilities(),
       lastUndo: () => state.undo,
       sameDocument: (docId) => state.docId !== null && docId === state.docId,
       restore: (id, request) => new Promise<RestoreAnswer>((resolve, reject) => { held.push({ id, request, answer: resolve, fail: reject }); }),

@@ -29,13 +29,14 @@ import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
 import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
-import { standaloneSession } from "./session-owner.ts";
+import { sessionStamps, standaloneSession } from "./session-owner.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
-import type { CommonDocumentSession } from "../../application/session/document-session.ts";
+import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
+import { mountWriterEmptyScript } from "./writer-empty-script.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
 import { pictures } from "./ports/pictures.ts";
@@ -89,10 +90,11 @@ export interface SharedWriterSource {
   readonly author: { readonly next: () => { readonly id: string; readonly by: string } | null };
   readonly writer: () => string;
   readonly handle: () => SharedDocumentHandle | null;
-  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
+  readonly lifetime: Pick<SharedDocumentSession, "epoch" | "read" | "run" | "subscribe" | "beforeCommand">;
 }
 
 export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
+  if (!stopWriterRuntimeFeature()) throw new Error("The Writer could not finish");
   const commands = shared ? writerFlowCommands(flowPorts, { author: shared.author, writer: shared.writer, handle: shared.handle }) : null;
   return writer.replace(() => {
     const render = currentRowsRender();
@@ -117,7 +119,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             if (initialized.kind === "failed") throw initialized.error;
           }
           let dismissedGhost: typeof tagGhost = null;
-          return createFlowWriter({
+          const flow = createFlowWriter({
             ...(shared && commands ? { paintedText: shared.text.paintedText, bufferedText: shared.text.bufferedText, commands: commands.commands,
               visualBuffer: writerVisualBuffer(shared.text, { document: () => documentReader.current(), lifetime: shared.lifetime, decode: flowCell,
                 storedHtml: text.storedHtmlFromDom, shown: edit => paintGuard().whileShown(edit) }) } : {}),
@@ -230,6 +232,11 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             newCommentId: () => randomIds.id("c"),
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
+          if (!shared) return flow;
+          const handle = shared.handle();
+          return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,
+            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,
+            ...(shared.text.bufferedText.abandonment ? { abandonment: shared.text.bufferedText.abandonment } : {}) }) : flow;
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,
@@ -255,10 +262,11 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
       openVisual: (rowId: string, highlight?: { from: number; to: number }) => { mounted.writerFlowControl()?.openVisual(rowId, highlight); },
       outsideRemove: (rowId: string) => edits.run(deleteBeatCommand(rowId))
     }), (withdraw) => { withdrawHook = withdraw; });
-    const control = { ...mounted, dispose: () => {
+    const control = { ...mounted, dispose: (): boolean => {
+      if (mounted.writerFlowControl()?.settle?.() === false || mounted.dispose() === false) return false;
       withdrawHook?.();
       if (writer.owner() === control) writer.stop();
-      else mounted.dispose();
+      return true;
     } };
     return control;
   }, (control) => [() => {
@@ -267,7 +275,9 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
   }]);
 }
 
-export const stopWriterRuntimeFeature = writer.stop;
+export function stopWriterRuntimeFeature(): boolean {
+  return writer.owner()?.dispose() ?? true;
+}
 export const writerControls = writer.owner;
 
 export function writerActions() {
