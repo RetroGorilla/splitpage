@@ -277,7 +277,7 @@ export function loadMutantFiles(entries) {
 }
 
 export function parseArgs(args) {
-  const opts = { files: [], concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, baselineTimeoutMs: null, keep: false, baseline: true, failOnSurvivor: false, shard: null };
+  const opts = { files: [], concurrency: defaultConcurrency(), timeoutMs: DEFAULT_TIMEOUT_MS, baselineTimeoutMs: null, keep: false, baseline: true, baselineOnly: false, failOnSurvivor: false, shard: null };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     const value = (name) => {
@@ -305,13 +305,16 @@ export function parseArgs(args) {
       opts.shard = { index, count };
     } else if (a === "--keep") opts.keep = true;
     else if (a === "--no-baseline") opts.baseline = false;
+    else if (a === "--baseline-only") opts.baselineOnly = true;
     else if (a === "--fail-on-survivor") opts.failOnSurvivor = true;
-    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --baseline-timeout, --shard, --keep, --no-baseline or --fail-on-survivor` };
+    else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --concurrency, --timeout, --baseline-timeout, --shard, --keep, --no-baseline, --baseline-only or --fail-on-survivor` };
     else opts.files.push(a);
   }
   if (!opts.files.length) {
-    return { error: "usage: node tools/mutants.mjs <mutants.json>... [--concurrency N] [--timeout SECONDS] [--baseline-timeout SECONDS] [--shard K/N] [--keep] [--no-baseline] [--fail-on-survivor]" };
+    return { error: "usage: node tools/mutants.mjs <mutants.json>... [--concurrency N] [--timeout SECONDS] [--baseline-timeout SECONDS] [--shard K/N] [--keep] [--no-baseline | --baseline-only] [--fail-on-survivor]" };
   }
+  if (opts.baselineOnly && opts.shard) return { error: "--baseline-only cannot be combined with --shard" };
+  if (opts.baselineOnly && !opts.baseline) return { error: "--baseline-only cannot be combined with --no-baseline" };
   opts.baselineTimeoutMs ??= opts.timeoutMs;
   return opts;
 }
@@ -370,6 +373,7 @@ export async function main(args, { repo = REPO, print = console.log, printError 
         for (const line of result.failures) printError(`  ${line}`);
         return 2;
       }
+      if (opts.baselineOnly) return 0;
     }
     print(`running ${mutants.length} mutants, ${Math.min(opts.concurrency, mutants.length)} at a time`);
     const results = await runAll(mutants, { ...base, concurrency: opts.concurrency, onResult: (r) => print(`  ${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ""}`) });
