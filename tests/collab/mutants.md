@@ -1,3 +1,5 @@
+Mounted Split keydown aliases the standalone undo owner in an F2 branch | src/bootstrap/wiring/editor.ts | src/test/shared-split-refusals-app.test.mjs: Split legacy event and undo inventories | tests/collab/split-review-mutants.json
+Split composing keys reach legacy handlers when the IME bypass is removed | src/bootstrap/wiring/editor.ts | src/test/shared-split-refusals-app.test.mjs: Split IME key table, both columns and delivery orders | tests/collab/split-review-mutants.json
 Unserved Split native route reaches standalone handlers | src/bootstrap/wiring/shared-split.ts | src/test/shared-split-refusals-app.test.mjs: refusal table and standalone undo inventory | tests/collab/split-review-mutants.json
 Drained removed-beat commit is not announced | src/application/editing/buffered-field.ts | src/test/shared-split-refusals-app.test.mjs: rule 29 drained removal, both columns and delivery orders | tests/collab/split-review-mutants.json
 Split does not pass its abandonment registry | src/bootstrap/wiring/shared-split.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
