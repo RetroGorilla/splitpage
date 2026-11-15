@@ -306,7 +306,7 @@ that wires its surface:
   supplies the switch's binding port for Split. It mounts the existing buffer,
   selects shared input/focus/composition ports, and restores cold ports on leave.
   [The binding record](stage-2-split-composed.md) covers D16, D17 and D18 and
-  explains how a caller combines it with the separate Writer adapter. Command
+  records the hook's combined Writer/Split binding and five abandonment steps. Command
   callers and D27 remain the next part; this does not close the whole C7 row.
 - **C6 or later, Writer paste** (paste is outside C6's typing scope). The shared
   Writer selects `pasteSharedFlowClipboard` and passes the handle to

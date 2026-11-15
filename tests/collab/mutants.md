@@ -1,3 +1,15 @@
+Split does not pass its abandonment registry | src/bootstrap/wiring/shared-split.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split ordinary abandonment never runs its surfaces | src/bootstrap/wiring/shared-split.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split final abandonment is only ordinary abandonment | src/bootstrap/wiring/shared-split.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split rollback never releases an unhydrated field | src/bootstrap/wiring/shared-split.ts | src/test/shared-hook-routes-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split abandonment retains disposed registrations | src/bootstrap/wiring/shared-split.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split ordinary abandon discards committable text | src/bootstrap/wiring/split-buffer.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split field loses final abandonment | src/bootstrap/wiring/split-buffer.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Split field never registers for abandonment | src/bootstrap/wiring/split-buffer.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Input ordinary abandon discards committable text | src/bootstrap/wiring/buffered-input.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Input field loses final abandonment | src/bootstrap/wiring/buffered-input.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Input field never registers for abandonment | src/bootstrap/wiring/buffered-input.ts | src/test/shared-split-app.test.mjs | tests/collab/split-abandonment-mutants.json
+Hook ordinary abandon forgets Split | src/bootstrap/wiring/shared-test.ts | src/test/shared-hook-routes-app.test.mjs | tests/collab/split-abandonment-mutants.json
 C5d Split replace-all adds a fallback notice | src/features/find/find.ts | src/features/find/ports.test.ts: one warning before standalone work | tests/features/find/shared-refusal-mutants.json
 C5d tag composer reports success after refusal | src/features/tags/production-tags.ts | tests/features/tags/production-tags-mount.test.ts: single and bulk tagging refuse once | tests/collab/visible-refusal-mutants.json
 C5d Writer repeats the session refusal | src/features/writer/flow-writer.ts | tests/features/writer/flow-command-ports.test.ts: one warning across session and Writer | tests/collab/visible-refusal-mutants.json

@@ -7,9 +7,10 @@ import { currentCapabilities } from "./session-owner.ts";
 import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, joinSharedBindings, leaveRunningSharedSession,
   sharedSessionParts } from "./shared-session.ts";
 import { recoveryPanelBinding } from "./recovery-panel.ts";
-import type { SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
+import type { SharedBindings, SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
 import type { Home } from "../../application/location/document-location.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
+import { sharedSplitBindings } from "./shared-split.ts";
 import { createSharedTestPeer } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
@@ -77,12 +78,20 @@ function startSharedTestHook(): () => void {
   const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
   document.addEventListener("compositionstart", composition, true);
   document.addEventListener("compositionend", composition, true);
-  const writing = sharedWriterBindings({
+  const effects = {
     recovered: () => { counts.recovered++; notices.show("Your writing was kept in recovery.", "warn"); },
     missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
     ownershipScan: () => { counts.ownershipScans++; }, report
-  });
-  const bindings = joinSharedBindings(writing, recoveryPanelBinding);
+  };
+  const writing = sharedWriterBindings(effects), splitting = sharedSplitBindings(effects);
+  const editing: SharedBindings = {
+    enter: parts => { writing.enter(parts); splitting.enter(parts); },
+    settle: () => writing.settle() ?? splitting.settle(),
+    leave: () => { runEvery([splitting.leave, writing.leave]); },
+    abandon: () => { runEvery([() => { writing.abandon?.(); }, () => { splitting.abandon?.(); }]); },
+    drop: () => { runEvery([() => { writing.drop?.(); }, () => { splitting.drop?.(); }]); }
+  };
+  const bindings = joinSharedBindings(editing, recoveryPanelBinding);
   const left = (landed: boolean): void => {
     const ending = peer, kept = detached;
     peer = null; detached = null;
@@ -157,7 +166,7 @@ function startSharedTestHook(): () => void {
       appliedUpdates: () => peer?.appliedUpdates() ?? []
     },
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
-    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() })
+    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() })
   };
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {

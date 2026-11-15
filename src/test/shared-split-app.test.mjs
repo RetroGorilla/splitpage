@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
-import { migrateRows } from "../bootstrap/document-ports.ts";
+import { migrateRows, productionReaders } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
@@ -23,6 +23,14 @@ import { readOperation } from "../core/collab/read-operation.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCellSpaceForm } from "../bootstrap/wiring/ports/shared-cell-space.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
+import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
+import { sharedBufferPorts } from "../bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferedInputPorts } from "../bootstrap/wiring/buffered-input.ts";
+import { sessionStamps } from "../bootstrap/wiring/session-owner.ts";
+import { TITLE_FIELD_KEY } from "../application/editing/buffered-field-key.ts";
+import { bindBufferedInput } from "../features/common/buffered-input.ts";
+import { beatPos } from "../core/flow/flow.ts";
+import { edgeInput } from "../../tests/features/edge-input.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -41,6 +49,7 @@ after(() => { legacyUndo.compositionMark = legacyCompositionMark; });
 const allowed = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
 let serial = 0, operationSerial = 0;
 const ports = {
+  opening: openingStatus,
   refusal: () => null, commandRefused: sharedCommandRefusalNotice(notices), settle: () => { undoOwner().flush(); }, detach: () => {},
   bindings: sharedSplitBindings({ report: value => { reports.push(value); }, missingBase: key => { missing.push(key); }, recovered: key => { recovered.push(key); } }),
   common: allowed, standalone: createSessionCapabilities("standalone", allowed), migrate: migrateRows,
@@ -120,7 +129,7 @@ function remoteInsert(handle, field, offset, text) {
     content: [{ value: text, marks: [] }] });
   assert.ok(op); assert.deepEqual(executeSharedOperations(handle, [op]), { ok: true });
 }
-function agree(fixture, expected, expectedWarnings = []) {
+function agree(fixture, expected, expectedWarnings = [], expectedReports = []) {
   assert.equal(applySharedUpdate(fixture.peer, encodeSharedState(fixture.parts.handle)).ok, true);
   const late = createSharedDocument(); registerSharedOperationFamilies(late, { cells: html => fromHtml(html) });
   try {
@@ -130,7 +139,7 @@ function agree(fixture, expected, expectedWarnings = []) {
       { order: "late-C", replica: "C", output: projectSharedDocument(late) }
     ]);
     assert.deepEqual(currentDocument().rows.map(row => [row.id, row.audioText, row.visualText]), expected);
-    assert.deepEqual([reports, recovered, missing, errors], [[], [], [], []]);
+    assert.deepEqual([reports, recovered, missing, errors], [expectedReports, [], [], []]);
     assert.deepEqual(warningCalls, expectedWarnings);
     assert.deepEqual(legacyCompositionCalls, []);
   } finally { destroySharedDocument(late); }
@@ -212,7 +221,7 @@ for (const field of ["audioText", "visualText"]) test(`C7 lifecycle ${field}: re
     assert.equal(cell.textContent, "abcかdef");
     assert.deepEqual(leaveSharedSession(ports), { ok: false, reason: "buffer-composition" });
     assert.throws(() => ports.bindings.leave(), /buffer-composition/);
-    ports.bindings.enter(f.parts);
+    assert.doesNotThrow(() => { ports.bindings.enter(f.parts); });
     assert.equal(sharedSessionParts(), f.parts);
     assert.equal(sharedCellSpaceForm(cell), "abcdef");
     assert.deepEqual(f.parts.undo.sizes(), { undo: 0, redo: 0, dropped: 0 });
@@ -337,4 +346,78 @@ test("C7 rule 73: a structure caller without its shared port still refuses visib
     assert.deepEqual(points(cellOf("audioText")), [3, 3]);
     assert.deepEqual(f.parts.undo.sizes(), { undo: 0, redo: 0, dropped: 0 });
   } finally { f.close(); }
+});
+
+for (const field of ["audioText", "visualText"]) test(`rule 166 C7 ${field}: abandon keeps committable text, cancels composition, and final abandon releases during a commit`, async () => {
+  const f = await enter();
+  let stop = () => {};
+  try {
+    assert.equal(ports.bindings.abandonable(), 1);
+    const cell = cellOf(field); select(cell, 3);
+    const range = document.getSelection().getRangeAt(0).cloneRange();
+    const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "!" });
+    Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+    assert.equal(cell.dispatchEvent(before), true);
+    const text = document.createTextNode("!"); range.insertNode(text);
+    document.getSelection().setBaseAndExtent(text, 1, text, 1);
+    assert.equal(currentDocument().rows[0][field], "abcdef");
+    ports.bindings.abandon();
+    assert.equal(currentDocument().rows[0][field], "abc!def");
+    composing(cellOf(field), 4, "held");
+    ports.bindings.abandon();
+    assert.equal(ports.bindings.settle(), null);
+    assert.equal(cellOf(field).textContent, "abc!def");
+    const answers = []; let draining = false;
+    stop = f.parts.session.subscribe(() => {
+      if (draining) return; draining = true;
+      ports.bindings.abandon(); answers.push(ports.bindings.settle());
+      ports.bindings.drop(); answers.push(ports.bindings.settle());
+    });
+    select(cellOf(field), 4); assert.equal(type(cellOf(field), "x"), true);
+    stop();
+    assert.deepEqual(answers, ["buffer-pending", null]);
+    agree(f, [["r1", field === "audioText" ? "abc!xdef" : "abcdef", field === "visualText" ? "abc!xdef" : "abcdef"], ["r2", "Other", "Wide"]],
+      [refusedWarning, refusedWarning, refusedWarning]);
+  } finally { stop(); f.close(); }
+  assert.equal(ports.bindings.abandonable(), 0);
+});
+
+test("rule 166 C7 buffered input factory registers, preserves committable text, cancels composition and releases on final abandon", async () => {
+  const f = await enter(), steps = new Set();
+  const input = document.createElement("input"); document.body.append(input);
+  let bound = null, stop = () => {};
+  try {
+    const shared = sharedBufferPorts(f.parts.handle, f.parts.session, { readers: productionReaders, stamps: sessionStamps,
+      author: () => f.parts.author.next(), missingBase: key => { missing.push(key); }, recovered: key => { recovered.push(key); },
+      report: outcome => { reports.push(outcome); }, abandonment: step => { steps.add(step); return () => { steps.delete(step); }; } });
+    const inputs = sharedBufferedInputPorts(shared);
+    bound = bindBufferedInput({ inputs: [input], key: TITLE_FIELD_KEY, pasteLimit: 300,
+      stored: () => currentDocument().title, position: offset => beatPos(TITLE_FIELD_KEY, offset),
+      owns: pos => pos.kind === "beat" && pos.rowId === TITLE_FIELD_KEY }, inputs);
+    assert.equal(steps.size, 1);
+    input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+    const edge = edgeInput(() => input);
+    input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "insertText", data: "!", bubbles: true, cancelable: true }));
+    input.value += "!"; input.setSelectionRange(input.value.length, input.value.length);
+    for (const step of steps) step(false);
+    assert.equal(currentDocument().title, "Shared Split!");
+    edge.imeSet("held");
+    for (const step of steps) step(false);
+    assert.equal(bound.finish(), true);
+    assert.equal(input.value, "Shared Split!");
+    const answers = []; let draining = false;
+    stop = f.parts.session.subscribe(() => {
+      if (draining) return; draining = true;
+      for (const step of steps) step(false);
+      answers.push(bound.finish());
+      for (const step of steps) step(true);
+      answers.push(bound.finish());
+    });
+    input.setSelectionRange(input.value.length, input.value.length); assert.equal(edge.type("x"), true);
+    stop(); assert.deepEqual(answers, [false, true]);
+    assert.equal(currentDocument().title, "Shared Split!x");
+    assert.equal(bound.dispose(), true); assert.equal(steps.size, 0);
+    agree(f, [["r1", "abcdef", "abcdef"], ["r2", "Other", "Wide"]], [], [{ kind: "rejected", reason: "buffer-composition" },
+      { kind: "rejected", reason: "buffer-pending" }, { kind: "rejected", reason: "buffer-pending" }]);
+  } finally { stop(); bound?.dispose(); input.remove(); f.close(); }
 });
