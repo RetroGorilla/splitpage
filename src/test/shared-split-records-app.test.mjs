@@ -512,7 +512,7 @@ for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record
 
 for (const call of HELD_OWNER_CALLS) test(`C7 record held: the owner call for ${call.name} refused by a listener that announces it is not announced again`, async () => {
   const f = await enter();
-  const stop = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return false; });
+  const stop = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return "announced"; });
   try { refusedOnce(f, "local-first", call.act); } finally { stop(); tidy(f); }
 });
 
