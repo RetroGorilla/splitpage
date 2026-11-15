@@ -1,6 +1,7 @@
 import { mergeSharedUndoRecords, sharedUndoGroupKey, sharedUndoPartName } from "../../../core/collab/undo-record.ts";
 import type { SharedUndoRecord, SharedUndoSelection } from "../../../core/collab/undo-record.ts";
 import type { UndoDirection } from "./undo.ts";
+import type { FlowSelectionPair } from "../../../core/flow/flow.ts";
 
 export type SharedUndoReversal =
   | { readonly ok: true; readonly effective: boolean; readonly inverse: SharedUndoRecord; readonly selection: SharedUndoSelection | null }
@@ -13,7 +14,7 @@ export interface SharedUndoPorts {
 }
 
 export type SharedUndoOutcome =
-  | { readonly ok: true; readonly effective: true; readonly label: string; readonly selection: SharedUndoSelection | null }
+  | { readonly ok: true; readonly effective: true; readonly label: string; readonly selection: SharedUndoSelection | null; readonly recorded?: FlowSelectionPair }
   | { readonly ok: true; readonly effective: false; readonly label: string; readonly selection: null; readonly reason: "used-up" }
   | { readonly ok: false; readonly empty: true }
   | { readonly ok: false; readonly reason: string; readonly skipped?: true };
@@ -141,7 +142,7 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
     // rule 90 on #1414: the outcome says so, so the person is told someone else changed it.
     if (!reversal.effective) return { ok: true, effective: false, label: entry.record.label, selection: null, reason: "used-up" };
     push(to, { record: reversal.inverse, at: entry.at, group: entry.group, endsInSpace: entry.endsInSpace });
-    return { ok: true, effective: true, label: entry.record.label, selection: reversal.selection };
+    return { ok: true, effective: true, label: entry.record.label, selection: reversal.selection, ...entry.record.recorded ? { recorded: entry.record.recorded } : {} };
   }
 
   function hold(): () => void {

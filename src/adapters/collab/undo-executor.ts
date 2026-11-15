@@ -384,7 +384,7 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   };
   const parts = planned.map(plan => plan.inverse(after));
   return { ok: true, effective: parts.some(part => part.effective), selection: record.selection,
-    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null } };
+    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null, ...record.recorded ? { recorded: record.recorded } : {} } };
 }
 
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
@@ -540,5 +540,6 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
-  return { result, record: parts.length ? { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing } : null };
+  return { result, record: parts.length ? { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing,
+    ...description.recorded ? { recorded: description.recorded } : {} } : null };
 }

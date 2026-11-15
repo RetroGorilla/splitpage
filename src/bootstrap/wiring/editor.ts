@@ -31,7 +31,8 @@ import type { RowRoutePorts } from "../../features/rows/routes.ts";
 import { mountTitleRoutes } from "../../features/title/routes.ts";
 import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
 import type { Run } from "../../core/text/runs.ts";
-import { caretAfterStep } from "../../features/undo/caret.ts";
+import { caretAfterStep, replayPlacement } from "../../features/undo/caret.ts";
+import type { PlacedReplayStep } from "../../features/undo/caret.ts";
 import { mountUndoRoutes, undoGesture } from "../../features/undo/routes.ts";
 import { mountVideoPopover } from "../../features/video/popover.ts";
 import { mountWriterRoutes } from "../../features/writer/routes.ts";
@@ -134,12 +135,11 @@ import { sharedSessionParts } from "./shared-session.ts";
 import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
 import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
 import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
-import type { FlowRange } from "../../core/flow/flow.ts";
+import type { FlowRange, FlowSelectionPair } from "../../core/flow/flow.ts";
 import { beatPos } from "../../core/flow/flow.ts";
-import type { RowFieldStep } from "../../core/text/steps.ts";
 import type { ChangeSet } from "../../application/session/change-set.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
-import { replayedTextSteps } from "../../application/editing/undo/replayed-steps.ts";
+import { replayedSteps } from "../../application/editing/undo/replayed-steps.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
@@ -164,14 +164,6 @@ let scheduleWriterStats: () => void = inactiveWriter;
 type RootInput = Pick<Event, "target">;
 
 const paintingScreen: () => boolean = renderPaintingScreen;
-
-interface UndoCellStep {
-  readonly op: string;
-  readonly rowId: string;
-  readonly key: string;
-  readonly before?: unknown;
-  readonly after?: unknown;
-}
 
 function decodeCell(html: unknown): Run[] {
   return fromHtml(html);
@@ -290,7 +282,7 @@ function refreshFormatState(cellEl: Element): void {
 }
 
 const noWriterReplay = (): boolean => false;
-let writerReplayed: (steps: readonly unknown[]) => boolean = noWriterReplay;
+let writerReplayed: (steps: readonly unknown[], shared?: { readonly recorded: FlowSelectionPair | null; readonly dir: UndoDirection }) => boolean = noWriterReplay;
 
 const editorToolbar = owned<ReturnType<typeof mountEditorToolbar>>();
 
@@ -539,27 +531,31 @@ function notAttachableText(names: readonly string[]): string {
   return what + " Splitpage doesn't attach programs, scripts, shortcuts or files without an extension.";
 }
 
-export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
+export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
-    return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports: rowsEditorPorts });
+    const ports = sharedSplit ? { ...rowsEditorPorts, keydown: (event: KeyboardEvent) => {
+      if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);
+    }, input: (event: Event) => {
+      const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+      if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
+      else onRootInput(event);
+    } } : rowsEditorPorts;
+    return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports });
   });
 }
 
 export const stopRowsEditingFeature = rowsEditor.stop;
 
-function undoCellStep(steps: readonly unknown[]): UndoCellStep | null {
-  let cellStep: UndoCellStep | null = null;
+function undoCellStep(steps: readonly unknown[]): PlacedReplayStep | null {
   const doc = liveDocument.current();
-  for (const st of steps as readonly UndoCellStep[]) {
-    if (st.op !== "rowField") continue;
+  const placed = replayPlacement({ surface: "cells", dir: "undo", recorded: null, steps, rowExists: function (rowId) {
     if (!doc) throw new TypeError("An undo step was applied without a document");
-    if (!doc.rows.some(function (r) { return r.id === st.rowId; })) continue;
-    if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
-  }
-  return cellStep;
+    return doc.rows.some(function (r) { return r.id === rowId; });
+  } });
+  return placed?.kind === "step" ? placed.step : null;
 }
 
-function placeCellCaret(cellStep: UndoCellStep | null): boolean {
+function placeCellCaret(cellStep: PlacedReplayStep | null): boolean {
   if (!cellStep) return false;
   const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
   const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
@@ -578,10 +574,9 @@ function afterUndoApplied(steps: readonly unknown[]): void {
 }
 
 // why: the visual box is a cell: caretAfterStep gives its caret, and the box opens there
-function placeReplayedCaret(steps: readonly RowFieldStep[]): boolean {
-  if (!steps.length) return false;
+function placeReplayedCaret(steps: readonly unknown[], recorded: FlowSelectionPair | null, dir: UndoDirection): boolean {
   if (!viewFlags().writerOpen()) return placeCellCaret(undoCellStep(steps));
-  if (steps.some(step => step.key === "audioText")) return writerReplayed(steps);
+  if (replayPlacement({ surface: "writer", dir, recorded, steps })) return writerReplayed(steps, { recorded, dir });
   const visual = undoCellStep(steps);
   if (!visual) return false;
   const at = beatPos(visual.rowId, caretAfterStep(decodeCell, visual));
@@ -597,8 +592,8 @@ function replaySharedStep(shared: NonNullable<ReturnType<typeof sharedUndoRoute>
   try { outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); }); } finally { stop(); }
   if (!outcome.ok || !outcome.effective) return;
   const after = liveDocument.current(), changed: ChangeSet | null = replayed;
-  const steps = before && after && changed ? replayedTextSteps(before, after, changed) : [];
-  if (!placeReplayedCaret(steps) && outcome.selection) placeSharedSelection(outcome.selection);
+  const steps = before && after && changed ? replayedSteps(before, after, changed, dir) : [];
+  if (!placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection) placeSharedSelection(outcome.selection);
 }
 
 export function onRootInput(e: RootInput): void {
@@ -636,12 +631,12 @@ function scriptCellOf(target: EventTarget | null): CompositionCell | null {
   return cellEl && isScriptCell(cellEl) ? { rowId: cellEl.getAttribute("data-id") as string, field: cellEl.getAttribute("data-field") as string } : null;
 }
 
-export function mountCompositionFeature(): ReturnType<typeof mountComposition> {
+export function mountCompositionFeature(sharedSplit = false): ReturnType<typeof mountComposition> {
   return composition.replace(function () {
     return mountComposition({
       roots: editorRoots(),
       ports: {
-        cellOf: scriptCellOf,
+        cellOf: sharedSplit ? target => target instanceof Element && target.closest("#rows") ? null : scriptCellOf(target) : scriptCellOf,
         epoch: function () { return liveSession().epoch(); },
         mark: function (cell) { return undoOwner().compositionMark(cell.rowId, cell.field); },
         dropEmptySince: (mark, cancelled) => undoOwner().dropEmptySince(mark, cancelled)
@@ -739,10 +734,14 @@ export const onRootFocusOut = editorBlur(editorFocusPorts);
 
 const editorFocus = owned<{ readonly dispose: () => void }>();
 
-export function mountFocusFeature(): { readonly dispose: () => void } {
+export function mountFocusFeature(sharedSplit = false): { readonly dispose: () => void } {
   return editorFocus.replace(function () {
     const roots = editorRoots();
-    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports: editorFocusPorts }) };
+    const ports = sharedSplit ? { ...editorFocusPorts,
+      isScriptCell: (cell: Element) => !cell.closest("#rows") && isScriptCell(cell),
+      blurredCell: (cell: Element) => { if (!cell.closest("#rows")) editorFocusPorts.blurredCell(cell); }
+    } : editorFocusPorts;
+    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports }) };
   });
 }
 
@@ -838,6 +837,27 @@ function announceAttached(attached: PasteAttached, rowIndex: number, before: unk
 export function onRootPaste(e: ClipboardEvent): void {
   const clipboard = clipboardRoutes.owner();
   if (clipboard) clipboard.paste(e);
+}
+
+export function refuseSharedSplitNative(event: Event, cell: Element | null): boolean {
+  if (!cell || !isScriptCell(cell)) {
+    return event.type === "drop" && event.target instanceof Element && !!event.target.closest(".visual-cell")
+      && !event.target.closest("input,textarea");
+  }
+  if (event.type === "paste" || event.type === "cut" || event.type === "drop") return true;
+  if (event.type === "beforeinput") {
+    const type = (event as InputEvent).inputType;
+    return type === "deleteByCut" || type === "deleteByDrag"
+      || !/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type);
+  }
+  if (event.type !== "keydown") return false;
+  const key = event as KeyboardEvent, mod = key.ctrlKey || key.metaKey;
+  if (key.isComposing || key.keyCode === 229) return false;
+  if (key.key === "Enter" || mod && /^(b|i|u)$/i.test(key.key)
+    || key.altKey && !mod && (key.key === "ArrowUp" || key.key === "ArrowDown")) return true;
+  return key.key === "Tab" && (!!currentWhoList()?.isOpen(cell) || !!currentPlainTags()?.isOpen(cell)
+    || shownTagGhost()?.cellEl === cell || shownUntaggedSuggestion()?.cellEl === cell)
+    || key.key === "Escape" && !!currentPlainTags()?.isOpen(cell);
 }
 
 const videoPopover = owned<ReturnType<typeof mountVideoPopover>>();

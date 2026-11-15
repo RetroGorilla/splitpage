@@ -1,29 +1,32 @@
-import type { RowFieldStep, StepRow } from "../../../core/text/steps.ts";
+import type { Step, StepRow } from "../../../core/text/steps.ts";
+import { invertSteps } from "../../../core/text/steps.ts";
 import type { ChangeSet } from "../../session/change-set.ts";
+import type { UndoDirection } from "./undo.ts";
 import { diffStates } from "./history.ts";
-
-const TEXT_FIELDS: readonly string[] = Object.freeze(["audioText", "visualText"]);
 
 export interface ReplayedDocument {
   readonly rows?: readonly Readonly<StepRow>[];
 }
 
-function rowOf(doc: ReplayedDocument, rowId: string): Readonly<StepRow> | undefined {
-  return (doc.rows ?? []).find(row => row.id === rowId);
+const WRITTEN_ORDER: readonly string[] = Object.freeze(["id", "audioText", "visualText", "imageRef", "status"]);
+
+// why: diffStates follows key order, so projected rows take the field order flow.ts writes
+function written(row: Readonly<StepRow>): StepRow {
+  const ordered: StepRow = {};
+  for (const key of WRITTEN_ORDER) if (Object.hasOwn(row, key)) ordered[key] = row[key];
+  for (const key of Object.keys(row)) if (!Object.hasOwn(ordered, key)) ordered[key] = row[key];
+  return ordered;
 }
 
-// why: a shared replay gives the caret the same cell steps a standalone replay applies, from the rows the change names
-export function replayedTextSteps(before: ReplayedDocument, after: ReplayedDocument, changes: ChangeSet): RowFieldStep[] {
-  if (changes.whole || changes.cells.some(cell => cell.rowId === null)) {
-    return diffStates({ rows: [...before.rows ?? []] }, { rows: [...after.rows ?? []] }).filter((step): step is RowFieldStep => step.op === "rowField" && TEXT_FIELDS.includes(step.key));
-  }
-  const steps: RowFieldStep[] = [];
-  for (const cell of changes.cells) for (const key of TEXT_FIELDS) {
-    const rowId = cell.rowId;
-    if (rowId === null || cell.field !== null && cell.field !== key || steps.some(step => step.rowId === rowId && step.key === key)) continue;
-    const was = rowOf(before, rowId)?.[key], now = rowOf(after, rowId)?.[key];
-    if (now === undefined || was === now) continue;
-    steps.push({ op: "rowField", rowId, key, before: was ?? "", after: now });
-  }
-  return steps;
+function changedRows(doc: ReplayedDocument, changes: ChangeSet): StepRow[] {
+  const rows = doc.rows ?? [];
+  if (changes.whole || changes.cells.some(cell => cell.rowId === null)) return rows.map(written);
+  const named = new Set<unknown>([...changes.cells.map(cell => cell.rowId), ...changes.rowsInserted, ...changes.rowsRemoved]);
+  return rows.filter(row => named.has(row.id)).map(written);
+}
+
+// why: standalone replays a record's diffStates steps, reversed for undo; the changed rows give the same steps
+export function replayedSteps(before: ReplayedDocument, after: ReplayedDocument, changes: ChangeSet, dir: UndoDirection): Step[] {
+  const was = { rows: changedRows(before, changes) }, now = { rows: changedRows(after, changes) };
+  return dir === "undo" ? invertSteps(diffStates(now, was)) : diffStates(was, now);
 }

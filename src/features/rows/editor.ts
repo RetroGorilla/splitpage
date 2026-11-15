@@ -87,11 +87,11 @@ export function mountRowsEditor(mount: RowsEditorMount): RowsEditor {
   }
 
   function onInput(e: Event): void {
-    if (open) ports.input(e);
+    if (open && !e.defaultPrevented) ports.input(e);
   }
 
   function onKeyDown(e: Event): void {
-    if (open) ports.keydown(e as KeyboardEvent);
+    if (open && !e.defaultPrevented) ports.keydown(e as KeyboardEvent);
   }
 
   function onDragOver(ev: Event): void {
@@ -126,7 +126,7 @@ export function mountRowsEditor(mount: RowsEditorMount): RowsEditor {
   }
 
   function onDrop(ev: Event): void {
-    if (!open) return;
+    if (!open || ev.defaultPrevented) return;
     const e = ev as DragEvent;
     const drop = imageDropTarget(e);
     const files = e.dataTransfer ? e.dataTransfer.files : null;

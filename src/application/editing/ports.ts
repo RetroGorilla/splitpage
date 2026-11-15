@@ -19,7 +19,7 @@ export interface BufferedTextEdit {
   readonly isOpen: () => boolean;
   readonly text: () => string;
   readonly replace: (from: number, to: number, insert: string) => void;
-  readonly commit: (runs: readonly Run[], selection?: readonly [number, number], label?: string) => CommandOutcome & { readonly selection?: FlowRange; readonly written?: PaintedText };
+  readonly commit: (runs: readonly Run[], selection?: readonly [number, number], label?: string) => CommandOutcome & { readonly selection?: FlowRange; readonly written?: PaintedText; readonly recovered?: boolean };
   readonly recover: (runs: readonly Run[]) => CommandOutcome | null;
   readonly cancel: () => void;
 }

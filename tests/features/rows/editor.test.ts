@@ -76,6 +76,22 @@ function harness(p: ReturnType<typeof page>) {
 const picture = (win: Realm): File => new win.File(["x"], "a.png", { type: "image/png" });
 const textFile = (win: Realm): File => new win.File(["x"], "a.txt", { type: "text/plain" });
 
+for (const type of ["input", "keydown", "drop"] as const) test(`C7 D17: a prevented ${type} never reaches the rows editor ports`, () => {
+  const p = page(), h = harness(p);
+  p.byId("rows").addEventListener(type, event => { event.preventDefault(); }, true);
+  const editor = h.mount();
+  try {
+    const event = type === "drop" ? dragEvent(p.win, type, { types: ["text/plain"], text: "Other" }) :
+      type === "keydown" ? new p.win.KeyboardEvent(type, { key: "Enter", bubbles: true, cancelable: true }) :
+        new p.win.Event(type, { bubbles: true, cancelable: true });
+    p.byId("acell").dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(h.calls, []);
+    assert.equal(p.doc.activeElement, p.doc.body);
+    assert.equal(p.byId("acell").textContent, "");
+  } finally { editor.dispose(); }
+});
+
 test("rows editor: click, mousedown, input and keydown on the script's rows and the add-row bar reach the shared routes", () => {
   const p = page();
   const h = harness(p);
