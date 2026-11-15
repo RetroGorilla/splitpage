@@ -91,7 +91,7 @@ test("D32 (a): a shared plan without its own description is recorded under the c
   const w = world();
   try {
     assert.equal(w.harness.session.run(lengthCommand(true)).kind, "applied");
-    assert.deepEqual([w.harness.described, w.performed, w.owner.sizes().undo], [[{ label: "length", selection: null, typing: null }], ["perform"], 1]);
+    assert.deepEqual([w.harness.described, w.performed, w.owner.sizes().undo], [[{ label: "length", selection: null, typing: null, cells: [{ rowId: "R1", field: "lengthSeconds" }] }], ["perform"], 1]);
   } finally { w.close(); }
 });
 
@@ -127,7 +127,7 @@ test("a replica built without an undo owner executes as before and records nothi
   const harness = sharedHarness(adapterReplica(h.a));
   try {
     assert.equal(harness.session.run(lengthCommand(true)).kind, "applied");
-    assert.deepEqual(harness.described, [{ label: "length", selection: null, typing: null }]);
+    assert.deepEqual(harness.described, [{ label: "length", selection: null, typing: null, cells: [{ rowId: "R1", field: "lengthSeconds" }] }]);
   } finally { harness.session.dispose(); h.destroy(); }
 });
 

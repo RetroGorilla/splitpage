@@ -16,11 +16,21 @@ import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { Command, CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
 import type { FlowCommandSource } from "../../application/commands/flow.ts";
-import type { FlowDoc, FlowPorts, FlowRange, FlowRow } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
 import type { Run } from "../../core/text/runs.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
 import type { WriterFindAccess } from "../common/writer-find.ts";
 import type { FlowVisualBufferMount } from "./flow-visual-box.ts";
+
+export interface SharedReplay {
+  readonly recorded: FlowSelectionPair | null;
+  readonly dir: UndoDirection;
+}
+
+export type WriterReplayPlacement =
+  | { readonly kind: "recorded"; readonly range: FlowRange }
+  | { readonly kind: "step"; readonly step: { readonly rowId: string; readonly key: string; readonly before?: unknown; readonly after?: unknown } }
+  | null;
 
 export interface FlowWriter {
   readonly settle?: () => boolean;
@@ -33,7 +43,7 @@ export interface FlowWriter {
   readonly format: (command: string) => void;
   readonly marks: () => Record<string, boolean>;
   readonly beforeReplay: (dir: UndoDirection) => void;
-  readonly afterReplay: (steps: readonly unknown[]) => void;
+  readonly afterReplay: (steps: readonly unknown[], shared?: SharedReplay) => void;
   readonly comment: () => void;
   readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
   readonly selection: () => FlowRange | null;
@@ -75,6 +85,7 @@ export interface FlowWriterPorts {
   readonly wholeFieldText: WholeFieldTextCommit;
   readonly undo: FlowUndoPorts;
   readonly caretAfterStep: (step: { readonly before?: unknown; readonly after?: unknown }) => number;
+  readonly replayPlacement: (recorded: FlowSelectionPair | null, dir: UndoDirection, steps: readonly unknown[]) => WriterReplayPlacement;
   readonly notice: (text: string, tone: "ok" | "warn") => void;
   readonly changed: () => void;
   readonly selectionMoved: () => void;
