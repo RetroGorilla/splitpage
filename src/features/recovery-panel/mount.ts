@@ -1,5 +1,5 @@
 import type { CommandOutcome } from "../../application/session/document-session.ts";
-import { sharedRecoveryDiscardOperation, sharedRecoveryEntryName, sharedRecoveryPersonRestore } from "../../core/collab/recovery.ts";
+import { sharedRecoveryDiscardOperation, sharedRecoveryEntryName, sharedRecoveryPersonRestore, sharedRecoveryRecordRestore } from "../../core/collab/recovery.ts";
 import type { SharedRecoveryEntry } from "../../core/collab/recovery.ts";
 import type { RecoveryPanelControl, RecoveryPanelPorts } from "./ports.ts";
 import { recoveryPanelContent } from "./content.ts";
@@ -29,6 +29,7 @@ export function createRecoveryPanel(ports: RecoveryPanelPorts): RecoveryPanelCon
     const actions = row.appendChild(document.createElement("div")); actions.className = "history-restore";
     const removed = entry.kind === "removed-beat" || entry.kind === "removed-heading";
     const restore = entry.kind === "deleted-person" ? sharedRecoveryPersonRestore(entry, ports.document.current()?.people ?? [], preview) !== null
+      : entry.kind === "deleted-record" ? sharedRecoveryRecordRestore(entry, ports.document.current()?.people ?? [], preview) !== null
       : removed && !!entry.removal?.ids.length;
     if (restore) button(actions, "Restore", () => { if (ports.session.current()) report(ports.restore(name)); });
     if (sharedRecoveryDiscardOperation(entry, preview) && (!removed || !!entry.removal?.ids.length)) button(actions, "Discard", () => { if (ports.session.current()) report(ports.discard(name)); });

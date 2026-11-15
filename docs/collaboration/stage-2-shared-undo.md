@@ -987,6 +987,7 @@ the end of every generated history).
 | Creation record ownership | `creation-record-index.ts` | ownership keys; the guard reads picture values through the shared gallery reader |
 | Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
 | Undone split watch | `split-retirement.ts` | the stored record, hidden or not, through its read view of the store |
+| Removal marks | `record-deletion.ts` | the stored record, hidden or not, to read its removal mark and what the removal saw; never a shown reading |
 | Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |
 | Hydration | `hydrate.ts` | writes only |
 | Incremental projection | `incremental-project.ts` | observes changes only |
