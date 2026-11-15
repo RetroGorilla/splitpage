@@ -71,6 +71,7 @@ export interface BrollPanelPorts {
   readonly preferences: Pick<Preferences, "panelGrouping" | "setPanelGrouping">;
   readonly changes: PreferenceChanges;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "run">;
   readonly shared: SharedRecordCommands;
   readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;

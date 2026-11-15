@@ -607,19 +607,28 @@ function typedChange(el: PanelInput) {
 
 let drawingPanel = 0;
 let refusedTyped: string | null = null;
+let typedLife: { readonly ports: BrollPanelPorts | null; readonly shared: object; readonly epoch: number } | null = null;
+
+function sameSharedLife(): boolean {
+  const shared = (ports as PanelPortUse).shared.ports(), epoch = (ports as PanelPortUse).lifetime.epoch();
+  const same = shared !== null && typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;
+  typedLife = shared ? { ports, shared, epoch } : null;
+  if (!same) refusedTyped = null;
+  return same;
+}
 
 function keepingFocus(container: HTMLElement, draw: () => void) {
-  const active = document.activeElement as PanelInput | null;
+  const active = document.activeElement as PanelInput | null, keeping = sameSharedLife();
   let kept = null;
   if (active && container.contains(active)) {
     const typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
     const ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
     const change = ownValue ? typedChange(active) : null;
-    const saved = !change || typedAttempt(active, change) !== refusedTyped && writeTyped(active, change);
+    const saved = !change || !(keeping && typedAttempt(active, change) === refusedTyped) && writeTyped(active, change);
     kept = { key: focusKey(active), typed: typed, ownValue: ownValue, saved: saved, value: active.value,
              start: typed ? active.selectionStart : 0, end: typed ? active.selectionEnd : 0 };
   }
-  const unsaved = Array.from(container.querySelectorAll<PanelInput>('input[type="text"], textarea'))
+  const unsaved = !keeping ? [] : Array.from(container.querySelectorAll<PanelInput>('input[type="text"], textarea'))
     .filter(el => el !== active && typedSinceDrawn(el) && (!recordField(el) || typedChange(el))).map(el => ({ key: focusKey(el), value: el.value }));
   drawingPanel++;
   try {
@@ -730,7 +739,7 @@ function typedAttempt(el: PanelInput, change: ShotFields): string {
 
 function writeTyped(el: PanelInput, change: ShotFields): boolean {
   const saved = writeRecord(el.getAttribute("data-id"), change);
-  refusedTyped = saved ? null : typedAttempt(el, change);
+  refusedTyped = saved || !(ports as PanelPortUse).shared.ports() ? null : typedAttempt(el, change);
   return saved;
 }
 

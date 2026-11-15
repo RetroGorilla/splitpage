@@ -31,6 +31,7 @@ function fixture() {
     preferences: { panelGrouping: () => null, setPanelGrouping: () => {} },
     changes: { onChange: () => () => {} },
     document: fakeDocument().document,
+    lifetime: { epoch: () => 0 },
     edits: fakeEdits().edits,
     shared: fakeStandaloneRecords(),
     text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) } },

@@ -72,10 +72,13 @@ const SOURCE = { schema: 2, title: "Shared records", paragraphsDecided: true, wo
   brollShots: [{ id: "b1", name: "City", desc: "", status: "unshot", reshoot: false, notes: "", owner: "p1", audioRef: "", location: "", props: [{ id: M, name: "Mug" }], origin: "list" }]
 };
 
-async function enter() {
-  reports.length = 0; errors.length = 0; clearWarnings(); noticeCalls.length = 0;
+function adopt(source) {
   writerControls().closeWriter();
-  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  adoptReplacement(migrateRows(structuredClone(source)));
+}
+async function enter(source = SOURCE, adopting = true) {
+  reports.length = 0; errors.length = 0; clearWarnings(); noticeCalls.length = 0;
+  if (adopting) adopt(source);
   assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts(); assert.ok(parts); assert.equal(screenIsStale(), false);
   const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
@@ -708,4 +711,81 @@ test("C7 record standalone: the record, picture and comment callers read no shar
     [["Ann", "Bob", "Cy"], ["Crane", "Mug", "Park", "Lamp", "Rope"], ["Mug", "Lamp", "Rope"], ["a", "c"], "A Mug", [["C1", true], ["C9", false]]]);
   assert.equal(currentDocument().comments[1].author, "Bob");
   assert.deepEqual(warnings(), []);
+});
+
+const tagAnchor = name => '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="' + name + '" contenteditable="false">' + name + "</span>";
+const LAMP = "t_3lampxyzq0abc";
+const SCENED = { ...SOURCE, sections: [{ id: "H1", name: "Open", firstSceneId: "r1" }, { id: "H2", name: "Close", firstSceneId: "r2" }],
+  rows: [{ ...SOURCE.rows[0], visualText: SOURCE.rows[0].visualText + " " + tagAnchor("Mug") }, { ...SOURCE.rows[1], visualText: SOURCE.rows[1].visualText + " " + tagAnchor("Lamp") }],
+  productionTags: [...SOURCE.productionTags, { id: LAMP, cat: "prop", name: "Lamp", owner: "", notes: "", status: "needed" }] };
+const OTHER = { ...SOURCE, title: "Other script", brollShots: [{ ...SOURCE.brollShots[0], name: "Harbour", props: [] }] };
+const PROP = `#broll-panel .broll-prop-input${B1}`;
+const shownValue = selector => document.querySelector(selector)?.value ?? "";
+
+test("C7 record typed text: drafts in two occurrences of one tag in By scene each stay in their own box across a redraw", async () => {
+  const f = await enter(SCENED);
+  try {
+    openProductionPanel(); $('#production-modes [data-group="by-scene"]').click();
+    const scope = index => `#production-panel [data-scene-group=":scene:${index}"]`;
+    for (const [index, name] of [[0, "Alice"], [1, "Bob"]]) {
+      expandedCard(scope(index), "prop mug"); $(`${scope(index)} [data-action="tag-person-new"]${MUG}`).click();
+      typeIn(`${scope(index)} .tag-person-input${MUG}`, name, [name.length, name.length]);
+    }
+    $('#production-panel [data-action="tag-status-cycle"][data-key="prop lamp"]').click();
+    assert.notEqual(tagById(LAMP).status, "needed", "the other tag's status was served");
+    assert.deepEqual([0, 1].map(index => $(`${scope(index)} .tag-person-input${MUG}`).value), ["Alice", "Bob"]);
+  } finally { $('#production-modes [data-group="cat"]').click(); tidy(f); }
+});
+
+test("C7 record typed text: drafts typed before the session starts do not cross into it", async () => {
+  adopt(SOURCE);
+  productionCards(); tagPersonBox("#production-panel", "prop mug");
+  brollOpen("b1"); typeIn(PROP, "Old prop", [8, 8]); document.activeElement.blur();
+  const f = await enter(SOURCE, false);
+  try {
+    renderProduction(); runBrollRefresh();
+    assert.deepEqual([shownValue(`#production-panel .tag-person-input${MUG}`), shownValue(PROP)], ["", ""]);
+  } finally { tidy(f); }
+});
+
+test("C7 record typed text: a b-roll prop draft kept in the session does not reach another script's shot with the same id after leaving", async () => {
+  const f = await enter();
+  try {
+    brollOpen("b1"); typeIn(PROP, "Old script prop", [15, 15]); document.activeElement.blur();
+    runBrollRefresh();
+    assert.equal(shownValue(PROP), "Old script prop", "kept across a redraw in the session");
+  } finally { tidy(f); }
+  adopt(OTHER);
+  brollOpen("b1");
+  assert.equal(shownValue(PROP), "");
+  $(PROP).focus(); FIRE.enter($(PROP));
+  assert.deepEqual(shotB1().props, []);
+  document.activeElement?.blur?.();
+});
+
+async function refusedNotes() {
+  const f = await enter();
+  try {
+    brollOpen("b1"); typeIn(NOTES, "Wide", [4, 4]);
+    const stop = f.parts.session.beforeCommand(() => false);
+    try { blurOut($(NOTES)); } finally { stop(); }
+    assert.equal(shotB1().notes, "");
+  } finally { tidy(f); }
+}
+
+test("C7 record typed text: after a refused notes write and leaving, a standalone redraw saves the same notes, as on main", async () => {
+  await refusedNotes();
+  adopt(SOURCE);
+  brollOpen("b1"); typeIn(NOTES, "Wide", [4, 4]); runBrollRefresh();
+  assert.equal(shotB1().notes, "Wide");
+  document.activeElement?.blur?.();
+});
+
+test("C7 record typed text: a refused notes write does not outlive its session, so the next session's redraw saves the same notes", async () => {
+  await refusedNotes();
+  const f = await enter();
+  try {
+    brollOpen("b1"); typeIn(NOTES, "Wide", [4, 4]); runBrollRefresh(); runBrollRefresh();
+    assert.equal(shotB1().notes, "Wide");
+  } finally { tidy(f); }
 });
