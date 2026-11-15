@@ -1,31 +1,49 @@
 {
   "tests": [
-    "src/test/shared-split-refusals-app.test.mjs"
+    "src/test/shared-split-refusals-app.test.mjs",
+    "src/test/shared-split-refusals-drained-app.test.mjs",
+    "src/test/shared-split-refusals-ime-app.test.mjs",
+    "src/test/shared-split-refusals-audio-forward-app.test.mjs",
+    "src/test/shared-split-refusals-audio-reverse-app.test.mjs",
+    "src/test/shared-split-refusals-visual-forward-app.test.mjs",
+    "src/test/shared-split-refusals-visual-reverse-app.test.mjs"
   ],
   "mutants": [
     {
       "label": "a new shared keydown branch aliases the standalone undo owner",
       "file": "src/bootstrap/wiring/editor.ts",
       "find": "keydown: (event: KeyboardEvent) => {\n      if (!event.isComposing",
-      "replace": "keydown: (event: KeyboardEvent) => {\n      if (event.key === \"F2\") { const owner = undoOwner(); owner.last(); return; }\n      if (!event.isComposing"
+      "replace": "keydown: (event: KeyboardEvent) => {\n      if (event.key === \"F2\") { const owner = undoOwner(); owner.last(); return; }\n      if (!event.isComposing",
+      "tests": [
+        "src/test/shared-split-refusals-app.test.mjs"
+      ]
     },
     {
       "label": "the IME bypass is removed",
       "file": "src/bootstrap/wiring/editor.ts",
       "find": "if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);",
-      "replace": "onRootKeydown(event);"
+      "replace": "onRootKeydown(event);",
+      "tests": [
+        "src/test/shared-split-refusals-ime-app.test.mjs"
+      ]
     },
     {
       "label": "an unserved Split native route reaches standalone handlers",
       "file": "src/bootstrap/wiring/shared-split.ts",
       "find": "buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });",
-      "replace": "buffer = mountSharedSplitBuffer(shared);"
+      "replace": "buffer = mountSharedSplitBuffer(shared);",
+      "tests": [
+        "src/test/shared-split-refusals-audio-forward-app.test.mjs"
+      ]
     },
     {
       "label": "a successful commit's drained removal is not announced",
       "file": "src/application/editing/buffered-field.ts",
       "find": "if (outcome.recovered) ports.recovered(held.rowId);",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "src/test/shared-split-refusals-drained-app.test.mjs"
+      ]
     }
   ]
 }
