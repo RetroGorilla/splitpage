@@ -18,7 +18,7 @@ const { sharedStructurePorts } = await import("../bootstrap/wiring/ports/shared-
 const { fromHtml } = await import("../bootstrap/richtext.ts");
 const { addBeatCommand } = await import("../application/commands/rows.ts");
 const { encodeSharedState, encodeSharedStateVector, encodeSharedUpdate } = await import("../adapters/collab/document.ts");
-const { markParts } = await import("../../tests/collab/measure/mark-parts.mjs");
+const { PART_SEAMS, markParts } = await import("../../tests/collab/measure/mark-parts.mjs");
 const hook = window.__sharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "World", visualText: "" }];
@@ -135,7 +135,7 @@ test("timing marks: switched off, a valid update, a refused update and a typed c
     assert.equal(p.deliver("forward", "app"), 1);
     const found = spans(marks());
     assert.deepEqual([...new Set(found.map(span => span.seam))].sort(),
-      ["assembly", "document-entry", "live-apply", "mirror-apply", "projection-listeners", "render", "session-receive", "trial"]);
+      ["assembly", "document-entry", "live-apply", "mirror-apply", "projection-listeners", "receive", "render", "session-receive", "trial"]);
     const [trial] = of(found, "trial"), [live] = of(found, "live-apply"), [receive] = of(found, "session-receive");
     assert.ok(trial.end < live.start, "the trial ends before the live apply starts");
     for (const seam of ["mirror-apply", "assembly", "projection-listeners"]) assert.ok(of(found, seam).every(span => inside(span, live)), seam + " runs inside the live apply");
@@ -188,7 +188,7 @@ test("timing marks: a structural command, its undo and its redo each mark one in
   });
 });
 
-test("timing marks: on a recorded remote update and a typed character, the exclusive parts add up to the outermost spans", async () => {
+test("timing marks: on a recorded remote update and a typed character, the exclusive parts and the unattributed time add up to the outer spans", async () => {
   await shared(p => {
     p.hold();
     assert.equal(p.type("r2", 0, "Z").kind, "applied");
@@ -198,9 +198,161 @@ test("timing marks: on a recorded remote update and a typed character, the exclu
     appTypes("!")();
     const parts = markParts(entries());
     const sum = parts.validation + parts.apply + parts.projection + parts.rendering + parts.input;
-    assert.ok(Math.abs(sum - parts.outer) < 1e-6, `parts ${sum} against outer ${parts.outer}`);
+    assert.ok(Math.abs(sum + parts.unattributed - parts.outer) < 1e-6, `parts ${sum} and ${parts.unattributed} unattributed against outer ${parts.outer}`);
     assert.ok(parts.validation > 0 && parts.projection > 0 && parts.rendering > 0 && parts.input > 0, JSON.stringify(parts));
-    assert.ok(Object.values(parts.exclusive).every(time => time >= 0));
+    assert.ok(parts.unattributed > -1e-6 && Object.values(parts.exclusive).every(time => time >= 0), JSON.stringify(parts));
+  });
+});
+
+const PART_STARTS = new Set(Object.values(PART_SEAMS).flat().map(seam => `measure:${seam}:start`));
+const PROBES = [[Uint8Array, "from"], [Y.Doc.prototype, "emit"], [window.Element.prototype, "getBoundingClientRect"], [window.Element.prototype, "getClientRects"],
+  [window.Range.prototype, "getBoundingClientRect"], [window.Range.prototype, "getClientRects"], [window.Node.prototype, "appendChild"],
+  [window.Node.prototype, "insertBefore"], [window.Node.prototype, "removeChild"], [window.Element.prototype, "setAttribute"], [globalThis, "setTimeout"],
+  [window, "setTimeout"], [globalThis, "requestAnimationFrame"], [Date, "now"]];
+
+function probed(run) {
+  const recorded = [], restore = [], realMark = performance.mark;
+  let now = 0;
+  for (const [owner, name] of PROBES) {
+    const real = owner[name], own = Object.hasOwn(owner, name);
+    if (typeof real !== "function" || restore.some(entry => entry.owner === owner && entry.name === name)) continue;
+    owner[name] = function (...args) { now++; return real.apply(this, args); };
+    restore.push({ owner, name, undo: () => { if (own) owner[name] = real; else delete owner[name]; } });
+  }
+  performance.mark = name => { recorded.push({ name, startTime: now }); if (PART_STARTS.has(name)) now++; };
+  try { run(steps => { now += steps; }); } finally {
+    performance.mark = realMark;
+    for (const entry of restore.reverse()) entry.undo();
+  }
+  const names = recorded.map(entry => entry.name.slice(8));
+  try { return { parts: markParts(recorded), names }; } catch (error) { throw new Error(error.message + " in " + names.join(" "), { cause: error }); }
+}
+
+const key = (element, name, options = {}) => element.dispatchEvent(new window.KeyboardEvent(name, { bubbles: true, cancelable: true, ...options }));
+
+function press(element, data, insert, between = () => {}) {
+  key(element, "keydown", { key: data });
+  key(element, "keypress", { key: data });
+  const range = window.getSelection().getRangeAt(0).cloneRange();
+  const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data });
+  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+  assert.equal(element.dispatchEvent(before), true);
+  insert(range);
+  between();
+  element.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data }));
+  key(element, "keyup", { key: data });
+}
+
+function writerBeat() {
+  const root = document.getElementById("writer-doc"), element = root.querySelector('.wr-beat[data-id="r1"]'), node = element.lastChild;
+  root.focus();
+  const range = document.createRange();
+  range.setStart(node, node.data.length); range.collapse(true);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+  return { root, element, type: (data, between) => { press(element, data, () => { node.data += data; }, between); } };
+}
+
+function splitCell() {
+  writerControls().closeWriter();
+  const cell = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
+  assert.ok(cell);
+  cell.focus();
+  const range = document.createRange();
+  range.selectNodeContents(cell); range.collapse(false);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+  return { cell, type: data => { press(cell, data, at => {
+    at.deleteContents();
+    const text = document.createTextNode(data);
+    at.insertNode(text);
+    window.getSelection().setBaseAndExtent(text, data.length, text, data.length);
+  }); } };
+}
+
+test("unattributed time: on a clock that only marked stages and one deliberately unmarked listener advance, unattributed is exactly that listener's time", async () => {
+  await shared(() => {
+    hook.timing(true);
+    const unmarked = advance => () => { advance(7); };
+    let listener = null;
+    const { parts } = probed(advance => {
+      listener = unmarked(advance);
+      document.addEventListener("input", listener);
+      try { writerBeat().type("!"); } finally { document.removeEventListener("input", listener); }
+    });
+    assert.equal(parts.unattributed, 7, JSON.stringify(parts));
+    assert.ok(parts.input > 0 && parts.projection > 0 && parts.rendering > 0, JSON.stringify(parts));
+    assert.deepEqual(rows(hook.read().app), [["r1", "Hello!"], ["r2", "World"]]);
+  });
+});
+
+test("event spans: an event of the same type dispatched inside another leaves the outer span open, and an event stopped on its way closes after the listener that stopped it", async () => {
+  await shared(async p => {
+    p.hold();
+    hook.timing(true);
+    const elsewhere = document.body.appendChild(document.createElement("div"));
+    const made = new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "x" });
+    let nested = true;
+    const inner = () => { if (nested) { nested = false; elsewhere.dispatchEvent(made); } };
+    const { parts, names } = probed(() => {
+      document.addEventListener("input", inner, true);
+      try { writerBeat().type("!"); } finally { document.removeEventListener("input", inner, true); }
+    });
+    elsewhere.remove();
+    assert.equal(parts.unattributed, 0, names.join(" "));
+    assert.equal(names.filter(name => name === "event:start").length, 6, "five key and input events and the nested one");
+    const root = document.getElementById("writer-doc"), stop = event => { event.stopPropagation(); };
+    root.addEventListener("keyup", stop);
+    performance.clearMarks();
+    try { key(root, "keyup", { key: "!" }); } finally { root.removeEventListener("keyup", stop); }
+    assert.deepEqual(marks(), ["measure:event:start"], "the stopped keyup does not reach the window");
+    await new Promise(resolve => { queueMicrotask(resolve); });
+    assert.deepEqual(marks(), ["measure:event:start", "measure:event:end"], "it closes in the microtask after the stopping listener");
+  });
+});
+
+test("unattributed time is zero on a clock that every probed call advances: a typed character in the Writer and in Split, a valid update, an update held then drained, refused updates, undo and a structural command", async () => {
+  await shared(p => {
+    p.hold();
+    assert.equal(p.type("r2", 0, "Z").kind, "applied");
+    hook.timing(true);
+    const zero = (label, run) => {
+      const found = probed(run);
+      assert.equal(found.parts.unattributed, 0, label + ": " + JSON.stringify(found.parts) + " " + found.names.join(" "));
+      return found;
+    };
+    const writer = zero("a typed character in the Writer", () => { writerBeat().type("!"); });
+    assert.ok(writer.parts.input > 0 && writer.parts.rendering > 0, JSON.stringify(writer.parts));
+    const valid = zero("a valid update", () => { assert.equal(p.deliver("forward", "app"), 1); });
+    assert.ok(valid.parts.validation > 0 && valid.parts.apply > 0 && valid.parts.projection > 0, JSON.stringify(valid.parts));
+    assert.equal(p.type("r2", 0, "Y").kind, "applied");
+    const held = zero("an update held, then drained by the commit", () => {
+      writerBeat().type("?", () => { assert.equal(p.deliver("forward", "app"), 1); });
+    });
+    assert.ok(held.parts.exclusive.queue > 0, "the held copy is its own span");
+    assert.ok(held.names.indexOf("drain:start") >= 0 && held.names.indexOf("drain:start") === held.names.indexOf("live-apply:start") - 1, held.names.join(" "));
+    assert.deepEqual(rows(hook.read().app), [["r1", "Hello!?"], ["r2", "YZWorld"]]);
+    zero("refused updates", () => {
+      for (const kind of ["throws", "zero-length"]) assert.deepEqual(p.inject(p.refusedUpdate(kind)), { ok: false, reason: "invalid-update" });
+    });
+    const undo = zero("undo", () => {
+      const { root } = writerBeat();
+      key(root, "keydown", { key: "z", ctrlKey: true });
+      key(root, "keyup", { key: "z", ctrlKey: true });
+    });
+    assert.ok(undo.names.includes("input-write:start"), "the undo wrote");
+    assert.deepEqual(rows(hook.read().app), [["r1", "Hello"], ["r2", "YZWorld"]], "the two typed characters are one undo step");
+    const structure = zero("a structural command", () => {
+      const { root } = writerBeat();
+      key(root, "keydown", { key: "Enter" });
+      key(root, "keyup", { key: "Enter" });
+    });
+    assert.ok(structure.names.includes("input-write:start"), "the command wrote");
+    assert.equal(hook.read().app.rows.length, 3);
+    const cell = splitCell();
+    const split = zero("a typed character in Split", () => { cell.type("%"); });
+    assert.ok(split.parts.exclusive["cell-refresh"] > 0 && split.parts.input > 0, JSON.stringify(split.parts));
+    const splitSpans = spans(split.names.map(name => "measure:" + name));
+    assert.ok(of(splitSpans, "cell-refresh").every(span => insideOne(span, of(splitSpans, "input-handler"))), "the cell refresh runs inside the bubbling input handler");
+    assert.equal(hook.read().app.rows[0].audioText, "Hello%");
   });
 });
 
@@ -258,7 +410,7 @@ test("a refused update of each kind: throwing while applying and a zero-length s
     const commit = appTypes("!");
     performance.clearMarks();
     assert.deepEqual(p.inject(full), { ok: false, reason: "queue-full" }, "an open buffer refuses an update larger than its queue");
-    assert.deepEqual(spans(marks()), [], "a queue-full refusal is decided before the trial");
+    assert.deepEqual(spans(marks()).map(span => span.seam), ["receive"], "a queue-full refusal is decided before the trial");
     assert.equal(JSON.stringify(hook.read().app), app, "the refusal wrote nothing");
     performance.clearMarks();
     commit();

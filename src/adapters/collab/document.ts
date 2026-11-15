@@ -52,30 +52,36 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
 }
 
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
-  const state = collabState(handle), gate = state.ingress;
-  const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
-  assertSharedIngressAllowed(state);
-  if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
-    gate.declined = true;
-    return { ok: false, reason: "queue-full" };
-  }
-  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:start");
-  const trial = new CollabDocumentState();
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:receive:start");
   try {
-    const decoded = Y.decodeUpdate(update);
-    if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
-    Y.applyUpdate(trial.doc, Y.encodeStateAsUpdate(state.doc));
-    Y.applyUpdate(trial.doc, update);
-  } catch {
-    return { ok: false, reason: "invalid-update" };
-  } finally {
-    trial.doc.destroy();
-    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:end");
-  }
-  // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
-  if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
-  else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, "remote"));
-  return { ok: true };
+    const state = collabState(handle), gate = state.ingress;
+    const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
+    assertSharedIngressAllowed(state);
+    if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
+      gate.declined = true;
+      return { ok: false, reason: "queue-full" };
+    }
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:start");
+    const trial = new CollabDocumentState();
+    try {
+      const decoded = Y.decodeUpdate(update);
+      if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
+      Y.applyUpdate(trial.doc, Y.encodeStateAsUpdate(state.doc));
+      Y.applyUpdate(trial.doc, update);
+    } catch {
+      return { ok: false, reason: "invalid-update" };
+    } finally {
+      trial.doc.destroy();
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:end");
+    }
+    // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
+    if (closed) {
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:queue:start");
+      try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:queue:end"); }
+    } else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, "remote"));
+    return { ok: true };
+  } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:receive:end"); }
 }
 
 export function destroySharedDocument(handle: SharedDocumentHandle): void {

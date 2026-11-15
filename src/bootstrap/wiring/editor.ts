@@ -143,6 +143,9 @@ import { replayedSteps } from "../../application/editing/undo/replayed-steps.ts"
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -534,11 +537,16 @@ function notAttachableText(names: readonly string[]): string {
 export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
     const ports = sharedSplit ? { ...rowsEditorPorts, keydown: (event: KeyboardEvent) => {
-      if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try { if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
     }, input: (event: Event) => {
-      const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
-      if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
-      else onRootInput(event);
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try {
+        const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+        if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
+        else onRootInput(event);
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
     } } : rowsEditorPorts;
     return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports });
   });
@@ -617,14 +625,17 @@ export function onRootInput(e: RootInput): void {
 }
 
 function afterScriptCellChange(cellEl: Element): void {
-  keepCaretInView(cellEl);
-  scheduleProductionRefresh();
-  scheduleBrollRefresh();
-  scheduleWriterStats();
-  focusMemory().unmutePrompt();
-  scheduleUntaggedScan();
-  updateTagGhost(cellEl);
-  currentPlainTags()?.refresh();
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:cell-refresh:start");
+  try {
+    keepCaretInView(cellEl);
+    scheduleProductionRefresh();
+    scheduleBrollRefresh();
+    scheduleWriterStats();
+    focusMemory().unmutePrompt();
+    scheduleUntaggedScan();
+    updateTagGhost(cellEl);
+    currentPlainTags()?.refresh();
+  } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:cell-refresh:end"); }
 }
 
 const composition = owned<ReturnType<typeof mountComposition>>();

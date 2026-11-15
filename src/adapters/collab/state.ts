@@ -107,12 +107,15 @@ function settleIngress(state: CollabDocumentState): void {
         for (const listener of gate.declineListeners) guardSharedCallback(state, listener);
         continue;
       }
-      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:start");
-      gate.holds.add("delivering");
-      try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
-      catch (error) { gate.errors.push(error); }
-      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:end"); }
-      if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:drain:start");
+      try {
+        if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:start");
+        gate.holds.add("delivering");
+        try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
+        catch (error) { gate.errors.push(error); }
+        finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:end"); }
+        if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:drain:end"); }
     }
   } finally { gate.holds.delete("delivering"); }
 }
