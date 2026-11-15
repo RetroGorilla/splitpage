@@ -13,7 +13,7 @@ function state(visualText: string, shots: BrollState["brollShots"] = []): BrollS
   return { rows: [{ id: "R1", audioText: "Pour the coffee", visualText }, { id: "R2", audioText: "Drink", visualText: "B-roll: Elsewhere" }], brollShots: shots, productionTags: [] };
 }
 
-function keyed(visualText: string, shots: BrollState["brollShots"] = [], shotRemoved = (_id: string) => false) {
+function keyed(visualText: string, shots: BrollState["brollShots"] = [], shotRemoved: (id: string) => boolean = () => false) {
   const left = { rowId: "R1", cell: bufferReaders.cellOf(visualText), state: state(visualText, shots) };
   return sharedBrollKeying(left, bufferReaders, plain, AUTHOR, shotRemoved);
 }

@@ -35,8 +35,8 @@ function applySplices(cell: readonly Run[], splices: readonly SharedCellSplice[]
   return implode(units);
 }
 
-// why: rule 196 on #1414: each keying mints ids of its own, so copies keying one line at once never write one record and
-// cleanup settles the doubled key; an id held by an unclaimed shot of that name is reused, as standalone does.
+// why: rule 196 on #1414: each keying mints its own ids, so copies keying one line at once never share a record and
+// cleanup settles the doubled key; an unclaimed shot of that name keeps its id, as standalone does.
 export function sharedBrollKeying(left: SharedBrollLeftCell, readers: ProductionReaders, plainTextOf: FieldText,
   author: { readonly id: string; readonly by: string }, shotRemoved: (id: string) => boolean = () => false): SharedBrollKeying | null {
   let drawn = 0, minted = 0;
