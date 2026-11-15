@@ -948,8 +948,8 @@
     {
       "label": "route: the shared Writer binding abandons nothing",
       "file": "src/bootstrap/wiring/shared-writer.ts",
-      "find": "    abandon: () => { abandonAll(false); },",
-      "replace": "    abandon: () => {},",
+      "find": "    abandon: () => { closing = true; abandonAll(false); },",
+      "replace": "    abandon: () => { closing = true; },",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs"
       ]

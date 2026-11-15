@@ -11,8 +11,9 @@ const TIMING_MARKS = ["trial", "live-apply", "queue", "mirror-apply", "assembly"
 const MARK_LINE = /if \(\(typeof SPLITPAGE_TEST_HOOKS === "undefined" \|\| SPLITPAGE_TEST_HOOKS\) && timingMarks\.marksOn\) performance\.mark\("measure:[a-z-]+:(?:start|end)"\);/g;
 const MARKED = ["src/adapters/collab/document.ts", "src/adapters/collab/state.ts", "src/adapters/collab/incremental-project.ts", "src/adapters/collab/replica.ts",
   "src/adapters/collab/buffer.ts", "src/bootstrap/wiring/session-owner.ts", "src/bootstrap/wiring/undo.ts", "src/bootstrap/wiring/ports/shared-undo.ts",
-  "src/bootstrap/wiring/ports/shared-commands.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/shared-split.ts", "src/features/editing/cell-buffer.ts",
-  "src/features/writer/flow-surface.ts"];
+  "src/bootstrap/wiring/ports/shared-commands.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/shared-split.ts",
+  "src/bootstrap/wiring/ports/shared-broll-keying.ts", "src/features/editing/cell-buffer.ts", "src/features/writer/flow-surface.ts",
+  "src/features/writer/flow-visual-box.ts"];
 
 const ENTRY = [
   'export { applySharedUpdate } from "./src/adapters/collab/document.ts";',
@@ -25,8 +26,10 @@ const ENTRY = [
   'export { mountRowsEditingFeature } from "./src/bootstrap/wiring/editor.ts";',
   'export { sharedStructureCommands } from "./src/bootstrap/wiring/ports/shared-commands.ts";',
   'export { sharedSplitBindings } from "./src/bootstrap/wiring/shared-split.ts";',
+  'export { sharedLeftCellKeying } from "./src/bootstrap/wiring/ports/shared-broll-keying.ts";',
   'export { mountCellBuffer } from "./src/features/editing/cell-buffer.ts";',
-  'export { createSurface } from "./src/features/writer/flow-surface.ts";'
+  'export { createSurface } from "./src/features/writer/flow-surface.ts";',
+  'export { createFlowVisualBox } from "./src/features/writer/flow-visual-box.ts";'
 ].join("\n");
 
 const stripMarks: Plugin = { name: "strip-marks", setup(plugin) {

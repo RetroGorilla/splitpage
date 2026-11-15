@@ -6,11 +6,16 @@ import { posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export interface FlowVisualBoxPorts {
   readonly buffer?: FlowVisualBufferMount;
+  readonly listen?: (handler: EventListener) => EventListener;
   readonly opened?: (cell: HTMLElement, range: FlowRange, first: boolean) => void;
   readonly closing?: () => boolean;
+  readonly closeForReplay?: () => void;
   readonly closed?: (cell: HTMLElement) => void;
   readonly repaint?: (paint: () => void) => void;
   readonly root: HTMLElement;
@@ -46,14 +51,25 @@ export interface FlowVisualBufferControl {
 
 export type FlowVisualBufferMount = (root: HTMLElement, repaint: () => void) => FlowVisualBufferControl;
 
-export function createFlowVisualBox(ports: FlowVisualBoxPorts): ReturnType<typeof standaloneVisualBox> & { readonly settle?: () => boolean } {
+export function createFlowVisualBox(ports: FlowVisualBoxPorts): ReturnType<typeof standaloneVisualBox> & {
+  readonly settle?: () => boolean; readonly abandon?: () => void } {
   return ports.buffer ? bufferedVisualBox(ports, ports.buffer) : standaloneVisualBox(ports);
 }
 
 function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMount) {
-  let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false;
+  let binding: FlowVisualBufferControl | null = null, selection: FlowRange | null = null, composing = false, abandoning = false;
+  const abandoned = (close: () => void): void => {
+    abandoning = true;
+    try { close(); } finally { abandoning = false; }
+  };
   const control = standaloneVisualBox({ ...ports,
-    input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,
+    input: () => {}, leave: cell => { if (!abandoning) ports.leave(cell); }, keydown: () => false, beforeWrite: () => null,
+    listen: handler => event => {
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try { handler(event); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
+    },
+    closeForReplay: () => { abandoned(() => { control.close(); }); },
     opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.selectionKeep(selection); binding?.painted(); },
     closing: () => { if (binding && !binding.finish()) return false; binding?.selectionEnd(); return true; },
     closed: target => { target.dataset.field = "inactive-visual"; selection = null; binding?.selectionKeep(null); binding?.painted(); },
@@ -103,10 +119,12 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   for (const type of types) box.addEventListener(type, stopped, true);
   const released = (): void => { if (!composing && selection) binding?.selectionEnd(); };
   box.addEventListener("keyup", released);
-  return { ...control, settle: () => binding?.finish() ?? true, dispose: () => {
+  // why: rule 198 on #1414: in a shared session a view switch, undo, redo or teardown commits the box and keys nothing;
+  // shared keying is its own undo step, which keying on these closes would undo or replace.
+  return { ...control, settle: () => binding?.finish() ?? true, abandon: () => { abandoned(() => { control.close(false); }); }, dispose: () => {
     if (!binding?.dispose()) return;
     for (const type of types) { box.removeEventListener(type, gate, true); box.removeEventListener(type, stopped, true); }
-    box.removeEventListener("keyup", released); binding = null; control.dispose();
+    box.removeEventListener("keyup", released); binding = null; abandoned(() => { control.dispose(); });
   } };
 }
 
@@ -306,7 +324,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
       event.preventDefault();
       event.stopPropagation();
       const redo = event.key.toLowerCase() === "y" || event.shiftKey;
-      close();
+      if (ports.closeForReplay) ports.closeForReplay(); else close();
       ports.undo(redo ? "redo" : "undo");
       return;
     }
@@ -326,7 +344,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     if (input.inputType === "historyUndo" || input.inputType === "historyRedo") {
       event.preventDefault();
       event.stopPropagation();
-      close();
+      if (ports.closeForReplay) ports.closeForReplay(); else close();
       ports.undo(input.inputType === "historyUndo" ? "undo" : "redo");
     }
     if (input.inputType === "insertParagraph" || input.inputType === "insertLineBreak") {
@@ -370,7 +388,9 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     [closeButton, "click", onClose], [doc, "mousedown", outside], [window, "resize", refresh]
   ];
   if (parent) listeners.push([parent, "scroll", refresh]);
-  listeners.forEach(([element, event, handler]) => element.addEventListener(event, handler));
+  const listen = ports.listen;
+  const listening = listen ? listeners.map(([element, event, handler]): [EventTarget, string, EventListener] => [element, event, listen(handler)]) : listeners;
+  listening.forEach(([element, event, handler]) => element.addEventListener(event, handler));
   return {
     element: box,
     retarget: (range: FlowRange) => { target = range; if (range.head.kind === "beat") cell.dataset.id = range.head.rowId; },
@@ -379,7 +399,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     close,
     dispose(): void {
       close(false);
-      listeners.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
+      listening.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
       button.remove(); note.remove(); box.remove();
     }
   };
