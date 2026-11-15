@@ -78,10 +78,11 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   let off = (): void => {}, admission = (): void => {}, abandoning: (() => void) | undefined;
   try {
     for (const [name, listener] of listeners) input.addEventListener(name, listener);
-    off = ports.document.onChange(paint); admission = ports.lifetime.beforeCommand(finish); abandoning = ports.abandonment?.(abandon);
+    off = ports.document.onChange(paint); admission = ports.lifetime.beforeCommand(finish);
     paint();
+    abandoning = ports.abandonment?.(abandon);
   } catch (error) {
-    off(); admission(); abandoning?.();
+    off(); admission();
     for (const [name, listener] of listeners) input.removeEventListener(name, listener);
     area.remove(); throw error;
   }

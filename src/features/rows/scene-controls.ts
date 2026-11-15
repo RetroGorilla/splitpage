@@ -180,7 +180,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
     }
     if (shared && sceneId !== null) bind(sceneId);
     if (shared && sceneId === null) {
-      let composing = false, creating = false, release: (() => void) | null = null;
+      let composing = false, creating = false, beforeComposition = "", release: (() => void) | null = null;
       let caret: readonly [number | null, number | null, "forward" | "backward" | "none"] | null = null;
       const end = (): void => { const done = release; release = null; done?.(); };
       const finish = (): boolean => {
@@ -189,6 +189,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
       };
       const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
       const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish());
+      const stopAbandon = ports.sharedScenes?.abandonment?.(() => {
+        if (composing) { composing = false; input.value = beforeComposition; }
+        end();
+      });
       const stopCheck = shared.beforePaint(() => {
         if (!composing) end();
         caret = doc.activeElement === input ? [input.selectionStart, input.selectionEnd, input.selectionDirection ?? "none"] : null;
@@ -200,7 +204,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
       });
       pending = { held: () => release !== null, finish, revert: finish, dispose: () => {
         if (!finish()) return false;
-        stopAdmission?.(); stopCheck(); stopPainted(); return true;
+        stopAdmission?.(); stopAbandon?.(); stopCheck(); stopPainted(); return true;
       } };
       const create = (): void => {
         if (bound || composing || naming?.line !== made) return;
@@ -226,7 +230,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
           input.setSelectionRange(from, to);
         });
       };
-      input.addEventListener("compositionstart", () => { if (!bound) { composing = true; hold(); } });
+      input.addEventListener("compositionstart", () => { if (!bound) { beforeComposition = input.value; composing = true; hold(); } });
       input.addEventListener("compositionend", () => { composing = false; create(); end(); });
       input.addEventListener("input", () => { create(); if (!composing) end(); });
       for (const type of ["keydown", "keyup", "blur", "pointerdown", "focus", "cut", "paste", "drop"]) {

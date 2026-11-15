@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
-import { SHARED_SPLIT_SURFACE_FAILED, SHARED_SPLIT_SURFACE_NOTICES, sharedSplitSurfaces } from "../bootstrap/wiring/shared-split-surfaces.ts";
+import { SHARED_SPLIT_SURFACE_NOTICES, SHARED_SPLIT_SURFACE_PENDING, sharedSplitSurfaces } from "../bootstrap/wiring/shared-split-surfaces.ts";
+import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
+import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { TITLE_FIELD_KEY, headingFieldKey } from "../application/editing/buffered-field-key.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
@@ -76,11 +78,15 @@ function hooked(parts) {
   hookedParts.set(parts, made); originals.set(made, parts);
   return made;
 }
-const split = { enter: parts => realSplit.enter(originals.get(parts) ?? parts), settle: () => realSplit.settle(), leave: () => realSplit.leave() };
-const surfaces = sharedSplitSurfaces(split, effects, { leave: reason => { endings.push([reason, leaveSharedSession(ports)]); } });
+const split = { enter: parts => realSplit.enter(originals.get(parts) ?? parts), settle: () => realSplit.settle(), leave: () => realSplit.leave(),
+  abandon: () => realSplit.abandon(), drop: () => realSplit.drop(), abandonable: () => realSplit.abandonable() };
+const surfaces = sharedSplitSurfaces(split, effects);
 const ports = {
-  refusal: () => null, settle: () => { undoOwner().flush(); }, detach: () => {},
-  bindings: { enter: parts => surfaces.enter(hooked(parts)), settle: () => surfaces.settle(), leave: () => surfaces.leave() },
+  opening: openingStatus,
+  refusal: () => null, commandRefused: sharedCommandRefusalNotice(notices), settle: () => { undoOwner().flush(); }, detach: () => {},
+  left: landed => { endings.push(landed); },
+  bindings: { enter: parts => surfaces.enter(hooked(parts)), settle: () => surfaces.settle(), leave: () => surfaces.leave(),
+    abandon: () => surfaces.abandon(), drop: () => surfaces.drop() },
   common: allowed, standalone: createSessionCapabilities("standalone", allowed), migrate: migrateRows,
   docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Alice", structure: { cells: html => fromHtml(html) },
   report: error => { errors.push(error); }, timers: { now: Date.now, start: (run, ms) => setTimeout(run, ms), stop: clearTimeout }, now: Date.now
@@ -296,13 +302,27 @@ for (const box of ["rename", "add-scene"]) test(`C7 surface settle: an open comp
   assert.equal(sharedSession(), false);
 });
 
+for (const box of ["title", "add-scene"]) for (const step of ["abandon", "drop"]) {
+  test(`C7 surface abandonment: ${step === "abandon" ? "an ordinary abandon" : "a drop on its own"} cancels an open composition in the ${box} box and the leave lands`, async () => {
+    const f = await enter();
+    try {
+      const input = box === "title" ? atEnd(title()) : addSceneBox("r2"), before = input.value;
+      composeInput(input, "held");
+      assert.equal(surfaces.settle(), SHARED_SPLIT_SURFACE_PENDING);
+      surfaces[step]();
+      if (box === "add-scene") assert.equal(input.value, before, "the cancelled composition is not left in the box for a later Enter");
+    } finally { f.close(); }
+    assert.deepEqual([currentDocument().title, currentDocument().sections.map(s => s.name)], ["Shared Split", ["Scene"]]);
+  });
+}
+
 test("C7 surface mount: with no first delivery nothing is half-mounted, and leaving before it stops the wait and keeps the standalone boxes", () => {
   writerControls().closeWriter();
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   const calls = [], listeners = [];
   const split = { enter: () => { calls.push("enter"); }, settle: () => { calls.push("settle"); return null; }, leave: () => { calls.push("leave"); } };
   const session = { revision: () => 0, subscribe: listener => { listeners.push(listener); return () => { listeners.splice(listeners.indexOf(listener), 1); }; } };
-  const surfaces = sharedSplitSurfaces(split, effects, { leave: () => { calls.push("forced leave"); } }), parts = { session };
+  const surfaces = sharedSplitSurfaces(split, effects), parts = { session };
   surfaces.enter(parts);
   surfaces.enter(parts);
   assert.deepEqual([calls, listeners.length], [["enter", "enter"], 1]);
@@ -428,7 +448,7 @@ for (const limited of LIMITED) for (const order of ORDERS) test(`C7 surface limi
   }
 });
 
-test("C7 surface mount: a first-delivery mount that fails at any registration unwinds, leaves the session with its reason, and the standalone boxes answer", async () => {
+test("C7 surface mount: a first-delivery mount that fails at any registration unwinds, ends the session through the switch's forced leave with its notice, and the standalone boxes answer", async () => {
   probe = { inject: null, labels: [], live: [], recording: false };
   const clean = await enter(SOURCE);
   const labels = probe.labels; probe = null;
@@ -442,9 +462,11 @@ test("C7 surface mount: a first-delivery mount that fails at any registration un
     probe = { inject: at, labels: [], live: [], recording: false };
     let outcome;
     try { outcome = await enterSharedSession(ports); } finally { probe.recording = false; }
+    assert.equal(sharedSession(), true, where + ": the session stays until the switch has returned");
+    await new Promise(resolve => { setTimeout(resolve, 0); });
     const left = probe.live.map(entry => entry.label); probe = null;
     assert.deepEqual(outcome, { ok: true }, where);
-    assert.deepEqual(endings, [[SHARED_SPLIT_SURFACE_FAILED, { ok: true }]], where);
+    assert.deepEqual(endings, [true], where + ": the forced leave landed a standalone copy");
     assert.equal(sharedSession(), false, where);
     assert.deepEqual(left, [], where + ": nothing the failed mount registered stays registered");
     assert.deepEqual(warnings().map(call => call[0]), [SHARED_SPLIT_SURFACE_NOTICES.failed], where);

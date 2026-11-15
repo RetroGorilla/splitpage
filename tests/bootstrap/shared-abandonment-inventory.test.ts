@@ -18,7 +18,7 @@ const SURFACES: Readonly<Record<string, Row>> = {
   "bootstrap/wiring/shared-test-peer.ts": { holdsNothing: "the test peer opens an edit and commits it in the same call" },
   "bootstrap/wiring/split-buffer.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
   "bootstrap/wiring/buffered-input.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
-  "features/rows/scene-controls.ts": { notSharedYet: "#1591" }
+  "features/rows/scene-controls.ts": { registers: "const stopAbandon = ports.sharedScenes?.abandonment?.(() => {" }
 };
 
 function modules(path = ""): string[] {

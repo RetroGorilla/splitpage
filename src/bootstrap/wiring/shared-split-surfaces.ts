@@ -21,21 +21,18 @@ import { sharedBufferPorts } from "./ports/shared-buffer.ts";
 import { sharedCommandReport } from "./ports/shared-command-notices.ts";
 import { sharedSceneCreation } from "./ports/shared-scenes.ts";
 import { sessionStamps } from "./session-owner.ts";
+import { forceLeaveSharedSession } from "./shared-session.ts";
 import type { SharedBindings, SharedSessionParts } from "./shared-session.ts";
 import { currentWhoList } from "./who-list.ts";
 
 export const SHARED_SPLIT_SURFACE_PENDING = "buffer-pending";
-export const SHARED_SPLIT_SURFACE_FAILED = "surface-mount-failed";
+const SHARED_SPLIT_SURFACE_FAILED = "surface-mount-failed";
 
 export const SHARED_SPLIT_SURFACE_NOTICES = Object.freeze({
   failed: "The shared session ended because its title and scene boxes could not be set up.",
   titleCut: "Your typing met someone else's and the title went past " + TITLE_MAX + " characters, so its end is cut off.",
   sceneCut: "Your typing met someone else's and this scene name went past " + SCENE_NAME_MAX + " characters, so its end is cut off."
 });
-
-export interface SharedSplitSurfaceEnding {
-  readonly leave: (reason: string) => void;
-}
 
 function placeInSplit(rowId: string, offset: number): boolean {
   render();
@@ -68,18 +65,27 @@ function watchCuts(parts: SharedSessionParts): () => void {
   });
 }
 
-export function sharedSplitSurfaces(split: SharedBindings, effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">,
-  ending: SharedSplitSurfaceEnding): SharedBindings {
+export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonable?: () => number },
+  effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings & { readonly abandonable: () => number } {
   let entered: SharedSessionParts | null = null, waiting: (() => void) | null = null;
   let surfaces: { readonly title: ReturnType<typeof mountTitlesFeature>; readonly scenes: ReturnType<typeof mountSceneHeadersFeature>;
     readonly empty: ReturnType<typeof mountSharedEmptyScript> | null; readonly cuts: () => void } | null = null;
+  const abandons = new Set<(final: boolean) => void>();
+  const abandonment = (abandon: (final: boolean) => void): (() => void) => { abandons.add(abandon); return () => { abandons.delete(abandon); }; };
+  function abandonAll(final: boolean): void {
+    const errors: unknown[] = [];
+    for (const abandon of [...abandons]) { try { abandon(final); } catch (error) { errors.push(error); } }
+    if (errors.length) throw errors[0];
+  }
   function failed(parts: SharedSessionParts): void {
-    // why: the mount runs inside the switch or a session delivery, so the leave waits until that has returned
-    queueMicrotask(() => {
+    const release = parts.session.hold(SHARED_SPLIT_SURFACE_FAILED);
+    // why: the switch holds its lock until the entry or delivery that mounted returns, so the leave is the next task
+    window.setTimeout(() => {
+      release();
       if (entered !== parts) return;
       notices.show(SHARED_SPLIT_SURFACE_NOTICES.failed, "warn");
-      ending.leave(SHARED_SPLIT_SURFACE_FAILED);
-    });
+      forceLeaveSharedSession();
+    }, 0);
   }
   function mount(parts: SharedSessionParts): void {
     const made: (() => void)[] = [];
@@ -90,16 +96,17 @@ export function sharedSplitSurfaces(split: SharedBindings, effects: Pick<Buffere
         return next;
       };
       const text = sharedBufferPorts(parts.handle, parts.session, {
-        ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders, stamps: sessionStamps
+        ...effects, report: sharedCommandReport(notices, effects.report), author, readers: productionReaders, stamps: sessionStamps, abandonment
       });
       const names = sharedBufferedInputPorts(text, sharedBufferedInputHistory(parts.handle, parts.session, parts.undo));
       made.push(() => { mountTitlesFeature(); });
       const title = mountTitlesFeature(names);
       made.push(() => { mountSceneHeadersFeature(); });
-      const scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));
+      const scenes = mountSceneHeadersFeature(names, { ...sharedSceneCreation(parts.handle, parts.session, author), abandonment });
       const host = document.getElementById("rows");
       const empty = host ? mountSharedEmptyScript({ handle: parts.handle, session: parts.session, author: parts.author,
-        writer: () => String(collabState(parts.handle).doc.clientID), stamps: sessionStamps }, { host, edits, notices, report: effects.report, place: placeInSplit }) : null;
+        writer: () => String(collabState(parts.handle).doc.clientID), stamps: sessionStamps },
+      { host, edits, notices, report: effects.report, place: placeInSplit, abandonment }) : null;
       if (empty) made.push(() => { empty.dispose(); });
       const cuts = watchCuts(parts);
       surfaces = { title, scenes, empty, cuts };
@@ -131,13 +138,28 @@ export function sharedSplitSurfaces(split: SharedBindings, effects: Pick<Buffere
       if (surfaces && !(surfaces.title.finish() && surfaces.scenes.finish() && (surfaces.empty?.finish() ?? true))) return SHARED_SPLIT_SURFACE_PENDING;
       return split.settle();
     },
+    abandon: () => {
+      const errors: unknown[] = [];
+      for (const step of [() => { abandonAll(false); }, () => { split.abandon?.(); }]) {
+        try { step(); } catch (error) { errors.push(error); }
+      }
+      if (errors.length) throw errors[0];
+    },
+    drop: () => {
+      const errors: unknown[] = [];
+      for (const step of [() => { abandonAll(true); }, () => { split.drop?.(); }]) {
+        try { step(); } catch (error) { errors.push(error); }
+      }
+      if (errors.length) throw errors[0];
+    },
+    abandonable: () => abandons.size + (split.abandonable?.() ?? 0),
     leave: () => {
-      const held = surfaces;
-      if (held?.empty && !held.empty.dispose()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
+      const mounted = surfaces;
+      if (mounted?.empty && !mounted.empty.dispose()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
       waiting?.(); waiting = null;
       surfaces = null; entered = null;
       const errors: unknown[] = [];
-      if (held) for (const restore of [held.cuts, () => { mountTitlesFeature(); }, () => { mountSceneHeadersFeature(); }]) {
+      if (mounted) for (const restore of [mounted.cuts, () => { mountTitlesFeature(); }, () => { mountSceneHeadersFeature(); }]) {
         try { restore(); } catch (error) { errors.push(error); }
       }
       try { split.leave(); } catch (error) { errors.push(error); }

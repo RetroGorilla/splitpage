@@ -347,8 +347,8 @@ test("Split rename rule 5: a letter typed into a full 200-character name is refu
     assert.deepEqual([input.isConnected, page.reports, page.commands, page.repaints()], [false, [{ kind: "rejected", reason: "buffer-heading-length" }], [], 1]);
     remote(page, 0, "!");
     page.h.queue.flush("dup");
-    assert.equal(page.stored(), "!" + "a".repeat(200));
-    copies(page, ["!" + "a".repeat(200)]);
+    assert.equal(page.stored(), "!" + "a".repeat(199), "rule 156: a remote letter that takes the name past 200 cuts its end");
+    copies(page, ["!" + "a".repeat(199)]);
   } finally { page.close(); }
 });
 

@@ -319,9 +319,11 @@ test("rule 85 Escape restores the stored opening name even when concurrent write
     const input = page.open(); page.edge.select(201); page.edge.backspace();
     assert.equal(page.stored(), "Y" + "a".repeat(199));
     page.edge.escape(); page.h.queue.flush("dup"); page.h.join();
-    for (const handle of [page.h.a, page.h.b, page.h.c]) assert.equal(field(handle, headingFieldKey("H1")), "Y" + "a".repeat(200));
+    for (const handle of [page.h.a, page.h.b, page.h.c]) {
+      assert.equal(field(handle, headingFieldKey("H1")), "Y" + "a".repeat(199), "rule 156: the restored 201 letters show cut at 200 on every copy");
+    }
     assert.deepEqual([input.isConnected, input.value, input.selectionStart, input.selectionEnd, page.reports, page.owner.sizes().undo],
-      [false, "Y" + "a".repeat(200), 201, 201, [], 2]);
+      [false, "Y" + "a".repeat(199), 199, 199, [], 1], "rule 156: the deletion let the hidden letter into view, so the shown name is the opening one and Escape writes nothing");
   } finally { page.close(); }
 });
 

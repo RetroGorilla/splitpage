@@ -11,6 +11,7 @@ import type { SharedBindings, SharedSwitchOutcome, SharedSwitchPorts } from "./s
 import type { Home } from "../../application/location/document-location.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
 import { sharedSplitBindings } from "./shared-split.ts";
+import { sharedSplitSurfaces } from "./shared-split-surfaces.ts";
 import { createSharedTestPeer } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
@@ -83,7 +84,7 @@ function startSharedTestHook(): () => void {
     missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
     ownershipScan: () => { counts.ownershipScans++; }, report
   };
-  const writing = sharedWriterBindings(effects), splitting = sharedSplitBindings(effects);
+  const writing = sharedWriterBindings(effects), splitting = sharedSplitSurfaces(sharedSplitBindings(effects), effects);
   const editing: SharedBindings = {
     enter: parts => { writing.enter(parts); splitting.enter(parts); },
     settle: () => writing.settle() ?? splitting.settle(),

@@ -7,6 +7,7 @@ import type { SharedDocumentSession } from "../session/shared-session.ts";
 
 export interface SharedSceneCreation extends Pick<SharedDocumentSession, "beforeCommand"> {
   readonly hold: () => () => void;
+  readonly abandonment?: (abandon: (final: boolean) => void) => () => void;
   readonly create: (firstBeat: string, name: string) => { readonly heading: string | null; readonly outcome: CommandOutcome };
 }
 

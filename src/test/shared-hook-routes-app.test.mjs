@@ -44,15 +44,16 @@ const { documentEntry } = await import("../bootstrap/wiring/ports/document-entry
 const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
 const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-panel.ts");
 const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
+const { collabState } = await import("../adapters/collab/state.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const { openingStatus } = await import("../bootstrap/wiring/ports/transitions.ts");
 let hook = window.__sharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }];
 
-function script(rows) {
+function script(rows, sections) {
   writerControls().closeWriter();
-  adoptReplacement(migrateRows({ title: "Routes", rows }));
+  adoptReplacement(migrateRows({ title: "Routes", rows, ...(sections ? { sections } : {}) }));
   undoOwner().flush();
   writerControls().openWriter();
 }
@@ -114,7 +115,7 @@ function selectionVisualComposition() {
 }
 
 function emptyInput() {
-  const input = document.querySelector(".empty-script-input");
+  const input = [...document.querySelectorAll(".empty-script-input")].find(box => box.closest(".empty-script")?.nextElementSibling?.id !== "rows");
   assert.ok(input);
   input.focus();
   return input;
@@ -141,6 +142,27 @@ function splitPending(field, composition) {
   if (composition) assert.equal(sharedSessionParts().session.admit()?.kind, "rejected");
 }
 
+function splitBox(input, text, composition) {
+  input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+  if (composition) input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" }));
+  const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: !composition,
+    inputType: composition ? "insertCompositionText" : "insertText", isComposing: composition, data: text });
+  assert.equal(input.dispatchEvent(before), true);
+  input.value += text;
+  if (composition) input.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, inputType: before.inputType, data: text }));
+}
+
+function splitSceneBox(selector) {
+  writerControls().closeWriter();
+  const button = document.querySelector(selector); assert.ok(button, selector);
+  button.click();
+  const input = document.querySelector("#rows .section-rename input"); assert.ok(input);
+  return input;
+}
+
+const SCENE_ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "More", visualText: "" }];
+const SCENES = [{ id: "H1", name: "Scene", firstSceneId: "r1" }];
+
 const WAYS_OUT = [
   { name: "the public leave", rows: ROWS, run: () => { assert.deepEqual(hook.leave(), { ok: true }); } },
   { name: "Open, cancelled at its dialog", rows: ROWS, leaveFirst: true, run: () => localFilesOwner().openLocalFile() },
@@ -155,6 +177,19 @@ const WAYS_OUT = [
     { name: `stopping the app during a Split ${field} composition`, rows: [{ id: "r1", audioText: "Hello", visualText: "Wide" }],
       stops: true, visual: ["Wide"], landed: ["Shared Hello"], arrange: () => splitPending(field, true) }
   ]),
+  { name: "stopping the app with a pending Split title edit", rows: ROWS, stops: true, title: "Before entry!", arrange: () => {
+    writerControls().closeWriter();
+    const input = document.getElementById("doc-title"); assert.ok(input);
+    splitBox(input, "!", false);
+    assert.equal(collabState(sharedSessionParts().handle).ingress.holds.has("buffer"), true, "the title edit is still open");
+    assert.equal(hook.read().app.title, "Before entry", "the typed title is still only in its box");
+  } },
+  ...[{ box: "scene name", selector: '#rows .section-header[data-section-id="H1"] [data-section-action="rename"]' },
+    { box: "new scene name", selector: '#rows [data-action="add-section"][data-id="r2"]' }].map(({ box, selector }) => (
+    { name: `stopping the app during a composition in a Split ${box}`, rows: SCENE_ROWS, sections: SCENES, stops: true, scenes: ["Scene"], arrange: () => {
+      splitBox(splitSceneBox(selector), " held", true);
+      assert.equal(sharedSessionParts().session.admit()?.kind, "rejected");
+    } })),
   { name: "stopping the app with a pending buffered edit", rows: ROWS, stops: true, landed: ["Shared Hello!"], arrange: () => {
     const { element, node, range } = caretAtEnd();
     const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "!" });
@@ -186,7 +221,8 @@ function landing() {
   const doc = currentDocument();
   return { rows: doc.rows.map(row => row.audioText), docId: doc.docId, unsaved: unsavedChanges(), parts: sharedSessionParts() !== null, shared: sharedSession(),
     peer: window.__sharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes(),
-    title: doc.title, visual: doc.rows.map(row => row.visualText ?? ""), abandonable: window.__sharedTest?.counters().abandonable };
+    title: doc.title, visual: doc.rows.map(row => row.visualText ?? ""), scenes: (doc.sections ?? []).map(scene => scene.name),
+    abandonable: window.__sharedTest?.counters().abandonable };
 }
 
 for (const way of WAYS_OUT) {
@@ -194,7 +230,7 @@ for (const way of WAYS_OUT) {
     const store = draftStore();
     const before = documentEntry.before, remove = document.removeEventListener;
     try {
-      script(way.rows);
+      script(way.rows, way.sections);
       retitle("Before entry");
       assert.equal(undoOwner().sizes().undo > 0, true);
       await flushDraftNow();
@@ -224,9 +260,10 @@ for (const way of WAYS_OUT) {
       assert.deepEqual([landed.rows, landed.unsaved, landed.shared, landed.parts, landed.peer], [last, true, false, false, null]);
       assert.equal(landed.abandonable, 0);
       if (way.visual) assert.deepEqual(landed.visual, way.visual);
+      if (way.scenes) assert.deepEqual(landed.scenes, way.scenes, "an open composition in a scene name box is cancelled, not saved");
       assert.notEqual(landed.docId, session.docId);
       assert.deepEqual([landed.drafting, landed.seq], ["pending", floor], "drafting resumed with the landed copy's draft scheduled and no sequence number used");
-      assert.deepEqual([landed.undo, landed.title], [{ undo: 0, redo: 0 }, "Before entry"], "D34: the landed copy starts a fresh undo history");
+      assert.deepEqual([landed.undo, landed.title], [{ undo: 0, redo: 0 }, way.title ?? "Before entry"], "D34: the landed copy starts a fresh undo history");
       assert.equal(sharedSessionParts() === null, true, "no shared parts");
       if (!way.stops && !way.completes) {
         undoOwner().undo();
@@ -236,7 +273,7 @@ for (const way of WAYS_OUT) {
         assert.equal(window.__sharedTest, undefined);
         await restartApp();
         draftStore();
-        script(way.rows);
+        script(way.rows, way.sections);
       } else {
         assert.deepEqual(hook.read().peer, null);
         if (way.completes) edit("Edited after the entry");
@@ -306,7 +343,8 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
 });
 
 const SHARED_WRITER_SURFACES = ["narration buffer (flow-buffer.ts)", "visual buffer (writer-visual-buffer.ts)",
-  "selection-visual edit (writer-visual-buffer.ts)", "empty-script input (empty-script.ts)", "Split cell buffer (split-buffer.ts)"];
+  "selection-visual edit (writer-visual-buffer.ts)", "empty-script input (empty-script.ts)", "Split cell buffer (split-buffer.ts)",
+  "Split title box (buffered-input.ts)", "Split empty-script input (empty-script.ts)"];
 
 test("every surface the shared Writer and Split mount registers one abandon step, and leaving unregisters them all", async () => {
   draftStore();

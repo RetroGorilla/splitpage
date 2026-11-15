@@ -374,7 +374,7 @@ test("shared title: a composition that would take the title past 300 units is re
   } finally { page.close(); }
 });
 
-test("shared title: two writers each typing the 300th unit leave 301 stored; the inputs and the session view show it in full, growth is refused and a deletion is written", () => {
+test("shared title (rule 156): two writers each typing the 300th unit store 301; every view shows the first 300, growth is refused, and deleting the last shown unit shows the one the cut hid", () => {
   const page = sharedTitle("a".repeat(299));
   try {
     page.main.focus();
@@ -383,20 +383,20 @@ test("shared title: two writers each typing the 300th unit leave 301 stored; the
     page.edge.type("X");
     page.h.queue.flush("dup");
     page.paint();
-    const both = "Y" + "a".repeat(299) + "X";
-    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.viewTitle(), page.reports], [both, both, both, both, []]);
-    copies(page, [both, "user"]);
-    page.edge.select(301);
+    const shown = "Y" + "a".repeat(299);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.viewTitle(), page.reports], [shown, shown, shown, shown, []]);
+    copies(page, [shown, "user"]);
+    page.edge.select(300);
     page.edge.type("Z");
-    assert.deepEqual([page.stored(), page.main.value, page.reports, page.a.executed.length], [both, both, TOO_LONG, 1]);
+    assert.deepEqual([page.stored(), page.main.value, page.reports, page.a.executed.length], [shown, shown, TOO_LONG, 1]);
     assert.equal(page.edge.backspace(), true);
-    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length],
-      ["Y" + "a".repeat(299), "Y" + "a".repeat(299), "Y" + "a".repeat(299), TOO_LONG, 2]);
-    copies(page, ["Y" + "a".repeat(299), "user"]);
+    const next = "Y" + "a".repeat(298) + "X";
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length], [next, next, next, TOO_LONG, 2]);
+    copies(page, [next, "user"]);
   } finally { page.close(); }
 });
 
-test("shared title: two writers each committing two units onto 298 leave 302 stored, the session view shows it in full, and it shortens one deletion at a time", () => {
+test("shared title (rule 156): two writers each committing two units onto 298 store 302; every view shows the first 300, and each deletion of the last shown unit shows the next hidden one", () => {
   const page = sharedTitle("a".repeat(298));
   try {
     page.main.focus();
@@ -406,13 +406,13 @@ test("shared title: two writers each committing two units onto 298 leave 302 sto
     page.edge.imeCommit("漢字");
     page.h.queue.flush("dup");
     page.paint();
-    const both = "YZ" + "a".repeat(298) + "漢字";
-    assert.deepEqual([page.stored(), page.main.value, page.viewTitle(), page.reports], [both, both, both, []]);
-    page.edge.select(302);
+    const shown = "YZ" + "a".repeat(298);
+    assert.deepEqual([page.stored(), page.main.value, page.viewTitle(), page.reports], [shown, shown, shown, []]);
+    page.edge.select(300);
     assert.equal(page.edge.backspace(), true);
-    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length],
-      [both.slice(0, 301), both.slice(0, 301), both.slice(0, 301), [], 2]);
-    copies(page, [both.slice(0, 301), "user"]);
+    const next = "YZ" + "a".repeat(297) + "漢";
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, page.reports, page.a.executed.length], [next, next, next, [], 2]);
+    copies(page, [next, "user"]);
   } finally { page.close(); }
 });
 

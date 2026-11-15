@@ -1,25 +1,26 @@
 {
   "tests": [
-    "src/test/shared-split-surfaces-app.test.mjs"
+    "src/test/shared-split-surfaces-app.test.mjs",
+    "src/test/shared-hook-routes-app.test.mjs"
   ],
   "mutants": [
     {
       "label": "the shared Split mounts the standalone title, whose whole-field command has no shared plan",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
-      "find": "const title = mountTitlesFeature(names), scenes",
-      "replace": "const title = mountTitlesFeature(), scenes"
+      "find": "const title = mountTitlesFeature(names);",
+      "replace": "const title = mountTitlesFeature();"
     },
     {
       "label": "the shared Split mounts the standalone scene name boxes",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
-      "find": "scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));",
-      "replace": "scenes = mountSceneHeadersFeature();"
+      "find": "const scenes = mountSceneHeadersFeature(names, { ...sharedSceneCreation(parts.handle, parts.session, author), abandonment });",
+      "replace": "const scenes = mountSceneHeadersFeature();"
     },
     {
       "label": "the shared Split's add-scene box gets no shared creation port",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
-      "find": "scenes = mountSceneHeadersFeature(names, sharedSceneCreation(parts.handle, parts.session, author));",
-      "replace": "scenes = mountSceneHeadersFeature(names);"
+      "find": "const scenes = mountSceneHeadersFeature(names, { ...sharedSceneCreation(parts.handle, parts.session, author), abandonment });",
+      "replace": "const scenes = mountSceneHeadersFeature(names);"
     },
     {
       "label": "the shared Split mounts no empty-script surface",
@@ -60,8 +61,8 @@
     {
       "label": "leaving keeps the shared title binding instead of the standalone title",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
-      "find": "[() => { mountTitlesFeature(); }, ",
-      "replace": "[() => {}, "
+      "find": "[mounted.cuts, () => { mountTitlesFeature(); }, ",
+      "replace": "[mounted.cuts, () => {}, "
     },
     {
       "label": "leaving keeps the shared scene name boxes instead of the standalone ones",
@@ -86,6 +87,84 @@
       "file": "src/bootstrap/wiring/scene-headers.ts",
       "find": "finish: controls.finish,",
       "replace": "finish: () => true,"
+    },
+    {
+      "label": "a failed first-delivery mount does not end the session",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "      forceLeaveSharedSession();\n",
+      "replace": "\n"
+    },
+    {
+      "label": "a failed first-delivery mount leaves while the switch still holds its lock, so the forced leave drops instead of landing",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "    window.setTimeout(() => {\n      release();",
+      "replace": "    queueMicrotask(() => {\n      release();"
+    },
+    {
+      "label": "a failed first-delivery mount ends the session without its notice",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "      notices.show(SHARED_SPLIT_SURFACE_NOTICES.failed, \"warn\");\n",
+      "replace": "\n"
+    },
+    {
+      "label": "the title and scene name boxes register no abandon step",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "stamps: sessionStamps, abandonment\n",
+      "replace": "stamps: sessionStamps\n"
+    },
+    {
+      "label": "the add-scene box gets no abandonment port",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "{ ...sharedSceneCreation(parts.handle, parts.session, author), abandonment }",
+      "replace": "sharedSceneCreation(parts.handle, parts.session, author)"
+    },
+    {
+      "label": "the Split's empty-script input registers no abandon step",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "place: placeInSplit, abandonment }",
+      "replace": "place: placeInSplit }"
+    },
+    {
+      "label": "abandoning the shared Split skips the title, scene name and empty-script steps",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "[() => { abandonAll(false); }, ",
+      "replace": "[() => {}, "
+    },
+    {
+      "label": "dropping the shared Split skips the title, scene name and empty-script steps",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "[() => { abandonAll(true); }, ",
+      "replace": "[() => {}, "
+    },
+    {
+      "label": "the abandonable count leaves out the title, scene name and empty-script steps",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "abandons.size + (split",
+      "replace": "0 + (split"
+    },
+    {
+      "label": "the add-scene box never registers its abandon step",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "const stopAbandon = ports.sharedScenes?.abandonment?.(() => {",
+      "replace": "const stopAbandon = false && ports.sharedScenes?.abandonment?.(() => {"
+    },
+    {
+      "label": "abandoning the add-scene box during a composition keeps it composing",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "        if (composing) { composing = false; input.value = beforeComposition; }\n",
+      "replace": "\n"
+    },
+    {
+      "label": "abandoning the add-scene box keeps the composed text in the box",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "composing = false; input.value = beforeComposition; }",
+      "replace": "composing = false; }"
+    },
+    {
+      "label": "disposing the add-scene box keeps its abandon step registered",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "stopAdmission?.(); stopAbandon?.(); ",
+      "replace": "stopAdmission?.(); "
     }
   ]
 }
