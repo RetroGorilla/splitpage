@@ -246,14 +246,20 @@
     {
       "label": "retirement visuals watch every descendant instead of their owner",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field);",
-      "replace": "watchSharedCreationMembers(roots[collection], keys, raw => collection === \"visuals\" || raw instanceof Y.Map && raw.get(field) === owner, collection === \"visuals\" ? undefined : field);"
+      "find": "watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field, owner, raw => { const value: unknown = raw instanceof Y.Map ? raw.get(field) : null; return typeof value === \"string\" ? value : null; });",
+      "replace": "watchSharedCreationMembers(roots[collection], keys, raw => collection === \"visuals\" || raw instanceof Y.Map && raw.get(field) === owner, collection === \"visuals\" ? undefined : field, owner, raw => collection === \"visuals\" ? owner : raw instanceof Y.Map ? raw.get(field) as string : null);"
     },
     {
       "label": "invalidated retirement stays in the comparison worklist",
       "file": "src/adapters/collab/creation-observation-cache.ts",
       "find": "if (value) candidates.add(beat); else candidates.delete(beat); return value;",
       "replace": "if (value) candidates.add(beat); return value;"
+    },
+    {
+      "label": "retirement invalidation scans every cached observation",
+      "file": "src/adapters/collab/creation-observation-cache.ts",
+      "find": "const affected = index.affected(changes);",
+      "replace": "const affected = new Set(entries.keys());"
     }
   ]
 }

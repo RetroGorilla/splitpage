@@ -88,7 +88,7 @@ export function readSharedCreationContent(handle: SharedDocumentHandle, beat: st
   watchSharedCreationMap(roots.beats, beat);
   const owned = (collection: "beats" | "headings" | "visuals" | "gallery" | "comments" | "replies", field: string, owner: string) => {
     const keys = sharedCreationRecordKeys(handle, collection, field, owner);
-    watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field); return keys;
+    watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field, owner, raw => { const value: unknown = raw instanceof Y.Map ? raw.get(field) : null; return typeof value === "string" ? value : null; }); return keys;
   };
   if (!(record instanceof Y.Map)) return "null";
   const attachments = (["visuals", "gallery"] as const).flatMap(collection => owned(collection, "beat", beat).flatMap(id => {
@@ -120,7 +120,7 @@ export function readSharedCreationContent(handle: SharedDocumentHandle, beat: st
   });
   const statusKeys = (sharedCreationReadsSettled(handle) ? sharedStatusEventKeys(handle, { scope: "beat", record: beat as SharedContentRef }) : null) ?? [...roots.statusEvents.keys()];
   const ownStatus = statusKeys.filter(id => { const event = readSharedStatusEvent(roots.statusEvents.get(id)); return event?.target.scope === "beat" && event.target.record === beat; });
-  watchSharedCreationMembers(roots.statusEvents, ownStatus, raw => { const event = readSharedStatusEvent(raw); return event?.target.scope === "beat" && event.target.record === beat; });
+  watchSharedCreationMembers(roots.statusEvents, ownStatus, raw => { const event = readSharedStatusEvent(raw); return event?.target.scope === "beat" && event.target.record === beat; }, "target", beat, raw => { const event = readSharedStatusEvent(raw); return event?.target.scope === "beat" ? event.target.record : null; });
   for (const id of ownStatus) { watchSharedCreationMap(roots.statusEvents, id); watchSharedCreationMap(roots.retiredStatus, id); }
   const status = statusKeys.filter(id => {
     const event = readSharedStatusEvent(roots.statusEvents.get(id)); return event?.target.scope === "beat" && event.target.record === beat && !roots.retiredStatus.has(id);

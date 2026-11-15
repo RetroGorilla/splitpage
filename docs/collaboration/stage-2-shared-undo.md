@@ -758,28 +758,47 @@ still read from the native map, including during redo and encoded arrival.
 plain/formatted insertion, effective/settled-invalidated markers, the six
 placements below, and zero/100 unrelated beats. R1 is edited; R1/R2 each start
 as three narration characters split after the first. A retired creation has
-one narration and one visual character. Each cell is **first-key checks/builds
-then following-key checks/builds**. Every row is tested separately with **0 and
+one narration and one visual character. Each cell is **first-key checks/builds/visits
+then following-key checks/builds/visits**. Every row is tested separately with **0 and
 100 unrelated beats**, with identical results.
 
 | Marker state | Placement | Narration plain | Narration formatted | Visual plain | Visual formatted |
 | --- | --- | --- | --- | --- | --- |
-| Effective | None | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Effective | One in edited R1 segment | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 |
-| Effective | One in other R2 segment | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Effective | Two in R1 | 2/2 then 0/0 | 2/2 then 0/0 | 2/2 then 0/0 | 2/2 then 0/0 |
-| Effective | Two in R2 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Effective | One in each | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 | 1/1 then 0/0 |
-| Settled invalidation | None | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Settled invalidation | One in R1 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Settled invalidation | One in R2 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Settled invalidation | Two in R1 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Settled invalidation | Two in R2 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
-| Settled invalidation | One in each | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 | 0/0 then 0/0 |
+| Effective | None | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Effective | One in edited R1 segment | 1/1/2 then 0/0/2 | 1/1/2 then 0/0/2 | 1/1/0 then 0/0/0 | 1/1/0 then 0/0/0 |
+| Effective | One in other R2 segment | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Effective | Two in R1 | 2/2/4 then 0/0/4 | 2/2/4 then 0/0/4 | 2/2/0 then 0/0/0 | 2/2/0 then 0/0/0 |
+| Effective | Two in R2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Effective | One in each | 1/1/2 then 0/0/2 | 1/1/2 then 0/0/2 | 1/1/0 then 0/0/0 | 1/1/0 then 0/0/0 |
+| Settled invalidation | None | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | One in R1 | 0/0/2 then 0/0/2 | 0/0/2 then 0/0/2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | One in R2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | Two in R1 | 0/0/4 then 0/0/4 | 0/0/4 then 0/0/4 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | Two in R2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | One in each | 0/0/2 then 0/0/2 | 0/0/2 then 0/0/2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+
+The reverse dependency index routes changed native identities, map keys,
+ownership fields and join targets to cached observations. It does not scan
+cached markers. Rebuilding or removing an observation removes its old links.
+The matrix also pins observation visits: narration sharing the marked
+physical text needs two range-maintenance visits per marker per key; visual
+text and narration in another physical segment need zero visits. Plain and
+formatted insertion have the same counts, including settled invalidations.
+
+An additional **24 cases** warm **0, 1 or 100 markers elsewhere**, effective
+or invalidated, then type **20 keys** in the unmarked beat. All **480 keys**
+pin checks/builds/visits together, including the first key:
+
+| Markers elsewhere | Narration plain | Narration formatted | Visual plain | Visual formatted |
+| --- | --- | --- | --- | --- |
+| 0 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+| 1 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+| 100 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
 
 Cold checks are only for markers in the segment needed to resolve the edit.
-Warm unrelated typing makes no comparison or observation build. These counts
-exclude dependency bookkeeping and normal text/projection work. Native-read
+Warm unrelated typing makes no comparison or observation build. The pins
+measure comparisons, observation builds and cached-observation visits; they
+exclude keyed index lookups and normal text/projection work. Native-read
 pins remain in `creation-undo-cost.test.ts`; there is no timing claim.
 
 `creation-retirement-phases.test.ts` generates **63 operations per delivery

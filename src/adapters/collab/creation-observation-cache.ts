@@ -6,19 +6,21 @@ import { readSharedJoinEntry } from "./join-record.ts";
 
 interface Dependency { readonly map: Y.Map<unknown>; readonly key?: string; readonly ignore?: (key: string) => boolean; readonly births?: Y.Text }
 interface Membership { readonly root: Y.Map<unknown>; readonly keys: ReadonlySet<string>; readonly belongs: (raw: unknown) => boolean; readonly field?: string }
+interface RoutedMembership extends Membership { readonly owner: string; readonly ownerOf: (raw: unknown) => string | null }
 interface Joined { readonly root: Y.Map<unknown>; readonly keys: ReadonlySet<string> }
 interface Range { readonly text: Y.Text; from: number; to: number }
-interface Dependencies { readonly maps: Dependency[]; readonly ranges: Range[]; readonly members: Membership[]; readonly joins: Joined[] }
+interface Dependencies { readonly maps: Dependency[]; readonly ranges: Range[]; readonly members: RoutedMembership[]; readonly joins: Joined[] }
 interface Observation extends Dependencies { dirty: boolean; readonly value: boolean }
-interface Cache { readonly entries: Map<string, Observation>; readonly candidates: Set<string>; readonly synchronize: () => boolean }
+interface Cache { readonly entries: Map<string, Observation>; readonly candidates: Set<string>; readonly synchronize: () => boolean; readonly index: DependencyIndex }
 interface NativeNode { readonly _item: Y.Item | null }
 let collecting: Dependencies | null = null;
+export const sharedCreationDependencyCost = { visits: 0 };
 
 export function watchSharedCreationMap(map: Y.Map<unknown>, key?: string, ignore?: (key: string) => boolean): void {
   collecting?.maps.push({ map, ...(key === undefined ? {} : { key }), ...(ignore ? { ignore } : {}) });
 }
-export function watchSharedCreationMembers(root: Y.Map<unknown>, keys: readonly string[], belongs: (raw: unknown) => boolean, field?: string): void {
-  collecting?.members.push({ root, keys: new Set(keys), belongs, ...(field === undefined ? {} : { field }) });
+export function watchSharedCreationMembers(root: Y.Map<unknown>, keys: readonly string[], belongs: (raw: unknown) => boolean, field: string | undefined, owner: string, ownerOf: (raw: unknown) => string | null): void {
+  collecting?.members.push({ root, keys: new Set(keys), belongs, owner, ownerOf, ...(field === undefined ? {} : { field }) });
 }
 export function watchSharedCreationJoins(root: Y.Map<unknown>, keys: ReadonlySet<string>): void { collecting?.joins.push({ root, keys }); }
 export function watchSharedCreationText(text: Y.Text, from: number, to: number, store: unknown): void {
@@ -69,19 +71,85 @@ function joinsChanged(dependency: Joined, changes: ReadonlyMap<object, Set<strin
   } }, changes);
 }
 
+interface OwnerRoute { readonly ownerOf: (raw: unknown) => string | null; readonly owners: Map<string, Set<string>> }
+class DependencyIndex {
+  private readonly identities = new WeakMap<object, Set<string>>();
+  private readonly keys = new WeakMap<Y.Map<unknown>, Map<string, Set<string>>>();
+  private readonly members = new WeakMap<Y.Map<unknown>, Map<string | undefined, OwnerRoute>>();
+  private readonly joins = new WeakMap<Y.Map<unknown>, Map<string, Set<string>>>();
+  private readonly links = new Map<string, Set<Set<string>>>();
+
+  delete(beat: string): void { for (const slot of this.links.get(beat) ?? []) slot.delete(beat); this.links.delete(beat); }
+  private link(beat: string, slots: Map<string, Set<string>>, key: string): void {
+    let slot = slots.get(key); if (!slot) { slot = new Set(); slots.set(key, slot); } this.retain(beat, slot);
+  }
+  private retain(beat: string, slot: Set<string>): void {
+    slot.add(beat); let links = this.links.get(beat); if (!links) { links = new Set(); this.links.set(beat, links); } links.add(slot);
+  }
+  private key(beat: string, root: Y.Map<unknown>, key: string): void {
+    let slots = this.keys.get(root); if (!slots) { slots = new Map(); this.keys.set(root, slots); } this.link(beat, slots, key);
+  }
+  private identity(beat: string, type: object): void {
+    let slot = this.identities.get(type); if (!slot) { slot = new Set(); this.identities.set(type, slot); } this.retain(beat, slot);
+  }
+  set(beat: string, dependencies: Dependencies): void {
+    this.delete(beat);
+    for (const map of dependencies.maps) { if (map.key === undefined) this.identity(beat, map.map); else this.key(beat, map.map, map.key); }
+    for (const range of dependencies.ranges) this.identity(beat, range.text);
+    for (const member of dependencies.members) {
+      for (const key of member.keys) this.key(beat, member.root, key);
+      let fields = this.members.get(member.root); if (!fields) { fields = new Map(); this.members.set(member.root, fields); }
+      let route = fields.get(member.field); if (!route) { route = { ownerOf: member.ownerOf, owners: new Map() }; fields.set(member.field, route); }
+      this.link(beat, route.owners, member.owner);
+    }
+    for (const join of dependencies.joins) {
+      let slots = this.joins.get(join.root); if (!slots) { slots = new Map(); this.joins.set(join.root, slots); }
+      for (const key of join.keys) { this.key(beat, join.root, key); this.link(beat, slots, key); }
+    }
+  }
+  affected(changes: ReadonlyMap<object, Set<string | null>>): ReadonlySet<string> {
+    const affected = new Set<string>(), add = (slot?: ReadonlySet<string>) => { for (const beat of slot ?? []) affected.add(beat); };
+    const route = (root: Y.Map<unknown>, key: string, field: string | null | undefined, fields: ReadonlySet<string | null>) => {
+      for (const [watched, query] of this.members.get(root) ?? []) {
+        if (field !== undefined && watched !== undefined && field !== watched && !(field === null && fields.has(watched))) continue;
+        add(this.keys.get(root)?.get(key)); const owner = query.ownerOf(peek(root, key)); if (owner !== null) add(query.owners.get(owner));
+      }
+      const joins = this.joins.get(root);
+      if (joins && (field === undefined || field === "joins" || field === null && fields.has("joins"))) {
+        add(joins.get(key)); const record = peek(root, key), raw: unknown = record instanceof Y.Map ? peek(record, "joins") : null;
+        if (raw instanceof Y.Map) for (const id of raw.keys()) { const entry = readSharedJoinEntry(peek(raw, id)); if (entry) add(joins.get(entry.into)); }
+      }
+    };
+    for (const [type, fields] of changes) {
+      add(this.identities.get(type));
+      if (type instanceof Y.Map) for (const key of fields) if (key !== null) { add(this.keys.get(type)?.get(key)); route(type, key, undefined, fields); }
+      let node = type as NativeNode, field: string | null = null;
+      while (node._item) {
+        const item = node._item;
+        if (item.parent instanceof Y.Map && typeof item.parentSub === "string") route(item.parent, item.parentSub, field, fields);
+        field = item.parentSub; node = item.parent as NativeNode;
+      }
+    }
+    return affected;
+  }
+}
+
 function cache(handle: SharedDocumentHandle): Cache {
   const state = collabState(handle);
   return state.reads.keep(state.roots.creationRetired, "creation-observations", () => {
-    const entries = new Map<string, Observation>(), candidates = new Set(state.roots.creationRetired.keys());
+    const entries = new Map<string, Observation>(), candidates = new Set(state.roots.creationRetired.keys()), index = new DependencyIndex();
     const baselines = new WeakMap<Y.Transaction, Map<Range, { from: number; to: number }>>();
     const applyChanges = (transaction: Y.Transaction) => {
       const changes = transaction.changed as unknown as ReadonlyMap<object, Set<string | null>>;
       for (const beat of changes.get(state.roots.creationRetired) ?? []) if (beat !== null) {
         if (state.roots.creationRetired.has(beat)) { candidates.add(beat); const entry = entries.get(beat); if (entry) entry.dirty = true; }
-        else { candidates.delete(beat); entries.delete(beat); }
+        else { candidates.delete(beat); entries.delete(beat); index.delete(beat); }
       }
-      for (const [beat, entry] of entries) {
-        if (!state.roots.creationRetired.has(beat)) { entries.delete(beat); candidates.delete(beat); continue; }
+      const affected = index.affected(changes);
+      for (const beat of affected) {
+        const entry = entries.get(beat); if (!entry) continue;
+        sharedCreationDependencyCost.visits++;
+        if (!state.roots.creationRetired.has(beat)) { entries.delete(beat); candidates.delete(beat); index.delete(beat); continue; }
         for (const range of entry.ranges) {
           const subs = changes.get(range.text);
           if (subs) {
@@ -124,7 +192,7 @@ function cache(handle: SharedDocumentHandle): Cache {
     const changed = (transaction: Y.Transaction) => guardSharedCallback(state, () => { pending.add(transaction); synchronize(); });
     state.doc.on("beforeObserverCalls", changed);
     state.doc.once("destroy", () => guardSharedCallback(state, () => { state.doc.off("beforeObserverCalls", changed); }));
-    return { entries, candidates, synchronize };
+    return { entries, candidates, synchronize, index };
   });
 }
 
@@ -143,7 +211,7 @@ export function cachedSharedCreationObservation(handle: SharedDocumentHandle, be
   if (!sharedCreationReadsSettled(handle)) return read();
   const before = collecting, dependencies: Dependencies = { maps: [], ranges: [], members: [], joins: [] }; collecting = dependencies;
   try {
-    const value = read(); entries.set(beat, { ...dependencies, dirty: false, value });
+    const value = read(); entries.set(beat, { ...dependencies, dirty: false, value }); held.index.set(beat, dependencies);
     if (value) candidates.add(beat); else candidates.delete(beat); return value;
   } finally { collecting = before; }
 }
