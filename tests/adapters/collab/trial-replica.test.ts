@@ -408,7 +408,8 @@ test("failed rebuilds wait for a drain: 1,000 no-ops use live copy trials and th
     state.doc.clientID = 8;
     const trial = startSharedTrialReplica(handle, counts.count);
     let heard = 0;
-    observeSharedIntakeStopped(handle, () => { heard++; });
+    const stoppedHeld: number[] = [];
+    observeSharedIntakeStopped(handle, () => { heard++; stoppedHeld.push(state.ingress.held.length); });
     const dependent = crafted(7, [metaItem(7, 0, "", 1, Y.createID(8, 0)),
       new Y.Item(Y.createID(7, 1), null, Y.createID(7, 2), null, null, META, "cycle", new Y.ContentAny([2])),
       new Y.Item(Y.createID(7, 2), null, Y.createID(7, 1), null, null, META, "cycle", new Y.ContentAny([3]))]);
@@ -437,6 +438,7 @@ test("failed rebuilds wait for a drain: 1,000 no-ops use live copy trials and th
       assert.equal(thrown(end), "TypeError");
     }
     assert.deepEqual([trial.spent, trial.stopped(), heard], [3, true, 1]);
+    assert.deepEqual(stoppedHeld, [2]);
     assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: false, reason: "intake-stopped" });
   } finally { destroySharedDocument(handle); }
 });

@@ -8,8 +8,8 @@
   }, {
     "label": "held update skipped in the trial replica",
     "file": "src/adapters/collab/document.ts",
-    "find": "    if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n    else copyTrial(state, update, count);",
-    "replace": "    if (state.trial && !closed) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n    else copyTrial(state, update, count);"
+    "find": "      if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n      else copyTrial(state, update, count);",
+    "replace": "      if (state.trial && !closed) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n      else copyTrial(state, update, count);"
   }, {
     "label": "refused update left in the trial replica",
     "file": "src/adapters/collab/trial-replica.ts",

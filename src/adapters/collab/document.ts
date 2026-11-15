@@ -72,23 +72,25 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
     return { ok: false, reason: "queue-full" };
   }
   try {
-    const decoded = Y.decodeUpdate(update);
-    if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
-    // why: The standing replica holds live plus every held update, so the trial meets what the update will meet.
-    if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));
-    else copyTrial(state, update, count);
-  } catch {
-    return { ok: false, reason: "invalid-update" };
+    try {
+      const decoded = Y.decodeUpdate(update);
+      if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
+      // why: The standing replica holds live plus every held update, so the trial meets what the update will meet.
+      if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));
+      else copyTrial(state, update, count);
+    } catch {
+      return { ok: false, reason: "invalid-update" };
+    }
+    // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
+    if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
+    else {
+      count?.("apply", "live", update.byteLength);
+      applyAdmittedUpdate(state, update, apply => transactCollabState(state, "remote", apply));
+    }
+    return { ok: true };
   } finally {
     if (state.trial?.takeStop()) announceSharedIntakeStop(state);
   }
-  // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
-  if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
-  else {
-    count?.("apply", "live", update.byteLength);
-    applyAdmittedUpdate(state, update, apply => transactCollabState(state, "remote", apply));
-  }
-  return { ok: true };
 }
 
 export function destroySharedDocument(handle: SharedDocumentHandle): void {
