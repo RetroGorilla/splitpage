@@ -1,0 +1,495 @@
+{
+  "plan": {
+    "people": [
+      1,
+      2,
+      4
+    ],
+    "wordsPerPerson": 5000,
+    "keysPerWord": 6,
+    "correctionEvery": 55,
+    "typingBlock": 55,
+    "rewriteFraction": [
+      1,
+      12
+    ],
+    "markEvery": 100,
+    "splitEvery": 200,
+    "joinEvery": 200,
+    "removalEvery": 100,
+    "creationEvery": 1000,
+    "commentEvery": 1000,
+    "keyingEvery": 1000,
+    "replaceEvery": 1000,
+    "checkpoints": [
+      1,
+      2,
+      5,
+      10,
+      20,
+      60
+    ]
+  },
+  "result": {
+    "fixture": "long",
+    "people": 2,
+    "measuredWordsPerPersonPerDay": 10,
+    "keysPerWord": 6,
+    "measured": true,
+    "firstCap": {
+      "day": 26,
+      "encodedBytes": 2145200
+    },
+    "sessionReopen": "exact encoded state through applySharedUpdate, every day; no plain projection used to reopen",
+    "points": [
+      {
+        "day": 0,
+        "encodedBytes": 66469,
+        "categories": {
+          "text content": 10805,
+          "text identity": 468,
+          "birth range": 0,
+          "birth observed marks": 0,
+          "birth stamp or author": 0,
+          "birth keys and framing": 0,
+          "mark additions": 28797,
+          "mark removals": 0,
+          "mark copies": 0,
+          "deletions": 1,
+          "split objects": 0,
+          "retirement observations": 0,
+          "removal marks": 0,
+          "structure": 11966,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 212,
+          "update framing": 5
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 0,
+            "bytes": 0
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 0
+        },
+        "structs": 1345,
+        "deleteSetBytes": 1,
+        "plainBytes": 38342,
+        "counters": {
+          "typed": 0,
+          "correctionDeletes": 0,
+          "correctionRetypes": 0,
+          "rewritten": 0,
+          "marks": 0,
+          "splits": 0,
+          "joins": 0,
+          "beatsCreated": 0,
+          "beatsRemoved": 0,
+          "comments": 0,
+          "keyings": 0,
+          "replacements": 0,
+          "undos": 0,
+          "undoRedo": 0
+        }
+      },
+      {
+        "day": 1,
+        "encodedBytes": 148987,
+        "categories": {
+          "text content": 10925,
+          "text identity": 953,
+          "birth range": 18608,
+          "birth observed marks": 4868,
+          "birth stamp or author": 1188,
+          "birth keys and framing": 12504,
+          "mark additions": 29283,
+          "mark removals": 269,
+          "mark copies": 18,
+          "deletions": 137,
+          "split objects": 0,
+          "retirement observations": 0,
+          "removal marks": 43799,
+          "structure": 11995,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 212,
+          "update framing": 13
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 61,
+            "bytes": 3416
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 1452
+        },
+        "structs": 1617,
+        "deleteSetBytes": 32,
+        "plainBytes": 38479,
+        "counters": {
+          "typed": 120,
+          "correctionDeletes": 2,
+          "correctionRetypes": 2,
+          "rewritten": 10,
+          "marks": 1,
+          "splits": 0,
+          "joins": 0,
+          "beatsCreated": 0,
+          "beatsRemoved": 1,
+          "comments": 0,
+          "keyings": 0,
+          "replacements": 0,
+          "undos": 1,
+          "undoRedo": 1
+        }
+      },
+      {
+        "day": 2,
+        "encodedBytes": 209724,
+        "categories": {
+          "text content": 11045,
+          "text identity": 1557,
+          "birth range": 38012,
+          "birth observed marks": 11078,
+          "birth stamp or author": 2376,
+          "birth keys and framing": 25008,
+          "mark additions": 29773,
+          "mark removals": 540,
+          "mark copies": 36,
+          "deletions": 293,
+          "split objects": 277,
+          "retirement observations": 604,
+          "removal marks": 62104,
+          "structure": 12371,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 422,
+          "update framing": 13
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 183,
+            "bytes": 8174
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 2904
+        },
+        "structs": 1909,
+        "deleteSetBytes": 71,
+        "plainBytes": 38616,
+        "counters": {
+          "typed": 240,
+          "correctionDeletes": 4,
+          "correctionRetypes": 4,
+          "rewritten": 20,
+          "marks": 2,
+          "splits": 1,
+          "joins": 1,
+          "beatsCreated": 0,
+          "beatsRemoved": 2,
+          "comments": 0,
+          "keyings": 0,
+          "replacements": 0,
+          "undos": 4,
+          "undoRedo": 2
+        }
+      },
+      {
+        "day": 5,
+        "encodedBytes": 420499,
+        "categories": {
+          "text content": 11405,
+          "text identity": 3535,
+          "birth range": 96224,
+          "birth observed marks": 20752,
+          "birth stamp or author": 5940,
+          "birth keys and framing": 62520,
+          "mark additions": 31733,
+          "mark removals": 1624,
+          "mark copies": 90,
+          "deletions": 836,
+          "split objects": 831,
+          "retirement observations": 1812,
+          "removal marks": 154946,
+          "structure": 13181,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 842,
+          "update framing": 13
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 315,
+            "bytes": 13492
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 7260
+        },
+        "structs": 2772,
+        "deleteSetBytes": 191,
+        "plainBytes": 39044,
+        "counters": {
+          "typed": 600,
+          "correctionDeletes": 10,
+          "correctionRetypes": 10,
+          "rewritten": 50,
+          "marks": 6,
+          "splits": 3,
+          "joins": 3,
+          "beatsCreated": 0,
+          "beatsRemoved": 6,
+          "comments": 0,
+          "keyings": 0,
+          "replacements": 0,
+          "undos": 12,
+          "undoRedo": 6
+        }
+      },
+      {
+        "day": 10,
+        "encodedBytes": 862896,
+        "categories": {
+          "text content": 12064,
+          "text identity": 6902,
+          "birth range": 195472,
+          "birth observed marks": 64653,
+          "birth stamp or author": 11925,
+          "birth keys and framing": 125877,
+          "mark additions": 35013,
+          "mark removals": 3270,
+          "mark copies": 180,
+          "deletions": 1824,
+          "split objects": 1680,
+          "retirement observations": 3657,
+          "removal marks": 368221,
+          "structure": 15090,
+          "undo heading observations": 0,
+          "undo beat observations": 816,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6516,
+          "tags": 5879,
+          "comments": 2184,
+          "rest": 1476,
+          "update framing": 13
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 1078,
+            "bytes": 50078
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 14575
+        },
+        "structs": 4250,
+        "deleteSetBytes": 407,
+        "plainBytes": 40482,
+        "counters": {
+          "typed": 1200,
+          "correctionDeletes": 21,
+          "correctionRetypes": 21,
+          "rewritten": 100,
+          "marks": 12,
+          "splits": 6,
+          "joins": 6,
+          "beatsCreated": 1,
+          "beatsRemoved": 12,
+          "comments": 1,
+          "keyings": 1,
+          "replacements": 1,
+          "undos": 25,
+          "undoRedo": 13
+        }
+      },
+      {
+        "day": 20,
+        "encodedBytes": 1715693,
+        "categories": {
+          "text content": 13325,
+          "text identity": 13625,
+          "birth range": 395972,
+          "birth observed marks": 126462,
+          "birth stamp or author": 23859,
+          "birth keys and framing": 254239,
+          "mark additions": 41347,
+          "mark removals": 6606,
+          "mark copies": 360,
+          "deletions": 3739,
+          "split objects": 3426,
+          "retirement observations": 7445,
+          "removal marks": 786694,
+          "structure": 18335,
+          "undo heading observations": 0,
+          "undo beat observations": 1668,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 7410,
+          "tags": 5879,
+          "comments": 2345,
+          "rest": 2760,
+          "update framing": 13
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 2145,
+            "bytes": 97301
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 29161
+        },
+        "structs": 7158,
+        "deleteSetBytes": 826,
+        "plainBytes": 43129,
+        "counters": {
+          "typed": 2400,
+          "correctionDeletes": 43,
+          "correctionRetypes": 43,
+          "rewritten": 200,
+          "marks": 24,
+          "splits": 12,
+          "joins": 12,
+          "beatsCreated": 2,
+          "beatsRemoved": 24,
+          "comments": 2,
+          "keyings": 2,
+          "replacements": 2,
+          "undos": 50,
+          "undoRedo": 26
+        }
+      },
+      {
+        "day": 60,
+        "encodedBytes": 5534132,
+        "categories": {
+          "text content": 18430,
+          "text identity": 44914,
+          "birth range": 1196128,
+          "birth observed marks": 824206,
+          "birth stamp or author": 71622,
+          "birth keys and framing": 768072,
+          "mark additions": 66937,
+          "mark removals": 19924,
+          "mark copies": 540,
+          "deletions": 11950,
+          "split objects": 10396,
+          "retirement observations": 22592,
+          "removal marks": 2411973,
+          "structure": 32028,
+          "undo heading observations": 0,
+          "undo beat observations": 5928,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 11372,
+          "tags": 5879,
+          "comments": 3148,
+          "rest": 7896,
+          "update framing": 13
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 17295,
+            "bytes": 736668
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 87538
+        },
+        "structs": 18789,
+        "deleteSetBytes": 2500,
+        "plainBytes": 54450,
+        "counters": {
+          "typed": 7200,
+          "correctionDeletes": 130,
+          "correctionRetypes": 130,
+          "rewritten": 600,
+          "marks": 72,
+          "splits": 36,
+          "joins": 36,
+          "beatsCreated": 7,
+          "beatsRemoved": 72,
+          "comments": 7,
+          "keyings": 7,
+          "replacements": 7,
+          "undos": 151,
+          "undoRedo": 79
+        }
+      }
+    ]
+  }
+}

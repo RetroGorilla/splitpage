@@ -1,0 +1,386 @@
+{
+  "version": 1,
+  "source": "cafd0a73dfb0cd373b19e84b3503761e5e740840",
+  "runtime": "v24.22.1",
+  "comparison": "identical Stage 1 typing, immediate corrections, first-five-beat half rewrites; structural tail excluded from both",
+  "exportNote": "Stage 1 uses its serializeProjection; Stage 2 uses pretty JSON of its plain projection, all beats active",
+  "tapeOperations": 11490,
+  "stageOne": [
+    {
+      "writers": 2,
+      "blocks": 1,
+      "encodedBytes": 50914,
+      "categories": {
+        "text content": 10805,
+        "text identity": 2518,
+        "birth range": 0,
+        "birth observed marks": 0,
+        "birth stamp or author": 0,
+        "birth keys and framing": 0,
+        "mark additions": 3776,
+        "mark removals": 0,
+        "mark copies": 0,
+        "deletions": 2005,
+        "split objects": 0,
+        "retirement observations": 0,
+        "removal marks": 0,
+        "structure": 14403,
+        "undo heading observations": 0,
+        "undo beat observations": 0,
+        "undo replacement observations": 0,
+        "undo keying observations": 0,
+        "people": 216,
+        "shots": 6981,
+        "tags": 7254,
+        "comments": 2654,
+        "rest": 289,
+        "update framing": 13
+      },
+      "observationReferences": {
+        "insertionBound": {
+          "count": 0,
+          "bytes": 0
+        },
+        "range": {
+          "count": 0,
+          "bytes": 0
+        },
+        "unknown": {
+          "count": 0,
+          "bytes": 0
+        },
+        "keysAndArrayFraming": 0
+      },
+      "structs": 2023,
+      "deleteSetBytes": 648,
+      "typedCharacters": 11287,
+      "finalCharacters": 10478,
+      "exportedFileBytes": 38382,
+      "bytesPer1000Final": 4859.133422408857,
+      "bytesPer1000Typed": 4510.853193939931,
+      "encodedOverExport": 1.3265072169246002,
+      "within2MiB": true,
+      "within10x": true,
+      "fullWorkload": {
+        "finalCharacters": 10241,
+        "activeBeats": 34,
+        "projectedFileBytes": 41523,
+        "exportedFileBytes": 40778,
+        "typedCharacters": 11287,
+        "operations": {
+          "typing": 10415,
+          "correctionDeletes": 189,
+          "correctionRetypes": 189,
+          "revisionDeletes": 5,
+          "revisionTyping": 683,
+          "atoms": 9,
+          "splits": 5,
+          "joins": 5,
+          "joinRetirements": 5,
+          "moves": 5,
+          "removals": 2,
+          "restores": 1,
+          "statuses": 60,
+          "comments": 4,
+          "tags": 31,
+          "pictures": 10
+        },
+        "encodedBytes": 67095
+      }
+    },
+    {
+      "writers": 6,
+      "blocks": 1,
+      "encodedBytes": 50914,
+      "categories": {
+        "text content": 10805,
+        "text identity": 2507,
+        "birth range": 0,
+        "birth observed marks": 0,
+        "birth stamp or author": 0,
+        "birth keys and framing": 0,
+        "mark additions": 3775,
+        "mark removals": 0,
+        "mark copies": 0,
+        "deletions": 2003,
+        "split objects": 0,
+        "retirement observations": 0,
+        "removal marks": 0,
+        "structure": 14403,
+        "undo heading observations": 0,
+        "undo beat observations": 0,
+        "undo replacement observations": 0,
+        "undo keying observations": 0,
+        "people": 216,
+        "shots": 6981,
+        "tags": 7254,
+        "comments": 2654,
+        "rest": 289,
+        "update framing": 27
+      },
+      "observationReferences": {
+        "insertionBound": {
+          "count": 0,
+          "bytes": 0
+        },
+        "range": {
+          "count": 0,
+          "bytes": 0
+        },
+        "unknown": {
+          "count": 0,
+          "bytes": 0
+        },
+        "keysAndArrayFraming": 0
+      },
+      "structs": 2023,
+      "deleteSetBytes": 650,
+      "typedCharacters": 11287,
+      "finalCharacters": 10478,
+      "exportedFileBytes": 38382,
+      "bytesPer1000Final": 4859.133422408857,
+      "bytesPer1000Typed": 4510.853193939931,
+      "encodedOverExport": 1.3265072169246002,
+      "within2MiB": true,
+      "within10x": true,
+      "fullWorkload": {
+        "finalCharacters": 10241,
+        "activeBeats": 34,
+        "projectedFileBytes": 41523,
+        "exportedFileBytes": 40778,
+        "typedCharacters": 11287,
+        "operations": {
+          "typing": 10415,
+          "correctionDeletes": 189,
+          "correctionRetypes": 189,
+          "revisionDeletes": 5,
+          "revisionTyping": 683,
+          "atoms": 9,
+          "splits": 5,
+          "joins": 5,
+          "joinRetirements": 5,
+          "moves": 5,
+          "removals": 2,
+          "restores": 1,
+          "statuses": 60,
+          "comments": 4,
+          "tags": 31,
+          "pictures": 10
+        },
+        "encodedBytes": 67096
+      }
+    }
+  ],
+  "stageTwo": [
+    {
+      "writers": 2,
+      "blocks": 1,
+      "fresh": {
+        "encodedBytes": 26455,
+        "categories": {
+          "text content": 51,
+          "text identity": 5,
+          "birth range": 0,
+          "birth observed marks": 0,
+          "birth stamp or author": 0,
+          "birth keys and framing": 0,
+          "mark additions": 0,
+          "mark removals": 0,
+          "mark copies": 0,
+          "deletions": 1,
+          "split objects": 0,
+          "retirement observations": 0,
+          "removal marks": 0,
+          "structure": 11966,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 212,
+          "update framing": 5
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 0,
+            "bytes": 0
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 0
+        },
+        "structs": 1195,
+        "deleteSetBytes": 1
+      },
+      "recoveryKinds": {
+        "comment-without-words": 1
+      },
+      "encodedBytes": 6415088,
+      "categories": {
+        "text content": 10805,
+        "text identity": 54161,
+        "birth range": 1965123,
+        "birth observed marks": 2854447,
+        "birth stamp or author": 101664,
+        "birth keys and framing": 1073886,
+        "mark additions": 321741,
+        "mark removals": 0,
+        "mark copies": 0,
+        "deletions": 6855,
+        "split objects": 0,
+        "retirement observations": 0,
+        "removal marks": 0,
+        "structure": 11966,
+        "undo heading observations": 0,
+        "undo beat observations": 0,
+        "undo replacement observations": 0,
+        "undo keying observations": 0,
+        "people": 184,
+        "shots": 6126,
+        "tags": 5879,
+        "comments": 2026,
+        "rest": 212,
+        "update framing": 13
+      },
+      "observationReferences": {
+        "insertionBound": {
+          "count": 70683,
+          "bytes": 2730191
+        },
+        "range": {
+          "count": 0,
+          "bytes": 0
+        },
+        "unknown": {
+          "count": 0,
+          "bytes": 0
+        },
+        "keysAndArrayFraming": 124256
+      },
+      "structs": 24603,
+      "deleteSetBytes": 2554,
+      "typedCharacters": 11287,
+      "finalCharacters": 10478,
+      "exportedFileBytes": 38292,
+      "bytesPer1000Final": 612243.5579309028,
+      "bytesPer1000Typed": 568360.7690263134,
+      "encodedOverExport": 167.53076360597512,
+      "within2MiB": false,
+      "within10x": false
+    },
+    {
+      "writers": 6,
+      "blocks": 1,
+      "fresh": {
+        "encodedBytes": 26455,
+        "categories": {
+          "text content": 51,
+          "text identity": 5,
+          "birth range": 0,
+          "birth observed marks": 0,
+          "birth stamp or author": 0,
+          "birth keys and framing": 0,
+          "mark additions": 0,
+          "mark removals": 0,
+          "mark copies": 0,
+          "deletions": 1,
+          "split objects": 0,
+          "retirement observations": 0,
+          "removal marks": 0,
+          "structure": 11966,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 212,
+          "update framing": 5
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 0,
+            "bytes": 0
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 0
+        },
+        "structs": 1195,
+        "deleteSetBytes": 1
+      },
+      "recoveryKinds": {
+        "comment-without-words": 1
+      },
+      "encodedBytes": 6404190,
+      "categories": {
+        "text content": 10805,
+        "text identity": 54099,
+        "birth range": 1955143,
+        "birth observed marks": 2854447,
+        "birth stamp or author": 101664,
+        "birth keys and framing": 1073886,
+        "mark additions": 321249,
+        "mark removals": 0,
+        "mark copies": 0,
+        "deletions": 6475,
+        "split objects": 0,
+        "retirement observations": 0,
+        "removal marks": 0,
+        "structure": 11966,
+        "undo heading observations": 0,
+        "undo beat observations": 0,
+        "undo replacement observations": 0,
+        "undo keying observations": 0,
+        "people": 184,
+        "shots": 6126,
+        "tags": 5879,
+        "comments": 2026,
+        "rest": 212,
+        "update framing": 29
+      },
+      "observationReferences": {
+        "insertionBound": {
+          "count": 70683,
+          "bytes": 2730191
+        },
+        "range": {
+          "count": 0,
+          "bytes": 0
+        },
+        "unknown": {
+          "count": 0,
+          "bytes": 0
+        },
+        "keysAndArrayFraming": 124256
+      },
+      "structs": 24603,
+      "deleteSetBytes": 2368,
+      "typedCharacters": 11287,
+      "finalCharacters": 10478,
+      "exportedFileBytes": 38292,
+      "bytesPer1000Final": 611203.4739454094,
+      "bytesPer1000Typed": 567395.2334544166,
+      "encodedOverExport": 167.24616107803197,
+      "within2MiB": false,
+      "within10x": false
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+[
+  {
+    "fixture": "long",
+    "cap": 2097152,
+    "groupSizes": [
+      1,
+      2,
+      4
+    ],
+    "firstDayOverCap": 1,
+    "crossed": {
+      "typed": 6800,
+      "corrections": 123,
+      "bytes": 2115671,
+      "previous": {
+        "typed": 6700,
+        "bytes": 2087413
+      },
+      "ledger": {
+        "encodedBytes": 2115671,
+        "categories": {
+          "text content": 17605,
+          "text identity": 34405,
+          "birth range": 1043130,
+          "birth observed marks": 218841,
+          "birth stamp or author": 62307,
+          "birth keys and framing": 683199,
+          "mark additions": 28797,
+          "mark removals": 0,
+          "mark copies": 0,
+          "deletions": 985,
+          "split objects": 0,
+          "retirement observations": 0,
+          "removal marks": 0,
+          "structure": 11966,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 6126,
+          "tags": 5879,
+          "comments": 2026,
+          "rest": 212,
+          "update framing": 9
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 2520,
+            "bytes": 142688
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 76153
+        },
+        "structs": 15191,
+        "deleteSetBytes": 371
+      }
+    },
+    "note": "measured first writer's typing phase of day 1, before the 30,000-key daily allocation and before structural/formatting tail; stop at first over-cap block"
+  },
+  {
+    "fixture": "large",
+    "cap": 2097152,
+    "groupSizes": [
+      1,
+      2,
+      4
+    ],
+    "firstDayOverCap": 1,
+    "crossed": {
+      "typed": 4900,
+      "corrections": 89,
+      "bytes": 2124913,
+      "previous": {
+        "typed": 4800,
+        "bytes": 2093556
+      },
+      "ledger": {
+        "encodedBytes": 2124913,
+        "categories": {
+          "text content": 112653,
+          "text identity": 29805,
+          "birth range": 763316,
+          "birth observed marks": 159161,
+          "birth stamp or author": 44901,
+          "birth keys and framing": 494594,
+          "mark additions": 301148,
+          "mark removals": 0,
+          "mark copies": 0,
+          "deletions": 713,
+          "split objects": 0,
+          "retirement observations": 0,
+          "removal marks": 0,
+          "structure": 129540,
+          "undo heading observations": 0,
+          "undo beat observations": 0,
+          "undo replacement observations": 0,
+          "undo keying observations": 0,
+          "people": 184,
+          "shots": 61584,
+          "tags": 5879,
+          "comments": 21214,
+          "rest": 212,
+          "update framing": 9
+        },
+        "observationReferences": {
+          "insertionBound": {
+            "count": 0,
+            "bytes": 0
+          },
+          "range": {
+            "count": 1797,
+            "bytes": 104282
+          },
+          "unknown": {
+            "count": 0,
+            "bytes": 0
+          },
+          "keysAndArrayFraming": 54879
+        },
+        "structs": 20737,
+        "deleteSetBytes": 269
+      }
+    },
+    "note": "measured first writer's typing phase of day 1, before the 30,000-key daily allocation and before structural/formatting tail; stop at first over-cap block"
+  }
+]

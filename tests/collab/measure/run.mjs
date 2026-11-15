@@ -82,7 +82,8 @@ export function writer(handle, identity = {}) {
   };
   const command = raw => {
     const operation = operationOf(raw);
-    const execution = executeSharedCommand(handle, [operation], { label: raw.kind, selection: null, typing: null });
+    const execution = executeSharedCommand(handle, [operation], { label: raw.kind, selection: null, typing: null },
+      identity.base ? { base: identity.base() } : {});
     assert.deepEqual(execution.result, { ok: true }, raw.kind);
     assert.ok(execution.record, "missing undo record for " + raw.kind);
     ends.clear();
