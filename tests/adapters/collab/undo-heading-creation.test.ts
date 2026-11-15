@@ -18,6 +18,7 @@ import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts
 const runtime = createFlowLoadRuntime(), ORDERS = ["D1", "rev", "dup"] as const;
 const SOURCE = { rows: [{ id: "R0", audioText: "x" }, { id: "R1", audioText: "ab" }, { id: "R2", audioText: "c" }], sections: [{ id: "H0", name: "Open", firstSceneId: "R0" }] };
 type Reading = ReturnType<typeof projectSharedDocumentWithRecovery>;
+const names = (reading: Reading) => ((reading.document.sections ?? []) as { readonly name: string }[]).map(section => section.name);
 
 function start(order: typeof ORDERS[number], source: Record<string, unknown> = SOURCE) {
   const h = replicas(2, source), handles = [h.a, h.b];
@@ -149,7 +150,7 @@ for (const change of under) for (const order of ORDERS) for (const seen of [true
     assert.deepEqual(texts, change.name.startsWith("typing") ? ["x", "abQ", "c"] : change.name.includes("directly") ? ["x", "bob", "ab", "c"] : ["x", "ab", "bob", "c"]);
     h.check(now);
     assert.equal(h.owner.redo().ok, true); h.flush();
-    assert.deepEqual(projectSharedDocumentWithRecovery(h.a).document.sections.map(section => section.name), ["Open", "New"]);
+    assert.deepEqual(names(projectSharedDocumentWithRecovery(h.a)), ["Open", "New"]);
   } finally { h.close(); }
 });
 
@@ -159,7 +160,7 @@ for (const order of ORDERS) test(`rule 203: the creator's own rename is undone f
     const before = projectSharedDocumentWithRecovery(h.a), made = h.scene(), created = projectSharedDocumentWithRecovery(h.a);
     h.command([rename(made, "Y", "Alice")], "rename"); h.flush();
     const renamed = projectSharedDocumentWithRecovery(h.a);
-    assert.deepEqual(renamed.document.sections.map(section => section.name), ["Open", "NYew"]);
+    assert.deepEqual(names(renamed), ["Open", "NYew"]);
     assert.equal(h.owner.undo().ok, true); h.check(created);
     assert.equal(h.owner.undo().ok, true); h.check(before);
     assert.equal(h.owner.redo().ok, true); h.check(created);
@@ -191,12 +192,12 @@ for (const order of ORDERS) for (const seen of [true, false]) test(`rule 204: a 
     const state = encodeSharedState(h.a), outcome = h.owner.undo();
     if (seen) {
       assert.deepEqual(outcome, { ok: true, effective: false, label: "paste", selection: null, reason: "used-up" }); assert.deepEqual(encodeSharedState(h.a), state);
-      h.check(other); assert.deepEqual(other.document.sections.map(section => section.name), ["Open", "New"]);
+      h.check(other); assert.deepEqual(names(other), ["Open", "New"]);
       return;
     }
     assert.deepEqual(outcome, { ok: true, effective: true, label: "paste", selection: null }); h.flush();
     const merged = projectSharedDocumentWithRecovery(h.a);
-    assert.deepEqual([merged.document.rows.map(row => row.audioText), merged.document.sections.map(section => section.name), merged.recovery], [["x", "pQ", "ab", "c"], ["Open"], []]);
+    assert.deepEqual([merged.document.rows.map(row => row.audioText), names(merged), merged.recovery], [["x", "pQ", "ab", "c"], ["Open"], []]);
     assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "paste", selection: null, reason: "used-up" });
     h.check(merged);
   } finally { h.close(); }
@@ -210,7 +211,7 @@ for (const order of ORDERS) test(`rule 207: a heading made over the creator's ow
     h.scene(beat.beat);
     assert.equal(h.owner.undo().ok, true); h.flush();
     const shown = projectSharedDocumentWithRecovery(h.a);
-    assert.deepEqual(shown.document.sections.map(section => section.name), ["Open"]);
+    assert.deepEqual(names(shown), ["Open"]);
     assert.deepEqual(h.owner.undo(), { ok: true, effective: false, label: "create", selection: null, reason: "used-up" });
     h.check(shown);
   } finally { h.close(); }
@@ -225,7 +226,7 @@ for (const order of ORDERS) test(`rule 205: an unseen rename arrives after the u
     h.flush();
     assert.equal(isSharedCreationRetired(h.a, made.heading), false);
     const shown = projectSharedDocumentWithRecovery(h.a);
-    assert.deepEqual(shown.document.sections.map(section => section.name), ["Open", "NQew"]);
+    assert.deepEqual(names(shown), ["Open", "NQew"]);
     assert.deepEqual(h.owner.redo(), { ok: true, effective: false, label: "add-section", selection: null, reason: "used-up" });
     h.check(shown);
   } finally { h.close(); }
@@ -240,6 +241,20 @@ test("rule 208: a heading finished from a typed Writer line stays skipped with r
     assert.deepEqual(record.parts.map(item => item.kind === "structure" ? item.command : item.kind), ["heading-finalize"]);
     assert.deepEqual(h.owner.undo(), { ok: false, reason: "undo-unsupported:heading-finalize", skipped: true });
     assert.deepEqual(["heading-finalize", "heading-remove", "heading-create", "heading-creation"].map(supportsSharedUndoPart), [false, false, false, true]);
+  } finally { h.close(); }
+});
+
+for (const order of ORDERS) test(`rule 202: a copy that has seen the undo has no heading to type into, and a value written with the creation goes with it: ${order}`, () => {
+  const h = start(order);
+  try {
+    const before = projectSharedDocumentWithRecovery(h.a);
+    const record = h.command([...addScene("scene", "R1", "New"), { kind: "scalar", id: "scene_extra", by: "Alice", target: { scope: "heading", record: "scene_scene" }, field: "extra", value: "{\"mood\":\"dark\"}" }], "add-section");
+    assert.deepEqual(record.parts.map(item => item.kind), ["heading-creation"]);
+    h.flush(); const made = h.part(record), after = projectSharedDocumentWithRecovery(h.a);
+    assert.equal(h.owner.undo().ok, true); h.check(before);
+    const typing = executeSharedOperations(h.b, [operation(rename(made))], { base: readSharedRevision(h.b) });
+    assert.deepEqual([typing.ok, !typing.ok && typing.reason], [false, "missing-target"]);
+    assert.equal(h.owner.redo().ok, true); h.check(after);
   } finally { h.close(); }
 });
 

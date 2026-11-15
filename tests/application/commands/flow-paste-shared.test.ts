@@ -308,7 +308,7 @@ for (const literal of headed) for (const order of ["D1", "rev", "dup"] as const)
     const prepared = ports.commands.prepare("paste", doc => pasteSharedFlowClipboard(doc, at, data, ports.flow, runtime.rich.inertBody, runtime.load) ?? null, stamps, at);
     assert.equal(a.session.run(prepared.command).kind, "applied");
     const pasted = projectSharedDocumentWithRecovery(h.a);
-    assert.deepEqual(pasted.document.sections?.map(section => section.name), [literal.headers[0].scene.name]);
+    assert.deepEqual((pasted.document.sections as { readonly name: string }[]).map(section => section.name), [literal.headers[0].scene.name]);
     everywhere(pasted);
     assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "paste", selection: null }); everywhere(before);
     assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "paste", selection: null }); everywhere(pasted);

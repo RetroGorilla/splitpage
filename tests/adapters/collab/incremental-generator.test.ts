@@ -136,10 +136,10 @@ test("seeded incremental projection agrees at every authored and delivered revis
   }
   assert.deepEqual(violations, declaredLimits);
   t.diagnostic(JSON.stringify({ histories, commands, checkpoints, lateJoiners, discards, reports: incrementalReports.compared - reported, choices: choices.size, declaredLimits }));
-  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1560);
+  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1680);
   assert.equal(discards, 60);
-  assert.equal(checkpoints, 3252);
-  assert.equal(incrementalReports.compared - reported, 3216);
+  assert.equal(checkpoints, 3500);
+  assert.equal(incrementalReports.compared - reported, 3464);
   assert.equal(choices.size, 216);
   assert.deepEqual([...kinds].sort(), ["discard", "heading-create", "heading-finalize", "heading-remove", "heading-restore", "heading-retire", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "segment-restore", "segment-retire", "split", "split-before", "status", "status-retire", "text-delete", "text-insert", "text-restore"]);

@@ -145,12 +145,11 @@ export function readSharedHeadingCreationContent(handle: SharedDocumentHandle, h
   if (!(record instanceof Y.Map)) return "null";
   const line = () => {
     if (!(stored instanceof Y.Map)) return null;
-    watchSharedCreationMap(stored, "text"); watchSharedCreationMap(stored, "head");
-    const raw: unknown = stored.get("text"); if (!(raw instanceof Y.Text)) return null;
-    const boundaries = boundaryList(segment, stored, raw);
+    const raw: unknown = stored.get("text");
+    const boundaries = raw instanceof Y.Text ? boundaryList(segment, stored, raw) : [];
     const index = boundaries.findIndex(item => { const boundary = readSharedBoundaryEmbed(item.value); return boundary?.kind === "h" && boundary.id === heading; });
     const own = boundaries[index], next = boundaries[index + 1];
-    if (!own) { watchSharedCreationText(raw, 0, raw.length, null); return null; }
+    if (!own || !(raw instanceof Y.Text)) { watchSharedCreationMap(stored); if (raw instanceof Y.Text) watchSharedCreationText(raw, 0, raw.length, null); return null; }
     return [own.identity, own.value, text(handle, stored, writer, own.at, next?.at ?? raw.length)];
   };
   return JSON.stringify([fields(record, writer, unstamped), line()]);

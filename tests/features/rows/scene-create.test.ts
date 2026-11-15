@@ -174,7 +174,7 @@ test("the two shared creation commands give the same complete document in one li
     const made = projectSharedDocumentWithRecovery(set.b);
     assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "add-section", selection: null });
     assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 1, dropped: 0 }, 0]);
-    assert.deepEqual(projectSharedDocumentWithRecovery(set.b).document.sections, []);
+    assert.equal(projectSharedDocumentWithRecovery(set.b).document.sections, undefined);
     assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "add-section", selection: null });
     assert.deepEqual(projectSharedDocumentWithRecovery(set.b), made);
     assert.deepEqual(executeSharedOperations(set.b, commands[1] ?? [], { base: readSharedRevision(set.b) }), { ok: true });
