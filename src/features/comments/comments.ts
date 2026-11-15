@@ -9,6 +9,8 @@ import type { CommentFilter } from "../../application/preferences/preferences.ts
 import type { ConflictValue, SharedCommentPorts } from "../../application/commands/comments.ts";
 import type { RewritePlanner } from "../../application/commands/document-edit.ts";
 import { recordCommandRun } from "../../application/commands/shared-records.ts";
+import { createTypedDrafts, heldWrite, typedOrphansHtml } from "../common/typed-drafts.ts";
+import type { TypedDraft, TypedDrafts, TypedSave } from "../common/typed-drafts.ts";
 
 type CommentRenderReply = NonNullable<DocumentView["comments"][number]["replies"]>[number] & {
   readonly author: string; readonly body: string; readonly createdAt?: string | null | undefined;
@@ -472,8 +474,77 @@ function anchorLiveText(cmtId: string) {
   return anchorTextFromState(cmtId);
 }
 
-function editComments(build: (shared?: SharedCommentPorts) => Command) {
-  return recordCommandRun((ports as CommentsRuntimePorts).edits, (ports as CommentsRuntimePorts).shared, build);
+function editComments(build: (shared?: SharedCommentPorts) => Command, quiet = false) {
+  const shared = (ports as CommentsRuntimePorts).shared;
+  return recordCommandRun((ports as CommentsRuntimePorts).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);
+}
+
+const COMMENT_BOXES = ["comment-body-editable", "reply-composer"];
+
+let drafts: TypedDrafts | null = null;
+let draftLife: object | null = null;
+
+function typed(): TypedDrafts {
+  return drafts as TypedDrafts;
+}
+
+function plainOf(html: string): string {
+  const holder = document.createElement("template");
+  holder.innerHTML = html;
+  return holder.content.textContent ?? "";
+}
+
+function unsavedCommentLabel(draft: TypedDraft): string {
+  return draft.box === "reply-composer" ? "The comment was removed, so your reply was not saved" : "The commented text was removed, so your comment was not saved";
+}
+
+function goneComment(draft: TypedDraft): void {
+  (ports as CommentsRuntimePorts).notices.show(unsavedCommentLabel(draft) + ". The text is kept at the top of the comments list.", "warn");
+}
+
+function sameCommentLife(): boolean {
+  const shared = (ports as CommentsRuntimePorts).shared.ports(), same = shared !== null && shared === draftLife;
+  draftLife = shared;
+  if (!same) typed().clear();
+  return same;
+}
+
+function retryCommentDrafts(): void {
+  if (!sameCommentLife()) return;
+  const active = document.activeElement;
+  // why: a retry runs a command, and its admission would settle typing the person has not finished in another box
+  if (active && !active.closest("#comments-panel, #comment-modal") && (active.tagName === "TEXTAREA" || active.tagName === "INPUT" ||
+    active.closest('[contenteditable="true"], [contenteditable=""]'))) return;
+  reviseCommentDrafts();
+  typed().retry();
+}
+
+function reviseCommentDrafts(): void {
+  const text = (ports as CommentsRuntimePorts).text;
+  for (const draft of typed().held()) {
+    let live: string | null = null;
+    if (draft.box === "reply-composer") {
+      const body = document.querySelector<HTMLElement>('.reply-composer[data-for="' + safeId(draft.record, "c") + '"] .cell-editable');
+      live = body ? body.innerHTML : replyDrafts[draft.record]?.body ?? null;
+    } else if (pendingComment?.id === draft.record) {
+      live = (document.getElementById("comment-body-editable") as HTMLElement).innerHTML;
+    }
+    if (live === null) continue;
+    const clean = text.sanitizeHtml(live);
+    const media = draft.box !== "reply-composer" && /<img|video-embed-card/.test(clean);
+    if (plainOf(clean).trim() || media) typed().revise(draft.box, draft.record, clean);
+    else typed().drop(draft.box, draft.record);
+  }
+}
+
+export function dismissUnsavedComment(box: string | null, record: string | null): void {
+  if (!drafts || box === null || record === null) return;
+  drafts.dismiss(box, record);
+  renderComments();
+}
+
+function unsavedCommentsHtml(): string {
+  return typedOrphansHtml(typed().orphans().map(draft => ({ ...draft, text: plainOf(draft.text) })), unsavedCommentLabel);
 }
 
 function anchorUnwrapped(rowId: string, field: string, cmtId: string): RewritePlanner {
@@ -533,6 +604,7 @@ export function closeCommentComposer(cancelled?: boolean) {
   if (cancelled && pendingComment) {
     const pending = pendingComment;
     if (editComments(shared => unwrapCommentAnchorCommand(anchorUnwrapped(pending.rowId, pending.field, pending.id), shared && { ports: shared, anchor: pending.id })).held) return;
+    drafts?.drop("comment-body-editable", pending.id);
   }
   composerVersion++;
   (document.getElementById("comment-modal") as HTMLElement).hidden = true;
@@ -556,29 +628,44 @@ export function postComment() {
     return;
   }
   const pending = pendingComment;
-  if (editComments(shared => addCommentCommand({
-    id: pending.id,
-    rowId: pending.rowId,
-    field: pending.field,
-    anchorId: pending.id,
-    quotedText: pending.quotedText,
-    author: author,
-    body: bodyHtml,
-    resolved: false,
-    resolvedBy: null,
-    resolvedAt: null,
-    assignee: "",
-    createdAt: (ports as CommentsRuntimePorts).clock.nowIso(),
-    updatedAt: (ports as CommentsRuntimePorts).clock.nowIso(),
-    kind: "anchor",
-    replies: []
-  }, shared)).held) return;
-  (document.getElementById("comment-modal") as HTMLElement).hidden = true;
-  composerVersion++;
-  pendingComment = null;
-  bodyEl.innerHTML = "";
-  (ports as CommentsRuntimePorts).clearDraftUndo(bodyEl);
-  sendNow();
+  sameCommentLife();
+  const wrote = typed().submit("comment-body-editable", pending.id, bodyHtml, commentSave(pending, author));
+  if (wrote === "gone") closeCommentComposer();
+}
+
+function commentSave(pending: PendingCommentContext, author: string): TypedSave {
+  return (body, quiet) => {
+    const doc = (ports as CommentsRuntimePorts).document.current();
+    if (pending.field !== "title" && (!doc || rowIndexOf(doc, pending.rowId) === -1)) return "gone";
+    const run = editComments(shared => addCommentCommand({
+      id: pending.id,
+      rowId: pending.rowId,
+      field: pending.field,
+      anchorId: pending.id,
+      quotedText: pending.quotedText,
+      author: author,
+      body: body,
+      resolved: false,
+      resolvedBy: null,
+      resolvedAt: null,
+      assignee: "",
+      createdAt: (ports as CommentsRuntimePorts).clock.nowIso(),
+      updatedAt: (ports as CommentsRuntimePorts).clock.nowIso(),
+      kind: "anchor",
+      replies: []
+    }, shared), quiet);
+    if (run.held) return heldWrite(run);
+    if (pendingComment?.id === pending.id) {
+      const bodyEl = (document.getElementById("comment-body-editable") as HTMLElement);
+      (document.getElementById("comment-modal") as HTMLElement).hidden = true;
+      composerVersion++;
+      pendingComment = null;
+      bodyEl.innerHTML = "";
+      (ports as CommentsRuntimePorts).clearDraftUndo(bodyEl);
+    }
+    sendNow();
+    return "saved";
+  };
 }
 
 function sendNow() {
@@ -640,7 +727,10 @@ export function armDeleteComment(btn: Element, id: string | null) {
 export function toggleReplyComposer(id: string | null) {
   captureReplyDrafts();
   expandedReplyIds[id as string] = !expandedReplyIds[id as string];
-  if (!expandedReplyIds[id as string]) Reflect.deleteProperty(replyDrafts, id as string);
+  if (!expandedReplyIds[id as string]) {
+    Reflect.deleteProperty(replyDrafts, id as string);
+    drafts?.drop("reply-composer", id as string);
+  }
   renderComments();
   if (expandedReplyIds[id as string]) {
     const input = document.querySelector<HTMLElement>('.reply-composer[data-for="' + safeId(id, "c") + '"] .cell-editable');
@@ -662,11 +752,21 @@ export function postReply(id: string | null) {
     (ports as CommentsRuntimePorts).notices.show("Write a reply before posting.", "warn");
     return;
   }
-  const reply ={ id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: bodyHtml, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
-  if (editComments(build => addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)).held) return;
-  dropCommentState(id, false);
-  renderComments();
-  sendNow();
+  replyDrafts[id as string] = { body: bodyEl.innerHTML, name: nameInput.value };
+  sameCommentLife();
+  if (typed().submit("reply-composer", id as string, bodyHtml, replySave(id as string, author)) === "saved") renderComments();
+}
+
+function replySave(id: string, author: string): TypedSave {
+  return (body, quiet) => {
+    if (findCommentIndex(id) === -1) { dropCommentState(id, false); return "gone"; }
+    const reply = { id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: body, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
+    const run = editComments(build => addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build), quiet);
+    if (run.held) return heldWrite(run);
+    dropCommentState(id, false);
+    sendNow();
+    return "saved";
+  };
 }
 
 export function jumpToAnchor(cmtId: string | null) {
@@ -995,17 +1095,19 @@ export function captureReplyDrafts() {
 const COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
 
 export function renderComments() {
+  if (drafts) retryCommentDrafts();
   const doc = (ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null;
   if (!doc) return;
   const listEl = (document.getElementById("comments-list") as HTMLElement);
   if (!listEl) return;
   renderCommentFilterBar();
+  const unsaved = drafts ? unsavedCommentsHtml() : "";
   let items = doc.comments.filter(function (c) {
     return commentMatchesFilterMode(c, (commentFilter as CommentFilter).mode) && commentMatchesAssigneeFilter(c, (commentFilter as CommentFilter).assignee);
   });
   items = items.slice().sort((ports as CommentsRuntimePorts).sort.current() === "recent" ? commentRecentOrder : commentPositionCompare);
   if (!items.length) {
-    listEl.innerHTML = '<div class="comments-empty">' + (doc.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
+    listEl.innerHTML = unsaved + '<div class="comments-empty">' + (doc.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;
     return;
   }
@@ -1018,11 +1120,11 @@ export function renderComments() {
   if ((ports as CommentsRuntimePorts).sort.current() === "by-scene") {
     const current = (ports as CommentsRuntimePorts).document.current();
     const result = groupItemsByScene(current ?? { rows: [] }, items, c => c.field === "title" ? null : c.rowId);
-    listEl.innerHTML = result.groups.map(({ scene, items: grouped }) =>
+    listEl.innerHTML = unsaved + result.groups.map(({ scene, items: grouped }) =>
       '<section><h3 class="comments-scene-heading">' + escapeHtml("Scene " + scene.letter + (scene.name ? " · " + scene.name : "")) + '</h3>' + grouped.map(card).join("") + '</section>'
     ).join("") + (result.unassigned.length ? '<section><h3 class="comments-scene-heading">No scene</h3>' + result.unassigned.map(card).join("") + '</section>' : '') + COMMENTS_HINT_HTML;
   } else {
-    listEl.innerHTML = items.map(card).join("") + COMMENTS_HINT_HTML;
+    listEl.innerHTML = unsaved + items.map(card).join("") + COMMENTS_HINT_HTML;
   }
   if (commentMenuFor) {
     placeCommentMenu();
@@ -1046,6 +1148,8 @@ export function startComments(nextPorts: CommentStatePorts) {
   });
 
   commentFilter = (ports as CommentsRuntimePorts).preferences.commentFilter();
+  drafts = createTypedDrafts(COMMENT_BOXES, goneComment);
+  draftLife = null;
 
   listen(document, "mousedown", onCommentMenuMouseDown, true);
   listen(document, "keydown", onCommentMenuKeydown, true);
@@ -1062,6 +1166,8 @@ export function startComments(nextPorts: CommentStatePorts) {
     taggingHelpReturn = null;
     resetCommentBindings();
     commentFilter = undefined;
+    drafts = null;
+    draftLife = null;
     ports = null;
   } };
 }

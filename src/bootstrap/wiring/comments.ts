@@ -43,6 +43,7 @@ import {
   captureReplyDrafts,
   captureCommentComposer,
   closeCommentComposer,
+  dismissUnsavedComment,
   jumpToAnchor,
   limitAuthorNameField,
   postComment,
@@ -95,6 +96,7 @@ export function mountCommentsFeature(): ReturnType<typeof mountComments> {
       postReply: postReply,
       deleteComment: armDeleteComment,
       restoreConflict: restoreConflictValue,
+      dismissUnsaved: dismissUnsavedComment,
       menu: toggleCommentMenu,
       jump: id => {
         const flow = writerControls()?.writerFlowControl();

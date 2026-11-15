@@ -37,7 +37,7 @@ import { planQuickAdd } from "../../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
 import { NOTHING_RAN, recordCommandRun } from "../../application/commands/shared-records.ts";
 import type { RecordCommandRun, SharedRecordBuild } from "../../application/commands/shared-records.ts";
-import { createTypedDrafts, typedOrphansHtml } from "../common/typed-drafts.ts";
+import { createTypedDrafts, heldWrite, isHeld, typedOrphansHtml } from "../common/typed-drafts.ts";
 import type { TypedDraft, TypedDrafts, TypedSave, TypedWrite } from "../common/typed-drafts.ts";
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../../core/production/records.ts";
 import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
@@ -209,13 +209,13 @@ export function applyGearQuickAdd() {
 
 function gearSave(raw: string, quiet: boolean): TypedWrite {
   // why: the box replaces the whole gear list, so a silent retry could remove gear a collaborator added since
-  if (quiet) return "kept";
+  if (quiet) return "waits";
   function planned(doc: DocumentView | null) { return (planQuickAdd as PanelQuickAddRead)(doc, (ports as TagPanelPorts).text.productionReaders, raw, currentProductionIndex()); }
   const plan = (ports as TagPanelPorts).document.read(planned);
   const added = plan.added, removed = plan.removed;
 
   const run = editRecords(shared => gearQuickAddCommand(planned, shared));
-  if (run.held) return "kept";
+  if (run.held) return "waits";
   if (!run.changed) { fillGearQuickAdd(); return "saved"; }
   renderProduction();
   fillGearQuickAdd();
@@ -689,6 +689,16 @@ function draftBoxes(roots: readonly string[], draft: TypedDraft): TypedBox[] {
   return Array.from(document.querySelectorAll<TypedBox>(roots.map(root => root + " " + box).join(", ")));
 }
 
+function dropClosedDrafts(): void {
+  const view = (ports as TagPanelPorts).view, adding = view.tagAddingPersonKey(), renaming = view.tagRenamingKey();
+  for (const draft of typed().held()) {
+    const open = draft.box === "tag-rename-input" ? draft.record === renaming
+      : draft.box === "tag-person-input" ? draft.record === adding
+        : draft.box === "bulk-person-input" ? adding === "__bulk__" : true;
+    if (!open) typed().drop(draft.box, draft.record);
+  }
+}
+
 function showTagOrphans(rootIds: readonly string[]): void {
   const html = typedOrphansHtml(typed().orphans(), tagUnsavedLabel);
   for (const id of rootIds) document.getElementById(id)?.querySelector(".typed-unsaved")?.remove();
@@ -737,6 +747,7 @@ function keepingTyped(shared: object, rootIds: readonly string[], draw: () => vo
   if (!sameLife) typed().clear();
   // why: a retry runs a command, and its admission would settle typing the person has not finished in another box
   else if (!typingElsewhere(document.activeElement)) typed().retry();
+  dropClosedDrafts();
   const active = document.activeElement;
   const roots = rootIds.map(id => "#" + id), selector = roots.flatMap(root => TYPED_BOXES.map(box => root + " " + box)).join(", ");
   const boxes = Array.from(document.querySelectorAll<TypedBox>(selector));
@@ -1131,7 +1142,7 @@ function closeBulkPerson(): void {
 function bulkPersonSave(text: string, quiet: boolean): TypedWrite {
   const items = selectedEntries();
   if (!items.length) { closeBulkPerson(); if (!quiet) renderProduction(); return "gone"; }
-  return setOwnerOf(items, { name: text }, closeBulkPerson, quiet).held ? "kept" : "saved";
+  return heldWrite(setOwnerOf(items, { name: text }, closeBulkPerson, quiet));
 }
 
 export function bulkDeleteSelected() {
@@ -1242,7 +1253,7 @@ function notesSave(key: string): TypedSave {
   return (text, quiet) => {
     const item = findTagByKey(key);
     if (!item) return plainText(text).trim() ? "gone" : "saved";
-    return updateTags([item], { notes: cappedLongText(plainText(text), 2000) }, quiet).held ? "kept" : "saved";
+    return heldWrite(updateTags([item], { notes: cappedLongText(plainText(text), 2000) }, quiet));
   };
 }
 
@@ -1255,7 +1266,7 @@ function personSave(key: string | null): TypedSave {
   return (text, quiet) => {
     const item = findTagByKey(key);
     const run = item ? updateTags([item], { owner: { name: text } }, quiet) : editRecords(shared => addPersonCommand(text, (ports as TagPanelPorts).ids, shared), quiet);
-    if (run.held) return "kept";
+    if (run.held) return heldWrite(run);
     if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key) (ports as TagPanelPorts).view.setTagAddingPerson(null);
     if (!quiet) renderProduction();
     return "saved";
@@ -1264,7 +1275,7 @@ function personSave(key: string | null): TypedSave {
 
 export function addPersonForTag(key: string | null, value: string): RecordCommandRun {
   const wrote = typed().submit("tag-person-input", key ?? "", value, personSave(key));
-  return { changed: wrote === "saved", held: wrote === "kept" };
+  return { changed: wrote === "saved", held: isHeld(wrote) };
 }
 
 export function armPersonDelete(btn: Element, personId: string | null) {
@@ -1317,12 +1328,13 @@ function renameOnce(key: string | null, renamed: string, quiet: boolean): { read
   const renaming = (ports as TagPanelPorts).view.tagRenamingKey();
   (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
-  let held = false;
+  let wrote: TypedWrite = "saved";
   const changed = renameTag(item.cat.id, item.name, renamed, { ...(tagEditPorts as RemoveTagPorts), run: command => {
     const run = editRecords(() => command, quiet);
-    held = run.held;
+    wrote = heldWrite(run);
     return run.changed;
   } });
+  const held = isHeld(wrote);
   if (held) (ports as TagPanelPorts).view.setTagRenaming(quiet ? renaming : key);
   if (changed) {
     (ports as TagPanelPorts).undo.breakCoalescing();
@@ -1332,7 +1344,7 @@ function renameOnce(key: string | null, renamed: string, quiet: boolean): { read
     if (notes !== null && movedNotes !== null) prep.renameNotes(movedNotes, notes);
     if (!held && !quiet) renderProduction();
   }
-  return { key: changed ? nextKey : key, wrote: held ? "kept" : "saved" };
+  return { key: changed ? nextKey : key, wrote };
 }
 
 let openTagMenu: HTMLElement | null = null;

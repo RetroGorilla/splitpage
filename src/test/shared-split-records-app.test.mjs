@@ -493,7 +493,7 @@ for (const path of HELD_PATHS) for (const order of ORDERS) test(`C7 record held:
 const HELD_OWNER_CALLS = [
   { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), false); } },
   { name: "finding or adding a person", act: () => { assert.equal(findOrAddPerson("Cy"), ""); } },
-  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true }); } },
+  { name: "adding a prop to a shot", act: (announced = {}) => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true, ...announced }); }, reports: true },
   { name: "a picture edit", act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: false, held: true }); } }
 ];
 
@@ -513,7 +513,7 @@ for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record
 for (const call of HELD_OWNER_CALLS) test(`C7 record held: the owner call for ${call.name} refused by a listener that announces it is not announced again`, async () => {
   const f = await enter();
   const stop = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return "announced"; });
-  try { refusedOnce(f, "local-first", call.act); } finally { stop(); tidy(f); }
+  try { refusedOnce(f, "local-first", () => { call.act(call.reports ? { announced: true } : undefined); }); } finally { stop(); tidy(f); }
 });
 
 const doc = () => currentDocument();

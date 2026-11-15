@@ -51,8 +51,8 @@
     {
       "label": "the b-roll new person for a shot still calls the standalone command in a shared session",
       "file": "src/features/broll/panel.ts",
-      "find": "setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids, shared)",
-      "replace": "setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids)"
+      "find": "setShotsCommand([id], {}, { name: text }, (ports as PanelPortUse).ids, shared)",
+      "replace": "setShotsCommand([id], {}, { name: text }, (ports as PanelPortUse).ids)"
     },
     {
       "label": "adding a shot from the b-roll panel still calls the standalone command in a shared session",
@@ -93,8 +93,8 @@
     {
       "label": "adding a person from the production panel still calls the standalone command in a shared session",
       "file": "src/features/tags/panels.ts",
-      "find": "addPersonCommand(value, (ports as TagPanelPorts).ids, shared)",
-      "replace": "addPersonCommand(value, (ports as TagPanelPorts).ids)"
+      "find": "addPersonCommand(text, (ports as TagPanelPorts).ids, shared)",
+      "replace": "addPersonCommand(text, (ports as TagPanelPorts).ids)"
     },
     {
       "label": "deleting a person still calls the standalone command in a shared session",
@@ -123,8 +123,8 @@
     {
       "label": "posting a comment still calls the standalone command in a shared session",
       "file": "src/features/comments/comments.ts",
-      "find": "    replies: []\n  }, shared)).held) return;",
-      "replace": "    replies: []\n  })).held) return;"
+      "find": "      replies: []\n    }, shared), quiet);",
+      "replace": "      replies: []\n    }), quiet);"
     },
     {
       "label": "resolving a comment still calls the standalone command in a shared session",
@@ -141,13 +141,13 @@
     {
       "label": "replying to a comment still calls the standalone command in a shared session",
       "file": "src/features/comments/comments.ts",
-      "find": "addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)",
-      "replace": "addReplyCommand(id as string, reply, (ports as CommentsRuntimePorts).edits.stamps.clock)"
+      "find": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)",
+      "replace": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock)"
     },
     {
       "label": "a refused record command shows no notice",
       "file": "src/application/commands/shared-records.ts",
-      "find": "  if (outcome.kind === \"rejected\") records.refused(outcome);\n",
+      "find": "  records.refused(outcome);\n",
       "replace": "\n"
     },
     {
@@ -171,7 +171,7 @@
     {
       "label": "rule 73: renaming a tag runs through the silent edit that drops the refusal",
       "file": "src/features/tags/panels.ts",
-      "find": "    const run = editRecords(() => command);",
+      "find": "    const run = editRecords(() => command, quiet);",
       "replace": "    const run = { changed: (ports as TagPanelPorts).edits.edit(command), held: false };"
     },
     {
@@ -183,14 +183,14 @@
     {
       "label": "a refused record command reports nothing held, so its caller closes and clears as if it had saved",
       "file": "src/application/commands/shared-records.ts",
-      "find": "held: outcome.kind === \"rejected\" };",
-      "replace": "held: false };"
+      "find": "  return outcome.notified ? { changed: false, held: true, announced: true } : { changed: false, held: true };",
+      "replace": "  return { changed: false, held: false };"
     },
     {
       "label": "a shared record command that changes nothing reports itself held, so its caller keeps the box open instead of cleaning up",
       "file": "src/application/commands/shared-records.ts",
-      "find": "held: outcome.kind === \"rejected\" };",
-      "replace": "held: outcome.kind !== \"applied\" && outcome.kind !== \"committed\" };"
+      "find": "outcome.kind === \"committed\", held: false };",
+      "replace": "outcome.kind === \"committed\", held: outcome.kind !== \"applied\" && outcome.kind !== \"committed\" };"
     },
     {
       "label": "a refused picture edit reports nothing held, so the gallery moves its selection as if it had removed",
@@ -207,26 +207,26 @@
     {
       "label": "rule 154: a refused comment closes the composer and drops its text",
       "file": "src/features/comments/comments.ts",
-      "find": "  }, shared)).held) return;\n  (document.getElementById(\"comment-modal\") as HTMLElement).hidden = true;",
-      "replace": "  }, shared)).held && false) return;\n  (document.getElementById(\"comment-modal\") as HTMLElement).hidden = true;"
+      "find": "    if (run.held) return heldWrite(run);\n    if (pendingComment?.id === pending.id) {",
+      "replace": "    if (run.held) { closeCommentComposer(); return heldWrite(run); }\n    if (pendingComment?.id === pending.id) {"
     },
     {
       "label": "rule 154: a refused reply drops its composer and draft before the outcome",
       "file": "src/features/comments/comments.ts",
-      "find": "  const reply ={ id:",
-      "replace": "  dropCommentState(id, false);\n  const reply ={ id:"
+      "find": "  replyDrafts[id as string] = { body: bodyEl.innerHTML, name: nameInput.value };\n  sameCommentLife();",
+      "replace": "  dropCommentState(id, false);\n  sameCommentLife();"
     },
     {
       "label": "a refused reply drops its composer and draft",
       "file": "src/features/comments/comments.ts",
-      "find": "(ports as CommentsRuntimePorts).edits.stamps.clock, build)).held) return;",
-      "replace": "(ports as CommentsRuntimePorts).edits.stamps.clock, build)).held && false) return;"
+      "find": "    if (run.held) return heldWrite(run);\n    dropCommentState(id, false);",
+      "replace": "    if (run.held) { dropCommentState(id, false); return heldWrite(run); }\n    dropCommentState(id, false);"
     },
     {
       "label": "a served reply leaves its composer open",
       "file": "src/features/comments/comments.ts",
-      "find": "  dropCommentState(id, false);\n  renderComments();\n  sendNow();",
-      "replace": "  dropCommentState(id, false);\n  sendNow();"
+      "find": "replySave(id as string, author)) === \"saved\") renderComments();",
+      "replace": "replySave(id as string, author)) === \"saved\") sendNow();"
     },
     {
       "label": "a refused comment delete closes the comment's menu before the outcome",
@@ -249,26 +249,26 @@
     {
       "label": "a refused bulk assignment to a new person closes its box",
       "file": "src/features/broll/panel.ts",
-      "find": "    if (bulkInput === \"person\") bulkAssignNewPerson(value, closing);",
-      "replace": "    if (bulkInput === \"person\") { closing(); bulkAssignNewPerson(value, closing); }"
+      "find": "kind === \"person\" ? bulkAssignNewPerson(text, closing, quiet)",
+      "replace": "kind === \"person\" ? (closing(), bulkAssignNewPerson(text, closing, quiet))"
     },
     {
       "label": "a refused bulk new location closes its box",
       "file": "src/features/broll/panel.ts",
-      "find": "    else if (bulkInput === \"location\" && plainText(value).trim()) bulkLocation(value, closing);",
-      "replace": "    else if (bulkInput === \"location\" && plainText(value).trim()) { closing(); bulkLocation(value, closing); }"
+      "find": ": bulkLocation(text, closing, quiet));",
+      "replace": ": (closing(), bulkLocation(text, closing, quiet)));"
     },
     {
       "label": "the prop box clears the typed name before the outcome",
       "file": "src/features/broll/panel.ts",
-      "find": "  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;",
-      "replace": "  input.value = \"\";\n  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;"
+      "find": "  if (isHeld(typed().submit(\"broll-prop-input\", id, input.value, propSave(id)))) return;",
+      "replace": "  const typedName = input.value;\n  input.value = \"\";\n  if (isHeld(typed().submit(\"broll-prop-input\", id, typedName, propSave(id)))) return;"
     },
     {
       "label": "the prop box ignores the outcome and re-renders",
       "file": "src/features/broll/panel.ts",
-      "find": "  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held) return;",
-      "replace": "  if (!blank && (ports as PanelPortUse).records.addBrollProp((id as string), name).held && false) return;"
+      "find": "    return heldWrite(editShots(shared => addShotPropCommand(id, text, shared), quiet));",
+      "replace": "    editShots(shared => addShotPropCommand(id, text, shared), quiet);\n    return \"saved\";"
     },
     {
       "label": "the tag person box moves focus to Add person whatever the outcome (Enter)",
@@ -285,8 +285,8 @@
     {
       "label": "a refused tag person box closes",
       "file": "src/features/tags/panels.ts",
-      "find": "  if (run.held) return run;\n  (ports as TagPanelPorts).view.setTagAddingPerson(null);",
-      "replace": "  (ports as TagPanelPorts).view.setTagAddingPerson(null);"
+      "find": "    if (run.held) return heldWrite(run);\n    if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key)",
+      "replace": "    if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key)"
     },
     {
       "label": "a refused annotation removal adds its own warning to the refusal",
@@ -297,20 +297,20 @@
     {
       "label": "a refused new person for a shot closes its box",
       "file": "src/features/broll/panel.ts",
-      "find": ", (ports as PanelPortUse).ids, shared)).held) return;\n    addingPersonFor = null;",
-      "replace": ", (ports as PanelPortUse).ids, shared)).held && false) return;\n    addingPersonFor = null;"
+      "find": "    if (run.held) return heldWrite(run);\n    if (addingPersonFor === id) addingPersonFor = null;",
+      "replace": "    if (addingPersonFor === id) addingPersonFor = null;\n    if (run.held) return heldWrite(run);"
     },
     {
       "label": "a refused bulk Mark filmed drops the selection",
       "file": "src/features/broll/panel.ts",
-      "find": "  if (run.held) return;\n  closing();\n  renderBrollViews();\n  if (run.changed)",
-      "replace": "  if (run.held) { clearSelection(); return; }\n  closing();\n  renderBrollViews();\n  if (run.changed)"
+      "find": "  if (run.held) return run;\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)",
+      "replace": "  if (run.held) { clearSelection(); return run; }\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)"
     },
     {
       "label": "a refused gear quick add refills the box from the list",
       "file": "src/features/tags/panels.ts",
-      "find": "  if (run.held) return;\n  if (!run.changed) { fillGearQuickAdd(); return; }",
-      "replace": "  if (!run.changed) { fillGearQuickAdd(); return; }"
+      "find": "  if (run.held) return \"waits\";\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }",
+      "replace": "  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }"
     },
     {
       "label": "assigning a tag's owner drops change.owner",
@@ -357,8 +357,8 @@
     {
       "label": "a b-roll redraw writes a refused typed value again and warns again",
       "file": "src/features/broll/panel.ts",
-      "find": "const saved = !change || !(keeping && typedAttempt(active, change) === refusedTyped) && writeTyped(active, change);",
-      "replace": "const saved = !change || writeTyped(active, change);"
+      "find": "const saved = !field || !ownValue || held !== active.value && submitField(active) === \"saved\";",
+      "replace": "const saved = !field || !ownValue || submitField(active) === \"saved\";"
     },
     {
       "label": "a b-roll redraw drops the unsaved text of a box that lost focus",
@@ -393,7 +393,7 @@
     {
       "label": "a tag rename closes its box before the outcome",
       "file": "src/features/tags/panels.ts",
-      "find": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(key);",
+      "find": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(quiet ? renaming : key);",
       "replace": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(null);"
     },
     {
@@ -453,8 +453,22 @@
     {
       "label": "a refused b-roll write is remembered past its session",
       "file": "src/features/broll/panel.ts",
-      "find": "  if (!same) refusedTyped = null;\n",
-      "replace": "\n"
+      "find": "  if (!same) typed().clear();\n  return same;\n}\n\nfunction typingElsewhere",
+      "replace": "  return same;\n}\n\nfunction typingElsewhere"
+    },
+    {
+      "label": "a draft is dropped when its box is not rendered",
+      "file": "src/features/broll/panel.ts",
+      "find": "  for (const draft of typed().held()) for (const box of draftBoxes(container, draft)) box.value = draft.text;",
+      "replace": "  for (const draft of typed().held()) {\n    const boxes = draftBoxes(container, draft);\n    if (!boxes.length) typed().drop(draft.box, draft.record);\n    for (const box of boxes) box.value = draft.text;\n  }",
+      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+    },
+    {
+      "label": "rename mode is left before the outcome",
+      "file": "src/features/broll/panel.ts",
+      "find": "  if (!isHeld(wrote)) renamingId = null;\n  renderBrollViews();",
+      "replace": "  renamingId = null;\n  renderBrollViews();",
+      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
     }
   ]
 }

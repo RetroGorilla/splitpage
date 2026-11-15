@@ -33,6 +33,7 @@ export interface CommentsPorts {
   readonly postReply: (id: string | null) => void;
   readonly deleteComment: (button: Element, id: string | null) => void;
   readonly restoreConflict: (id: string | null) => void;
+  readonly dismissUnsaved: (box: string | null, record: string | null) => void;
   readonly menu: (id: string | null) => void;
   readonly jump: (id: string | null) => void;
   readonly openPanel: () => void;
@@ -187,6 +188,8 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
       if (remove) { ports.deleteComment(remove, remove.getAttribute("data-id")); return true; }
       const restore = target.closest('[data-action="restore-conflict"]');
       if (restore) { ports.restoreConflict(restore.getAttribute("data-id")); return true; }
+      const dismiss = target.closest('#comments-list [data-action="typed-unsaved-dismiss"]');
+      if (dismiss) { ports.dismissUnsaved(dismiss.getAttribute("data-box"), dismiss.getAttribute("data-record")); return true; }
       const menu = target.closest('[data-action="comment-menu"]');
       if (menu) { ports.menu(menu.getAttribute("data-id")); return true; }
       return !!target.closest(".comment-menu");
