@@ -1105,9 +1105,9 @@ The choices made here, assumed rules on the tracking issue:
 
 ### The generator on the shared document
 
-`tests/collab/undo/generator.test.ts` runs 300 seeded histories of 40 steps
-with two writers and 300 with three writers and a late joiner, on the shared
-document. A history draws every text, mark, field and status command, four
+`tests/collab/undo/generator-shared-two.test.ts` runs 300 seeded histories of
+40 steps with two writers, and `generator-shared-three.test.ts` 300 with three
+writers and a late joiner, on the shared document. A history draws every text, mark, field and status command, four
 record commands on the five kinds of record (create, change, remove, and a
 status on a tag or shot; a shot is created with props and half of its changes
 change the props), undo, redo, and delivery in order, duplicated and
