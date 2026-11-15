@@ -7,7 +7,7 @@ import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { beatPos, caretAt } from "../../core/flow/flow.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 
-import type { FlowWriter, FlowWriterMaker, WriterFeaturePorts } from "./ports.ts";
+import type { FlowWriter, FlowWriterMaker, SharedReplay, WriterFeaturePorts } from "./ports.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 
@@ -243,9 +243,9 @@ export function connectFlowUndo(step: ((dir: UndoDirection) => void) | null) {
   flowUndoStep = step;
 }
 
-export function writerReplayed(steps: readonly unknown[]) {
+export function writerReplayed(steps: readonly unknown[], shared?: SharedReplay) {
   if (!flowWriter || !(viewFlags as WriterFeaturePorts["view"])().writerOpen()) return false;
-  flowWriter.afterReplay(steps);
+  flowWriter.afterReplay(steps, shared);
   return true;
 }
 

@@ -31,7 +31,8 @@ import type { RowRoutePorts } from "../../features/rows/routes.ts";
 import { mountTitleRoutes } from "../../features/title/routes.ts";
 import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
 import type { Run } from "../../core/text/runs.ts";
-import { caretAfterStep } from "../../features/undo/caret.ts";
+import { caretAfterStep, replayPlacement } from "../../features/undo/caret.ts";
+import type { PlacedReplayStep } from "../../features/undo/caret.ts";
 import { mountUndoRoutes, undoGesture } from "../../features/undo/routes.ts";
 import { mountVideoPopover } from "../../features/video/popover.ts";
 import { mountWriterRoutes } from "../../features/writer/routes.ts";
@@ -81,7 +82,7 @@ import {
 } from "../../features/editing/draft-edit.ts";
 import {
   addRow,
-  addRowAndFocus,
+  addRowAtCaret,
   armDelete,
   capturePastePlace,
   clearDropMarkers,
@@ -133,9 +134,13 @@ import { viewFlags } from "./preferences-owner.ts";
 import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
 import { sharedSessionParts } from "./shared-session.ts";
 import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
+import { resolveSharedRecordedSelection, sharedRowShowing } from "../../adapters/collab/recorded-selection.ts";
 import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
 import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
-import type { FlowRange } from "../../core/flow/flow.ts";
+import type { FlowRange, FlowSelectionPair } from "../../core/flow/flow.ts";
+import { beatPos } from "../../core/flow/flow.ts";
+import type { UndoDirection } from "../../application/editing/undo/undo.ts";
+import { replayedSteps } from "../../application/editing/undo/replayed-steps.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
@@ -160,14 +165,6 @@ let scheduleWriterStats: () => void = inactiveWriter;
 type RootInput = Pick<Event, "target">;
 
 const paintingScreen: () => boolean = renderPaintingScreen;
-
-interface UndoCellStep {
-  readonly op: string;
-  readonly rowId: string;
-  readonly key: string;
-  readonly before?: unknown;
-  readonly after?: unknown;
-}
 
 function decodeCell(html: unknown): Run[] {
   return fromHtml(html);
@@ -286,7 +283,7 @@ function refreshFormatState(cellEl: Element): void {
 }
 
 const noWriterReplay = (): boolean => false;
-let writerReplayed: (steps: readonly unknown[]) => boolean = noWriterReplay;
+let writerReplayed: (steps: readonly unknown[], shared?: { readonly recorded: FlowSelectionPair | null; readonly dir: UndoDirection }) => boolean = noWriterReplay;
 
 const editorToolbar = owned<ReturnType<typeof mountEditorToolbar>>();
 
@@ -366,11 +363,7 @@ const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
   replay: function (dir) {
     const shared = sharedUndoRoute();
-    if (shared) {
-      const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
-      if (outcome.ok && outcome.selection) placeSharedSelection(outcome.selection);
-      return;
-    }
+    if (shared) { replaySharedStep(shared, dir); return; }
     if (dir === "redo") undoOwner().redo(); else undoOwner().undo();
   },
   writerStep: skipWriterUndo,
@@ -555,26 +548,57 @@ export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof 
 
 export const stopRowsEditingFeature = rowsEditor.stop;
 
-function afterUndoApplied(steps: readonly unknown[]): void {
-  let cellStep: UndoCellStep | null = null;
+function undoCellStep(steps: readonly unknown[]): PlacedReplayStep | null {
   const doc = liveDocument.current();
-  for (const st of steps as readonly UndoCellStep[]) {
-    if (st.op !== "rowField") continue;
+  const placed = replayPlacement({ surface: "cells", dir: "undo", recorded: null, steps, rowExists: function (rowId) {
     if (!doc) throw new TypeError("An undo step was applied without a document");
-    if (!doc.rows.some(function (r) { return r.id === st.rowId; })) continue;
-    if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
-  }
+    return doc.rows.some(function (r) { return r.id === rowId; });
+  } });
+  return placed?.kind === "step" ? placed.step : null;
+}
+
+export function cellCaretAfterStep(step: { readonly before?: unknown; readonly after?: unknown }): number {
+  return caretAfterStep(decodeCell, step);
+}
+
+function placeCellCaret(cellStep: PlacedReplayStep | null): boolean {
+  if (!cellStep) return false;
+  const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
+  const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
+  if (!cell) return false;
+  cell.focus();
+  placeCaretAtTextOffset(cell, cellCaretAfterStep(cellStep));
+  return true;
+}
+
+function afterUndoApplied(steps: readonly unknown[]): void {
+  const cellStep = undoCellStep(steps);
   undoGuard().whileApplying(renderProduction);
   undoOwner().settleAfterApply();
   if (writerReplayed(steps)) return;
-  if (cellStep) {
-    const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
-    const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
-    if (cell) {
-      cell.focus();
-      placeCaretAtTextOffset(cell, caretAfterStep(decodeCell, cellStep));
-    }
-  }
+  placeCellCaret(cellStep);
+}
+
+// why: the visual box is a cell: caretAfterStep gives its caret, and the box opens there
+function placeReplayedCaret(steps: readonly unknown[], recorded: FlowSelectionPair | null, dir: UndoDirection): boolean {
+  if (!viewFlags().writerOpen()) return placeCellCaret(undoCellStep(steps));
+  if (replayPlacement({ surface: "writer", dir, recorded, steps })) return writerReplayed(steps, { recorded, dir });
+  const visual = undoCellStep(steps);
+  if (!visual) return false;
+  const at = beatPos(visual.rowId, caretAfterStep(decodeCell, visual));
+  placeWriterVisual({ anchor: at, head: at });
+  return true;
+}
+
+function replaySharedStep(shared: NonNullable<ReturnType<typeof sharedUndoRoute>>, dir: UndoDirection): void {
+  const before = liveDocument.current();
+  const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
+  if (!outcome.ok || !outcome.effective) return;
+  const after = liveDocument.current(), parts = sharedSessionParts(), replayed = shared.replayed();
+  const cells = (replayed?.cells ?? []).map(cell => parts ? { ...cell, rowId: sharedRowShowing(parts.handle, cell.rowId) } : cell);
+  const steps = before && after ? replayedSteps(before, after, cells, dir) : [];
+  const recorded = parts && replayed?.recorded ? resolveSharedRecordedSelection(parts.handle, replayed.recorded) : null;
+  if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);
 }
 
 export function onRootInput(e: RootInput): void {
@@ -914,7 +938,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
     e.preventDefault();
     hideTagGhost();
     if (!sharedSessionParts()) cellEditing().sync(cellEl);
-    addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
+    addRowAtCaret(cellEl);
     return;
   }
   if (e.key === "Enter") {

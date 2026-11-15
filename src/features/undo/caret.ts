@@ -28,3 +28,45 @@ export function caretAfterStep(decode: HtmlRunDecoder, step: CellStep): number {
   }
   return offset;
 }
+
+export interface ReplayStep {
+  readonly op?: string;
+  readonly rowId?: string;
+  readonly key?: string;
+  readonly before?: unknown;
+  readonly after?: unknown;
+}
+
+export interface PlacedReplayStep extends ReplayStep {
+  readonly rowId: string;
+  readonly key: string;
+}
+
+export type ReplayPlacement<R> =
+  | { readonly kind: "recorded"; readonly range: R }
+  | { readonly kind: "step"; readonly step: PlacedReplayStep }
+  | null;
+
+export interface ReplayInput<R> {
+  readonly surface: "writer" | "cells";
+  readonly dir: "undo" | "redo";
+  readonly recorded: { readonly before: R; readonly after: R } | null;
+  readonly steps: readonly unknown[];
+  readonly rowExists?: (rowId: string) => boolean;
+}
+
+// why: the Writer restores a recorded selection or measures its first narration step; a cell its first text step
+export function replayPlacement<R>(input: ReplayInput<R>): ReplayPlacement<R> {
+  const steps = input.steps as readonly ReplayStep[];
+  if (input.surface === "writer") {
+    if (input.recorded) return { kind: "recorded", range: input.dir === "undo" ? input.recorded.before ?? input.recorded.after : input.recorded.after };
+    const step = steps.find(item => item.op === "rowField" && item.key === "audioText");
+    return step && step.rowId ? { kind: "step", step: step as PlacedReplayStep } : null;
+  }
+  let cell: PlacedReplayStep | null = null;
+  for (const step of steps) {
+    if (step.op !== "rowField" || !input.rowExists?.(step.rowId as string)) continue;
+    if (!cell && (step.key === "visualText" || step.key === "audioText")) cell = step as PlacedReplayStep;
+  }
+  return cell ? { kind: "step", step: cell } : null;
+}

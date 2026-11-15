@@ -128,6 +128,16 @@ test("C9 hides unsupported actions for damaged removals, unnamed fragments and a
   } finally { panel.dispose(); f.ports.host.remove(); }
 });
 
+test("C9 a deleted record whose removal has no recorded author says so instead of naming nobody", () => {
+  const entries: SharedRecoveryEntry[] = [{ kind: "deleted-record", collection: "tags", record: "t_1", field: null, entry: null, fields: { id: "t_1", cat: "prop", name: "Cup", notes: "blue" },
+    by: "", changed: ["notes"], state: "s" }];
+  const f = fakeRecoveryPanelPorts(entries); f.state.shared = true; const panel = createRecoveryPanel(f.ports);
+  try {
+    panel.open(); const row = f.ports.host.querySelector("article");
+    assert.deepEqual([row?.querySelector("p")?.textContent, row?.querySelector("pre")?.textContent], ["No author recorded", "Cup\nNotes: blue\nChanged after it was deleted: notes"]);
+  } finally { panel.dispose(); f.ports.host.remove(); }
+});
+
 test("C9 empty recovery wording and a remote publication repaint the open list", () => {
   const entries: SharedRecoveryEntry[] = [], f = fakeRecoveryPanelPorts(entries); f.state.shared = true;
   const panel = createRecoveryPanel(f.ports);

@@ -60,10 +60,11 @@ export function sharedCellTextOperations(cell: SharedCellText, splices: readonly
   const result: Char[] = [];
   let kept = 0;
   for (const splice of parts) {
-    result.push(...was.slice(kept, splice.from), ...explode(splice.insert));
+    for (let index = kept; index < splice.from; index++) result.push(was[index] as Char);
+    for (const unit of explode(splice.insert)) result.push(unit);
     kept = splice.to;
   }
-  result.push(...was.slice(kept));
+  for (let index = kept; index < was.length; index++) result.push(was[index] as Char);
   const now = explode(cell.after);
   if (result.length !== now.length || result.some((unit, index) => unitKey(unit) !== unitKey(now[index] as Char))) return null;
   const target: SharedTextAddress = { owner: cell.owner as SharedTextAddress["owner"], segment: cell.owner as SharedTextAddress["segment"], field: cell.field };

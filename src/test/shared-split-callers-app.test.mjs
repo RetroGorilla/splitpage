@@ -146,7 +146,7 @@ function shape(doc) {
   return { rows: doc.rows.map(row => [row.id, row.audioText, row.visualText, row.status, row.lengthSeconds ?? null]),
     sections: (doc.sections ?? []).map(scene => [scene.id, scene.firstSceneId]), target: doc.targetSeconds ?? null, wpm: doc.wordsPerMinute };
 }
-function agree(f, expected) {
+function agree(f, expected, view = shape) {
   const late = createSharedDocument(); registerSharedOperationFamilies(late, { cells: html => fromHtml(html) });
   try {
     assert.equal(applySharedUpdate(late, encodeSharedState(f.parts.handle)).ok, true);
@@ -154,7 +154,7 @@ function agree(f, expected) {
       { order: "D1", replica: "A", output: currentDocument() }, { order: "D1", replica: "B", output: projectSharedDocument(f.peer) },
       { order: "late-C", replica: "C", output: projectSharedDocument(late) }
     ]);
-    assert.deepEqual(shape(currentDocument()), expected);
+    assert.deepEqual(view(currentDocument(), f), expected);
     assert.deepEqual([reports, errors], [[], []]);
   } finally { destroySharedDocument(late); }
 }
@@ -163,6 +163,10 @@ const START = (r1 = row("r1", "abcdef", "ZWide")) => [r1, row("r2", "Other"), ro
 const base = (rows = START(), extra = {}) => ({ rows, sections: [["s1", "r3"]], target: null, wpm: 150, ...extra });
 function undoOnce(f, order) {
   assert.equal(press(cellOf("audioText", "r3"), "z", { ctrlKey: true }), true);
+  exchange(f, order);
+}
+function redoOnce(f, order) {
+  assert.equal(press(cellOf("audioText", "r3"), "z", { ctrlKey: true, shiftKey: true }), true);
   exchange(f, order);
 }
 function minted(f) {
@@ -399,6 +403,42 @@ for (const order of ORDERS) test(`C7 settled offsets: the delete button finds it
   } finally { f.close(); }
 });
 
+const deleteButton = id => document.querySelector(`#rows .row[data-id="${id}"] [data-action="delete-row"]`);
+for (const order of ORDERS) test(`C7 delete button: a held peer beat that redraws the rows arms the live button, and a second click deletes, ${order}`, async () => {
+  const f = await enter();
+  try {
+    pendingTyping(cellOf("audioText"), 6);
+    remoteCreate(f.peer, "r1", "r2", "before");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    const clicked = deleteButton("r2");
+    armDelete(clicked, "r2");
+    const live = deleteButton("r2");
+    assert.equal(clicked.isConnected, false, "the held beat redrew the rows");
+    assert.deepEqual([live.classList.contains("armed"), document.querySelectorAll(".armed").length], [true, 1]);
+    exchange(f, order);
+    agree(f, tail([["r1", "abcdefX"], ["bob", ""]]), kinds);
+    armDelete(deleteButton("r2"), "r2");
+    exchange(f, order);
+    agree(f, [["r1", "abcdefX"], ["bob", ""], ["r3", "Third"]], kinds);
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
+});
+for (const order of ORDERS) test(`C7 delete button: a held peer join that removes the beat arms nothing and writes nothing, ${order}`, async () => {
+  const f = await enter();
+  try {
+    pendingTyping(cellOf("audioText"), 6);
+    remoteJoin(f.peer, "r2", "r1");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    const sizes = f.parts.undo.sizes();
+    armDelete(deleteButton("r2"), "r2");
+    assert.deepEqual([deleteButton("r2"), document.querySelectorAll(".armed").length], [null, 0]);
+    exchange(f, order);
+    agree(f, base([row("r1", "abcdefX Other", "Wide"), row("r3", "Third")]));
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + 1 });
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
+});
+
 function pendingTyping(cell, at) {
   select(cell, at);
   const range = document.getSelection().getRangeAt(0).cloneRange();
@@ -417,16 +457,20 @@ const MERGED = {
   inside: { before: "ZabcdXefgh", inside: "abcZdXefgh", after: "abcdXefghZ" },
   after: { before: "ZabcdefgXh", inside: "abcZdefgXh", after: "abcdefgXhZ" }
 };
+const UNTYPED = { before: "Zabcdefgh", inside: "abcZdefgh", after: "abcdefghZ" };
 const CUT = {
-  before: { before: ["ZaXb", "gh"], inside: ["aXb", "gh"], after: ["aXb", "ghZ"] },
-  inside: { before: ["Zab", "gh"], inside: ["ab", "gh"], after: ["ab", "ghZ"] },
-  after: { before: ["Zab", "gXh"], inside: ["ab", "gXh"], after: ["ab", "gXhZ"] }
+  before: { before: ["ZaXb", "gh"], inside: ["aXb", "Zgh"], after: ["aXb", "ghZ"] },
+  inside: { before: ["Zab", "gh"], inside: ["ab", "Zgh"], after: ["ab", "ghZ"] },
+  after: { before: ["Zab", "gXh"], inside: ["ab", "ZgXh"], after: ["ab", "gXhZ"] }
 };
 const UNSPLIT = text => base([row("r1", text, "Wide"), row("r2", "Other"), row("r3", "Third")]);
 const PENDING_CALLERS = [
   { name: "Alt+Enter", act: cell => { assert.equal(press(cell, "Enter", { altKey: true }), true); },
     after: (id, typed, peer) => base([row("r1", CUT[typed][peer][0], "Wide"), row(id, CUT[typed][peer][1]), row("r2", "Other"), row("r3", "Third")]) },
-  { name: "the split core", act: (cell, f) => { const split = splitRowFieldCore(cell); assert.match(split?.id, f.beat); },
+  { name: "the split core", act: (cell, f, data, refused) => {
+    const split = splitRowFieldCore(cell);
+    if (refused) assert.equal(split ?? null, null); else assert.match(split?.id, f.beat);
+  },
     after: (id, typed, peer) => base([row("r1", CUT[typed][peer][0], "Wide"), row(id, CUT[typed][peer][1]), row("r2", "Other"), row("r3", "Third")]) },
   { name: "Ctrl+Enter", act: cell => { assert.equal(press(cell, "Enter", { ctrlKey: true }), true); },
     after: (id, typed, peer) => base([row("r1", MERGED[typed][peer], "Wide"), row(id, ""), row("r2", "Other"), row("r3", "Third")]) },
@@ -451,8 +495,13 @@ async function settledCase(caller, order, typed, peer) {
     const id = caller.refused ? null : minted(f);
     agree(f, caller.after(id, typed, peer));
     assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + (caller.refused ? 1 : 2) });
-    if (caller.refused) return;
+    if (!caller.refused) {
+      undoOnce(f, order);
+      agree(f, UNSPLIT(MERGED[typed][peer]));
+    }
     undoOnce(f, order);
+    agree(f, UNSPLIT(UNTYPED[peer]));
+    redoOnce(f, order);
     agree(f, UNSPLIT(MERGED[typed][peer]));
     assert.deepEqual(warnings(), []);
   } finally { clearWarnings(); f.close(); }
@@ -476,6 +525,88 @@ for (const order of ORDERS) test(`C7 settled offsets: Alt+Enter over cXd with a 
     assert.deepEqual(warnings(), []);
   } finally { f.close(); }
 });
+for (const order of ORDERS) test(`C7 rule 200: Alt+Enter over cXd keeps a peer's Z held between c and d, which begins the new beat, ${order}`, async () => {
+  const f = await enter();
+  try {
+    pendingTyping(cellOf("audioText"), 3);
+    select(cellOf("audioText"), 2, 5);
+    remoteInsert(f.peer, "r1", "audioText", 3, "Z");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);
+    exchange(f, order);
+    const id = minted(f);
+    agree(f, base([row("r1", "ab", "Wide"), row(id, "Zef"), row("r2", "Other"), row("r3", "Third")]));
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
+});
+
+const STRUCTURE = { ...SOURCE, rows: [{ id: "r0", audioText: "Lead", visualText: "", status: "todo" },
+  { ...SOURCE.rows[0], audioText: "abcdefgh" }, ...SOURCE.rows.slice(1)] };
+function remoteJoin(handle, from, into) {
+  const op = readOperation({ kind: "join", id: "bob_" + ++remoteSerial, by: "Bob", from, into, glue: " " });
+  assert.ok(op); assert.deepEqual(executeSharedOperations(handle, [op]), { ok: true });
+}
+const PEER_STRUCTURE = {
+  "a split before the selection": peer => { remoteSplit(peer, "r1", 4); },
+  "a split inside the selection": peer => { remoteSplit(peer, "r1", 6); },
+  "a split after the selection": peer => { remoteSplit(peer, "r1", 7); },
+  "a join of the row into the one before": peer => { remoteJoin(peer, "r1", "r0"); }
+};
+const tail = rows => [...rows, ["r2", "Other"], ["r3", "Third"]];
+const PEER_TYPED = {
+  "a split before the selection": tail([["r0", "Lead"], ["r1", "aXbcd"], ["bob", "efgh"]]),
+  "a split inside the selection": tail([["r0", "Lead"], ["r1", "aXbcdef"], ["bob", "gh"]]),
+  "a split after the selection": tail([["r0", "Lead"], ["r1", "aXbcdefg"], ["bob", "h"]]),
+  "a join of the row into the one before": tail([["r0", "Lead aXbcdefgh"]])
+};
+const PEER_UNTYPED = Object.fromEntries(Object.entries(PEER_TYPED).map(([name, rows]) => [name, rows.map(([kind, text]) => [kind, text.replace("aX", "a")])]));
+const SPLIT_FOLLOWS = {
+  "a split before the selection": tail([["r0", "Lead"], ["r1", "aXbcd"], ["bob", "e"], ["mine", "h"]]),
+  "a split after the selection": tail([["r0", "Lead"], ["r1", "aXbcde"], ["mine", ""], ["bob", "h"]]),
+  "a join of the row into the one before": tail([["r0", "Lead aXbcde"], ["mine", "h"]])
+};
+const STRUCTURE_RESULT = {
+  "Alt+Enter": SPLIT_FOLLOWS,
+  "the split core": SPLIT_FOLLOWS,
+  "Ctrl+Enter": {
+    "a split before the selection": tail([["r0", "Lead"], ["r1", "aXbcd"], ["bob", "efgh"], ["mine", ""]]),
+    "a split after the selection": tail([["r0", "Lead"], ["r1", "aXbcdefg"], ["mine", ""], ["bob", "h"]]),
+    "a join of the row into the one before": tail([["r0", "Lead aXbcdefgh"], ["mine", ""]])
+  },
+  "an in-cell beat paste": {}
+};
+const kinds = (doc, f) => doc.rows.map(r => [f.beat.test(r.id) ? "mine" : /^r\d$/.test(r.id) ? r.id : "bob", r.audioText]);
+for (const caller of PENDING_CALLERS) for (const order of ORDERS) for (const [name, remote] of Object.entries(PEER_STRUCTURE)) {
+  const expected = STRUCTURE_RESULT[caller.name][name], refused = !expected;
+  test(`C7 rule 201: ${caller.name} over fg with typing pending and ${name} held ${refused ? "is refused with one notice" : "follows the text"}, ${order}`, async () => {
+    const f = await enter(STRUCTURE);
+    try {
+      const data = caller.arrange?.();
+      const sizes = f.parts.undo.sizes();
+      pendingTyping(cellOf("audioText"), 1);
+      select(cellOf("audioText"), 6, 8);
+      remote(f.peer);
+      assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+      assert.equal(currentDocument().rows.length, 4, "the peer's change is held until admission");
+      clearWarnings();
+      caller.act(cellOf("audioText"), f, data, refused);
+      assert.deepEqual(warnings(), refused ? [REFUSED] : []);
+      clearWarnings();
+      exchange(f, order);
+      agree(f, expected ?? PEER_TYPED[name], kinds);
+      assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + (refused ? 1 : 2) });
+      if (!refused) {
+        undoOnce(f, order);
+        agree(f, PEER_TYPED[name], kinds);
+      }
+      undoOnce(f, order);
+      agree(f, PEER_UNTYPED[name], kinds);
+      redoOnce(f, order);
+      agree(f, PEER_TYPED[name], kinds);
+      assert.deepEqual(warnings(), []);
+    } finally { clearWarnings(); f.close(); }
+  });
+}
 
 test("C7 callers: a refusal the session already announced is not announced again", () => {
   clearWarnings();

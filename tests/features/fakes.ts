@@ -27,7 +27,7 @@ export function fakeSharedCommands(): SharedCommandGuard {
 }
 const standaloneRefusal = (): never => { throw new Error("a standalone caller reported a shared refusal"); };
 export function fakeStandaloneStructure(): SharedStructureCommands {
-  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal };
+  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal, settleSelection: standaloneRefusal };
 }
 export function fakeStandaloneValues(): SharedValueCommands {
   return { ports: () => null, refused: standaloneRefusal };
@@ -82,10 +82,10 @@ export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): Capab
 
 export function fakeFlowCommandEffects() {
   const notices: string[] = [];
-  const effects: Pick<FlowWriterPorts, "moveBeat" | "undo" | "caretAfterStep" | "notice" | "changed" | "selectionMoved" | "plainVisual" | "beatInput" | "typeAtBeatEdge" | "beatKeydown" | "beatSelection" | "leaveBeat" | "newCommentId" | "openComment"> = {
+  const effects: Pick<FlowWriterPorts, "moveBeat" | "undo" | "caretAfterStep" | "replayPlacement" | "notice" | "changed" | "selectionMoved" | "plainVisual" | "beatInput" | "typeAtBeatEdge" | "beatKeydown" | "beatSelection" | "leaveBeat" | "newCommentId" | "openComment"> = {
     moveBeat: swapBeatsCommand,
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
-    caretAfterStep: () => 0, notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
+    caretAfterStep: () => 0, replayPlacement: () => null, notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false,
     beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "comment", openComment: () => {}
   };
@@ -158,7 +158,7 @@ export function fakeWriterPorts(initial: DocumentView, visual: Pick<FlowWriterPo
       shown: edit => edit(), editingBlocked: () => false, text: { ...editing.edits.stamps, cells: () => [] },
       wholeFieldText: createWholeFieldTextCommit({ run: editing.edits.run, text: { ...editing.edits.stamps, cells: () => [] } }),
       undo: { step, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
-      caretAfterStep: () => 0, notice: () => {}, changed: () => {}, plainVisual: () => "",
+      caretAfterStep: () => 0, replayPlacement: () => null, notice: () => {}, changed: () => {}, plainVisual: () => "",
       beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false, beatSelection: () => {},
       leaveBeat: () => {}, newCommentId: () => "c", openComment: () => {}
     }) },

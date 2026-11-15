@@ -201,7 +201,10 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     const mine: Running = { plan: plan, landed: null, lost: null };
     running = mine;
     try {
-      const description = shared.undo === false ? null : shared.description ?? { label: name, selection: null, typing: null };
+      const described = shared.undo === false ? null : shared.description ?? { label: name, selection: null, typing: null };
+      // why: standalone keeps the plan's selection with its undo entry; the shared record keeps it for the replay
+      const cells = plan.changes.cells.flatMap(cell => cell.rowId !== null && cell.field !== null ? [{ rowId: cell.rowId, field: cell.field }] : []);
+      const description = described ? { ...described, ...plan.selection ? { recorded: plan.selection } : {}, ...cells.length ? { cells } : {} } : described;
       const result = ports.replica.execute(shared.operations, { base: base, description: description });
       if (!result.ok) return { kind: "rejected", reason: result.reason };
     } catch (error) {

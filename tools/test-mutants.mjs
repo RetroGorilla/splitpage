@@ -84,6 +84,15 @@ eq("parseArgs takes several files in order", parseArgs(["a.json", "b.json", "--c
 eq("parseArgs reads --shard", JSON.stringify(parseArgs(["m.json", "--shard", "2/4"]).shard), JSON.stringify({ index: 2, count: 4 }));
 eq("parseArgs reads --shard=", JSON.stringify(parseArgs(["m.json", "--shard=1/1"]).shard), JSON.stringify({ index: 1, count: 1 }));
 eq("parseArgs reads --baseline-timeout", parseArgs(["m.json", "--baseline-timeout", "900"]).baselineTimeoutMs, 900000);
+eq("parseArgs defaults to running mutants", parseArgs(["m.json"]).baselineOnly, false);
+eq("parseArgs reads --baseline-only", parseArgs(["m.json", "--baseline-only"]).baselineOnly, true);
+check("usage lists --baseline-only", parseArgs([]).error.includes("--baseline-only"));
+check("unknown flags list --baseline-only", parseArgs(["m.json", "--nope"]).error.includes("--baseline-only"));
+for (const conflict of [["--shard", "1/6"], ["--no-baseline"]]) {
+  for (const flags of [["--baseline-only", ...conflict], [...conflict, "--baseline-only"]]) {
+    eq(`parseArgs refuses ${flags.join(" ")}`, parseArgs(["m.json", ...flags]).error, `--baseline-only cannot be combined with ${conflict[0]}`);
+  }
+}
 eq("the baseline timeout defaults to the mutant timeout", parseArgs(["m.json", "--timeout", "40"]).baselineTimeoutMs, 40000);
 for (const bad of ["0/4", "5/4", "1/0", "2", "x/y", "9007199254740993/9007199254740992", "1/9007199254740992"]) eq(`parseArgs refuses --shard ${bad}`, typeof parseArgs(["m.json", "--shard", bad]).error, "string");
 const nine = Array.from({ length: 9 }, (_, i) => ({ label: String(i) }));
@@ -236,9 +245,28 @@ try {
   const crashOnly = await run("crash", [{ ...source, label: "syntax", replace: "export const a = ;" }], ["--fail-on-survivor"]);
   eq("end to end: a crash alone is not caught and fails with --fail-on-survivor", crashOnly.code, 1);
 
+  writeFileSync(join(fixtureRepo, "tests", "b.test.mjs"), 'import test from "node:test"; test("b passes unmutated", () => {});\n');
+  const manifests = ["baseline-a.json", "baseline-b.json"].map((name) => join(fixtureRepo, name));
+  writeFileSync(manifests[0], JSON.stringify([{ ...source, label: "value", replace: "export const a = 2;" }]));
+  writeFileSync(manifests[1], JSON.stringify([{ ...source, label: "syntax", replace: "export const a = ;", tests: ["tests/a.test.mjs", "tests/b.test.mjs"] }]));
+  const baselineLines = [];
+  const baselineCode = await main([...manifests, "--baseline-only", "--baseline-timeout", "10", "--fail-on-survivor"], {
+    repo: fixtureRepo, print: (line) => baselineLines.push(line), printError: (line) => baselineLines.push(line)
+  });
+  eq("baseline-only passes for the unmutated copy across all manifests", baselineCode, 0);
+  check("baseline-only prints the deduplicated union of every manifest's tests", /^baseline: 2 test files, passed in \d+\.\d+s$/.test(baselineLines.join("\n")), baselineLines.join("\n"));
+  for (const manifest of manifests) rmSync(manifest);
+
+  const timedBaseline = await run("timed-baseline", [{ ...source, label: "value", replace: "export const a = 2;" }], ["--baseline-only", "--baseline-timeout", "0.001"]);
+  eq("baseline-only uses its own timeout rather than the mutant timeout", timedBaseline.code, 2);
+  check("baseline-only reports its timeout", timedBaseline.text.includes("baseline: 1 test files, FAILED") && timedBaseline.text.includes("timeout"), timedBaseline.text);
+
   const missing = await run("missing", [{ ...source, label: "value", replace: "export const a = 2;", tests: ["tests/a.test.mjs", "tests/nowhere.test.mjs"] }]);
   eq("a test filter that matches no file stops the run", missing.code, 2);
   check("the unmatched filter is named", missing.text.includes('"tests/nowhere.test.mjs" matches no unit test file'), missing.text);
+  const baselineMissing = await run("baseline-missing", [{ ...source, label: "value", replace: "export const a = 2;", tests: ["tests/nowhere.test.mjs"] }], ["--baseline-only"]);
+  eq("baseline-only still rejects unmatched test filters", baselineMissing.code, 2);
+  check("baseline-only names the unmatched filter", baselineMissing.text.includes('"tests/nowhere.test.mjs" matches no unit test file'), baselineMissing.text);
 
   writeFileSync(join(fixtureRepo, "tests", "b.test.mjs"), 'import test from "node:test"; import assert from "node:assert/strict"; test("b fails unmutated", () => { assert.ok(false); });\n');
   const narrow = await run("narrow", [{ ...source, label: "value", replace: "export const a = 2;" }]);
@@ -246,6 +274,13 @@ try {
   const mixed = await run("mixed", [{ ...source, label: "value", replace: "export const a = 2;" }, { ...source, label: "everything", replace: "export const a = 3;", tests: [] }]);
   eq("an unfiltered entry makes the baseline cover every unit test", mixed.code, 2);
   check("the baseline failure names the failing test", mixed.text.includes("tests/b.test.mjs") && mixed.text.includes("b fails unmutated"), mixed.text);
+  const baselineNarrow = await run("baseline-narrow", [{ ...source, label: "value", replace: "export const a = 2;" }], ["--baseline-only"]);
+  eq("baseline-only excludes tests outside the filtered scope", baselineNarrow.code, 0);
+  check("baseline-only runs no mutants after passing", /^baseline: 1 test files, passed in \d+\.\d+s$/.test(baselineNarrow.text), baselineNarrow.text);
+  const baselineMixed = await run("baseline-mixed", [{ ...source, label: "value", replace: "export const a = 2;" }, { ...source, label: "everything", replace: "export const a = 3;", tests: [] }], ["--baseline-only"]);
+  eq("baseline-only covers every unit test for an unfiltered entry and fails on an unmutated failure", baselineMixed.code, 2);
+  check("baseline-only prints the failed baseline and failing test", baselineMixed.text.includes("baseline: 2 test files, FAILED") && baselineMixed.text.includes("tests/b.test.mjs") && baselineMixed.text.includes("b fails unmutated"), baselineMixed.text);
+  check("baseline-only runs no mutants after failing", !baselineMixed.text.includes("running ") && !baselineMixed.text.includes("Mutants caught:"), baselineMixed.text);
 } finally {
   rmSync(fixtureRepo, { recursive: true, force: true });
 }

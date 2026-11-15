@@ -572,23 +572,30 @@ final scheme test makes redundant.
 ### Collaboration mutants in CI
 
 Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs in
-PR CI, in the job "Collaboration mutants", as six shards in parallel (the step
-turns on bash's `extglob` first):
+PR CI. "Collaboration mutants baseline" runs one baseline for the whole set,
+and "Collaboration mutants" runs six shards in parallel. Both turn on bash's
+`extglob` first:
 
 ```
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --baseline-timeout 900 --fail-on-survivor
+node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
+node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
 ```
 
 A survivor, an inconclusive mutant or a mutant that cannot be applied fails the
-shard, and the gate requires every shard. Each shard first runs its own
-baseline: every test file its mutants name, which with every sixth mutant is
-nearly all of them. The baseline has its own time budget (`--baseline-timeout`),
-and when it fails the shard's log lists the failing tests. On 2026-11-13 the
-four baselines took 272 to 407 s on GitHub's 4-core runners. On 2026-11-14 and
-2026-11-15 the four-shard baselines took 275 to 600 s, and two shards, in two
-runs, reached the job's 30-minute limit, so the job now runs six shards, each
-with about a sixth of the mutants. The baseline budget stays at 900 s, 1.5 times
-the slowest baseline measured.
+shard, and the gate requires both the baseline and every shard to succeed when
+mutants are due, or both jobs to be skipped when they are not. A failed or
+cancelled baseline fails the gate even if every shard passes. The baseline
+covers every test file the whole set names, or every unit test if an entry has
+no filter; its log lists failing tests. Its job has a 30-minute limit and a
+1,500 s baseline budget: the first whole-set baseline, on 2026-11-15, took
+708.1 s for 202 test files, and the per-shard baselines before it varied
+fourfold between runners. The shards run with `--no-baseline` and retain their
+30-minute limit; in that first run they took 9.9 to 18 minutes. The shard count had already risen from four to six this week,
+but on 2026-11-15 the repeated baselines still took 167.7 to 674.5 s per shard
+on GitHub's runners, covering 106 to 125 files, while the mutants themselves
+took about 19 minutes for 183. Three shards across two pull requests reached
+the limit one to twelve mutants short. Running the baseline once removes that
+repeated work from each shard's time limit.
 
 `tests/collab/undo-slow-mutants.json` runs in the nightly workflow instead, job
 `mutants`, at `--concurrency 2` with a 600 s timeout per mutant. Its entries are

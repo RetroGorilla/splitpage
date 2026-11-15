@@ -202,6 +202,9 @@ function readField<K extends "record-set" | "scalar">(raw: unknown, kind: K, tar
   } catch { return null; }
 }
 export function readRecordSet(raw: unknown) { return readField(raw, "record-set", recordAddress); }
+export function readRecordRevive(raw: unknown) {
+  return readKind(raw, "record-revive", { target: recordAddress }, { field: oneOf("props", "links"), entry: ref });
+}
 export function readRecordDelete(raw: unknown) {
   return readKind(raw, "record-delete", { target: recordAddress });
 }
@@ -263,6 +266,7 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "record-create": return readRecordCreate(value);
       case "record-set": return readRecordSet(value);
       case "record-delete": return readRecordDelete(value);
+      case "record-revive": return readRecordRevive(value);
       case "scalar": return readScalarSet(value);
       case "status": return readSharedStatusEvent(value);
       case "text-restore": return readTextRestore(value);

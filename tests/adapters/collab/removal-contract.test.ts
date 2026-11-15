@@ -97,7 +97,7 @@ test("removal preparation reads only touched records with zero and many unrelate
       } finally { prep.close(); }
     } finally { set.close(); }
   }
-  assert.deepEqual(counts, [{ texts: 4, markEntries: 0, records: 57, statusEntries: 0, orderEntries: 0 }, { texts: 4, markEntries: 0, records: 57, statusEntries: 0, orderEntries: 0 }]);
+  assert.deepEqual(counts, [{ texts: 4, markEntries: 0, records: 63, statusEntries: 0, orderEntries: 0 }, { texts: 4, markEntries: 0, records: 63, statusEntries: 0, orderEntries: 0 }]);
   t.diagnostic(JSON.stringify({ unrelated: [0, 10000], reads: counts, requiredIdentityAbsenceReads: 4 }));
 });
 

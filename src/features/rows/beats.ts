@@ -1,7 +1,7 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeId } from "../../core/document/text-policy.ts";
 import { addBeatCommand, deleteBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
-import { splitBeatCommand, textCut } from "../../application/commands/split-join.ts";
+import { splitBeatCommand, textCut, unitsCut } from "../../application/commands/split-join.ts";
 import { armDeleteButton, disarmDeleteButton } from "./delete-button.ts";
 
 import type { BeatPorts, Beats } from "./ports.ts";
@@ -73,13 +73,34 @@ function addRowAndFocus(afterId: string | null | undefined, field: string | null
   cell.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+function seenSelection(id: string, field: string, cellEl: Element) {
+  return () => (ports as BeatPortUse).selection.of(document.querySelector(rowCellSelector(id, field)) ?? cellEl);
+}
+
+function addRowAtCaret(cellEl: Element) {
+  const id = cellEl.getAttribute("data-id"), field = cellEl.getAttribute("data-field");
+  if (!id || field !== "audioText" || !(ports as BeatPortUse).shared.ports()) { addRowAndFocus(id, field); return; }
+  const settled = (ports as BeatPortUse).shared.settleSelection(id, seenSelection(id, field, cellEl));
+  if (settled) addRowAndFocus(settled.rowId, field);
+}
+
+function splitSharedNarration(id: string, cellEl: Element, shared: NonNullable<ReturnType<BeatPorts["shared"]["ports"]>>) {
+  const settled = (ports as BeatPortUse).shared.settleSelection(id, seenSelection(id, "audioText", cellEl));
+  if (!settled) return null;
+  (ports as BeatPortUse).undo.breakCoalescing();
+  const createdId = (ports as BeatPortUse).ids.id("r");
+  const minted = sharedCreated(splitBeatCommand(settled.rowId, "audioText", unitsCut(settled.removed, settled.at), createdId, (ports as BeatPortUse).edits.text, shared));
+  return minted ? { id: minted, field: "audioText" } : null;
+}
+
 function splitField(cellEl: Element) {
   const id = cellEl.getAttribute("data-id");
   const field = cellEl.getAttribute("data-field");
   if ((ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
   const shared = (ports as BeatPortUse).shared.ports();
+  if (shared && field === "audioText" && id) return splitSharedNarration(id, cellEl, shared);
   if (!shared) (ports as BeatPortUse).cells.sync(cellEl);
-  // why: admission commits pending typing and drains held updates, so offsets are read after it, from the repainted cell
+  // why: a shared visual split is refused by name, so no offset it reads reaches a write
   else if (!(ports as BeatPortUse).shared.settle()) return null;
   const sel = (ports as BeatPortUse).selection.of(shared ? document.querySelector(rowCellSelector(id, field)) ?? cellEl : cellEl);
   if (!sel) return null;
@@ -195,12 +216,24 @@ function moveRow(id: string, dir: number) {
   swapAdjacent(id, dir);
 }
 
-function armDelete(btn: Element, id: string) {
-  const rowEl = document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as BeatPortUse).ids as IdSource) + '"]');
-  // why: one admission settles every cell and drains held updates, so the row is found after it and a refusal warns once
-  if ((ports as BeatPortUse).shared.ports()) { if (!(ports as BeatPortUse).shared.settle()) return; }
-  else if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
-  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
+function rowElement(id: string) {
+  return document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as BeatPortUse).ids as IdSource) + '"]');
+}
+
+function armDelete(given: Element, id: string) {
+  let btn = given, idx: number;
+  if (!(ports as BeatPortUse).shared.ports()) {
+    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
+    const rowEl = rowElement(id);
+    if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
+  } else {
+    // why: one admission settles every cell and drains held updates, which can redraw the row, so all is read after it
+    if (!(ports as BeatPortUse).shared.settle()) return;
+    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
+    const live = given.isConnected ? given : rowElement(id)?.querySelector('[data-action="delete-row"]');
+    if (idx === -1 || !live) return;
+    btn = live;
+  }
   const doc = (ports as BeatPortUse).document.current() as BeatDocument;
   if (idx !== -1 && isBlankBeat(doc, doc.rows[idx], (ports as BeatPortUse).text)) {
     (ports as BeatPortUse).deletes.disarm("row");
@@ -223,6 +256,7 @@ export function startBeatRows(next: BeatPorts): Beats {
   return {
     addRow: addRow,
     addRowAndFocus: addRowAndFocus,
+    addRowAtCaret: addRowAtCaret,
     splitField: splitField,
     splitCellField: splitCellField,
     focusField: focusField,
