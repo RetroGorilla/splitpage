@@ -328,7 +328,8 @@ test("rule 85 Escape restores the stored opening name even when concurrent write
       assert.equal(stored(handle, headingFieldKey("H1")), "Y" + "a".repeat(200));
       assert.equal(field(handle, headingFieldKey("H1")), "Y" + "a".repeat(199), "rule 156: the restored 201 letters show cut at 200 on every copy");
     }
-    assert.deepEqual([input.isConnected, input.value, page.reports, page.owner.sizes().undo], [false, "Y" + "a".repeat(199), [], 2]);
+    assert.deepEqual([input.isConnected, input.value, input.selectionStart, input.selectionEnd, page.reports, page.owner.sizes().undo],
+      [false, "Y" + "a".repeat(199), 200, 200, [], 2], "rule 156: the restored name shows cut at 200, with the caret at the end of what is shown");
   } finally { page.close(); }
 });
 

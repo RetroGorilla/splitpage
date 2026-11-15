@@ -674,7 +674,7 @@
   }, {
     "label": "Escape closes without writing its opening name",
     "file": "src/features/common/buffered-input.ts",
-    "find": "if (!binding.replace(form.opening, \"rename-cancel\")) return false;",
+    "find": "if (!binding.replace(opened, \"rename-cancel\")) return false;",
     "replace": "return true;",
     "tests": ["tests/features/shared-undo-surfaces.test.ts"]
   }, {

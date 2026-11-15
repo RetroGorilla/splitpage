@@ -76,6 +76,10 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
     for (const abandon of [...abandons]) { try { abandon(final); } catch (error) { errors.push(error); } }
     if (errors.length) throw errors[0];
   }
+  function releaseFailure(): void {
+    const release = failing; failing = null;
+    release?.();
+  }
   function failed(parts: SharedSessionParts): void {
     const release = parts.session.hold(SHARED_SPLIT_SURFACE_FAILED);
     failing = release;
@@ -136,6 +140,8 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
       waiting = stop;
     },
     settle: () => {
+      // why: a leave in the failed-mount gap would settle under the failure hold, so every exit lifts it before landing
+      releaseFailure();
       if (surfaces && !(surfaces.title.finish() && surfaces.scenes.finish() && (surfaces.empty?.finish() ?? true))) return SHARED_SPLIT_SURFACE_PENDING;
       return split.settle();
     },
@@ -148,6 +154,7 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
     },
     drop: () => {
       const errors: unknown[] = [];
+      releaseFailure();
       for (const step of [() => { abandonAll(true); }, () => { split.drop?.(); }]) {
         try { step(); } catch (error) { errors.push(error); }
       }
@@ -158,7 +165,7 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
       const mounted = surfaces;
       if (mounted?.empty && !mounted.empty.dispose()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
       waiting?.(); waiting = null;
-      failing?.(); failing = null;
+      releaseFailure();
       surfaces = null; entered = null;
       const errors: unknown[] = [];
       try { closeSplitCompletions(); } catch (error) { errors.push(error); }

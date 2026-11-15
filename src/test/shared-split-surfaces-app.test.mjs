@@ -593,6 +593,47 @@ test("C7 surface mount: an app stop in the failed-mount gap releases the failure
   }
 });
 
+for (const state of ["native", "buffered"]) {
+  test(`C7 surface mount: an app stop in the failed-mount gap with ${state} Split typing lands the typing and the peer's text`, async () => {
+    const f = await failedEntry(SOURCE);
+    try {
+      const cell = cellOf("audioText", "r1"); caret(cell, 3);
+      cellText(cell, "X", false, state === "buffered");
+      const typed = warnings().length;
+      remoteInsert(f.peer, "r2", "audioText", 0, "Z");
+      assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+      assert.deepEqual(forceLeaveSharedSession(), { ok: true });
+      assert.deepEqual(endings, [true], "the exit lifted the failure hold, so the copy landed instead of being dropped");
+      assert.deepEqual(shape(currentDocument()), withZ(edit(shape(SOURCE), s => { s.rows[0][0] = "abcX"; })));
+      await new Promise(resolve => { setTimeout(resolve, 0); });
+      assert.deepEqual([typed, warnings().length], state === "buffered" ? [1, 1] : [0, 0],
+        "typing that reaches the held session is refused once and kept; the exit adds no notice of its own");
+      assert.equal(surfaces.abandonable(), 0);
+    } finally {
+      destroySharedDocument(f.peer);
+      if (sharedSession()) forceLeaveSharedSession();
+    }
+  });
+}
+
+for (const surface of CONTRACT.filter(s => s.name === "add-scene box" || s.name === "emptied-script input")) {
+  test(`C7 surface abandonment (rule 166): an ordinary abandon lands the text the browser already wrote in the ${surface.name}`, async () => {
+    const f = await enter(surface.source ?? SOURCE);
+    try {
+      surface.prepare?.(f);
+      surface.native(surface.open(), surface.text);
+      surfaces.abandon();
+      assert.deepEqual(surface.read(currentDocument()), surface.typed);
+      assert.deepEqual(leaveSharedSession(ports), { ok: true });
+      assert.deepEqual(surface.read(currentDocument()), surface.typed);
+      assert.deepEqual(errors, []);
+    } finally {
+      destroySharedDocument(f.peer);
+      if (sharedSession()) forceLeaveSharedSession();
+    }
+  });
+}
+
 for (const exit of ["leave", "stop"]) test(`C7 surface leave: a People list open in a shared Split cell closes on ${exit}`, async () => {
   const f = await enter();
   try {

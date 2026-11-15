@@ -180,7 +180,7 @@
     {
       "label": "empty target unmounts pending native input",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "if (pending) { notify(\"buffer-pending\"); return false; }",
+      "find": "if (pending && input.value === beforeInput) { notify(\"buffer-pending\"); return false; }",
       "replace": "if (false) return false;",
       "tests": [
         "tests/features/empty-script/guards.test.ts"

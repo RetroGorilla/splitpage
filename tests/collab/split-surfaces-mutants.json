@@ -145,8 +145,8 @@
     {
       "label": "the add-scene box never registers its abandon step",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "const stopAbandon = ports.sharedScenes?.abandonment?.(() => {",
-      "replace": "const stopAbandon = false && ports.sharedScenes?.abandonment?.(() => {"
+      "find": "const stopAbandon = ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {",
+      "replace": "const stopAbandon = false && ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {"
     },
     {
       "label": "abandoning the add-scene box during a composition keeps it composing",
@@ -165,6 +165,76 @@
       "file": "src/features/rows/scene-controls.ts",
       "find": "stopAdmission?.(); stopAbandon?.(); ",
       "replace": "stopAdmission?.(); "
+    },
+    {
+      "label": "rule 166: the add-scene box releases its hold at an exit without creating the scene the browser already wrote (finding 2)",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "        if (!composing && release && !bound) create();\n",
+      "replace": "\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "rule 166: the emptied-script input abandons without first landing the text the browser already wrote (finding 1)",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "settleBeforeAbandoning(finish, abandon)",
+      "replace": "abandon",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "rule 166: the emptied-script input refuses text the browser already wrote as pending (finding 1)",
+      "file": "src/features/empty-script/empty-script.ts",
+      "find": "if (pending && input.value === beforeInput) {",
+      "replace": "if (pending) {",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs", "tests/features/empty-script/guards.test.ts"]
+    },
+    {
+      "label": "an app stop in the failed-mount gap keeps the failure hold, so the shared copy does not land (finding 3)",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "const release = failing; failing = null;\n    release?.();",
+      "replace": "failing = null;",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "rule 85: a caret typed past a cut name's shown end goes back to its start after the commit (finding 6)",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "Math.min(typed, local.text.length)",
+      "replace": "typed",
+      "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+    },
+    {
+      "label": "a title setup that fails part-way keeps its binding's admission and abandon registrations (finding 4)",
+      "file": "src/features/common/buffered-input.ts",
+      "find": "unlisten(); binding.detach(); throw error;",
+      "replace": "unlisten(); throw error;",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "rule 156: the cut watch forgets which of my letters it already told about, so one hidden edit is told again (finding 5)",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "if (now.size) hidden.set(key, now); else hidden.delete(key);",
+      "replace": "hidden.delete(key);",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "rule 156: a letter I typed in this session is not counted as mine when a cut hides it, so no one is told (finding 5)",
+      "file": "src/adapters/collab/paint-base.ts",
+      "find": "unit.clock >= since;",
+      "replace": "unit.clock < since;",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "rule 85: Escape restores the capped projection instead of the stored text it opened on (finding 6)",
+      "file": "src/features/common/buffered-input.ts",
+      "find": "whole(expected) ?? form.opening",
+      "replace": "form.opening",
+      "tests": ["tests/features/shared-undo-surfaces.test.ts"]
+    },
+    {
+      "label": "leaving the shared Split keeps an open People list open (finding 7)",
+      "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
+      "find": "      try { closeSplitCompletions(); } catch (error) { errors.push(error); }\n",
+      "replace": "\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     }
   ]
 }

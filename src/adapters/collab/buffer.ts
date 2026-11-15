@@ -99,9 +99,10 @@ export function createSharedBufferedText(
           stranded = planned && outcome.kind === "rejected";
           if (outcome.kind === "applied" || outcome.kind === "committed" || outcome.kind === "noop") {
             const local = selection ? readSharedPaintedText(handle, target) : null;
-            const anchors = selection?.map(offset => {
+            const anchors = selection?.map(typed => {
               if (!local) return null;
-              const preceding = offset > 0 ? local.identity(offset - 1) : null;
+              // why: rule 156 hides a cut name's end, so a caret typed past it rests at the end of what is shown
+              const offset = Math.min(typed, local.text.length), preceding = offset > 0 ? local.identity(offset - 1) : null;
               return preceding ? sharedAnchorCharacterEnd(preceding) : local.identity(0) ?? local.emptyGap ?? null;
             }) ?? [];
             const beforeDrain = readSharedRevision(handle);

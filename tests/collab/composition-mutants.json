@@ -876,7 +876,7 @@
     {
       "label": "route: an empty-script composition is not abandoned at stop",
       "file": "src/features/empty-script/empty-script.ts",
-      "find": "abandoning = ports.abandonment?.(abandon);",
+      "find": "abandoning = ports.abandonment?.(settleBeforeAbandoning(finish, abandon));",
       "replace": "abandoning = ports.abandonment?.(() => {});",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs"

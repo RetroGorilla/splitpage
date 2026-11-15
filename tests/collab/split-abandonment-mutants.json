@@ -39,38 +39,44 @@
     {
       "label": "Split ordinary abandon discards committable text",
       "file": "src/bootstrap/wiring/split-buffer.ts",
-      "find": "if (final || !binding.finish()) abandon(final);",
-      "replace": "abandon(final);"
+      "find": "settleBeforeAbandoning(() => binding.finish(), abandon)",
+      "replace": "abandon"
     },
     {
       "label": "Split field loses final abandonment",
       "file": "src/bootstrap/wiring/split-buffer.ts",
-      "find": "if (final || !binding.finish()) abandon(final);",
-      "replace": "if (final || !binding.finish()) abandon(false);"
+      "find": "settleBeforeAbandoning(() => binding.finish(), abandon)",
+      "replace": "settleBeforeAbandoning(() => binding.finish(), () => abandon(false))"
     },
     {
       "label": "Split field never registers for abandonment",
       "file": "src/bootstrap/wiring/split-buffer.ts",
-      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n            if (final || !binding.finish()) abandon(final);\n          }) ?? (() => {})",
+      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(settleBeforeAbandoning(() => binding.finish(), abandon)) ?? (() => {})",
       "replace": "abandonment: () => () => {}"
     },
     {
       "label": "Input ordinary abandon discards committable text",
       "file": "src/bootstrap/wiring/buffered-input.ts",
-      "find": "if (final || !binding.finish()) abandon(final);",
-      "replace": "abandon(final);"
+      "find": "settleBeforeAbandoning(() => binding.finish(), abandon)",
+      "replace": "abandon"
     },
     {
       "label": "Input field loses final abandonment",
       "file": "src/bootstrap/wiring/buffered-input.ts",
-      "find": "if (final || !binding.finish()) abandon(final);",
-      "replace": "if (final || !binding.finish()) abandon(false);"
+      "find": "settleBeforeAbandoning(() => binding.finish(), abandon)",
+      "replace": "settleBeforeAbandoning(() => binding.finish(), () => abandon(false))"
     },
     {
       "label": "Input field never registers for abandonment",
       "file": "src/bootstrap/wiring/buffered-input.ts",
-      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n          if (final || !binding.finish()) abandon(final);\n        }) ?? (() => {})",
+      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(settleBeforeAbandoning(() => binding.finish(), abandon)) ?? (() => {})",
       "replace": "abandonment: () => () => {}"
+    },
+    {
+      "label": "settling before an ordinary abandon is skipped, so committable text is discarded on every surface",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "return final => { if (final || !finish()) abandon(final); };",
+      "replace": "return final => { abandon(final); };"
     },
     {
       "label": "Hook ordinary abandon forgets Split",
