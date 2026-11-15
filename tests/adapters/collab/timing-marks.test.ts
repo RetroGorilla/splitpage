@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as Y from "yjs";
 import { applySharedUpdate, encodeSharedStateVector, encodeSharedUpdate, observeSharedUpdates, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { timingMarks } from "../../../shared/timing-marks.ts";
 import { replicas } from "./executor-support.ts";
 import { nativeText } from "./incremental-support.ts";
+import { markParts } from "../../collab/measure/mark-parts.mjs";
 
 const SOURCE = { title: "Script", rows: [{ id: "R1", audioText: "one" }, { id: "R2", audioText: "two" }] };
 const THROWS_WHILE_APPLYING = [1, 1, 7, 0, 168, 7, 5, 1, 125, 1, 0];
@@ -117,6 +119,34 @@ test("timing marks: after a projection failure, the failure delivery is a projec
       for (const span of found) if (span !== live && span !== receive) assert.ok(inside(span, live) || span.seam === "trial", span.seam + " inside the live apply");
     } finally { stop(); replica.dispose(); }
   });
+});
+
+test("timing marks: on the trial replica path a refused update marks one rebuild inside its trial and receive, an ordinary arrival none, and unattributed is 0", () => {
+  const shared = replicas(2, SOURCE), replica = createSharedReplica(shared.a), recorded: { name: string; startTime: number }[] = [];
+  const real = performance.mark.bind(performance), emit = Y.Doc.prototype.emit, from = Uint8Array.from;
+  let now = 0;
+  Y.Doc.prototype.emit = function (this: Y.Doc, ...args: Parameters<typeof emit>) { now++; return emit.apply(this, args); };
+  Uint8Array.from = function (this: typeof Uint8Array, ...args: unknown[]) { now++; return (from as (...values: unknown[]) => Uint8Array).apply(this, args); } as typeof Uint8Array.from;
+  performance.mark = ((name: string) => { recorded.push({ name, startTime: now }); if (!/:(receive|drain|event):/.test(name) && name.endsWith(":start")) now++; }) as typeof performance.mark;
+  timingMarks.marksOn = true;
+  const measured = (run: () => void) => {
+    recorded.length = 0;
+    run();
+    const names = recorded.map(entry => entry.name).filter(name => name.startsWith("measure:"));
+    return { found: spans(names), parts: markParts(recorded.filter(entry => entry.name.startsWith("measure:"))) };
+  };
+  try {
+    const refused = measured(() => { assert.deepEqual(applySharedUpdate(shared.a, Uint8Array.from(THROWS_WHILE_APPLYING)), { ok: false, reason: "invalid-update" }); });
+    const [receive] = of(refused.found, "receive"), [trial] = of(refused.found, "trial"), rebuilds = of(refused.found, "rebuild");
+    assert.ok(receive && trial && rebuilds.length === 1 && rebuilds[0] && inside(rebuilds[0], trial) && inside(trial, receive));
+    assert.ok(refused.parts.rebuild > 0 && refused.parts.unattributed === 0, JSON.stringify(refused.parts));
+    const ordinary = measured(() => { assert.deepEqual(applySharedUpdate(shared.a, written(shared.b, shared.a, "b:R1", "+")), { ok: true }); });
+    assert.deepEqual([of(ordinary.found, "rebuild").length, of(ordinary.found, "trial").length, of(ordinary.found, "live-apply").length], [0, 1, 1]);
+    assert.ok(ordinary.parts.rebuild === 0 && ordinary.parts.unattributed === 0, JSON.stringify(ordinary.parts));
+  } finally {
+    timingMarks.marksOn = false; performance.mark = real; Y.Doc.prototype.emit = emit; Uint8Array.from = from;
+    replica.dispose(); shared.close();
+  }
 });
 
 test("timing marks: switched off, a valid update, a refused update and a local write make no mark", () => {
