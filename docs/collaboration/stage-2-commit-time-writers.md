@@ -189,6 +189,41 @@ Two copies that type the same new line at once mint two keys and two shots, as t
 copies typing the same new `@Name` give two people. `tests/collab/broll-text-records.test.ts`
 holds the cases.
 
+### Keying a left Split cell
+
+In a shared session the only route that keys B-roll lines is leaving a Split visual
+cell. `keySharedLeftCell` in `application/commands/shared-broll-keying.ts` runs up to
+two shared commands through the session, so they pass the same admission and stale
+checks as any other:
+
+- `drop-repeated-broll-keys` deletes a key that directly follows a key for the same
+  line, carries the id the projection gave it as a repeat, and has no shot. It has
+  no undo entry and no stamp.
+- `key-broll-lines` (`sharedBrollKeying` in `core/collab/broll-keying.ts`) keys each
+  unkeyed line, makes its shot authored by the leaving copy, and stamps the beat. It
+  has an undo entry. A new key's id comes from the line's first character, followed
+  back through restores (`bs_k<client>_<clock>`). So copies keying one line at once
+  give one id and one shot, and a key restored by undo and then keyed again gets the
+  same id.
+
+Nothing to key runs no command. A leave during session end, row removal or teardown
+keys nothing. Assumed rules 196 to 199:
+
+- **196:** two copies leaving one line at once store one shot under one id. The text
+  shows two keys side by side until any copy next leaves that cell. That leave drops
+  the later key in text order and writes no shot. The copy whose key was dropped
+  finds its keying undo used up. The other copy can still undo while key and shot
+  are as made.
+- **197:** text another copy types into the line meanwhile stays after the key, and
+  the shot keeps the name the leaving copy saw.
+- **198:** a leave caused by session end, row removal or teardown keys nothing.
+- **199:** undo of a keying after another copy changed its shot, deleted its key or
+  restored its marker is used up and writes nothing.
+
+`tests/collab/broll-keying.test.ts`, `tests/core/collab/broll-keying.test.ts` and
+`src/test/shared-broll-leave-app.test.mjs` hold the cases. The Writer's two leave
+points do not call it yet.
+
 ## Stamps
 
 A beat's stamp is who changed it last and when. In a shared session it is an

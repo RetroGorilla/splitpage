@@ -32,10 +32,10 @@ test("exported command builders and the bulk-row writer cannot escape the classi
       if (builds || exported.name === "createBulkTagRows") builders.push(exported.name);
     }
   }
-  assert.equal(builders.length, 54);
+  assert.equal(builders.length, 56);
   assert.deepEqual(builders.sort(), builderOperationCoverage.map(row => row[0]).sort());
   for (const row of builderOperationCoverage) assert.ok(["serve", "serve pending composition", "refuse", "could not classify"].includes(row.shared), row[0]);
-  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 11, 17]);
+  assert.deepEqual(["field-record", "text-mark", "structure"].map(group => builderOperationCoverage.filter(row => row[1] === group).length), [26, 13, 17]);
 });
 
 test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one lost-intent classes", () => {
@@ -81,9 +81,9 @@ test("coverage decisions name only defined operations, capability and builder re
     ["titleCommand", "renameSceneCommand", "cellTextCommand"]);
 });
 
-test("the 28 text/structure builders and 24 flow rows record their audited branches", () => {
+test("the 30 text/structure builders and 24 flow rows record their audited branches", () => {
   const builders = builderOperationCoverage.filter(row => row[1] === "text-mark" || row[1] === "structure");
-  assert.equal(builders.length, 28);
+  assert.equal(builders.length, 30);
   for (const row of builders) {
     assert.equal(row.length, 4, row[0]);
     if (row.length === 4) assert.ok(row[3].length > 0 && row[3].every(branch => branch[0].length > 0), row[0]);
@@ -108,7 +108,7 @@ test("each audited row declares exactly the union of its literal branch requirem
     assert.deepEqual(declared.sort(), [...required].sort(), row[0]);
     rows++;
   }
-  assert.equal(rows, 52);
+  assert.equal(rows, 54);
   assert.equal(flowOperationCoverage.find(row => row[0] === "typeWithMarks")?.[2], "text-insert");
   assert.equal(flowOperationCoverage.find(row => row[0] === "replaceAll")?.[2], "text-insert,text-delete,heading-remove,scalar");
   context.diagnostic(`${rows} rows equal the union of ${branches} literal branch requirements`);

@@ -4,6 +4,7 @@ import type {
 } from "../../core/collab/operations.ts";
 import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
+import { SHARED_BROLL_KEYING_LABEL } from "../../application/commands/shared-broll-keying.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
 import type { SharedDocumentHandle } from "./types.ts";
@@ -353,7 +354,22 @@ export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: Sh
   });
 }
 
+// why: rules 145 and 196 on #1414: keys and shots from leaving a cell are taken back, or put back, only together and
+// only while each is as the command left it; anything else uses the entry up.
+function keyingAsMade(handle: SharedDocumentHandle, record: SharedUndoRecord): boolean {
+  return record.parts.every(part => {
+    if (part.kind === "record-create") { const now = recordNow(handle, part); return now !== null && same(now, part.fields); }
+    if (part.kind === "record-delete") return recordNow(handle, part) === null;
+    if (part.kind !== "text") return false;
+    const history = readSharedTextHistory(handle, part.target);
+    if (!history) return false;
+    return part.inserted.every(identity => { const unit = readSharedAnchorUnit(identity); return !!unit && !!history.live(history.follow(unit)); })
+      && part.deleted.every(item => { const unit = readSharedAnchorUnit(item.identity); return !!unit && !unit.after && history.known(unit) && !history.live(unit) && !history.back(unit); });
+  });
+}
+
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
+  if (record.label === SHARED_BROLL_KEYING_LABEL && !keyingAsMade(handle, record)) return { ok: true, effective: false, selection: null, inverse: record };
   // why: a creation and its initial text are one edit; a used-up creation must not undo any other part of that edit.
   if (record.parts.some(part => part.kind === "beat-create" && !canReverseSharedCreation(handle, part))) {
     return { ok: true, effective: false, selection: null, inverse: record };
