@@ -150,15 +150,32 @@ export interface OwnerSwap {
   readonly restore: () => void;
 }
 
-let commandHold: string | null = null;
-
-function heldOutcome(): CommandOutcome | null {
-  return commandHold ? { kind: "rejected", reason: commandHold } : null;
+interface SessionCommandHold {
+  readonly reason: string;
+  readonly scope: "all" | "entries";
+  readonly outer: SessionCommandHold | null;
 }
 
-export function holdSessionCommands(reason: string): () => void {
+let commandHold: SessionCommandHold | null = null;
+
+function heldCommandOutcome(hold: SessionCommandHold): CommandOutcome | null {
+  for (let current: SessionCommandHold | null = hold; current; current = current.outer) {
+    if (current.scope === "all") return { kind: "rejected", reason: current.reason };
+  }
+  return null;
+}
+
+function heldOutcome(): CommandOutcome | null {
+  return commandHold ? heldCommandOutcome(commandHold) : null;
+}
+
+export function sessionEntryRefusal(): string | null {
+  return commandHold ? commandHold.reason : null;
+}
+
+export function holdSessionCommands(reason: string, scope: "all" | "entries" = "all"): () => void {
   const outer = commandHold;
-  commandHold = reason;
+  commandHold = { reason, scope, outer };
   let open = true;
   return function () {
     if (!open) return;
@@ -367,6 +384,10 @@ export function landStandalone(doc: ValidatedDocument, capability: CapabilityPor
 
 export function sharedSession(): boolean {
   return started !== null && started.current.kind === "shared";
+}
+
+export function sharedRecoverySession(): Pick<SharedDocumentSession, "recovery" | "subscribe"> | null {
+  return started?.current.kind === "shared" ? started.current.session : null;
 }
 
 // why: The shared session hands its projection to readers typed as a view; keeping the entry's own result gives

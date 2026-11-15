@@ -13,6 +13,29 @@ function harness() {
   return fakeWriterPorts(migrateRows({ title: "Writer mount", rows: [] }, fakeMigration().ports));
 }
 
+test("a refused flow disposal preserves the Writer and its owner until disposal succeeds", () => {
+  const h = harness(), create = h.ports.flow.create;
+  let allowed = false;
+  const writer = startWriter({ ...h.ports, flow: { ...h.ports.flow, create: (...args) => {
+    const flow = create(...args);
+    return { ...flow, settle: () => true, dispose: () => allowed ? flow.dispose() : false };
+  } } });
+  try {
+    writer.openWriter();
+    const flow = writer.writerFlowControl();
+    writer.closeWriter();
+    assert.equal(h.state.open, true);
+    assert.equal(writer.writerFlowControl(), flow);
+    assert.equal(writer.dispose(), false);
+    assert.equal(h.state.open, true);
+    assert.equal(writer.writerFlowControl(), flow);
+    allowed = true;
+    writer.closeWriter();
+    assert.equal(h.state.open, false);
+    assert.equal(writer.writerFlowControl(), null);
+  } finally { allowed = true; writer.dispose(); }
+});
+
 test("a refused buffer settlement keeps the Writer open through close, undo and owner disposal", () => {
   const h = harness(), create = h.ports.flow.create;
   let allowed = false, replayed = false;
@@ -29,7 +52,7 @@ test("a refused buffer settlement keeps the Writer open through close, undo and 
     assert.equal(root.textContent, "held native text");
     assert.equal(writer.writerUndoStep("undo"), true);
     assert.equal(replayed, false);
-    writer.dispose();
+    assert.equal(writer.dispose(), false);
     assert.equal(h.state.open, true);
     assert.equal(root.textContent, "held native text");
     allowed = true;

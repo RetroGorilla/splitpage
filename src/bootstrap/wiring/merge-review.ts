@@ -11,7 +11,7 @@ import { homes as portHomes, place as portPlace } from "./ports/location.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { fileConflicts as portFileConflicts } from "./ports/saving.ts";
 import { text as portText } from "./ports/text.ts";
-import { capabilities as portCapabilities } from "./ports/capabilities.ts";
+import { capabilities as portCapabilities, entryCapabilities } from "./ports/capabilities.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 
 const mergeReview = owned<MergeReviewMount>();
@@ -19,6 +19,7 @@ const mergeReview = owned<MergeReviewMount>();
 function mergeReviewPorts(): MergeReviewPorts {
   return {
     capability: portCapabilities,
+    entryCapability: entryCapabilities,
     notices: portNotices,
     document: portDocument,
     session: { mergeBase: () => mergeBase() },

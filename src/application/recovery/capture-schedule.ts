@@ -27,6 +27,7 @@ export interface CaptureSchedule {
   readonly cancel: () => void;
   readonly cancelRetry: () => void;
   readonly backingOff: () => boolean;
+  readonly armed: () => boolean;
   readonly landed: () => void;
   readonly refused: () => number;
   readonly resume: () => void;
@@ -101,6 +102,7 @@ export function createCaptureSchedule(ports: CaptureSchedulePorts): CaptureSched
     cancel: cancel,
     cancelRetry: cancelRetry,
     backingOff: function () { return retryTimer !== null; },
+    armed: function () { return idleTimer !== null || maxTimer !== null; },
     landed: landed,
     refused: refused,
     resume: resume

@@ -24,6 +24,7 @@ export interface MergeOutcomeView {
 
 export interface DocumentMergePorts<Ctx> extends Omit<ApplyMergePorts<Ctx, ValidatedDocument, ValidatedDocument, ValidatedDocument | null>, "merge" | "view"> {
   readonly capability: Pick<CapabilityPort, "merge">;
+  readonly entryCapability: Pick<CapabilityPort, "merge">;
   readonly states: (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) => MergedStates;
   readonly entry: (raw: unknown, lines?: LineShotIds) => ValidatedDocument;
   readonly view: MergeOutcomeView;
@@ -59,12 +60,12 @@ export function createDocumentMerge<Ctx>(ports: DocumentMergePorts<Ctx>): Docume
 
   return Object.freeze({
     states: function (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) {
-      const can = ports.capability.merge();
+      const can = ports.entryCapability.merge();
       if (!can.allowed) throw new Error(can.reason);
       return ports.states(base, mine, theirs);
     },
     apply: function <T extends ValidatedDocument | null>(opts?: ApplyMergeOptions<T, ValidatedDocument> | null): MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>> {
-      const can = ports.capability.merge();
+      const can = ports.entryCapability.merge();
       if (!can.allowed) return { state: null, result: null, snapshot: null, reason: can.reason };
       if (!opts) return { state: applying.current(), result: null, snapshot: null };
       return applyIncomingMerge(opts, applying);

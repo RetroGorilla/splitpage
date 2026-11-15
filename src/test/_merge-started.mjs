@@ -5,4 +5,5 @@ import { createSessionCapabilities } from "../application/session/capabilities.t
 
 const allowed = () => ({ allowed: true });
 
-if (!mergeStarted()) startMerge({ ...sessionMergePorts(), capability: createSessionCapabilities("standalone", { edit: allowed, comment: allowed }) });
+if (!mergeStarted()) startMerge({ ...sessionMergePorts(), capability: createSessionCapabilities("standalone", { edit: allowed, comment: allowed }),
+  entryCapability: createSessionCapabilities("standalone", { edit: allowed, comment: allowed }) });
