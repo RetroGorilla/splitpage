@@ -127,7 +127,7 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
     const record = id === null || records.has(id) ? undefined : state.records.get(id) ?? index.records(id).find(value => value.id === id);
     if (id !== null && record && planned(record).retired) records.set(id, planned(record));
   }
-  return projectSharedBlocks(streams, [...records.values()]).filter(block => block.id === null || (block.kind !== "b" || !(state.hidden.get(block.id) ?? index.hidden(block.id)))
+  return projectSharedBlocks(streams, [...records.values()]).filter(block => block.id === null || !(state.hidden.get(block.id) ?? index.hidden(block.id))
     && (purpose === "restore-membership" || !(block.kind === "h" ? state.headings.get(block.id) ?? index.headingRemoved(block.id) : plannedRemoval(state, block.id))));
 }
 
