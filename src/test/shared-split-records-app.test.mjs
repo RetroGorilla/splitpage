@@ -8,6 +8,8 @@ import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/w
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
+import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
+import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
@@ -46,7 +48,8 @@ const clearWarnings = () => { toastHost().replaceChildren(); };
 const allowed = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
 let serial = 0, remoteSerial = 0;
 const ports = {
-  refusal: () => null, settle: () => { undoOwner().flush(); }, detach: () => {},
+  opening: openingStatus,
+  refusal: () => null, commandRefused: sharedCommandRefusalNotice(notices), settle: () => { undoOwner().flush(); }, detach: () => {},
   bindings: sharedSplitBindings({ report: value => { reports.push(value); }, missingBase: () => {}, recovered: () => {} }),
   common: allowed, standalone: createSessionCapabilities("standalone", allowed), migrate: migrateRows,
   docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Alice", structure: { cells: html => fromHtml(html) },
