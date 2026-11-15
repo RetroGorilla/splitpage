@@ -21,6 +21,7 @@ import { createSessionCapabilities } from "../application/session/capabilities.t
 
 startRecovery({
   capability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
+  entryCapability: createSessionCapabilities("standalone", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) }),
   desktop: () => null,
   sessionStorage: () => sessionStorage, localStorage: () => localStorage, internImage: internDataUrl
 });

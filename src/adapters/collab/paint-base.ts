@@ -9,7 +9,6 @@ import { collabProjectedVisualTargets } from "./painted-visual-targets.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
-import { readCollabMarkState } from "./mark-store.ts";
 
 function partReading(part: { readonly text: Y.Text; readonly target: SharedTextAddress; readonly from: number; readonly to: number }) {
   const runs = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!runs) return null;
@@ -30,16 +29,10 @@ function partReading(part: { readonly text: Y.Text; readonly target: SharedTextA
     const relative = [...Y.encodeRelativePosition(Y.createRelativePositionFromJSON({ item, assoc: 0 }))];
     return readSharedAnchor(JSON.stringify({ ...frame, relative }));
   }
-  return { text: runs.text, positions, identity, endGap: encodeCollabTextAnchor(part.text, part.target, part.to, "before") };
+  return { text: runs.text, identity, endGap: encodeCollabTextAnchor(part.text, part.target, part.to, "before") };
 }
 
-function partMarks(handle: SharedDocumentHandle, part: { readonly text: Y.Text; readonly container: Y.Map<unknown>; readonly marksKey: string }, positions: readonly number[]): string[] {
-  const keys = new Map(readCollabMarkState(handle, part.text, part.container.get(part.marksKey)).characters
-    .map(character => [character.offset, JSON.stringify(character.marks.map(group => [group.kind, group.id, group.values]))] as const));
-  return positions.map(position => keys.get(position) ?? "");
-}
-
-function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, selection: boolean, marks: string[] | null = null): PaintedText | null {
+function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, selection: boolean): PaintedText | null {
   const visuals = selection && address.field === "visualText";
   const found = visuals ? collabProjectedVisualTargets(handle, address) : collabProjectedTextTarget(handle, address); if (!found) return null;
   const pieces: { readonly from: number; readonly length: number; readonly identity: (index: number) => SharedContentRef | null }[] = [];
@@ -53,9 +46,7 @@ function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, s
     if (glue && (part.group || visuals)) {
       const reference = visuals ? JSON.stringify(["painted-visual-break", preceding, part.target.segment]) as SharedContentRef : sharedJoinGlueReference(part.group as string);
       pieces.push({ from: text.length, length: 1, identity: () => reference }); text += glue;
-      marks?.push("");
     }
-    marks?.push(...partMarks(handle, part, read.positions));
     if (reading.text.length) pieces.push({ from: text.length, length: reading.text.length, identity: reading.identity });
     text += reading.text; endGap = reading.endGap;
     if (reading.text.length) preceding = part.target.segment;
@@ -73,11 +64,6 @@ function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, s
 
 export function readSharedPaintedText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {
   return paintedText(handle, address, false);
-}
-
-export function readSharedPaintedTextMarks(handle: SharedDocumentHandle, address: SharedTextAddress): { readonly painted: PaintedText; readonly marks: readonly string[] } | null {
-  const marks: string[] = [], painted = paintedText(handle, address, false, marks);
-  return painted && marks.length === painted.text.length ? { painted, marks } : null;
 }
 
 export function readSharedPaintedSelectionText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {

@@ -8,14 +8,16 @@ eval window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r1',offset:5},hea
 eval S.enter()
 expect window.__writerFlowTest.on()
 expect window.__writerFlowTest.selection().head.rowId === 'r1' && window.__writerFlowTest.selection().head.offset === 5
-eval S.peer.hold();document.getElementById('writer-doc').focus();true
+eval window.applied=S.peer.appliedUpdates().length;S.peer.hold();document.getElementById('writer-doc').focus();true
 press x
 expect S.read().app.rows[0].audioText === 'Hellox'
 expect window.__writerFlowTest.selection().head.offset === 6
 eval S.peer.type('r1',0,'Y');S.peer.type('r2',5,'!');true
 expect S.read().peer.rows[0].audioText === 'YHello' && S.read().peer.rows[1].audioText === 'World!'
 expect S.read().app.rows[0].audioText === 'Hellox' && S.read().app.rows[1].audioText === 'World'
-eval S.peer.release('reverse')
+expect S.peer.appliedUpdates().length === window.applied && S.counters().queued >= 3
+eval window.released=S.peer.release('reverse');true
+expect (function(a){return a.length===window.released&&a.length>=3&&a.every(function(e,i){return i===0||a[i-1].update>e.update})&&a[0].to==='app'&&a[a.length-1].to==='peer'})(S.peer.appliedUpdates().slice(window.applied))
 expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
 expect S.read().app.rows[0].audioText === 'YHellox' && S.read().app.rows[1].audioText === 'World!'
 expect document.querySelector('#writer-doc .wr-beat[data-id="r1"]').textContent === 'YHellox'
@@ -29,11 +31,22 @@ key ctrl+shift KeyZ
 expect S.read().app.rows[0].audioText === 'YHellox' && S.read().app.rows[1].audioText === 'World!'
 expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
 expect window.__writerFlowTest.selection().anchor.offset === 7 && window.__writerFlowTest.selection().head.offset === 7
+eval window.applied=S.peer.appliedUpdates().length;S.peer.hold();document.getElementById('writer-doc').focus();true
+press q
+expect S.read().app.rows[0].audioText === 'YHelloxq' && S.read().peer.rows[0].audioText === 'YHellox'
+eval S.peer.type('r2',6,'Z');true
+expect S.read().peer.rows[1].audioText === 'World!Z' && S.read().app.rows[1].audioText === 'World!'
+eval window.released=S.peer.release('duplicate');true
+expect (function(a){return a.length===2*window.released&&window.released>=2&&a.every(function(e,i){var o=a[i%2?i-1:i+1];return o.update===e.update&&o.to===e.to})&&a.some(function(e){return e.to==='app'})&&a.some(function(e){return e.to==='peer'})})(S.peer.appliedUpdates().slice(window.applied))
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect S.read().app.rows[0].audioText === 'YHelloxq' && S.read().app.rows[1].audioText === 'World!Z'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r2"]').textContent === '​World!Z'
+expect window.__writerFlowTest.selection().head.rowId === 'r1' && window.__writerFlowTest.selection().head.offset === 8
 expect S.counters().ownershipScans > 0 && S.counters().recovered === 0 && S.counters().missingBase === 0
 eval window.projection=S.read().app;S.leave()
 expect F.state().docId !== projection.docId
 expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
 expect S.read().peer === null
 expect window.__writerFlowTest.on()
-expect document.querySelector('#writer-doc .wr-beat[data-id="r1"]').textContent === 'YHellox'
-expect document.querySelector('#writer-doc .wr-beat[data-id="r2"]').textContent === '\u200bWorld!'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r1"]').textContent === 'YHelloxq'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r2"]').textContent === '\u200bWorld!Z'

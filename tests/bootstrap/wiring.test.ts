@@ -140,6 +140,7 @@ function transitionPorts(): TransitionDeps {
 function mergePorts(): LegacyMergePorts {
   return {
     capability: MAY_EDIT,
+    entryCapability: MAY_EDIT,
     states: (_base, _mine, theirs) => ({ merged: theirs, conflicts: [], stats: { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 } }),
     entry: (raw) => migrateRows(raw),
     isDocument: (raw) => !!raw && typeof raw === "object",
@@ -239,6 +240,7 @@ function fakes(): Fakes {
       note("recovery");
       return {
         capability: MAY_EDIT,
+        entryCapability: MAY_EDIT,
         desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
         drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }
@@ -539,7 +541,11 @@ test("failed partial startup: an actions, exporters, merge or recovery factory t
     ["recovery capability stash", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), capability: { merge: MAY_EDIT.merge } }) }), "recovery", "the recovery dependency's capability port has no stash function"],
     ["recovery capability merge", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), capability: { stash: MAY_EDIT.stash } }) }), "recovery", "the recovery dependency's capability port has no merge function"],
     ["merge capability nothing", (f) => ({ ...f.deps, merge: () => without(f.deps.merge(), "capability") }), "merge", "the merge dependency returned no capability port"],
-    ["merge capability merge", (f) => ({ ...f.deps, merge: () => ({ ...f.deps.merge(), capability: {} }) }), "merge", "the merge dependency's capability port has no merge function"]
+    ["merge capability merge", (f) => ({ ...f.deps, merge: () => ({ ...f.deps.merge(), capability: {} }) }), "merge", "the merge dependency's capability port has no merge function"],
+    ["merge entry capability nothing", (f) => ({ ...f.deps, merge: () => without(f.deps.merge(), "entryCapability") }), "merge", "the merge dependency returned no entry capability port"],
+    ["merge entry capability method", (f) => ({ ...f.deps, merge: () => ({ ...f.deps.merge(), entryCapability: {} }) }), "merge", "the merge dependency returned no entry capability port"],
+    ["recovery entry capability nothing", (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), "entryCapability") }), "recovery", "the recovery dependency returned no entry capability port"],
+    ["recovery entry capability method", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), entryCapability: {} }) }), "recovery", "the recovery dependency returned no entry capability port"]
   ];
   for (const [what, spoil, step, message] of cases) {
     const f = fakes();
@@ -1091,7 +1097,6 @@ test("lifecycle: start, stop and start again three times with the same owners an
 });
 
 const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
-  "document compositionstart/C": 1, "document compositionend/C": 1,
   "document beforecopy/C": 1, "document beforecut/C": 1, "document click/B": 1, "document click/C": 1, "document contextmenu/B": 1, "document copy/C": 1,
   "document cut/C": 1, "document dragend/B": 1, "document dragover/B": 1, "document dragstart/C": 1, "document drop/B": 1, "document focusin/B": 1,
   "document input/C": 1, "document keydown/C": 3, "document mousedown/B": 1, "document mousedown/C": 2, "document mousemove/B": 1,

@@ -66,6 +66,24 @@ test("Present reads past a name chip as if it were not there", () => {
   } finally { runtime.dispose(); }
 });
 
+test("C8 refused external launch does not skip onboarding or fetch a script", async () => {
+  const h = harness(), previous = sessionStorage.getItem("splitpage-prompter-launch"), fetchBefore = globalThis.fetch;
+  dom.reconfigure({ url: "https://splitpage.test/#script=" + "1".repeat(64) });
+  let skipped = 0, reads = 0;
+  globalThis.fetch = async () => { reads++; throw new Error("refused fetch"); };
+  const runtime = startPrompter({ ...h.ports, entry: { before: () => ({ refused: "buffer-composition" }) },
+    preferences: { ...h.ports.preferences, skipOnboardingForPrompter: () => { skipped++; } } });
+  try {
+    const hooks = win as unknown as { __prompterTest: { launchFromScript: (token: string) => Promise<boolean> } };
+    assert.equal(await hooks.__prompterTest.launchFromScript("1".repeat(64)), false);
+    assert.equal(skipped, 0); assert.equal(reads, 0); assert.equal(h.state.open, false);
+  } finally {
+    runtime.dispose(); globalThis.fetch = fetchBefore;
+    if (previous === null) sessionStorage.removeItem("splitpage-prompter-launch"); else sessionStorage.setItem("splitpage-prompter-launch", previous);
+    dom.reconfigure({ url: "https://splitpage.test/" });
+  }
+});
+
 test("prompter runtime uses fake document, preferences, panels and tag container ports", () => {
   const h = harness();
   h.flags.prompterMirror = true;

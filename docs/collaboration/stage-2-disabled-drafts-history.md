@@ -42,10 +42,18 @@ cannot replace the shared session.
   restore outstanding (each is counted from its request until its answer has been
   handled), no restore pending, no pending change or armed capture, no retry
   scheduled and not stopped, whether or not the store is available. Otherwise it
-  refuses with that reason and changes nothing. While detached nothing is
-  scheduled or written; resuming arms nothing and continues the draft sequence. A
-  flush that captured nothing answers ok only if the writer is still live when the
-  answer is formed; otherwise it answers that nothing was kept.
+  refuses with that reason and changes nothing. A draft take holds the detach from
+  the moment it starts until the `applyTaken` that consumes it has finished; a take
+  whose store throws at once rethrows and holds nothing. While detached nothing is
+  scheduled, written or restored: a take answers null without asking the store, and
+  `applyTaken` answers `DETACHED` without reading the draft or reporting to the
+  desktop. Resuming arms nothing and continues the draft sequence.
+- A flush answers ok only when the copy the store last accepted matches the open
+  script as the answer is formed, or the script needs no copy (nothing unsaved,
+  and not a keep flush of a file tab). Otherwise it answers the stopped writer's
+  failure code, or `NOT_KEPT` when the copy on disk is older or missing. A capture
+  skipped because the store was unavailable keeps its change pending with a
+  wake-up, so the copy is written once the store returns.
 - A history copy for a standalone save that lands after the session became shared
   follows the current session, so it is not made; the snapshots stay under the old
   id. Package 14 decides captured-save effects together with the session owner.

@@ -5,7 +5,8 @@ import { prompterActions as definitions } from "../../features/prompter/actions.
 import { owned } from "../../features/routing/owned.ts";
 import { documentReader } from "./ports/document.ts";
 import { text } from "./ports/text.ts";
-import { opening } from "./ports/transitions.ts";
+import { opening, openingActivity } from "./ports/transitions.ts";
+import { documentEntry } from "./ports/document-entry.ts";
 import { startup } from "./ports/startup.ts";
 import { microphones, prompterDesktop, prompterVoice } from "./ports/desktop.ts";
 import { panelControl } from "./ports/panels.ts";
@@ -21,6 +22,7 @@ const prompter = owned<PrompterRuntime>();
 export function mountPrompterRuntimeFeature(): PrompterRuntime {
   return prompter.replace(() => {
     const ports: PrompterFeaturePorts = {
+      entry: documentEntry, openingActivity,
       document: documentReader, text, opening, startup,
       desktop: prompterDesktop, voice: prompterVoice, microphones, changes,
       panels: panelControl, preferences: prompterPreferences, viewFlags: prompterView,

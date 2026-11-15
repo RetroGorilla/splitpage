@@ -9,7 +9,7 @@ import type { ProductionReaders } from "../../../core/production/ports.ts";
 import type { StampPorts } from "../../../application/session/ports.ts";
 
 export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
-  effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan"> & {
+  effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan" | "abandonment"> & {
     readonly author: () => { readonly id: string; readonly by: string };
     readonly readers: ProductionReaders;
     readonly stamps: StampPorts;
@@ -27,6 +27,6 @@ export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<Sh
       read: (key, field) => field === bufferedFieldTarget(key)?.field ? readSharedPaintedSelectionText(handle, sharedBufferedTarget(handle, key)) : null
     },
     bufferedText: { open: commit.open, beforeCommand: session.beforeCommand, missingBase: effects.missingBase, recovered: effects.recovered, report: effects.report,
-      ...(effects.ownershipScan ? { ownershipScan: effects.ownershipScan } : {}) }
+      ...(effects.ownershipScan ? { ownershipScan: effects.ownershipScan } : {}), ...(effects.abandonment ? { abandonment: effects.abandonment } : {}) }
   };
 }

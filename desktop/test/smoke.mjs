@@ -5073,7 +5073,7 @@ async function caseMovedFileTabAndWindowCloseTogether(target, fixturesDir) {
 }
 
 async function caseMovedFileWriterStoppedAsksAgain(target, fixturesDir) {
-  const tag = target.name + " moved file: a tab that answers ok without writing a copy is asked about again (#505 S2)";
+  const tag = target.name + " moved file: a tab whose writer stopped without a copy is asked about again (#505 S2)";
   const marker = "MARKER-WRITER-STOPPED-" + Date.now();
   const aPath = writeFixture(fixturesDir, "case-505-stopped-" + Date.now() + ".splitpage", "Writer Stopped", [[marker, "v"]]);
   const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
@@ -5101,7 +5101,8 @@ async function caseMovedFileWriterStoppedAsksAgain(target, fixturesDir) {
       JSON.stringify(status) + " exitCode=" + app.proc.exitCode);
 
     const answer = await evalPage(cdp, "window.__desktopTest.drafts.flushNow()");
-    record(tag + ": a flush now answers ok with nothing on disk", !!answer && answer.ok === true && !(await draftStatusFor(cdp)).hasDraft, JSON.stringify(answer));
+    record(tag + ": a flush now answers the stop's failure with nothing on disk",
+      !!answer && answer.ok === false && answer.code === "TOO_LARGE" && !(await draftStatusFor(cdp)).hasDraft, JSON.stringify(answer));
 
     const seen1 = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
@@ -6451,7 +6452,7 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: moved file, window close asks again when the copy can't be kept (#496)", () => caseMovedFileUnkeptCopyAsksOnWindowClose(target, fixturesDir)],
     ["draft: session end keeps a copy of a clean tab whose file is gone (#492)", () => caseSessionEndKeepsGoneFileCopy(target, fixturesDir)],
     ["draft: moved file, a tab close and a window close at once never lose the script (#505)", () => caseMovedFileTabAndWindowCloseTogether(target, fixturesDir)],
-    ["draft: moved file, a tab that answers ok without a copy is asked about again (#505)", () => caseMovedFileWriterStoppedAsksAgain(target, fixturesDir)],
+    ["draft: moved file, a tab whose writer stopped without a copy is asked about again (#505)", () => caseMovedFileWriterStoppedAsksAgain(target, fixturesDir)],
     ["draft: session end flushes a dirty file tab before the file check (#505)", () => caseSessionEndFlushesDirtyTabFirst(target, fixturesDir)],
     ["close check: a tab close backing off for a cancelled quit stops holding its copy (#507)", () => caseCloseBackOffReleasesCopy(target, fixturesDir, "quit")],
     ["close check: a tab close backing off for a cancelled window close stops holding its copy (#507)", () => caseCloseBackOffReleasesCopy(target, fixturesDir, "window close")],

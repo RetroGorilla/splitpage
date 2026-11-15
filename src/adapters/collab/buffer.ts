@@ -42,12 +42,10 @@ export const SHARED_TYPING_LABEL = "typing";
 function typingDescription(handle: SharedDocumentHandle, target: SharedTextAddress, painted: PaintedText, commit: BufferedCommit): SharedCommandDescription {
   const first = commit.splices[0], preceding = first && first.from > 0 ? painted.identity(first.from - 1) : null;
   // why: name inputs replay at the recorded pre-typing boundary; rich text follows concurrent text in its gap
-  const cell = target.field === "audioText" || target.field === "visualText";
-  const anchor = !first ? null : cell
+  const anchor = !first ? null : target.field === "audioText" || target.field === "visualText"
     ? createSharedAnchor(handle, target, first.from, "after")
     : preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null;
-  const selection = anchor ? { anchor, focus: anchor } : null, typing = commit.splices.map(splice => splice.insert).join("");
-  return cell ? { label: SHARED_TYPING_LABEL, selection, typing, caretText: target } : { label: SHARED_TYPING_LABEL, selection, typing };
+  return { label: SHARED_TYPING_LABEL, selection: anchor ? { anchor, focus: anchor } : null, typing: commit.splices.map(splice => splice.insert).join("") };
 }
 
 export function createSharedBufferedText(

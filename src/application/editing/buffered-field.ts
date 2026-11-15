@@ -12,6 +12,7 @@ export interface BufferedFieldPorts extends Pick<BufferedTextCommit, "open">, Pi
   readonly recovered: (rowId: string) => void;
   readonly report: (outcome: CommandOutcome) => void;
   readonly ownershipScan?: () => void;
+  readonly abandonment?: (abandon: (final: boolean) => void) => () => void;
 }
 
 export interface BufferedFieldEvent {
@@ -79,6 +80,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   let committing = false;
   let refusedComposition = false;
   let composedFromHold: string | null = null;
+  let released = false;
   const keyOf = surface.key ?? ((pos: FlowPos) => pos.kind === "beat" ? pos.rowId : null);
   const at = surface.position ?? beatPos;
   const text = surface.text ?? ((field: E) => projection(surface.runs(field)));
@@ -216,6 +218,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   }
 
   function finish(): boolean {
+    if (released) return true;
     const checked = ownership(checkpoint("settle"));
     return checked.ok && settle();
   }
@@ -228,6 +231,20 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   }
 
   const stopAdmission = ports.beforeCommand(() => committing || finish());
+
+  function abandon(final: boolean): void {
+    if (final) released = true;
+    if (committing) return;
+    surface.composition(false); ended = false; refusedComposition = false; composedFromHold = null; target = null; label = undefined;
+    const held = active;
+    if (!held) return;
+    active = null;
+    surface.reset(held.rowId);
+    try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
+    surface.repaint(held.rowId);
+  }
+
+  const stopAbandonment = ports.abandonment?.(abandon);
 
   return {
     native: (event, dispatch) => {
@@ -335,7 +352,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     base: rowId => active?.rowId === rowId ? active.base : null,
     dispose: () => {
       if (!finish()) return false;
-      stopAdmission(); target = null; surface.composition(false);
+      stopAdmission(); stopAbandonment?.(); target = null; surface.composition(false);
       return true;
     }
   };

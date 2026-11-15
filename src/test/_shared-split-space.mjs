@@ -1,4 +1,5 @@
 import { migrateRows, productionReaders } from "../bootstrap/document-ports.ts";
+import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { sessionStamps } from "../bootstrap/wiring/session-owner.ts";
 import { sharedBufferPorts } from "../bootstrap/wiring/ports/shared-buffer.ts";
@@ -14,6 +15,7 @@ export function splitSpaceSwitch() {
   const reports = [];
   const allowed = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
   return { reports, ports: {
+    opening: openingStatus,
     refusal: () => null, settle: () => { undoOwner().flush(); }, detach: () => {},
     bindings: {
       enter: parts => {

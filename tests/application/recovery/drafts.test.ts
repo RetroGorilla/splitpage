@@ -8,6 +8,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+import { inspect } from "node:util";
 import type { createDraftStore as draftStoreFactory } from "../../../desktop/drafts.ts";
 import type {
   checkFileGone as checkGone, copyKept as keptCopy, holdKeep as keepHold, runCloseCheck as closeCheck, CloseCheckIo
@@ -53,6 +54,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
   };
   const ports: DraftsPorts = {
     capability: { drafts: () => MODES[state.mode].drafts() },
+    entryCapability: { drafts: () => MODES[state.mode].drafts() },
     running: () => start.running ?? true,
     clock: { now: () => state.now },
     timers: {
@@ -61,7 +63,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     },
     report: (error) => { log.push("report:" + String(error)); },
     document: { current: () => state.current },
-    session: { mergeBase: () => state.base, noteAbsorbedDirty: (reason) => { log.push("absorbed:" + reason); } },
+    session: { mergeBase: () => state.base, noteAbsorbedDirty: (reason) => { log.push("absorbed:" + reason); state.editSeq++; } },
     place: {
       fileHome: () => null,
       importHome: () => null,
@@ -528,7 +530,7 @@ test("a document that can't be copied stops the writer until the next change, wh
     JSON.stringify = real;
     assert.deepEqual(h.toasts.map((t) => [t.message, t.kind, t.sticky]), [["Crash recovery is paused — this document is too large to copy", "warn", true]]);
     assert.equal(status().stopped, true);
-    assert.deepEqual(await drafts.flush(), { ok: true }, "a stopped writer answers ok without writing");
+    assert.deepEqual(await drafts.flush(), { ok: false, code: "TOO_LARGE" }, "a stopped writer writes nothing and answers that nothing was kept");
     assert.equal(h.written.length, 0);
 
     h.state.editSeq = 22;
@@ -1049,7 +1051,7 @@ const YIELD_POINTS: YieldPoint[] = [
     const take = drafts.taker();
     assert.ok(take);
     h.resume.setRestorePending(false);
-    void take();
+    void take().then((value) => drafts.applyTaken(value));
   } },
   { name: "a file draft restore awaiting its file read", reason: "restoring", hold: "file", reach: restoreFrom },
   { name: "a file draft restore awaiting the parse", reason: "restoring", hold: "parse", reach: restoreFrom },
@@ -1249,17 +1251,20 @@ test("losing the store after a change was scheduled still refuses the detach whi
 
 test("a detach tried from inside a flush, between its no-op capture and its answer, refuses as flushing", async () => {
   const h = harness();
-  const drafts = mount(h.ports);
   const tried: unknown[] = [];
   let probing = false;
-  h.desktop.writable = () => { if (probing) tried.push(drafts.detachSource()); return true; };
+  let drafts: DraftsMount | null = null;
+  drafts = mount({ ...h.ports, saves: { ...h.ports.saves, editSeq: () => {
+    if (probing) tried.push(drafts?.detachSource());
+    return h.ports.saves.editSeq();
+  } } });
   try {
     await drafts.flush();
     const answer = drafts.flush({ keep: true });
     probing = true;
     assert.deepEqual(await answer, { ok: true });
     probing = false;
-    assert.ok(tried.length >= 2, "the capture and the answer both read the store");
+    assert.ok(tried.length >= 2, "the capture and the answer both read the edit sequence");
     assert.ok(tried.every((t) => JSON.stringify(t) === JSON.stringify({ ok: false, reason: "flushing" })), JSON.stringify(tried));
     assert.equal(h.written.length, 1);
   } finally {
@@ -1337,6 +1342,286 @@ test("with no draft store there is nothing to settle, so the detach succeeds at 
   } finally {
     drafts.dispose();
   }
+});
+
+type TakenWire = Awaited<ReturnType<NonNullable<ReturnType<DesktopDraftStore["taker"]>>>>;
+const titleOf = (payload: Record<string, unknown> | undefined) => (JSON.parse(String(payload?.["stateJson"])) as { title: string }).title;
+
+test("a keep flush over a stored A whose capture skipped while the store was gone does not answer kept for B", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  try {
+    await drafts.flush();
+    assert.equal(titleOf(h.written.at(-1)), "Pilot");
+    const keep = drafts.flush({ keep: true });
+    h.state.current = restoreVersion("Document B"); h.state.editSeq = 2;
+    let reads = 0;
+    h.desktop.writable = () => ++reads !== 1;
+    const answer = await keep;
+    assert.ok(reads >= 1, "the capture found the store gone");
+    assert.notEqual(answer.ok, true, JSON.stringify(answer));
+    assert.equal(h.written.length, 1);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("a take whose caller applies it later holds the detach until that apply, whatever another apply or flush does meanwhile", async () => {
+  const h = harness({ hasDraft: true });
+  const gate = deferred<TakenWire>();
+  h.desktop.taker = () => () => gate.promise;
+  const drafts = mount(h.ports);
+  try {
+    const take = drafts.taker();
+    assert.ok(take);
+    const applied = take().then((value) => drafts.applyTaken(value));
+    let between: unknown = null, recoveredAtDetach = -1;
+    void gate.promise.then(() => {
+      between = drafts.detachSource();
+      recoveredAtDetach = h.recovered.length;
+    });
+    await drafts.applyTaken(null);
+    assert.equal(h.resume.restorePending(), false);
+    fireDue(h.timers);
+    await settle();
+    await drafts.flush();
+    assert.equal(drafts.detachRefusal(), "restoring");
+    gate.resolve({ header: { origin: { kind: "untitled" }, docIdWrittenOut: false }, stateJson: JSON.stringify(restoreVersion("Recovered")) } as unknown as TakenWire);
+    await applied;
+    assert.equal(h.recovered.length, 1, "the caller restored the draft");
+    assert.notEqual((between as { ok?: boolean } | null)?.ok, true, `detached with ${recoveredAtDetach} restores done, then the caller restored`);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("a change armed while a keep flush waits keeps its timers when the store is gone at capture, and writes B once it is back", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  const held = holdStore(h);
+  try {
+    await landFirstWrite(drafts, held);
+    const keep = drafts.flush({ keep: true });
+    h.state.current = restoreVersion("Document B"); h.state.editSeq = 2;
+    drafts.noteChange();
+    h.desktop.writable = () => false;
+    assert.notEqual((await keep).ok, true);
+    assert.equal(h.written.length, 1);
+    assert.equal(drafts.detachRefusal(), "pending");
+    assert.ok(h.timers.some((t) => t.live), "a pending change keeps a wake-up");
+    h.desktop.writable = () => true;
+    fireIdle(h.timers);
+    await drain(held);
+    assert.equal(titleOf(h.written.at(-1)), "Document B");
+    assert.equal(drafts.detachRefusal(), null);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("the taker hands its caller the store's own promise, so the take answers in the same reaction as on main", async () => {
+  const h = harness({ hasDraft: true });
+  const answer = Promise.resolve(null);
+  h.desktop.taker = () => () => answer;
+  const drafts = mount(h.ports);
+  try {
+    const take = drafts.taker();
+    assert.ok(take);
+    assert.equal(take(), answer);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("a take whose store throws at once rethrows and leaves nothing open, so it does not hold the detach", async () => {
+  const h = harness({ hasDraft: true });
+  const failure = new Error("test: the take failed");
+  h.desktop.taker = () => () => { throw failure; };
+  const drafts = mount(h.ports);
+  try {
+    const take = drafts.taker();
+    assert.ok(take);
+    assert.throws(() => take(), failure);
+    await drafts.applyTaken(null);
+    fireDue(h.timers);
+    await settle();
+    await drafts.flush();
+    assert.equal(drafts.detachRefusal(), null);
+    assert.equal(drafts.detachSource().ok, true);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("a taker invoked after a successful detach takes nothing, and an apply while detached restores and reports nothing", async () => {
+  const h = harness({ hasDraft: true });
+  let takes = 0;
+  h.desktop.taker = () => () => { takes++; return Promise.resolve(null); };
+  const drafts = mount(h.ports);
+  try {
+    const take = drafts.taker();
+    assert.ok(take);
+    await drafts.applyTaken(await take());
+    fireDue(h.timers);
+    await settle();
+    await drafts.flush();
+    assert.equal(drafts.detachSource().ok, true);
+    const before = [h.recovered.length, h.restoreDone.length];
+    assert.equal(await take(), null);
+    assert.equal(takes, 1);
+    const late = { header: { origin: { kind: "untitled" }, docIdWrittenOut: false }, stateJson: JSON.stringify(restoreVersion("Late")) };
+    assert.equal(await drafts.applyTaken(late), "DETACHED");
+    assert.deepEqual([h.recovered.length, h.restoreDone.length], before);
+    assert.equal(drafts.detachRefusal(), "detached");
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("an edit followed at once by a keep flush answers ok with that edit stored, so the close asks nothing more", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  try {
+    await drafts.flush();
+    h.state.current = restoreVersion("Edited"); h.state.editSeq = 2;
+    drafts.noteChange();
+    const answer = await drafts.flush({ keep: true });
+    assert.equal(answer.ok, true, JSON.stringify(answer));
+    assert.equal(titleOf(h.written.at(-1)), "Edited");
+    assert.equal(h.written.length, 2);
+  } finally {
+    drafts.dispose();
+  }
+});
+
+test("an unawaited document open that rejects surfaces once as an unhandled rejection with its own reason, and releases the restore count", async () => {
+  const h = harness();
+  const failure = new Error("test: the open failed");
+  const unhandled: unknown[] = [];
+  const listener = (reason: unknown) => { unhandled.push(reason); };
+  const runner = process.listeners("unhandledRejection");
+  process.removeAllListeners("unhandledRejection");
+  process.on("unhandledRejection", listener);
+  const file = { name: "pilot.splitpage", lastModified: 4 };
+  const drafts = mount({ ...h.ports,
+    files: { handle: () => ({ getFile: () => Promise.resolve(file) }),
+      parse: () => Promise.resolve({ state: restoreVersion("Mine"), kind: "splitpage", docIdEmbedded: true }) } as DraftsPorts["files"],
+    documents: { open: () => Promise.reject(failure) } });
+  try {
+    h.resume.setRestorePending(false);
+    assert.equal(await drafts.applyTaken(takenFileDraft()), "nothing-unsaved");
+    await new Promise((resolve) => { setImmediate(resolve); });
+    await new Promise((resolve) => { setImmediate(resolve); });
+    assert.deepEqual(unhandled, [failure]);
+    assert.notEqual(drafts.detachRefusal(), "restoring");
+  } finally {
+    process.off("unhandledRejection", listener);
+    for (const handler of runner) process.on("unhandledRejection", handler);
+    drafts.dispose();
+  }
+});
+
+const SEQUENCE_OPS = ["edit", "noteChange", "flush", "flushKeep", "fireTimers", "writeOk", "writeFails", "storeLost", "storeBack",
+  "takeStart", "takeStartApplying", "takeAnswers", "applyTake", "applyNull", "detach", "resume", "settle"] as const;
+type SequenceOp = typeof SEQUENCE_OPS[number];
+const SEQUENCE_STARTS = ["no draft", "a draft to restore", "a take obtained and another restore done", "copy A stored"] as const;
+type SequenceStart = typeof SEQUENCE_STARTS[number];
+const SEQUENCE_LENGTH = 4;
+const SEQUENCE_TAKEN = { header: { origin: { kind: "untitled" }, docIdWrittenOut: false }, stateJson: JSON.stringify(restoreVersion("Recovered")) } as unknown as TakenWire;
+
+async function runSequence(ops: readonly SequenceOp[], start: SequenceStart): Promise<string | null> {
+  const h = harness({ hasDraft: start === "a draft to restore" || start === "a take obtained and another restore done" });
+  const gate = deferred<TakenWire>();
+  h.desktop.taker = () => () => gate.promise;
+  const writes: HeldWrite[] = [];
+  let stored: string | null = null;
+  h.desktop.write = (payload) => new Promise((resolve, reject) => {
+    writes.push({ payload: payload as Record<string, unknown>, answer: resolve as (reply: unknown) => void, fail: reject });
+  });
+  const flushes: { answer: Promise<unknown>; matched: boolean | null }[] = [];
+  const matches = () => stored === JSON.stringify(h.state.current);
+  const freeze = () => {
+    for (const f of flushes) if (f.matched === null && !inspect(f.answer).includes("<pending>")) f.matched = matches();
+  };
+  const drafts = mount({ ...h.ports, transitions: { ...h.ports.transitions, recover: (recovery) => { freeze(); return h.ports.transitions.recover(recovery); } } });
+  const take = drafts.taker();
+  let taking: Promise<unknown> | null = null, answeredTake = false;
+  let delivered = null as { value: unknown } | null;
+  let detachedAt: string | null = null, version = 0, failure: string | null = null;
+  const owned = () => h.recovered.length + ":" + h.restoreDone.length;
+  const watchFlush = (answer: Promise<{ ok?: boolean }>) => {
+    const watched = { answer: answer as Promise<unknown>, matched: null as boolean | null };
+    flushes.push(watched);
+    void answer.then((value) => {
+      if (value.ok === true && !(watched.matched ?? matches())) failure ??= "I1: a flush answered ok while the store holds another copy";
+    });
+  };
+  const checkSettled = () => {
+    if (drafts.detachRefusal() === "pending" && !h.timers.some((t) => t.live) && writes.length === 0) failure ??= "I3: pending with no wake-up";
+  };
+  try {
+    if (start === "a take obtained and another restore done") await drafts.applyTaken(null);
+    if (start === "copy A stored" || start === "a take obtained and another restore done") {
+      void drafts.flush();
+      await settle();
+      const first = writes.shift();
+      assert.ok(first);
+      stored = String(first.payload["stateJson"]);
+      first.answer({ ok: true, seq: first.payload["seq"], bytes: 1 });
+    }
+    await settle();
+    for (const op of ops) {
+      freeze();
+      if (op === "edit") { h.state.current = { ...h.state.current, title: "v" + ++version } as typeof h.state.current; h.state.editSeq++; }
+      else if (op === "noteChange") drafts.noteChange();
+      else if (op === "flush" || op === "flushKeep") watchFlush(drafts.flush(op === "flushKeep" ? { keep: true } : null));
+      else if (op === "fireTimers") { if (!h.timers.some((t) => t.live)) return null; fireDue(h.timers); }
+      else if (op === "writeOk" || op === "writeFails") {
+        const write = writes.shift();
+        if (!write) return null;
+        if (op === "writeFails") write.fail(new Error("test: write failed"));
+        else { stored = String(write.payload["stateJson"]); write.answer({ ok: true, seq: write.payload["seq"], bytes: 1 }); }
+      } else if (op === "storeLost" || op === "storeBack") {
+        const writable = op === "storeBack";
+        if (h.desktop.writable() === writable) return null;
+        h.desktop.writable = () => writable;
+      } else if (op === "takeStart" || op === "takeStartApplying") {
+        if (!take || taking) return null;
+        taking = take();
+        if (op === "takeStart") void taking.then((value) => { delivered = { value }; });
+        else void taking.then((value) => drafts.applyTaken(value));
+      } else if (op === "takeAnswers") { if (!taking || answeredTake) return null; answeredTake = true; gate.resolve(SEQUENCE_TAKEN); }
+      else if (op === "applyTake") { if (!delivered) return null; const value = delivered.value; delivered = null; void drafts.applyTaken(value); }
+      else if (op === "applyNull") void drafts.applyTaken(null);
+      else if (op === "detach") { if (drafts.detachSource().ok) detachedAt = owned(); }
+      else if (op === "resume") { if (drafts.resumeWriting()) detachedAt = null; }
+      if (op === "settle") await settle();
+      else await Promise.resolve();
+      if (detachedAt !== null && owned() !== detachedAt) failure ??= "I2: a restore changed the document or reported while detached";
+      if (op === "settle") checkSettled();
+      if (failure) return failure;
+    }
+    await settle();
+    if (detachedAt !== null && owned() !== detachedAt) failure ??= "I2: a restore changed the document or reported while detached";
+    checkSettled();
+    return failure;
+  } finally {
+    await settle();
+    drafts.dispose();
+  }
+}
+
+test("every sequence of draft operations up to the fixed length, one reaction apart, keeps kept, restore and wake-up invariants", async () => {
+  const sequences: SequenceOp[][] = [[]];
+  for (let length = 0; length < SEQUENCE_LENGTH; length++) {
+    for (const prefix of sequences.filter((s) => s.length === length)) for (const op of SEQUENCE_OPS) sequences.push([...prefix, op]);
+  }
+  const failures: string[] = [];
+  for (const start of SEQUENCE_STARTS) for (const ops of sequences) {
+    const failure = await runSequence(ops, start);
+    if (failure) failures.push(`${start}: ${ops.join(", ")}: ${failure}`);
+  }
+  assert.deepEqual(failures.slice(0, 5), []);
 });
 
 
