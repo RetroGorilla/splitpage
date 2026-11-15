@@ -309,7 +309,7 @@ test("event spans: an event of the same type dispatched inside another leaves th
   });
 });
 
-test("unattributed time is zero on a clock that every probed call advances: a typed character in the Writer and in Split, a valid update, an update held then drained, refused updates, undo and a structural command", async () => {
+test("unattributed time is zero on a clock that every probed call advances: a typed character in the Writer and in Split, a valid update, an update held then drained, refused updates, undo, a structural command, and a Split command that captures, settles and drains", async () => {
   await shared(p => {
     p.hold();
     assert.equal(p.type("r2", 0, "Z").kind, "applied");
@@ -353,6 +353,26 @@ test("unattributed time is zero on a clock that every probed call advances: a ty
     const splitSpans = spans(split.names.map(name => "measure:" + name));
     assert.ok(of(splitSpans, "cell-refresh").every(span => insideOne(span, of(splitSpans, "input-handler"))), "the cell refresh runs inside the bubbling input handler");
     assert.equal(hook.read().app.rows[0].audioText, "Hello%");
+    assert.equal(p.type("r2", 0, "X").kind, "applied");
+    const capture = zero("Ctrl+Enter in Split with typing still open and a peer update held: the capture settles the typing, reads the caret and drains the update on release", () => {
+      const range = window.getSelection().getRangeAt(0).cloneRange();
+      const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "^" });
+      Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+      assert.equal(cell.cell.dispatchEvent(before), true);
+      range.deleteContents();
+      const text = document.createTextNode("^");
+      range.insertNode(text);
+      window.getSelection().setBaseAndExtent(text, 1, text, 1);
+      assert.equal(p.deliver("forward", "app"), 1);
+      key(cell.cell, "keydown", { key: "Enter", ctrlKey: true });
+      key(cell.cell, "keyup", { key: "Enter", ctrlKey: true });
+    });
+    const captureSpans = spans(capture.names.map(name => "measure:" + name)), drains = of(captureSpans, "drain");
+    assert.ok(of(captureSpans, "queue").length === 1 && drains.length >= 1, capture.names.join(" "));
+    assert.ok(drains.every(span => insideOne(span, of(captureSpans, "input-command"))), "the held update drains inside the command's settle and capture");
+    assert.ok(capture.parts.apply > 0, JSON.stringify(capture.parts));
+    assert.deepEqual(rows(hook.read().app).map(([, text]) => text).filter(text => text !== ""), ["Hello%^", "XYZWorld"], "the typing and the peer update both landed");
+    assert.equal(hook.read().app.rows.length, 4, "Ctrl+Enter added a beat");
   });
 });
 

@@ -7,6 +7,8 @@ import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
 import { readSharedStatusHeads } from "../../../adapters/collab/status.ts";
 import { readSharedJoinedFields, readSharedJoinedParts } from "../../../adapters/collab/undo-join.ts";
+import { collabState } from "../../../adapters/collab/state.ts";
+import { sharedStructureIdentity } from "../../../adapters/collab/structure-identity.ts";
 
 export function sharedValuePorts(source: { readonly handle: () => SharedDocumentHandle | null; readonly author: SharedValuePorts["author"]; readonly stamps: StampPorts }): () => SharedValuePorts | null {
   return () => source.handle() ? {
@@ -30,6 +32,10 @@ export function sharedStructurePorts(source: Parameters<typeof sharedValuePorts>
     return ports && { author: ports.author, beatStamp: ports.beatStamp, cells: html => source.cells(html ?? ""), joinedParts: beat => {
       const handle = source.handle();
       return handle ? readSharedJoinedParts(handle, beat) : [];
+    }, createdBeat: operation => {
+      const handle = source.handle();
+      if (!handle) throw new Error("a shared beat was created after its session ended");
+      return sharedStructureIdentity(String(collabState(handle).doc.clientID), operation, "beat");
     } };
   };
 }

@@ -6,6 +6,7 @@ import { documentReader } from "./ports/document.ts";
 import { edits } from "./ports/editing.ts";
 import { personColors } from "./ports/person-colors.ts";
 import { notices } from "./ports/effects.ts";
+import { sharedValueCommands } from "./ports/shared-commands.ts";
 import { chromePreferences } from "./ports/preferences.ts";
 import { screen } from "./ports/screen.ts";
 
@@ -18,7 +19,7 @@ export function titleChromeControls(): DocumentChromeControl {
 export function mountTitleChromeFeature(): DocumentChromeControl {
   return chrome.replace(() => {
     const ports: DocumentChromePorts = {
-      document: documentReader, edits, personColors, notices,
+      document: documentReader, edits, personColors, notices, shared: sharedValueCommands,
       preferences: chromePreferences
     };
     return startDocumentChrome(ports);

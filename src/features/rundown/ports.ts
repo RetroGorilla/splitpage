@@ -4,6 +4,7 @@ import type { RowDrag } from "../../application/editing/row-drag.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PreferenceChanges, Preferences } from "../../application/preferences/preferences.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { SharedValueCommands } from "../../application/commands/shared-values.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 
@@ -19,7 +20,8 @@ export interface RundownPorts {
 
 export interface TargetPorts {
   readonly document: Pick<DocumentReader, "current">;
-  readonly edits: Pick<DocumentEdits, "edit">;
+  readonly edits: Pick<DocumentEdits, "edit" | "run">;
+  readonly shared: SharedValueCommands;
   readonly notices: Pick<NoticePort, "show">;
 }
 

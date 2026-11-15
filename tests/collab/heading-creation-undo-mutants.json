@@ -1,0 +1,94 @@
+{
+  "tests": [
+    "tests/adapters/collab/undo-heading-creation.test.ts",
+    "tests/adapters/collab/undo-heading.test.ts",
+    "tests/application/commands/flow-paste-shared.test.ts",
+    "tests/features/rows/scene-create.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "rule 202: a hidden heading still shows in the projection",
+      "file": "src/adapters/collab/projection-source.ts",
+      "find": "return hidden.size ? projected.filter(block => block.id === null || !hidden.has(block.id)) : projected;",
+      "replace": "return hidden.size ? projected.filter(block => block.kind !== \"b\" || block.id === null || !hidden.has(block.id)) : projected;"
+    },
+    {
+      "label": "rule 202: the incremental blocks keep a stale heading after its undo",
+      "file": "src/adapters/collab/projection-source.ts",
+      "find": "[streams, records, headings]",
+      "replace": "[streams, records]"
+    },
+    {
+      "label": "rule 202: commands still find a hidden heading",
+      "file": "src/adapters/collab/structure-plan.ts",
+      "find": "filter(block => block.id === null || !(state.hidden.get(block.id) ?? index.hidden(block.id))",
+      "replace": "filter(block => block.id === null || (block.kind !== \"b\" || !(state.hidden.get(block.id) ?? index.hidden(block.id)))"
+    },
+    {
+      "label": "rule 202: redo hides the heading again instead of bringing it back",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "kind: part.retired ? \"heading-restore\" : \"heading-retire\"",
+      "replace": "kind: \"heading-retire\""
+    },
+    {
+      "label": "rule 203: a heading's own values are not part of it as made",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "return JSON.stringify([fields(record, writer, unstamped), line()]);",
+      "replace": "return JSON.stringify([null, line()]);"
+    },
+    {
+      "label": "rule 203: a heading's name is not part of it as made",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "return [own.identity, own.value, text(handle, stored, writer, own.at, next?.at ?? raw.length)];",
+      "replace": "return [own.identity, own.value];"
+    },
+    {
+      "label": "rule 203: a changed heading is still undone",
+      "file": "src/adapters/collab/undo-heading-creation.ts",
+      "find": " && readSharedHeadingCreationContent(handle, part.heading, part.writer, part.segment) === part.content;",
+      "replace": ";"
+    },
+    {
+      "label": "rule 204: a used-up heading lets the rest of its step be undone",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "    || part.kind === \"heading-creation\" && !canReverseSharedHeadingCreation(handle, part))) {",
+      "replace": "    )) {"
+    },
+    {
+      "label": "rule 204: a paste's heading line is not recorded for undo",
+      "file": "src/adapters/collab/undo-heading-creation.ts",
+      "find": "&& operations.some(item => item.kind === \"segment-create\" && item.beat === operation.target.owner);",
+      "replace": "&& false;"
+    },
+    {
+      "label": "rule 204: a beat the paste made and took away comes back on undo",
+      "file": "src/adapters/collab/undo-creation.ts",
+      "find": "    if (part.kind === \"remove\") return !internal.has(String(part.removal));",
+      "replace": ""
+    },
+    {
+      "label": "rule 205: a heading stays hidden after an unseen change arrives",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "return typeof segment === \"string\" && readSharedHeadingCreationContent(handle, beat, writer, segment) === observed;",
+      "replace": "return typeof segment === \"string\";"
+    },
+    {
+      "label": "rule 206: beats typed under a heading count as its name",
+      "file": "src/adapters/collab/creation-retirement.ts",
+      "find": "text(handle, stored, writer, own.at, next?.at ?? raw.length)",
+      "replace": "text(handle, stored, writer, own.at, raw.length)"
+    },
+    {
+      "label": "rule 208: a heading finished from a typed line is undone by hiding its words",
+      "file": "src/adapters/collab/undo-heading-creation.ts",
+      "find": "&& operations.some(item => item.kind === \"segment-create\" && item.beat === operation.target.owner);",
+      "replace": "&& true;"
+    },
+    {
+      "label": "rule 208: an undo that would clear a scene's first beat stays stuck instead of skipping",
+      "file": "src/adapters/collab/undo-executor.ts",
+      "find": "part.field === \"firstSceneId\" && part.prior.clear === true)) {",
+      "replace": "part.field === \"firstSceneId\" && part.prior.clear === true && false)) {"
+    }
+  ]
+}

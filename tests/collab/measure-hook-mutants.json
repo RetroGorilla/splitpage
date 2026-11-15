@@ -162,6 +162,20 @@
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
+      "label": "a Split command's capture, settle and drain run outside the command span",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n  try { return settledSelection(rowId, read); }\n  finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:end\"); }\n",
+      "replace": "function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {\n  return settledSelection(rowId, read);\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a Split command's settle is not marked",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "function settle(): boolean {\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n",
+      "replace": "function settle(): boolean {\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
       "label": "the event span opens on bubbling, after the handlers",
       "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "  for (const type of MEASURED_EVENTS) window.addEventListener(type, opened, true);",

@@ -17,7 +17,7 @@ function formattingCleanup(transaction: Y.Transaction): boolean {
   return deleted && formatsOnly;
 }
 
-export type IngressHold = "delivering" | "buffer";
+export type IngressHold = "delivering" | "buffer" | "capture";
 
 export class IngressGate {
   readonly holds = new Set<IngressHold>();

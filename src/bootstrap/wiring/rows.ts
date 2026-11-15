@@ -5,6 +5,7 @@ import { notices as portNotices } from "./ports/effects.ts";
 import { text as portText } from "./ports/text.ts";
 import { ownership as portOwnership } from "./ports/saving.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
+import { sharedStructureCommands } from "./ports/shared-commands.ts";
 import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import type { PastePlace, BeatMedia, BeatMediaPorts, BeatPorts, Beats } from "../../features/rows/ports.ts";
@@ -34,7 +35,8 @@ export function mountBeatsFeature(): Beats {
         armedId: (area) => deleteConfirmation().armedId(area),
         arm: (area, id, expired, show, timers) => { deleteConfirmation().arm(area, id, expired, show, timers); },
         disarm: (area) => { deleteConfirmation().disarm(area); }
-      }
+      },
+      shared: sharedStructureCommands
     };
     return mountBeats(ports);
   });
@@ -65,6 +67,10 @@ export function addRow(afterId: string | null | undefined): string | null {
 
 export function addRowAndFocus(afterId: string | null | undefined, field: string | null): void {
   beats.owner()?.addRowAndFocus(afterId, field);
+}
+
+export function addRowAtCaret(cell: Element): void {
+  beats.owner()?.addRowAtCaret(cell);
 }
 
 export function splitCellField(cell: Element): void {

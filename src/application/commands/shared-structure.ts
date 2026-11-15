@@ -4,7 +4,7 @@ import { flowBaseReference } from "../../core/collab/base-reference.ts";
 import { FlowOperationTrace, flowIdentity } from "../../core/flow/operations.ts";
 import { cellLength } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
-import type { DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, CommandOutcome, DocumentView, Plan } from "../session/document-session.ts";
 import type { ParagraphFlagChange } from "./paragraphs.ts";
 import type { SharedValuePorts } from "./shared-values.ts";
 
@@ -13,6 +13,24 @@ type SharedStructureAuthor = { readonly id: string; readonly by: string };
 export interface SharedStructurePorts extends Pick<SharedValuePorts, "author" | "beatStamp"> {
   readonly cells: (html: string | null | undefined) => readonly Run[];
   readonly joinedParts: (beat: string) => readonly { readonly beat: string; readonly length: number }[];
+  readonly createdBeat: (operation: SharedContentRef) => string;
+}
+
+export interface CreatedBeatCommand extends Command {
+  readonly created: () => string | null;
+}
+
+export interface SharedSettledSelection {
+  readonly rowId: string;
+  readonly removed: readonly (readonly [number, number])[];
+  readonly at: number;
+}
+
+export interface SharedStructureCommands {
+  readonly ports: () => SharedStructurePorts | null;
+  readonly refused: (outcome: CommandOutcome) => void;
+  readonly settle: () => boolean;
+  readonly settleSelection: (rowId: string, read: () => { readonly from: number; readonly to: number } | null) => SharedSettledSelection | null;
 }
 
 export function sharedStructureTrace(doc: DocumentView, ports: SharedStructurePorts, author: SharedStructureAuthor): FlowOperationTrace {
@@ -22,6 +40,11 @@ export function sharedStructureTrace(doc: DocumentView, ports: SharedStructurePo
 // why: the caller's id names the new beat only inside its own list, so its stamp travels in the creation itself.
 export function sharedCreatedBeat(stamps: StampPorts): SharedJsonFields {
   return { visualText: "", imageRef: null, status: "todo", stamp: { at: stamps.clock.nowIso(), by: stamps.editor.name() } };
+}
+
+export function sharedMintedBeat(trace: FlowOperationTrace, ports: SharedStructurePorts, beat: string): string | null {
+  const operation = trace.ops.find(op => (op.kind === "segment-create" || op.kind === "split") && op.beat === beat);
+  return operation ? ports.createdBeat(operation.id) : null;
 }
 
 export function sharedParagraphFlags(trace: FlowOperationTrace, flags: readonly ParagraphFlagChange[]): void {

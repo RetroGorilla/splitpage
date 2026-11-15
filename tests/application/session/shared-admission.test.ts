@@ -29,6 +29,21 @@ test("local admission refusal and failure happen before planning; unregister let
   } finally { h.session.dispose(); }
 });
 
+test("a listener that announces its refusal marks the refusal notified, and a silent one leaves it for the caller", () => {
+  const h = fixture();
+  try {
+    const stopAnnounced = h.session.beforeCommand(() => "announced");
+    assert.deepEqual(h.session.run(h.command), { kind: "rejected", reason: "buffer-pending", notified: true });
+    assert.deepEqual(h.session.admit(), { kind: "rejected", reason: "buffer-pending", notified: true });
+    stopAnnounced();
+    const stopSilent = h.session.beforeCommand(() => false);
+    assert.deepEqual(h.session.admit(), { kind: "rejected", reason: "buffer-pending" });
+    stopSilent();
+    assert.equal(h.session.admit(), null);
+    assert.equal(h.executed.length, 0);
+  } finally { h.session.dispose(); }
+});
+
 test("admission can flush a command before the next plan without recursively calling itself", () => {
   const h = fixture(), order: string[] = [];
   try {

@@ -545,7 +545,8 @@ test("a visual split in a shared session is refused by name with nothing sent; s
 test("structure commands with no author, or no shared ports, plan as before and ask no author when nothing changes", () => {
   let asked = 0;
   const counting: SharedStructurePorts = { author: () => { asked++; return { id: "w9_1", by: "Alice" }; }, cells,
-    beatStamp: () => { throw new Error("no stamp expected"); }, joinedParts: () => { throw new Error("no parts expected"); } };
+    beatStamp: () => { throw new Error("no stamp expected"); }, joinedParts: () => { throw new Error("no parts expected"); },
+    createdBeat: () => { throw new Error("no created beat expected"); } };
   const live: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...structuredClone(documentWith(startRows())) };
   const stamps = stampsOf("Alice", 5);
   for (const command of [splitBeatCommand("R9", "audioText", textCut(0, 0), "N1", { ...stamps, cells }, counting), splitBeatCommand("R1", "status", textCut(0, 0), "N1", { ...stamps, cells }, counting),
@@ -692,7 +693,7 @@ for (const make of [(_stamps: StampPorts, shared?: SharedStructurePorts) => dele
 const visualSplit: Make = (stamps, shared) => splitBeatCommand("R1", "visualText", textCut(1, 2), "N1", { ...stamps, cells }, shared);
 for (const literal of [...cases, { name: "visual split", make: visualSplit }]) test(`standalone structure plan, effects and undo stay identical without a handle or author: ${literal.name}`, () => {
   const stamps = stampsOf("Alice", 5), unexpected = () => { throw new Error("standalone read shared state"); };
-  const nobody: SharedStructurePorts = { author: () => null, beatStamp: unexpected, joinedParts: unexpected, cells: unexpected };
+  const nobody: SharedStructurePorts = { author: () => null, beatStamp: unexpected, joinedParts: unexpected, cells: unexpected, createdBeat: unexpected };
   const absent = sharedStructurePorts({ handle: () => null, author: unexpected, stamps, cells: unexpected })();
   const before: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...documentWith([{ ...beat("R1"), visualText: "abc" }, ...startRows().slice(1)]) };
   const baseline = literal.make(stamps).plan(before, capabilities());

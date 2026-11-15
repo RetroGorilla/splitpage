@@ -1,5 +1,6 @@
 import type { SessionListener } from "../../application/session/document-session.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { SharedValueCommands } from "../../application/commands/shared-values.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
@@ -47,7 +48,8 @@ export interface DocumentChromePorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly preferences: Pick<Preferences, "commentAuthor" | "myColor" | "nameOf" | "setCommentAuthor" | "setMyColor">;
   readonly personColors: PersonColorLookup;
-  readonly edits: Pick<DocumentEdits, "edit">;
+  readonly edits: Pick<DocumentEdits, "edit" | "run">;
+  readonly shared: SharedValueCommands;
   readonly notices: Pick<NoticePort, "show">;
 }
 
