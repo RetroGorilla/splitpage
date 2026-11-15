@@ -28,24 +28,25 @@ expect JSON.stringify(window.fromApp) === JSON.stringify(S.read().app) && kept('
 eval window.fromPeer=S.peer.lateJoiner('peer');true
 expect JSON.stringify(window.fromPeer) === JSON.stringify(S.read().app) && JSON.stringify(S.peer.recoveryEntries('joiner')) === JSON.stringify(S.peer.recoveryEntries('app'))
 expect JSON.stringify(S.recovery().app) === JSON.stringify(S.recovery().peer)
+eval window.R=JSON.stringify(S.peer.recoveryEntries('app'));window.RP=JSON.stringify(S.recovery());window.three=function(){var j=JSON.stringify(S.peer.joined());return j===JSON.stringify(S.read().app)&&j===JSON.stringify(S.read().peer)};window.rec=function(){return ['app','peer','joiner'].every(function(w){return JSON.stringify(S.peer.recoveryEntries(w))===R})&&JSON.stringify(S.recovery())===RP};true
+expect kept('app') === 'r2|Gone wordsx' && rec()
 eval window.joinerTyped=S.peer.joinerType('r3',4,'!');true
-expect window.joinerTyped === 'applied' && S.peer.joined().rows[1].audioText === 'Keep!' && A('r3','audioText') === 'Keep'
+expect window.joinerTyped === 'applied' && S.peer.joined().rows[1].audioText === 'Keep!' && A('r3','audioText') === 'Keep' && rec()
 eval window.caught=S.peer.catchUp();true
-expect A('r3','audioText') === 'Keep!' && T('r3','audioText') === 'Keep!' && same() && JSON.stringify(window.caught) === JSON.stringify(S.read().app)
+expect A('r3','audioText') === 'Keep!' && T('r3','audioText') === 'Keep!' && three() && JSON.stringify(window.caught) === JSON.stringify(S.read().app) && rec()
 eval window.joinerTyped=S.peer.joinerType('r1',5,'s','visualText');S.peer.catchUp();true
-expect window.joinerTyped === 'applied' && A('r1','visualText') === 'BLooks' && T('r1','visualText') === 'BLooks' && same()
+expect window.joinerTyped === 'applied' && A('r1','visualText') === 'BLooks' && T('r1','visualText') === 'BLooks' && three() && rec()
 eval window.joinerUndone=S.peer.joinerUndo();S.peer.catchUp();true
-expect window.joinerUndone.ok && window.joinerUndone.label === 'typing' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'Keep!' && same()
+expect window.joinerUndone.ok && window.joinerUndone.label === 'typing' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'Keep!' && three() && rec()
 eval window.joinerUndone=S.peer.joinerUndo();window.caught=S.peer.catchUp();true
-expect window.joinerUndone.ok && window.joinerUndone.label === 'typing' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'Keep' && same()
+expect window.joinerUndone.ok && window.joinerUndone.label === 'typing' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'Keep' && three() && rec()
 expect JSON.stringify(window.caught) === JSON.stringify(S.read().app) && T('r3','audioText') === 'Keep' && T('r1','visualText') === 'BLook'
-expect kept('joiner') === 'r2|Gone wordsx' && kept('app') === kept('joiner') && kept('peer') === kept('joiner')
 eval window.empty=S.peer.joinerUndo();true
-expect window.empty.ok === false || window.empty.effective === false
+expect (window.empty.ok === false || window.empty.effective === false) && three() && rec()
 eval at('r3','audioText',4);true
 press .
 eval S.peer.deliver();window.caught=S.peer.catchUp();true
-expect A('r3','audioText') === 'Keep.' && same() && JSON.stringify(window.caught) === JSON.stringify(S.read().app)
+expect A('r3','audioText') === 'Keep.' && three() && JSON.stringify(window.caught) === JSON.stringify(S.read().app) && rec()
 expect S.counters().missingBase === 0
 eval S.leave()
 expect S.read().peer === null && S.peer.joined() === null && T('r3','audioText') === 'Keep.'

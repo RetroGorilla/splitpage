@@ -63,19 +63,32 @@ click #wr-close
 wait !window.__writerFlowTest.on()
 key ctrl KeyF
 wait !document.querySelector('.findbar').hidden
-eval (function(){var f=document.getElementById('find-input');f.value='cup';f.dispatchEvent(new Event('input',{bubbles:true}));var r=document.getElementById('replace-input');r.value='pot';r.dispatchEvent(new Event('input',{bubbles:true}));return true})()
+eval window.FI=document.getElementById('find-input');window.RI=document.getElementById('replace-input');FI.select();true
+expect document.activeElement === FI
+press cup
+eval RI.focus();true
+press pot
+expect FI.value === 'cup' && RI.value === 'pot' && document.activeElement === RI
 eval clear();true
 wait document.querySelectorAll('#toast-host .toast').length === 0
 expect document.getElementById('find-count').textContent === '1 of 1'
 eval window.before=snap();true
 jsclick #find-replace
 expect one(NOT) && snap() === window.before
+expect document.activeElement === RI && !RI.disabled
+press s
+expect RI.value === 'pots' && snap() === window.before
 eval clear();true
 wait document.querySelectorAll('#toast-host .toast').length === 0
 jsclick #find-replace-all
 expect one(NOT) && snap() === window.before && document.getElementById('find-count').textContent === '1 of 1'
-eval (function(){var f=document.getElementById('find-input');f.value='tea';f.dispatchEvent(new Event('input',{bubbles:true}));var r=document.getElementById('replace-input');r.value='pot';r.dispatchEvent(new Event('input',{bubbles:true}));return true})()
-expect document.getElementById('find-count').textContent === '1 of 1'
+expect document.activeElement === RI && !RI.disabled
+key Backspace
+expect RI.value === 'pot'
+eval FI.focus();FI.select();true
+press tea
+expect FI.value === 'tea' && document.getElementById('find-count').textContent === '1 of 1'
+eval RI.focus();true
 eval S.peer.type('r5',0,'X');S.peer.deliver();clear();true
 wait document.querySelectorAll('#toast-host .toast').length === 0
 expect A('r5','audioText') === 'Xgreen tea'
@@ -83,6 +96,10 @@ eval window.before=snap();true
 jsclick #find-replace
 expect one(CHANGED) && snap() === window.before
 expect document.getElementById('find-count').textContent === '1 of 1'
+expect document.activeElement === RI && !RI.disabled
+key Backspace
+press t
+expect RI.value === 'pot' && snap() === window.before
 jsclick #find-replace
 eval S.peer.deliver();true
 expect A('r5','audioText') === 'Xgreen pot' && same()
