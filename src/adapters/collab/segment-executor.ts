@@ -60,7 +60,7 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
     if (Object.hasOwn(stamp, "at") && Object.hasOwn(stamp, "by")) writes.push({ kind: "set", path: [...beatPath, "stamp"], value: stamp });
     else for (const [key, value] of Object.entries(stamp)) extra.push([key === "at" ? "updatedAt" : "updatedBy", value]);
     writes.push({ kind: "set", path: [...beatPath, "extra"], value: JSON.stringify(Object.fromEntries(extra.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))) });
-    writes.push(...prepareSharedInitialGallery(operation, view, beat, identities));
+    for (const write of prepareSharedInitialGallery(operation, view, beat, identities)) writes.push(write);
     const overlay = [...writes], texts: { readonly path: readonly string[]; readonly title: boolean }[] = [], content: SharedTextExecutionDescription[] = [];
     planSharedStructureOwner(view, beat, segment);
     let boundary: SharedTextWritePlan | null = null;
@@ -80,7 +80,7 @@ export function prepareSharedSegmentCreation(operation: SharedSegmentCreate, vie
       if (html) {
         const target = { owner: beat, segment: field === "audioText" ? segment as SharedContentRef : visual, field };
         const initial = prepareSharedInitialContent(sharedStructureView(view, overlay), target, html, JSON.stringify(["initial", operation.id, field]), operation.by, ports);
-        content.push(initial.description); overlay.push(...initial.writes);
+        content.push(initial.description); for (const write of initial.writes) overlay.push(write);
       }
     }
     sharedCreatedAttachments(view).push({ collection: "visuals", beat, html: String(operation.fields.visualText ?? ""), record: visual });

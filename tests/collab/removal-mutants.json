@@ -122,7 +122,7 @@
   }, {
     "label": "restore leaves the discard active",
     "file": "src/adapters/collab/removal-executor.ts",
-    "find": "  writes.push(...sharedRemovalDiscardRetires(view, removals));\n",
+    "find": "  for (const write of sharedRemovalDiscardRetires(view, removals)) writes.push(write);\n",
     "replace": "",
     "tests": ["tests/adapters/collab/discard.test.ts"]
   }, {
