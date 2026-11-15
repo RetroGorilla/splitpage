@@ -26,11 +26,8 @@ import { inlineStateImages } from "../../../src/adapters/storage/02c-blobs.ts";
 import { isMain } from "../../../tools/main-module.mjs";
 import { timingMarks } from "../../../shared/timing-marks.ts";
 import { markParts } from "./mark-parts.mjs";
+import { acquireReplica } from "./trial-method.mjs";
 
-const REPLICA = new URL("../../../src/adapters/collab/trial-replica.ts", import.meta.url);
-// why: The paired run measures older revisions too, and those have no standing trial replica to hold.
-const acquireReplica = existsSync(REPLICA) ? (await import(REPLICA.href)).acquireSharedTrialReplica : null;
-export const TRIAL_METHOD = acquireReplica ? "standing replica" : "copy per update";
 const held = (handle, mode) => mode === "current" && acquireReplica ? acquireReplica(handle) : () => {};
 const MIB = 1024 ** 2;
 const CAP = 2 * MIB;

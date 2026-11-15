@@ -60,6 +60,16 @@ export function writeRecord(path, record) {
   writeFileSync(path, JSON.stringify({ ...kept, [record.kind]: record }, null, 2) + "\n");
 }
 
+const TRIAL_METHOD_FILE = "tests/collab/measure/trial-method.mjs";
+const TRIAL_COPY_FILE = "tests/collab/measure/trial-method-copy.mjs";
+
+export function placeTools(repo, dir, paths) {
+  for (const path of paths) cpSync(join(repo, path), join(dir, path), { recursive: true });
+  // why: A revision without the standing trial replica is measured with its copy per update; the module is chosen here,
+  // so the measurement imports nothing by a computed name.
+  if (existsSync(join(dir, TRIAL_COPY_FILE)) && !existsSync(join(dir, "src/adapters/collab/trial-replica.ts"))) cpSync(join(dir, TRIAL_COPY_FILE), join(dir, TRIAL_METHOD_FILE));
+}
+
 export async function toolRevision(run, paths, dryRun) {
   const changed = (await run("git", ["status", "--porcelain", "--", ...paths])).trim();
   if (changed && !dryRun) throw new Error(`commit the measuring tools before a real run; changed: ${changed.split("\n").length} path(s) under ${paths.join(", ")}`);
@@ -147,7 +157,7 @@ async function sharedMain(args, repo) {
       await run(process.execPath, ["build.mjs", "--test"], dirs[side]);
     }
     const tool = await toolRevision(run, SHARED_TOOL_PATHS, args.dryRun);
-    for (const side of ["base", "head"]) for (const path of SHARED_TOOL_PATHS) cpSync(join(repo, path), join(dirs[side], path), { recursive: true });
+    for (const side of ["base", "head"]) placeTools(repo, dirs[side], SHARED_TOOL_PATHS);
     const data = join(scratch, "shared-data.json");
     console.error("perf-ab: preparing the entry states and replay bytes once, from head");
     await run(process.execPath, ["tools/perf-shared.mjs", "--prepare", data, "--only", args.only], dirs.head);

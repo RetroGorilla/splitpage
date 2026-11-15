@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { abbaOrder, passOrder, parseArgs, sharedSummary, toolRevision, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { abbaOrder, passOrder, parseArgs, placeTools, sharedSummary, toolRevision, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { KEY_GAP_MS, TYPED } from "./perf-record.mjs";
 import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, expectedKeys, parseShared, parseSharedArgs,
@@ -160,6 +160,23 @@ test("both trees measure with the running checkout's tools, and a real run refus
   assert.deepEqual(await toolRevision(git(""), ["tools"], false), { commit: "d".repeat(40), changed: false });
   assert.deepEqual(await toolRevision(git(" M tools/perf-shared.mjs\n"), ["tools"], true), { commit: "d".repeat(40), changed: true });
   await assert.rejects(toolRevision(git(" M tools/perf-shared.mjs\n?? tools/new.mjs\n"), ["tools"], false), /commit the measuring tools before a real run; changed: 2 path\(s\) under tools/);
+});
+
+test("a revision without the standing trial replica gets the copy-per-update method module, one with it keeps the checkout's", () => {
+  const root = mkdtempSync(join(tmpdir(), "perf-place-"));
+  try {
+    const measure = join("tests", "collab", "measure");
+    const checkout = join(root, "checkout"), older = join(root, "older"), newer = join(root, "newer");
+    for (const dir of [checkout, older, newer]) mkdirSync(join(dir, measure), { recursive: true });
+    writeFileSync(join(checkout, measure, "trial-method.mjs"), "standing");
+    writeFileSync(join(checkout, measure, "trial-method-copy.mjs"), "copy");
+    mkdirSync(join(newer, "src", "adapters", "collab"), { recursive: true });
+    writeFileSync(join(newer, "src", "adapters", "collab", "trial-replica.ts"), "");
+    for (const dir of [older, newer]) placeTools(checkout, dir, ["tests/collab/measure"]);
+    assert.equal(readFileSync(join(older, measure, "trial-method.mjs"), "utf8"), "copy");
+    assert.equal(readFileSync(join(newer, measure, "trial-method.mjs"), "utf8"), "standing");
+    assert.equal(readFileSync(join(checkout, measure, "trial-method.mjs"), "utf8"), "standing", "the checkout itself is never changed");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("rounds run in ABBA order and wait for free memory before each one", async () => {

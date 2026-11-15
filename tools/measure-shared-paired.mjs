@@ -1,7 +1,6 @@
-import { cpSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
-import { abbaOrder, median, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { abbaOrder, median, placeTools, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const PAIRED_FIXTURES = ["short", "long", "large"];
@@ -71,7 +70,7 @@ export async function main(argv, repo = REPO) {
   try { args = parsePairedArgs(argv); } catch (error) { console.error(`measure-shared-admission: ${error.message}`); return 1; }
   return withRefTrees(repo, "measure-shared-admission", [["base", args.base], ["head", args.head]], async ({ dirs, shas, run, scratch }) => {
     const tool = await toolRevision(run, TOOL_PATHS, args.dryRun);
-    for (const side of ["base", "head"]) for (const path of TOOL_PATHS) cpSync(join(repo, path), join(dirs[side], path), { recursive: true });
+    for (const side of ["base", "head"]) placeTools(repo, dirs[side], TOOL_PATHS);
     const data = join(scratch, "paired-data.json");
     console.error("measure-shared-admission: preparing the states and update streams once, from head");
     await run(process.execPath, ["--expose-gc", MEASURE, "--prepare", data, "--only", args.only], dirs.head);

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
-import { TRIAL_METHOD, admissionRound, expectedAfter, fixtures, growth, markedAdmission, updatesFor } from "./run.mjs";
+import { admissionRound, expectedAfter, fixtures, growth, markedAdmission, updatesFor } from "./run.mjs";
+import { TRIAL_METHOD } from "./trial-method.mjs";
 import { isMain } from "../../../tools/main-module.mjs";
 
 export const PAIRED_FIXTURES = ["short", "long", "large"];
