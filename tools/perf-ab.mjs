@@ -5,6 +5,7 @@ import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, buildArgs } from "./perf-record.mjs";
 import { GROUP_NAMES, REMOTE_RATES, SHARED_FIXTURES } from "./perf-shared.mjs";
+import { TRACE_CATEGORIES } from "./perf-trace.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const SHARED_MIN_ROUNDS = 5;
@@ -75,30 +76,59 @@ export async function waitForMemory(minMb, { free = () => freemem() / 2 ** 20, s
   }
 }
 
+export const PASSES = Object.freeze(["untraced", "traced"]);
+export const NOISE_FLOORS = Object.freeze({ p50: 0.5, p95: 3 });
+
+export function passOrder(round) {
+  return round % 2 === 1 ? [...PASSES] : [...PASSES].reverse();
+}
+
+const caseRuns = (record, side, pass) => record.rounds.filter((r) => r.side === side && (r.pass ?? "traced") === pass).map((r) => r.rows.filter((x) => x.kind === "case"));
+const caseLabels = (record) => [...new Set(record.rounds.flatMap((r) => r.rows.filter((x) => x.kind === "case").map((x) => x.label)))];
+const valuesOf = (runs, label, pick) => runs.map((run) => run.find((x) => x.label === label)).filter(Boolean).map(pick).filter((v) => v !== null && v !== undefined);
+
+export function tracingNoise(record) {
+  const rows = [];
+  for (const side of ["base", "head"]) for (const label of caseLabels(record)) for (const measure of Object.keys(NOISE_FLOORS)) {
+    const untraced = valuesOf(caseRuns(record, side, "untraced"), label, (x) => x[measure]), traced = valuesOf(caseRuns(record, side, "traced"), label, (x) => x[measure]);
+    if (!untraced.length || !traced.length) continue;
+    const base = median(untraced), allowed = Math.max(Math.max(...untraced) - Math.min(...untraced), 0.15 * base, NOISE_FLOORS[measure]);
+    rows.push({ side, label, measure, untraced: base, traced: median(traced), allowed, within: median(traced) <= base + allowed && median(traced) >= base - allowed });
+  }
+  return { rows, within: rows.length > 0 && rows.every((row) => row.within) };
+}
+
 export function sharedSummary(record) {
-  const sides = ["base", "head"];
-  const rows = (side) => record.rounds.filter((r) => r.side === side).map((r) => r.rows.filter((x) => x.kind === "case"));
-  const labels = [...new Set(record.rounds.flatMap((r) => r.rows.filter((x) => x.kind === "case").map((x) => x.label)))];
-  const stat = (side, label, pick) => {
-    const values = rows(side).map((run) => run.find((x) => x.label === label)).filter(Boolean).map(pick).filter((v) => v !== null && v !== undefined);
+  const sides = ["base", "head"], noise = tracingNoise(record);
+  const budgetPass = noise.within ? "traced" : "untraced";
+  const stat = (side, pass, label, pick) => {
+    const values = valuesOf(caseRuns(record, side, pass), label, pick);
     return values.length ? median(values) : null;
   };
   const value = (n) => n === null ? "—" : String(+n.toFixed(3));
   const delta = (b, h) => b === null || h === null ? "—" : `${h >= b ? "+" : ""}${+(h - b).toFixed(3)}`;
-  const columns = [["p50", (x) => x.p50], ["p95", (x) => x.p95], ["long-task ms", (x) => x.longTaskMs], ...GROUP_NAMES.map((g) => [`${g} ms`, (x) => x.groups[g]])];
+  const columns = [["p50", budgetPass, (x) => x.p50], ["p95", budgetPass, (x) => x.p95], ["long-task ms", budgetPass, (x) => x.longTaskMs],
+    ...GROUP_NAMES.map((g) => [`${g} ms`, "traced", (x) => x.groups?.[g]])];
   const lines = [
     ...(record.dryRun ? ["Dry run: pipeline check only, not evidence.", ""] : []),
-    `Shared composed-editor comparison: base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${rows("base").length} rounds per side in ABBA order. Each cell is base / head / head minus base.`,
+    `Shared composed-editor comparison: base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${caseRuns(record, "base", "traced").length} rounds per side and pass in ABBA order. Each cell is base / head / head minus base.`,
+    "",
+    noise.within
+      ? "Tracing moved no latency figure past the noise rule of audit 7 section 6, so one traced pass serves both: the budget figures and the parts both come from the traced pass. Both passes are given below."
+      : "Tracing moved a latency figure past the noise rule of audit 7 section 6, so the budget figures (p50, p95, long tasks) come from the untraced pass and the parts from the traced pass of the same schedule and revision. Both passes are given below.",
     "",
     `| Case | ${columns.map(([name]) => name).join(" | ")} |`,
     `| --- | ${columns.map(() => "---").join(" | ")} |`
   ];
-  for (const label of labels) {
-    lines.push(`| ${label} | ${columns.map(([, pick]) => {
-      const [b, h] = sides.map((side) => stat(side, label, pick));
+  for (const label of caseLabels(record)) {
+    lines.push(`| ${label} | ${columns.map(([, pass, pick]) => {
+      const [b, h] = sides.map((side) => stat(side, pass, label, pick));
       return `${value(b)} / ${value(h)} / ${delta(b, h)}`;
     }).join(" | ")} |`);
   }
+  lines.push("", "Tracing against the noise rule (untraced median, traced median, allowed difference: the larger of the untraced range, 15 % and the floor):", "",
+    "| Side | Case | Measure | Untraced | Traced | Allowed | Within |", "| --- | --- | --- | --- | --- | --- | --- |",
+    ...noise.rows.map((row) => `| ${row.side} | ${row.label} | ${row.measure} | ${value(row.untraced)} | ${value(row.traced)} | ${value(row.allowed)} | ${row.within ? "yes" : "no"} |`));
   return lines.join("\n");
 }
 
@@ -119,21 +149,24 @@ async function sharedMain(args, repo) {
     const record = {
       kind: "shared-composed-editor", dryRun: args.dryRun, startedAt: new Date().toISOString(),
       conditions: { node: process.version, arch: process.arch, platform: process.platform, typedCharacters: TYPED.length, keyGapMs: KEY_GAP_MS,
-        remoteRates: REMOTE_RATES, fixtures: args.only.split(","), clients: prepared.clients, replayUpdates: prepared.replayUpdates, minFreeMb: args.minFreeMb, rounds: args.rounds },
+        remoteRates: REMOTE_RATES, fixtures: args.only.split(","), clients: prepared.clients, replayUpdates: prepared.replayUpdates, minFreeMb: args.minFreeMb, rounds: args.rounds,
+        passes: PASSES, traceCategories: TRACE_CATEGORIES },
       revisions, rounds: []
     };
     const persist = () => { if (args.out) writeRecord(args.out, record); };
     persist();
     for (let round = 1; round <= args.rounds; round++) {
-      const freeMb = await waitForMemory(args.minFreeMb);
       const order = abbaOrder(round);
       for (const side of order) {
-        console.error(`perf-ab: round ${round}/${args.rounds} ${side} (${freeMb} MB free before the round)`);
-        const json = join(scratch, `${side}-${round}.json`), startedAt = new Date().toISOString();
-        await run(process.execPath, ["tools/perf-shared.mjs", "--built", "--data", data, "--json", json, "--only", args.only], dirs[side]);
-        const rows = JSON.parse(readFileSync(json, "utf8")).rows;
-        record.rounds.push({ round, order, side, freeMb, startedAt, browser: rows.find((r) => r.kind === "entry")?.browser ?? "unknown", rows });
-        persist();
+        for (const pass of passOrder(round)) {
+          const freeMb = await waitForMemory(args.minFreeMb);
+          console.error(`perf-ab: round ${round}/${args.rounds} ${side} ${pass} (${freeMb} MB free before the pass)`);
+          const json = join(scratch, `${side}-${pass}-${round}.json`), startedAt = new Date().toISOString();
+          await run(process.execPath, ["tools/perf-shared.mjs", "--built", ...(pass === "traced" ? ["--trace"] : []), "--data", data, "--json", json, "--only", args.only], dirs[side]);
+          const rows = JSON.parse(readFileSync(json, "utf8")).rows;
+          record.rounds.push({ round, order, side, pass, freeMb, startedAt, browser: rows.find((r) => r.kind === "entry")?.browser ?? "unknown", rows });
+          persist();
+        }
       }
     }
     console.log(sharedSummary(record));

@@ -3,28 +3,51 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { abbaOrder, parseArgs, sharedSummary, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { abbaOrder, passOrder, parseArgs, sharedSummary, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { KEY_GAP_MS, TYPED } from "./perf-record.mjs";
-import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, caseList, expectedKeys, markGroups, markProblem, parseShared, parseSharedArgs,
-  sharedProblems, sharedRows, sharedSuiteText } from "./perf-shared.mjs";
+import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, expectedKeys, parseShared, parseSharedArgs,
+  sharedProblems, sharedReport, sharedRows, sharedSuiteText, traceFile, tracedCase } from "./perf-shared.mjs";
+import { TASK_RECORD, TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
 
-test("mark groups are the shared disjoint parts of the page's raw marks, and what the event and update spans hold outside every part is unattributed", () => {
-  const groups = markGroups([
-    ["receive:start", 0], ["trial:start", 0], ["trial:end", 1.5], ["live-apply:start", 2], ["mirror-apply:start", 3], ["mirror-apply:end", 5],
-    ["projection-listeners:start", 5], ["session-receive:start", 6], ["render:start", 7], ["render:end", 10], ["session-receive:end", 11],
-    ["projection-listeners:end", 11.5], ["live-apply:end", 12], ["receive:end", 12.5], ["event:start", 19], ["input-handler:start", 20],
-    ["input-command:start", 21], ["input-write:start", 22], ["input-write:end", 25], ["input-command:end", 26], ["input-handler:end", 26.5], ["event:end", 27]
+const record = (name, at, dur, extra = {}) => ({ name, ph: "X", ts: at * 1000, dur: dur * 1000, pid: 1, tid: 1, cat: "devtools.timeline", ...extra });
+const dispatch = (type, at, dur) => record("EventDispatch", at, dur, { args: { data: { type } } });
+const mark = (seam, edge, at) => ({ name: `measure:${seam}:${edge}`, ph: "I", ts: at * 1000, pid: 1, tid: 1, cat: "blink.user_timing", args: { data: { startTime: at } } });
+const span = (seam, from, to) => [mark(seam, "start", from), mark(seam, "end", to)];
+
+function sampleTrace() {
+  return [
+    record(TASK_RECORD, 0, 20, { cat: "toplevel" }), dispatch("keydown", 1, 2), dispatch("keypress", 4, 8), dispatch("input", 6.5, 3),
+    ...span("input-handler", 5, 11), ...span("input-command", 6, 10), ...span("input-write", 7, 9),
+    record("FunctionCall", 13, 2), record("UpdateLayoutTree", 16, 1),
+    record(TASK_RECORD, 30, 2, { cat: "toplevel" }), dispatch("keyup", 30.5, 1),
+    record(TASK_RECORD, 39.5, 2, { cat: "toplevel" }), record("Paint", 40, 1), record("Layout", 40.5, 0.25),
+    record(TASK_RECORD, 60, 10, { cat: "toplevel" }), record("FunctionCall", 60.5, 9), ...span("receive", 61, 69), ...span("trial", 62, 64), ...span("live-apply", 65, 68),
+    record(TASK_RECORD, 80, 5, { cat: "toplevel" }), record("FunctionCall", 80.5, 4),
+    record(TASK_RECORD, 100, 10, { cat: "toplevel" }), dispatch("keydown", 101, 3), ...span("input-handler", 102, 103),
+    { ...record(TASK_RECORD, 0, 500, { cat: "toplevel" }), tid: 2 }, { ...record("FunctionCall", 1, 400), tid: 2 }
+  ];
+}
+
+test("a trace gives each key the script time of its own tasks, its parts and the rest as unattributed, and its style, layout and paint up to the next key", () => {
+  const { keys, groups } = traceRecords(sampleTrace());
+  const zero = { validation: 0, apply: 0, projection: 0, rendering: 0 };
+  assert.deepEqual(keys, [
+    { at: 0, tasks: 2, script: 2 + 8 + 2 + 1, ...zero, input: 6, route: 2, plan: 2, write: 2, unattributed: 13 - 6, outer: 13, style: 1, layout: 0.25, paint: 1 },
+    { at: 100, tasks: 1, script: 3, ...zero, input: 1, route: 1, plan: 0, write: 0, unattributed: 2, outer: 3, style: 0, layout: 0, paint: 0 }
   ]);
-  assert.deepEqual(Object.keys(groups), GROUP_NAMES);
-  assert.deepEqual(groups, { validation: 1.5, apply: 1.5, projection: 2 + 1.5 + 2, rendering: 3, input: 1.5 + 2 + 3, route: 1.5, plan: 2, write: 3,
-    unattributed: 0.5 + 0.5 + 1 + 0.5, outer: 12.5 + 8 });
-  assert.equal(groups.validation + groups.apply + groups.projection + groups.rendering + groups.input + groups.unattributed, groups.outer);
-  assert.equal(markProblem([["event:start", 0], ["render:start", 0], ["input-write:start", 1], ["render:end", 2]]), "Unpaired timing mark: measure:render:end");
-  assert.equal(markProblem([["event:start", 0], ["render:start", 2]]), "Unclosed timing mark: render");
-  assert.equal(markProblem([["render:start", 0], ["render:end", 1]]), "Timing mark outside every outer span: measure:render:start");
-  assert.equal(markProblem([]), null);
-  assert.deepEqual(SEAMS.filter((seam) => markProblem([["event:start", 0], [seam + ":start", 0], [seam + ":end", 1], ["event:end", 1]])), [], "every seam belongs to a part");
+  assert.deepEqual(groups, { validation: 2, apply: 3, projection: 0, rendering: 0, input: 7, route: 3, plan: 2, write: 2,
+    unattributed: 13 + 3 + 9 - 12, outer: 13 + 3 + 9, style: 1, layout: 0.25, paint: 1 }, "a task with neither a key nor a mark adds nothing, and another thread is ignored");
+  assert.deepEqual(GROUP_NAMES, Object.keys(groups));
+  assert.throws(() => traceRecords([...sampleTrace(), ...span("render", 200, 201)]), /outside every task record/);
+  assert.throws(() => traceRecords([...sampleTrace(), ...span("render", 17, 17.5)]), /Timing mark outside every outer span: measure:render:start/);
+  assert.throws(() => traceRecords(sampleTrace().filter((event) => !event.name.startsWith("measure:"))), /no measure: mark/);
+  assert.deepEqual(SEAMS.filter((seam) => {
+    try { traceRecords([record(TASK_RECORD, 0, 10), record("FunctionCall", 1, 8), ...span(seam, 2, 3)]); return false; } catch { return true; }
+  }), [], "every seam belongs to a part");
+  assert.deepEqual(TRACE_CATEGORIES.filter((category) => category.startsWith("disabled-by-default")), [], "the trace stays off the costly categories");
+  const problem = tracedCase(() => { throw new Error("no file"); });
+  assert.deepEqual(problem, { keys: [], groups: null, problem: "no file" });
 });
 
 test("the cases cover typing on both surfaces at every rate, undo, peer and own structural edits, both backlog shapes and refusals", () => {
@@ -58,18 +81,32 @@ test("the suite enters from the stored state, warms up once, switches to the Wri
   assert.equal(lines.filter((l) => l === `sleep ${KEY_GAP_MS}`).length, (caseList().length + 1 - undos - own) * presses + undos * 20 + own * 10);
   assert.equal(lines.filter((l) => l === "key ctrl Enter").length, own * 10);
   assert.doesNotThrow(() => new Function(`return ${PAGE};`));
+  assert.equal(lines.filter((l) => l.startsWith("trace ")).length, 0, "an untraced pass records no trace");
+  const traced = sharedSuiteText(data, "traces").trim().split("\n"), starts = traced.filter((l) => l === `trace start ${TRACE_CATEGORIES.join(",")}`);
+  assert.equal(starts.length, caseList().length, "every case but the warm-up is traced");
+  caseList().forEach((spec, index) => {
+    const stop = traced.indexOf(`trace stop ${traceFile("traces", index)}`), ended = traced.indexOf(`eval window.__perfShared.end(${JSON.stringify(spec.label)})`);
+    const begun = traced.findLastIndex((l, at) => at < stop && l.startsWith("eval window.__perfShared.begin("));
+    assert.ok(stop > 0 && stop === ended - 1 && traced[begun - 1] === starts[0], `${spec.label}: the trace starts just before begin and stops just before end`);
+  });
 });
 
-test("a run is refused when keys go missing, marks do not pair, refusals are not refused or the backlog never lands", () => {
-  const good = (spec) => ({ kind: "case", label: spec.label, keys: expectedKeys(spec), marks: [["event:start", 0], ["render:start", 1], ["render:end", 2], ["event:end", 3]],
+test("a run is refused when keys go missing, a trace cannot be read, refusals are not refused or the backlog never lands", () => {
+  const trace = (spec) => ({ keys: Array.from({ length: expectedKeys(spec) }, () => ({})), groups: Object.fromEntries(GROUP_NAMES.map((g) => [g, 1])), problem: null });
+  const good = (spec) => ({ kind: "case", label: spec.label, keys: expectedKeys(spec), trace: trace(spec),
     replayed: spec.rate ? { source: "remote", delivered: 3, refused: 0, recovered: 0 } : null,
     events: spec.kind === "backlog" ? [{ release: spec.order, updates: 200, ms: 4 }]
       : spec.kind === "refused" ? [{ refused: "throws", ok: false, reason: "invalid-update" }, { refused: "zero-length", ok: false, reason: "invalid-update" }, { refused: "queue-full", ok: true, reason: null }] : [] });
   const entry = { kind: "entry", label: "short entry", fixture: "short", beats: 2, stateBytes: 3, ms: 5, browser: "Edg/1" };
-  const rows = [entry, { kind: "case", label: "warm-up (discarded)", keys: 1, marks: [["render:end", 1]], events: [] }, ...caseList().map(good)];
+  const rows = [entry, { kind: "case", label: "warm-up (discarded)", keys: 1, events: [] }, ...caseList().map(good)];
   assert.deepEqual(sharedProblems(rows, "short"), []);
-  const broken = rows.map((r) => r.label === "split typing, remote 1/s" ? { ...r, keys: 3 } : r.label === "split typing, remote 10/s" ? { ...r, marks: [["trial:start", 0]] } : r);
-  assert.equal(sharedProblems(broken, "short").length, 2);
+  const untraced = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([name]) => name !== "trace")));
+  assert.deepEqual(sharedProblems(untraced, "short"), [], "an untraced pass has no trace to check");
+  const broken = rows.map((r) => r.label === "split typing, remote 1/s" ? { ...r, keys: 3 }
+    : r.label === "split typing, remote 10/s" ? { ...r, trace: { keys: [], groups: null, problem: "Unclosed timing mark: render" } }
+      : r.label === "split typing, remote 0/s" ? { ...r, trace: { ...r.trace, keys: [{}] } } : r);
+  assert.deepEqual(sharedProblems(broken, "short"), ["split typing, remote 0/s: 1 traced keys, expected " + TYPED.length, "split typing, remote 1/s: 3 key samples, expected " + TYPED.length,
+    "split typing, remote 10/s: Unclosed timing mark: render"]);
   const refused = rows.map((r) => r.events?.some((e) => e.refused) ? { ...r, events: [{ refused: "throws", ok: true, reason: null }] } : r);
   assert.equal(sharedProblems(refused, "short").length, 3);
   const unreleased = rows.map((r) => r.events?.some((e) => e.release) ? { ...r, events: [] } : r);
@@ -77,13 +114,19 @@ test("a run is refused when keys go missing, marks do not pair, refusals are not
   assert.equal(sharedProblems(rows.filter((r) => r.kind !== "entry"), "short").length, 1);
   const kept = sharedRows(rows, "short");
   assert.equal(kept.length, caseList().length + 1);
-  assert.ok(kept.every((r) => r.kind === "entry" || (r.label.startsWith("short ") && r.groups.rendering === 1 && r.groups.unattributed === 2 && r.markCount === 4 && !("marks" in r))));
+  assert.ok(kept.every((r) => r.kind === "entry" || (r.label.startsWith("short ") && r.traced && r.groups.unattributed === 1 && r.keyRecords.length === r.keys && !("trace" in r))));
+  assert.ok(sharedRows(untraced, "short").every((r) => r.kind === "entry" || (!r.traced && r.groups === null && r.keyRecords === null)));
+  assert.match(sharedReport(sharedRows(untraced, "short")), /Untraced pass: latency and long tasks only/);
+  assert.match(sharedReport(kept, true), new RegExp(`Traced pass \\(categories ${TRACE_CATEGORIES.join(", ")}\\)`));
+  const attached = attachTraces([entry, { kind: "case", label: caseList()[2].label }], (index) => { assert.equal(index, 2); return sampleTrace(); });
+  assert.deepEqual([attached[0], attached[1].trace.problem, attached[1].trace.keys.length], [entry, null, 2]);
   assert.deepEqual(parseShared('pressed a\nPERF {"kind":"entry"}\n'), [{ kind: "entry" }]);
 });
 
 test("arguments: perf-shared, the shared comparison and the paired adapter rerun", () => {
   assert.equal(parseSharedArgs(["--prepare", "x.json", "--only", "short"]).only[0], "short");
-  for (const args of [[], ["--data"], ["--data", "x", "--only", "huge"], ["--data", "x", "--only", "short,short"], ["--bogus"]]) assert.ok(parseSharedArgs(args).error);
+  assert.deepEqual([parseSharedArgs(["--data", "x.json"]).trace, parseSharedArgs(["--data", "x.json", "--trace"]).trace], [false, true]);
+  for (const args of [[], ["--data"], ["--data", "x", "--only", "huge"], ["--data", "x", "--only", "short,short"], ["--bogus"], ["--prepare", "x", "--trace"]]) assert.ok(parseSharedArgs(args).error);
   const shared = parseArgs(["base", "--shared"]);
   assert.deepEqual([shared.rounds, shared.only, shared.dryRun, shared.minFreeMb, shared.out], [5, "short,long,large,edited", false, 3000, null]);
   assert.equal(parseArgs(["base", "--shared", "--rounds", "1", "--only", "short", "--dry-run"]).rounds, 1);
@@ -119,16 +162,27 @@ test("rounds run in ABBA order and wait for free memory before each one", async 
   await assert.rejects(waitForMemory(3000, { free: () => 100, sleep: async () => {}, pollMs: 10, waitMs: 30 }), /stayed under 3000 MB/);
 });
 
-test("summaries report base, head and the difference per case, and mark a dry run as not evidence", () => {
+test("summaries report base, head and the difference per case, mark a dry run as not evidence, and take the budget figures from the untraced pass only when tracing moved them past the noise rule", () => {
   const groups = Object.fromEntries(GROUP_NAMES.map((g) => [g, 1]));
-  const row = (p50) => ({ kind: "case", label: "short split typing, remote 1/s", p50, p95: p50 * 2, longTaskMs: 0, groups });
+  const row = (p50, traced) => ({ kind: "case", label: "short split typing, remote 1/s", p50, p95: p50 * 2, longTaskMs: 0, groups: traced ? groups : null });
   const revisions = { base: { commit: "a".repeat(40) }, head: { commit: "b".repeat(40) } };
-  const record = { dryRun: true, revisions, rounds: [
-    { side: "base", rows: [row(10)] }, { side: "head", rows: [row(12)] }, { side: "head", rows: [row(14)] }, { side: "base", rows: [row(20)] }] };
-  const text = sharedSummary(record);
-  assert.match(text, /^Dry run: pipeline check only, not evidence\./);
-  assert.match(text, /\| short split typing, remote 1\/s \| 15 \/ 13 \/ -2 \| 30 \/ 26 \/ -4 \| 0 \/ 0 \/ \+0 \|/);
-  assert.doesNotMatch(sharedSummary({ ...record, dryRun: false }), /Dry run/);
+  const both = (side, p50, shift) => [{ side, pass: "untraced", rows: [row(p50, false)] }, { side, pass: "traced", rows: [row(p50 + shift, true)] }];
+  const record = (shift) => ({ dryRun: true, revisions, rounds: [...both("base", 10, shift), ...both("head", 12, shift), ...both("head", 14, shift), ...both("base", 20, shift)] });
+  const quiet = sharedSummary(record(0.25));
+  assert.match(quiet, /^Dry run: pipeline check only, not evidence\./);
+  assert.match(quiet, /one traced pass serves both/);
+  assert.match(quiet, /\| short split typing, remote 1\/s \| 15\.25 \/ 13\.25 \/ -2 \| 30\.5 \/ 26\.5 \/ -4 \| 0 \/ 0 \/ \+0 \| 1 \/ 1 \/ \+0 \|/);
+  const loud = sharedSummary(record(40));
+  assert.match(loud, /budget figures \(p50, p95, long tasks\) come from the untraced pass/);
+  assert.match(loud, /\| short split typing, remote 1\/s \| 15 \/ 13 \/ -2 \| 30 \/ 26 \/ -4 \| 0 \/ 0 \/ \+0 \| 1 \/ 1 \/ \+0 \|/);
+  assert.match(loud, /\| base \| short split typing, remote 1\/s \| p50 \| 15 \| 55 \| 10 \| no \|/);
+  const noise = tracingNoise(record(1.6));
+  assert.deepEqual(noise.rows.map((r) => [r.side, r.measure, r.allowed, r.within]), [["base", "p50", 10, true], ["base", "p95", 20, true], ["head", "p50", 2, true], ["head", "p95", 4, true]],
+    "allowed is the larger of the untraced range, 15 % of its median and the floor");
+  assert.equal(tracingNoise(record(-2.5)).within, false, "a traced pass faster by more than the allowance is outside the noise too");
+  assert.deepEqual(passOrder(1), ["untraced", "traced"]);
+  assert.deepEqual(passOrder(2), ["traced", "untraced"]);
+  assert.doesNotMatch(sharedSummary({ ...record(0), dryRun: false }), /Dry run/);
   const run = (p50) => ({ current: { single: { p50, p95: p50 }, 1000: { total: p50 } }, direct: { single: { p50 }, 1000: { total: p50 } } });
   const paired = pairedSummary({ dryRun: false, revisions, rounds: [{ side: "base", rows: [{ name: "short", phase: "fresh", run: run(1) }] }, { side: "head", rows: [{ name: "short", phase: "fresh", run: run(2) }] }] });
   assert.match(paired, /\| short \/ fresh \| 1 \/ 2 \/ \+1 \|/);

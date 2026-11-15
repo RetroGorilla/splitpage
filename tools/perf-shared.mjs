@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, parsePortBase } from "./perf-record.mjs";
-import { markParts } from "../tests/collab/measure/mark-parts.mjs";
+import { TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 export const SHARED_FIXTURES = ["short", "long", "large", "edited"];
@@ -41,22 +41,11 @@ export function caseList() {
   ];
 }
 
-export function markGroups(marks) {
-  const parts = markParts(marks.map(([name, startTime]) => ({ name: "measure:" + name, startTime })));
-  const round = (value) => Math.round(value * 1000) / 1000;
-  const exclusive = (seam) => parts.exclusive[seam] ?? 0;
-  return {
-    validation: round(parts.validation), apply: round(parts.apply), projection: round(parts.projection), rendering: round(parts.rendering),
-    input: round(parts.input), route: round(exclusive("input-handler")), plan: round(exclusive("input-command")), write: round(exclusive("input-write")),
-    unattributed: round(parts.unattributed), outer: round(parts.outer)
-  };
+export function tracedCase(read) {
+  try { return { ...traceRecords(read()), problem: null }; } catch (error) { return { keys: [], groups: null, problem: error instanceof Error ? error.message : String(error) }; }
 }
 
-export function markProblem(marks) {
-  try { markGroups(marks); return null; } catch (error) { return error instanceof Error ? error.message : String(error); }
-}
-
-export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write", "unattributed", "outer"];
+export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write", "unattributed", "outer", "style", "layout", "paint"];
 
 export const PAGE = `(function () {
   if (window.__perfShared) return 'ready';
@@ -153,10 +142,8 @@ export const PAGE = `(function () {
       var consumed = replayed ? replayed.delivered + replayed.refused : 0;
       if (perf.replaying === 'remote') perf.cursor += consumed;
       var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
-      var marks = performance.getEntriesByType('mark').filter(function (m) { return m.name.indexOf('measure:') === 0; })
-        .map(function (m) { return [m.name.slice(8), +m.startTime.toFixed(4)]; });
       var out = { kind: 'case', label: label, keys: lat.length, p50: q(lat, 0.5), p95: q(lat, 0.95), max: lat.length ? +lat[lat.length - 1].toFixed(1) : null,
-        longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1), marks: marks,
+        longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1),
         replayed: perf.replaying ? { source: perf.replaying, delivered: replayed ? replayed.delivered : 0, refused: replayed ? replayed.refused : 0,
           recovered: replayed ? replayed.recovered : 0 } : null, events: perf.events };
       clear();
@@ -202,28 +189,32 @@ function caret(surface) {
     : ["eval document.activeElement && document.activeElement.blur()", `caret #rows .row:nth-of-type(${LOCAL_ROW + 1}) .audio-cell .cell-editable`, "key end"];
 }
 
-function caseLines(spec, label = spec.label) {
+function caseLines(spec, label = spec.label, trace = null) {
   return [
     `eval window.__perfShared.prepare(${JSON.stringify(spec)})`,
     ...caret(spec.surface),
+    ...(trace ? [`trace start ${TRACE_CATEGORIES.join(",")}`] : []),
     `eval window.__perfShared.begin(${JSON.stringify(spec)})`,
     ...(KEY_LINES[spec.kind] ?? typingLines)(),
     `sleep ${SETTLE_MS}`,
+    ...(trace ? [`trace stop ${trace}`] : []),
     `eval window.__perfShared.end(${JSON.stringify(label)})`
   ];
 }
 
-export function sharedSuiteText(data) {
+export const traceFile = (dir, index) => join(dir, `case-${index}.json`);
+
+export function sharedSuiteText(data, traceDir = null) {
   const text = JSON.stringify(data);
   const lines = ["open", "viewport 1400 900", "wait document.querySelectorAll('#rows .row').length > 0", "sleep 1500", `eval ${oneLine(PAGE)}`];
   for (let at = 0; at < text.length; at += CHUNK) lines.push(`eval window.__perfShared.chunk(${JSON.stringify(text.slice(at, at + CHUNK))})`);
   lines.push("eval window.__perfShared.enter()", `wait document.querySelectorAll('#rows .row').length === ${data.rows}`, "sleep 1000");
   const cases = caseList();
   lines.push(...caseLines(cases[1], "warm-up (discarded)"));
-  for (const spec of cases) {
+  cases.forEach((spec, index) => {
     if (spec.surface === "writer" && !lines.includes("click #btn-write")) lines.push("click #btn-write", "wait window.__writerFlowTest.on()", "sleep 500");
-    lines.push(...caseLines(spec));
-  }
+    lines.push(...caseLines(spec, spec.label, traceDir && traceFile(traceDir, index)));
+  });
   return lines.join("\n") + "\n";
 }
 
@@ -242,8 +233,8 @@ export function sharedProblems(found, fixture) {
     const row = cases.find((r) => r.label === spec.label);
     if (!row) continue;
     if (row.keys !== expectedKeys(spec)) problems.push(`${spec.label}: ${row.keys} key samples, expected ${expectedKeys(spec)}`);
-    const broken = markProblem(row.marks);
-    if (broken) problems.push(`${spec.label}: ${broken}`);
+    if (row.trace?.problem) problems.push(`${spec.label}: ${row.trace.problem}`);
+    else if (row.trace && row.trace.keys.length !== expectedKeys(spec)) problems.push(`${spec.label}: ${row.trace.keys.length} traced keys, expected ${expectedKeys(spec)}`);
     if (spec.kind === "backlog" && !(row.events.length === 1 && row.events[0].updates > 0)) problems.push(`${spec.label}: the backlog was not released`);
     if (spec.kind === "refused") {
       for (const kind of ["throws", "zero-length"]) {
@@ -261,9 +252,17 @@ export function sharedRows(found, fixture) {
   return found.filter((r) => r.kind === "entry" || (r.kind === "case" && !r.label.startsWith("warm-up")))
     .map((r) => {
       if (r.kind !== "case") return { ...r, fixture };
-      const { marks, ...kept } = r;
-      return { ...kept, fixture, label: `${fixture} ${r.label}`, markCount: marks.length, groups: markGroups(marks) };
+      const { trace, ...kept } = r;
+      return { ...kept, fixture, label: `${fixture} ${r.label}`, traced: !!trace, groups: trace?.groups ?? null, keyRecords: trace?.keys ?? null };
     });
+}
+
+export function attachTraces(found, readTrace) {
+  const cases = caseList();
+  return found.map((row) => {
+    const index = row.kind === "case" ? cases.findIndex((spec) => spec.label === row.label) : -1;
+    return index < 0 ? row : { ...row, trace: tracedCase(() => readTrace(index)) };
+  });
 }
 
 export async function prepareData(only) {
@@ -294,10 +293,11 @@ export async function prepareData(only) {
 }
 
 export function parseSharedArgs(argv) {
-  let built = false, data = null, json = null, prepare = null, only = SHARED_FIXTURES;
+  let built = false, trace = false, data = null, json = null, prepare = null, only = SHARED_FIXTURES;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--built") built = true;
+    else if (arg === "--trace") trace = true;
     else if (arg === "--data") data = argv[++i] ?? "";
     else if (arg === "--json") json = argv[++i] ?? "";
     else if (arg === "--prepare") prepare = argv[++i] ?? "";
@@ -307,11 +307,12 @@ export function parseSharedArgs(argv) {
   const unknown = only.filter((f) => !SHARED_FIXTURES.includes(f));
   if (unknown.length || !only.length || new Set(only).size !== only.length) return { error: `--only needs distinct fixtures from ${SHARED_FIXTURES.join(",")}` };
   if (prepare === "" || data === "" || json === "") return { error: "--prepare, --data and --json each need a file" };
-  if (!prepare && !data) return { error: "usage: node tools/perf-shared.mjs --prepare <data.json> [--only ...] | --data <data.json> [--built] [--json <out.json>] [--only ...]" };
-  return { built, data: data && resolve(data), json: json && resolve(json), prepare: prepare && resolve(prepare), only, error: null };
+  if (!prepare && !data) return { error: "usage: node tools/perf-shared.mjs --prepare <data.json> [--only ...] | --data <data.json> [--built] [--trace] [--json <out.json>] [--only ...]" };
+  if (prepare && trace) return { error: "--trace belongs to a measuring run, not --prepare" };
+  return { built, trace, data: data && resolve(data), json: json && resolve(json), prepare: prepare && resolve(prepare), only, error: null };
 }
 
-export function sharedReport(rows) {
+export function sharedReport(rows, traced = false) {
   const cases = rows.filter((r) => r.kind === "case");
   const entries = rows.filter((r) => r.kind === "entry");
   const lines = [
@@ -321,7 +322,9 @@ export function sharedReport(rows) {
     `- Remote rates: ${REMOTE_RATES.join(", ")} updates a second of pre-generated single-character edits to the first beat; peer structural edits are split, join, add and remove, pre-generated and delivered one update a second`,
     `- Backlog: ${BACKLOG_UPDATES} held peer updates released ${BACKLOG_AT_MS} ms into the typing, one by one or as one catch-up diff`,
     `- Own structural edits: ${OWN_STRUCTURAL_PRESSES} presses of Ctrl+Enter in a Split narration cell, each adding a beat at the caret through the selection capture`,
-    "- Parts: the five mark parts, the handler, command and write within input, and unattributed (synchronous work inside an event or update span outside every part). Style, layout and paint after the task are in the latency and long-task figures, not in unattributed",
+    traced
+      ? `- Traced pass (categories ${TRACE_CATEGORIES.join(", ")}). Parts: the five mark parts and the handler, command and write within input, read from the trace's user-timing marks. Outer: script time (outermost script records) in every task that holds a key event or a mark; remote updates also keep their receive and drain spans. Unattributed is outer minus the five parts. Style, layout and paint are the browser's records in the case, reported on their own`
+      : "- Untraced pass: latency and long tasks only; the parts come from a traced pass",
     "",
     "| Fixture | Beats | State bytes | Entry ms | Browser |",
     "| --- | --- | --- | --- | --- |",
@@ -329,7 +332,7 @@ export function sharedReport(rows) {
     "",
     `| Case | Keys | p50 | p95 | Max | Long tasks | Long-task ms | Remote delivered | ${GROUP_NAMES.map((g) => `${g} ms`).join(" | ")} |`,
     `| --- | --- | --- | --- | --- | --- | --- | --- | ${GROUP_NAMES.map(() => "---").join(" | ")} |`,
-    ...cases.map((r) => `| ${r.label} | ${r.keys} | ${r.p50 ?? "—"} | ${r.p95 ?? "—"} | ${r.max ?? "—"} | ${r.longTasks} | ${r.longTaskMs} | ${r.replayed ? r.replayed.delivered : "—"} | ${GROUP_NAMES.map((g) => r.groups[g]).join(" | ")} |`)
+    ...cases.map((r) => `| ${r.label} | ${r.keys} | ${r.p50 ?? "—"} | ${r.p95 ?? "—"} | ${r.max ?? "—"} | ${r.longTasks} | ${r.longTaskMs} | ${r.replayed ? r.replayed.delivered : "—"} | ${GROUP_NAMES.map((g) => r.groups?.[g] ?? "—").join(" | ")} |`)
   ];
   return lines.join("\n") + "\n";
 }
@@ -355,12 +358,14 @@ export async function main(argv) {
     for (const fixture of args.only) {
       const prepared = data.fixtures[fixture];
       if (!prepared) { console.error(`perf-shared: the data file has no ${fixture} fixture`); return 2; }
-      const suite = join(work, `${fixture}.txt`);
-      writeFileSync(suite, sharedSuiteText(prepared));
+      const suite = join(work, `${fixture}.txt`), traces = args.trace ? mkdtempSync(join(work, `${fixture}-traces-`)) : null;
+      writeFileSync(suite, sharedSuiteText(prepared, traces));
       const r = spawnSync(process.execPath, [DRIVER, "--script", suite, "--port", String(ports.base), "--cdp-port", String(ports.base + CDP_PORT_OFFSET), "--shot-dir", work], {
         cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000
       });
-      const found = parseShared(r.stdout ?? "");
+      const parsed = parseShared(r.stdout ?? "");
+      const found = traces ? attachTraces(parsed, (index) => JSON.parse(readFileSync(traceFile(traces, index), "utf8"))) : parsed;
+      if (traces) rmSync(traces, { recursive: true, force: true });
       const problems = sharedProblems(found, fixture);
       if (r.status !== 0 || problems.length) {
         console.error((r.stdout ?? "").split("\n").filter((l) => !l.startsWith("pressed") && !l.startsWith("PERF ")).slice(-30).join("\n"));
@@ -372,8 +377,8 @@ export async function main(argv) {
       rows.push(...sharedRows(found, fixture));
     }
   } finally { rmSync(work, { recursive: true, force: true }); }
-  if (args.json) writeFileSync(args.json, JSON.stringify({ rows }, null, 2) + "\n");
-  console.log(sharedReport(rows));
+  if (args.json) writeFileSync(args.json, JSON.stringify({ traced: args.trace, traceCategories: args.trace ? TRACE_CATEGORIES : null, rows }, null, 2) + "\n");
+  console.log(sharedReport(rows, args.trace));
   return 0;
 }
 
